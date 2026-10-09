@@ -10,6 +10,8 @@ import androidx.annotation.Nullable;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import java.io.File;
+
 /**
  * The one place in the app that asks Android about the system wallpaper.
  *
@@ -26,6 +28,8 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 public final class WallpaperPictureReader {
 
     private static final String LOG_TAG = "WallpaperPictureReader";
+    /** Not a wallpaper id Android issues: "ask for it". */
+    private static final int UNKNOWN_WALLPAPER_ID = Integer.MIN_VALUE;
 
     private WallpaperPictureReader() {
     }
@@ -38,6 +42,19 @@ public final class WallpaperPictureReader {
     @NonNull
     public static WallpaperPicture read(@NonNull Context context,
                                         @Nullable TermuxAppSharedPreferences preferences) {
+        return read(context, preferences, UNKNOWN_WALLPAPER_ID);
+    }
+
+    /**
+     * {@link #read(Context, TermuxAppSharedPreferences)} for a caller that has just read the system
+     * wallpaper id itself, so the same answer is not asked of Android twice in one breath.
+     *
+     * @param currentSystemWallpaperId the id as the caller read it, -1 when that read failed
+     */
+    @NonNull
+    public static WallpaperPicture read(@NonNull Context context,
+                                        @Nullable TermuxAppSharedPreferences preferences,
+                                        int currentSystemWallpaperId) {
         WallpaperManager manager;
         try {
             manager = WallpaperManager.getInstance(context);
@@ -47,9 +64,46 @@ public final class WallpaperPictureReader {
         }
         boolean serviceRunning = serviceRunning(manager);
         int storedId = preferences == null ? 0 : preferences.getManagedWallpaperSystemId();
-        boolean launcherSet = serviceRunning && storedId > 0 && storedId == currentWallpaperId(manager);
+        boolean launcherSet = serviceRunning && storedId > 0
+            && storedId == (currentSystemWallpaperId == UNKNOWN_WALLPAPER_ID
+                ? currentWallpaperId(manager) : currentSystemWallpaperId);
         boolean stillFileExists = serviceRunning && !launcherSet && stillFileExists(manager);
         return WallpaperPicturePolicy.resolve(serviceRunning, launcherSet, stillFileExists);
+    }
+
+    /**
+     * The exact copy of the picture the in-app picker last set, under the app's own files. This
+     * is the file the glass reads when the wallpaper is the launcher's own; whether it is on
+     * screen is {@link #managedPictureOnScreen}'s question.
+     */
+    @NonNull
+    public static File managedWallpaperExactFile(@NonNull Context context) {
+        File directory = new File(context.getFilesDir(), "managed-wallpaper");
+        if (!directory.exists()) {
+            directory.mkdirs();
+        }
+        return new File(directory, "system-wallpaper-exact.png");
+    }
+
+    /**
+     * Whether the wallpaper on screen is one set from inside the launcher: the system's wallpaper
+     * id is the one the picker stored when it set the picture, and the picture's exact copy is
+     * still on disk. The same rule the activity's blur source uses, so the settings page and the
+     * chrome agree on which wallpapers Fancier Glass can work over.
+     */
+    public static boolean managedPictureOnScreen(@NonNull Context context,
+                                                 @Nullable TermuxAppSharedPreferences preferences) {
+        if (preferences == null) return false;
+        int storedId = preferences.getManagedWallpaperSystemId();
+        if (storedId <= 0) return false;
+        WallpaperManager manager;
+        try {
+            manager = WallpaperManager.getInstance(context);
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Cannot reach the wallpaper service", e);
+            return false;
+        }
+        return storedId == currentWallpaperId(manager) && managedWallpaperExactFile(context).isFile();
     }
 
     /** The only {@code getWallpaperInfo()} call in the app; everything else goes through here. */

@@ -163,6 +163,7 @@ public final class TerminalHintsOverlay {
         } else {
             ShareUtils.copyTextToClipboard(activity, hint.value,
                 activity.getString(R.string.terminal_hint_copied));
+            ClipboardHistory.get(activity).record(hint.value);
         }
     }
 }

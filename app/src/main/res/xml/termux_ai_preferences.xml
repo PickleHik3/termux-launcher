@@ -10,31 +10,44 @@
             app:summary="@string/termux_ai_runtime_status_summary"
             app:persistent="false"
             app:selectable="false"/>
-        <com.termux.app.fragments.settings.termux.TaiRuntimeActionsPreference
-            app:key="tai_runtime_actions"
-            app:persistent="false"
-            app:selectable="false"/>
+        <!-- Stop, unload, logs and the detailed status live on TaiRuntimePreferencesFragment. -->
+        <Preference
+            app:key="tai_runtime_controls"
+            app:title="@string/termux_ai_runtime_controls_title"
+            app:summary="@string/termux_ai_runtime_controls_summary"
+            app:persistent="false"/>
     </PreferenceCategory>
 
     <PreferenceCategory
         app:key="tai_models_category"
         app:title="@string/termux_ai_zone_models_title">
-        <Preference
-            app:key="tai_models_empty"
-            app:title="@string/termux_ai_models_empty_title"
-            app:summary="@string/termux_ai_models_empty_summary"
-            app:persistent="false"
-            app:selectable="false"/>
-        <Preference
-            app:key="tai_models_browse_catalog"
-            app:title="@string/termux_ai_models_browse_catalog_title"
-            app:summary="@string/termux_ai_models_browse_catalog_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TaiModelCatalogPreferencesFragment"
+        <!-- Everything about models (installed, catalogue, downloads, adding by link or file)
+             lives in the Model centre; this page keeps one row into it. -->
+        <com.termux.app.fragments.settings.termux.TaiModelCentreRowPreference
+            app:key="tai_model_centre"
+            app:title="@string/tai_model_centre_title"
             app:persistent="false"/>
         <Preference
-            app:key="tai_model_import"
-            app:title="@string/termux_ai_model_import_title"
-            app:summary="@string/termux_ai_model_import_summary"
+            app:key="tai_welcome_card"
+            app:title="@string/tai_welcome_pref_title"
+            app:summary="@string/tai_welcome_pref_summary"
+            app:persistent="false"/>
+        <Preference
+            app:key="tai_voice_input"
+            app:title="@string/settings_keyboard_sub_voice_title"
+            app:summary="@string/settings_keyboard_sub_voice_summary"
+            app:persistent="false"/>
+        <Preference
+            app:key="tai_benchmark"
+            app:title="@string/tai_bench_title"
+            app:summary="@string/tai_bench_pref_summary"
+            app:persistent="false"/>
+        <!-- A bring-your-own-key OpenAI-compatible server; its rows live on their own screen
+             (TaiRemotePreferencesFragment). -->
+        <Preference
+            app:key="tai_remote_provider"
+            app:title="@string/tai_remote_row_title"
+            app:summary="@string/tai_remote_row_summary_off"
             app:persistent="false"/>
         <Preference
             app:key="tai_huggingface_token"
@@ -44,44 +57,17 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        app:key="tai_server_category"
-        app:title="@string/termux_ai_zone_server_title">
+        app:key="tai_developer_category"
+        app:title="@string/termux_ai_developer_title">
         <Preference
-            app:key="tai_endpoint_copy"
-            app:title="@string/termux_ai_endpoint_copy_title"
-            app:summary="@string/termux_ai_endpoint_notice_summary"
+            app:key="tai_local_api"
+            app:title="@string/termux_ai_local_api_title"
+            app:summary="@string/termux_ai_local_api_summary"
             app:persistent="false"/>
-        <androidx.preference.SwitchPreferenceCompat
-            app:key="tai_api_auth_required"
-            app:title="@string/termux_ai_auth_required_title"
-            app:summaryOff="@string/termux_ai_auth_required_summary_off"
-            app:summaryOn="@string/termux_ai_auth_required_summary_on"
-            app:defaultValue="true"/>
-        <androidx.preference.SwitchPreferenceCompat
-            app:key="tai_lan_enabled"
-            app:title="@string/termux_ai_lan_enabled_title"
-            app:summaryOff="@string/termux_ai_lan_enabled_summary_off"
-            app:summaryOn="@string/termux_ai_lan_enabled_summary_on"
-            app:defaultValue="false"/>
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        app:key="tai_advanced_category"
-        app:title="@string/termux_ai_zone_advanced_title">
         <Preference
-            app:key="tai_parameters_defaults"
-            app:title="@string/termux_ai_parameters_defaults_title"
-            app:summary="@string/termux_ai_parameters_defaults_summary"
+            app:key="tai_advanced"
+            app:title="@string/termux_ai_zone_advanced_title"
+            app:summary="@string/termux_ai_advanced_summary"
             app:persistent="false"/>
-        <androidx.preference.SwitchPreferenceCompat
-            app:key="tai_openai_auto_load"
-            app:title="@string/termux_ai_openai_auto_load_title"
-            app:summaryOff="@string/termux_ai_openai_auto_load_summary_off"
-            app:summaryOn="@string/termux_ai_openai_auto_load_summary_on"
-            app:defaultValue="true"/>
-        <com.termux.app.fragments.settings.termux.TaiOverridesPreference
-            app:key="tai_runtime_overrides"
-            app:persistent="false"
-            app:selectable="false"/>
     </PreferenceCategory>
 </PreferenceScreen>

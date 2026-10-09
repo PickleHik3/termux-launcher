@@ -454,6 +454,9 @@ public final class ExtraKeysView extends GridLayout {
 
     public ExtraKeysView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        // The rows are a key layout the user wrote left to right; a right-to-left GridLayout would
+        // reverse every row, so the grid keeps its columns in every locale.
+        setLayoutDirection(LAYOUT_DIRECTION_LTR);
         // The hold bloom lives in this view's overlay and must be allowed to draw past the
         // GridLayout content box; the dock's ancestor capsule clip still contains it.
         setClipChildren(false);
@@ -1790,7 +1793,7 @@ public final class ExtraKeysView extends GridLayout {
         View root = getRootView();
         if (root == null) root = button;
         try {
-            mTravelPopup.showAtLocation(root, Gravity.NO_GRAVITY, mTravelKeyScreenX, mTravelKeyScreenY);
+            mTravelPopup.showAtLocation(root, Gravity.TOP | Gravity.LEFT, mTravelKeyScreenX, mTravelKeyScreenY);
         } catch (Exception ignored) {
             mTravelPopup = null;
             mTravelBubble = null;

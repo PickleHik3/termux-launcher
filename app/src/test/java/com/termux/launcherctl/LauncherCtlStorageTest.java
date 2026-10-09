@@ -24,7 +24,7 @@ public class LauncherCtlStorageTest {
 
         assertEquals(new File(tempDir, ".launcherctl"), LauncherCtlStorage.getLauncherCtlDir());
         assertEquals(new File(tempDir, ".launcherctl/launcher.db"), LauncherCtlStorage.getDatabaseFile());
-        assertEquals(new File(tempDir, ".launcherctl/notifications.jsonl"), LauncherCtlStorage.getNotificationsJsonlFile());
+        assertEquals(new File(tempDir, ".launcherctl/notifications.jsonl"), LauncherCtlStorage.getLegacyNotificationsJsonlFile());
     }
 
     @Test

@@ -36,7 +36,7 @@ public class KeyPopupPaletteTest {
         Context context = themed();
         KeyPopupPalette palette = KeyPopupPalette.resolve(context);
         int primary = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorPrimary, 0);
+            androidx.appcompat.R.attr.colorPrimary, 0);
         assertEquals(primary | 0xFF000000, palette.primary);
         assertEquals(255, Color.alpha(palette.primary));
     }

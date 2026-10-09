@@ -70,6 +70,9 @@ public final class TourFingerTrace {
             case SCRUB:
                 scrubPoint(left, right, centerY, inset, travel, eased, out);
                 break;
+            case HOLD_DRAG:
+                holdDragPoint(centerX, centerY, travel, progress, out);
+                break;
             case TAP:
             case HOLD:
             case NONE:
@@ -102,6 +105,21 @@ public final class TourFingerTrace {
         if (bounded <= HOLD_LIFT) return 1f;
         return 1f - ease((bounded - HOLD_LIFT) / (1f - HOLD_LIFT));
     }
+
+    /**
+     * Land and hold for the first {@link #HOLD_DRAG_HOLD} of the pass, then drag sideways from
+     * the same spot: a border drag is a hold that gives way, and a finger that slid at once would
+     * read as the sideways swipe the content keeps for itself.
+     */
+    private static void holdDragPoint(float centerX, float centerY, float travel, float progress,
+                                      float[] out) {
+        float dragged = clamp01((clamp01(progress) - HOLD_DRAG_HOLD) / (1f - HOLD_DRAG_HOLD));
+        out[0] = centerX + (travel * ease(dragged));
+        out[1] = centerY;
+    }
+
+    /** How much of a border drag's pass is the hold before the finger moves. */
+    public static final float HOLD_DRAG_HOLD = 0.4f;
 
     /** Slide along the row for the first two thirds, then lift away from it. */
     private static void scrubPoint(float left, float right, float centerY, float inset,

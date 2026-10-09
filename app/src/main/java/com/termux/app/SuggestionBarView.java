@@ -87,6 +87,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.launcher.LauncherAppLauncher;
@@ -106,12 +107,14 @@ import com.termux.app.launcher.popup.MenuRow;
 import com.termux.app.launcher.popup.MenuRowFactory;
 import com.termux.app.launcher.popup.MenuRowWidths;
 import com.termux.app.launcher.popup.MenuSpec;
+import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.launcher.icon.DockIconCache;
 import com.termux.app.launcher.icon.RenderedIconDrawable;
 import com.termux.app.launcher.data.IconPack;
 import com.termux.app.launcher.data.IconPackDrawableItem;
 import com.termux.app.launcher.data.IconPackRepository;
 import com.termux.app.launcher.data.LauncherIconResolver;
+import com.termux.app.launcher.data.PinnedArtworkMemo;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.launcher.notifications.NotificationBadgeFrame;
 import com.termux.app.launcher.notifications.NotificationCardSurface;
@@ -262,6 +265,28 @@ public final class SuggestionBarView extends GridLayout
         DockIconCache.memoryClassMb(getContext()),
         () -> getContext().getPackageManager().getDefaultActivityIcon(),
         entry -> LauncherAppDataProvider.getInstance(getContext()).icons().artwork(entry));
+    /**
+     * Binds the dock's and the drawer's icons without rendering on the main thread: an icon the
+     * cache holds binds at once, a missing one is rendered on the icon thread — into the same
+     * budgeted caches — and fades in over a quiet tile. See {@link AsyncIconBinder}. Only this
+     * view holds the binder; what it queues reaches it, and through it this view and the cache,
+     * weakly.
+     */
+    private final AsyncIconBinder iconBinder = new AsyncIconBinder(
+        new AsyncIconBinder.Renderer() {
+            @Override
+            public Drawable peek(@NonNull LauncherAppEntry entry, int sizePx) {
+                return iconCache.peek(entry, sizePx);
+            }
+
+            @Override
+            public Drawable render(@NonNull LauncherAppEntry entry, int sizePx) {
+                return iconCache.icon(entry, sizePx);
+            }
+        },
+        AsyncIconBinder.sharedWorker(),
+        AsyncIconBinder.mainThreadExecutor(),
+        this::iconTileColor);
     /** Visible alpha bounds per drawable; avoids rescanning custom/icon-pack artwork on every drag event. */
     private final Map<Drawable, RectF> drawableVisibleBoundsCache = new WeakHashMap<>();
     private final Map<Drawable, FocusOutlineRenderer.Visual> focusOutlineVisualCache = new WeakHashMap<>();
@@ -286,6 +311,14 @@ public final class SuggestionBarView extends GridLayout
     private final Map<String, WeakReference<View>> launchTargetViewsByPackage = new HashMap<>();
     private final Map<View, ValueAnimator> launchTouchAnimators = new WeakHashMap<>();
     private final Map<String, LauncherAppEntry> resolvedRefCache = new HashMap<>();
+    /**
+     * What {@link #resolvePinnedApp} last answered per pinned item, so a dock rebuild does not
+     * load each override or pinned-pack drawable from its pack again. Keyed on the item, its
+     * override, the packs in force with their versions and the day (calendar icons); cleared with
+     * the rendered caches whenever artwork is invalidated.
+     */
+    private final PinnedArtworkMemo<Drawable, LauncherIconResolver.ResolvedIcon> pinnedArtworkMemo =
+        new PinnedArtworkMemo<>(64);
     private final Map<String, List<ShortcutInfo>> shortcutCache = new HashMap<>();
     private final Paint swipePreviewBadgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint swipePreviewBadgeStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -321,6 +354,10 @@ public final class SuggestionBarView extends GridLayout
         @Override public int opacityPercent() { return appBarOpacity; }
         @Override public boolean blurEnabled() { return blurEnabled; }
         @Override public int blurRadiusDp() { return blurRadiusDp; }
+        @Override public int grainPercent() {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
+            return preferences == null ? 0 : preferences.getDockGlassGrain();
+        }
     };
     private final MenuRowFactory menuRows = new MenuRowFactory(getContext(), menuTheme);
     /** The app/folder context menu, and the shortcuts menu that opens beside it. */
@@ -361,7 +398,7 @@ public final class SuggestionBarView extends GridLayout
             @Override public int outlineColor() { return resolveLauncherOutlineColor(); }
             @Override public int highlightAccentColor() {
                 return MaterialColors.getColor(SuggestionBarView.this,
-                    com.google.android.material.R.attr.colorPrimary, resolveLauncherOutlineColor());
+                    androidx.appcompat.R.attr.colorPrimary, resolveLauncherOutlineColor());
             }
             @Override public int sendButtonTextColor() {
                 return MaterialColors.getColor(SuggestionBarView.this,
@@ -497,6 +534,12 @@ public final class SuggestionBarView extends GridLayout
     private long stableLayoutSuppressedSinceUptimeMs = 0L;
     private static final int MAX_DEFERRED_RENDER_ATTEMPTS = 8;
     private int deferredRenderAttempts;
+    /**
+     * A render was turned away for want of stable bounds and nothing has rendered since. The
+     * bounded retries can be spent while the row is hidden (Minimal mode, a re-parenting), so this
+     * outlives them: the next layout pass that leaves the row stable re-issues the render.
+     */
+    private boolean renderLostWhileUnstable;
     /**
      * When a render was first turned away for want of stable bounds, and nothing has rendered
      * since. It is the row's own clock: draw suppression keeps a separate one, which a release
@@ -692,6 +735,8 @@ public final class SuggestionBarView extends GridLayout
             }
         }
         attachNotificationBadgeListener();
+        // Renders parked while the window was away, for cells still waiting on them.
+        iconBinder.resumeAll();
         if (configRepository != null) configRepository.addListener(configListener);
         LauncherAppDataProvider.getInstance(getContext()).addIconArtworkListener(iconArtworkListener);
         // A catalogue swap can land on a detached row; re-render on the way back in, since the
@@ -718,6 +763,8 @@ public final class SuggestionBarView extends GridLayout
         if (configRepository != null) configRepository.removeListener(configListener);
         LauncherAppDataProvider existing = LauncherAppDataProvider.peekInstance();
         if (existing != null) existing.removeIconArtworkListener(iconArtworkListener);
+        // Nothing is rendered, or kept queued, for a window that has gone.
+        iconBinder.cancelAll();
     }
 
     @Override
@@ -765,9 +812,29 @@ public final class SuggestionBarView extends GridLayout
             rowHeightHintWaived = false;
         }
         scheduleStableDrawReleaseIfPossible();
+        if (renderLostWhileUnstable) post(this::reissueLostRender);
         if (changed) resyncRailPagingForLength();
         // A render ends in a layout pass, so this is where the ticks learn what the row now holds.
         publishPageIndicator();
+    }
+
+    /**
+     * Re-issues a render the row had to drop while it had no stable bounds. Posted from
+     * {@link #onLayout} because the bounds are only readable once the pass has finished; a row
+     * that is still unstable leaves the flag set for the next pass.
+     */
+    private void reissueLostRender() {
+        if (!renderLostWhileUnstable || !hostVisible || !isAttachedToWindow()
+            || !hasStableRenderBounds()) {
+            return;
+        }
+        renderLostWhileUnstable = false;
+        reload();
+    }
+
+    /** Whether a render is still owed to the row because it was dropped while unstable. */
+    boolean isRenderLostWhileUnstable() {
+        return renderLostWhileUnstable;
     }
 
     /**
@@ -961,6 +1028,7 @@ public final class SuggestionBarView extends GridLayout
     private void invalidateRenderedIconCaches() {
         launcherTextColorCache = null;
         iconCache.invalidateAll();
+        pinnedArtworkMemo.clear();
         drawableVisibleBoundsCache.clear();
         focusOutlineVisualCache.clear();
         for (ValueAnimator animator : new ArrayList<>(terminalFocusOutlineAnimators.values())) {
@@ -1391,7 +1459,7 @@ public final class SuggestionBarView extends GridLayout
             iconResolver = new LauncherIconResolver(getContext());
         }
         if (iconPackRepository == null) {
-            iconPackRepository = new IconPackRepository(getContext());
+            iconPackRepository = IconPackRepository.getInstance(getContext());
         }
         syncIconPackIdentity();
         if (!appDataProvider.hasLoadedApps()) {
@@ -2223,7 +2291,7 @@ public final class SuggestionBarView extends GridLayout
         azFocusedEntryKey = key;
         azFocusedView = target;
         if (rowHapticsEnabled && movedBetweenApps) {
-            performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+            Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
         }
         if ((now - lastAzFocusBounceUptimeMs) >= AZ_FOCUS_BOUNCE_COOLDOWN_MS) {
             lastAzFocusBounceUptimeMs = now;
@@ -2852,6 +2920,7 @@ public final class SuggestionBarView extends GridLayout
         }
         waiveRowHeightHintIfOverdue();
         if (!hasStableRenderBounds()) {
+            renderLostWhileUnstable = true;
             // A gate on the home screen is anti-flicker, never a mute switch: a row with nothing in
             // it yet stays dark until its bounds settle, but a row that is already showing icons
             // keeps showing them. One frame of icons at the wrong size beats a blank dock.
@@ -2886,6 +2955,7 @@ public final class SuggestionBarView extends GridLayout
             return false;
         }
         pendingDeferredRender = false;
+        renderLostWhileUnstable = false;
         deferredRenderAttempts = 0;
         renderDeferredSinceUptimeMs = 0L;
         int buttonCount = Math.max(1, maxButtonCount);
@@ -3157,7 +3227,7 @@ public final class SuggestionBarView extends GridLayout
         terminalSearchFocusIndex = Math.floorMod(terminalSearchFocusIndex + delta, count);
         if (rowHapticsEnabled && RowHapticTickHelper.isBoundaryCrossing(
             previousFocusIndex, terminalSearchFocusIndex)) {
-            performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+            Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
         }
         applyTerminalSearchFocusOutline();
         return true;
@@ -3453,6 +3523,40 @@ public final class SuggestionBarView extends GridLayout
         return iconForDisplay(entry, sizePx);
     }
 
+    /**
+     * Shows {@code entry}'s rendered icon in {@code view} without rendering on the main thread: at
+     * once when the cache holds it, otherwise as a quiet tile the icon fades in over once the
+     * worker has rendered it. The drawer's cells and the dock's buttons bind through here;
+     * {@link #getRenderedIcon} stays for callers that need the drawable in hand, such as a drag.
+     *
+     * @return true when the icon was bound now
+     */
+    public boolean bindRenderedIcon(@NonNull ImageView view, @NonNull LauncherAppEntry entry,
+                                    int sizePx) {
+        if (sizePx <= 0) {
+            AsyncIconBinder.cancel(view);
+            view.setImageDrawable(iconForDisplay(entry, sizePx));
+            return true;
+        }
+        return iconBinder.bind(view, entry, sizePx, entry.icon);
+    }
+
+    /**
+     * Renders {@code entries} at {@code sizePx} on the worker ahead of their cells, so a page
+     * about to be shown binds from the cache. Capped at {@link AsyncIconBinder#MAX_PREFETCH}.
+     */
+    public void prefetchRenderedIcons(@NonNull List<LauncherAppEntry> entries, int sizePx) {
+        iconBinder.prefetch(entries, sizePx);
+    }
+
+    /**
+     * The tile an icon shows while it is rendered: the launcher's own on-surface tone, which the
+     * scheme chrome already drives, at a low alpha so it reads as a quiet stand-in on any glass.
+     */
+    private int iconTileColor() {
+        return withAlphaComponent(getLauncherTextColor(), 0x1F);
+    }
+
     /** Read-only budget shared by dock and drawer rendered icons. */
     public int getRenderedIconCacheBudgetBytes() {
         return iconCache.budgetBytes();
@@ -3467,8 +3571,7 @@ public final class SuggestionBarView extends GridLayout
 
         ImageButton imageButton = new ImageButton(getContext());
         int size = iconSizePx();
-        Drawable icon = iconForDisplay(entry, size);
-        imageButton.setImageDrawable(icon);
+        bindRenderedIcon(imageButton, entry, size);
         imageButton.setScaleType(ImageButton.ScaleType.CENTER_INSIDE);
         imageButton.setAdjustViewBounds(true);
         imageButton.setPadding(0, 0, 0, 0);
@@ -3557,22 +3660,28 @@ public final class SuggestionBarView extends GridLayout
                 ? buildLaunchAnimationContext(launchSourceView)
                 : null;
             Bundle options = launchAnimationContext != null ? launchAnimationContext.options : null;
-            if (!LauncherAppLauncher.tryStartProfileMainActivity(context, entry, options)) {
-                Log.w(LOG_TAG, "Failed to launch cloned/profile package " + entry.appRef.packageName
-                    + " activity=" + entry.appRef.activityName + " user=" + entry.appRef.userId);
-                return;
-            }
-            if (activeAzLetter != null) {
-                clearAzPreview();
-            }
-            getUsageStatsStore().recordLaunch(entry.appRef.stableId());
-            invalidateMostUsedCache();
-            if (terminalView != null) {
-                terminalView.clearInputLine();
-            }
-            dismissFolderPopup();
-            dismissAppContextPopup();
-            dismissShortcutsPopup();
+            // LauncherApps answers at once; only its am fallback answers later, off main.
+            LauncherAppLauncher.startProfileMainActivity(context, entry, options, (launched, later) -> {
+                if (!launched) {
+                    Log.w(LOG_TAG, "Failed to launch cloned/profile package " + entry.appRef.packageName
+                        + " activity=" + entry.appRef.activityName + " user=" + entry.appRef.userId);
+                    return;
+                }
+                // A late answer finds the bar as it is now; one that has left the window has
+                // nothing left to tidy.
+                if (later && !isAttachedToWindow()) return;
+                if (activeAzLetter != null) {
+                    clearAzPreview();
+                }
+                getUsageStatsStore().recordLaunch(entry.appRef.stableId());
+                invalidateMostUsedCache();
+                if (terminalView != null) {
+                    terminalView.clearInputLine();
+                }
+                dismissFolderPopup();
+                dismissAppContextPopup();
+                dismissShortcutsPopup();
+            });
             return;
         }
         PackageManager packageManager = context.getPackageManager();
@@ -3596,18 +3705,14 @@ public final class SuggestionBarView extends GridLayout
             ? buildLaunchAnimationContext(launchSourceView)
             : null;
 
-        Intent pkgDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
-        ComponentName pkgDefaultComponent = pkgDefault != null ? pkgDefault.getComponent() : null;
-        ComponentName explicitComponent = explicit != null ? explicit.getComponent() : null;
-        boolean explicitIsPackageDefault = sameComponent(explicitComponent, pkgDefaultComponent);
-
-        boolean launched = false;
-        if (explicitIsPackageDefault && tryStartActivity(context, pkgDefault, launchAnimationContext)) {
-            launched = true;
-        } else if (tryStartActivity(context, explicit, launchAnimationContext)) {
-            launched = true;
-        } else if (!explicitIsPackageDefault && tryStartActivity(context, pkgDefault, launchAnimationContext)) {
-            launched = true;
+        // The catalogue already names the component: start it as it is and ask the package
+        // manager for the package's own launch intent only when that fails, rather than resolving
+        // it on every tap. A Launcher3-style launch intent is exactly this explicit one.
+        boolean launched = tryStartActivity(context, explicit, launchAnimationContext);
+        Intent pkgDefault = null;
+        if (!launched) {
+            pkgDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
+            launched = tryStartActivity(context, pkgDefault, launchAnimationContext);
         }
 
         Intent resolveFallback = null;
@@ -3749,14 +3854,40 @@ public final class SuggestionBarView extends GridLayout
             return entry;
         }
         Drawable globalArtwork = artworkOrNull(entry);
-        LauncherIconResolver.ResolvedIcon resolvedIcon = getIconResolver().resolvePinnedDetailed(
-            entry.appRef, item.iconOverride, globalArtwork, entry.iconPackArtwork);
+        String memoKey = pinnedArtworkKey(entry, item);
+        LauncherIconResolver.ResolvedIcon resolvedIcon = pinnedArtworkMemo.get(memoKey, globalArtwork);
+        if (resolvedIcon == null) {
+            resolvedIcon = getIconResolver().resolvePinnedDetailed(
+                entry.appRef, item.iconOverride, globalArtwork, entry.iconPackArtwork);
+            pinnedArtworkMemo.put(memoKey, globalArtwork, resolvedIcon);
+        }
         Drawable pinnedIcon = resolvedIcon.drawable;
         if ((pinnedIcon == null || pinnedIcon == globalArtwork)
             && resolvedIcon.iconPackArtwork == entry.iconPackArtwork) {
             return entry;
         }
         return new LauncherAppEntry(entry.appRef, entry.label, pinnedIcon, resolvedIcon.iconPackArtwork);
+    }
+
+    /**
+     * Everything a pinned item's artwork depends on besides the global icon it falls back to:
+     * the item, its override, the icon packs in force (with their versions, through the
+     * provider's identity), whether the global icon is pack artwork, and the day of the month,
+     * which picks a calendar icon.
+     */
+    @NonNull
+    private String pinnedArtworkKey(@NonNull LauncherAppEntry entry, @NonNull PinnedAppItem item) {
+        LauncherAppDataProvider provider = appDataProvider != null
+            ? appDataProvider : LauncherAppDataProvider.peekInstance();
+        StringBuilder key = new StringBuilder(entry.appRef.stableId()).append('\n');
+        if (item.iconOverride != null && item.iconOverride.isValid()) {
+            key.append(item.iconOverride.iconPackPackage).append('/')
+                .append(item.iconOverride.drawableName);
+        }
+        key.append('\n').append(provider == null ? "" : provider.iconPackIdentity())
+            .append('\n').append(entry.iconPackArtwork)
+            .append('\n').append(java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_MONTH));
+        return key.toString();
     }
 
     private LauncherAppEntry folderSyntheticEntry(@NonNull PinnedFolderItem folder) {
@@ -3891,7 +4022,7 @@ public final class SuggestionBarView extends GridLayout
     @NonNull
     private IconPackRepository getIconPackRepository() {
         if (iconPackRepository == null) {
-            iconPackRepository = new IconPackRepository(getContext());
+            iconPackRepository = IconPackRepository.getInstance(getContext());
         }
         return iconPackRepository;
     }
@@ -3944,10 +4075,6 @@ public final class SuggestionBarView extends GridLayout
             Log.d(LOG_TAG, "launch failed for intent " + intent + ": " + e.getMessage());
             return false;
         }
-    }
-
-    private static boolean sameComponent(@Nullable ComponentName first, @Nullable ComponentName second) {
-        return first != null && second != null && first.equals(second);
     }
 
     @Nullable
@@ -4021,13 +4148,15 @@ public final class SuggestionBarView extends GridLayout
         BottomSheetDialog dialog = new BottomSheetDialog(getContext());
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(12), dp(16), dp(12));
+        root.setPadding(dp(16), 0, dp(16), dp(12));
+        root.addView(new com.google.android.material.bottomsheet.BottomSheetDragHandleView(getContext()),
+            new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(getContext());
         title.setText(TextUtils.isEmpty(folder.title) ? "Folder Apps" : folder.title);
-        title.setTextColor(resolveLauncherTextColor());
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextSize(14f);
+        com.termux.app.material.M3.textAppearance(title, com.google.android.material.R.attr.textAppearanceTitleMedium);
+        title.setTextColor(com.termux.app.material.M3.onSurface(getContext()));
 
         final Set<String> selectedIds = new LinkedHashSet<>();
         for (PinnedAppItem folderApp : folder.apps) {
@@ -4046,9 +4175,12 @@ public final class SuggestionBarView extends GridLayout
         });
         final List<String> labels = buildDisplayLabels(source);
 
-        EditText searchInput = new EditText(getContext());
-        searchInput.setHint("Search apps");
+        com.google.android.material.textfield.TextInputLayout folderSearchLayout = new com.google.android.material.textfield.TextInputLayout(getContext());
+        folderSearchLayout.setHint("Search apps");
+        EditText searchInput = new com.google.android.material.textfield.TextInputEditText(folderSearchLayout.getContext());
         searchInput.setSingleLine(true);
+        folderSearchLayout.addView(searchInput, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         final List<LauncherAppEntry> filteredApps = new ArrayList<>(source);
         final List<String> filteredLabels = new ArrayList<>(labels);
@@ -4102,10 +4234,10 @@ public final class SuggestionBarView extends GridLayout
         topActions.setOrientation(LinearLayout.HORIZONTAL);
         topActions.setGravity(Gravity.END);
 
-        ImageButton delete = new ImageButton(getContext());
-        delete.setImageResource(R.drawable.ic_delete_sweep_24);
+        com.google.android.material.button.MaterialButton delete = new com.google.android.material.button.MaterialButton(getContext(), null,
+            com.google.android.material.R.attr.materialIconButtonStyle);
+        delete.setIconResource(R.drawable.ic_delete_sweep_24);
         delete.setContentDescription("Delete folder");
-        styleIconButton(delete, dp(4));
         delete.setOnClickListener(v -> {
             if (folderIndex >= 0) {
                 removePinnedAt(folderIndex);
@@ -4114,21 +4246,21 @@ public final class SuggestionBarView extends GridLayout
             }
             dialog.dismiss();
         });
-        LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(dp(28), dp(28));
+        LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         topActions.addView(delete, deleteParams);
 
         LinearLayout buttons = new LinearLayout(getContext());
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         buttons.setGravity(Gravity.END);
 
-        Button cancel = new Button(getContext());
+        com.google.android.material.button.MaterialButton cancel = new com.google.android.material.button.MaterialButton(getContext(), null,
+            androidx.appcompat.R.attr.borderlessButtonStyle);
         cancel.setText("Cancel");
-        styleGhostButton(cancel);
         cancel.setOnClickListener(v -> dialog.dismiss());
 
-        Button save = new Button(getContext());
+        com.google.android.material.button.MaterialButton save = new com.google.android.material.button.MaterialButton(getContext());
         save.setText("Save");
-        styleGhostButton(save);
         save.setOnClickListener(v -> {
             List<PinnedAppItem> selectedApps = collectSelectedFolderApps(folder, source, selectedIds);
             dialog.dismiss();
@@ -4140,7 +4272,7 @@ public final class SuggestionBarView extends GridLayout
 
         root.addView(topActions, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(searchInput, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(folderSearchLayout, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(listView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(320)));
         root.addView(buttons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -4181,7 +4313,7 @@ public final class SuggestionBarView extends GridLayout
             LauncherAppEntry e = resolvePinnedApp(folderApp);
             if (artworkOrNull(e) == null) continue;
             ImageView mini = new ImageView(getContext());
-            mini.setImageDrawable(getRenderedIcon(e, miniSize));
+            bindRenderedIcon(mini, e, miniSize);
             mini.setScaleType(ImageView.ScaleType.FIT_CENTER);
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = miniSize;
@@ -4206,7 +4338,8 @@ public final class SuggestionBarView extends GridLayout
                 com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT));
             FrameLayout.LayoutParams badge = new FrameLayout.LayoutParams(miniSize, miniSize,
                 Gravity.END | Gravity.BOTTOM);
-            badge.setMargins(0, 0, pinnedFolderMiniIconMarginPx(), pinnedFolderMiniIconMarginPx());
+            badge.bottomMargin = pinnedFolderMiniIconMarginPx();
+            badge.setMarginEnd(pinnedFolderMiniIconMarginPx());
             iconShell.addView(overflow, badge);
         }
         iconShell.addView(miniGrid, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
@@ -4330,30 +4463,26 @@ public final class SuggestionBarView extends GridLayout
         List<IconPackDrawableItem> source = pack.drawableItems();
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(18), dp(18), dp(18), dp(12));
+        root.setPadding(dp(18), 0, dp(18), dp(12));
+        root.addView(new com.google.android.material.bottomsheet.BottomSheetDragHandleView(getContext()),
+            new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(getContext());
         title.setText(packInfo.label);
-        title.setTextColor(resolveLauncherTextColor());
-        title.setTextSize(18f);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        com.termux.app.material.M3.textAppearance(title, com.google.android.material.R.attr.textAppearanceTitleLarge);
+        title.setTextColor(com.termux.app.material.M3.onSurface(getContext()));
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         title.setPadding(0, 0, 0, dp(12));
         root.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        EditText search = new EditText(getContext());
+        com.google.android.material.textfield.TextInputLayout searchLayout = new com.google.android.material.textfield.TextInputLayout(getContext());
+        searchLayout.setHint("Search icons");
+        EditText search = new com.google.android.material.textfield.TextInputEditText(searchLayout.getContext());
         search.setSingleLine(true);
-        search.setHint("Search icons");
-        search.setTextColor(resolveLauncherTextColor());
-        search.setHintTextColor(resolveLauncherSubtleTextColor());
-        GradientDrawable searchBg = new GradientDrawable();
-        searchBg.setCornerRadius(dp(8));
-        searchBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xF2));
-        searchBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x66));
-        search.setBackground(searchBg);
-        search.setPadding(dp(10), 0, dp(10), 0);
-        search.setMinHeight(dp(38));
+        searchLayout.addView(search, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         GridView iconGrid = new GridView(getContext());
         iconGrid.setNumColumns(GridView.AUTO_FIT);
@@ -4365,7 +4494,7 @@ public final class SuggestionBarView extends GridLayout
         iconGrid.setPadding(0, dp(2), 0, dp(2));
         iconGrid.setBackgroundColor(0x00000000);
         iconGrid.setSelector(new ColorDrawable(0x00000000));
-        root.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(searchLayout, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
         gridParams.setMargins(0, dp(10), 0, 0);
         root.addView(iconGrid, gridParams);
@@ -4409,116 +4538,26 @@ public final class SuggestionBarView extends GridLayout
             }
         });
 
-        Dialog dialog = new Dialog(getContext(), android.R.style.Theme_Translucent_NoTitleBar);
-        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
-        dialog.setCanceledOnTouchOutside(true);
-        View dialogSurface = buildIconPickerDialogSurface(root);
-        dialog.setContentView(dialogSurface);
+        BottomSheetDialog dialog = new BottomSheetDialog(getContext());
+        dialog.setContentView(root);
+        // The grid takes the sheet's height, so the sheet opens full rather than as a stub.
+        View sheetView = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+        if (sheetView != null) {
+            ViewGroup.LayoutParams sheetParams = sheetView.getLayoutParams();
+            if (sheetParams != null) {
+                sheetParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                sheetView.setLayoutParams(sheetParams);
+            }
+        }
+        dialog.getBehavior().setSkipCollapsed(true);
+        dialog.getBehavior().setState(com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED);
         iconPickerDialog = dialog;
-        dialog.setOnShowListener(shownDialog -> configureIconPickerDialogWindow(dialog, dialogSurface, root));
         iconPickerDialog.setOnDismissListener(dismissedDialog -> {
             if (iconPickerDialog != null && !iconPickerDialog.isShowing()) {
                 iconPickerDialog = null;
             }
         });
         iconPickerDialog.show();
-    }
-
-    @NonNull
-    private View buildIconPickerDialogSurface(@NonNull View content) {
-        FrameLayout overlay = new FrameLayout(getContext());
-        overlay.setClipToPadding(false);
-        overlay.setPadding(0, 0, 0, 0);
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int screenHeight = getResources().getDisplayMetrics().heightPixels;
-        overlay.setMinimumWidth(screenWidth);
-        overlay.setMinimumHeight(screenHeight);
-        overlay.setLayoutParams(new ViewGroup.LayoutParams(
-            screenWidth,
-            screenHeight
-        ));
-
-        GradientDrawable panelBg = new GradientDrawable();
-        panelBg.setCornerRadius(dp(12));
-        panelBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xF4));
-        content.setBackground(panelBg);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            content.setClipToOutline(true);
-            content.setElevation(dp(8));
-        }
-
-        int sideMargin = dp(18);
-        int topMargin = iconPickerTopMargin();
-        int bottomMargin = dp(24);
-        int cardWidth = screenWidth >= dp(640) ? dp(560) : Math.max(dp(280), screenWidth - (sideMargin * 2));
-        int cardHeight = Math.max(dp(360), screenHeight - topMargin - bottomMargin);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-            cardWidth,
-            cardHeight,
-            Gravity.CENTER
-        );
-        params.setMargins(sideMargin, topMargin, sideMargin, bottomMargin);
-        overlay.addView(content, params);
-        return overlay;
-    }
-
-    private int iconPickerTopMargin() {
-        return getStatusBarHeight() + dp(20);
-    }
-
-    private int getStatusBarHeight() {
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : dp(24);
-    }
-
-    private void configureIconPickerDialogWindow(
-        @NonNull Dialog dialog,
-        @NonNull View dialogSurface,
-        @NonNull View content
-    ) {
-        android.view.Window window = dialog.getWindow();
-        if (window == null) {
-            return;
-        }
-
-        window.setBackgroundDrawable(new ColorDrawable(0x00000000));
-        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        window.setDimAmount(0.32f);
-        window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        window.setSoftInputMode(
-            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING |
-            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
-        );
-        installKeyboardAwareIconPickerLayout(dialogSurface, content);
-    }
-
-    private void installKeyboardAwareIconPickerLayout(@NonNull View dialogSurface, @NonNull View content) {
-        ViewTreeObserver observer = dialogSurface.getViewTreeObserver();
-        observer.addOnGlobalLayoutListener(() -> {
-            Rect visibleFrame = new Rect();
-            dialogSurface.getWindowVisibleDisplayFrame(visibleFrame);
-            int fullHeight = dialogSurface.getRootView() == null ? dialogSurface.getHeight() : dialogSurface.getRootView().getHeight();
-            int keyboardHeight = Math.max(0, fullHeight - visibleFrame.bottom);
-            int sideMargin = dp(18);
-            int topMargin = iconPickerTopMargin();
-            int bottomMargin = dp(24) + keyboardHeight;
-            int availableHeight = Math.max(dp(280), fullHeight - topMargin - bottomMargin);
-            ViewGroup.LayoutParams rawParams = content.getLayoutParams();
-            if (!(rawParams instanceof FrameLayout.LayoutParams)) {
-                return;
-            }
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) rawParams;
-            if (params.leftMargin == sideMargin
-                && params.topMargin == topMargin
-                && params.rightMargin == sideMargin
-                && params.bottomMargin == bottomMargin
-                && params.height == availableHeight) {
-                return;
-            }
-            params.setMargins(sideMargin, topMargin, sideMargin, bottomMargin);
-            params.height = availableHeight;
-            content.setLayoutParams(params);
-        });
     }
 
     private void showIconPickerMessagePopup(@NonNull String title, @NonNull String message) {
@@ -4688,8 +4727,10 @@ public final class SuggestionBarView extends GridLayout
 
         ImageButton gear = new ImageButton(getContext());
         gear.setImageResource(R.drawable.ic_settings);
-        styleIconButton(gear, dp(3));
-        int gearSize = dp(24);
+        // An 18dp glyph centred in the 48dp touch minimum, named for screen readers.
+        styleIconButton(gear, dp(15));
+        gear.setContentDescription(getContext().getString(R.string.folder_popup_settings_description));
+        int gearSize = dp(48);
         gear.setOnClickListener(v -> {
             dismissFolderPopup();
             refreshPinnedItemsFromRepository();
@@ -6805,7 +6846,7 @@ public final class SuggestionBarView extends GridLayout
     private void performPinnedPageTransitionHaptic(int targetPage) {
         if (!rowHapticsEnabled)
             return;
-        performHapticFeedback(pinnedPageTransitionHaptic(
+        Haptics.tick(this, pinnedPageTransitionHaptic(
             isMostUsedDynamicPage(targetPage), Build.VERSION.SDK_INT));
     }
 
@@ -7432,7 +7473,7 @@ public final class SuggestionBarView extends GridLayout
 
     /** The ticks' accent: the launcher's own, which is what the dock's ticks were drawn from. */
     private int resolvePageIndicatorAccentColor() {
-        return MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary,
+        return MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(getContext(), R.color.termux_primary));
     }
 
@@ -7605,8 +7646,7 @@ public final class SuggestionBarView extends GridLayout
     private View createPopupEntryButton(@NonNull LauncherAppEntry entry, int sizePx,
                                         @NonNull String sourceFolderId) {
         ImageButton button = new ImageButton(getContext());
-        Drawable icon = iconForDisplay(entry, sizePx);
-        button.setImageDrawable(icon);
+        bindRenderedIcon(button, entry, sizePx);
         button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         button.setAdjustViewBounds(true);
         button.setPadding(0, 0, 0, 0);
@@ -8107,12 +8147,6 @@ public final class SuggestionBarView extends GridLayout
         int byHeight = (maxPopupHeight - verticalPadding - (cellMargin * rows * 2)) / Math.max(rows, 1);
         int candidate = Math.min(iconSizePx(), Math.min(byWidth, byHeight));
         return clamp(candidate, dp(16), iconSizePx());
-    }
-
-    private void styleGhostButton(@NonNull Button button) {
-        button.setBackgroundColor(0x00000000);
-        button.setTextColor(resolveLauncherTextColor());
-        button.setAllCaps(false);
     }
 
     private void styleIconButton(@NonNull ImageButton button, int paddingPx) {

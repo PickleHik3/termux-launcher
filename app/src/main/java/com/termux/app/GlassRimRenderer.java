@@ -31,9 +31,9 @@ public final class GlassRimRenderer {
      * edge of the drawer plane, the dock capsule, every anchored menu and every terminal pane all
      * being invisible at once.
      */
-    private static final int BASE_COLOR = 0x3DFFFFFF;
-    private static final int LIGHT_TOP_COLOR = 0x7DFFFFFF;
-    private static final int SHIMMER_COLOR = 0xC8FFFFFF;
+    private static final int BASE_COLOR = com.termux.app.chrome.GlassTokens.RIM_BASE;
+    private static final int LIGHT_TOP_COLOR = com.termux.app.chrome.GlassTokens.RIM_LIGHT_TOP;
+    private static final int SHIMMER_COLOR = com.termux.app.chrome.GlassTokens.RIM_SHIMMER;
 
     private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint lightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -54,12 +54,14 @@ public final class GlassRimRenderer {
     private boolean mShadeRead;
 
     /**
-     * How wide the rim's stroke is at this density. Painted just inside the bounds, so this is
-     * also how far in from a glass surface's bounding box its visible border line sits — which is
-     * what anything lining up against that border (a corner tab) has to start past.
+     * How wide the rim's stroke is at this density: 1dp, the same line every glass surface draws
+     * through {@code GlassSurfaceFactory.rim}, so a focused pane's rim is as wide as the one it
+     * replaces. Painted just inside the bounds, so this is also how far in from a glass surface's
+     * bounding box its visible border line sits — which is what anything lining up against that
+     * border (a corner tab) has to start past.
      */
     public static float strokePx(float density) {
-        return Math.max(1f, 1.25f * density);
+        return Math.max(1f, density);
     }
 
     public GlassRimRenderer(float density) {

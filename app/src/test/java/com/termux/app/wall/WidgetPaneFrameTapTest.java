@@ -68,6 +68,10 @@ public class WidgetPaneFrameTapTest {
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
         @Override public void openLayoutEditor() { log.add("layout"); }
+        @Override public void openWallpaperPicker() { log.add("wallpaper"); }
+        boolean minimal;
+        @Override public boolean isMinimalMode() { return minimal; }
+        @Override public void toggleMinimalMode() { minimal = !minimal; log.add("minimal"); }
         @Override public int widgetGridColumns() { return columns; }
         @Override public int widgetGridRows() { return rows; }
         @Override public void setWidgetGrid(int newColumns, int newRows) {
@@ -124,13 +128,13 @@ public class WidgetPaneFrameTapTest {
         return buttonX(activity, 1);
     }
 
-    /** The third button: the sliders that open Appearance. */
-    private static float slidersX(Activity activity) {
+    /** The third button: "Wallpaper & style", which opens the wallpaper picker. */
+    private static float wallpaperX(Activity activity) {
         return buttonX(activity, 2);
     }
 
-    /** The fourth button: the grid that opens Layout, one button and gap further along. */
-    private static float layoutX(Activity activity) {
+    /** The fourth button: minimal mode, the same door every place's tab carries. */
+    private static float minimalX(Activity activity) {
         return buttonX(activity, 3);
     }
 
@@ -369,7 +373,7 @@ public class WidgetPaneFrameTapTest {
     }
 
     @Test
-    public void theTabRunsTheEditPencilAndTheAppearanceSliders() {
+    public void theTabRunsTheEditPencilAndTheWallpaperAndStyleButton() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
@@ -378,9 +382,9 @@ public class WidgetPaneFrameTapTest {
         holdCorner(page);
         tap(page, pencilX(activity), tabCentreY(activity));
         holdCorner(page);
-        tap(page, slidersX(activity), tabCentreY(activity));
+        tap(page, wallpaperX(activity), tabCentreY(activity));
 
-        assertEquals(Arrays.asList("edit", "appearance"), calls.log);
+        assertEquals(Arrays.asList("edit", "wallpaper"), calls.log);
     }
 
     /**
@@ -438,11 +442,11 @@ public class WidgetPaneFrameTapTest {
     }
 
     /**
-     * The page's two editor doors, side by side: the sliders open Appearance, the grid beside
-     * them opens Layout, and either one puts the tab away behind it.
+     * The page's one editor door, "Wallpaper & style": it opens the wallpaper picker, which leads
+     * on to the Look and Layout editors, and puts the tab away behind it.
      */
     @Test
-    public void theSlidersOpenAppearanceAndTheGridOpensLayout() {
+    public void theWallpaperAndStyleButtonOpensThePicker() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
@@ -450,18 +454,39 @@ public class WidgetPaneFrameTapTest {
         holdCorner(page);
         RectF bounds = new RectF();
         page.controlsTab().tabBounds(bounds);
-        tap(page, slidersX(activity), bounds.centerY());
-        assertEquals(Collections.singletonList("appearance"), calls.log);
-        assertFalse(page.isControlsTabShown());
-
-        holdCorner(page);
-        tap(page, layoutX(activity), bounds.centerY());
-        assertEquals(Arrays.asList("appearance", "layout"), calls.log);
+        tap(page, wallpaperX(activity), bounds.centerY());
+        assertEquals(Collections.singletonList("wallpaper"), calls.log);
         assertFalse(page.isControlsTabShown());
     }
 
     /**
-     * The + between the pencil and the sliders: another widgets page. Like the tick and the cross
+     * Minimal mode is one mode for every place, so Home's tab carries the same button in and
+     * out of it as the terminal's and the display's: a tap flips it and puts the tab away, and
+     * the next tap flips it back.
+     */
+    @Test
+    public void theTabCarriesTheMinimalModeButton() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        Calls calls = new Calls();
+        page.setHost(calls);
+        holdCorner(page);
+        RectF bounds = new RectF();
+        page.controlsTab().tabBounds(bounds);
+        tap(page, minimalX(activity), bounds.centerY());
+        assertEquals(Collections.singletonList("minimal"), calls.log);
+        assertTrue(calls.minimal);
+        assertFalse(page.isControlsTabShown());
+
+        holdCorner(page);
+        tap(page, minimalX(activity), bounds.centerY());
+        assertEquals(Arrays.asList("minimal", "minimal"), calls.log);
+        assertFalse("the same button is the way back", calls.minimal);
+        assertFalse(page.isControlsTabShown());
+    }
+
+    /**
+     * The + between the pencil and the wallpaper button: another widgets page. Like the tick and the cross
      * it is the grid's own coordinator that answers it, so the page's host hears nothing.
      */
     @Test
@@ -526,7 +551,7 @@ public class WidgetPaneFrameTapTest {
     }
 
     @Test
-    public void theEditingTabTakesTheCornerFromThePencilAndTheSliders() {
+    public void theEditingTabTakesTheCornerFromThePencilAndTheWallpaperButton() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
@@ -536,8 +561,8 @@ public class WidgetPaneFrameTapTest {
         page.applyWidgetEditing(true);
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
         tap(page, pencilX(activity), tabCentreY(activity));
-        tap(page, slidersX(activity), tabCentreY(activity));
-        assertEquals("neither the pencil nor the sliders is on the editing tab",
+        tap(page, wallpaperX(activity), tabCentreY(activity));
+        assertEquals("neither the pencil nor the wallpaper button is on the editing tab",
             Collections.emptyList(), calls.log);
 
         // Leaving editing puts it away and gives the resting buttons back.

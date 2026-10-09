@@ -6,42 +6,22 @@
         app:title="@string/settings_search_hint"
         app:persistent="false" />
 
-    <PreferenceCategory app:title="@string/settings_root_launcher_header">
+    <ListPreference
+        app:key="app_launcher_use_case_mode"
+        app:icon="@drawable/ic_symbol_stacks"
+        app:title="@string/settings_use_as_title"
+        app:dialogTitle="@string/settings_use_as_dialog_title" />
 
-        <Preference
-            app:key="layout"
-            app:icon="@drawable/ic_symbol_grid_view"
-            app:title="@string/settings_destination_layout"
-            app:summary="@string/settings_destination_layout_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.LayoutPreferencesFragment" />
+    <PreferenceCategory app:key="root_personalization" app:title="@string/settings_root_personalization_header">
 
+        <!-- One door to wallpaper, Look, Layout and the icon pack: opens the wallpaper picker
+             over the live launcher, in code. The Look page rows stay searchable under it. -->
         <Preference
-            app:key="appearance"
+            app:key="wallpaper_style"
             app:icon="@drawable/ic_symbol_palette"
-            app:title="@string/settings_destination_appearance"
-            app:summary="@string/settings_destination_appearance_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment" />
-
-        <Preference
-            app:key="terminal"
-            app:icon="@drawable/ic_symbol_terminal"
-            app:title="@string/settings_destination_terminal"
-            app:summary="@string/settings_destination_terminal_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TerminalPreferencesFragment" />
-
-        <Preference
-            app:key="status_bar"
-            app:icon="@drawable/ic_symbol_notifications"
-            app:title="@string/settings_destination_status_bar"
-            app:summary="@string/settings_destination_status_bar_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment" />
-
-        <Preference
-            app:key="keyboard_input"
-            app:icon="@drawable/ic_symbol_keyboard"
-            app:title="@string/settings_destination_keyboard_input"
-            app:summary="@string/settings_destination_keyboard_input_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment" />
+            app:persistent="false"
+            app:title="@string/settings_destination_wallpaper_style"
+            app:summary="@string/settings_destination_wallpaper_style_summary" />
 
         <Preference
             app:key="launcher_apps"
@@ -51,15 +31,61 @@
             app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment" />
 
         <Preference
+            app:key="status_bar"
+            app:icon="@drawable/ic_symbol_notifications"
+            app:title="@string/settings_destination_status_bar"
+            app:summary="@string/settings_destination_status_bar_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment" />
+
+        <Preference
+            app:key="notifications"
+            app:icon="@drawable/ic_symbol_notification_settings"
+            app:title="@string/settings_destination_notifications"
+            app:summary="@string/settings_destination_notifications_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.NotificationsPreferencesFragment" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="root_workspace" app:title="@string/settings_root_workspace_header">
+
+        <Preference
+            app:key="terminal"
+            app:icon="@drawable/ic_symbol_terminal"
+            app:title="@string/settings_destination_terminal"
+            app:summary="@string/settings_destination_terminal_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TerminalPreferencesFragment" />
+
+        <Preference
+            app:key="keyboard_input"
+            app:icon="@drawable/ic_symbol_keyboard"
+            app:title="@string/settings_destination_keyboard_input"
+            app:summary="@string/settings_destination_keyboard_input_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment" />
+
+        <Preference
             app:key="display"
             app:icon="@drawable/ic_symbol_desktop_windows"
             app:title="@string/settings_destination_display"
             app:summary="@string/settings_destination_display_summary"
             app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
 
+        <Preference
+            app:key="on_device_ai"
+            app:icon="@drawable/ic_symbol_smart_toy"
+            app:title="@string/settings_tai_service_title"
+            app:summary="@string/settings_destination_on_device_ai_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TaiPreferencesFragment" />
+
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/settings_root_system_info_header">
+    <PreferenceCategory app:key="root_app" app:title="@string/settings_root_app_header">
+
+        <Preference
+            app:key="app_behavior"
+            app:icon="@drawable/ic_symbol_battery_saver"
+            app:title="@string/settings_destination_app_behavior"
+            app:summary="@string/settings_destination_app_behavior_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.AppBehaviorPreferencesFragment" />
 
         <Preference
             app:key="services_permissions"

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the layout canvas says to a screen reader, one element at a time (LayoutCanvasView). -->
+<resources>
+    <!-- Where a bar stands. -->
+    <string name="layout_canvas_a11y_edge_top">Top edge</string>
+    <string name="layout_canvas_a11y_edge_bottom">Bottom edge</string>
+    <string name="layout_canvas_a11y_edge_left">Left edge</string>
+    <string name="layout_canvas_a11y_edge_right">Right edge</string>
+    <!-- An edge with more than one bar on it: which one this is, counted from the screen edge. -->
+    <string name="layout_canvas_a11y_stack_position">%1$s, %2$d of %3$d from the edge</string>
+    <!-- Two parts of one spoken line, such as an element's name and where it stands. -->
+    <string name="layout_canvas_a11y_join">%1$s, %2$s</string>
+    <string name="layout_canvas_a11y_size_dp">%1$d dp</string>
+    <string name="layout_canvas_a11y_size_percent">%1$d%% of the usual size</string>
+    <string name="layout_canvas_a11y_chin_dp">%1$d dp below the keys</string>
+    <string name="layout_canvas_a11y_grid_size">%1$d columns, %2$d rows</string>
+
+    <!-- The size controls on the selected element. -->
+    <string name="layout_canvas_a11y_handle_dock">Pinned apps size</string>
+    <string name="layout_canvas_a11y_handle_keyboard">Keyboard height</string>
+    <string name="layout_canvas_a11y_handle_chin">Space below the keys</string>
+
+    <!-- Actions. -->
+    <string name="layout_canvas_a11y_select">Select</string>
+    <string name="layout_canvas_a11y_deselect">Deselect</string>
+    <string name="layout_canvas_a11y_move_top">Move to the top edge</string>
+    <string name="layout_canvas_a11y_move_bottom">Move to the bottom edge</string>
+    <string name="layout_canvas_a11y_move_left">Move to the left edge</string>
+    <string name="layout_canvas_a11y_move_right">Move to the right edge</string>
+    <string name="layout_canvas_a11y_move_outward">Move toward the screen edge</string>
+    <string name="layout_canvas_a11y_move_inward">Move toward the middle</string>
+    <string name="layout_canvas_a11y_hide">Hide</string>
+    <string name="layout_canvas_a11y_show">Show</string>
+    <string name="layout_canvas_a11y_larger">Make larger</string>
+    <string name="layout_canvas_a11y_smaller">Make smaller</string>
+    <string name="layout_canvas_a11y_chin_more">More space below the keys</string>
+    <string name="layout_canvas_a11y_chin_less">Less space below the keys</string>
+    <string name="layout_canvas_a11y_add_column">Add a column</string>
+    <string name="layout_canvas_a11y_remove_column">Remove a column</string>
+    <string name="layout_canvas_a11y_add_row">Add a row</string>
+    <string name="layout_canvas_a11y_remove_row">Remove a row</string>
+</resources>

@@ -16,8 +16,10 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import com.termux.ai.TaiReadAloud;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.R;
 import com.termux.app.SuggestionBarCallback;
 import com.termux.shared.file.FileUtils;
@@ -50,6 +52,7 @@ import com.termux.shared.view.KeyboardUtils;
 import com.termux.shared.view.ViewUtils;
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
+import com.termux.terminal.TerminalLinks;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.UrlDetector;
 import com.termux.view.TerminalView;
@@ -146,6 +149,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     public void onCreate() {
         onReloadProperties();
+        TaiReadAloud.prewarmAvailability(mContext);
         // Panes are created lazily by TerminalPaneController (each configured in PaneHost), so
         // there may be no active pane yet at activity onCreate. Guard the initial font/keep-on setup.
         TerminalView view = mHost.focusedView();
@@ -156,6 +160,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             view.setKeepScreenOn(mHost.preferences().shouldKeepScreenOn());
             applyCursorTrailPolicy(view);
             applyUrlUnderlinePolicy(view);
+            applyPaddingFillPolicy(view);
         }
     }
 
@@ -177,6 +182,17 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     /**
+     * Whether a pane paints the empty band around its text grid with the background colour of the
+     * nearest edge cell (Ghostty's {@code window-padding-color = extend}). Pure preference, unlike
+     * the cursor trail: nothing about the device's power state should turn this back off.
+     */
+    public void applyPaddingFillPolicy(TerminalView view) {
+        if (view == null)
+            return;
+        view.setPaddingFillEnabled(mHost.preferences().isTerminalPaddingFillEnabled());
+    }
+
+    /**
      * Mark the URLs a tap would open. Touch has no hover, so the mark is the tap target's only
      * affordance; it follows the same preference as the tap, and takes the theme's accent so it
      * reads as interactive against any text colour.
@@ -187,9 +203,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         int color = 0;
         if (mHost.properties().shouldOpenTerminalTranscriptURLOnClick()) {
             color = com.google.android.material.color.MaterialColors.getColor(mContext,
-                com.google.android.material.R.attr.colorPrimary, 0);
+                androidx.appcompat.R.attr.colorPrimary, 0);
         }
         view.setUrlUnderlineColor(color);
+        view.setUrlTapEnabled(color != 0);
     }
 
     /**
@@ -212,6 +229,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         setSoftKeyboardState(true, mHost.isActivityRecreated());
         applyCursorTrailPolicy(mHost.focusedView());
         applyUrlUnderlinePolicy(mHost.focusedView());
+        applyPaddingFillPolicy(mHost.focusedView());
         mTerminalCursorBlinkerStateAlreadySet = false;
         if (mHost.focusedView().mEmulator != null) {
             // Start terminal cursor blinking if enabled
@@ -297,26 +315,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @Override
     public void onSingleTapUp(MotionEvent e) {
         TerminalEmulator term = mHost.currentSession().getEmulator();
-        int[] tappedColumnAndRow = mHost.focusedView().getColumnAndRow(e, true);
-        String hyperlink = term.getHyperlinkUriAt(tappedColumnAndRow[1], tappedColumnAndRow[0]);
-        if (hyperlink != null) {
-            // An OSC 8 link was tapped. Confirm before acting on it: unlike the URL regex below, the
-            // target is chosen by the application and need not resemble the text that was tapped.
-            showHyperlinkStrip(hyperlink, hyperlinkStripAnchor(e));
-            return;
-        }
-        if (mHost.properties().shouldOpenTerminalTranscriptURLOnClick()) {
-            int[] columnAndRow = mHost.focusedView().getColumnAndRow(e, true);
-            String url = urlAtTap(term, columnAndRow[0], columnAndRow[1]);
-            if (url != null) {
-                ShareUtils.openUrl(mContext, url);
-                return;
-            }
-        }
         if (!term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
+            // Switched off, a tap is only a tap: the keyboard waits for its own key.
+            if (isKeyboardTurnedOff()) return;
             if (isInAppKeyboardEnabled()) {
-                mInAppKeyboardController.show(ShowReason.TERMINAL_TAP);
-                suppressSystemImeForInAppKeyboard();
+                showInAppKeyboardForTap();
                 return;
             }
             if (!mHost.areSoftKeyboardFlagsDisabled())
@@ -324,6 +327,31 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             else
                 Logger.logVerbose(LOG_TAG, "Not showing soft keyboard onSingleTapUp since its disabled");
         }
+    }
+
+    /**
+     * A tapped link, OSC 8 or an address in the text, asks with a strip above the line before
+     * anything opens: the same offer wherever the tap lands, in a shell or over a TUI that got the
+     * tap as its click too.
+     */
+    @Override
+    public void onLinkTap(TerminalLinks.Link link, MotionEvent e) {
+        showLinkStrip(link.uri, linkStripAnchor(e));
+    }
+
+    /**
+     * Once the keyboard key has put the launcher's keyboard down, a tap on a full-screen TUI that
+     * tracks the mouse brings it back the way a tap on a shell does; the program still gets the
+     * tap as its click. A scroll or a hold never lands here, so reading back does not raise it.
+     */
+    @Override
+    public void onMouseTrackingTap(MotionEvent e) {
+        if (isInAppKeyboardEnabled() && !isKeyboardTurnedOff()) showInAppKeyboardForTap();
+    }
+
+    private void showInAppKeyboardForTap() {
+        mInAppKeyboardController.show(ShowReason.TERMINAL_TAP);
+        suppressSystemImeForInAppKeyboard();
     }
 
     @Override
@@ -339,6 +367,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @Override
     public boolean shouldUseCtrlSpaceWorkaround() {
         return mHost.properties().isUsingCtrlSpaceWorkaround();
+    }
+
+    @Override
+    public boolean shouldPassCtrlSpaceToAndroid() {
+        return mHost.preferences().isPassCtrlSpaceToAndroidEnabled();
     }
 
     @Override
@@ -793,6 +826,34 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     @Override
+    public boolean isReadAloudAvailable() {
+        return TaiReadAloud.isAvailable(mContext);
+    }
+
+    @Override
+    public boolean isReadingAloud() {
+        return TaiReadAloud.isSpeaking();
+    }
+
+    /**
+     * Reads the selection with the voice model on the reading card, or stops the reading already
+     * under way ("Stop reading", or an empty selection) and closes the card with it.
+     */
+    @Override
+    public void onReadAloud(String text) {
+        if (text == null || text.trim().isEmpty() || TaiReadAloud.isSpeaking()) {
+            if (TaiReadAloud.isSpeaking()) TaiReadAloud.stop(mContext);
+            mHost.closeReadAloudCard();
+            return;
+        }
+        if (mHost.showReadAloudCard(text)) return;
+        // No card to show: read without one, as before it existed.
+        TaiReadAloud.toggle(mContext, text, error -> {
+            if (error != null) AppNotice.show(mContext, error, true);
+        });
+    }
+
+    @Override
     public boolean onCodePoint(final int codePoint, boolean ctrlDown, TerminalSession session) {
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
@@ -992,6 +1053,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // On the Display place with mouse mode on, the keyboard and the touchpad share one frame:
         // this key swaps which of them holds it rather than taking the frame away.
         if (mHost.toggleDisplayFrameKeyboard()) return;
+        // The keyboard key is the way back from "off": it turns the keyboard on and raises it.
+        if (isKeyboardTurnedOff()) {
+            setKeyboardTurnedOff(false);
+            return;
+        }
         if (isInAppKeyboardEnabled()) {
             mInAppKeyboardController.toggle(ToggleReason.KEYBOARD_ACTION);
             suppressSystemImeForInAppKeyboard();
@@ -1048,7 +1114,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // theme. For android 8.+, the "defaultFocusHighlightEnabled" attribute is also set to false
         // in TerminalView layout to fix the issue.
         // If soft keyboard is disabled by user for Termux (check function docs for Termux behaviour info)
-        if (KeyboardUtils.shouldSoftKeyboardBeDisabled(mContext, mHost.preferences().isSoftKeyboardEnabled(), mHost.preferences().isSoftKeyboardEnabledOnlyIfNoHardware())) {
+        if (isKeyboardTurnedOff() || KeyboardUtils.shouldSoftKeyboardBeDisabled(mContext, mHost.preferences().isSoftKeyboardEnabled(), mHost.preferences().isSoftKeyboardEnabledOnlyIfNoHardware())) {
             Logger.logVerbose(LOG_TAG, "Maintaining disabled soft keyboard");
             mHost.disableSoftKeyboard(mHost.focusedView());
             mHost.focusedView().requestFocus();
@@ -1147,6 +1213,45 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         KeyboardUtils.showSoftKeyboard(mContext, target);
     }
 
+    /** Whether the user switched the keyboard off, from the palette or its extra key. */
+    public boolean isKeyboardTurnedOff() {
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        return preferences != null && preferences.isKeyboardTurnedOff();
+    }
+
+    /**
+     * Flips the keyboard off or on, answering whether it is now on. Off holds whichever keyboard
+     * is in use down until it is turned on again; a tap on the terminal no longer raises it.
+     */
+    public boolean toggleKeyboardTurnedOff() {
+        boolean off = !isKeyboardTurnedOff();
+        setKeyboardTurnedOff(off);
+        AppNotice.show(mContext, off ? R.string.notice_keyboard_turned_off
+            : R.string.notice_keyboard_turned_on);
+        return !off;
+    }
+
+    private void setKeyboardTurnedOff(boolean off) {
+        if (isInAppKeyboardEnabled()) {
+            mInAppKeyboardController.setTurnedOff(off);
+            suppressSystemImeForInAppKeyboard();
+            return;
+        }
+        mHost.preferences().setKeyboardTurnedOff(off);
+        View view = mHost.focusedView();
+        if (view == null) return;
+        if (off) {
+            mHost.disableSoftKeyboard(view);
+        } else {
+            mHost.clearDisableSoftKeyboardFlags();
+            // Android's keyboard switched off in Settings stays off; this only undoes our own.
+            if (mHost.preferences().isSoftKeyboardEnabled()) {
+                view.requestFocus();
+                showSystemSoftKeyboard(view);
+            }
+        }
+    }
+
     private boolean isInAppKeyboardEnabled() {
         return mInAppKeyboardController != null && mInAppKeyboardController.isEnabled();
     }
@@ -1206,11 +1311,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         "http", "https", "mailto", "tel", "sms", "geo", "ftp", "ftps"));
 
     /**
-     * Where the hyperlink strip's bottom edge should land: one text row above the tap, so the strip
+     * Where the link strip's bottom edge should land: one text row above the tap, so the strip
      * sits over the line above and the tapped link itself stays visible under it.
      */
     @Nullable
-    private PointF hyperlinkStripAnchor(@NonNull MotionEvent e) {
+    private PointF linkStripAnchor(@NonNull MotionEvent e) {
         TerminalView view = mHost.focusedView();
         if (view == null) return null;
         int[] onScreen = new int[2];
@@ -1220,24 +1325,27 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     /**
-     * Ask what to do with a tapped OSC 8 hyperlink. A thin two-action strip above the tapped line
-     * rather than a page: an outside tap is the cancel, and the transcript — including the link
-     * itself — stays readable behind it, which is also what shows what is about to be opened.
+     * Ask what to do with a tapped link. A thin two-action strip above the tapped line rather than
+     * a page: an outside tap is the cancel, and the transcript — including the link itself — stays
+     * readable behind it, which is also what shows what is about to be opened. An OSC 8 target is
+     * chosen by the program and need not resemble the text that was tapped, so it is never opened
+     * unasked; a plain address gets the same strip so one tap means one thing.
      */
-    private void showHyperlinkStrip(String uri, @Nullable PointF anchor) {
+    private void showLinkStrip(String uri, @Nullable PointF anchor) {
         String scheme = Uri.parse(uri).getScheme();
         boolean openable = scheme != null && OPENABLE_HYPERLINK_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT));
         TerminalSheetController sheet = mHost.sheetController();
         LinearLayout strip = new LinearLayout(mContext);
         strip.setOrientation(LinearLayout.HORIZONTAL);
         strip.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        addHyperlinkStripAction(strip, mContext.getString(R.string.action_hyperlink_copy), () -> {
+        addLinkStripAction(strip, mContext.getString(R.string.action_hyperlink_copy), () -> {
             sheet.dismiss();
             ShareUtils.copyTextToClipboard(mContext, uri,
                 mContext.getString(R.string.msg_select_url_copied_to_clipboard));
+            ClipboardHistory.get(mContext).record(uri);
         });
         if (openable) {
-            addHyperlinkStripAction(strip, mContext.getString(R.string.action_hyperlink_open),
+            addLinkStripAction(strip, mContext.getString(R.string.action_hyperlink_open),
                 () -> {
                     sheet.dismiss();
                     ShareUtils.openUrl(mContext, uri);
@@ -1247,7 +1355,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             TerminalSheetController.Placement.stripAbove(anchor));
     }
 
-    private void addHyperlinkStripAction(@NonNull LinearLayout strip, @NonNull CharSequence label,
+    private void addLinkStripAction(@NonNull LinearLayout strip, @NonNull CharSequence label,
                                          @NonNull Runnable action) {
         int density = Math.round(mContext.getResources().getDisplayMetrics().density);
         TextView button = new TextView(mContext);
@@ -1257,7 +1365,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // Material text-button ink: the accent says "action", which the borderless pill no longer
         // says with an outline.
         button.setTextColor(com.google.android.material.color.MaterialColors.getColor(mContext,
-            com.google.android.material.R.attr.colorPrimary, button.getCurrentTextColor()));
+            androidx.appcompat.R.attr.colorPrimary, button.getCurrentTextColor()));
         button.setSingleLine(true);
         button.setGravity(android.view.Gravity.CENTER);
         // The 40dp is the strip's whole height budget: a thinner row than this stops being tappable.
@@ -1267,16 +1375,6 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         strip.addView(button, new LinearLayout.LayoutParams(
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
-    }
-
-    /**
-     * The URL under a tap, or null: the address whose underlined cells include the tapped one, so
-     * what opens is exactly what the screen marked as openable.
-     */
-    @Nullable
-    private static String urlAtTap(@NonNull TerminalEmulator term, int column, int row) {
-        UrlDetector.UrlSpan span = UrlDetector.at(term.getScreen(), column, row);
-        return span == null ? null : span.url;
     }
 
     public void showUrlSelection() {
@@ -1313,6 +1411,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 sheet.dismiss();
                 ShareUtils.copyTextToClipboard(mContext, url,
                     mContext.getString(R.string.msg_select_url_copied_to_clipboard));
+                ClipboardHistory.get(mContext).record(url);
             });
             row.setOnLongClickListener(view -> {
                 sheet.dismiss();
@@ -1353,7 +1452,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         final String transcriptText = ShellUtils.getTerminalSessionTranscriptText(session, false, true);
         if (transcriptText == null) return;
 
-        MessageDialogUtils.showMessage(mContext, TermuxConstants.TERMUX_APP_NAME + " Report Issue",
+        MessageDialogUtils.showMessage(mContext, TermuxConstants.TERMUX_LAUNCHER_APP_DISPLAY_NAME + " Report Issue",
             mContext.getString(R.string.msg_add_termux_debug_info),
             mContext.getString(com.termux.shared.R.string.action_yes), (dialog, which) -> reportIssueFromTranscript(transcriptText, true),
             mContext.getString(com.termux.shared.R.string.action_no), (dialog, which) -> reportIssueFromTranscript(transcriptText, false),
@@ -1361,10 +1460,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     private void reportIssueFromTranscript(String transcriptText, boolean addTermuxDebugInfo) {
-        Logger.showToast(mContext, mContext.getString(R.string.msg_generating_report), true);
+        com.termux.app.notice.AppNotice.show(mContext, mContext.getString(R.string.msg_generating_report), true);
         REPORT_EXECUTOR.execute(() -> {
             StringBuilder reportString = new StringBuilder();
-            String title = TermuxConstants.TERMUX_APP_NAME + " Report Issue";
+            String title = TermuxConstants.TERMUX_LAUNCHER_APP_DISPLAY_NAME + " Report Issue";
             reportString.append("## Transcript\n");
             reportString.append("\n").append(MarkdownUtils.getMarkdownCodeForString(transcriptText, true));
             reportString.append("\n##\n");

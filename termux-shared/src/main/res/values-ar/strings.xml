@@ -54,7 +54,7 @@
     <string name="setting_launcher_icon_enabled_off">سيتم تعطيل أيقونة التطبيق.</string>
     <string name="setting_launcher_icon_enabled_on">سيتم تمكين أيقونة التطبيق. (الافتراضية)</string>
     <string name="setting_launcher_icon_title">تعم تمكين ايقونة التطبيق</string>
-    <string name="msg_about_termux_monet">أنت تستخدم نسخة معدلة وغير رسمية من Termux، مع تطبيقات من صنع المجتمع وميزات مهملة/غير مخططة. كن على علم بأن هذا التطبيق غير مستقر وغير مدعوم من قبل Termux.</string>
+    <string name="msg_about_termux_launcher">أنت تستخدم نسخة معدلة وغير رسمية من Termux، مع تطبيقات من صنع المجتمع وميزات مهملة/غير مخططة. كن على علم بأن هذا التطبيق غير مستقر وغير مدعوم من قبل Termux.</string>
     <string name="msg_storage_permission_not_granted_on_request">لم يمنح المستخدم إذن التخزين عند الطلب</string>
     <string name="log_level_title">مستوى التسجيل</string>
     <string name="log_level_off">ايقاف</string>
@@ -72,15 +72,6 @@
 \n الاستثناء: %2$s</string>
     <string name="error_exception_received_while_executing_app_shell_command">تم تلقي استثناء أثناء تنفيذ أمر shell الخاص بالتطبيق \"%1$s\".
 \n الاستثناء: %2$s</string>
-    <string name="msg_report_issue">"إذا كنت تريد الإبلاغ عن هذه المشكلة، فانسخ نصها من قائمة الخيارات (3 نقاط في أعلى اليمين) وانشر المشكلة على أحد الروابط التالية. 
-\n
-\n إذا كنت تنشر &amp;TERMUX_APP_NAME؛  تقرير تعطل التطبيق، فيرجى تقديم تفاصيل حول ما كنت تفعله والذي تسبب في التعطل وكيفية إعادة إنتاجه، إن أمكن. 
-\n
-\n إذا كنت تنشر مشكلة على GitHub، فقم بنشرها في المستودع الذي ينتمي إليه التقرير.  المشكلات المفتوحة أو رسائل البريد الإلكتروني المرسلة مع **لقطات شاشة (جزئية)** بدلاً من النص المنسوخ أو ملف من هذا التقرير **من المرجح أن يتم إغلاقها/حذفها تلقائيًا**.  يمكنك اختياريًا إزالة أي معلومات خاصة بالجهاز تعتبرها خاصة أو لا ترغب في مشاركتها أو ليست ذات صلة بالمشكلة. 
-\n
-\n نحن لا نقدم الدعم لأي أدوات/نصوص برمجية متعلقة بالقرصنة.  أي أسئلة يتم طرحها بشأنها عبر البريد الإلكتروني أو على GitHub أو أي &amp;TERMUX_APP_NAME رسمي آخر؛  منتديات المجتمع **من المرجح أن يتم إغلاقها/حذفها تلقائيًا** وقد تؤدي إلى حظر **مؤقت أو دائم**.  راجع %1$s/wiki/Hacking للحصول على التفاصيل. 
-\n
-\n لا تبلغ عن المشكلات التي حدثت في Termux Monet على termux-app repo، إلا إذا كنت متأكدًا تمامًا من أن هذه المشكلة موجودة أيضًا في تطبيق Termux العادي."</string>
     <string name="error_termux_app_package_context_not_accessible">&TERMUX_APP_NAME; التطبيق (سياق الحزمة) لا يمكن الوصول إليه.</string>
     <string name="error_termux_prefix_dir_path_not_accessible">&amp;TERMUX_APP_NAME; لا يمكن الوصول إلى دليل app $PREFIX بواسطة تطبيق %1$s. قد يكون هذا بسبب عدم تثبيت أو إعداد &amp;TERMUX_APP_NAME؛ التطبيق أو &amp;TERMUX_APP_NAME؛ يحتوي كل من التطبيق والتطبيق %1$s على توقيعات APK مختلفة لأنك تمكنت من تثبيت كلا التطبيقين من مصادر مختلفة. قد يكون السبب أيضًا هو أن &amp;TERMUX_APP_NAME; دليل $PREFIX \"&amp;TERMUX_PREFIX_DIR_PATH;\" غير موجود أو ليس لديه أذونات القراءة والكتابة والتنفيذ.</string>
 </resources>

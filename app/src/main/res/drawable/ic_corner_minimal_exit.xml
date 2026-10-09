@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Minimal mode, on: the same four corners folded back in, the way back to the place's chrome.
+     Drawn on the tiling mark's 512 grid, in the same stroke and colour, and tinted by the tab. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:pathData="M200,84v116H84M312,84v116h116M428,312H312v116M84,312h116v116"
+        android:strokeColor="#E6E6E6"
+        android:strokeWidth="44"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

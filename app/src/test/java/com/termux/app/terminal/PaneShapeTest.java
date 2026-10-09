@@ -79,6 +79,46 @@ public class PaneShapeTest {
     }
 
     @Test
+    public void topClearanceSpendsTheHeadroomTheGridAlreadyLeaves() {
+        // The 24dp default at 2.625 density: the sides owe 19px, and with the first row of cells
+        // starting 7px down its own view the top owes 12px — the first cell then sits the same
+        // 19px off the top as the last row's cells sit off the bottom.
+        int side = PaneShape.contentInsetPx(63f);
+        assertEquals(19, side);
+        assertEquals(12, PaneShape.topInsetPx(side, 7));
+        assertEquals(side, PaneShape.topInsetPx(side, 7) + 7);
+        // With no headroom the top is the symmetric inset itself.
+        assertEquals(19, PaneShape.topInsetPx(side, 0));
+    }
+
+    @Test
+    public void topClearanceLandsTheFirstCellWhereTheLastRowsCellsLand() {
+        // Whatever the headroom, the first cell's corner — the side inset across, the margin plus
+        // the headroom down — sits on or inside the arc, at the same inset as the other edges.
+        for (float radius = 1f; radius <= 200f; radius += 0.5f) {
+            int side = PaneShape.contentInsetPx(radius);
+            for (int headroom = 0; headroom <= 40; headroom += 3) {
+                int top = PaneShape.topInsetPx(side, headroom);
+                int cellTop = top + headroom;
+                assertTrue("top " + top + " with " + headroom + " headroom leaves the first cell"
+                    + " outside a " + radius + "px arc",
+                    Math.hypot(radius - side, radius - Math.min(cellTop, side)) <= radius + EPS);
+                assertTrue("never more than the symmetric inset", top <= side);
+                assertEquals("even with the sides, unless the headroom alone is past them",
+                    Math.max(side, headroom), cellTop);
+            }
+        }
+    }
+
+    @Test
+    public void headroomPastTheInsetOwesNothing() {
+        assertEquals(0, PaneShape.topInsetPx(19, 19));
+        assertEquals(0, PaneShape.topInsetPx(19, 40));
+        assertEquals(0, PaneShape.topInsetPx(0, 0));
+        assertEquals(5, PaneShape.topInsetPx(5, -3));
+    }
+
+    @Test
     public void capIsMonotonic_soAResizeNeverJumpsTheShape() {
         float previous = 0f;
         for (int height = 1; height <= 400; height += 7) {

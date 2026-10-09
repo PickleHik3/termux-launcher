@@ -37,13 +37,15 @@ public class PaneWallControllerTest {
         boolean terminalOnly;
         boolean widgets = true;
         boolean display = true;
-        int interrupted;
+        Boolean terminalOffScreen;
 
         @Override public boolean reducedMotion() { return true; }
         @Override public boolean isTerminalOnly() { return terminalOnly; }
         @Override public boolean isWidgetsEnabled() { return widgets; }
         @Override public boolean isDisplayEnabled() { return display; }
-        @Override public void onWallDragInterrupted() { interrupted++; }
+        @Override public void onTerminalOffScreenChanged(boolean offScreen) {
+            terminalOffScreen = offScreen;
+        }
     }
 
     private Activity activity;
@@ -64,6 +66,17 @@ public class PaneWallControllerTest {
         wall.layout(0, 0, 1080, 1800);
     }
 
+    @Test public void theWallsTerminalOffScreenSignalReachesTheHost() {
+        // The first layout reports where the terminal stands, so a cold start restored onto
+        // another place hides it before anything moves.
+        assertEquals("the first layout reports the terminal on screen", Boolean.FALSE,
+            host.terminalOffScreen);
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        assertEquals(Boolean.TRUE, host.terminalOffScreen);
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        assertEquals(Boolean.FALSE, host.terminalOffScreen);
+    }
+
     @Test public void thePlacesFollowThePreferences() {
         assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY),
             controller.pages());
@@ -75,7 +88,6 @@ public class PaneWallControllerTest {
         host.terminalOnly = true;
         controller.refreshPages();
         assertEquals(Collections.singletonList(PaneWallPage.TERMINAL), controller.pages());
-        assertFalse("nowhere to go, so nothing to drag", controller.canDrag());
     }
 
     @Test public void aPlaceSwitchedOffWhileShowingHandsTheWallBackToTheTerminal() {
@@ -155,15 +167,6 @@ public class PaneWallControllerTest {
         assertFalse(controller.goTo("nowhere"));
         controller.returnToTerminal(false);
         assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
-    }
-
-    @Test public void aNavigationUnderALiveDragReachesTheHost() {
-        assertTrue(controller.beginDrag());
-        controller.dragTo(-200f);
-
-        controller.goTo(PaneWallPage.DISPLAY, false);
-
-        assertEquals(1, host.interrupted);
     }
 
     @Test public void aTerminalLeftOnScreenByACutSlideCountsAsShowingWhateverTheRecordSays() {

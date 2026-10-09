@@ -3,7 +3,6 @@ package com.termux.app.fragments.settings.termux;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.widget.Toast;
 
@@ -11,7 +10,6 @@ import androidx.annotation.Keep;
 import androidx.annotation.Nullable;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
-import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 
@@ -34,7 +32,6 @@ import java.nio.charset.StandardCharsets;
 
 @Keep
 public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPreferenceFragment {
-    private static final String STORE = "advanced_diagnostics";
 
     @Override public void onCreatePreferences(Bundle state, String rootKey) {
         Context context = getContext();
@@ -43,7 +40,6 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
         manager.setPreferenceDataStore(new AdvancedDataStore(context));
         setPreferencesFromResource(R.xml.advanced_diagnostics_preferences, rootKey);
         configureLogLevel(context);
-        configureDeveloperVisibility();
         bindActions(context);
         SettingsLayoutUtils.applyScreenLayout(this);
     }
@@ -65,14 +61,6 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
                 + (String.valueOf(Logger.DEFAULT_LOG_LEVEL).equals(((ListPreference) preference).getValue())
                     ? " · " + getString(R.string.settings_default_value) : "");
         });
-    }
-
-    private void configureDeveloperVisibility() {
-        androidx.preference.SwitchPreferenceCompat toggle = findPreference("developer_options_enabled");
-        PreferenceCategory tools = findPreference("developer_tools");
-        if (toggle == null || tools == null) return;
-        tools.setVisible(toggle.isChecked());
-        toggle.setOnPreferenceChangeListener((preference, value) -> { tools.setVisible(Boolean.TRUE.equals(value)); return true; });
     }
 
     private void bindActions(Context context) {
@@ -135,10 +123,9 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
 
     private static final class AdvancedDataStore extends PreferenceDataStore {
         private final DebuggingPreferencesDataStore debugging;
-        private final SharedPreferences local;
-        AdvancedDataStore(Context context) { debugging = DebuggingPreferencesDataStore.getInstance(context); local = context.getSharedPreferences(STORE, Context.MODE_PRIVATE); }
-        @Override public void putBoolean(String key, boolean value) { if ("developer_options_enabled".equals(key)) local.edit().putBoolean(key, value).apply(); else debugging.putBoolean(key, value); }
-        @Override public boolean getBoolean(String key, boolean fallback) { return "developer_options_enabled".equals(key) ? local.getBoolean(key, fallback) : debugging.getBoolean(key, fallback); }
+        AdvancedDataStore(Context context) { debugging = DebuggingPreferencesDataStore.getInstance(context); }
+        @Override public void putBoolean(String key, boolean value) { debugging.putBoolean(key, value); }
+        @Override public boolean getBoolean(String key, boolean fallback) { return debugging.getBoolean(key, fallback); }
         @Override public void putString(String key, @Nullable String value) { debugging.putString(key, value); }
         @Override public String getString(String key, @Nullable String fallback) { return debugging.getString(key, fallback); }
     }

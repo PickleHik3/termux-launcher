@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A tonal button in the error container role, for the code-built TAI screens to inflate. -->
+<com.google.android.material.button.MaterialButton xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.Tai.Button.Error"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content" />

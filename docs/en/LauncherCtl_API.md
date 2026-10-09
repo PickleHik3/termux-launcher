@@ -1,16 +1,16 @@
 # LauncherCtl API (Local AI Endpoint)
 
 ## Overview
-LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint, model management for the on-device Termux AI (TAI) runtime, one app-launch route, and the pane routes that let a process in a shell open and drive a terminal pane of its own. It is not a general device-control or agent bridge.
+LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint, model management for the On-device AI runtime (`tai` internal code prefix), one app-launch route, the pane routes that let a process in a shell open and drive a terminal pane of its own, the signal routes (a notification, the progress ring, the clipboard) for a process that has no terminal to write the matching escape sequence into, and the opt-in notification history routes. It is not a general device-control or agent bridge.
 
 - Server: in app process, isolated from native model work which runs in `:tai_runtime`.
 - Bind mode: `localhost` (default, `127.0.0.1`) or opt-in `lan` (`0.0.0.0`).
 - Auth: bearer token from `~/.launcherctl/token`, or `X-Api-Key: <token>` header. The token can be made optional for localhost (see [Auth](#auth)).
 - Endpoint URL: `~/.launcherctl/endpoint`.
-- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>` and `launcherctl pane …`. The launcher app installs both when `TermuxActivity` starts.
+- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`, `launcherctl pane …`, `window open`, `agent`, `notify`, `progress`, `clipboard`, `notifications`, `keyboard`, `x11 gpu`, and the device commands `vibrate`, `torch`, `battery`, `volume`, `toast` and `wallpaper`. The launcher app installs both when `TermuxActivity` starts. The shell commands one by one: [launcherctl](LauncherCtl.md).
 - Removed helpers: `launcherctl-mcp` and `launcher-restart` are no longer installed and are deleted on upgrade.
 
-`tai` uses this authenticated server for the local Termux AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
+`tai` uses this authenticated server for the local On-device AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
 
 ## Files and Components
 
@@ -26,7 +26,7 @@ Runtime files under `$HOME/.launcherctl`:
 - `token`: API bearer token.
 - `endpoint`: local base URL (`http://127.0.0.1:<port>`).
 
-TAI model packages live under app-private model storage, not under `~/.launcherctl`.
+On-device AI model packages live under app-private model storage, not under `~/.launcherctl`.
 
 ## Discovery
 
@@ -52,7 +52,7 @@ The token is a startup-generated random secret stored owner-only at `~/.launcher
 
 ### Token-optional toggle (localhost only)
 
-A setting **Require API token** (default **on**) lives under **Settings → Services & permissions → TAI · Termux AI**. When turned **off**, requests from localhost need no token — any placeholder API key (or none) works. This is convenient for local CLI clients that cannot easily read the token file.
+A setting **Require API token** (default **on**) lives in the **Server** group of **Settings → On-device AI**, beside **LAN access** (whose summary says it "turns itself off after 12 hours"). When turned **off**, requests from localhost need no token — any placeholder API key (or none) works. This is convenient for local CLI clients that cannot easily read the token file.
 
 - `GET /` and `OPTIONS` never require auth, regardless of the toggle.
 - **LAN bind mode always requires the token**, no matter the toggle state. Anyone who can reach a LAN-exposed endpoint and does not present the token gets `401`.
@@ -76,7 +76,7 @@ remote page points its own hostname at `127.0.0.1` so the browser treats the API
 
 ## Endpoint Reference
 
-The complete route surface is below. App launch is the only non-TAI action route. There are no notification, media, resource, event, agent, MCP, restart, or general device-control routes.
+The complete route surface is below. Besides the On-device AI routes there are app launch, the pane and window routes, the on-screen keyboard, the three signal routes (notification, progress, clipboard), the notification history routes, the device routes (vibrate, torch, battery, volume, toast, wallpaper), agent status and the display's GPU probe. There are no media, resource, event, MCP or restart routes.
 
 ### Health and discovery
 
@@ -134,7 +134,7 @@ launcherctl launch maps
 launcherctl launch com.example.maps
 ```
 
-`launcherctl`'s other command is `pane`, below. Use `tai` for model and inference commands.
+`launcherctl`'s other commands are `pane`, `window`, `agent`, `notify`, `progress`, `clipboard`, `notifications`, `keyboard`, `x11` and the device commands, below; [launcherctl](LauncherCtl.md) lists them as the shell sees them. Use `tai` for model and inference commands.
 
 ### Panes
 
@@ -212,6 +212,59 @@ launcherctl pane close "$id"
 Every `pane` command prints the server's JSON body and exits 1 on an HTTP error, so the error code
 (`not_owned`, `pane_not_found`, …) is always visible to the caller.
 
+### Windows
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/windows` | Open a NEW full-size window (not a split) |
+
+A pane shares the screen with whatever else is in the current window; a window is the same kind of
+full-size, own-chip surface `+` in the window strip creates. This route is for a script that wants
+one of those for itself instead of a pane squeezed in beside the user's — tlstore-ui's own
+full-screen UI is the motivating case. It is background-safe exactly like the pane routes: the
+launcher only needs to be running, not in the foreground.
+
+`POST /v1/windows` takes:
+
+```json
+{"command": ["tlstore"], "title": "tlstore", "focus": true}
+```
+
+- `command` — an argv array, or a string that is run through `sh -c`. Unlike `POST /v1/panes`, this
+  is required: a window with nothing to run is just `launcherctl window open`'s job in the
+  interactive UI (Ctrl+Alt+C / the strip's `+`), not this API's. The command runs through the
+  user's login shell, and the window is the command's: when it exits, the window closes and its
+  chip goes with it — unlike a pane opened through `POST /v1/panes`, where the shell stays behind.
+  If it was the last window, you are left with an empty home, as when you close the last window
+  yourself.
+- `title` — the name shown on the window's chip.
+- `focus` — default `true`, switches the window strip to it; `false` leaves whichever window is on
+  screen alone while the new one keeps running behind it.
+
+The response is flat, not a pane record:
+
+```json
+{"ok": true, "id": "6d3f…", "window": 2, "columns": 80, "rows": 24}
+```
+
+`window` is the new window's index, in the same order `GET /v1/panes` lists windows under.
+`columns`/`rows` are `0` when the window has not been laid out yet (an unfocused window nobody has
+looked at). The opened pane is owned exactly like one opened through `POST /v1/panes`, so
+`/v1/panes/{id}/write|read|close` reach it the same way — `GET /v1/panes` and `/focus` too. A
+window that could not be opened (no session, terminal limit reached, compatibility mode on, or the
+window could never be given a starting size) is HTTP 409 `window_open_failed`; a missing `command`
+is HTTP 400 `bad_request`.
+
+Rate limit: 30 a minute.
+
+```sh
+id=$(launcherctl window open --title tlstore --no-focus -- tlstore \
+     | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+launcherctl pane read "$id" --lines 40
+launcherctl pane focus "$id"
+launcherctl pane close "$id"
+```
+
 ### The on-screen keyboard
 
 | Method | Path | Purpose |
@@ -225,45 +278,382 @@ Display place it goes through the same rules a tap there does — see
 [The keyboard follows text fields](X11_Display.md#the-keyboard-follows-text-fields) — and
 elsewhere it simply opens or closes the keyboard. Both put something on a screen, so a stopped
 launcher answers 409 `activity_not_running`; 409 `unavailable` means the in-app keyboard is off.
+If the user has switched the keyboard off with `keyboard.toggle_enabled`, a `manual` show turns it
+back on, while a `focus` show is ignored and answers 409 `unavailable`.
 Rate limit: 240 a minute each.
+
+`hide` also takes `{"hold": true}`: the calling session keeps the keyboard down until it calls
+`show` itself, instead of just for this one call. If that session ends first, the launcher shows
+the keyboard again on its own — nothing is ever left stuck down. A full-screen program that wants
+the keyboard out of its way while it runs (tlstore-ui) asks for a hold.
 
 ```sh
 launcherctl keyboard show --source focus
 launcherctl keyboard hide --source focus
 launcherctl keyboard show          # source=manual
+launcherctl keyboard hide --hold   # keep it down until this session shows it again or ends
 ```
+
+### Notifications, the progress ring and the clipboard
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/notify` | A message in the phone's notification shade — what `OSC 99` sends |
+| POST | `/v1/progress` | The progress ring on a window chip — what `OSC 9;4` sets |
+| POST | `/v1/clipboard` | Put text on the Android clipboard — what an `OSC 52` write does |
+| GET | `/v1/clipboard` | Read the Android clipboard — what an `OSC 52` query answers |
+
+A program that has a terminal sends these things as escape sequences and needs none of this. These
+routes exist for a process that does not: a coding agent's tool runner is typically a service
+parented to init with stdin on `/dev/null`, so nothing it prints can reach any terminal. Each route
+runs the very same code its escape sequence does — the app has one implementation per signal
+(`ShellSignals`), and the OSC handlers and these routes both call it — so a notification posted
+either way is indistinguishable, a ring set either way is the same ring, and the clipboard rules are
+the same rules.
+
+**Attribution.** None of these needs a pane id. The body's optional `pane` names the pane the
+signal belongs to (the window whose chip shows the ring, the pane a tapped notification returns
+to); without it the signal goes to the current pane. The shell client fills `pane` from
+`$TERMUX_LAUNCHER_PANE` when that is set, so from an ordinary shell the result is exactly what the
+escape sequence would have done; in an environment without it (opencode's tool runner) the current
+pane is a sensible default. An unknown `pane` is HTTP 404 `pane_not_found`; no pane at all (no
+session) is HTTP 409 `no_session`.
+
+**Background.** Like the pane routes, these only need the launcher to be *running*, not on screen:
+`activity_not_running` (409) means the process is gone. A notification sent while the user is in
+another app is precisely the case the shade is for; a progress report is state the chip picks up
+when the terminal is next seen. A clipboard read is the exception, see below.
+
+`POST /v1/notify` takes:
+
+```json
+{"title": "Build", "body": "42 tests passed", "id": "build", "urgency": "normal", "pane": "6d3f…"}
+```
+
+- `body` — the message; required unless `title` is given. Multi-line is fine.
+- `title` — optional headline. As with `OSC 99`, a message with only a body uses it as the headline.
+- `id` — optional name (up to 256 characters): sending the same name again replaces the earlier
+  message instead of stacking another one.
+- `urgency` — `low` (silent), `normal` (default), or `critical` (the urgent channel); the
+  protocol's `0`/`1`/`2` are accepted too.
+
+Answers `{"ok": true, "pane": "…", "id": "build", "shown": true}`. `shown` is false when nothing
+reached the user: the launcher's notifications are turned off and it is not on screen either.
+Rate limit: 60 a minute.
+
+`POST /v1/progress` takes:
+
+```json
+{"state": "normal", "percent": 42, "pane": "6d3f…"}
+```
+
+- `state` — `clear`, `normal`, `error`, `indeterminate` or `paused` (`0`–`4` in `OSC 9;4` terms).
+  May be omitted when `percent` is given, which means `normal`.
+- `percent` — 0–100. Optional for `normal`, `error` and `paused`, in which case the ring keeps its
+  last value, as the escape does.
+
+Answers `{"ok": true, "pane": "…", "state": "normal", "percent": 42}`. A pane whose terminal has not
+started yet is 409 `pane_not_ready`. Rate limit: 600 a minute, the same as agent status reports,
+since a build prints a percentage often.
+
+`POST /v1/clipboard` takes `{"text": "…"}` and answers `{"ok": true, "length": 12}`.
+`GET /v1/clipboard` answers `{"ok": true, "text": "…"}` (`""` when the clipboard holds no text).
+
+The clipboard is the one place a signal can *take* something from the user or replace what they
+just copied, so both directions follow the rules an `OSC 52` write and query already follow, and
+answer with their own codes rather than a generic one:
+
+- Writing works whether or not the launcher is on screen, as Termux:API's `termux-clipboard-set`
+  always has: a script started from another app's foreground is asking on purpose. An `OSC 52`
+  write from a pane keeps the on-screen rule, since any program printing to a pane can emit one.
+- Reading needs the launcher on screen. Off screen, `GET /v1/clipboard` answers 409
+  `launcher_not_visible` — Android only lets the focused app read the clipboard anyway.
+- Reading also needs **Settings → Terminal → Let programs read the clipboard** (on by default), the
+  same switch that gates `OSC 52` queries. Off, `GET /v1/clipboard` is 403 `clipboard_read_disabled`.
+
+There is no separate clipboard history to keep in step: the Android clipboard is the one clipboard
+here, and the in-app keyboard's paste key, the terminal's own paste, the Linux display and every
+other app all read it. Rate limit: 60 a minute each way.
+
+The shell client wraps all of this:
+
+```sh
+launcherctl notify [--title T] [--id ID] [--urgency low|normal|critical] [--pane ID] <body>
+printf 'line one\nline two' | launcherctl notify --title Report      # body from stdin
+launcherctl progress 42            # normal, 42 %
+launcherctl progress error         # keeps the last percentage
+launcherctl progress indeterminate
+launcherctl progress clear         # always clear when the work is done
+launcherctl progress 70 --pane "$id"
+launcherctl clipboard copy 'some text'
+git diff | launcherctl clipboard copy
+launcherctl clipboard paste        # {"ok":true,"text":"…"}
+```
+
+`POST /v1/notify` also takes `{"close": "build"}` in place of a body: it takes down the message
+with that id, as `OSC 99`'s `p=close` does, and answers `{"ok": true, "pane": "…", "id": "build",
+"closed": true}` (the same answer whether or not the message was still up). Shell:
+`launcherctl notify --close ID [--pane ID]`.
+
+### Notification history
+
+A per-app log of notifications that a process in the shell can query: an agent asked to "make a
+task list from my work email notifications over the last week" runs one command. It is **opt-in
+per app** and off until the user picks apps in the launcher's settings (the string set
+`app_notification_history_packages`); notification access alone records nothing. Only apps in that
+set are written, and a notification from any other app is never stored.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/v1/notifications` | Recorded messages, newest first |
+| GET | `/v1/notifications/apps` | Recorded apps with counts and last-seen time |
+| GET | `/v1/notifications/active` | What is in the shade now, for enabled apps only |
+| POST | `/v1/notifications/clear` | Delete recorded rows, all or one app's |
+
+`GET /v1/notifications` takes these query parameters, all optional:
+
+| Parameter | Meaning |
+| --- | --- |
+| `app` | A package name, or part of the app's name (case-insensitive) |
+| `since`, `until` | `90m`, `12h`, `7d`, `2w` (counted back from now), an ISO date or date-time, or epoch milliseconds. A bare `until` date includes that whole day |
+| `query` | Text to look for in title, text, sender, conversation and app name |
+| `limit` | 1 to 1000, default 100 |
+| `format` | `text` for one line per message instead of JSON |
+
+The JSON answer is `{"ok": true, "count": N, "notifications": [...]}`; each row has `time` (ms),
+`timeIso`, `package`, `app`, `conversation`, `title`, `sender`, `text`, `subText`, `category`,
+`channel`, `key`, `postTime` and `removedTime` (null while it is in the shade). `/apps` answers
+`{"apps": [{"package", "app", "count", "lastSeen", "lastSeenIso"}]}`. `/clear` takes an optional
+`{"app": "..."}` (or `?app=`) and answers `{"ok": true, "removed": N}`. A bad `since`, `until` or
+`limit` is a `400 bad_request` that says what it could not read.
+
+Every read answers with a `hint` when there is nothing to read for a reason the caller can fix:
+notification access is not granted, or no app is enabled. With `format=text` the hint is a first
+line starting `# `.
+
+```sh
+launcherctl notifications --app "Work Mail" --since 7d
+launcherctl notifications --since 2026-09-21 --until 2026-09-28 --query invoice --limit 50
+launcherctl notifications --json --app com.google.android.gm
+launcherctl notifications apps
+launcherctl notifications active
+launcherctl notifications clear --app com.google.android.gm
+```
+
+The text form is one line per message, `time · app · title — text`:
+
+```
+2026-09-28 14:03 · Work Mail · Ann — Invoice due Friday
+2026-09-28 13:00 · Chat · Project · Ben: on my way
+```
+
+What is recorded, and what is not:
+
+- One row per distinct message. An InboxStyle bundle (Gmail, Outlook) becomes a row per line and a
+  MessagingStyle chat a row per message with its sender and time, all sharing the notification's
+  key. The app label, conversation title, category and channel id are kept.
+- Skipped as noise: ongoing and foreground-service notifications, progress bars, media controls, and
+  group summaries (a summary is dropped when its children are in the shade or when it only counts).
+- An identical re-post of the same notification is one row. Removal from the shade sets
+  `removedTime` on the existing rows; it never adds a row.
+- Rows are pruned by age (`app_notification_history_retention_days`, 1 to 365, default 30), when
+  something is written and at most once an hour.
+- Codes are masked at write time while `app_notification_history_mask_codes` is on (the default): a
+  4-8 digit run next to a word like code, OTP, verification, passcode, one-time or PIN is stored as
+  `••••••`.
+
+The history lives in `~/.launcherctl/launcher.db`, readable by anything running as the app's user;
+that is why it is opt-in per app. The older `notifications.jsonl` mirror is gone and is deleted
+the first time the new store opens.
+
+### Device routes: vibrate, torch, battery, volume, toast, wallpaper
+
+| Method | Path | Body | Answer |
+| --- | --- | --- | --- |
+| POST | `/v1/vibrate` | `{"duration_ms": 1000, "force": false}` (both optional) | `{"ok": true, "duration_ms": 1000, "force": false}` |
+| POST | `/v1/torch` | `{"on": true}` | `{"ok": true, "on": true, "camera": "0"}` |
+| GET | `/v1/battery` | none | `{"health": "GOOD", "percentage": 87, "plugged": "UNPLUGGED", "status": "DISCHARGING", "temperature": 29.5, "current": -312000}` |
+| GET | `/v1/volume` | none | `{"ok": true, "streams": [{"stream": "music", "volume": 7, "max_volume": 15}, …]}` |
+| POST | `/v1/volume` | `{"stream": "music", "volume": 7}` | `{"ok": true, "stream": "music", "volume": 7, "max_volume": 15}` |
+| POST | `/v1/toast` | `{"text": "hi", "short": false}` | `{"ok": true, "length": 2}` |
+| POST | `/v1/wallpaper` | `{"path": "/sdcard/a.jpg", "target": "both"}` (`target`: `home`, `lock`, `both`; default `both`) | `{"ok": true, "target": "both", "width": 2400, "height": 1080, "launcher_refresh": "live"}` |
+| GET | `/v1/wallpaper` | none | `{"ok": true, "home_id": 12, "lock_id": 13, "live": false, "managed": true, "lock_slot": "same_as_home", "desired_width": 1080, "desired_height": 2400}` (`lock_slot`: `same_as_home` or `photo`) |
+
+These are the answers `termux-vibrate`, `termux-torch`, `termux-battery-status`, `termux-volume`
+and `termux-toast` give, so a compatibility script can pass them through. They need no pane and
+no visible launcher; the same bearer token and a per-route rate limit apply (30 a minute for
+vibrate and torch, 60 for toast and volume writes, 120 for battery and volume reads, 6 for wallpaper sets and 30 for the wallpaper read).
+
+- `vibrate` calls `Haptics.vibrate(context, ms, force)`, so the user's haptics setting and
+  silent mode apply unless `force` is true. Duration is capped at 10 s. 400 `bad_request` for a
+  non-positive duration.
+- `torch` uses the first camera that reports a flash, and needs no permission. 404 `no_torch`
+  when no camera has one, 409 `torch_unavailable` when another app holds the camera.
+- `battery` values are the `termux-battery-status` names: `health` is `GOOD`, `COLD`, `DEAD`,
+  `OVERHEAT`, `OVER_VOLTAGE`, `UNSPECIFIED_FAILURE` or `UNKNOWN`; `plugged` is `PLUGGED_AC`,
+  `PLUGGED_USB`, `PLUGGED_WIRELESS` or `UNPLUGGED`; `status` is `CHARGING`, `DISCHARGING`,
+  `FULL`, `NOT_CHARGING` or `UNKNOWN`; `temperature` is degrees Celsius; `current` is
+  microamperes (`CURRENT_NOW`, 0 when the device does not report it; the sign convention is the
+  device's own).
+- `volume` streams are `alarm`, `music`, `notification`, `ring`, `system` and `call`. The array
+  `termux-volume` prints is wrapped under `streams`. A value above the maximum is clamped. 403
+  `volume_refused` when Android refuses (ring and notification under Do Not Disturb).
+- `toast` raises an in-app notice through `AppNotice` while the launcher is on screen and a
+  stock system toast otherwise; long by default, `"short": true` for the brief one.
+- `wallpaper` sets the system wallpaper through the same code the in-app picker uses
+  (`ManagedWallpaper.apply`), so the launcher's stored wallpaper id and exact-picture copy follow
+  and the glass treats it as its own picture; a wide picture is cut to the screen-sized centre
+  exactly as after a pick. `path` must be absolute, readable, a decodable image of at most 48 MB,
+  and under the Termux home or shared storage (`/sdcard`, `/storage/emulated`; symlinks are
+  resolved first, so `~/storage/shared/...` works). Errors: 400 `bad_request`, 403
+  `path_not_allowed` or `unreadable`, 404 `not_found`, 413 `too_large`, 415 `not_an_image`, 500
+  `wallpaper_failed`. The call blocks until Android has taken the picture (seconds for a large
+  one). It never needs the Activity: the wallpaper is always set. For `home` and `both` the
+  launcher is also told to re-dress (wallpaper mode on, styling reload): `launcher_refresh` is
+  `live` when the launcher is running, and `on_next_open` when it is not, in which case the
+  reload happens the next time it opens. `lock` alone changes nothing in the launcher. `GET`
+  reports the current ids, whether a live wallpaper is on, and whether the home wallpaper is the
+  one the launcher set (`managed`).
+- `wallpaper` with `builtin` is gone with the pre-made backgrounds: 400 `bad_request`
+  ("'builtin' was removed; use 'path'"), and `GET /v1/wallpaper/builtins` no longer exists.
+
+```sh
+launcherctl vibrate -d 200 --force
+launcherctl torch on; launcherctl torch off
+launcherctl battery
+launcherctl volume                 # list every stream
+launcherctl volume music 7
+launcherctl toast --short 'build done'
+launcherctl wallpaper set ~/pics/a.jpg --lock   # --home | --lock | --both (default)
+launcherctl wallpaper get
+```
+
+### Agent status and the display's GPU
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/panes/{id}/agent` | `{"state": "working\|blocked\|idle\|clear", "agent": "name"}`: what the coding agent in that pane is doing, shown on the window chips and in Sessions (`launcherctl agent`) |
+| POST | `/v1/agents/hooks` | Write the four Claude Code hooks that send those states into `~/.claude/settings.json`, leaving existing hooks alone (`launcherctl agent install-hooks`) |
+| GET | `/v1/x11/gpu` | Which graphics profile fits this phone for Linux apps: `gpu`, `recommended`, every `profiles` entry with `reason`, `installed`, `packages`, `env` and `server`, and `env_text`. `?format=env` answers the exports as shell lines (`launcherctl x11 gpu [--env]`) |
+
+See [Agent status](Agent_Status.md) and [The Linux display](X11_Display.md#gpu-acceleration-for-your-apps).
 
 ### OpenAI-compatible
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/v1/models` | List installed, loadable models with TAI metadata |
+| GET | `/v1/models` | List installed, loadable models with On-device AI metadata |
 | GET | `/v1/models/{id}` | Return one model object (filtered from `/v1/models`) |
 | POST | `/v1/chat/completions` | Chat completions: text, image/audio input, tools, SSE streaming |
 | POST | `/v1/responses` | Stateless OpenAI Responses adapter (text/image input, function calls/results) |
 | POST | `/v1/completions` | Legacy text completions, SSE streaming |
 | POST | `/v1/embeddings` | Embeddings for models advertising `text_embeddings` |
-| POST | `/v1/audio/speech` | Always returns `unsupported_audio_output` (HTTP 501) |
+| POST | `/v1/tokenize` | `{model, input}` in, `{tokens: n}` out, using the model's own tokenizer |
+| POST | `/v1/audio/transcriptions` | Speech to text with the voice input speech model: multipart `file` (WAV or raw 16 kHz PCM16), `model`, `language`, `prompt`, `response_format` `json`\|`text`\|`verbose_json`; see [Voice input](Voice_Input.md) |
+| POST | `/v1/audio/speech` | Speech output with the voice model (KittenTTS): `wav` whole, `pcm` streamed per sentence; see [Text to speech](Text_To_Speech.md) |
+| POST | `/v1/ai/speak` | `tai speak`: plays the text on the phone (JSON or plain-text body; `?voice=&speed=`; `?format=wav` returns audio instead) |
+| POST | `/v1/ai/speak/stop` | Stops whatever the phone is reading aloud |
+| POST | `/v1/ai/images/generations` | Text to image with an MNN diffusion model (Stable Diffusion 1.5, Taiyi, Sana); see [`POST /v1/ai/images/generations`](#post-v1aiimagesgenerations) |
+| POST | `/v1/ai/images/cancel` | Discards the image generation in flight (the engine cannot stop mid-run) |
 
 OpenAI `/v1/*` streaming uses Server-Sent Events (`text/event-stream`) and ends with `data: [DONE]`.
 
 #### `GET /v1/models` metadata
 
-Each entry in the standard OpenAI-shaped `data` array includes TAI-specific metadata prefixed with an underscore so existing OpenAI clients ignore it:
+Each entry in the standard OpenAI-shaped `data` array includes On-device AI metadata prefixed with an underscore so existing OpenAI clients ignore it:
 
 - `_backend`: backend routing for the model, currently `litert-lm` (default LiteRT-LM runtime) or `mnn-llm` (bundled MNN backend).
 - `_capabilities`: ordered list of endpoint capability strings, for example `text_chat`, `image_input`, `audio_input`, `tool_use`, or `code`. This is what the installed APK can currently serve and is identical to `_endpoint_capabilities`.
 - `_source_capabilities`: informational upstream/package capabilities. Clients should not treat these as enabled endpoint features.
-- `_default_max_output_tokens`, `_endpoint_context_window`, and `_source_context_window`: runtime default, the context window TAI serves on this device, and the model's own limit. The endpoint window grows with device RAM up to the model's limit and follows the **Context window** setting when one is set; see [Termux AI backends](Termux_AI_Backends.md#context-window-sizing).
-- `_tool_mode`: present for tool-capable models. MNN tool support is `prompt_fallback` (the model's own chat template renders the tools when it can, TAI's prompt otherwise); LiteRT tool support is native when advertised.
+- `_default_max_output_tokens`, `_endpoint_context_window`, and `_source_context_window`: runtime default, the context window served on this device, and the model's own limit. The endpoint window grows with device RAM up to the model's limit and follows the **Context window** setting when one is set; see [On-device AI backends](On_Device_AI_Backends.md#context-window-sizing).
+- `_tool_mode`: present for tool-capable models. MNN tool support is `prompt_fallback` (the model's own chat template renders the tools when it can, the server's prompt otherwise); LiteRT tool support is native when advertised.
+- Package facts: `_format`, `_display_name`, `_architecture`, `_quantization`, `_size` (bytes), `_sha256` and `_license`.
+- Where the capabilities came from: `_capabilities_verified` (true for catalog entries), `_capability_source` (`catalog` or `import_or_user_metadata`) and `_capability_verification` (`declared` until a device probe exists).
+
+Every entry that advertises `text_embeddings` also carries the embedder fields:
+
+| Field | Meaning |
+| --- | --- |
+| `_endpoint_dimensions` | The model's native output width (recognised families only) |
+| `_endpoint_matryoshka_dims` | The only sizes `dimensions` accepts, largest first; any other value is `400 invalid_dimensions` |
+| `_endpoint_normalized` | `true`: every vector is L2-normalised |
+| `_endpoint_max_batch` | The largest `input` array `/v1/embeddings` takes, currently 64 |
+| `_revision` | A cheap hash of the model file's name, size and mtime, for knowing when to rebuild an index |
+| `_endpoint_throttle_while_generating` | `"priority"`: embeddings run at background priority while a chat generation runs |
+| `_endpoint_windows` | The `.tflite` EmbeddingGemma's installed window graphs, ascending (absent for one graph) |
+
+For an EmbeddingGemma 2 `.litertlm` embedder, `_endpoint_context_window` is `2048` and there is no `_endpoint_windows`.
+
+Besides the OpenAI `data` array, the response has a top-level `models` array in the shape Codex reads: every chat model with `tool_use` and a context window of at least 16384 tokens. Image-generation models are never listed. A model's speculative-decoding probe is cached per model file, so `/v1/models` answers in about a second rather than re-probing every file.
 
 `GET /v1/models/{id}` returns the single matching object (HTTP 404 if unknown).
 
 #### `POST /v1/embeddings`
 
-OpenAI-compatible embeddings endpoint. Only models that advertise `text_embeddings` in their `/v1/models` `_capabilities` array are accepted; others return `capability_not_supported`. `input` may be a string or an array of strings, and the response returns one OpenAI `embedding` item per input in the same order. Local output is float vectors only; `encoding_format:"base64"` is rejected with `unsupported_encoding_format`.
+OpenAI-compatible embeddings endpoint. Only models that advertise `text_embeddings` in their `/v1/models` `_capabilities` array are accepted; others return `capability_not_supported`. `input` may be a string or an array of strings (at most `_endpoint_max_batch` entries, currently 64; a larger batch returns `413 batch_too_large` naming the limit, never a silent drop), and the response returns one OpenAI `embedding` item per input in the same order.
 
-LiteRT EmbeddingGemma `.tflite` installs require `sentencepiece.model` in the same model directory. New downloads fetch that sidecar automatically. Older installs that only contain the `.tflite` return `embedding_tokenizer_missing` until the model is re-downloaded or the sidecar is added.
+Request fields beyond the OpenAI basics (`model`, `input`, `dimensions`):
+
+- `input_type`: `"query"` or `"document"` (default `"document"`). EmbeddingGemma was trained with a task prefix on every input; the server adds it, counted inside the model's window: `task: search result | query: ` for a query, `title: <title or none> | text: ` for a document. Other embedding families ignore this field.
+- `title`: an optional document heading (for example a note's title), folded into the document prefix in place of `none`. Ignored for `input_type: "query"`.
+- `encoding_format`: `"float"` (default) or `"base64"` (standard base64 of the vector's little-endian float32 bytes, OpenAI's shape).
+
+Each `data[i]` also reports `tokens` (the token count before any truncation; body and prefix combined, BOS/EOS excluded) and `truncated` (whether the body had to be cut to fit the model's window — the prefix itself is never the part that is cut). A long input is trimmed, never a 500. EmbeddingGemma 2 `.litertlm` models and MNN embedders expose no token count: their items carry `truncated: false` and no `tokens` field, and `usage.prompt_tokens` is `0`, so treat a missing `tokens` as "length unknown".
+
+Dawn brief items 5 and 6, useful for a client that indexes in the background: while a chat generation is running elsewhere in the process, embeddings run throttled (background thread priority) so they do not slow the live reply; every embedder's `/v1/models` entry states this policy as `_endpoint_throttle_while_generating: "priority"`, and `/v1/ai/runtime` `runtime.activeGeneration` says when it applies. A load that cannot fit in memory returns `503` with a `Retry-After` header and `code: "embedding_memory"`, distinct from the `429`/`Retry-After` a request over the 60/minute rate limit gets.
+
+LiteRT EmbeddingGemma `.tflite` installs require `sentencepiece.model` in the same model directory. New downloads fetch that sidecar automatically. Older installs that only contain the `.tflite` return `409 embedding_tokenizer_missing` until the model is re-downloaded or the sidecar is added.
+
+EmbeddingGemma 2 (`embeddinggemma-2-text-vision-440m`, the recommended embedder, and `embeddinggemma-2-text-270m`) ships as a single `.litertlm` bundle served by LiteRT-LM's embedding engine. The bundle carries its own tokenizer, so there is no sidecar, and the files need LiteRT-LM 0.18.0 or later. It answers in the same shape as above with `_runtime: "litertlm-embedding"`, text input only (the 440M's image input is not served yet), 768 dimensions with the same Matryoshka sizes, and the same `input_type`/`title` prefixes. The engine is built with a 2048-token input cap, which `/v1/models` reports as `_endpoint_context_window: 2048` (no `_endpoint_windows`). A `.litertlm` import whose file name contains `embeddinggemma` is classed as `text_embeddings` when no capabilities are given.
+
+The embedder's `/v1/models` entry additionally carries `_endpoint_dimensions` (the model's native output width; recognised families only), `_endpoint_matryoshka_dims` (the only sizes `dimensions` accepts when listed, largest first; any other size gets `400 invalid_dimensions`), `_endpoint_normalized` (`true`: every vector is L2-normalised), `_endpoint_max_batch`, and a stable `_revision` (a cheap hash of the model file's name/size/mtime, never its bytes) a client can use to know when to rebuild its index.
+
+EmbeddingGemma ships fixed-shape graphs per context window (`seq256`, `seq512`, `seq1024`, `seq2048`); every input costs the full window regardless of how short it is. When a new EmbeddingGemma download fetches a graph bigger than `seq512`, it also fetches the smaller `seq256`/`seq512` siblings alongside it, best effort. When more than one window graph is installed next to each other, TAI routes each input independently to the smallest installed window it fits in (prefix + body + BOS/EOS), only falling back to the largest window — and truncating the body, as always — when nothing fits; this is transparent to the request and response shape. `_endpoint_context_window` reports the largest installed window, and a new field, `_endpoint_windows`, lists every installed window ascending, for example `[256, 512, 1024]`, so a client can tell a single-graph install (`_endpoint_windows` has one entry) from a multi-window one.
+
+#### `POST /v1/ai/images/generations`
+
+Text-to-image through the MNN Diffusion engine, on the GPU (OpenCL) by default. The body follows OpenAI's
+image generation shape, with a few additions:
+
+| Field | Meaning |
+| --- | --- |
+| `model` | A registered image model id. Exactly one of `model` and `model_path`. |
+| `model_path` | A model folder, under Termux home or shared storage: the way to try a package before it can be imported. |
+| `model_type` | `sd15` (default for the Stable Diffusion file layout), `taiyi` or `sana`. Taiyi shares Stable Diffusion's files, so it must be said. |
+| `prompt` | Required, up to 2000 characters. |
+| `size` | `"WxH"`. Stable Diffusion and Taiyi: `512x512` only (the engine is fixed). Sana: multiples of 32 from 256 to 2048. Default `512x512`. |
+| `n` | Only `1`. |
+| `steps` | 1-100, default 20. |
+| `seed` | Whole number; `-1` (default) picks one, reported back in `tai.seed`. |
+| `cfg_scale` | Sana only; default 4.5, `0` turns guidance off. Stable Diffusion's guidance is fixed inside the engine. |
+| `image` | Sana only: an input picture to edit. Needs `vae_encoder.mnn` in the package. |
+| `backend` | `opencl` (default) or `cpu`. |
+| `memory_mode` | `0` saves memory, `1` is fastest and keeps the model loaded (Stable Diffusion/Taiyi), `2` balances. Left out, the fastest mode whose estimate fits the memory free now is chosen, closing idle embeddings, speech models or an idle chat model if that is needed. |
+| `output` | A `.png` path under Termux home or shared storage: the image is written there and `data[0].path` returned instead of base64. |
+| `response_format` | `b64_json` (the only one). |
+| `stream` | `true` answers with SSE progress events. |
+
+Response: `{created, data: [{b64_json | path}], tai: {model, width, height, steps, seed, backend, memoryMode, modelType, loadMs, generateMs, evicted?}}`.
+With `stream: true` each event is `{type: "image_generation.progress", progress: 0-100}`, then one
+`{type: "image_generation.completed", ...}` carrying the response above (or an error object), then `data: [DONE]`.
+A request that cannot run is refused with its own status before any stream starts: `400` for a bad field
+(`missing_prompt`, `unsupported_n`, `invalid_size`, `invalid_steps`, `invalid_backend`, `invalid_memory_mode`,
+`image_input_unavailable`), `400` with `tokenizer_mtok_missing` for a package that ships the raw tokenizer
+(`vocab.json`/`merges.txt`) instead of `tokenizer.mtok`, `403` for a path outside the allowed roots, `404` for an
+unknown model or folder, `409 image_generation_active` while another image is being made, `409 insufficient_memory`,
+`501 mnn_image_unavailable` when the installed native library predates image support.
+
+Only one image is generated at a time, on a lane of its own: chat and speech are not queued behind it.
+The engine ignores the progress callback's return value, so a run cannot be stopped part-way:
+`POST /v1/ai/images/cancel` (and a client that disconnects) discards the result when the engine returns.
+Image models never appear in `/v1/models` or the chat lists, and `tai load` answers `400 image_model_not_loadable`.
+
+`tai image "prompt" [--model ID | --model-dir DIR] [--type sd15|taiyi|sana] [--out FILE.png] [--steps N] [--seed N] [--size WxH] [--cfg X] [--image IN.png] [--cpu] [--memory-mode 0|1|2]`
+calls this route (progress on stderr, the PNG saved to `--out`, default `./tai-image-<time>.png`; Ctrl-C and `tai image --stop` cancel; `tai --json image ...` prints the response).
+
+#### `POST /v1/tokenize`
+
+`{model, input}` in, `{tokens: n}` out: the installed embedding model's own tokenizer, with no task prefix and no BOS/EOS framing added — just the raw count, so a client can split long text on real token counts instead of estimating from characters. Only the `.tflite` EmbeddingGemma (`embeddinggemma-300m`) exposes a tokenizer; an EmbeddingGemma 2 `.litertlm` model and every other backend return `501 capability_not_supported` ("Tokenize is only available for .tflite embedding models; .litertlm models expose no tokenizer."). Rate limit: 120 a minute.
 
 ### Ollama-compatible
 
@@ -279,7 +669,7 @@ LiteRT EmbeddingGemma `.tflite` installs require `sentencepiece.model` in the sa
 | POST | `/api/embeddings` | Legacy alias: `{model, prompt}` in, `{embedding: [...]}` out |
 | POST | `/api/pull` `/api/create` `/api/push` `/api/copy` `/api/delete` | Return HTTP 501 (not emulated) |
 
-Ollama `/api/chat` and `/api/generate` stream newline-delimited JSON (NDJSON) by default. Ollama registry operations (`pull`, `create`, `push`, `copy`, `delete`) are not emulated because Ollama/GGUF packages are not LiteRT-LM or MNN packages. Install models from the TAI catalog or import flow instead.
+Ollama `/api/chat` and `/api/generate` stream newline-delimited JSON (NDJSON) by default. Ollama registry operations (`pull`, `create`, `push`, `copy`, `delete`) are not emulated because Ollama/GGUF packages are not LiteRT-LM or MNN packages. Install models from the On-device AI catalog or import flow instead.
 
 ### Model management
 
@@ -289,12 +679,15 @@ These routes are used by the `tai` CLI and the Settings UI. They share the same 
 | --- | --- | --- |
 | GET | `/v1/ai/status` | Overall status, settings, and limitations |
 | GET | `/v1/ai/runtime` | Loaded model and runtime state |
-| GET | `/v1/ai/models` | Detailed TAI model registry |
+| GET | `/v1/ai/models` | Detailed On-device AI model registry |
 | GET | `/v1/ai/models/downloads` | Show download progress/history |
 | POST | `/v1/ai/models/import` | Register a supported local package |
 | POST | `/v1/ai/models/download` | Download a model from a URL |
 | POST | `/v1/ai/models/download-catalog` | Download a catalog model |
-| POST | `/v1/ai/models/downloads/cancel` | Cancel an active download |
+| POST | `/v1/ai/models/downloads/cancel` | Cancel a download and delete its partial file |
+| POST | `/v1/ai/models/downloads/pause` | Pause a download, keeping its partial file |
+| POST | `/v1/ai/models/downloads/resume` | Continue a paused, failed or cancelled download from the bytes it has |
+| POST | `/v1/ai/models/downloads/prioritize` | Move a queued download to the front ("start now") |
 | POST | `/v1/ai/models/delete` | Delete an installed user model |
 | POST | `/v1/ai/models/load` | Load a model into the registry slot |
 | POST | `/v1/ai/models/unload` | Unload a model from the registry slot |
@@ -302,10 +695,36 @@ These routes are used by the `tai` CLI and the Settings UI. They share the same 
 | POST | `/v1/ai/runtime/load` | Load a model into the active runtime |
 | POST | `/v1/ai/runtime/unload` | Unload the active model |
 | POST | `/v1/ai/runtime/keep-warm` | Keep a model loaded temporarily |
-| POST | `/v1/ai/runtime/cancel` | Cancel active generation |
+| POST | `/v1/ai/runtime/cancel` | Cancel the active generation or benchmark |
+| DELETE | `/v1/ai/runtime/history` | Clear the runtime history (`tai runtime --clear-history`) |
+| GET | `/v1/ai/logs?lines=N` | The event log: loads, evictions, failures (`tai logs`; `lines` 1-5000) |
+| DELETE | `/v1/ai/logs` | Clear the event log (`tai logs --clear`) |
+| POST | `/v1/ai/benchmarks/run` | Run the benchmark (`tai benchmark`) |
+| GET | `/v1/ai/benchmarks` | The stored results and leaderboard (`tai benchmark --results`) |
+| DELETE | `/v1/ai/benchmarks` | Forget results, for one model or all (`tai benchmark --clear`) |
+| POST | `/v1/ai/benchmarks/skip-wait` | End the running benchmark's cool-down now; the next result is marked "warm start" (`tai benchmark --skip-wait`) |
+| POST | `/v1/ai/runtime/benchmark` | LiteRT-LM's own benchmark() (`tai benchmark --native`) |
+| POST | `/v1/ai/tier` | Developer override of the RAM tier: `{"tier": "1\|2\|3\|auto"}`; no `tai` flag. The reply also carries `memoryMode` (`relaxed` or `unrestricted`, read-only) |
 | POST | `/v1/auth/rotate` | Rotate the API token and rewrite discovery files |
 
 `POST /v1/ai/runtime/preflight` checks ABI, API level, bundled native libraries, model package readability/format, memory, accelerator policy, and known backend history without touching native LiteRT-LM/MNN runtime code.
+
+`POST /v1/ai/benchmarks/run` takes:
+
+```json
+{"models": ["gemma-4-e2b-it-litert-lm"], "preset": "standard", "processors": ["gpu"],
+ "compare": false, "eagle": false, "force": false, "stream": true}
+```
+
+- `models` — an array of ids (or a single `model`); omitted, the default assistant model. Each must be an installed chat model (`404 model_not_found`, `404 model_file_missing`, `400 capability_not_supported`).
+- `preset` — `quick` (each test once) or `standard` (twice, the median kept; the default). Anything else is `400 bad_preset`.
+- `processors` — `cpu`, `gpu` or both; omitted, the processor an automatic load would pick.
+- `compare` — run both processors where the model and phone support them, each as its own entry.
+- `eagle` — also bench MNN builds with their EAGLE-3 draft model.
+- `force` — skip the battery and heat check at the start (`409 conditions_not_met` otherwise).
+- `stream` — `true` answers with SSE events per phase; otherwise the run's summary.
+
+A run already in progress is `409 benchmark_running`; a busy runtime is `409 runtime_busy`.
 
 ## Streaming Notes
 
@@ -317,7 +736,48 @@ These routes are used by the `tai` CLI and the Settings UI. They share the same 
 
 Each protected route has its own token-bucket rate limiter. When a bucket is exhausted the server returns HTTP `429 Too Many Requests` with a `Retry-After: <seconds>` header indicating when the bucket refills. The error body uses the standard error envelope (see below).
 
-Limits are per-route, not global, so heavy generation traffic does not starve unrelated management calls.
+Limits are per-route, not global, so heavy generation traffic does not starve unrelated management calls. Requests per minute:
+
+| Route | Limit |
+| --- | ---: |
+| `POST /v1/apps/launch` | 30 |
+| `POST /v1/auth/rotate` | 5 |
+| `GET /v1/panes`, `POST /v1/panes/{id}/write`, `GET /v1/panes/{id}/text` | 240 |
+| `POST /v1/panes`, `POST /v1/windows` | 30 |
+| `POST /v1/panes/{id}/focus` | 120 |
+| `POST /v1/panes/{id}/close` | 60 |
+| `POST /v1/panes/{id}/agent` | 600 |
+| `POST /v1/agents/hooks` | 10 |
+| `POST /v1/keyboard/show`, `POST /v1/keyboard/hide` | 240 each |
+| `POST /v1/notify` | 60 |
+| `POST /v1/progress` | 600 |
+| `POST /v1/clipboard`, `GET /v1/clipboard` | 60 each |
+| `GET /v1/notifications`, `/apps`, `/active` | 120 each |
+| `POST /v1/notifications/clear` | 10 |
+| `POST /v1/vibrate`, `POST /v1/torch` | 30 each |
+| `GET /v1/battery`, `GET /v1/volume` | 120 each |
+| `POST /v1/volume`, `POST /v1/toast` | 60 each |
+| `POST /v1/wallpaper` | 6 |
+| `GET /v1/wallpaper` | 30 |
+| `GET /v1/models`, `GET /v1/ai/status`, `GET /v1/ai/runtime`, `GET /v1/ai/models`, `GET /v1/ai/models/downloads`, `GET /v1/ai/benchmarks` | 120 each |
+| `POST /v1/chat/completions`, `/v1/responses`, `/v1/completions`, `/v1/embeddings` | 60 each |
+| `POST /v1/tokenize` | 120 |
+| `POST /v1/audio/transcriptions` | 240 |
+| `POST /v1/audio/speech`, `POST /v1/ai/speak` | 60 each |
+| `POST /v1/ai/speak/stop` | 120 |
+| `POST /v1/ai/images/generations` | 12 |
+| `POST /v1/ai/images/cancel` | 60 |
+| `POST /v1/ai/models/import`, `/download`, `/download-catalog`, `/load`, `POST /v1/ai/runtime/load` | 20 each |
+| `POST /v1/ai/models/downloads/cancel`, `/pause`, `/resume`, `/prioritize`, `POST /v1/ai/models/delete` | 30 each |
+| `POST /v1/ai/models/unload`, `/v1/ai/runtime/unload`, `/preflight`, `/keep-warm`, `/cancel` | 60 each |
+| `POST /v1/ai/benchmarks/run`, `POST /v1/ai/runtime/benchmark` | 6 each |
+| `POST /v1/ai/benchmarks/skip-wait` | 60 |
+| `DELETE /v1/ai/benchmarks` | 30 |
+| `GET /v1/ai/logs` | 60 |
+| `DELETE /v1/ai/logs`, `DELETE /v1/ai/runtime/history` | 30 each |
+| `POST /v1/ai/tier` | 30 |
+| `GET /api/version`, `/api/tags`, `/api/ps`, `POST /api/show` | 120 each |
+| `POST /api/chat`, `/api/generate`, `/api/embed`, `/api/embeddings` | 60 each |
 
 ## Error Envelope
 
@@ -345,7 +805,7 @@ Rate-limit errors use `type: "rate_limit_error"` on `/v1/*` and the same flat `e
 
 ## Terminal LLM Client Configuration
 
-TAI exposes OpenAI-compatible HTTP endpoints so terminal clients such as `aichat`, `aider`, `tmuxai`, or any tool that reads `OPENAI_BASE_URL` / `OPENAI_API_KEY` can drive the local model runtime.
+On-device AI exposes OpenAI-compatible HTTP endpoints so terminal clients such as `aichat`, `aider`, `tmuxai`, or any tool that reads `OPENAI_BASE_URL` / `OPENAI_API_KEY` can drive the local model runtime.
 
 Default bind mode is `localhost` (server bound to `127.0.0.1`). With the **Require API token** setting on (default), the bearer token is required for every protected request. Token and endpoint URL are written to:
 
@@ -440,12 +900,16 @@ Inspect `/v1/models` first to confirm both `_backend == "mnn-llm"` and the endpo
   screen. This does not add capabilities — ownership still confines `write`/`text`/`close` to panes
   opened through the API, and nothing here can bring the launcher to the Android foreground on its
   own — but the same token now reaches a pane for longer.
+- The signal routes give the token what any program in a shell already has through escape
+  sequences, no more: the clipboard read keeps the on-screen requirement and the read setting
+  that gate `OSC 52` (a write works off screen, as Termux:API's always has), and a notification or a progress ring is something the user sees, not
+  something the caller learns.
 
 ## Troubleshooting
 
 ### Token errors (`401`)
 - Read the current token: `cat ~/.launcherctl/token`.
-- Rotate it with `POST /v1/auth/rotate` or from **Settings → Services & permissions → TAI · Termux AI → Recreate API token**, then re-run your command.
+- Rotate it with `POST /v1/auth/rotate` or from **Settings → On-device AI → OpenAI endpoint → Recreate token**, then re-run your command.
 - If you turned **Require API token** off, confirm you are still on `localhost` bind mode — LAN mode always requires the token.
 
 ### `Connection refused`

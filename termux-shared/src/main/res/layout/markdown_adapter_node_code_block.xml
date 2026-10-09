@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Code reads left to right in every locale, and so does the scroll that carries it. -->
 <HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:clipChildren="false"
     android:clipToPadding="false"
     android:fillViewport="true"
-    android:paddingLeft="16dip"
-    android:paddingRight="16dip"
+    android:layoutDirection="ltr"
+    android:paddingStart="16dip"
+    android:paddingEnd="16dip"
     android:scrollbarStyle="outsideInset">
 
     <com.google.android.material.textview.MaterialTextView
@@ -16,13 +18,14 @@
         android:background="@color/background_markdown_code_block"
         android:fontFamily="monospace"
         android:lineSpacingExtra="2dip"
-        android:paddingLeft="16dip"
+        android:paddingStart="16dip"
         android:paddingTop="8dip"
-        android:paddingRight="16dip"
+        android:paddingEnd="16dip"
         android:paddingBottom="8dip"
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:textColor="?android:attr/textColorPrimary"
         android:textColorLink="?android:attr/textColorLink"
+        android:textDirection="ltr"
         android:textSize="12sp" />
 
 </HorizontalScrollView>

@@ -12,6 +12,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
@@ -121,5 +122,43 @@ public class StatusBarWidgetViewTest {
 
     private static int exact(int size) {
         return View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY);
+    }
+
+    /**
+     * The weather is re-fitted from the stats cluster's layout listener, so a value that did not
+     * change must not request another layout — or every layout schedules the next one and the
+     * home screen re-lays out until the system kills it for the Binder churn (2026-10-07).
+     */
+    @Test
+    public void setValue_withTheSameText_doesNotRequestLayout() {
+        StatusBarWidgetView view = new StatusBarWidgetView(
+            ApplicationProvider.getApplicationContext(), null);
+        view.setValue("35° · Clear");
+        settleLayout(view);
+        assertFalse(view.isLayoutRequested());
+
+        view.setValue("35° · Clear");
+        assertFalse(view.isLayoutRequested());
+
+        view.setValue("35°");
+        assertTrue(view.isLayoutRequested());
+    }
+
+    @Test
+    public void setValue_emptyTwice_doesNotRequestLayout() {
+        StatusBarWidgetView view = new StatusBarWidgetView(
+            ApplicationProvider.getApplicationContext(), null);
+        view.setValue("");
+        settleLayout(view);
+        assertFalse(view.isLayoutRequested());
+
+        view.setValue("");
+        assertFalse(view.isLayoutRequested());
+    }
+
+    private static void settleLayout(View view) {
+        int spec = View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.AT_MOST);
+        view.measure(spec, spec);
+        view.layout(0, 0, view.getMeasuredWidth(), view.getMeasuredHeight());
     }
 }

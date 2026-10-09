@@ -35,14 +35,15 @@ public class WidgetPickerProductionSelectionTest {
         Fixture fixture = new Fixture(false);
         fixture.controller.openPicker();
         fixture.idleAndLayout();
-        // The list opens collapsed: the app row is what is there, and it opens the cards.
+        // The list opens collapsed: the launcher's own widgets are row 0, the app row is row 1,
+        // and opening it puts its cards under it.
         RecyclerView.ViewHolder app = fixture.pane.picker().list()
-            .findViewHolderForAdapterPosition(0);
+            .findViewHolderForAdapterPosition(1);
         assertNotNull("app row must be attached", app);
         assertTrue(app.itemView.performClick());
         fixture.idleAndLayout();
         RecyclerView.ViewHolder card = fixture.pane.picker().list()
-            .findViewHolderForAdapterPosition(1);
+            .findViewHolderForAdapterPosition(2);
         assertNotNull("real provider card must be attached", card);
         assertTrue(card.itemView.performClick());
         assertEquals(1, fixture.platform.allocations);

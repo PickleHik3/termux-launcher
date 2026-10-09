@@ -49,9 +49,48 @@ public final class IconPackRepository {
 
     private final Context context;
     private final PackageManager packageManager;
-    private final Map<String, IconPack> parsedPacks = new LinkedHashMap<>();
+    /** Parsed packs kept: the global one and the pinned one, no more (a parse is names, not pixels). */
+    private static final int MAX_PARSED_PACKS = 2;
+    /**
+     * Guards both maps below. A pack is parsed on whichever thread asks first (the icon store's,
+     * the main thread's, or the Icons mode's warm-up), so the maps are shared; the parse itself
+     * runs outside the lock.
+     */
+    private final Object lock = new Object();
+    private final Map<String, IconPack> parsedPacks = new LinkedHashMap<String, IconPack>(4, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, IconPack> eldest) {
+            return size() > MAX_PARSED_PACKS;
+        }
+    };
     private final Map<String, Long> lastVersionChecks = new LinkedHashMap<>();
+    /** Resources kept per pack APK in use: the global, the pinned and a picked icon's pack or two. */
+    private static final int MAX_PACK_RESOURCES = 4;
+    private final IconPackResourcesCache<Resources> packResources =
+        new IconPackResourcesCache<>(MAX_PACK_RESOURCES);
 
+    private static volatile IconPackRepository instance;
+
+    /**
+     * The process-wide repository every icon surface shares (the catalogue, the dock's pinned
+     * icons, the notification cards), so a pack's appfilter is parsed once and its resources
+     * loaded once rather than once per surface. Thread-safe: the maps are guarded by one lock and
+     * the resources cache by its own.
+     */
+    @NonNull
+    public static IconPackRepository getInstance(@NonNull Context context) {
+        IconPackRepository current = instance;
+        if (current != null) return current;
+        synchronized (IconPackRepository.class) {
+            if (instance == null) instance = new IconPackRepository(context);
+            return instance;
+        }
+    }
+
+    /**
+     * A private repository with caches of its own. Only for discovery-only callers and tests;
+     * anything that loads icons uses {@link #getInstance}.
+     */
     public IconPackRepository(@NonNull Context context) {
         this.context = context.getApplicationContext();
         this.packageManager = this.context.getPackageManager();
@@ -101,28 +140,34 @@ public final class IconPackRepository {
     @Nullable
     public IconPack loadIconPack(@Nullable String packageName) {
         if (packageName == null || packageName.trim().isEmpty()) return null;
-        IconPack cached = parsedPacks.get(packageName);
+        IconPack cached;
+        Long checkedAt;
+        synchronized (lock) {
+            cached = parsedPacks.get(packageName);
+            checkedAt = lastVersionChecks.get(packageName);
+        }
         long now = SystemClock.elapsedRealtime();
-        Long checkedAt = lastVersionChecks.get(packageName);
         if (checkedAt != null && now - checkedAt < CACHE_VERSION_RECHECK_MS) {
             return cached;
         }
         IconPackInfo info = buildInfo(packageName, isThemedPackage(packageName));
-        lastVersionChecks.put(packageName, now);
-        if (info == null) {
+        synchronized (lock) {
+            lastVersionChecks.put(packageName, now);
+            if (info == null) {
+                parsedPacks.remove(packageName);
+                return null;
+            }
+            if (cached != null && cached.info.versionCode == info.versionCode) return cached;
             parsedPacks.remove(packageName);
-            return null;
         }
-        if (cached != null && cached.info.versionCode == info.versionCode) return cached;
-        parsedPacks.remove(packageName);
 
         XmlResourceParser appfilterRes = null;
         XmlResourceParser drawableRes = null;
         InputStream appfilterStream = null;
         InputStream drawableStream = null;
         try {
-            Context iconPackContext = context.createPackageContext(packageName, Context.CONTEXT_IGNORE_SECURITY);
-            Resources resources = iconPackContext.getResources();
+            Resources resources = packResources(packageName);
+            if (resources == null) return null;
             AssetManager assets = resources.getAssets();
 
             XmlPullParser appfilter = null;
@@ -156,7 +201,9 @@ public final class IconPackRepository {
             }
 
             IconPack pack = IconPackXmlParser.parse(info, appfilter, drawable);
-            parsedPacks.put(packageName, pack);
+            synchronized (lock) {
+                parsedPacks.put(packageName, pack);
+            }
             return pack;
         } catch (Exception ignored) {
             return null;
@@ -169,8 +216,36 @@ public final class IconPackRepository {
     }
 
     public void clearCache() {
-        parsedPacks.clear();
-        lastVersionChecks.clear();
+        synchronized (lock) {
+            parsedPacks.clear();
+            lastVersionChecks.clear();
+        }
+        packResources.clear();
+    }
+
+    /**
+     * The resources of {@code packageName} as installed now, loaded once per APK and reused for
+     * every drawable taken from it; null when the pack is not installed or cannot be read. See
+     * {@link IconPackResourcesCache}.
+     */
+    @Nullable
+    public Resources packResources(@Nullable String packageName) {
+        if (packageName == null || packageName.trim().isEmpty()) return null;
+        String apkPath;
+        try {
+            ApplicationInfo info = packageManager.getApplicationInfo(packageName, 0);
+            apkPath = info.sourceDir == null ? "" : info.sourceDir;
+        } catch (PackageManager.NameNotFoundException | RuntimeException notInstalled) {
+            apkPath = null;
+        }
+        return packResources.get(packageName, apkPath, name -> {
+            try {
+                return context.createPackageContext(name, Context.CONTEXT_IGNORE_SECURITY)
+                    .getResources();
+            } catch (PackageManager.NameNotFoundException | RuntimeException unreadable) {
+                return null;
+            }
+        });
     }
 
     @Nullable

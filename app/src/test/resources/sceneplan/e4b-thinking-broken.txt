@@ -1,0 +1,19 @@
+```json
+{
+  "elements": [
+    {"name": "Deep blue sky", "kind": "sky", "box": [0, 0, 400, 1000], "depth": "far", "motion": "still", "note": "Vibrant, clear blue color."},
+    {"name": "Cumulus clouds", "kind": "clouds", "box": [150, 0, 4500, 10], "depth": "middle", "motion": "drift", "note": "Bright white, catching the sunlight."},
+    {"name": "Snow-capped mountain", "kind": "mountain",      "
+      "box": [400, 20, 650, 80], "depth": "far", "motion": "still", "note": "Majestic peak with visible snow patches."},
+    {"name": "Dark pine trees", "kind": "trees", "box": [50, 0, 70, 30], "depth": "middle", "motion": "sway", "note": "Dense, dark green foliage."},
+    {"name": "Lone cloaked figure", "kind": "figure", "box": [650, 450, 0
+        50], "depth": "middle", "motion": "none", "note": "Standing still, facing the mountain."},
+    {"name": "Pink grass field", "kind": "grass", "box": [70, 0, 90, 100], "depth": "middle", "motion": "sway", "note": "Vibrant pinkish-red hue."},
+    {"name": "Dark foreground grass", "kind": "grass", "box": [0, 850
+        0, 10000], "depth": "near", "motion": "sway", "note": "Darker, blurred, providing depth."},
+    {"name": "Floating pink petals",      "      "kind": "other", "box": [0, 400
+        0, 10000], "depth": "middle", "motion": "drift", "note": "Small, delicate pink specks floating."}
+  ],
+  "scene": {"time": "day", "weather": "cloudy", "light_direction": "low sun from the right", "particles": "petals", "mood": "serene, epic", "do_not_animate": ["Lone cloaked figure"]}
+}
+```

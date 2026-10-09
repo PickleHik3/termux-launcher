@@ -30,6 +30,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.termux.R;
 import com.termux.app.FocusOutlineRenderer;
+import com.termux.app.chrome.ActionButtonRow;
 import com.termux.app.notice.TerminalDress;
 
 import java.util.ArrayList;
@@ -126,7 +127,7 @@ public final class TourOverlayView extends FrameLayout {
     private final ScrollView mBodyScroll;
     private final LinearLayout mSections;
     private final TextView mDocsLink;
-    private final LinearLayout mButtonRow;
+    private final ActionButtonRow mButtonRow;
     /** The card's action buttons, rebuilt whenever the card offers a different set. */
     private final List<TextView> mActionButtons = new ArrayList<>();
     /** What the buttons currently on the card stand for, in the order they are read. */
@@ -170,6 +171,9 @@ public final class TourOverlayView extends FrameLayout {
     public TourOverlayView(@NonNull Context context) {
         super(context);
         mDensity = context.getResources().getDisplayMetrics().density;
+        // The card is placed by absolute geometry in onLayout; what it says reads in the locale's
+        // direction even though the content root it hangs off is pinned left to right.
+        setLayoutDirection(LAYOUT_DIRECTION_LOCALE);
         setWillNotDraw(false);
         // Passive by construction: the gesture the card is asking for belongs to the chrome below.
         setClickable(false);
@@ -265,21 +269,20 @@ public final class TourOverlayView extends FrameLayout {
         bodyParams.topMargin = dp(8);
         mCard.addView(mBodyScroll, bodyParams);
 
-        mButtonRow = new LinearLayout(context);
-        mButtonRow.setOrientation(LinearLayout.HORIZONTAL);
-        mButtonRow.setGravity(Gravity.END);
+        // The card's actions share one row while they fit across the card and stack when they do
+        // not; the row measures that itself, at whatever width and font scale the card has.
+        mButtonRow = new ActionButtonRow(context);
 
-        // The docs link shares the button row: it leads, takes the slack, and Start using keeps
-        // the trailing edge, so the closing card ends on one row of buttons.
+        // The docs link shares the closing card's row: it leads, and Start using keeps the
+        // trailing edge. When the two do not fit side by side the link goes under the action.
         mDocsLink = textButton(context, view -> {
             if (mCallbacks != null) mCallbacks.onTourDocsTapped();
         });
         mDocsLink.setVisibility(GONE);
-        addDocsLink();
+        mButtonRow.setLeading(mDocsLink);
 
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        buttonParams.gravity = Gravity.END;
         buttonParams.topMargin = dp(8);
         mCard.addView(mButtonRow, buttonParams);
 
@@ -626,8 +629,21 @@ public final class TourOverlayView extends FrameLayout {
             mAccent, 1f, 1f, mDensity);
     }
 
+    /**
+     * The movement the card asks for, turned toward the control as it is laid out: the drawer is
+     * pulled away from the apps row's edge, so a row that is a rail down a side is swiped inward
+     * rather than pulled down.
+     */
+    private TourGesture gestureAsLaidOut(@NonNull TourGesture gesture) {
+        if (gesture != TourGesture.DRAG_DOWN || mTargetRect == null
+            || !TourTargets.DOCK.equals(glowTargetId())) return gesture;
+        if (mTargetRect.height() < mTargetRect.width()) return gesture;
+        return mTargetRect.centerX() < getWidth() / 2 ? TourGesture.SWIPE_RIGHT
+            : TourGesture.SWIPE_LEFT;
+    }
+
     private void drawFinger(@NonNull Canvas canvas) {
-        TourGesture gesture = mStep.gestureAt(mStage);
+        TourGesture gesture = gestureAsLaidOut(mStep.gestureAt(mStage));
         if (gesture == TourGesture.NONE || mTraceProgress >= 1f) return;
         // The widest ring the cue ever draws is the hold's halo, at 1.9 times the finger's own
         // radius; the centre is kept in far enough that even that stays on the screen.
@@ -851,6 +867,8 @@ public final class TourOverlayView extends FrameLayout {
         TextView command = new TextView(context);
         command.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
         command.setTypeface(Typeface.MONOSPACE);
+        // A shell command reads left to right whatever the card around it does.
+        command.setTextDirection(TEXT_DIRECTION_LTR);
         command.setTextColor(mDress.textColor);
         command.setText(section.commandRes);
         command.setLineSpacing(dp(1), 1f);
@@ -864,7 +882,7 @@ public final class TourOverlayView extends FrameLayout {
         mCopyButtons.add(copyButton);
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        buttonParams.leftMargin = dp(6);
+        buttonParams.setMarginStart(dp(6));
         commandRow.addView(copyButton, buttonParams);
 
         LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
@@ -882,40 +900,26 @@ public final class TourOverlayView extends FrameLayout {
         button.setText(R.string.tour_copied_commands);
     }
 
-    /** The card's buttons, rebuilt only when the set actually changed. */
+    /**
+     * The card's buttons, rebuilt only when the set actually changed. Whether they share a row or
+     * stand one under another — the usage card's three answers, each a phrase, do not fit across
+     * a phone — is the row's own measurement, not this.
+     */
     private void applyActions(@NonNull List<TourAction> actions) {
         if (!mActions.equals(actions)) {
             mActions.clear();
             mActions.addAll(actions);
-            mButtonRow.removeAllViews();
-            addDocsLink();
+            for (TextView button : mActionButtons) mButtonRow.removeView(button);
             mActionButtons.clear();
             for (TourAction action : mActions) {
                 TextView button = textButton(getContext(), view -> onActionTapped(action));
                 button.setText(action.labelRes);
                 button.setContentDescription(getContext().getString(action.labelRes));
-                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                params.leftMargin = dp(8f);
-                mButtonRow.addView(button, params);
+                mButtonRow.addView(button);
                 mActionButtons.add(button);
             }
         }
         mButtonRow.setVisibility(mActions.isEmpty() ? GONE : VISIBLE);
-    }
-
-    /**
-     * The docs link leads the row as a pill of its own size, and an empty spacer takes the
-     * slack, so the action buttons keep the trailing edge without the link stretching to meet
-     * them.
-     */
-    private void addDocsLink() {
-        LinearLayout.LayoutParams linkParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        linkParams.gravity = Gravity.CENTER_VERTICAL;
-        mButtonRow.addView(mDocsLink, linkParams);
-        View spacer = new View(getContext());
-        mButtonRow.addView(spacer, new LinearLayout.LayoutParams(0, 0, 1f));
     }
 
     private void onActionTapped(@NonNull TourAction action) {

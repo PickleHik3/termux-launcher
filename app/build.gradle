@@ -9,7 +9,7 @@ ext {
     // Bootstrap of a different variant must not be manually installed by the user after app installation
     // by replacing $PREFIX since app code is dependent on the variant used to build the APK.
     // Currently supported values are: ["apt-android-7", "apt-android-5"]
-    litertLmVersion = "0.14.0"
+    litertLmVersion = "0.18.0"
     packageVariant = System.getenv("TERMUX_PACKAGE_VARIANT") ?: "apt-android-7" // Default: "apt-android-7"
 }
 
@@ -17,6 +17,7 @@ android {
     namespace "com.termux"
 
     compileSdkVersion project.properties.compileSdkVersion.toInteger()
+    ndkVersion = System.getenv("JITPACK_NDK_VERSION") ?: project.properties.ndkVersion
     def appVersionName = System.getenv("TERMUX_APP_VERSION_NAME") ?: ""
     def apkVersionTag = System.getenv("TERMUX_APK_VERSION_TAG") ?: ""
     def splitAPKsForDebugBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_DEBUG_BUILDS") ?: "1"
@@ -37,8 +38,24 @@ android {
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // libtai_xnnpack.so (com.termux.ai.TaiXnnpackDelegate): a JNI shim that dlopens the
+        // already-loaded libtensorflowlite_jni.so and calls its exported XNNPACK delegate C API
+        // directly, so Whisper inference gets a real multi-threaded XNNPACK pthreadpool (see
+        // WhisperSttRuntime).
+        externalNativeBuild {
+            ndkBuild {
+                cFlags "-std=c11", "-Wall", "-Wextra", "-Werror", "-Os"
+            }
+        }
+
+        ndk {
+            abiFilters 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+        }
+
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
-        versionName "0.2.40"
+        // One plain X.Y.Z for every edition; nightlies get +dev.<sha> from CI (see AGENTS.md). Keep the line bare: CI greps it.
+        versionName "1.0.0"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
@@ -48,7 +65,6 @@ android {
 
         manifestPlaceholders = [
             TERMUX_PACKAGE_NAME    : "com.termux",
-            TERMUX_APP_NAME        : "Termux:Launcher",
             TERMUX_APP_ALLOW_BACKUP: "false",
             TERMUX_APP_FULL_BACKUP_CONTENT: "false",
             TERMUX_APP_USES_CLEARTEXT_TRAFFIC: "false"
@@ -94,7 +110,7 @@ android {
             manifestPlaceholders = [
                 TERMUX_APP_ALLOW_BACKUP: "false",
                 TERMUX_APP_FULL_BACKUP_CONTENT: "false",
-                TERMUX_APP_USES_CLEARTEXT_TRAFFIC: "false"
+                TERMUX_APP_USES_CLEARTEXT_TRAFFIC: "true" // http only to this phone/private LAN: TaiRemoteClient.checkUrl is the guard
             ]
         }
 
@@ -118,11 +134,24 @@ android {
     lint {
         disable 'ProtectedPermissions'
         disable 'HardcodedDebugMode'
+        // Untranslated strings are a standing condition, not a defect: the app ships more strings
+        // than any translation carries and Android falls back to the default resource. Baselining
+        // this one would put the build back in the red on the next string anybody adds.
+        disable 'MissingTranslation'
+        // Everything else that was already here is recorded in the baseline rather than silenced,
+        // so a new finding of any kind still fails the build.
+        baseline = file('lint-baseline.xml')
     }
 
     testOptions {
         unitTests {
             includeAndroidResources = true
+        }
+    }
+
+    externalNativeBuild {
+        ndkBuild {
+            path "src/main/jni/Android.mk"
         }
     }
 
@@ -138,12 +167,15 @@ android {
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
             def abi = output.getFilter(com.android.build.OutputFile.ABI)
+            // CI passes termux-app_v<versionName>_<edition>_<variant>; local builds keep the variant-buildType name.
             outputFileName = new File("termux-app_" + (apkVersionTag ? apkVersionTag : project.ext.packageVariant + "-" + variant.buildType.name) + "_" + (abi ? abi : "universal") + ".apk")
         }
     }
 
     buildFeatures {
         buildConfig true
+        // The privileged lane's Shizuku user service (src/main/aidl/com/termux/privileged/lane).
+        aidl true
     }
 
     sourceSets {
@@ -157,7 +189,10 @@ dependencies {
     implementation "androidx.preference:preference:1.2.1"
     implementation "androidx.recyclerview:recyclerview:1.1.0"
     implementation "androidx.viewpager:viewpager:1.1.0-alpha01"
-    implementation "com.google.android.material:material:1.12.0"
+    implementation "com.google.android.material:material:1.14.0"
+    // The editor's bottom area (appearance_editor_panel). Material 1.14.0 already resolves 2.2.1;
+    // declared here because the app's own layouts use it directly.
+    implementation "androidx.constraintlayout:constraintlayout:2.2.1"
     implementation "com.vanniktech:android-image-cropper:4.7.0"
     implementation "com.google.guava:guava:32.0.1-android"
     implementation "io.noties.markwon:core:$markwonVersion"
@@ -219,6 +254,149 @@ tasks.register("verifyReleaseHardening") {
             throw new GradleException("Release build type must not use debug signing config.")
         }
     }
+}
+
+// The launcher ships a pinned tlstore release rather than building the store in-tree (the store's
+// own sources live in PickleHik3/tlstore). app/tlstore.lock names the release and the sha256 of
+// each file its dist/ folder must contain; this task fetches them into a generated assets
+// directory that is wired below as an assets srcDir for every variant.
+tasks.register("fetchTlstore") {
+    description = "Downloads the pinned tlstore release's dist/ files (app/tlstore.lock) into " +
+        "build/generated/tlstore/assets/tlstore, or copies them from -Ptlstore.local=<dir>."
+    group = "build setup"
+
+    def lockFile = file("tlstore.lock")
+    def outDir = file("$buildDir/generated/tlstore/assets/tlstore")
+    def localDir = project.hasProperty("tlstore.local")
+        ? project.property("tlstore.local").toString()
+        : System.getenv("TLSTORE_LOCAL")
+
+    inputs.file(lockFile)
+    if (localDir) {
+        inputs.dir(localDir)
+    }
+    outputs.dir(outDir)
+
+    doLast {
+        if (!lockFile.isFile()) {
+            throw new GradleException("Missing ${lockFile.path}")
+        }
+        def lines = lockFile.readLines().collect { it.trim() }
+            .findAll { it && !it.startsWith("#") }
+        def tagLine = lines.find { it.startsWith("tag ") }
+        if (tagLine == null) {
+            throw new GradleException("${lockFile.path} has no 'tag <release>' line")
+        }
+        def tag = tagLine.substring(4).trim()
+        // "<sha256>  <file>", the same shape `sha256sum` prints (and SHA256SUMS uses).
+        def entryPattern = ~/^([0-9a-f]{64})\s+(\S+)$/
+        def entries = lines.findAll { it != tagLine }.collect { line ->
+            def matcher = entryPattern.matcher(line)
+            if (!matcher.matches()) {
+                throw new GradleException("${lockFile.path}: unreadable line: '${line}'")
+            }
+            [sha256: matcher.group(1), file: matcher.group(2)]
+        }
+        if (entries.isEmpty()) {
+            throw new GradleException("${lockFile.path} names no dist files")
+        }
+
+        outDir.mkdirs()
+
+        // AGP's incremental asset merge can keep a stale copy when these files are swapped
+        // (a local build, then the pinned release, or back), so when any of them changes, the
+        // merged and compressed assets are dropped and rebuilt from scratch.
+        def snapshot = { entries.collectEntries { e ->
+            def f = new File(outDir, e.file)
+            [(e.file): f.isFile() ? sha256Hex(f) : null]
+        } }
+        def before = snapshot()
+        def dropStaleMerges = {
+            if (snapshot() != before) {
+                ["intermediates/assets", "intermediates/compressed_assets"].each {
+                    project.delete("$buildDir/$it")
+                }
+            }
+        }
+
+        if (localDir) {
+            def source = new File(localDir)
+            if (!source.isDirectory()) {
+                throw new GradleException("-Ptlstore.local (or TLSTORE_LOCAL) points at " +
+                    "${source.path}, which is not a directory")
+            }
+            logger.warn("tlstore: using local files from ${source.path}; app/tlstore.lock is " +
+                "NOT checked against them")
+            entries.each { entry ->
+                def from = new File(source, entry.file)
+                if (!from.isFile()) {
+                    throw new GradleException("${from.path} is missing from -Ptlstore.local " +
+                        "dir ${source.path}")
+                }
+                java.nio.file.Files.copy(from.toPath(), new File(outDir, entry.file).toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }
+            dropStaleMerges()
+            return
+        }
+
+        entries.each { entry ->
+            def dest = new File(outDir, entry.file)
+            if (dest.isFile() && sha256Hex(dest) == entry.sha256) {
+                return // already the pinned bytes
+            }
+            def url = "https://raw.githubusercontent.com/PickleHik3/tlstore/${tag}/dist/${entry.file}"
+            def temp = File.createTempFile(".tlstore-", ".tmp", outDir)
+            try {
+                try {
+                    temp.withOutputStream { out -> out << new URL(url).openStream() }
+                } catch (IOException e) {
+                    if (dest.isFile()) {
+                        logger.warn("tlstore: could not fetch ${url} (${e.message}); keeping " +
+                            "the cached ${dest.name}")
+                        return
+                    }
+                    throw new GradleException("tlstore: could not fetch ${url} (${e.message}) " +
+                        "and no cached copy of ${entry.file} is present. Fetch it once while " +
+                        "online, or pass -Ptlstore.local=<dir> with a local tlstore checkout's " +
+                        "dist/ folder.")
+                }
+                def actual = sha256Hex(temp)
+                if (actual != entry.sha256) {
+                    throw new GradleException("tlstore: ${entry.file} from ${url} has sha256 " +
+                        "${actual}, expected ${entry.sha256} (app/tlstore.lock). Refusing to " +
+                        "use it.")
+                }
+                java.nio.file.Files.move(temp.toPath(), dest.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            } finally {
+                temp.delete()
+            }
+        }
+        dropStaleMerges()
+    }
+}
+
+def sha256Hex(File file) {
+    def digest = java.security.MessageDigest.getInstance("SHA-256")
+    file.withInputStream { input ->
+        def buffer = new byte[8192]
+        def read
+        while ((read = input.read(buffer)) > 0) digest.update(buffer, 0, read)
+    }
+    def hex = new StringBuilder()
+    digest.digest().each { hex.append(String.format("%02x", it)) }
+    hex.toString()
+}
+
+android.sourceSets.all { sourceSet ->
+    sourceSet.assets.srcDir("$buildDir/generated/tlstore/assets")
+}
+
+afterEvaluate {
+    tasks.matching {
+        it.name ==~ /merge.*Assets/ || it.name.toLowerCase(java.util.Locale.ROOT).contains("lint")
+    }.configureEach { it.dependsOn(tasks.named("fetchTlstore")) }
 }
 
 def validateVersionName(String versionName) {
@@ -288,6 +466,9 @@ tasks.register("generateLicenseResources", Copy) {
     from(rootProject.file("THIRD_PARTY_NOTICES.md")) {
         rename { "third_party_notices.txt" }
     }
+    from(rootProject.file("THIRD_PARTY_LICENSES.txt")) {
+        rename { "third_party_licenses.txt" }
+    }
     from(rootProject.file("LICENSE")) {
         rename { "license_gpl_3.txt" }
     }
@@ -344,6 +525,22 @@ afterEvaluate {
 // it is a file the launcher carries and writes into the prefix (X11CliInstaller). Built per
 // build type, because the signature it trusts is that build type's: a debug launcher carries a
 // loader that trusts the debug key, a release launcher one that trusts the release key.
+// VoiceReplayRig (app/src/test/.../voice/VoiceReplayRig.java) is a JUnit test that stays skipped
+// (Assume) unless -Dvoice.replay.in is set; these are the only properties it reads, forwarded
+// from the Gradle invocation to the test JVM so `./gradlew testDebugUnitTest -Dvoice.replay.in=…`
+// reaches it. An ordinary test run passes none of them, so nothing here changes that run.
+tasks.withType(Test).configureEach {
+    ['voice.replay.in', 'voice.replay.model', 'voice.replay.terminal', 'voice.replay.bare',
+     'voice.replay.pause', 'voice.replay.out', 'voice.replay.python', 'voice.replay.keep'].each { key ->
+        def value = System.getProperty(key) ?: project.findProperty(key)
+        if (value != null) systemProperty key, value
+    }
+    // The test JVM runs in this module's directory, so a relative default would land in app/app/.
+    if (System.getProperty('voice.replay.out') == null && project.findProperty('voice.replay.out') == null) {
+        systemProperty 'voice.replay.out', new File(buildDir, 'voice-replay').absolutePath
+    }
+}
+
 if (findProject(":x11-server:loader") != null) {
     def loaderProject = project(":x11-server:loader")
     def loaderAssetsDir = new File(buildDir, "generated/x11LoaderAssets")
@@ -375,8 +572,14 @@ if (findProject(":x11-server:loader") != null) {
         }
         android.sourceSets.getByName(typeName).assets.srcDir typeDir
         tasks.configureEach {
-            if (name.startsWith("merge") && name.endsWith("Assets")
-                    && name.toLowerCase().contains(typeName.toLowerCase())) {
+            def mentionsType = name.toLowerCase().contains(typeName.toLowerCase())
+            // The loader lands in an asset source set, so everything that reads the assets has to
+            // wait for it — the asset merge, and lint too: its analysis and model tasks walk the
+            // same source sets, and Gradle fails the build outright when they meet a directory
+            // nothing told them to wait for.
+            def readsAssets = (name.startsWith("merge") && name.endsWith("Assets")) ||
+                name.toLowerCase(java.util.Locale.ROOT).contains("lint")
+            if (mentionsType && readsAssets) {
                 dependsOn task
             }
         }

@@ -58,7 +58,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Item 02 of {@code project-docs/landscape-round/SPEC.md}: the reported profile is a landscape
+ * The reported profile is a landscape
  * place with the pinned apps on a <b>left rail</b>, the alphabets bar on the <b>bottom</b>, and
  * <b>nothing pinned</b> — and on it, a finger on B or C was reported to produce no visible app
  * choices at all.
@@ -333,7 +333,7 @@ public class AzStandaloneStripEmptyPinnedTest {
         for (PaneWallPage place : PaneWallPage.values())
             for (PlaceOrientation orientation : PlaceOrientation.values())
                 for (Element element : Element.values())
-                    store.setSlot(place, orientation, element, layout.slot(element));
+                    store.setSlot(orientation, element, layout.slot(element));
         assertFalse("the arrangement must not let the index ride the row",
             PlaceChromePolicy.azRidesAppsRow(layout));
         screen.applyEdgeStacks(layout);

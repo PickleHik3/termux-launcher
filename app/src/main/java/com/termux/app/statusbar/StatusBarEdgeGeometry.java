@@ -19,11 +19,24 @@ import com.termux.app.place.PlaceLayout.Edge;
  */
 public final class StatusBarEdgeGeometry {
 
+    /**
+     * An open row, from the edge it stands on: the widget slot the clock, the pinned cards and
+     * the media share, the status row of chips, and the foot that keeps the chips inside the
+     * bar's outline. The row follows the slot directly, so the bar is exactly the three.
+     */
+    public static final float SLOT_DOCKED_DP = 65f;
+    public static final float SLOT_CAPSULE_DP = 69f;
+    public static final float STATUS_ROW_DP = 24f;
+    public static final float ROW_FOOT_DOCKED_DP = 2f;
+    public static final float ROW_FOOT_CAPSULE_DP = 3f;
+
     /** A row's thickness is its height; a column's is its width. Both in dp. */
     public static final float ROW_COMPACT_DOCKED_DP = 32f;
     public static final float ROW_COMPACT_CAPSULE_DP = 30f;
-    public static final float ROW_EXPANDED_DOCKED_DP = 96f;
-    public static final float ROW_EXPANDED_CAPSULE_DP = 100f;
+    public static final float ROW_EXPANDED_DOCKED_DP =
+        SLOT_DOCKED_DP + STATUS_ROW_DP + ROW_FOOT_DOCKED_DP;
+    public static final float ROW_EXPANDED_CAPSULE_DP =
+        SLOT_CAPSULE_DP + STATUS_ROW_DP + ROW_FOOT_CAPSULE_DP;
 
     /**
      * The column is a little wider than the row is tall: it carries the same chips turned on

@@ -1,5 +1,6 @@
 package com.termux.app.layouteditor;
 
+import com.termux.app.place.LayoutVariant;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertFalse;
@@ -12,12 +13,8 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Bar;
-import com.termux.app.editorshell.EditorShellMetrics;
-import com.termux.app.fragments.settings.PlaceMiniatureView;
-import com.termux.app.place.KeyboardOnEnter;
 import com.termux.app.place.EdgeStackPolicy;
-import com.termux.app.place.PlaceArrangeModel;
-import com.termux.app.place.PlaceArrangeModel.Element;
+import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -41,9 +38,9 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The Layout editor's decisions, without a window: which orientation the miniature shows and which
- * one a drop writes, which rows stand beneath it on each place, what a drop or a pick does to the
- * live place, when the session is dirty, and what the revert puts back.
+ * The Layout editor's decisions, without a window: which orientation the canvas shows and which
+ * one a drop writes, what a drop, a handle, a tray chip or a type chip does to the live place,
+ * when the session is dirty, and what the revert puts back.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -52,11 +49,6 @@ public class LayoutEditorPlanTest {
 
     private static final PlaceOrientation PORTRAIT = PlaceOrientation.PORTRAIT;
     private static final PlaceOrientation LANDSCAPE = PlaceOrientation.LANDSCAPE;
-
-    /** Landscape viewports in pixels, the shapes a phone and a window of one actually take. */
-    private static final int[][] LANDSCAPE_VIEWPORTS = {
-        {960, 540}, {1024, 600}, {1300, 600}, {1280, 720}, {1600, 720}, {1920, 1080},
-        {2340, 1080}, {2400, 1080}};
 
     private SharedPreferences prefs;
     private PlaceLayoutStore places;
@@ -71,47 +63,6 @@ public class LayoutEditorPlanTest {
 
     private LayoutEditorPlan enterOnTerminalInPortrait() {
         return LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
-    }
-
-    /** Every row's label, in the order the card stands them in. */
-    private static List<String> labels(LayoutEditorPlan plan) {
-        List<String> names = new ArrayList<>();
-        for (LayoutEditorPlan.Row row : plan.rows())
-            names.add(RuntimeEnvironment.getApplication().getString(row.group.labelRes));
-        return names;
-    }
-
-    /** The one row a label names, so a test can pick on it. */
-    private static LayoutEditorPlan.Row row(LayoutEditorPlan plan, String label) {
-        for (LayoutEditorPlan.Row row : plan.rows()) {
-            if (label.equals(RuntimeEnvironment.getApplication().getString(row.group.labelRes)))
-                return row;
-        }
-        throw new AssertionError("no row labelled " + label + " in " + labels(plan));
-    }
-
-    /** The one row a label names under one heading: two headings both offer a Height. */
-    private static LayoutEditorPlan.Row row(LayoutEditorPlan plan, Element element, String label) {
-        for (LayoutEditorPlan.Row row : plan.rows()) {
-            if (row.element == element
-                && label.equals(RuntimeEnvironment.getApplication().getString(row.group.labelRes)))
-                return row;
-        }
-        throw new AssertionError("no " + element + " row labelled " + label + " in " + labels(plan));
-    }
-
-    /** The size row under one heading, for a test to drag. */
-    private static PlaceArrangeModel.Size size(LayoutEditorPlan plan, Element element,
-                                               String label) {
-        LayoutEditorPlan.Row row = row(plan, element, label);
-        assertTrue(label + " is a size row", row.group instanceof PlaceArrangeModel.Size);
-        return (PlaceArrangeModel.Size) row.group;
-    }
-
-    private static void pick(LayoutEditorPlan plan, String label, String value) {
-        LayoutEditorPlan.Row row = row(plan, label);
-        assertTrue(label + " is a pill row", row.group instanceof PlaceArrangeModel.Pills);
-        ((PlaceArrangeModel.Pills) row.group).writer.write(value);
     }
 
     @Test
@@ -133,8 +84,8 @@ public class LayoutEditorPlanTest {
         assertEquals("the phone did not turn", PORTRAIT, plan.deviceOrientation());
         assertFalse("so the live place stays where it is", plan.liveFollows());
 
-        // The miniature draws the orientation on the toggle, whatever the phone is in.
-        assertEquals(places.resolve(PaneWallPage.TERMINAL, LANDSCAPE), plan.shownLayout());
+        // The layout canvas draws the orientation on the toggle, whatever the phone is in.
+        assertEquals(places.resolve(LANDSCAPE), plan.shownLayout());
     }
 
     @Test
@@ -142,15 +93,15 @@ public class LayoutEditorPlanTest {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.BOTTOM));
-        assertEquals("bottom", prefs.getString("place.terminal.portrait.status_bar", null));
+        assertEquals("bottom", prefs.getString("layout.portrait.status_bar", null));
         assertNull("landscape untouched",
-            prefs.getString("place.terminal.landscape.status_bar", null));
+            prefs.getString("layout.landscape.status_bar", null));
 
         plan.showOrientation(LANDSCAPE);
-        assertEquals("the phone is still in portrait, so only the miniature moves",
+        assertEquals("the phone is still in portrait, so only the layout canvas moves",
             LayoutEditorPlan.Drop.MINIATURE, plan.drop(Bar.APPS_ROW, Edge.RIGHT));
-        assertEquals("right", prefs.getString("place.terminal.landscape.apps_row", null));
-        assertNull("portrait untouched", prefs.getString("place.terminal.portrait.apps_row", null));
+        assertEquals("right", prefs.getString("layout.landscape.apps_row", null));
+        assertNull("portrait untouched", prefs.getString("layout.portrait.apps_row", null));
     }
 
     @Test
@@ -158,30 +109,39 @@ public class LayoutEditorPlanTest {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.EXTRA_KEYS, null));
-        assertEquals("hidden", prefs.getString("place.terminal.portrait.extra_keys", null));
-        assertEquals(RowPlacement.HIDDEN, places.extraKeys(PaneWallPage.TERMINAL, PORTRAIT));
+        assertEquals("hidden", prefs.getString("layout.portrait.extra_keys", null));
+        assertEquals(RowPlacement.HIDDEN, places.extraKeys(PORTRAIT));
     }
 
     @Test
-    public void aBarDroppedWhereItCannotStandWritesNothing() {
+    public void theStatusBarDroppedInTheTrayIsHiddenAndTheRevertBringsItBack() {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
-        // Every bar stands on every edge now; the status bar never hides, and that is the one
-        // drop left that cannot be made.
-        assertEquals(LayoutEditorPlan.Drop.NONE, plan.drop(Bar.STATUS_BAR, null));
-        assertNull(prefs.getString("place.terminal.portrait.status_bar", null));
-        assertFalse("nothing was written, so there is nothing to lose", plan.isDirty());
+        // Every bar stands on every edge, and every bar may be put away — the status bar too,
+        // since the wall's paging is the border drag and nothing rides the bar's swipe.
+        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, null));
+        assertEquals("hidden", prefs.getString("layout.portrait.status_bar", null));
+        assertTrue(places.resolve(PORTRAIT).slot(
+            com.termux.app.place.Element.STATUS).hidden);
+        assertFalse("the other orientation keeps its bar",
+            places.resolve(LANDSCAPE).slot(com.termux.app.place.Element.STATUS).hidden);
+        assertTrue("a hidden status bar is something to lose", plan.isDirty());
+
+        plan.revert();
+        assertFalse(places.resolve(PORTRAIT).slot(
+            com.termux.app.place.Element.STATUS).hidden);
+        assertFalse(plan.isDirty());
 
         assertEquals("a row on the top edge is a placement like any other",
             LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.APPS_ROW, Edge.TOP));
-        assertEquals("top", prefs.getString("place.terminal.portrait.apps_row", null));
+        assertEquals("top", prefs.getString("layout.portrait.apps_row", null));
     }
 
     /** What stands along the bottom of the Terminal in portrait, outermost first. */
     private List<String> bottomStack() {
         List<String> names = new ArrayList<>();
         for (com.termux.app.place.Element element : EdgeStackPolicy.stack(
-            places.resolve(PaneWallPage.TERMINAL, PORTRAIT), Edge.BOTTOM))
+            places.resolve(PORTRAIT), Edge.BOTTOM))
             names.add(element.name());
         return names;
     }
@@ -218,19 +178,19 @@ public class LayoutEditorPlanTest {
         plan.showOrientation(LANDSCAPE);
         assertFalse(plan.liveFollows());
 
-        // The editor shows what the user is looking at, so a rotation takes the miniature with it.
+        // The editor shows what the user is looking at, so a rotation takes the layout canvas with it.
         plan.onDeviceOrientationChanged(LANDSCAPE);
         assertEquals(LANDSCAPE, plan.deviceOrientation());
         assertEquals(LANDSCAPE, plan.shownOrientation());
         assertTrue(plan.liveFollows());
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.LEFT));
-        assertEquals("left", prefs.getString("place.terminal.landscape.status_bar", null));
+        assertEquals("left", prefs.getString("layout.landscape.status_bar", null));
     }
 
     @Test
     public void aSessionIsDirtyOnceABarHasMovedAndCleanAgainAfterTheRevert() {
-        places.setStatusBarEdge(PaneWallPage.TERMINAL, PORTRAIT, Edge.TOP);
-        places.setAppsRow(PaneWallPage.TERMINAL, LANDSCAPE, RowPlacement.BOTTOM);
+        places.setStatusBarEdge(PORTRAIT, Edge.TOP);
+        places.setAppsRow(LANDSCAPE, RowPlacement.BOTTOM);
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
         assertFalse("nothing moved yet", plan.isDirty());
 
@@ -243,14 +203,14 @@ public class LayoutEditorPlanTest {
 
         plan.revert();
         assertFalse("every bar is back where the editor found it", plan.isDirty());
-        assertEquals(Edge.TOP, places.statusBarEdge(PaneWallPage.TERMINAL, PORTRAIT));
-        assertEquals(RowPlacement.BOTTOM, places.appsRow(PaneWallPage.TERMINAL, LANDSCAPE));
+        assertEquals(Edge.TOP, places.statusBarEdge(PORTRAIT));
+        assertEquals(RowPlacement.BOTTOM, places.appsRow(LANDSCAPE));
     }
 
     @Test
     public void aDropThatChangesNothingIsNotAnUnsavedChange() {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
-        Edge resting = places.statusBarEdge(PaneWallPage.TERMINAL, PORTRAIT);
+        Edge resting = places.statusBarEdge(PORTRAIT);
 
         plan.drop(Bar.STATUS_BAR, resting);
         assertFalse("the bar landed where it already stood", plan.isDirty());
@@ -275,12 +235,12 @@ public class LayoutEditorPlanTest {
         plan.showPlace(PaneWallPage.WIDGETS);
         assertEquals(PaneWallPage.WIDGETS, plan.place());
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.BOTTOM));
-        assertEquals("bottom", prefs.getString("place.home.portrait.status_bar", null));
+        assertEquals("bottom", prefs.getString("layout.portrait.status_bar", null));
 
         plan.revert();
         assertFalse(plan.isDirty());
         assertEquals("the place the editor opened on is back too",
-            RowPlacement.BOTTOM, places.extraKeys(PaneWallPage.TERMINAL, PORTRAIT));
+            RowPlacement.BOTTOM, places.extraKeys(PORTRAIT));
     }
 
     // ----------------------------------------------------------------------- the notice slot
@@ -308,282 +268,133 @@ public class LayoutEditorPlanTest {
         assertTrue(plan.warnsSideStatusBar());
     }
 
-    // ------------------------------------------------------------ the rows beneath the miniature
+    // ------------------------------------------------------- the handles, the tray, the chips
 
+    /**
+     * The keyboard's switch is one value for both orientations, so putting the keyboard away in
+     * the tray lands on the live place whichever orientation the canvas shows.
+     */
     @Test
-    public void homeOffersTheKeyboardsFormAndOnEnterAndTheGridsTwoCounts() {
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+    public void theKeyboardPutAwayFollowsLiveOnEitherOrientation() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        plan.showOrientation(LANDSCAPE);
 
-        assertEquals(labels(plan), Arrays.asList("Height", "Type", "On enter", "Height",
-            "Bottom padding", "Grid columns", "Grid rows"));
-        assertTrue("the grid's counts are counters",
-            row(plan, "Grid columns").group instanceof PlaceArrangeModel.Counter);
+        assertEquals("shared by both orientations",
+            LayoutEditorPlan.Drop.LIVE, plan.setKeyboardShown(false));
+        assertFalse(places.isKeyboardShown());
+        assertTrue("as unsaved as a moved bar", plan.isDirty());
+        assertTrue(plan.trayItems().contains(LayoutEditorPlan.TrayItem.KEYBOARD));
+
+        assertEquals(LayoutEditorPlan.Drop.LIVE,
+            plan.restore(LayoutEditorPlan.TrayItem.KEYBOARD));
+        assertTrue(places.isKeyboardShown());
+        assertFalse(plan.trayItems().contains(LayoutEditorPlan.TrayItem.KEYBOARD));
+        assertFalse(plan.isDirty());
     }
 
+    /** A tray chip brings a hidden bar back to the edge it was put away from. */
     @Test
-    public void theTerminalHasNoGridToCountAndNoKeyboardModeToPick() {
+    public void aTrayChipBringsABarBackToTheEdgeItLeft() {
+        places.setSlot(PORTRAIT, com.termux.app.place.Element.EXTRA_KEYS,
+            com.termux.app.place.Slot.on(Edge.TOP, com.termux.app.place.Element.EXTRA_KEYS));
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
-        assertEquals(labels(plan),
-            Arrays.asList("Height", "Type", "On enter", "Height", "Bottom padding"));
+        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.EXTRA_KEYS, null));
+        assertTrue(plan.trayItems().contains(LayoutEditorPlan.TrayItem.EXTRA_KEYS));
+
+        assertEquals(LayoutEditorPlan.Drop.LIVE,
+            plan.restore(LayoutEditorPlan.TrayItem.EXTRA_KEYS));
+        assertFalse(plan.trayItems().contains(LayoutEditorPlan.TrayItem.EXTRA_KEYS));
+        assertEquals("back on the top edge, not folded to the bottom", Edge.TOP,
+            plan.shownLayout().slot(com.termux.app.place.Element.EXTRA_KEYS).edge);
+        assertFalse("the bar is where it started", plan.isDirty());
+        assertEquals("a chip for a bar on the phone does nothing", LayoutEditorPlan.Drop.NONE,
+            plan.restore(LayoutEditorPlan.TrayItem.STATUS_BAR));
     }
 
+    /** A type chip writes the orientation on the toggle alone. */
     @Test
-    public void onlyTheDisplayOffersTheKeyboardMode() {
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.DISPLAY, PORTRAIT);
-
-        assertEquals(labels(plan), Arrays.asList("Height", "Type", "On enter", "Keyboard mode",
-            "Height", "Bottom padding"));
-    }
-
-    @Test
-    public void aPickOnARowWritesTheOrientationOnTheToggleAlone() {
+    public void aTypeChipWritesTheOrientationOnTheToggleAlone() {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
-        pick(plan, "Type", "floating");
-        assertEquals(KeyboardForm.FLOATING, places.keyboardForm(PaneWallPage.TERMINAL, PORTRAIT));
+        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setKeyboardForm(KeyboardForm.FLOATING));
+        assertEquals(KeyboardForm.FLOATING, places.keyboardForm(PORTRAIT));
         assertNull("landscape untouched",
-            prefs.getString("place.terminal.landscape.keyboard_form", null));
+            prefs.getString("layout.landscape.keyboard_form", null));
+        assertEquals("the chip already checked writes nothing", LayoutEditorPlan.Drop.NONE,
+            plan.setKeyboardForm(KeyboardForm.FLOATING));
 
         plan.showOrientation(LANDSCAPE);
-        assertEquals("the row re-reads itself for the orientation now shown",
-            "docked", ((PlaceArrangeModel.Pills) row(plan, "Type").group).selected);
-        pick(plan, "Type", "split");
-        assertEquals(KeyboardForm.SPLIT, places.keyboardForm(PaneWallPage.TERMINAL, LANDSCAPE));
+        assertEquals("read again for the orientation now shown",
+            KeyboardForm.DOCKED, plan.keyboardForm());
+        assertEquals(LayoutEditorPlan.Drop.MINIATURE, plan.setKeyboardForm(KeyboardForm.SPLIT));
+        assertEquals(KeyboardForm.SPLIT, places.keyboardForm(LANDSCAPE));
         assertEquals("portrait keeps what it was given",
-            KeyboardForm.FLOATING, places.keyboardForm(PaneWallPage.TERMINAL, PORTRAIT));
+            KeyboardForm.FLOATING, places.keyboardForm(PORTRAIT));
     }
 
+    /** The grid's corner handle writes both counts, for the orientation on the toggle. */
     @Test
-    public void theOnEnterRowIsThePlacesOwnAndNotAnOrientationsOf() {
-        LayoutEditorPlan plan = enterOnTerminalInPortrait();
-
-        pick(plan, "On enter", "closed");
-        assertEquals(KeyboardOnEnter.CLOSED, places.keyboardOnEnter(PaneWallPage.TERMINAL));
-        assertEquals("one key for the place, not one per orientation",
-            "closed", prefs.getString("place.terminal.keyboard_on_enter", null));
-
-        plan.showOrientation(LANDSCAPE);
-        assertEquals("so the other orientation shows the same answer",
-            "closed", ((PlaceArrangeModel.Pills) row(plan, "On enter").group).selected);
-    }
-
-    @Test
-    public void theDisplaysKeyboardModeIsPerOrientationLikeItsForm() {
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.DISPLAY, LANDSCAPE);
-
-        pick(plan, "Keyboard mode", "overlay");
-        assertEquals(KeyboardMode.OVERLAY, places.keyboardMode(PaneWallPage.DISPLAY, LANDSCAPE));
-        assertNull("portrait untouched",
-            prefs.getString("place.display.portrait.keyboard_mode", null));
-    }
-
-    @Test
-    public void aGridCountWritesTheOrientationOnTheToggleAlone() {
+    public void theGridHandleWritesTheOrientationOnTheToggleAlone() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, LANDSCAPE);
 
-        ((PlaceArrangeModel.Counter) row(plan, "Grid columns").group).writer.write(6);
-        assertEquals(6, places.widgetColumns(PaneWallPage.WIDGETS, LANDSCAPE));
+        plan.setWidgetGrid(6, 3);
+        assertEquals(6, places.widgetColumns(LANDSCAPE));
+        assertEquals(3, places.widgetRows(LANDSCAPE));
         assertNull("portrait untouched",
-            prefs.getString("place.home.portrait.widget_columns", null));
-    }
-
-    @Test
-    public void aRowPickIsAnUnsavedChangeAndTheRevertPutsItBack() {
-        places.setKeyboardForm(PaneWallPage.TERMINAL, PORTRAIT, KeyboardForm.DOCKED);
-        LayoutEditorPlan plan = enterOnTerminalInPortrait();
-        assertFalse("nothing picked yet", plan.isDirty());
-
-        pick(plan, "Type", "split");
-        assertTrue("a row is as unsaved as a moved bar", plan.isDirty());
-
-        pick(plan, "On enter", "open");
+            prefs.getString("layout.portrait.widget_columns", null));
         assertTrue(plan.isDirty());
-
-        plan.revert();
-        assertFalse(plan.isDirty());
-        assertEquals(KeyboardForm.DOCKED, places.keyboardForm(PaneWallPage.TERMINAL, PORTRAIT));
-        assertEquals(KeyboardOnEnter.AS_LEFT, places.keyboardOnEnter(PaneWallPage.TERMINAL));
     }
 
     @Test
-    public void theRowsFollowTheSecondDoorToItsPlace() {
-        LayoutEditorPlan plan = enterOnTerminalInPortrait();
-        assertEquals(5, plan.rows().size());
-
-        plan.showPlace(PaneWallPage.WIDGETS);
-        assertEquals("home's grid counts join the card", 7, plan.rows().size());
-    }
-
-
-    // ----------------------------------------------------------------------- the three sizes
-
-    @Test
-    public void everyPlaceOffersTheDocksHeightAndTheKeyboardsHeightAndChin() {
-        for (PaneWallPage place : PaneWallPage.values()) {
-            LayoutEditorPlan plan = LayoutEditorPlan.enter(places, place, PORTRAIT);
-
-            PlaceArrangeModel.Size dock = size(plan, Element.PINNED_APPS, "Height");
-            assertEquals("a scale is a hundred steps of its own range",
-                100, dock.max - dock.min);
-            assertEquals(PlaceArrangeModel.Unit.PERCENT, dock.unit);
-
-            assertEquals(PlaceArrangeModel.Unit.PERCENT,
-                size(plan, Element.KEYBOARD, "Height").unit);
-
-            PlaceArrangeModel.Size chin = size(plan, Element.KEYBOARD, "Bottom padding");
-            assertEquals("the chin is counted in dp, from nothing to its ceiling",
-                PlaceArrangeModel.Unit.DP, chin.unit);
-            assertEquals(TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING, chin.min);
-            assertEquals(TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING, chin.max);
-        }
-    }
-
-    @Test
-    public void aSizeDragWritesTheOrientationOnTheToggleAlone() {
+    public void aSizeHandleWritesTheOrientationOnTheToggleAlone() {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
-        size(plan, Element.KEYBOARD, "Height").writer.write(100);
-        assertEquals("the track's top is the scale's ceiling",
-            TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE,
-            places.keyboardHeightScale(PaneWallPage.TERMINAL, PORTRAIT), 0.001f);
+        plan.setKeyboardHeightScale(TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE);
+        assertEquals(TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            places.keyboardHeightScale(PORTRAIT), 0.001f);
         assertNull("landscape untouched",
-            prefs.getString("place.terminal.landscape.keyboard_height", null));
+            prefs.getString("layout.landscape.keyboard_height", null));
 
         plan.showOrientation(LANDSCAPE);
-        assertNotEquals("the row re-reads itself for the orientation now shown",
-            100, size(plan, Element.KEYBOARD, "Height").value);
-        size(plan, Element.KEYBOARD, "Height").writer.write(50);
-        assertNotEquals("the two orientations stand at their own heights",
-            places.keyboardHeightScale(PaneWallPage.TERMINAL, PORTRAIT),
-            places.keyboardHeightScale(PaneWallPage.TERMINAL, LANDSCAPE), 0.001f);
-        assertEquals("portrait keeps what it was given",
-            TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE,
-            places.keyboardHeightScale(PaneWallPage.TERMINAL, PORTRAIT), 0.001f);
-    }
-
-    @Test
-    public void theDocksHeightAndTheChinAreThePlacesAndTheOrientationsToo() {
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.DISPLAY, LANDSCAPE);
-
-        size(plan, Element.PINNED_APPS, "Height").writer.write(0);
+        assertEquals(LayoutEditorPlan.Drop.MINIATURE, plan.setDockHeightScale(
+            TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT));
         assertEquals(TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT,
-            places.dockHeightScale(PaneWallPage.DISPLAY, LANDSCAPE), 0.001f);
-        assertNull("portrait untouched",
-            prefs.getString("place.display.portrait.dock_height", null));
+            places.dockHeightScale(LANDSCAPE), 0.001f);
+        assertNull("portrait's dock untouched",
+            prefs.getString("layout.portrait.dock_height", null));
 
-        size(plan, Element.KEYBOARD, "Bottom padding").writer.write(24);
-        assertEquals(24, places.keyboardChinDp(PaneWallPage.DISPLAY, LANDSCAPE));
-        assertNull("portrait untouched",
-            prefs.getString("place.display.portrait.keyboard_chin", null));
-        assertEquals("and no other place moved with it", 0,
-            places.keyboardChinDp(PaneWallPage.TERMINAL, LANDSCAPE));
+        plan.setKeyboardChinDp(24);
+        assertEquals(24, places.keyboardChinDp(LANDSCAPE));
+        assertEquals(24, plan.keyboardChinDp());
     }
 
     @Test
     public void aSizeThatMovesIsAnUnsavedChangeAndTheRevertPutsAllThreeBack() {
-        places.setDockHeightScale(PaneWallPage.TERMINAL, PORTRAIT, 1.5f);
-        places.setKeyboardHeightScale(PaneWallPage.TERMINAL, PORTRAIT, 1.2f);
-        places.setKeyboardChinDp(PaneWallPage.TERMINAL, PORTRAIT, 12);
+        places.setDockHeightScale(PORTRAIT, 1.5f);
+        places.setKeyboardHeightScale(PORTRAIT, 1.2f);
+        places.setKeyboardChinDp(PORTRAIT, 12);
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
         assertFalse("nothing dragged yet", plan.isDirty());
 
-        size(plan, Element.PINNED_APPS, "Height").writer.write(0);
+        plan.setDockHeightScale(TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT);
         assertTrue("a size is as unsaved as a moved bar", plan.isDirty());
-        size(plan, Element.KEYBOARD, "Height").writer.write(100);
-        size(plan, Element.KEYBOARD, "Bottom padding").writer.write(48);
+        plan.setKeyboardHeightScale(TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE);
+        plan.setKeyboardChinDp(48);
 
         plan.revert();
         assertFalse(plan.isDirty());
-        assertEquals(1.5f, places.dockHeightScale(PaneWallPage.TERMINAL, PORTRAIT), 0.001f);
-        assertEquals(1.2f, places.keyboardHeightScale(PaneWallPage.TERMINAL, PORTRAIT), 0.001f);
-        assertEquals(12, places.keyboardChinDp(PaneWallPage.TERMINAL, PORTRAIT));
+        assertEquals(1.5f, places.dockHeightScale(PORTRAIT), 0.001f);
+        assertEquals(1.2f, places.keyboardHeightScale(PORTRAIT), 0.001f);
+        assertEquals(12, places.keyboardChinDp(PORTRAIT));
     }
 
     @Test
     public void aSizeDraggedBackToWhereItStoodIsNotAnUnsavedChange() {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
-        int resting = size(plan, Element.KEYBOARD, "Bottom padding").value;
 
-        size(plan, Element.KEYBOARD, "Bottom padding").writer.write(resting);
-        assertFalse("the thumb landed where it already stood", plan.isDirty());
-    }
-
-    @Test
-    public void aSizeRowReadsBackTheStepItWasDraggedTo() {
-        LayoutEditorPlan plan = enterOnTerminalInPortrait();
-
-        size(plan, Element.PINNED_APPS, "Height").writer.write(37);
-        assertEquals("the thumb stays where the finger left it",
-            37, size(plan, Element.PINNED_APPS, "Height").value);
-    }
-
-    @Test
-    public void theRowsSectionKeepsWhateverTheCanvasLeavesAndNeverLessThanItsFloor() {
-        assertEquals("the room left under the canvas",
-            400, LayoutEditorPlan.rowsHeightCapPx(2400, 1800, 200, 120));
-        assertEquals("a canvas that took it all still leaves a list to scroll in",
-            120, LayoutEditorPlan.rowsHeightCapPx(2400, 2300, 200, 120));
-    }
-
-    @Test
-    public void thePortraitCanvasIsTwoFifthsOfTheScreenAndTheLandscapeOneStopsAtTheRoomLeft() {
-        int reserved = 60;
-        float portraitAspect = 9f / 19.5f;
-        float landscapeAspect = 19.5f / 9f;
-
-        int portrait = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, 1080, 2400,
-            portraitAspect, reserved, 400);
-        assertEquals("42% of the screen, plus the room the tray keeps",
-            Math.round(0.42f * 2400) + reserved, portrait);
-        // A card whose chrome has grown — a large font scale, both notices showing — does not take
-        // the fifth of the screen the sheet is leaving the live place. The picture gives way.
-        assertEquals("the sheet keeps its budget and the frame takes what is left",
-            Math.round(0.80f * 2400) - 1600,
-            LayoutEditorPlan.miniatureHeightPx(PORTRAIT, 1080, 2400,
-                portraitAspect, reserved, 1600));
-
-        // The landscape viewport is that phone turned: 2400 wide, 1080 tall. A frame as wide as
-        // the screen is then taller than the screen, which is the whole defect: owe the canvas
-        // nothing and it takes everything, rows and all.
-        assertTrue("a full-width landscape frame does not fit the screen it came from",
-            Math.round(2400 / landscapeAspect) + reserved > 1080);
-        int wideOpen = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, 2400, 1080,
-            landscapeAspect, reserved, 0);
-        assertEquals("with nothing owed room below it the canvas claims the whole screen",
-            1080, wideOpen);
-
-        int onACard = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, 2400, 1080,
-            landscapeAspect, reserved, 400);
-        assertEquals("and only what is left once the chrome and the rows have theirs",
-            1080 - 400, onACard);
-        assertTrue("which is less than the frame asked for", onACard < wideOpen);
-    }
-
-    @Test
-    public void everyLandscapeViewportLeavesTheRowsTheirFloor() {
-        // The two the landscape review reproduced on. The card's chrome and the rows' floor are
-        // dp, so only the density moves them; the font scale moves what stands inside the rows,
-        // which is the scroller's business and not this sum's.
-        for (float density : new float[]{180f / 160f, 260f / 160f}) {
-            int chooser = Math.round(density * EditorShellMetrics.CHOOSER_DP);
-            int padding = Math.round(density * 10f);
-            int floor = Math.round(density * LayoutEditorController.ROWS_FLOOR_DP);
-            int reserved = Math.round(density * 48f);
-            for (int[] viewport : LANDSCAPE_VIEWPORTS) {
-                // The worst case: both notices showing, which is the most chrome there is.
-                int chrome = LayoutEditorController.cardChromePx(viewport[1], chooser, padding, 2,
-                    density);
-                int height = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, viewport[0],
-                    viewport[1], PlaceMiniatureView.frameAspect(LANDSCAPE), reserved,
-                    chrome + floor);
-                String where = viewport[0] + "x" + viewport[1] + " at " + density + "x";
-                int left = viewport[1] - height - chrome;
-                assertTrue("the rows keep their floor at " + where, left >= floor);
-                assertEquals("and the cap hands them room that is really there at " + where,
-                    left, LayoutEditorPlan.rowsHeightCapPx(viewport[1], height, chrome, floor));
-            }
-        }
+        plan.setKeyboardChinDp(plan.keyboardChinDp());
+        assertFalse("the handle landed where it already stood", plan.isDirty());
     }
 
     @Test
@@ -602,105 +413,36 @@ public class LayoutEditorPlanTest {
             plan.warnsOtherOrientation());
     }
 
-    // ------------------------------------------------------------------------------- the sheet
+    @Test
+    public void anEditorOpenedInMinimalModeEditsTheMinimalLayout() {
+        places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
+        places.setMinimal(true);
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        assertEquals(LayoutVariant.MINIMAL, plan.variant());
+        // The layout canvas draws the minimal layout: the seed, with everything put away.
+        assertTrue(plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden);
+        assertFalse(plan.isDirty());
 
-    /** pong: 1080x2412 at 420dpi, which is 411 x 919 dp. */
-    private static final float PONG_DENSITY = 2.625f;
-    private static final int PONG_WIDTH_PX = 1080;
-    private static final int PONG_HEIGHT_PX = 2412;
+        places.forVariant(LayoutVariant.MINIMAL).setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
+        assertTrue(plan.isDirty());
+        assertFalse(plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden);
+        // Toggling minimal mode under the open editor does not move what it edits.
+        places.setMinimal(false);
+        assertFalse(plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden);
 
-    private static int pongPx(float dp) {
-        return Math.round(dp * PONG_DENSITY);
+        plan.revert();
+        assertFalse(plan.isDirty());
+        assertTrue(plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden);
+        // The normal layout was never in it.
+        assertFalse(places.forVariant(LayoutVariant.NORMAL).resolve(PORTRAIT)
+            .slot(com.termux.app.place.Element.APPS).hidden);
     }
 
     @Test
-    public void theSheetLeavesTheLivePlaceTheTopOfPongsScreenAndTheRowsTheirFloor() {
-        // Worked the way LayoutEditorController.applyCanvasHeight works it out, on the Terminal
-        // place in portrait: nothing is warned about, so there are no notice lines.
-        int chooser = pongPx(EditorShellMetrics.CHOOSER_DP);
-        int padding = pongPx(10f);
-        int floor = pongPx(LayoutEditorController.ROWS_FLOOR_DP);
-        int reserved = pongPx(48f);
-        int chrome = LayoutEditorController.cardChromePx(PONG_HEIGHT_PX, chooser, padding, 0,
-            PONG_DENSITY);
-        int budget = LayoutEditorPlan.cardBudgetPx(PONG_WIDTH_PX, PONG_HEIGHT_PX);
-        int miniature = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, PONG_WIDTH_PX,
-            PONG_HEIGHT_PX, PlaceMiniatureView.frameAspect(PORTRAIT), reserved, chrome + floor);
-        int rows = LayoutEditorPlan.rowsHeightCapPx(budget, miniature, chrome, floor);
-
-        assertEquals("the sheet stands in four fifths of the screen",
-            Math.round(0.80f * PONG_HEIGHT_PX), budget);
-        assertEquals("and never grows past it", budget, chrome + miniature + rows);
-        assertTrue("the rows keep at least their floor", rows >= floor);
-
-        // What the user sees above the card: the live place, with its status strip and chip row.
-        // The card's own 12dp margin from the bottom edge, from layout_editor.xml.
-        int cardTop = PONG_HEIGHT_PX - (chrome + miniature + rows) - pongPx(12f);
-        assertTrue("about a fifth of the screen of live place above the sheet, not a sliver: "
-                + (cardTop / PONG_DENSITY) + "dp",
-            cardTop >= pongPx(150f));
-    }
-
-    @Test
-    public void aLandscapeScreenHasNoHeightToGiveAwayAndKeepsTheWholeCard() {
-        assertEquals("a portrait screen keeps a fifth of itself for the place behind the sheet",
-            Math.round(0.80f * 2400), LayoutEditorPlan.cardBudgetPx(1080, 2400));
-        assertEquals("a landscape screen is already the short edge",
-            1080, LayoutEditorPlan.cardBudgetPx(2400, 1080));
-    }
-
-    // ------------------------------------------------------------------------- the two-pane body
-
-    @Test
-    public void aPortraitMiniatureLeavesAPaneForTheRowsAndALandscapeOneDoesNot() {
-        // The wide review device: 1300 x 600 px at 1.125x.
-        float density = 180f / 160f;
-        int content = EditorShellMetrics.contentWidthPx(1300, density);
-
-        int portraitNatural = LayoutEditorPlan.miniatureNaturalWidthPx(PORTRAIT, 1300, 600,
-            PlaceMiniatureView.frameAspect(PORTRAIT));
-        EditorShellMetrics.PaneSplit beside = EditorShellMetrics.paneSplit(content,
-            portraitNatural, density);
-        assertEquals("a portrait frame is a sliver; the rows go beside it", 2, beside.paneCount);
-        assertTrue("and the rows' pane holds a whole row",
-            LayoutEditorController.rowsBesideMiniature(portraitNatural, beside, density));
-
-        int landscapeNatural = LayoutEditorPlan.miniatureNaturalWidthPx(LANDSCAPE, 1300, 600,
-            PlaceMiniatureView.frameAspect(LANDSCAPE));
-        assertEquals("a landscape frame is as wide as the screen", 1300, landscapeNatural);
-        EditorShellMetrics.PaneSplit beneath = EditorShellMetrics.paneSplit(content,
-            landscapeNatural, density);
-        assertFalse("a frame squeezed into half the body is a frame that has been cut",
-            LayoutEditorController.rowsBesideMiniature(landscapeNatural, beneath, density));
-    }
-
-    @Test
-    public void aMiniatureInItsOwnPaneTakesWhicheverOfTheTwoRunsOutFirst() {
-        float aspect = PlaceMiniatureView.frameAspect(PORTRAIT);
-        int reserved = 54;
-        // A tall pane: the width runs out first, so the frame is as wide as the pane.
-        int wide = LayoutEditorPlan.miniatureHeightInPanePx(aspect, reserved, 200, 4000);
-        assertEquals(Math.round(200 / aspect) + reserved, wide);
-        // A short pane: the height runs out first, and the frame never overflows it.
-        int shortPane = LayoutEditorPlan.miniatureHeightInPanePx(aspect, reserved, 200, 300);
-        assertEquals(300, shortPane);
-        assertTrue(shortPane < wide);
-    }
-
-    @Test
-    public void thePaneFrameNeverExceedsThePaneAtAnyReferenceSize() {
-        for (float density : new float[]{180f / 160f, 260f / 160f}) {
-            float aspect = PlaceMiniatureView.frameAspect(PORTRAIT);
-            int reserved = Math.round(density * 48f);
-            for (int paneWidth = 100; paneWidth <= 900; paneWidth += 13) {
-                for (int paneHeight = 120; paneHeight <= 900; paneHeight += 31) {
-                    int height = LayoutEditorPlan.miniatureHeightInPanePx(aspect, reserved,
-                        paneWidth, paneHeight);
-                    assertTrue(paneWidth + "x" + paneHeight + " overflowed its pane",
-                        height <= Math.max(paneHeight, reserved));
-                    assertTrue("and still leaves a frame", height >= reserved);
-                }
-            }
-        }
+    public void anEditorOpenedOutsideMinimalModeEditsTheNormalLayoutAndLeavesMinimalBe() {
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        assertEquals(LayoutVariant.NORMAL, plan.variant());
+        places.forVariant(LayoutVariant.MINIMAL).setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
+        assertFalse("the minimal layout is not this session's to lose", plan.isDirty());
     }
 }

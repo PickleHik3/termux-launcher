@@ -10,7 +10,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="#D9000000"
+    android:background="?attr/colorSurfaceInverse"
     android:descendantFocusability="blocksDescendants"
     android:focusable="false"
     android:padding="8dp">
@@ -26,21 +26,19 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/key_inspector_title"
-            android:textColor="#FFFFFFFF"
+            android:textColor="?attr/colorOnSurfaceInverse"
             android:textAppearance="?attr/textAppearanceTitleSmall" />
 
-        <TextView
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/key_inspector_close"
+            style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:clickable="true"
             android:focusable="false"
             android:minWidth="48dp"
             android:minHeight="48dp"
-            android:gravity="center"
             android:text="@string/key_inspector_close"
-            android:textColor="#FFFFFFFF"
-            android:textAppearance="?attr/textAppearanceLabelLarge" />
+            android:textColor="?attr/colorOnSurfaceInverse" />
     </LinearLayout>
 
     <TextView
@@ -49,7 +47,6 @@
         android:layout_height="wrap_content"
         android:focusable="false"
         android:fontFamily="monospace"
-        android:textColor="#FFE0E0E0"
-        android:textSize="11sp"
-        android:lineSpacingExtra="1dp" />
+        android:textAppearance="?attr/textAppearanceLabelSmall"
+        android:textColor="?attr/colorOnSurfaceInverse" />
 </LinearLayout>

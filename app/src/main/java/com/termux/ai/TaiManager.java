@@ -3,11 +3,15 @@ package com.termux.ai;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Process;
+import android.os.SystemClock;
 import java.util.Base64;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.ai.edge.litertlm.Backend;
+import com.google.ai.edge.litertlm.BenchmarkInfo;
+import com.google.ai.edge.litertlm.BenchmarkKt;
 import com.google.ai.edge.litertlm.Content;
 import com.google.ai.edge.litertlm.Contents;
 import com.google.ai.edge.litertlm.Message;
@@ -21,8 +25,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.File;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -32,6 +39,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class TaiManager {
@@ -39,17 +47,34 @@ public final class TaiManager {
     private static final int MAX_MEDIA_BYTES = 25 * 1024 * 1024;
     private static final String INTERNAL_MODEL_SPEC = "_taiModelSpec";
     private static final String INTERNAL_RUNTIME_OPTIONS = "_taiRuntimeOptions";
+    /** The feature load plan the app process resolved for a request that names its feature. */
+    private static final String INTERNAL_FEATURE_PLAN = "_taiFeaturePlan";
+    /** The STT idle-unload setting, carried to the runtime process with every speech request. */
+    private static final String INTERNAL_STT_IDLE_MINUTES = "_taiSttIdleUnloadMinutes";
+    /** Where the app process puts audio for the runtime process; files here are deleted once transcribed. */
+    public static final String STT_IPC_DIR = "tai-ipc";
 
     private final Context appContext;
     private final TaiSettings settings;
     private final TaiModelRegistry registry;
     private final TaiModelStore modelStore;
     private final TaiModelDownloader modelDownloader;
+    /** The download queue; null in the runtime process, which never downloads. */
+    @Nullable private final TaiDownloadEngine downloadEngine;
     @Nullable private TaiRuntime runtime;
     @Nullable private final TaiRuntimeServiceClient runtimeClient;
     private final boolean runtimeProcess;
     /** Total device RAM, detected once; {@code -1} until first use, {@code 0} when unknown. */
     private volatile long deviceMemoryBytes = -1L;
+    /**
+     * In the runtime process: how long an idle Whisper model is kept, as the app process's settings
+     * last said ({@link TaiSettings#getSttIdleUnloadMinutes}); the plan's default until told.
+     */
+    private volatile long sttIdleLimitMs = TaiPressureWatch.STT_IDLE_MS;
+    /** In the runtime process: the benchmark in progress, which cancel and unload stop first. */
+    @Nullable private volatile TaiBenchHarness activeBench;
+    /** In the app process: a benchmark stream in flight; a second request is refused. */
+    private final AtomicBoolean benchStreamActive = new AtomicBoolean();
 
     public interface OpenAiStreamSink {
         void onEvent(@NonNull JSONObject event) throws IOException;
@@ -69,8 +94,17 @@ public final class TaiManager {
         registry = new TaiModelRegistry();
         modelStore = new TaiModelStore(appContext);
         modelDownloader = new TaiModelDownloader(appContext, modelStore);
+        // Building the engine reconciles: a download the last process died under reads as paused
+        // from the first status call, never as a "downloading" nothing is doing.
+        downloadEngine = runtimeProcess ? null : TaiDownloadEngine.getInstance(appContext);
         runtime = runtimeProcess ? new MultiBackendTaiRuntime(appContext) : null;
         runtimeClient = runtimeProcess ? null : new TaiRuntimeServiceClient(appContext);
+        if (!runtimeProcess) {
+            // The wallpaper vision models are gone; delete any left on the phone, once, off the main thread.
+            Thread visionCleanup = new Thread(() -> TaiVisionLeftovers.cleanOnce(appContext), "tai-vision-cleanup");
+            visionCleanup.setDaemon(true);
+            visionCleanup.start();
+        }
     }
 
     @NonNull
@@ -106,24 +140,44 @@ public final class TaiManager {
     /** Status queries should return quickly; cap them so a busy/hung runtime can't stall callers. */
     private static final long RUNTIME_STATUS_TIMEOUT_MS = 8_000L;
 
+    /** {@link TaiRuntimeServiceClient}'s own flat default, kept here for callers that don't pass one. */
+    static final long DEFAULT_TRANSCRIBE_TIMEOUT_MS = 120_000L;
+    static final long DEFAULT_CHAT_TIMEOUT_MS = 120_000L;
+
     @NonNull
     private JSONObject runtimeRequest(@NonNull String operation, @Nullable String body) throws JSONException {
-        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "TAI runtime service client is unavailable.");
+        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "On-device AI runtime service client is unavailable.");
         return runtimeClient.request(operation, body == null ? "{}" : body);
     }
 
     @NonNull
     private JSONObject runtimeRequest(@NonNull String operation, @Nullable String body, long timeoutMs) throws JSONException {
-        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "TAI runtime service client is unavailable.");
+        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "On-device AI runtime service client is unavailable.");
         return runtimeClient.request(operation, body == null ? "{}" : body, timeoutMs);
     }
 
     /** Supplies the isolated runtime with the model definition resolved by the authoritative app process. */
     @NonNull
     private String delegatedRuntimeBody(@NonNull String body) throws JSONException {
+        return delegatedRuntimeBody(body, false);
+    }
+
+    /**
+     * As above; {@code chatRoute} for the chat, completion, load and keep-warm routes, where a request
+     * that names no feature is the assistant's ({@link TaiCallerRequests#featureFor}).
+     */
+    @NonNull
+    private String delegatedRuntimeBody(@NonNull String body, boolean chatRoute) throws JSONException {
         JSONObject request = parseBody(body);
         request.remove(INTERNAL_MODEL_SPEC);
         request.remove(INTERNAL_RUNTIME_OPTIONS);
+        request.remove(INTERNAL_FEATURE_PLAN);
+        // The request's feature loads by its plan, resolved here where the picks live.
+        TaiFunction feature = TaiCallerRequests.featureFor(request, chatRoute);
+        TaiFeaturePlan plan = feature == null ? null : TaiFeaturePlans.forContext(appContext).plan(feature);
+        if (plan != null && plan.where == TaiFeaturePlan.Where.ON_DEVICE && !namesModel(request)) {
+            request.put("model", plan.requestModel());
+        }
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(modelId);
         if (spec != null) {
@@ -131,12 +185,38 @@ public final class TaiManager {
             request.put(INTERNAL_MODEL_SPEC, spec.toJson());
             request.put(INTERNAL_RUNTIME_OPTIONS, settings.getRuntimeOptions(spec).toJson());
         }
+        if (plan != null && plan.where == TaiFeaturePlan.Where.ON_DEVICE) request.put(INTERNAL_FEATURE_PLAN, plan.toJson());
         return request.toString();
+    }
+
+    /**
+     * App process, chat routes: a request that names no model and whose feature (the one it names, else
+     * the assistant) runs on the remote provider asks for the provider's model, so the remote routing
+     * that follows sees it. A local plan's model is filled in with the rest of the plan by {@link
+     * #delegatedRuntimeBody(String, boolean)}. Anything else is left as it is.
+     */
+    @NonNull
+    private String withRemoteFeatureModel(@NonNull String body) {
+        if (runtimeProcess) return body;
+        try {
+            JSONObject request = parseBody(body);
+            if (namesModel(request)) return body;
+            TaiFunction feature = TaiCallerRequests.featureFor(request, true);
+            if (feature == null) return body;
+            TaiFeaturePlan plan = TaiFeaturePlans.forContext(appContext).plan(feature);
+            return plan.isRemote() ? request.put("model", plan.requestModel()).toString() : body;
+        } catch (JSONException | RuntimeException e) {
+            return body;
+        }
+    }
+
+    private static boolean namesModel(@NonNull JSONObject request) {
+        return !request.optString("model", request.optString("modelId", "")).trim().isEmpty();
     }
 
     @NonNull
     private TaiRuntime localRuntime() {
-        if (runtime == null) throw new IllegalStateException("TAI native runtime is only available in " + TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
+        if (runtime == null) throw new IllegalStateException("On-device AI native runtime is only available in " + TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
         return runtime;
     }
 
@@ -151,7 +231,7 @@ public final class TaiManager {
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("name", "TAI");
-        data.put("displayName", "Termux AI");
+        data.put("displayName", "On-device AI");
         data.put("runtime", state.toJson());
         data.put("settings", settings.toJson());
         data.put("appProcessRuntime", false);
@@ -167,6 +247,8 @@ public final class TaiManager {
         endpoints.put("/v1/responses");
         endpoints.put("/v1/completions");
         endpoints.put("/v1/embeddings");
+        endpoints.put("/v1/tokenize");
+        endpoints.put("/v1/audio/transcriptions");
         data.put("openAiCompatibleEndpoints", endpoints);
         data.put("ollamaCompatibleEndpoints", new JSONArray()
             .put("/api/version").put("/api/tags").put("/api/show").put("/api/chat")
@@ -176,18 +258,66 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject runtimeStatus() throws JSONException {
-        TaiRuntimeState state = getRuntimeState();
+        // One round trip to the runtime process answers both the state and the resident table.
+        JSONObject remote = shouldDelegateRuntime() ? remoteRuntimeStatus() : null;
+        TaiRuntimeState state = shouldDelegateRuntime() ? remoteRuntimeState(remote) : localRuntime().getState();
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("runtime", state.toJson());
+        JSONArray residents = residentsJson(remote);
+        data.put("residents", residents);
+        data.put("embedder", embedderStateJson(residents));
         data.put("settings", settings.toJson());
         data.put("appProcessRuntime", false);
         data.put("runtimeProcess", TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
-        data.put("backendPolicy", "TAI loads native LiteRT-LM/MNN backends in an isolated Android process after preflight checks.");
+        data.put("backendPolicy", "On-device AI loads native LiteRT-LM/MNN backends in an isolated Android process after preflight checks.");
         data.put("runtimeHistory", TaiRuntimeHistory.summary(appContext));
         appendCrashMarker(data);
         appendDeviceCompatibility(data, state);
         return data;
+    }
+
+    /**
+     * Dawn brief item 6: whether an embedder is resident right now, next to the chat model's own
+     * {@code runtime.loaded} — read off the resident table so it works identically whether this
+     * call answers locally or through {@link #shouldDelegateRuntime}'s round trip. Dawn runs quiet
+     * background indexing only while this is cheap, i.e. the embedder is already resident.
+     */
+    @NonNull
+    private static JSONObject embedderStateJson(@NonNull JSONArray residents) throws JSONException {
+        JSONObject embedder = new JSONObject();
+        JSONObject embedding = null;
+        for (int i = 0; i < residents.length(); i++) {
+            JSONObject entry = residents.optJSONObject(i);
+            if (entry != null && "embedding".equals(entry.optString("kind", ""))) {
+                embedding = entry;
+                break;
+            }
+        }
+        embedder.put("loaded", embedding != null);
+        if (embedding != null) {
+            embedder.put("modelId", embedding.optString("id", ""));
+            embedder.put("backend", embedding.optString("backend", ""));
+            // The size the model takes loaded, from its file; the load meter reads far less for an
+            // mmapped graph (26 MB for EmbeddingGemma's 183 MB file on pong), so it is reported apart.
+            long estimated = embedding.optLong("estimatedBytes", 0L);
+            long measured = embedding.isNull("measuredBytes") ? 0L : embedding.optLong("measuredBytes", 0L);
+            embedder.put("residentMb", Math.max(estimated, measured) / (1024L * 1024L));
+            if (measured > 0L) embedder.put("measuredLoadMb", measured / (1024L * 1024L));
+            embedder.put("busy", embedding.optBoolean("busy", false));
+        }
+        return embedder;
+    }
+
+    /** The resident table: the runtime process's own, or the one its status reply carried. */
+    @NonNull
+    private JSONArray residentsJson(@Nullable JSONObject remoteStatus) throws JSONException {
+        if (shouldDelegateRuntime()) {
+            JSONArray residents = remoteStatus == null ? null : remoteStatus.optJSONArray("residents");
+            return residents == null ? new JSONArray() : residents;
+        }
+        if (!(runtime instanceof MultiBackendTaiRuntime)) return new JSONArray();
+        return ((MultiBackendTaiRuntime) runtime).residency().toJson();
     }
 
     @NonNull
@@ -222,6 +352,8 @@ public final class TaiManager {
             return denied;
         }
         File modelFile = new File(resolvedPath);
+        File imageDirectory = diffusionImportDirectory(modelFile);
+        if (imageDirectory != null) return importDiffusionPackage(request, imageDirectory, path);
         if (!modelFile.isFile() || !modelFile.canRead()) {
             JSONObject error = error(404, "model_file_not_readable", "Model file does not exist or is not readable by the app process");
             error.put("path", path);
@@ -245,7 +377,7 @@ public final class TaiManager {
             );
         } catch (IllegalArgumentException e) {
             return error(400, "unsupported_model_format",
-                "TAI can import LiteRT-LM packages and MNN config packages only. GGUF/raw weights require a backend this APK does not include.");
+                "On-device AI can import LiteRT-LM packages and MNN config packages only. GGUF/raw weights require a backend this APK does not include.");
         }
         TaiModelProfile runtimeProfile = TaiModelProfile.fromRequest(request, TaiModelProfile.forModel(baseSpec));
         TaiModelSpec spec = new TaiModelSpec(
@@ -279,7 +411,73 @@ public final class TaiManager {
         data.put("model", spec.toJson());
         data.put("requiresUserApprovedPath", true);
         data.put("copiedIntoAppPrivateStorage", false);
-        data.put("message", "Model path registered. Load it with TAI to run through the isolated Android LiteRT-LM runtime when preflight passes.");
+        data.put("message", "Model path registered. Load it with On-device AI to run through the isolated Android LiteRT-LM runtime when preflight passes.");
+        return data;
+    }
+
+    /**
+     * The text-to-image package folder {@code target} is or sits in (Stable Diffusion, Taiyi, Sana), or
+     * null for anything else, so {@code tai import} takes a package by its folder or by any file in it.
+     */
+    @Nullable
+    private static File diffusionImportDirectory(@NonNull File target) {
+        File directory = target.isDirectory() ? target : target.isFile() ? target.getParentFile() : null;
+        // Sana's llm/ holds its own config.json and graphs; a file in it belongs to the package above.
+        if (directory != null && directory.getName().equals("llm") && directory.getParentFile() != null
+            && TaiDiffusionImport.detectLayout(rootNames(directory.getParentFile())) != TaiDiffusionPackage.TYPE_AUTO) {
+            directory = directory.getParentFile();
+        }
+        if (directory == null) return null;
+        return TaiDiffusionImport.detectLayout(rootNames(directory)) == TaiDiffusionPackage.TYPE_AUTO ? null : directory;
+    }
+
+    @NonNull
+    private static List<String> rootNames(@NonNull File directory) {
+        List<String> names = new ArrayList<>();
+        File[] children = directory.listFiles();
+        if (children != null) for (File child : children) if (child.isFile()) names.add(child.getName());
+        return names;
+    }
+
+    /**
+     * Registers a text-to-image folder where it is (as {@code tai import} does for any model). A
+     * Stable Diffusion folder that ships the raw CLIP tokenizer gets the app's converted
+     * {@code tokenizer.mtok} written beside it.
+     */
+    @NonNull
+    private JSONObject importDiffusionPackage(@NonNull JSONObject request, @NonNull File directory,
+                                              @NonNull String requestedPath) throws JSONException {
+        String modelId = sanitizeModelId(request.optString("modelId", request.optString("model", directory.getName())));
+        if (modelId.isEmpty()) return error(400, "bad_request", "Missing model id");
+        int layout = TaiDiffusionImport.detectLayout(rootNames(directory));
+        int hinted = TaiDiffusionPackage.parseType(request.optString("modelType", request.optString("type", "")));
+        int type = hinted >= 0 && (layout == TaiDiffusionPackage.TYPE_SANA) == (hinted == TaiDiffusionPackage.TYPE_SANA)
+            ? hinted : TaiDiffusionImport.typeFor(layout, directory.getName());
+        if (type != TaiDiffusionPackage.TYPE_SANA) {
+            TaiDiffusionTokenizer.Result tokenizer = TaiDiffusionTokenizer.ensure(directory, appContext);
+            if (!tokenizer.proceed()) {
+                JSONObject refused = error(400, "unsupported_image_model", tokenizer.message);
+                refused.put("path", requestedPath);
+                return refused;
+            }
+        }
+        TaiDiffusionPackage.Result checked = TaiDiffusionPackage.inspect(directory, type);
+        if (!checked.ok()) {
+            JSONObject refused = error(400, "unsupported_image_model", checked.message);
+            refused.put("path", requestedPath);
+            return refused;
+        }
+        TaiModelSpec spec = TaiDiffusionImport.spec(modelId, request.optString("displayName", modelId), "imported",
+            request.optString("license", "User-provided model; license accepted externally"),
+            directory.getAbsolutePath(), checked.type, checked.totalBytes);
+        modelStore.upsertUserModel(spec);
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("imported", true);
+        data.put("model", spec.toJson());
+        data.put("requiresUserApprovedPath", true);
+        data.put("copiedIntoAppPrivateStorage", false);
+        data.put("message", "Image model registered. Generate with tai image --model " + modelId + ".");
         return data;
     }
 
@@ -291,6 +489,12 @@ public final class TaiManager {
     @NonNull
     public TaiModelImporter.DocumentMetadata modelDocumentMetadata(@NonNull Uri uri) {
         return new TaiModelImporter(appContext, modelStore).readMetadata(uri);
+    }
+
+    /** The image model type ({@code sd15}, {@code taiyi}, {@code sana}) a picked folder holds, or "". */
+    @NonNull
+    public String diffusionTypeOfFolder(@NonNull Uri tree) {
+        return new TaiModelImporter(appContext, modelStore).diffusionTypeOfFolder(tree);
     }
 
     @NonNull
@@ -312,7 +516,10 @@ public final class TaiManager {
         // Accept a bare repo URL: auto-detect the backend and resolve to the package entry file
         // (config.json / .litertlm) so the user never picks a backend or hunts the HF file list.
         if (TaiHuggingFace.parse(url) != null) {
-            TaiModelDownloader.HfResolve resolved = modelDownloader.resolveHuggingFaceEntry(url, token);
+            boolean previewOnly = request.optBoolean("previewOnly", false);
+            // The card is only read for a preview: it feeds the import flow's picker and summary,
+            // and a real download (or an API client) has no use for it.
+            TaiModelDownloader.HfResolve resolved = modelDownloader.resolveHuggingFaceEntry(url, token, previewOnly);
             if (resolved.authRequired) {
                 JSONObject gated = error(403, "gated_model_requires_auth",
                     "This Hugging Face repo is gated or private. Save your Hugging Face access token "
@@ -320,10 +527,11 @@ public final class TaiManager {
                 gated.put("huggingFaceTokenBundled", false);
                 return gated;
             }
-            if (resolved.candidates.length() > 1 || request.optBoolean("previewOnly", false)
-                && resolved.candidates.length() > 0) {
+            if (resolved.candidates.length() > 1 || previewOnly && resolved.candidates.length() > 0) {
                 JSONObject choices = error(409, "artifact_selection_required", "Choose a model file to download.");
                 choices.put("candidates", resolved.candidates);
+                choices.put("modelFacts", resolved.facts);
+                if (!resolved.readme.isEmpty()) choices.put("modelCard", resolved.readme);
                 return choices;
             }
             if (resolved.url.isEmpty()) {
@@ -387,6 +595,18 @@ public final class TaiManager {
         return modelDownloader.startCatalogDownload(entry, settings.getHuggingFaceToken());
     }
 
+    /** Downloads a speech-to-text catalog entry with the given window's graph (5 or 10 seconds).
+     *  An unknown window (or a non-speech/window-less entry) downloads the entry's default artifact. */
+    @NonNull
+    public JSONObject downloadSpeechModel(@NonNull String modelId, int windowSeconds) throws JSONException {
+        TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(modelId);
+        if (entry == null) return error(404, "model_not_found", "Unknown catalog model: " + modelId);
+        if (!entry.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) {
+            return error(400, "not_a_speech_model", "Model " + modelId + " is not a speech-to-text model.");
+        }
+        return modelDownloader.startCatalogDownload(entry.withWindow(windowSeconds), settings.getHuggingFaceToken());
+    }
+
     @NonNull
     public JSONObject deleteModel(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
@@ -394,9 +614,15 @@ public final class TaiManager {
         if (modelId.isEmpty()) return error(400, "bad_request", "Missing model id");
         TaiRuntimeState state = getRuntimeState();
         boolean activeModelLoaded = state.loadedModelId != null && state.loadedModelId.equals(modelId);
+        // A transfer still running for this model would re-create its record and files under the
+        // delete; stop it first (its partial files go with it).
+        if (downloadEngine != null && request.optBoolean("confirm", false)) downloadEngine.cancel(modelId);
         TaiModelStore.DeleteResult deleteResult = modelStore.deleteUserModel(modelId,
             activeModelLoaded, request.optBoolean("confirm", false));
         if (!deleteResult.ok) return error(409, deleteResult.errorCode, deleteResult.message);
+        // The model's runtime history and bench records go with it: they are keyed by its id and
+        // nothing prunes them otherwise. (Bench results used to be kept after a delete.)
+        pruneModelRecords(modelId);
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("deleted", deleteResult.deleted);
@@ -404,24 +630,79 @@ public final class TaiManager {
         return data;
     }
 
+    /** Drops a deleted model's runtime-history entries and benchmark records; failures only cost disk. */
+    private void pruneModelRecords(@NonNull String modelId) {
+        TaiRuntimeHistory.removeModel(appContext, modelId);
+        try {
+            benchStore().removeModel(modelId);
+        } catch (IOException ignored) {
+        }
+    }
+
     @NonNull
     public JSONObject downloads() throws JSONException {
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("downloads", modelStore.getDownloads());
+        data.put("parallel", settings.getDownloadParallel());
+        JSONArray running = new JSONArray();
+        if (downloadEngine != null) for (String id : downloadEngine.runningTransferIds()) running.put(id);
+        data.put("running", running);
         return data;
     }
 
+    /** Stops a download and deletes its partial files. */
     @NonNull
     public JSONObject cancelDownload(@NonNull String body) throws JSONException {
+        return downloadAction(body, "cancel");
+    }
+
+    /** Stops a download and keeps its partial file; {@link #resumeDownload} continues it. */
+    @NonNull
+    public JSONObject pauseDownload(@NonNull String body) throws JSONException {
+        return downloadAction(body, "pause");
+    }
+
+    /** Re-queues a paused, failed or cancelled download; it continues from the bytes it has. */
+    @NonNull
+    public JSONObject resumeDownload(@NonNull String body) throws JSONException {
+        return downloadAction(body, "resume");
+    }
+
+    /** "Start now": moves a queued download to the front, swapping out the oldest running one. */
+    @NonNull
+    public JSONObject prioritizeDownload(@NonNull String body) throws JSONException {
+        return downloadAction(body, "prioritize");
+    }
+
+    @NonNull
+    private JSONObject downloadAction(@NonNull String body, @NonNull String action) throws JSONException {
         JSONObject request = parseBody(body);
         String modelId = sanitizeModelId(request.optString("modelId", request.optString("model", "")));
         if (modelId.isEmpty()) return error(400, "bad_request", "Missing model id");
-        TaiModelDownloadService.requestCancel(modelId);
+        if (downloadEngine == null) return error(500, "downloads_unavailable", "Downloads run in the app process only.");
+        boolean applied;
+        switch (action) {
+            case "pause": applied = downloadEngine.pause(modelId, TaiModelStore.PAUSED_USER); break;
+            case "resume": applied = downloadEngine.resume(modelId); break;
+            case "prioritize": applied = downloadEngine.prioritize(modelId); break;
+            default: applied = downloadEngine.cancel(modelId); break;
+        }
+        JSONObject record = modelStore.findDownloadForModel(modelId);
+        if (!applied && record == null) return error(404, "download_not_found", "No download for model " + modelId);
+        if (!applied) {
+            JSONObject conflict = error(409, "download_state_conflict",
+                "Download for " + modelId + " is " + record.optString("status", "unknown") + "; cannot " + action + " it.");
+            conflict.put("transfer", record);
+            return conflict;
+        }
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("modelId", modelId);
-        data.put("cancellationRequested", true);
+        data.put("action", action);
+        // The old field name, for the CLI and scripts that read it.
+        if ("cancel".equals(action)) data.put("cancellationRequested", true);
+        if (record != null) data.put("transfer", record);
         return data;
     }
 
@@ -430,66 +711,996 @@ public final class TaiManager {
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
+        if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         if (spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
                 && !spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
             return error(400, "embedding_model_not_loadable",
                 "Model " + modelId + " is an embedding model. It is served on demand via /v1/embeddings and "
                     + "/api/embed and does not need to be loaded into the generation runtime.");
         }
+        if (spec.isImageGeneration()) {
+            // Image models never enter the chat runtime: MnnDiffusionRuntime loads them on demand.
+            return error(400, "image_model_not_loadable",
+                "Model " + modelId + " is an image model. It is served on demand via /v1/ai/images/generations "
+                    + "and tai image and does not load into the chat runtime.");
+        }
+        if (spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) {
+            // Speech models never enter the chat runtime: WhisperSttRuntime loads them on demand
+            // behind /v1/audio/transcriptions and tai transcribe (or ahead of time via sttWarm).
+            return error(400, "speech_model_not_loadable",
+                "Model " + modelId + " is a speech-to-text model. It is served on demand via /v1/audio/transcriptions "
+                    + "and tai transcribe and does not load into the chat runtime.");
+        }
+        if (spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) {
+            // Voice models load on demand behind /v1/audio/speech, tai speak and Read aloud.
+            return error(400, "tts_model_not_loadable",
+                "Model " + modelId + " is a voice model. It is served on demand via /v1/audio/speech "
+                    + "and tai speak and does not load into the chat runtime.");
+        }
+        if (spec.isVisionTool()) {
+            // Leftover vision tool models are never a chat target.
+            return error(400, "vision_model_not_loadable",
+                "Model " + modelId + " is a vision tool model and does not load into the chat runtime.");
+        }
         String requestedBackend = request.optString("backend", "").trim();
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
             return error(409, "backend_mismatch", "Model " + modelId + " requires backend " + spec.backend + ".");
         }
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_LOAD_MODEL, delegatedRuntimeBody(body));
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_LOAD_MODEL, delegatedRuntimeBody(body, true));
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
+        // A load that names its feature reuses its model when the runtime holds it with a window as large as
+        // the plan's. One that names none (tai load, the Model Centre's Load) still reloads, as it always did.
+        if (TaiCallerRequests.featureOf(request) != null && !request.optBoolean("clearCache", false)) {
+            JSONObject reused = reuseForFeature(spec, options);
+            if (reused != null) return reused;
+        }
+        // The reset hook (tai load --fresh, or clearCache on the load routes directly): thrown away
+        // before the load itself picks the fingerprinted directory, so the model always rebuilds
+        // its converted-weight cache from scratch instead of trusting whatever is on disk.
+        if (request.optBoolean("clearCache", false) && TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+            MnnTaiRuntime.clearMmapCache(appContext, spec.id);
+        }
         if (hasInjectedRuntimeOverride()) {
             JSONObject result = localRuntime().load(spec, options);
             return result;
         }
+        // A resident model the load cannot replace keeps serving as it is, as a generation's own load
+        // treats it (ensureModelLoadedForGeneration): the caller gets it, reused, rather than a refusal
+        // that reads as no model at all. A fresh load (clearCache) asked for a rebuild and is refused.
+        boolean fresh = request.optBoolean("clearCache", false);
         TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
         if (preflight.blocked) {
-            TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
-                preflight.effectiveAccelerator, preflight.message);
+            if (!fresh && localRuntime().isModelLoaded(spec.id)) return residentAsIs(spec);
+            // Only a refusal that says something about the accelerator belongs in its history. Free
+            // memory running short is a moment, a missing or unreadable file is the download not
+            // being done yet, and a known failure is the record itself: writing any of them down
+            // locked the GPU out for good (a load tried mid-download left "failed on gpu: Download
+            // or import this model" behind, and automatic loads were refused from then on).
+            if (TaiRuntimeHistory.isAcceleratorVerdict(preflight.errorCode)) {
+                TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
+                    preflight.effectiveAccelerator, preflight.message);
+            }
             return preflight.blockingError(preflightStatusCode(preflight));
         }
-        TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
-        JSONObject result = localRuntime().load(spec, loadOptions);
+        LoadDecision decision = decideLoad(spec, options, preflight);
+        if (decision.refusal != null) {
+            return !fresh && localRuntime().isModelLoaded(spec.id) ? residentAsIs(spec) : decision.refusal;
+        }
+        JSONObject result = loadWithCanary(spec, decision.options);
         result.put("preflight", preflight.toJson());
+        decision.describe(result);
         recordRuntimeResult(spec, preflight, result);
+        if (result.optBoolean("ok", false)) {
+            markLoadedAsking(spec, options);
+            markUsedByFeature(spec, options);
+        }
         return result;
     }
 
     @NonNull
     public JSONObject unloadModel() throws JSONException {
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_UNLOAD_MODEL, "{}");
+        // An unload under a running benchmark ends the benchmark: its entry is recorded as
+        // stopped and the phases that finished are kept.
+        TaiBenchHarness bench = activeBench;
+        if (bench != null) bench.requestStop("unloaded");
         return localRuntime().unload();
+    }
+
+    /**
+     * Unloads the chat model alone, and only while it is {@code modelId}: for a caller that loaded a
+     * model for itself and must give back nothing else (the app sort). Embeddings, speech and an image
+     * model stay, and a chat model another feature has loaded since is left as it is. A benchmark
+     * stops only when it is running on that model.
+     */
+    @NonNull
+    public JSONObject unloadChatModel(@Nullable String modelId) throws JSONException {
+        String requested = modelId == null ? "" : modelId.trim();
+        if (requested.isEmpty()) return error(400, "bad_request", "Missing model id");
+        TaiModelSpec spec = resolveModel(requested);
+        String id = spec != null ? spec.id : TaiSettings.migrateBuiltInModelId(requested);
+        if (shouldDelegateRuntime()) {
+            return runtimeRequest(TaiRuntimeIpc.OP_UNLOAD_CHAT_MODEL, new JSONObject().put("model", id).toString());
+        }
+        TaiRuntime local = localRuntime();
+        TaiBenchHarness bench = activeBench;
+        if (bench != null && local.isModelLoaded(id)) bench.requestStop("unloaded");
+        return local.unloadChatModel(id);
     }
 
     @NonNull
     public JSONObject keepWarmRuntime(@NonNull String body) throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_KEEP_WARM, delegatedRuntimeBody(body));
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_KEEP_WARM, delegatedRuntimeBody(body, true));
         JSONObject request = parseBody(body);
         TaiRuntimeState state = localRuntime().getState();
         String fallbackModel = state.loadedModelId != null ? state.loadedModelId : settings.getDefaultAssistantModel();
         String modelId = requestedModelId(request, fallbackModel);
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
+        if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         int minutes = request.optInt("minutes", request.optInt("keepWarmMinutes", 0));
         if (minutes <= 0) minutes = settings.getIdleUnloadMinutes() > 0 ? settings.getIdleUnloadMinutes() : 30;
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
         if (preflight.blocked) return preflight.blockingError(preflightStatusCode(preflight));
-        JSONObject result = localRuntime().keepWarm(spec, optionsForPreflight(spec, options, preflight), minutes);
+        TaiRuntimeOptions warmOptions = optionsForPreflight(spec, options, preflight);
+        LoadDecision decision = null;
+        if (!localRuntime().isModelLoaded(spec.id)) {
+            decision = decideLoad(spec, options, preflight);
+            if (decision.refusal != null) return decision.refusal;
+            warmOptions = decision.options;
+        }
+        JSONObject result = localRuntime().keepWarm(spec, warmOptions, minutes);
         result.put("preflight", preflight.toJson());
+        if (decision != null) decision.describe(result);
         recordRuntimeResult(spec, preflight, result);
         return result;
     }
 
     @NonNull
     public JSONObject cancelRuntime() throws JSONException {
+        return cancelRuntime(TaiBenchHarness.STOP_CANCELLED);
+    }
+
+    /**
+     * {@link #cancelRuntime()} with the reason a running benchmark's record gives for stopping:
+     * {@code cancelled} is the user, {@code memory_pressure} is the runtime giving everything back
+     * when the phone ran out. Only the runtime process itself passes anything else; a request over
+     * IPC is always the user's.
+     */
+    @NonNull
+    public JSONObject cancelRuntime(@NonNull String stopReason) throws JSONException {
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_CANCEL, "{}");
+        // tai cancel is how a running benchmark is stopped from outside; see TaiRuntimeService's
+        // busy rule. The harness cancels the generation itself and records the entry as stopped.
+        TaiBenchHarness bench = activeBench;
+        if (bench != null) bench.requestStop(stopReason);
         return localRuntime().cancel();
+    }
+
+    /**
+     * "Skip the wait" (spec Screen 5): ends the active bench's current or next cool-down wait at
+     * once, and that entry's record is marked {@code warmStart}. A no-op, not an error, when
+     * nothing is running.
+     */
+    @NonNull
+    public JSONObject skipBenchCooldown() throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_BENCH_SKIP_WAIT, "{}");
+        TaiBenchHarness bench = activeBench;
+        if (bench != null) bench.skipCooldown();
+        JSONObject result = new JSONObject();
+        result.put("ok", true);
+        result.put("skipped", bench != null);
+        return result;
+    }
+
+    /**
+     * "Leaving pauses at the end of the current step; Resume on return" (spec Safety table,
+     * Screen/app row): holds or releases the active bench's guard. The in-app run screen's only
+     * lever — a {@code tai benchmark} from the terminal is never held. A no-op, not an error, when
+     * nothing is running.
+     */
+    @NonNull
+    public JSONObject holdBench(@NonNull String body) throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_BENCH_HOLD, delegatedRuntimeBody(body));
+        JSONObject request = parseBody(body);
+        boolean held = request.optBoolean("held", false);
+        TaiBenchHarness bench = activeBench;
+        if (bench != null) bench.setHeld(held);
+        JSONObject result = new JSONObject();
+        result.put("ok", true);
+        result.put("held", held);
+        result.put("active", bench != null);
+        return result;
+    }
+
+    // ---- Benchmark (bench v2) ------------------------------------------------------------------
+
+    /** The results file, {@code files/tai/benchmarks.json}, written by this (the app) process only. */
+    @NonNull
+    private TaiBenchStore benchStore() {
+        return TaiBenchStore.in(appContext.getFilesDir());
+    }
+
+    /**
+     * {@code GET /v1/ai/benchmarks}: every record and the leaderboard for the current bench
+     * version. Deleting a model removes its results (see {@link #pruneModelRecords}); each record
+     * still says whether its model is installed so a reader can mark it.
+     */
+    @NonNull
+    public JSONObject benchmarks() throws JSONException {
+        JSONObject data = benchStore().toJson(TaiBenchSuite.BENCH_VERSION);
+        JSONArray records = data.optJSONArray("records");
+        if (records != null) {
+            for (int i = 0; i < records.length(); i++) {
+                JSONObject record = records.optJSONObject(i);
+                if (record != null) record.put("installed", resolveModel(record.optString("modelId", "")) != null);
+            }
+        }
+        return data;
+    }
+
+    /** {@code GET /v1/ai/logs}: the last {@code lines} lines of the AI event log (both files), oldest first. */
+    @NonNull
+    public JSONObject eventLogs(int lines) throws JSONException {
+        List<String> tail = TaiEventLog.in(appContext.getFilesDir()).tail(lines > 0 ? lines : TaiEventLog.DEFAULT_TAIL_LINES);
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("count", tail.size());
+        data.put("lines", new JSONArray(tail));
+        return data;
+    }
+
+    /** {@code DELETE /v1/ai/logs}: deletes the AI event log files. */
+    @NonNull
+    public JSONObject clearEventLogs() throws JSONException {
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("cleared", TaiEventLog.in(appContext.getFilesDir()).clear());
+        return data;
+    }
+
+    /** {@code DELETE /v1/ai/runtime/history}: wipes the recorded load/failure/memory history. */
+    @NonNull
+    public JSONObject clearRuntimeHistory() throws JSONException {
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("removed", TaiRuntimeHistory.clear(appContext));
+        return data;
+    }
+
+    /** {@code DELETE /v1/ai/benchmarks}: clears every record, or {@code modelId}'s only. */
+    @NonNull
+    public JSONObject clearBenchmarks(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        String modelId = request.optString("modelId", request.optString("model", "")).trim();
+        try {
+            int removed = benchStore().clear(modelId.isEmpty() ? null : modelId);
+            JSONObject data = new JSONObject();
+            data.put("ok", true);
+            data.put("removed", removed);
+            data.put("modelId", modelId.isEmpty() ? JSONObject.NULL : modelId);
+            return data;
+        } catch (IOException e) {
+            return error(500, "benchmarks_clear_failed", "Could not rewrite the benchmark file: " + message(e));
+        }
+    }
+
+    /**
+     * {@code POST /v1/ai/benchmarks/run} without {@code stream}: runs the whole bench and answers
+     * once with the {@code done} summary plus the leaderboard the records landed on.
+     */
+    @NonNull
+    public JSONObject benchRunCollect(@NonNull String body) throws JSONException {
+        AtomicReference<JSONObject> done = new AtomicReference<>();
+        AtomicReference<JSONObject> failure = new AtomicReference<>();
+        try {
+            benchRun(body, new OpenAiStreamSink() {
+                @Override
+                public void onEvent(@NonNull JSONObject event) {
+                    String name = event.optString("event", "");
+                    if ("done".equals(name)) done.set(event);
+                    // An error outside any entry is the run failing to start; entry errors are in the records.
+                    else if ("error".equals(name) && !event.has("entry")) failure.compareAndSet(null, event);
+                }
+
+                @Override
+                public void onDone() {
+                }
+            });
+        } catch (IOException e) {
+            return error(500, "benchmark_failed", message(e));
+        }
+        if (done.get() == null) {
+            JSONObject event = failure.get();
+            if (event == null) return error(500, "benchmark_failed", "The benchmark ended without a result.");
+            return error(event.optInt("status", 500), event.optString("code", "benchmark_failed"),
+                event.optString("message", "The benchmark could not start."));
+        }
+        JSONObject result = new JSONObject(done.get().toString());
+        result.remove("event");
+        result.remove("at");
+        result.put("leaderboard", benchStore().toJson(TaiBenchSuite.BENCH_VERSION).opt("leaderboard"));
+        return result;
+    }
+
+    /** An exception's message, or its class name when it has none (an IOException often does not). */
+    @NonNull
+    private static String message(@NonNull Exception e) {
+        String text = e.getMessage();
+        return text == null || text.isEmpty() ? e.getClass().getSimpleName() : text;
+    }
+
+    /**
+     * Runs bench v2 over {@code models} and streams {@link TaiBenchHarness} events into
+     * {@code sink}. Request: {@code {models: [id…] | model, preset: quick|standard,
+     * compare: bool? (both processors where supported), processors: [cpu|gpu…]?, eagle: bool?}}. In the app process the request is resolved
+     * (model specs and the settings' runtime options travel with it, as every runtime request's
+     * do), forwarded to {@code :tai_runtime} as {@link TaiRuntimeIpc#OP_BENCH_RUN}, and each
+     * {@code entry_done} record is appended to the store as it arrives. In the runtime process
+     * the harness runs here, against the local router.
+     */
+    public void benchRun(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        long startedMs = android.os.SystemClock.elapsedRealtime();
+        TaiEventLog.log(appContext, TaiEventLog.BENCH_START, "benchmark run");
+        String outcome = "finished";
+        try {
+            if (shouldDelegateRuntime()) {
+                benchRunDelegated(body, sink);
+            } else {
+                benchRunLocal(body, sink);
+            }
+        } catch (JSONException | IOException | RuntimeException e) {
+            outcome = "failed: " + e.getClass().getSimpleName();
+            throw e;
+        } finally {
+            TaiEventLog.log(appContext, TaiEventLog.BENCH_DONE, null, null, null, 0,
+                android.os.SystemClock.elapsedRealtime() - startedMs, 0L, outcome);
+        }
+    }
+
+    private void benchRunDelegated(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        if (runtimeClient == null) {
+            emitBenchError(sink, error(503, "tai_runtime_unavailable", "On-device AI runtime service client is unavailable."));
+            return;
+        }
+        JSONObject prepared = prepareBenchRequest(parseBody(body));
+        if (!prepared.optBoolean("ok", false)) {
+            emitBenchError(sink, prepared);
+            return;
+        }
+        prepared.remove("ok");
+        if (!benchStreamActive.compareAndSet(false, true)) {
+            emitBenchError(sink, error(409, "benchmark_running", "A benchmark is already running; wait for it or stop it with tai cancel."));
+            return;
+        }
+        try {
+            // The runtime can die under a run; the recovery writes what the harness could not and
+            // asks for the rest of the entries again (see TaiBenchCrashRecovery).
+            new TaiBenchCrashRecovery(benchStore(), com.termux.BuildConfig.VERSION_NAME,
+                TaiBenchCrashRecovery.DEFAULT_RESTART_PAUSE_MS).run(prepared, benchErrorMapped(sink),
+                (request, attemptSink) -> runtimeClient.stream(TaiRuntimeIpc.OP_BENCH_RUN, request.toString(), attemptSink));
+        } finally {
+            benchStreamActive.set(false);
+        }
+    }
+
+    /**
+     * {@code sink} with the service client's error shape ({@code {error, tai}}) turned into the
+     * bench's own {@code error} event, for errors the recovery does not handle itself.
+     */
+    @NonNull
+    private static OpenAiStreamSink benchErrorMapped(@NonNull OpenAiStreamSink sink) {
+        return new OpenAiStreamSink() {
+            @Override
+            public void onEvent(@NonNull JSONObject event) throws IOException {
+                if (!event.has("event") && event.has("error")) {
+                    try {
+                        sink.onEvent(benchErrorEvent(event.optJSONObject("tai") == null ? event : event.getJSONObject("tai")));
+                    } catch (JSONException e) {
+                        throw new IOException(e);
+                    }
+                    return;
+                }
+                sink.onEvent(event);
+            }
+
+            @Override
+            public void onDone() throws IOException {
+                sink.onDone();
+            }
+        };
+    }
+
+    /**
+     * The app-process half of a bench request: every model resolved and checked (a chat model,
+     * installed), the preset and processors validated, the specs and runtime options attached the
+     * way {@link #delegatedRuntimeBody} attaches them for one model. {@code ok:false} is the error
+     * to answer with.
+     */
+    @NonNull
+    private JSONObject prepareBenchRequest(@NonNull JSONObject request) throws JSONException {
+        List<String> ids = new ArrayList<>();
+        JSONArray models = request.optJSONArray("models");
+        if (models != null) {
+            for (int i = 0; i < models.length(); i++) {
+                Object item = models.opt(i);
+                String id = item instanceof JSONObject ? ((JSONObject) item).optString("model", "") : String.valueOf(item);
+                if (!id.trim().isEmpty() && !ids.contains(id.trim())) ids.add(id.trim());
+            }
+        }
+        if (ids.isEmpty()) {
+            String single = request.optString("model", "").trim();
+            ids.add(single.isEmpty() ? settings.getDefaultAssistantModel() : single);
+        }
+        TaiBenchSuite.Preset preset = TaiBenchSuite.Preset.fromId(request.optString("preset", null));
+        if (preset == null) return error(400, "bad_preset", "preset must be quick or standard.");
+        JSONArray prepared = new JSONArray();
+        for (String id : ids) {
+            TaiModelSpec spec = resolveModel(id);
+            if (spec == null) return error(404, "model_not_found", "Unknown model: " + id);
+            if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
+                return error(400, "capability_not_supported", "Model " + id + " is not a chat model.");
+            }
+            if (spec.localPath == null || !new File(spec.localPath).exists()) {
+                return error(404, "model_file_missing", "Download or import " + id + " before benchmarking it.");
+            }
+            JSONObject entry = new JSONObject();
+            entry.put("model", spec.id);
+            entry.put(INTERNAL_MODEL_SPEC, spec.toJson());
+            entry.put(INTERNAL_RUNTIME_OPTIONS, settings.getRuntimeOptions(spec).toJson());
+            prepared.put(entry);
+        }
+        JSONArray processors = null;
+        Object requestedProcessors = request.opt("processors");
+        if (requestedProcessors instanceof JSONArray) {
+            processors = (JSONArray) requestedProcessors;
+        } else if (requestedProcessors instanceof String && !((String) requestedProcessors).trim().isEmpty()) {
+            processors = new JSONArray().put(((String) requestedProcessors).trim());
+        }
+        JSONObject body = new JSONObject();
+        body.put("ok", true);
+        body.put("models", prepared);
+        body.put("preset", preset.id);
+        body.put("processors", processors == null ? JSONObject.NULL : processors);
+        body.put("compare", request.optBoolean("compare", false));
+        body.put("eagle", request.optBoolean("eagle", false));
+        body.put("force", request.optBoolean("force", false));
+        return body;
+    }
+
+    /** The runtime-process half: the harness against the local router. */
+    private void benchRunLocal(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        JSONObject request = parseBody(body);
+        TaiRuntimeState state = localRuntime().getState();
+        if (state.activeGeneration || "loading".equals(state.state)) {
+            JSONObject busy = error(409, "runtime_busy", "The runtime is " + ("loading".equals(state.state) ? "loading" : "generating")
+                + "; wait for it to finish or cancel it before benchmarking.");
+            if (state.loadedModelId != null) busy.put("loadedModelId", state.loadedModelId);
+            emitBenchError(sink, busy);
+            return;
+        }
+        if (activeBench != null) {
+            emitBenchError(sink, error(409, "benchmark_running", "A benchmark is already running."));
+            return;
+        }
+        TaiBenchSuite.Preset preset = TaiBenchSuite.Preset.fromId(request.optString("preset", null));
+        if (preset == null) {
+            emitBenchError(sink, error(400, "bad_preset", "preset must be quick or standard."));
+            return;
+        }
+        JSONArray models = request.optJSONArray("models");
+        if (models == null || models.length() == 0) {
+            emitBenchError(sink, error(400, "no_models", "No models to benchmark."));
+            return;
+        }
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+        Map<String, TaiModelSpec> specs = new LinkedHashMap<>();
+        Map<String, TaiRuntimeOptions> baseOptions = new LinkedHashMap<>();
+        List<TaiBenchSuite.ModelInput> inputs = new ArrayList<>();
+        for (int i = 0; i < models.length(); i++) {
+            JSONObject model = models.optJSONObject(i);
+            if (model == null) continue;
+            String id = model.optString("model", "");
+            TaiModelSpec spec = resolveModel(model, id);
+            if (spec == null) {
+                emitBenchError(sink, error(404, "model_not_found", "Unknown model: " + id));
+                return;
+            }
+            TaiRuntimeOptions options = runtimeOptionsFromRequest(model, spec);
+            // The processor an automatic load would take is the default pick; the GPU is compared
+            // only where the phone and this model's preflight allow it. An explicit --gpu is
+            // planned regardless and refused, with the reason, by the load.
+            boolean gpuSupported = device.supportsAccelerator("gpu")
+                && !TaiLoadPreflight.evaluate(appContext, spec, options.withAccelerator("gpu"), false).blocked;
+            String best = TaiLoadPreflight.evaluate(appContext, spec, options.withAccelerator("auto"), false).effectiveAccelerator;
+            best = "gpu".equalsIgnoreCase(best) ? TaiBenchSuite.ACCELERATOR_GPU : TaiBenchSuite.ACCELERATOR_CPU;
+            // A GPU-only file (the Gemma 4 -gpu/-web bundles) has no CPU graph; the comparison skips it.
+            boolean cpuSupported = TaiModelProfile.forModel(spec).supports("cpu");
+            boolean speculativeCapable = spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING);
+            specs.put(spec.id, spec);
+            baseOptions.put(spec.id, options);
+            inputs.add(new TaiBenchSuite.ModelInput(spec.id, spec.backend, best, cpuSupported, gpuSupported, speculativeCapable));
+        }
+        List<String> processors = null;
+        JSONArray requestedProcessors = request.optJSONArray("processors");
+        if (requestedProcessors != null) {
+            processors = new ArrayList<>();
+            for (int i = 0; i < requestedProcessors.length(); i++) processors.add(requestedProcessors.optString(i, ""));
+        }
+        List<TaiBenchSuite.EntryPlan> entries = TaiBenchSuite.expand(inputs, request.optBoolean("compare", false), processors, request.optBoolean("eagle", false));
+        // A restart after the runtime crashed asks only for the entries not yet finished.
+        JSONArray skip = request.optJSONArray("skip");
+        if (skip != null && skip.length() > 0) {
+            Set<String> finished = new LinkedHashSet<>();
+            for (int i = 0; i < skip.length(); i++) finished.add(skip.optString(i, ""));
+            List<TaiBenchSuite.EntryPlan> remaining = new ArrayList<>();
+            for (TaiBenchSuite.EntryPlan planned : entries) if (!finished.contains(planned.key())) remaining.add(planned);
+            entries = remaining;
+        }
+        if (entries.isEmpty()) {
+            emitBenchError(sink, error(400, "no_entries", "Nothing to run: no model and processor pair to benchmark."));
+            return;
+        }
+        JSONObject deviceJson = new JSONObject();
+        deviceJson.put("soc", device.socModel == null ? JSONObject.NULL : device.socModel);
+        deviceJson.put("ramClassGb", device.memoryBytes > 0L ? Math.round(device.memoryBytes / (double) (1024L * 1024L * 1024L)) : JSONObject.NULL);
+
+        TaiDeviceConditions conditionsReader = new TaiDeviceConditions(appContext);
+        boolean force = request.optBoolean("force", false);
+        if (!force) {
+            TaiBenchGuardRules.Snapshot startSnapshot = conditionsReader.snapshot();
+            String reason = TaiBenchGuardRules.startCheck(startSnapshot);
+            if (reason != null) {
+                JSONObject refusal = error(409, "conditions_not_met", conditionsMessage(reason));
+                refusal.put("reason", reason);
+                refusal.put("batteryPercent", startSnapshot.batteryPercent >= 0 ? startSnapshot.batteryPercent : JSONObject.NULL);
+                refusal.put("charging", startSnapshot.charging);
+                refusal.put("thermalStatus", startSnapshot.thermalStatus >= 0 ? startSnapshot.thermalStatus : JSONObject.NULL);
+                emitBenchError(sink, refusal);
+                return;
+            }
+        }
+
+        TaiBenchGuard guard = new TaiBenchConditionsGuard(conditionsReader::snapshot, System::currentTimeMillis);
+        TaiBenchHarness harness = new TaiBenchHarness(preset, entries, new BenchHost(specs, baseOptions),
+            guard, sink::onEvent, com.termux.BuildConfig.VERSION_NAME, deviceJson);
+        activeBench = harness;
+        conditionsReader.startThermalListener(() -> harness.requestStop("thermal"));
+        try {
+            harness.run();
+        } finally {
+            conditionsReader.stopThermalListener();
+            activeBench = null;
+        }
+        sink.onDone();
+    }
+
+    /** The human message for a {@code conditions_not_met} refusal, by {@link TaiBenchGuardRules#startCheck} reason. */
+    @NonNull
+    private static String conditionsMessage(@NonNull String reason) {
+        switch (reason) {
+            case "battery_low":
+                return "Battery is below " + TaiBenchGuardRules.START_BATTERY_MIN_PERCENT
+                    + "%; plug in or charge before benchmarking, or pass force=true to run anyway.";
+            case "too_hot":
+                return "The phone is already warm; let it cool before benchmarking, or pass force=true to run anyway.";
+            default:
+                return "The phone is not in a state to start a benchmark.";
+        }
+    }
+
+    /** The harness's window on this process: the router, the meter, the log, the stamps. */
+    private final class BenchHost implements TaiBenchHarness.Host {
+        /** Long enough for the {@code done} event to reach the app over the binder before the process goes. */
+        private static final long ABANDON_KILL_DELAY_MS = 1_500L;
+
+        @NonNull private final Map<String, TaiModelSpec> specs;
+        @NonNull private final Map<String, TaiRuntimeOptions> baseOptions;
+        @Nullable private String log;
+
+        BenchHost(@NonNull Map<String, TaiModelSpec> specs, @NonNull Map<String, TaiRuntimeOptions> baseOptions) {
+            this.specs = specs;
+            this.baseOptions = baseOptions;
+        }
+
+        @NonNull
+        private TaiModelSpec spec(@NonNull TaiBenchSuite.EntryPlan entry) {
+            TaiModelSpec spec = specs.get(entry.modelId);
+            if (spec == null) throw new IllegalStateException("No spec for " + entry.modelId);
+            return spec;
+        }
+
+        /** The entry's processor and draft-model choice on top of the settings' options; thinking off. */
+        @NonNull
+        private TaiRuntimeOptions options(@NonNull TaiBenchSuite.EntryPlan entry, @Nullable Integer maxTokens, boolean greedy) {
+            TaiRuntimeOptions base = baseOptions.get(entry.modelId);
+            if (base == null) base = settings.getRuntimeOptions(spec(entry));
+            return base.withGenerationOverrides(maxTokens, greedy ? Integer.valueOf(1) : null, null,
+                greedy ? Double.valueOf(0.0) : null, entry.accelerator, null, null, null, null,
+                Boolean.FALSE, entry.speculative);
+        }
+
+        /** The same preflight, budget and history as {@code tai load}; a refusal skips the entry. */
+        @NonNull
+        @Override
+        public JSONObject load(@NonNull TaiBenchSuite.EntryPlan entry) throws JSONException {
+            TaiModelSpec spec = spec(entry);
+            TaiRuntimeOptions options = options(entry, null, false);
+            TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
+            if (preflight.blocked) {
+                if (TaiRuntimeHistory.isAcceleratorVerdict(preflight.errorCode)) {
+                    TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
+                        preflight.effectiveAccelerator, preflight.message);
+                }
+                return preflight.blockingError(preflightStatusCode(preflight));
+            }
+            LoadDecision decision = decideLoad(spec, options, preflight);
+            if (decision.refusal != null) return decision.refusal;
+            // The GPU self-test runs here as on every other load: a bench GPU load is a GPU load.
+            JSONObject result = loadWithCanary(spec, decision.options);
+            if (result.optBoolean("ok", false)
+                    && TaiGpuVerdict.REASON_FAILED.equals(result.optString("backendFallbackReason", ""))) {
+                // The self-test failed and moved the model to the CPU: this entry is the GPU's, so it is skipped
+                // rather than measured on the other processor under the GPU's name.
+                localRuntime().unload();
+                return error(409, "gpu_wrong_answers", TaiGpuVerdict.REASON_FAILED);
+            }
+            result.put("preflight", preflight.toJson());
+            decision.describe(result);
+            recordRuntimeResult(spec, preflight, result);
+            return result;
+        }
+
+        @NonNull
+        @Override
+        public JSONObject unload() throws JSONException {
+            return localRuntime().unload();
+        }
+
+        /** The chat model resident now, with the processor it runs on and what is left of its keep-warm. */
+        @Nullable
+        @Override
+        public JSONObject residentChat() throws JSONException {
+            TaiRuntimeState state = localRuntime().getState();
+            if (!state.loaded || state.loadedModelId == null) return null;
+            JSONObject resident = new JSONObject().put("modelId", state.loadedModelId);
+            MultiBackendTaiRuntime router = MultiBackendTaiRuntime.processInstance();
+            TaiResidency.Entry entry = router == null ? null : router.residency().find(TaiResidency.Kind.CHAT, state.loadedModelId);
+            if (entry != null) resident.put("accelerator", entry.accelerator);
+            long warmLeftMs = state.keepWarmUntilMs - System.currentTimeMillis();
+            if (state.keepWarmUntilMs > 0L && warmLeftMs > 0L) {
+                resident.put("keepWarmMinutes", Math.max(1L, (warmLeftMs + 59_999L) / 60_000L));
+            }
+            return resident;
+        }
+
+        /** Loads it back the way {@code tai load} does (or {@code tai keep-warm}, when it was being kept warm). */
+        @Override
+        public void restoreChat(@NonNull JSONObject resident) throws JSONException {
+            JSONObject request = new JSONObject().put("model", resident.optString("modelId", ""));
+            String accelerator = resident.optString("accelerator", "");
+            if (!accelerator.isEmpty()) request.put("accelerator", accelerator);
+            int minutes = resident.optInt("keepWarmMinutes", 0);
+            if (minutes > 0) {
+                request.put("minutes", minutes);
+                keepWarmRuntime(request.toString());
+            } else {
+                loadModel(request.toString());
+            }
+        }
+
+        /**
+         * A load that never returned is still running on a thread the runtime cannot stop, and the
+         * weights it mapped stay mapped for as long as the process lives. Ending the process is the
+         * only way to get them back, so it goes a moment after the run's {@code done} has been
+         * sent. The app's client sees no request in flight, does not count it a crash, and binds a
+         * fresh process on the next request.
+         */
+        @Override
+        public void abandonRuntime() {
+            Thread killer = new Thread(() -> {
+                try {
+                    Thread.sleep(ABANDON_KILL_DELAY_MS);
+                } catch (InterruptedException ignored) {
+                }
+                Process.killProcess(Process.myPid());
+            }, "tai-bench-abandon");
+            killer.setDaemon(true);
+            killer.start();
+        }
+
+        @NonNull
+        @Override
+        public JSONObject chat(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull String userPrompt, int maxTokens,
+                               @NonNull TaiGenerationCallback callback) throws JSONException {
+            // Greedy (top_k 1, temperature 0) for every phase: the numbers should not move with
+            // the dice, and the check questions have one right answer. One-shot: every prompt gets
+            // a fresh conversation, or LiteRT-LM would answer each one with the earlier phases'
+            // passages and replies still in context (a check answered as the previous question).
+            return localRuntime().chat(spec(entry).id, TaiChatRequest.oneShot(TaiBenchSuite.SYSTEM_PROMPT, userPrompt),
+                options(entry, maxTokens, true), callback);
+        }
+
+        @Override
+        public void cancel() {
+            try {
+                localRuntime().cancel();
+            } catch (JSONException | RuntimeException ignored) {
+            }
+        }
+
+        @NonNull
+        @Override
+        public TaiLoadMeter startMeter() {
+            return TaiLoadMeter.start(appContext);
+        }
+
+        @NonNull
+        @Override
+        public String longInputLog() throws IOException {
+            if (log != null) return log;
+            try (InputStream input = appContext.getAssets().open(TaiBenchSuite.LONG_INPUT_ASSET);
+                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+                log = new String(output.toByteArray(), StandardCharsets.UTF_8);
+            }
+            return log;
+        }
+
+        @Override
+        public void clearMmapCache(@NonNull TaiBenchSuite.EntryPlan entry) {
+            if (!TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) return;
+            MnnTaiRuntime.clearMmapCache(appContext, spec(entry).id);
+        }
+
+        /** {@code :tai_runtime}'s own PSS (this process, where the model is resident). */
+        @Override
+        public long processPssBytes() {
+            try {
+                long kb = android.os.Debug.getPss();
+                return kb > 0L ? kb * 1024L : -1L;
+            } catch (RuntimeException e) {
+                return -1L;
+            }
+        }
+
+        @NonNull
+        @Override
+        public JSONObject describe(@NonNull TaiBenchSuite.EntryPlan entry) throws JSONException {
+            TaiModelSpec spec = spec(entry);
+            JSONObject json = new JSONObject();
+            json.put("displayName", spec.displayName);
+            // The size the spec knows or the file's; nothing is hashed here — a multi-GB sha256
+            // has no place inside a timed run, so the hash is whatever the download recorded.
+            long bytes = TaiResidency.fileBytes(spec);
+            json.put("sizeBytes", bytes > 0L ? bytes : spec.sizeBytes);
+            json.put("sha256", spec.sha256 == null ? JSONObject.NULL : spec.sha256);
+            json.put("runtimeVersion", TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)
+                ? MnnTaiRuntime.RUNTIME_VERSION : com.termux.BuildConfig.LITERT_LM_VERSION);
+            return json;
+        }
+    }
+
+    /** An {@code error} event in the harness's shape from a manager error object. */
+    @NonNull
+    private static JSONObject benchErrorEvent(@NonNull JSONObject source) throws JSONException {
+        JSONObject event = new JSONObject();
+        event.put("event", "error");
+        event.put("at", System.currentTimeMillis());
+        event.put("code", source.optString("error", "benchmark_failed"));
+        event.put("message", source.optString("message", "The benchmark could not start."));
+        event.put("status", source.optInt("_statusCode", 500));
+        if (source.has("loadedModelId")) event.put("loadedModelId", source.opt("loadedModelId"));
+        // A conditions_not_met refusal attaches reason/batteryPercent/charging/thermalStatus; any
+        // field beyond the standard shape travels through to the caller unchanged.
+        Iterator<String> keys = source.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if ("ok".equals(key) || "error".equals(key) || "message".equals(key)
+                || "_statusCode".equals(key) || "loadedModelId".equals(key)) continue;
+            event.put(key, source.get(key));
+        }
+        return event;
+    }
+
+    private void emitBenchError(@NonNull OpenAiStreamSink sink, @NonNull JSONObject source) throws JSONException, IOException {
+        sink.onEvent(benchErrorEvent(source));
+        sink.onDone();
+    }
+
+    /** Runs can each spend tens of seconds; the whole {@code tai benchmark} call may take minutes. */
+    private static final long BENCHMARK_TIMEOUT_MS = 20 * 60_000L;
+    private static final String BENCHMARK_PROMPT = "How are you";
+    private static final long BYTES_PER_MB = 1024L * 1024L;
+
+    /**
+     * Runs LiteRT-LM's own {@code com.google.ai.edge.litertlm.benchmark()} in the runtime process, so
+     * TAI's numbers are comparable 1:1 with Google AI Edge Gallery's Benchmark screen: same API, same
+     * default prefill/decode token counts, its own throwaway engine and cache directory. That engine
+     * is independent of the one {@link MultiBackendTaiRuntime} tracks, so it is refused while a chat
+     * model is loaded or loading rather than silently doubling the memory a resident model already
+     * holds — the caller unloads first, or passes {@code force} to accept that risk instead of the
+     * memory-budget refusal below.
+     */
+    @NonNull
+    public JSONObject benchmark(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        TaiModelSpec spec = resolveModel(request, modelId);
+        if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
+        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
+            return error(400, "capability_not_supported", "Model " + modelId + " is not a chat model.");
+        }
+        if (!TaiModelSpec.BACKEND_LITERT_LM.equals(spec.backend)) {
+            return error(400, "backend_not_supported",
+                "tai benchmark calls com.google.ai.edge.litertlm.benchmark(), which is LiteRT-LM only.");
+        }
+        TaiBenchmarkParams params = TaiBenchmarkParams.fromRequest(request);
+        if (params == null) return error(400, "bad_request", "accelerator must be gpu or cpu");
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_BENCHMARK, delegatedRuntimeBody(body), BENCHMARK_TIMEOUT_MS);
+
+        TaiRuntimeState state = localRuntime().getState();
+        if (state.loaded || state.activeGeneration || "loading".equals(state.state)) {
+            JSONObject busy = error(409, "model_loaded", "Unload the loaded model first: tai benchmark runs its "
+                + "own LiteRT-LM engine and cannot share memory with a resident model.");
+            if (state.loadedModelId != null) busy.put("loadedModelId", state.loadedModelId);
+            return busy;
+        }
+
+        File modelFile = spec.localPath == null ? null : new File(spec.localPath);
+        if (modelFile == null || !modelFile.isFile() || !modelFile.canRead()) {
+            return error(404, "model_file_not_readable", "Model file does not exist or is not readable: " + modelId);
+        }
+
+        if (!params.force) {
+            TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+            long fileBytes = TaiResidency.fileBytes(spec);
+            TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, fileBytes, false,
+                device.physicalMemoryBytes, availableMemory(device),
+                Collections.singletonList(params.accelerator), params.prefillTokens + params.decodeTokens, null, 0)
+                .withConditions(gateConditions()));
+            if (!plan.fits) {
+                JSONObject refusal = insufficientMemory(spec.displayName, plan);
+                refusal.put("hint", "Pass force=true to skip this budget check. Google AI Edge Gallery's Benchmark "
+                    + "screen has no memory budget, and force is how tai benchmark stays comparable to it.");
+                return refusal;
+            }
+        }
+
+        File cacheDir = new File(appContext.getCacheDir(), "tai-benchmark-" + System.nanoTime());
+        if (!cacheDir.mkdirs()) {
+            return error(500, "benchmark_cache_dir_failed",
+                "Could not create a benchmark cache directory under " + appContext.getCacheDir());
+        }
+        try {
+            return runBenchmark(spec, modelFile, params, cacheDir);
+        } finally {
+            deleteRecursively(cacheDir);
+        }
+    }
+
+    @NonNull
+    private JSONObject runBenchmark(@NonNull TaiModelSpec spec, @NonNull File modelFile,
+                                     @NonNull TaiBenchmarkParams params, @NonNull File cacheDir) throws JSONException {
+        Backend backend = TaiBenchmarkParams.ACCELERATOR_CPU.equals(params.accelerator)
+            ? new Backend.CPU() : new Backend.GPU();
+        JSONArray runsJson = new JSONArray();
+        ValueSeries initMsSeries = new ValueSeries();
+        ValueSeries ttftMsSeries = new ValueSeries();
+        ValueSeries prefillTpsSeries = new ValueSeries();
+        ValueSeries decodeTpsSeries = new ValueSeries();
+        Double firstInitMs = null;
+        for (int i = 0; i < params.runs; i++) {
+            TaiLoadMeter sampler = TaiLoadMeter.start(appContext);
+            BenchmarkInfo info;
+            try {
+                info = BenchmarkKt.benchmark(modelFile.getAbsolutePath(), backend, params.prefillTokens,
+                    params.decodeTokens, cacheDir.getAbsolutePath(), BENCHMARK_PROMPT);
+            } catch (Throwable t) {
+                sampler.stop();
+                String message = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+                JSONObject failure = error(500, "benchmark_failed", "Benchmark run " + (i + 1) + " failed: " + message);
+                failure.put("run", i + 1);
+                if (runsJson.length() > 0) failure.put("runs", runsJson);
+                return failure;
+            }
+            sampler.stop();
+            double initMs = info.getInitTimeInSecond() * 1000.0;
+            double ttftMs = info.getTimeToFirstTokenInSecond() * 1000.0;
+            double prefillTps = info.getLastPrefillTokensPerSecond();
+            double decodeTps = info.getLastDecodeTokensPerSecond();
+            // The first init reads the package off disk cold; later ones are warm. Averaging them
+            // together would hide exactly the number Gallery's screen calls out separately.
+            if (i == 0) firstInitMs = initMs; else initMsSeries.add(initMs);
+            ttftMsSeries.add(ttftMs);
+            prefillTpsSeries.add(prefillTps);
+            decodeTpsSeries.add(decodeTps);
+            JSONObject run = new JSONObject();
+            run.put("initMs", initMs);
+            run.put("ttftMs", ttftMs);
+            run.put("prefillTps", prefillTps);
+            run.put("decodeTps", decodeTps);
+            run.put("prefillTokenCount", info.getLastPrefillTokenCount());
+            run.put("decodeTokenCount", info.getLastDecodeTokenCount());
+            run.put("availBeforeMb", sampler.beforeBytes() / BYTES_PER_MB);
+            run.put("availMinMb", sampler.minBytes() / BYTES_PER_MB);
+            runsJson.put(run);
+        }
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("model", spec.id);
+        data.put("accelerator", params.accelerator);
+        data.put("prefillTokens", params.prefillTokens);
+        data.put("decodeTokens", params.decodeTokens);
+        data.put("runs", runsJson);
+        JSONObject initSummary = new JSONObject();
+        if (firstInitMs != null) initSummary.put("firstMs", firstInitMs);
+        if (!initMsSeries.isEmpty()) {
+            initSummary.put("laterAvgMs", initMsSeries.avg());
+            initSummary.put("laterMinMs", initMsSeries.min());
+            initSummary.put("laterMaxMs", initMsSeries.max());
+        }
+        JSONObject summary = new JSONObject();
+        summary.put("initMs", initSummary);
+        summary.put("ttftMs", ttftMsSeries.toJson());
+        summary.put("prefillTps", prefillTpsSeries.toJson());
+        summary.put("decodeTps", decodeTpsSeries.toJson());
+        data.put("summary", summary);
+        data.put("litertLmVersion", com.termux.BuildConfig.LITERT_LM_VERSION);
+        return data;
+    }
+
+    /** avg/min/max/count over a run of values, the shape Gallery's own ValueSeries reports. */
+    private static final class ValueSeries {
+        private double sum;
+        private double minValue = Double.NaN;
+        private double maxValue = Double.NaN;
+        private int count;
+
+        void add(double value) {
+            minValue = count == 0 ? value : Math.min(minValue, value);
+            maxValue = count == 0 ? value : Math.max(maxValue, value);
+            sum += value;
+            count++;
+        }
+
+        boolean isEmpty() {
+            return count == 0;
+        }
+
+        double avg() {
+            return count == 0 ? 0.0 : sum / count;
+        }
+
+        double min() {
+            return count == 0 ? 0.0 : minValue;
+        }
+
+        double max() {
+            return count == 0 ? 0.0 : maxValue;
+        }
+
+        @NonNull
+        JSONObject toJson() throws JSONException {
+            JSONObject json = new JSONObject();
+            json.put("avg", avg());
+            json.put("min", min());
+            json.put("max", max());
+            json.put("count", count);
+            return json;
+        }
+    }
+
+    private static void deleteRecursively(@Nullable File file) {
+        if (file == null) return;
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) deleteRecursively(child);
+        }
+        //noinspection ResultOfMethodCallIgnored
+        file.delete();
     }
 
     /**
@@ -503,19 +1714,47 @@ public final class TaiManager {
     @NonNull
     public TaiRuntimeState getRuntimeState() {
         if (!shouldDelegateRuntime()) return localRuntime().getState();
+        return remoteRuntimeState(remoteRuntimeStatus());
+    }
+
+    /** The runtime process's full status reply, or {@code null} when it could not be reached. */
+    @Nullable
+    private JSONObject remoteRuntimeStatus() {
         try {
-            JSONObject status = runtimeRequest(TaiRuntimeIpc.OP_RUNTIME_STATUS, "{}", RUNTIME_STATUS_TIMEOUT_MS);
-            JSONObject runtimeJson = status.optJSONObject("runtime");
-            if (runtimeJson == null) runtimeJson = status.optJSONObject("state");
-            return TaiRuntimeState.fromJson(runtimeJson);
+            return runtimeRequest(TaiRuntimeIpc.OP_RUNTIME_STATUS, "{}", RUNTIME_STATUS_TIMEOUT_MS);
         } catch (JSONException e) {
-            return TaiRuntimeState.fromJson(null);
+            return null;
         }
     }
 
     @NonNull
+    private static TaiRuntimeState remoteRuntimeState(@Nullable JSONObject status) {
+        if (status == null) return TaiRuntimeState.fromJson(null);
+        JSONObject runtimeJson = status.optJSONObject("runtime");
+        if (runtimeJson == null) runtimeJson = status.optJSONObject("state");
+        return TaiRuntimeState.fromJson(runtimeJson);
+    }
+
+    @NonNull
     public JSONObject openAiChatCompletions(@NonNull String body) throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_CHAT, delegatedRuntimeBody(body));
+        return openAiChatCompletions(body, DEFAULT_CHAT_TIMEOUT_MS);
+    }
+
+    /**
+     * As {@link #openAiChatCompletions(String)}, with the IPC deadline the caller wants instead of
+     * the flat default — a voice-input rewrite gives itself a few seconds, so a slow answer costs
+     * that one phrase its polish instead of stalling the session for two minutes.
+     */
+    @NonNull
+    public JSONObject openAiChatCompletions(@NonNull String body, long timeoutMs) throws JSONException {
+        body = withRemoteFeatureModel(body);
+        // A remote/<id> model goes to the remote provider here, in the app process: the :tai_runtime
+        // process is never woken for it (remote provider design, section 4.2).
+        if (!runtimeProcess && TaiCallerRequests.isRemoteRequest(body)) {
+            return new TaiRemoteProvider(appContext).chatCompletions(
+                TaiCallerRequests.remoteBody(parseBody(body)), timeoutMs);
+        }
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_CHAT, delegatedRuntimeBody(body, true), timeoutMs);
         JSONObject request = parseBody(body);
         JSONArray messages = request.optJSONArray("messages");
         if (messages == null || messages.length() == 0) {
@@ -530,7 +1769,7 @@ public final class TaiManager {
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown TAI model: " + modelId));
+        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown model: " + modelId));
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
             return openAiError(generationCapabilityError(spec));
         }
@@ -596,7 +1835,7 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject openAiCompletions(@NonNull String body) throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_COMPLETION, delegatedRuntimeBody(body));
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_COMPLETION, delegatedRuntimeBody(body, true));
         JSONObject request = parseBody(body);
         String prompt = promptFromCompletionRequest(request);
         if (prompt.trim().isEmpty()) return openAiError(error(400, "bad_request", "Missing prompt"));
@@ -609,7 +1848,7 @@ public final class TaiManager {
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown TAI model: " + modelId));
+        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown model: " + modelId));
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
             return openAiError(generationCapabilityError(spec));
         }
@@ -642,14 +1881,6 @@ public final class TaiManager {
         return response;
     }
 
-    @NonNull
-    public JSONObject openAiAudioSpeech(@NonNull String body) throws JSONException {
-        parseBody(body);
-        return openAiError(error(501, "unsupported_audio_output",
-            "Audio output is not available from the local LiteRT-LM or MNN runners. "
-                + "Use text responses or a separate text-to-speech backend."));
-    }
-
     public boolean isStreamRequest(@NonNull String body) {
         try {
             return parseBody(body).optBoolean("stream", false);
@@ -659,12 +1890,18 @@ public final class TaiManager {
     }
 
     public void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        body = withRemoteFeatureModel(body);
+        if (!runtimeProcess && TaiCallerRequests.isRemoteRequest(body)) {
+            new TaiRemoteProvider(appContext).stream(
+                TaiCallerRequests.remoteBody(parseBody(body)), DEFAULT_CHAT_TIMEOUT_MS, sink);
+            return;
+        }
         if (shouldDelegateRuntime()) {
             if (runtimeClient == null) {
-                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "TAI runtime service client is unavailable."));
+                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "On-device AI runtime service client is unavailable."));
                 return;
             }
-            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM, delegatedRuntimeBody(body), sink);
+            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM, delegatedRuntimeBody(body, true), sink);
             return;
         }
         JSONObject request = parseBody(body);
@@ -685,7 +1922,7 @@ public final class TaiManager {
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) {
-            emitOpenAiError(sink, error(404, "model_not_found", "Unknown TAI model: " + modelId));
+            emitOpenAiError(sink, error(404, "model_not_found", "Unknown model: " + modelId));
             return;
         }
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
@@ -812,10 +2049,10 @@ public final class TaiManager {
     public void openAiCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
         if (shouldDelegateRuntime()) {
             if (runtimeClient == null) {
-                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "TAI runtime service client is unavailable."));
+                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "On-device AI runtime service client is unavailable."));
                 return;
             }
-            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM, delegatedRuntimeBody(body), sink);
+            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM, delegatedRuntimeBody(body, true), sink);
             return;
         }
         JSONObject request = parseBody(body);
@@ -836,7 +2073,7 @@ public final class TaiManager {
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) {
-            emitOpenAiError(sink, error(404, "model_not_found", "Unknown TAI model: " + modelId));
+            emitOpenAiError(sink, error(404, "model_not_found", "Unknown model: " + modelId));
             return;
         }
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
@@ -911,17 +2148,28 @@ public final class TaiManager {
         JSONObject installed = new JSONObject();
         JSONArray models = new JSONArray();
         TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+        TaiRuntimePresence.Snapshot presence = TaiRuntimePresence.read(appContext);
         boolean mnnSupported = device.mnnSupported;
         LinkedHashMap<String, TaiModelSpec> availableModels = new LinkedHashMap<>();
         availableModels.putAll(modelStore.getDownloadedReadableModels());
         availableModels.putAll(modelStore.getInstalledUserModels());
         for (TaiModelSpec stored : availableModels.values()) {
-            if (TaiModelSpec.BACKEND_MNN_LLM.equals(stored.backend) && !mnnSupported) continue;
+            if ((TaiModelSpec.BACKEND_MNN_LLM.equals(stored.backend)
+                || TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(stored.backend)) && !mnnSupported) continue;
+            // Image models are not chat models either; they are addressed by the image route.
+            if (stored.isImageGeneration()) continue;
             // Management can retain imported packages whose backend is not executable yet, but
             // generation discovery must publish only models with at least one runnable endpoint.
             if (stored.endpointCapabilities.isEmpty()) continue;
-            TaiModelSpec spec = TaiContextWindowPolicy.apply(stored, device.memoryBytes,
-                settings.getRuntimeOptions(stored).contextWindow);
+            // Speech-to-text models aren't chat models: MultiBackendTaiRuntime doesn't route
+            // speech_to_text yet (phase 2), and they're never a valid /v1/chat/completions target.
+            if (stored.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
+            if (stored.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) continue;
+            // Vision tool models are never a chat target.
+            if (stored.isVisionTool()) continue;
+            Integer userContext = settings.getRuntimeOptions(stored).contextWindow;
+            TaiModelSpec spec = advertisedContextWindow(TaiContextWindowPolicy.apply(stored, device.memoryBytes,
+                userContext), device, presence, userContext != null);
             // Advertise multimodal LiteRT models as separate modality-scoped ids (chat / -vision /
             // -audio), matching Edge Gallery's per-task loading. See TaiModelVariants.
             for (TaiModelSpec variant : TaiModelVariants.expand(spec,
@@ -930,7 +2178,8 @@ public final class TaiManager {
             }
         }
         installed.put("models", models);
-        return applyAudioHistoryGates(openAiModelsFromTaiModels(installed), device);
+        JSONObject response = applyAudioHistoryGates(openAiModelsFromTaiModels(installed), device);
+        return response;
     }
 
     @NonNull
@@ -1035,6 +2284,9 @@ public final class TaiManager {
                 toolMode = inferredToolMode == null ? "" : inferredToolMode;
             }
             if (!toolMode.isEmpty()) item.put("_tool_mode", toolMode);
+            if (contains(endpointCapabilities, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) {
+                putEmbedderFields(item, model);
+            }
             data.put(item);
         }
 
@@ -1043,6 +2295,49 @@ public final class TaiManager {
         response.put("data", data);
         response.put("models", codexModels(data));
         return response;
+    }
+
+    /**
+     * The embedder-specific fields dawn's brief asks {@code /v1/models} for (item 3): output
+     * dimensions, the Matryoshka sizes {@code dimensions} may truncate to, a stable revision so
+     * dawn knows when to rebuild its index, that vectors are L2-normalised, and the largest batch
+     * {@code /v1/embeddings} accepts (item 4). Context window is already covered by the existing
+     * {@code _endpoint_context_window}, overridden here by the largest installed window graph
+     * because a catalogue install records the catalogue's window rather than the graph's; the
+     * window-routing brief (item 7) also adds {@code _endpoint_windows}, every installed window
+     * sorted ascending, when more than the primary graph is on disk.
+     */
+    private static void putEmbedderFields(@NonNull JSONObject item, @NonNull JSONObject model) throws JSONException {
+        String id = model.optString("id", "");
+        String localPath = model.isNull("localPath") ? null : model.optString("localPath", null);
+        // Window-routing brief item 7: several installed graphs beside one another, keyed by their
+        // own seqNNNN, override the single-file window a catalogue install otherwise records.
+        int[] windows = localPath == null ? new int[0] : TaiModelSpec.windowsFor(localPath);
+        if (windows.length > 0) {
+            item.put("_endpoint_context_window", windows[windows.length - 1]);
+            JSONArray windowsArray = new JSONArray();
+            for (int window : windows) windowsArray.put(window);
+            item.put("_endpoint_windows", windowsArray);
+        } else if (localPath != null && localPath.toLowerCase(Locale.ROOT).endsWith(".litertlm")) {
+            // A .litertlm embedder (EmbeddingGemma 2) is one bundle with no seqNNNN in its name;
+            // its window is the input cap the LiteRT-LM embedding engine is built with.
+            item.put("_endpoint_context_window", LiteRtLmEmbeddingRuntime.MAX_INPUT_TOKENS);
+        }
+        int dimensions = TaiModelSpec.embeddingDimensionsFor(id, localPath);
+        if (dimensions > 0) item.put("_endpoint_dimensions", dimensions);
+        int[] matryoshka = TaiModelSpec.embeddingMatryoshkaDimsFor(id, localPath);
+        if (matryoshka.length > 0) {
+            JSONArray sizes = new JSONArray();
+            for (int size : matryoshka) sizes.put(size);
+            item.put("_endpoint_matryoshka_dims", sizes);
+        }
+        String revision = TaiModelSpec.revisionFor(localPath);
+        if (revision != null) item.put("_revision", revision);
+        item.put("_endpoint_normalized", true);
+        item.put("_endpoint_max_batch", EMBEDDINGS_MAX_BATCH);
+        // Item 5: the policy, not the live state. While /v1/ai/runtime reports
+        // runtime.activeGeneration, embedding runs at background thread priority.
+        item.put("_endpoint_throttle_while_generating", "priority");
     }
 
     @NonNull
@@ -1126,35 +2421,151 @@ public final class TaiManager {
         return false;
     }
 
+    /** {@code /v1/embeddings} accepts at most this many inputs per request (dawn brief item 4);
+     *  a larger batch is refused with 413, not silently truncated or dropped. Dawn is told the
+     *  number through {@code _endpoint_max_batch} on the embedder's {@code /v1/models} entry. */
+    static final int EMBEDDINGS_MAX_BATCH = 64;
+    /** The wait {@link #embeddingsTimeoutMs} gives any embeddings request, before its inputs. */
+    static final long EMBEDDINGS_TIMEOUT_BASE_MS = 120_000L;
+    /** The wait {@link #embeddingsTimeoutMs} adds per input. */
+    static final long EMBEDDINGS_TIMEOUT_PER_INPUT_MS = 5_000L;
+
+    /**
+     * How long the app process waits for the runtime to answer an embeddings request of {@code inputs}
+     * inputs. A request costs one inference per input, so the wait grows with the batch; the base covers
+     * the model load and a throttled batch behind a live chat reply (embeddings run at background priority
+     * then). 64 inputs wait 440 s, one input 125 s. A batch past {@link #EMBEDDINGS_MAX_BATCH} waits
+     * as the cap does: the runtime refuses it at once, and a hung runtime should not hold it longer.
+     */
+    static long embeddingsTimeoutMs(int inputs) {
+        int counted = Math.min(Math.max(0, inputs), EMBEDDINGS_MAX_BATCH);
+        return EMBEDDINGS_TIMEOUT_BASE_MS + counted * EMBEDDINGS_TIMEOUT_PER_INPUT_MS;
+    }
+
+    /**
+     * {@code body} with the embedder Dawn search's feature load plan names as its {@code model} when it
+     * names none; unchanged when it names one, is not JSON, or nothing resolves.
+     */
+    @NonNull
+    private String withEmbeddingModel(@NonNull String body) {
+        if (runtimeProcess) return body;
+        try {
+            JSONObject request = new JSONObject(body);
+            if (!request.optString("model", "").trim().isEmpty()) return body;
+            String id = TaiFeaturePlans.forContext(appContext).plan(TaiFunction.EMBEDDINGS).modelId;
+            if (id == null || id.isEmpty()) return body;
+            return request.put("model", id).toString();
+        } catch (JSONException | RuntimeException e) {
+            return body;
+        }
+    }
+
     @NonNull
     public JSONObject embeddings(@NonNull String body) throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_EMBEDDINGS, delegatedRuntimeBody(body));
+        // No model in the request: the embedder Dawn search's plan names, not the chat
+        // assistant. Resolved before the runtime hand-off so both processes see the same model.
+        body = withEmbeddingModel(body);
+        if (shouldDelegateRuntime()) {
+            List<String> counted = embeddingInputs(parseBody(body));
+            int n = counted == null ? 1 : counted.size();
+            return runtimeRequest(TaiRuntimeIpc.OP_EMBEDDINGS, delegatedRuntimeBody(body), embeddingsTimeoutMs(n));
+        }
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         String encodingFormat = request.optString("encoding_format", "float");
-        if (!encodingFormat.isEmpty() && !"float".equalsIgnoreCase(encodingFormat)) {
+        boolean base64 = "base64".equalsIgnoreCase(encodingFormat);
+        if (!encodingFormat.isEmpty() && !"float".equalsIgnoreCase(encodingFormat) && !base64) {
             return openAiRequestError(400, "unsupported_encoding_format",
-                "Only encoding_format:\"float\" is supported for local embeddings.", "encoding_format");
+                "Only encoding_format:\"float\" or \"base64\" is supported for local embeddings.", "encoding_format");
         }
         boolean hasDimensions = request.has("dimensions");
         int dimensions = hasDimensions ? request.optInt("dimensions", -1) : 0;
         if (hasDimensions && dimensions <= 0) {
             return openAiRequestError(400, "invalid_dimensions", "Embedding dimensions must be positive.", "dimensions");
         }
+        String inputType = request.optString("input_type", LiteRtEmbeddingRuntime.INPUT_TYPE_DOCUMENT);
+        if (!LiteRtEmbeddingRuntime.INPUT_TYPE_QUERY.equals(inputType)
+                && !LiteRtEmbeddingRuntime.INPUT_TYPE_DOCUMENT.equals(inputType)) {
+            return openAiRequestError(400, "invalid_input_type",
+                "input_type must be \"query\" or \"document\".", "input_type");
+        }
+        String title = request.has("title") && !request.isNull("title") ? request.optString("title", null) : null;
         List<String> inputs = embeddingInputs(request);
         if (inputs == null) {
             return openAiRequestError(400, "unsupported_embedding_input",
                 "Embeddings input must be a string or an array of strings.", "input");
         }
+        if (inputs.size() > EMBEDDINGS_MAX_BATCH) {
+            return openAiRequestError(413, "batch_too_large",
+                "At most " + EMBEDDINGS_MAX_BATCH + " inputs are accepted per /v1/embeddings request.", "input");
+        }
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) {
-            return openAiRequestError(404, "model_not_found", "Unknown TAI model: " + modelId, "model");
+            return openAiRequestError(404, "model_not_found", "Unknown model: " + modelId, "model");
         }
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) {
             return openAiRequestError(501, "capability_not_supported",
                 "Embeddings are not supported for model '" + modelId + "'.", "model");
         }
-        return ((MultiBackendTaiRuntime) localRuntime()).embed(spec, inputs, dimensions);
+        // A catalogue built-in that was never downloaded has no graph on disk: say so plainly
+        // instead of failing deep in the runtime.
+        if (spec.localPath == null || spec.localPath.trim().isEmpty()) {
+            return openAiRequestError(404, "model_not_installed",
+                "Model '" + modelId + "' is not downloaded. Download it in the Model centre first.", "model");
+        }
+        // Matryoshka quality holds only at the trained sizes, so a model that lists them takes no other.
+        int[] matryoshka = TaiModelSpec.embeddingMatryoshkaDimsFor(spec.id, spec.localPath);
+        if (dimensions > 0 && matryoshka.length > 0 && !contains(matryoshka, dimensions)) {
+            return openAiRequestError(400, "invalid_dimensions",
+                "dimensions must be one of " + java.util.Arrays.toString(matryoshka) + " for this model.", "dimensions");
+        }
+        MultiBackendTaiRuntime local = (MultiBackendTaiRuntime) localRuntime();
+        if (!local.residency().isResident(TaiResidency.Kind.EMBEDDING, spec.id)) {
+            JSONObject refusal = decideEmbeddingLoad(spec, runtimeOptionsFromRequest(request, spec));
+            if (refusal != null) return refusal;
+        }
+        JSONObject result = local.embed(spec, inputs, dimensions, inputType, title);
+        if (base64 && result.optInt("_statusCode", 200) < 400) applyBase64Encoding(result);
+        return result;
+    }
+
+    /** In place: swaps every {@code data[i].embedding} float array for the little-endian float32
+     *  base64 string OpenAI's {@code encoding_format: "base64"} sends (dawn brief, "nice to have"). */
+    private static void applyBase64Encoding(@NonNull JSONObject result) throws JSONException {
+        JSONArray data = result.optJSONArray("data");
+        if (data == null) return;
+        for (int i = 0; i < data.length(); i++) {
+            JSONObject item = data.optJSONObject(i);
+            JSONArray vector = item == null ? null : item.optJSONArray("embedding");
+            if (item == null || vector == null) continue;
+            java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(vector.length() * 4)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            for (int j = 0; j < vector.length(); j++) buffer.putFloat((float) vector.optDouble(j, 0.0));
+            item.put("embedding", Base64.getEncoder().encodeToString(buffer.array()));
+        }
+    }
+
+    /**
+     * {@code POST /v1/tokenize}: {@code {model, input}} in, {@code {tokens: n}} out (dawn brief,
+     * "nice to have") — the installed embedding model's own tokenizer, so dawn can split notes on
+     * real token counts instead of estimating from characters.
+     */
+    @NonNull
+    public JSONObject tokenize(@NonNull String body) throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_TOKENIZE, delegatedRuntimeBody(body));
+        JSONObject request = parseBody(body);
+        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        String input = request.optString("input", "");
+        TaiModelSpec spec = resolveModel(request, modelId);
+        if (spec == null) {
+            return openAiRequestError(404, "model_not_found", "Unknown model: " + modelId, "model");
+        }
+        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) {
+            return openAiRequestError(501, "capability_not_supported",
+                "Tokenize is only supported for embedding models today.", "model");
+        }
+        MultiBackendTaiRuntime local = (MultiBackendTaiRuntime) localRuntime();
+        return local.tokenize(spec, input);
     }
 
     @Nullable
@@ -1179,6 +2590,568 @@ public final class TaiManager {
         return inputs;
     }
 
+    /**
+     * OpenAI-style speech-to-text: {@code file} (a path — the API server writes uploads to
+     * {@code cacheDir/tai-ipc}, and a path under Termux home or shared storage is accepted from
+     * scripts), {@code model} (default: the installed speech model from settings), {@code language}
+     * (ISO 639-1, multilingual Whisper graphs only; Parakeet detects it) and {@code prompt} (a
+     * vocabulary line Whisper biases towards; Parakeet has no prompt). The app process resolves the
+     * model and forwards to the runtime process, whose STT lane runs the engine's interpreter.
+     * Answers {@code {text, language, duration, segments, ...}}.
+     */
+    @NonNull
+    public JSONObject transcribe(@NonNull String body) throws JSONException {
+        return transcribe(body, DEFAULT_TRANSCRIBE_TIMEOUT_MS);
+    }
+
+    /**
+     * As {@link #transcribe(String)}, with the IPC deadline the caller wants instead of the flat
+     * default — a voice-input segment gives itself a much shorter one, so a hung runtime fails
+     * that one segment instead of stalling for the full timeout.
+     */
+    @NonNull
+    public JSONObject transcribe(@NonNull String body, long timeoutMs) throws JSONException {
+        JSONObject request = parseBody(body);
+        TaiModelSpec spec = resolveSpeechModel(request);
+        if (spec == null) return speechModelError(request);
+        String path = request.optString("file", "").trim();
+        if (path.isEmpty()) return openAiRequestError(400, "stt_audio_missing", "Provide the audio as multipart 'file' or a 'file' path.", "file");
+        if (shouldDelegateRuntime()) {
+            File audio = new File(path);
+            if (!isSttIpcFile(audio)) {
+                // A path from a script: the same roots /v1/chat/completions accepts local media from.
+                try {
+                    path = TaiMediaAccess.resolveLocalPath(path);
+                } catch (JSONException e) {
+                    return openAiRequestError(400, "stt_audio_unreadable", mediaAccessMessage(e), "file");
+                }
+            }
+            if (!new File(path).isFile()) return openAiRequestError(400, "stt_audio_missing", "Audio file not found: " + path, "file");
+            request.put("file", path);
+            return runtimeRequest(TaiRuntimeIpc.OP_TRANSCRIBE, delegatedSpeechBody(request, spec), timeoutMs);
+        }
+        rememberSttIdleLimit(request);
+        File audio = new File(path);
+        if (!audio.isFile()) return openAiRequestError(400, "stt_audio_missing", "Audio file not found: " + path, "file");
+        try {
+            TaiRuntime local = localRuntime();
+            if (!(local instanceof MultiBackendTaiRuntime)) {
+                return openAiRequestError(501, "capability_not_supported", "Speech-to-text needs the multi-backend runtime.", "model");
+            }
+            MultiBackendTaiRuntime router = (MultiBackendTaiRuntime) local;
+            if (!router.residency().isResident(TaiResidency.Kind.STT, spec.id)) {
+                JSONObject refusal = decideSttLoad(spec);
+                if (refusal != null) return refusal;
+            }
+            String language = stringOverride(request, "language");
+            return router.transcribe(spec, audio, language, biasPromptFor(request));
+        } finally {
+            // The upload was written for this one request; scripts' own files are left alone.
+            if (isSttIpcFile(audio)) {
+                //noinspection ResultOfMethodCallIgnored
+                audio.delete();
+            }
+        }
+    }
+
+    /** Loads the speech model ahead of its first request, so the load overlaps the first words spoken. */
+    @NonNull
+    public JSONObject sttWarm(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        TaiModelSpec spec = resolveSpeechModel(request);
+        if (spec == null) return speechModelError(request);
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_STT_WARM, delegatedSpeechBody(request, spec));
+        rememberSttIdleLimit(request);
+        TaiRuntime local = localRuntime();
+        if (!(local instanceof MultiBackendTaiRuntime)) {
+            return openAiRequestError(501, "capability_not_supported", "Speech-to-text needs the multi-backend runtime.", "model");
+        }
+        MultiBackendTaiRuntime router = (MultiBackendTaiRuntime) local;
+        if (!router.residency().isResident(TaiResidency.Kind.STT, spec.id)) {
+            JSONObject refusal = decideSttLoad(spec);
+            if (refusal != null) return refusal;
+        }
+        return router.sttWarm(spec);
+    }
+
+    /** The idle limit for a resident speech model, for the runtime process's memory watch. */
+    public long sttIdleLimitMs() {
+        return sttIdleLimitMs;
+    }
+
+    // ---- speech output ----
+
+    /** One sentence of speech for {@link #synthesizeSpeech}: PCM16 little-endian mono at {@code sampleRate}. */
+    public interface SpeechAudioSink {
+        void onAudio(@NonNull byte[] pcm16, int sampleRate) throws IOException;
+    }
+
+    /**
+     * The IPC deadline for {@link #speak}: the call returns only once the text has been heard, so
+     * the deadline covers synthesis and playback of the whole text, generously (a slow phone
+     * synthesising slower than it speaks, and the model load on first use). Time the runtime spent
+     * paused ({@link #pauseSpeaking}) does not count against it; see {@link #speechPauses}.
+     */
+    static long speakTimeoutMs(int chars) {
+        return Math.min(60L * 60_000L, 60_000L + chars * 200L);
+    }
+
+    /**
+     * The app process's note of how long the phone's speech has been paused, opened when the
+     * runtime confirms a pause and closed on resume or stop, so a {@link #speak} waiting on the
+     * runtime moves its deadline out for as long as the user keeps it paused. The runtime keeps its
+     * own ({@link TaiTtsPlayer#awaitDone}).
+     */
+    private final TaiPauseClock speechPauses = new TaiPauseClock();
+
+    /**
+     * Speaks {@code input} through the phone's speaker with the speech-output model and returns
+     * when it has been heard or stopped: {@code tai speak}, Read aloud and the settings sample.
+     * Body: {@code input} (or {@code text}), {@code voice}, {@code speed}, {@code model}; voice and
+     * speed default to the settings'. Answers {@code ok, model, voice, speed, sentences,
+     * audioSeconds, firstSoundMs, played, stopped, timings}.
+     */
+    @NonNull
+    public JSONObject speak(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        TaiSpeechRequest parsed = parseSpeechRequest(request, TaiSpeechRequest.MAX_SPEAK_CHARS);
+        if (!parsed.isValid()) return speechRefusal(parsed);
+        TaiModelSpec spec = resolveTtsModel(request, parsed);
+        if (spec == null) return ttsModelError(request, parsed);
+        if (shouldDelegateRuntime()) {
+            if (runtimeClient == null) return error(500, "runtime_client_unavailable", "On-device AI runtime service client is unavailable.");
+            return runtimeClient.request(TaiRuntimeIpc.OP_TTS_SPEAK, delegatedTtsBody(parsed, spec),
+                speakTimeoutMs(parsed.text.length()), speechPauses);
+        }
+        MultiBackendTaiRuntime router = ttsRouter();
+        if (router == null) return noTtsRuntime();
+        JSONObject refusal = decideTtsLoad(router, spec);
+        if (refusal != null) return refusal;
+        JSONObject spoken = TaiSpeechOutput.speak(appContext, router, spec, parsed);
+        closeVoiceIfItsGroupIsTight(router, spec);
+        return spoken;
+    }
+
+    /**
+     * Decision 8's second yield: while a group read aloud belongs to is in use and free memory is under
+     * the hold floor, the voice model closes after each reply ({@link TaiFeaturePlan#readAloudResidency})
+     * instead of staying for its idle limit. The chat window, which yields first, is the budget's own ladder.
+     */
+    private void closeVoiceIfItsGroupIsTight(@NonNull MultiBackendTaiRuntime router, @NonNull TaiModelSpec spec) {
+        try {
+            long hold = TaiLoadBudget.floorBytes(false, gateConditions());
+            long available = TaiMemInfo.read(appContext).availBytes;
+            boolean tight = hold > 0L && available > 0L && available < hold;
+            List<TaiResidency.Entry> residents = router.residency().snapshot();
+            if (TaiFeaturePlan.readAloudResidency(residents, System.currentTimeMillis(), tight)
+                    != TaiFeaturePlan.Residency.PER_REPLY) return;
+            TaiResidency.Entry voice = router.residency().find(TaiResidency.Kind.TTS, spec.id);
+            if (voice != null && !voice.busy) router.evict(Collections.singletonList(voice));
+        } catch (JSONException | RuntimeException ignored) {
+            // The idle limit closes it later in any case.
+        }
+    }
+
+    /** Stops whatever the phone is saying; answers {@code {ok, stopped}}. Never waits for synthesis. */
+    @NonNull
+    public JSONObject stopSpeaking() throws JSONException {
+        if (shouldDelegateRuntime()) {
+            speechPauses.resume(SystemClock.elapsedRealtime());
+            return runtimeRequest(TaiRuntimeIpc.OP_TTS_STOP, "{}", RUNTIME_STATUS_TIMEOUT_MS);
+        }
+        return TaiSpeechOutput.stop(ttsRouter());
+    }
+
+    /**
+     * Pauses the phone's speech where it is, mid-word; the speak call stays open until it is
+     * resumed or stopped. Answers {@code {ok, paused}}, {@code paused} false when nothing was
+     * playing (between two of Read aloud's sentences, say). Never waits for synthesis.
+     */
+    @NonNull
+    public JSONObject pauseSpeaking() throws JSONException {
+        if (shouldDelegateRuntime()) {
+            JSONObject result = runtimeRequest(TaiRuntimeIpc.OP_TTS_PAUSE, "{}", RUNTIME_STATUS_TIMEOUT_MS);
+            if (result.optBoolean("paused", false)) speechPauses.pause(SystemClock.elapsedRealtime());
+            return result;
+        }
+        return TaiSpeechOutput.pause();
+    }
+
+    /** Carries paused speech on from where it stopped; answers {@code {ok, resumed}}. */
+    @NonNull
+    public JSONObject resumeSpeaking() throws JSONException {
+        if (shouldDelegateRuntime()) {
+            speechPauses.resume(SystemClock.elapsedRealtime());
+            return runtimeRequest(TaiRuntimeIpc.OP_TTS_RESUME, "{}", RUNTIME_STATUS_TIMEOUT_MS);
+        }
+        return TaiSpeechOutput.resume();
+    }
+
+    /** Answers {@code {ok, speaking, sounding, paused}} for the phone's speech; see {@link TaiSpeechOutput#state}. */
+    @NonNull
+    public JSONObject speechState() throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_TTS_STATE, "{}", RUNTIME_STATUS_TIMEOUT_MS);
+        return TaiSpeechOutput.state();
+    }
+
+    /** Loads the speech-output model ahead of its first sentence. */
+    @NonNull
+    public JSONObject ttsWarm(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        TaiSpeechRequest parsed = TaiSpeechRequest.parse(new JSONObject(request.toString()).put("input", "."),
+            settings.getTtsVoice(), settings.getTtsSpeed(), TaiSpeechRequest.MAX_SPEAK_CHARS);
+        TaiModelSpec spec = resolveTtsModel(request, parsed);
+        if (spec == null) return ttsModelError(request, parsed);
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_TTS_WARM, delegatedTtsBody(parsed, spec));
+        MultiBackendTaiRuntime router = ttsRouter();
+        if (router == null) return noTtsRuntime();
+        JSONObject refusal = decideTtsLoad(router, spec);
+        if (refusal != null) return refusal;
+        return router.ttsWarm(spec);
+    }
+
+    /**
+     * Checks a speech request without running it: the refusal (OpenAI error shape with
+     * {@code _statusCode}) or {@code null} when it would run. The API calls this before it commits
+     * to a 200 and a streamed body.
+     */
+    @Nullable
+    public JSONObject checkSpeechRequest(@NonNull String body, int maxChars) throws JSONException {
+        JSONObject request = parseBody(body);
+        TaiSpeechRequest parsed = parseSpeechRequest(request, maxChars);
+        if (!parsed.isValid()) return speechRefusal(parsed);
+        return resolveTtsModel(request, parsed) == null ? ttsModelError(request, parsed) : null;
+    }
+
+    /** {@code wav} or {@code pcm} for a request that {@link #checkSpeechRequest} accepted. */
+    @NonNull
+    public static String speechResponseFormat(@NonNull String body) {
+        try {
+            return TaiSpeechRequest.parse(new JSONObject(body.trim().isEmpty() ? "{}" : body), TaiTtsVoices.DEFAULT_VOICE,
+                TaiTtsVoices.DEFAULT_SPEED, Integer.MAX_VALUE).format;
+        } catch (JSONException e) {
+            return TaiSpeechRequest.FORMAT_WAV;
+        }
+    }
+
+    /** The 44-byte RIFF header for {@code dataBytes} of mono PCM16, for the API's {@code wav} answer. */
+    @NonNull
+    public static byte[] wavHeader(int dataBytes, int sampleRate) {
+        return TaiWav.header(dataBytes, sampleRate);
+    }
+
+    /** The limit {@code /v1/audio/speech} applies, OpenAI's; {@code tai speak} gets {@link #speakCharacterLimit}. */
+    public static int apiSpeechCharacterLimit() {
+        return TaiSpeechRequest.MAX_API_CHARS;
+    }
+
+    public static int speakCharacterLimit() {
+        return TaiSpeechRequest.MAX_SPEAK_CHARS;
+    }
+
+    /**
+     * Synthesises without playing, handing each sentence to {@code sink} as it is ready: the
+     * OpenAI {@code /v1/audio/speech} route and {@code tai speak --out}. The runtime process writes
+     * each sentence as a PCM16 file under {@code cacheDir/tai-ipc} and says so; this side reads
+     * it, deletes it and passes the bytes on, so audio never crosses the Messenger inline. Returns
+     * the runtime's summary, or a refusal or failure in the OpenAI error shape. When {@code sink}
+     * throws (the HTTP client went away) synthesis is stopped and the exception rethrown.
+     */
+    @NonNull
+    public JSONObject synthesizeSpeech(@NonNull String body, int maxChars, @NonNull SpeechAudioSink sink)
+            throws JSONException, IOException {
+        JSONObject request = parseBody(body);
+        TaiSpeechRequest parsed = parseSpeechRequest(request, maxChars);
+        if (!parsed.isValid()) return speechRefusal(parsed);
+        TaiModelSpec spec = resolveTtsModel(request, parsed);
+        if (spec == null) return ttsModelError(request, parsed);
+        if (!shouldDelegateRuntime()) {
+            // In-process (a runtime override): synthesise straight into the sink.
+            MultiBackendTaiRuntime router = ttsRouter();
+            if (router == null) return noTtsRuntime();
+            final IOException[] failure = new IOException[1];
+            JSONObject result = router.synthesizeSpeech(spec, parsed.text, parsed.voice, parsed.speed, (samples, count, index) -> {
+                byte[] pcm = new byte[count * 2];
+                TaiWav.floatToPcm16(samples, 0, count, pcm, 0);
+                try {
+                    sink.onAudio(pcm, router.ttsSampleRate());
+                    return true;
+                } catch (IOException e) {
+                    failure[0] = e;
+                    return false;
+                }
+            }, () -> failure[0] != null);
+            if (failure[0] != null) throw failure[0];
+            return result;
+        }
+        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "On-device AI runtime service client is unavailable.");
+        final JSONObject[] summary = new JSONObject[1];
+        try {
+            runtimeClient.stream(TaiRuntimeIpc.OP_TTS_SYNTHESIZE, delegatedTtsBody(parsed, spec), new OpenAiStreamSink() {
+                @Override
+                public void onEvent(@NonNull JSONObject event) throws IOException {
+                    String file = event.optString("file", "");
+                    if (!file.isEmpty()) {
+                        File pcm = new File(file);
+                        try {
+                            sink.onAudio(readAllBytes(pcm), event.optInt("sampleRate", KittenTtsRuntime.SAMPLE_RATE));
+                        } finally {
+                            //noinspection ResultOfMethodCallIgnored
+                            pcm.delete();
+                        }
+                    } else if (event.has("result")) {
+                        summary[0] = event.optJSONObject("result");
+                    } else if (event.has("error")) {
+                        summary[0] = event;
+                    }
+                }
+
+                @Override
+                public void onDone() {
+                }
+            });
+        } catch (IOException | RuntimeException e) {
+            // The client went away mid-stream: stop synthesising audio nobody will hear.
+            try {
+                stopSpeaking();
+            } catch (JSONException ignored) {
+            }
+            throw e;
+        }
+        if (summary[0] == null) return error(500, "tts_stream_incomplete", "The speech runtime ended without a result.");
+        return summary[0];
+    }
+
+    /** The runtime-process half of {@link #synthesizeSpeech}: files out, one event per sentence, then the summary. */
+    void synthesizeSpeechToEvents(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        JSONObject request = parseBody(body);
+        TaiSpeechRequest parsed = parseSpeechRequest(request, TaiSpeechRequest.MAX_SPEAK_CHARS);
+        TaiModelSpec spec = parsed.isValid() ? resolveTtsModel(request, parsed) : null;
+        MultiBackendTaiRuntime router = ttsRouter();
+        JSONObject result;
+        if (!parsed.isValid()) {
+            result = speechRefusal(parsed);
+        } else if (spec == null) {
+            result = ttsModelError(request, parsed);
+        } else if (router == null) {
+            result = noTtsRuntime();
+        } else {
+            JSONObject refusal = decideTtsLoad(router, spec);
+            if (refusal != null) {
+                result = refusal;
+            } else {
+                final IOException[] failure = new IOException[1];
+                result = TaiSpeechOutput.synthesizeToFiles(appContext, router, spec, parsed, (file, samples, sampleRate, index) -> {
+                    try {
+                        JSONObject event = new JSONObject();
+                        event.put("file", file.getAbsolutePath());
+                        event.put("samples", samples);
+                        event.put("sampleRate", sampleRate);
+                        event.put("index", index);
+                        sink.onEvent(event);
+                        return true;
+                    } catch (IOException | JSONException e) {
+                        failure[0] = e instanceof IOException ? (IOException) e : new IOException(e.getMessage());
+                        //noinspection ResultOfMethodCallIgnored
+                        file.delete();
+                        return false;
+                    }
+                });
+                if (failure[0] != null) throw failure[0];
+            }
+        }
+        if (result.has("error") && !result.optBoolean("ok", true)) {
+            sink.onEvent(result);
+        } else {
+            sink.onEvent(new JSONObject().put("result", result));
+        }
+        sink.onDone();
+    }
+
+    @NonNull
+    private TaiSpeechRequest parseSpeechRequest(@NonNull JSONObject request, int maxChars) {
+        return TaiSpeechRequest.parse(request, settings.getTtsVoice(), settings.getTtsSpeed(), maxChars);
+    }
+
+    @NonNull
+    private JSONObject speechRefusal(@NonNull TaiSpeechRequest parsed) throws JSONException {
+        return openAiRequestError(parsed.statusCode, parsed.errorCode == null ? "bad_request" : parsed.errorCode,
+            parsed.errorMessage == null ? "Bad speech request." : parsed.errorMessage, parsed.errorParam);
+    }
+
+    @NonNull
+    private JSONObject noTtsRuntime() throws JSONException {
+        return openAiRequestError(501, "capability_not_supported", "Speech output needs the multi-backend runtime.", "model");
+    }
+
+    /**
+     * The speech-output model a request names, or the installed one when it names none, one of
+     * OpenAI's speech model names, or an id this phone has never heard of (OpenAI-shaped clients
+     * send a model field they may not know how to leave out); {@code null} when that does not
+     * resolve to a {@code text_to_speech} model. In the runtime process the app process's
+     * resolved spec rides along in the body.
+     */
+    @Nullable
+    private TaiModelSpec resolveTtsModel(@NonNull JSONObject request, @NonNull TaiSpeechRequest parsed) {
+        String modelId = parsed.model;
+        if (runtimeProcess) {
+            TaiModelSpec supplied = resolveModel(request, modelId);
+            return supplied != null && TaiTtsModels.isTtsModel(supplied) ? supplied : null;
+        }
+        if (TaiSpeechRequest.isDefaultModelAlias(modelId)) return TaiTtsModels.resolveActive(appContext, modelStore);
+        TaiModelSpec spec = resolveModel(request, modelId);
+        if (spec == null && TaiModelCatalog.get(modelId) == null) return TaiTtsModels.resolveActive(appContext, modelStore);
+        return spec != null && TaiTtsModels.isTtsModel(spec) ? spec : null;
+    }
+
+    @NonNull
+    private JSONObject ttsModelError(@NonNull JSONObject request, @NonNull TaiSpeechRequest parsed) throws JSONException {
+        String modelId = parsed.model;
+        TaiModelSpec spec = TaiSpeechRequest.isDefaultModelAlias(modelId) ? null : resolveModel(request, modelId);
+        if (spec != null && !TaiTtsModels.isTtsModel(spec)) {
+            return openAiRequestError(400, "not_a_tts_model", "Model '" + modelId + "' is not a voice model.", "model");
+        }
+        if (!TaiSpeechRequest.isDefaultModelAlias(modelId) && TaiModelCatalog.get(modelId) != null) {
+            return openAiRequestError(400, "tts_model_not_installed", "Model '" + modelId + "' is not installed.", "model");
+        }
+        return openAiRequestError(400, "tts_model_not_installed",
+            "No voice model is installed. Get one in On-device AI settings > Model centre > Speech > Voice output.", "model");
+    }
+
+    /** The runtime-process body: the parsed request with the resolved spec riding along. */
+    @NonNull
+    private String delegatedTtsBody(@NonNull TaiSpeechRequest parsed, @NonNull TaiModelSpec spec) throws JSONException {
+        JSONObject body = new JSONObject();
+        body.put("input", parsed.text);
+        body.put("voice", parsed.voice);
+        body.put("speed", (double) parsed.speed);
+        body.put("response_format", parsed.format);
+        body.put("model", spec.id);
+        body.put(INTERNAL_MODEL_SPEC, spec.toJson());
+        return body.toString();
+    }
+
+    @Nullable
+    private MultiBackendTaiRuntime ttsRouter() {
+        TaiRuntime local = runtime;
+        return local instanceof MultiBackendTaiRuntime ? (MultiBackendTaiRuntime) local : null;
+    }
+
+    /**
+     * The budget for a speech-output model that is not resident yet: the measured or estimated
+     * cost against what is free, with idle embeddings evicted if that is what it takes. Speech
+     * output never evicts speech-to-text or chat: dictating and chatting matter more than a voice
+     * that reloads in a second. {@code null} means go ahead.
+     */
+    @Nullable
+    private JSONObject decideTtsLoad(@NonNull MultiBackendTaiRuntime router, @NonNull TaiModelSpec spec) throws JSONException {
+        if (router.residency().isResident(TaiResidency.Kind.TTS, spec.id)) return null;
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+        List<TaiResidency.Entry> residents = router.residency().snapshot();
+        long available = TaiResidency.creditedAvailable(availableMemory(device), residents, TaiResidency.Kind.TTS, spec.backend);
+        long worst = TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 0);
+        TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
+            : TaiLoadBudget.Estimate.ratio(TaiResidency.ttsEstimateBytes(spec), 0L);
+        List<TaiResidency.Entry> candidates = new ArrayList<>();
+        for (TaiResidency.Entry entry : TaiResidency.evictionCandidates(residents, TaiResidency.Kind.TTS, spec.backend,
+                TaiFunction.READ_ALOUD, System.currentTimeMillis())) {
+            if (entry.kind == TaiResidency.Kind.EMBEDDING) candidates.add(entry);
+        }
+        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
+            candidates, gateConditions());
+        if (!plan.fits) return openAiError(insufficientMemory(spec.displayName, plan));
+        evict(plan);
+        return null;
+    }
+
+    @NonNull
+    private static byte[] readAllBytes(@NonNull File file) throws IOException {
+        long length = file.length();
+        if (length > Integer.MAX_VALUE) throw new IOException("Audio file too large");
+        byte[] out = new byte[(int) length];
+        try (java.io.FileInputStream in = new java.io.FileInputStream(file)) {
+            int done = 0;
+            while (done < out.length) {
+                int read = in.read(out, done, out.length - done);
+                if (read < 0) break;
+                done += read;
+            }
+            return done == out.length ? out : java.util.Arrays.copyOf(out, done);
+        }
+    }
+
+    /**
+     * The vocabulary line behind {@code <|startofprev|>}: the request's OpenAI {@code prompt},
+     * trimmed, or none (plain dictation). There is no built-in vocabulary any more: the shell
+     * bias hurt prose (dropped words, noise read as "ok"), and voice input is dictation only.
+     */
+    @Nullable
+    static String biasPromptFor(@NonNull JSONObject request) {
+        String prompt = request.optString("prompt", "").trim();
+        return prompt.isEmpty() ? null : prompt;
+    }
+
+    /** The speech model a request names, or the one voice input uses; {@code null} when neither resolves. */
+    @Nullable
+    private TaiModelSpec resolveSpeechModel(@NonNull JSONObject request) {
+        String modelId = speechModelIdFor(request);
+        if (modelId.isEmpty()) return null;
+        TaiModelSpec spec = resolveModel(request, modelId);
+        return spec != null && spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT) ? spec : null;
+    }
+
+    /** The request's model, else the installed speech model the settings choose — a stored id whose
+     *  files are gone counts as unset and another installed speech model stands in for it. */
+    @NonNull
+    private String speechModelIdFor(@NonNull JSONObject request) {
+        String requested = requestedModelId(request, "");
+        return requested.isEmpty() ? TaiSpeechModels.activeModelId(appContext) : requested;
+    }
+
+    @NonNull
+    private JSONObject speechModelError(@NonNull JSONObject request) throws JSONException {
+        String modelId = speechModelIdFor(request);
+        if (modelId.isEmpty()) {
+            return openAiRequestError(400, "stt_model_not_configured",
+                "No speech-to-text model is installed. Get one in On-device AI settings > Model centre > Speech.", "model");
+        }
+        TaiModelSpec spec = resolveModel(request, modelId);
+        if (spec == null) return openAiRequestError(404, "model_not_found", "Unknown model: " + modelId, "model");
+        return openAiRequestError(400, "not_a_speech_model", "Model '" + modelId + "' is not a speech-to-text model.", "model");
+    }
+
+    /** The runtime-process body for a speech request: the resolved spec and the STT idle setting ride along. */
+    @NonNull
+    private String delegatedSpeechBody(@NonNull JSONObject request, @NonNull TaiModelSpec spec) throws JSONException {
+        request.remove(INTERNAL_RUNTIME_OPTIONS);
+        request.put("model", spec.id);
+        request.put(INTERNAL_MODEL_SPEC, spec.toJson());
+        request.put(INTERNAL_STT_IDLE_MINUTES, settings.getSttIdleUnloadMinutes());
+        return request.toString();
+    }
+
+    private void rememberSttIdleLimit(@NonNull JSONObject request) {
+        if (!runtimeProcess || !request.has(INTERNAL_STT_IDLE_MINUTES)) return;
+        sttIdleLimitMs = java.util.concurrent.TimeUnit.MINUTES.toMillis(Math.max(0, request.optInt(INTERNAL_STT_IDLE_MINUTES, 0)));
+    }
+
+    /** Whether {@code file} is one of the uploads the API server wrote under {@code cacheDir/tai-ipc}. */
+    private boolean isSttIpcFile(@NonNull File file) {
+        try {
+            File dir = new File(appContext.getCacheDir(), STT_IPC_DIR).getCanonicalFile();
+            return file.getCanonicalFile().getParentFile() != null && dir.equals(file.getCanonicalFile().getParentFile());
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    @NonNull
+    private static String mediaAccessMessage(@NonNull JSONException e) {
+        String message = e.getMessage() == null ? "" : e.getMessage();
+        int colon = message.indexOf(':');
+        return colon > 0 ? message.substring(colon + 1) : message;
+    }
+
     @NonNull
     private JSONObject openAiRequestError(int statusCode, @NonNull String code,
                                           @NonNull String message, @Nullable String param) throws JSONException {
@@ -1198,7 +3171,7 @@ public final class TaiManager {
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
+        if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         String requestedBackend = request.optString("backend", "").trim();
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
             return error(409, "backend_mismatch", "Model " + modelId + " requires backend " + spec.backend + ".");
@@ -1221,28 +3194,774 @@ public final class TaiManager {
     @Nullable
     private JSONObject ensureModelLoadedForGeneration(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
         String modelId = spec.id;
-        if (localRuntime().isModelLoaded(modelId)) return null;
+        // Resident: used as it is, unless a feature asks for a larger window than it was loaded with
+        // (decision 5) - then it reloads once at the feature's window, and stays if that cannot happen.
+        boolean resident = localRuntime().isModelLoaded(modelId);
+        if (resident && residentServes(spec, options)) {
+            markUsedByFeature(spec, options);
+            return null;
+        }
         if (hasInjectedRuntimeOverride()) {
             JSONObject load = localRuntime().load(spec, options);
             if (!load.optBoolean("ok", false)) return load;
             return null;
         }
         if (!settings.isOpenAiAutoLoadEnabled()) {
+            if (resident) return null;
             JSONObject data = error(409, "model_not_loaded",
-                "Model is not loaded. Load it explicitly with tai load or from TAI settings.");
+                "Model is not loaded. Load it explicitly with tai load or from On-device AI settings.");
             data.put("autoLoadEnabled", false);
             return data;
         }
         TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, true);
         if (preflight.blocked) {
-            return preflight.blockingError(preflightStatusCode(preflight));
+            return resident ? null : preflight.blockingError(preflightStatusCode(preflight));
         }
-        TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
-        JSONObject load = localRuntime().load(spec, loadOptions);
+        LoadDecision decision = decideLoad(spec, options, preflight);
+        if (decision.refusal != null) return resident ? null : decision.refusal;
+        JSONObject load = loadWithCanary(spec, decision.options);
         load.put("preflight", preflight.toJson());
+        decision.describe(load);
         recordRuntimeResult(spec, preflight, load);
         if (!load.optBoolean("ok", false)) return load;
+        markLoadedAsking(spec, options);
+        markUsedByFeature(spec, options);
         return null;
+    }
+
+    /** The canary runs at most once per process, whatever it finds. */
+    private static final java.util.concurrent.atomic.AtomicBoolean GPU_CANARY_RAN =
+        new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    /**
+     * A chat load, with the GPU check of spec section 2.3 after it. On the first GPU load of a Gemma 4
+     * file on a phone whose GPU path is unconfirmed, a fixed prompt is answered greedily before the
+     * caller's request; a wrong answer (or a crash, which {@link TaiGpuVerdict} reads on the next
+     * start) stores Failed, and this load is redone on the CPU with the reason stamped on it.
+     */
+    @NonNull
+    private JSONObject loadWithCanary(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
+        JSONObject result = localRuntime().load(spec, options);
+        if (!result.optBoolean("ok", false)) return result;
+        TaiPlatformCaps.GpuPath path = TaiPlatformCaps.cached(appContext).gpuPath;
+        if (!TaiGpuVerdict.shouldRunCanary(path, spec.id, options.accelerator, GPU_CANARY_RAN.get())) return result;
+        if (!GPU_CANARY_RAN.compareAndSet(false, true)) return result;
+        boolean passed;
+        TaiGpuVerdict.beginCanary(appContext);
+        try {
+            TaiRuntimeOptions canary = options.withGenerationOverrides(TaiGpuVerdict.CANARY_MAX_TOKENS, null, null, 0.0,
+                null, null, null, null, null, Boolean.FALSE, Boolean.FALSE);
+            JSONObject reply = localRuntime().chat(spec.id, "", TaiGpuVerdict.CANARY_PROMPT, canary);
+            passed = reply.optBoolean("ok", false) && TaiGpuVerdict.canaryPasses(reply.optString("response", ""));
+        } catch (JSONException | RuntimeException e) {
+            passed = false;
+        }
+        TaiGpuVerdict.finishCanary(appContext, passed);
+        if (passed) return result;
+        TaiEventLog.log(appContext, TaiEventLog.ACCEL_FALLBACK, spec.id, spec.backend, TaiTierPolicy.ACCEL_GPU,
+            0, 0L, 0L, TaiGpuVerdict.REASON_FAILED);
+        TaiAcceleratorFallback.set(spec.id, TaiGpuVerdict.REASON_FAILED);
+        JSONObject cpu = localRuntime().load(spec, options.withAccelerator(TaiTierPolicy.ACCEL_CPU));
+        if (cpu.optBoolean("ok", false) && cpu.isNull("backendFallbackReason")) {
+            cpu.put("backendFallbackReason", TaiGpuVerdict.REASON_FAILED);
+        }
+        return cpu;
+    }
+
+    /** The options a load goes ahead with, or the refusal the memory budget answered instead. */
+    private static final class LoadDecision {
+        @Nullable final TaiRuntimeOptions options;
+        @Nullable final JSONObject refusal;
+        @NonNull final TaiLoadBudget.Plan plan;
+        /** Residents closed to make room, in order; empty when the load fit as is. */
+        @NonNull final List<String> evicted;
+        /** Why the plan's accelerator is not the model's first choice; empty when it is. */
+        @NonNull final String acceleratorFallbackReason;
+
+        LoadDecision(@Nullable TaiRuntimeOptions options, @Nullable JSONObject refusal,
+                     @NonNull TaiLoadBudget.Plan plan, @NonNull List<String> evicted) {
+            this(options, refusal, plan, evicted, "");
+        }
+
+        LoadDecision(@Nullable TaiRuntimeOptions options, @Nullable JSONObject refusal,
+                     @NonNull TaiLoadBudget.Plan plan, @NonNull List<String> evicted,
+                     @NonNull String acceleratorFallbackReason) {
+            this.options = options;
+            this.refusal = refusal;
+            this.plan = plan;
+            this.evicted = evicted;
+            this.acceleratorFallbackReason = acceleratorFallbackReason;
+        }
+
+        /** Stamps the load result with the budget and what was evicted for it. */
+        void describe(@NonNull JSONObject result) throws JSONException {
+            result.put("memoryBudget", planJson(plan));
+            result.put("evicted", new JSONArray(evicted));
+            if (!acceleratorFallbackReason.isEmpty()) {
+                result.put("acceleratorFallbackReason", acceleratorFallbackReason);
+                if (result.isNull("backendFallbackReason")) result.put("backendFallbackReason", acceleratorFallbackReason);
+            }
+        }
+    }
+
+    /**
+     * A dry run of the memory budget for a momentary load of {@code modelId} (a model the caller
+     * unloads within a minute, such as a background job) as it would be decided now: the
+     * same request {@link #decideLoad} builds, but nothing is evicted, logged or loaded. Null when
+     * it cannot be worked out (unknown model, a blocked preflight, an error): the caller then goes
+     * ahead and lets the real load decide. Not for the main thread.
+     */
+    @Nullable
+    public TaiLoadBudget.Plan previewMomentaryLoad(@NonNull String modelId, @Nullable String accelerator,
+                                                   int contextWindow) {
+        try {
+            TaiModelSpec spec = resolveModel(modelId);
+            if (spec == null) return null;
+            JSONObject request = new JSONObject();
+            request.put("load_class", "momentary");
+            request.put("context_window", contextWindow);
+            if (accelerator != null) request.put("accelerator", accelerator);
+            TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
+            TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, true);
+            if (preflight.blocked) return null;
+            TaiDeviceCapabilities device = preflight.device;
+            List<String> accelerators;
+            if (!"auto".equals(preflight.requestedAccelerator) || TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+                accelerators = Collections.singletonList(preflight.effectiveAccelerator);
+            } else {
+                accelerators = TaiLoadPreflight.autoAccelerators(appContext, spec, device, preflight.profile,
+                    TaiLoadPreflight.normalizeAccelerator(options.preferredAccelerator));
+                if (accelerators.isEmpty()) accelerators = Collections.singletonList(preflight.effectiveAccelerator);
+            }
+            int cap = TaiContextWindowPolicy.effectiveEndpointContextWindow(spec, device.memoryBytes, options.contextWindow);
+            boolean encoders = spec.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
+                || spec.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
+            List<TaiResidency.Entry> residents = residency().snapshot();
+            TaiMemInfo.Reading memory = TaiMemInfo.read(appContext);
+            long available = TaiResidency.creditedAvailable(availableMemory(memory, device), residents,
+                TaiResidency.Kind.CHAT, spec.backend);
+            return TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, TaiResidency.fileBytes(spec), encoders,
+                device.physicalMemoryBytes, available, accelerators, cap,
+                null, 0, options.contextWindow != null,
+                measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend,
+                    TaiFunction.fromId(options.feature), System.currentTimeMillis()),
+                true)
+                .withConditions(gateConditions())
+                .withKvBytesPerToken(kvBytesPerToken(spec))
+                .withGpuless(!device.supportsAccelerator("gpu")));
+        } catch (Exception | LinkageError e) {
+            return null;
+        }
+    }
+
+    /**
+     * Settles accelerator and context window for a load that passed preflight, from the memory free
+     * right now (see {@link TaiLoadBudget}). Every load path goes through here: explicit loads,
+     * keep-warm and the automatic load behind a chat request.
+     */
+    @NonNull
+    private LoadDecision decideLoad(
+        @NonNull TaiModelSpec spec,
+        @NonNull TaiRuntimeOptions options,
+        @NonNull TaiLoadPreflight.Result preflight
+    ) throws JSONException {
+        TaiDeviceCapabilities device = preflight.device;
+        List<String> accelerators;
+        if (!"auto".equals(preflight.requestedAccelerator) || TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+            accelerators = Collections.singletonList(preflight.effectiveAccelerator);
+        } else {
+            accelerators = TaiLoadPreflight.autoAccelerators(appContext, spec, device, preflight.profile,
+                TaiLoadPreflight.normalizeAccelerator(options.preferredAccelerator));
+            if (accelerators.isEmpty()) accelerators = Collections.singletonList(preflight.effectiveAccelerator);
+        }
+        int cap = TaiContextWindowPolicy.effectiveEndpointContextWindow(spec, device.memoryBytes, options.contextWindow);
+        long fileBytes = TaiResidency.fileBytes(spec);
+        boolean encoders = spec.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
+            || spec.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
+        String crashedAccelerator = null;
+        int crashedContext = 0;
+        JSONObject marker = TaiRuntimeCrashMarker.read(appContext);
+        if (marker != null && spec.id.equals(marker.optString("modelId"))) {
+            crashedAccelerator = TaiLoadPreflight.normalizeAccelerator(marker.optString("accelerator", null));
+            crashedContext = marker.optInt("contextWindow", 0);
+        }
+        // The resident chat model is closed before this one initializes, so its bytes are this
+        // load's to spend; every other resident stays and is already missing from availMem — the
+        // idle ones among them are what the plan may evict when it does not fit as is.
+        List<TaiResidency.Entry> residents = residency().snapshot();
+        TaiMemInfo.Reading memory = TaiMemInfo.read(appContext);
+        long available = TaiResidency.creditedAvailable(availableMemory(memory, device), residents,
+            TaiResidency.Kind.CHAT, spec.backend);
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, fileBytes, encoders,
+            device.physicalMemoryBytes, available, accelerators, cap,
+            crashedAccelerator, crashedContext, options.contextWindow != null,
+            measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend,
+                    TaiFunction.fromId(options.feature), System.currentTimeMillis()),
+            options.momentary == Boolean.TRUE)
+            .withConditions(gateConditions())
+            .withKvBytesPerToken(kvBytesPerToken(spec))
+            .withGpuless(!device.supportsAccelerator("gpu")));
+        if (!plan.fits) {
+            TaiEventLog.log(appContext, TaiEventLog.OOM_GUARD, spec.id, spec.backend, plan.accelerator,
+                plan.contextWindow, 0L, plan.neededFreeBytes(),
+                "load refused: needs " + plan.neededFreeBytes() / (1024L * 1024L) + " MB free, "
+                    + plan.availableBytes / (1024L * 1024L) + " MB available");
+            return new LoadDecision(null, insufficientMemory(spec.displayName, plan), plan, Collections.<String>emptyList());
+        }
+        if (plan.overcommitted) {
+            TaiEventLog.log(appContext, TaiEventLog.OOM_GUARD, spec.id, spec.backend, plan.accelerator,
+                plan.contextWindow, 0L, plan.neededFreeBytes(),
+                "load past the budget (unrestricted): needs " + plan.neededFreeBytes() / (1024L * 1024L) + " MB free, "
+                    + plan.availableBytes / (1024L * 1024L) + " MB available");
+        }
+        String fallbackReason = acceleratorFallbackReason(spec, device, preflight, plan, fileBytes, encoders, available,
+            options.momentary == Boolean.TRUE, TaiLoadPreflight.normalizeAccelerator(options.preferredAccelerator));
+        TaiAcceleratorFallback.set(spec.id, fallbackReason);
+        if (!fallbackReason.isEmpty()) {
+            TaiEventLog.log(appContext, TaiEventLog.ACCEL_FALLBACK, spec.id, spec.backend, plan.accelerator,
+                plan.contextWindow, 0L, 0L, fallbackReason);
+        }
+        List<String> evicted = evict(plan);
+        TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
+        if (!TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && plan.accelerator != null
+                && !plan.accelerator.equals(preflight.effectiveAccelerator)) {
+            loadOptions = loadOptions.withAccelerator(plan.accelerator);
+        }
+        return new LoadDecision(loadOptions.withContextWindow(plan.contextWindow), null, plan, evicted, fallbackReason);
+    }
+
+    /**
+     * Why a load goes ahead on other than the model's first compatible accelerator, or an empty
+     * string when it does not: either the first one carries an unexpired failure record, or the
+     * memory budget could not afford it at the floor window. Only automatic loads of LiteRT models
+     * choose; an explicit accelerator is the caller's.
+     */
+    @NonNull
+    private String acceleratorFallbackReason(
+        @NonNull TaiModelSpec spec,
+        @NonNull TaiDeviceCapabilities device,
+        @NonNull TaiLoadPreflight.Result preflight,
+        @NonNull TaiLoadBudget.Plan plan,
+        long fileBytes,
+        boolean encoders,
+        long available,
+        boolean momentary,
+        @Nullable String preferred
+    ) {
+        if (!"auto".equals(preflight.requestedAccelerator) || TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) return "";
+        if (plan.accelerator == null) return "";
+        // The feature's plan, when it names one the model and device take, is the first choice.
+        String first = preferred != null && preflight.profile.supports(preferred) && device.supportsAccelerator(preferred)
+            ? preferred : null;
+        for (String accelerator : preflight.profile.compatibleAccelerators) {
+            if (first != null) break;
+            if (device.supportsAccelerator(accelerator)) first = accelerator;
+        }
+        if (first == null || first.equals(plan.accelerator)) return "";
+        JSONObject failed = TaiRuntimeHistory.failedEntry(appContext, spec, device, first);
+        if (failed != null) {
+            return "history_failure: " + failed.optString("reason", "load failed");
+        }
+        // Quoted at the window the plan actually tried for this accelerator (the director's 2048,
+        // not the chat floor of 4096): the figure in the event must be the one that was refused.
+        TaiLoadBudget.Estimate estimate = TaiLoadBudget.estimate(spec.backend, first, fileBytes, encoders,
+            plan.contextWindow, measuredHistory(spec, device), kvBytesPerToken(spec));
+        long needed = estimate.nonReclaimableBytes + plan.reserveBytes;
+        return (momentary ? "budget(momentary): needs " : "budget: needs ") + needed / (1024L * 1024L) + " MB free, "
+            + available / (1024L * 1024L) + " MB available";
+    }
+
+    /**
+     * The one budget for an embedding model that is not resident yet: the same preflight a chat
+     * load passes, then the measured or file-size estimate against what is free, idle residents
+     * evicted if that is what it takes. Checked only when the runtime does not already hold this
+     * model, never per batch. {@code null} means go ahead.
+     */
+    @Nullable
+    private JSONObject decideEmbeddingLoad(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
+        // Memory only: the chat preflight's ABI, native-library and sidecar checks do not describe an
+        // embedding package, and the embedding runtimes report their own load errors.
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+        // This backend's embedding runtime replaces the model it holds; that one is credited back.
+        List<TaiResidency.Entry> residents = residency().snapshot();
+        long available = TaiResidency.creditedAvailable(availableMemory(device), residents,
+            TaiResidency.Kind.EMBEDDING, spec.backend);
+        long worst = TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device, spec.backend, "cpu", 0);
+        TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
+            : TaiLoadBudget.Estimate.ratio(TaiResidency.embeddingEstimateBytes(spec), 0L);
+        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
+            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.EMBEDDING, spec.backend,
+                TaiFunction.EMBEDDINGS, System.currentTimeMillis()), gateConditions());
+        if (!plan.fits) {
+            JSONObject envelope = openAiError(embeddingMemoryRefusal(spec.displayName, plan));
+            envelope.put("_retryAfterSeconds", EMBEDDING_MEMORY_RETRY_AFTER_SECONDS);
+            return envelope;
+        }
+        evict(plan);
+        return null;
+    }
+
+    /**
+     * Insufficient memory for an embedding load, dawn brief item 5's shape: {@code 503}, a
+     * {@code Retry-After} the server layer turns into a header (see {@code _retryAfterSeconds} in
+     * {@link com.termux.launcherctl.LauncherCtlApiServer#jsonResponse}), and the stable
+     * {@code embedding_memory} code so dawn can back off without guessing at a message string.
+     */
+    private static boolean contains(@NonNull int[] values, int value) {
+        for (int v : values) if (v == value) return true;
+        return false;
+    }
+
+    @NonNull
+    static JSONObject embeddingMemoryRefusal(@NonNull String displayName, @NonNull TaiLoadBudget.Plan plan) throws JSONException {
+        JSONObject refusal = insufficientMemory(displayName, plan);
+        refusal.put("error", "embedding_memory");
+        refusal.put("_statusCode", 503);
+        refusal.put("_retryAfterSeconds", EMBEDDING_MEMORY_RETRY_AFTER_SECONDS);
+        return refusal;
+    }
+
+    // ---- Image generation (MNN diffusion) -------------------------------------------------------
+
+    /** Receives 0-100 progress; the engine cannot be interrupted, so a throw only ends the wait and discards the image. */
+    public interface ImageProgress {
+        void onProgress(int percent) throws IOException;
+    }
+
+    /** A request that passed every check, or the refusal that stopped it. */
+    private static final class PreparedImage {
+        @Nullable final JSONObject refusal;
+        @Nullable final TaiImageRequest request;
+        @Nullable final TaiModelSpec spec;
+        @Nullable final String modelDir;
+        @Nullable final TaiDiffusionPackage.Result pkg;
+
+        PreparedImage(@Nullable JSONObject refusal, @Nullable TaiImageRequest request, @Nullable TaiModelSpec spec,
+                      @Nullable String modelDir, @Nullable TaiDiffusionPackage.Result pkg) {
+            this.refusal = refusal;
+            this.request = request;
+            this.spec = spec;
+            this.modelDir = modelDir;
+            this.pkg = pkg;
+        }
+    }
+
+    /**
+     * Checks an image request without running it: the refusal (OpenAI error shape with
+     * {@code _statusCode}) or {@code null} when it would run. The API calls this before it commits
+     * to a 200 and a streamed body.
+     */
+    @Nullable
+    public JSONObject checkImageRequest(@NonNull String body) throws JSONException {
+        return prepareImage(parseBody(body)).refusal;
+    }
+
+    @NonNull
+    private PreparedImage prepareImage(@NonNull JSONObject request) throws JSONException {
+        TaiImageRequest parsed = TaiImageRequest.parse(request, TaiMediaAccess::resolveLocalPath);
+        if (!parsed.isValid()) {
+            return new PreparedImage(openAiRequestError(parsed.statusCode,
+                parsed.errorCode == null ? "bad_request" : parsed.errorCode,
+                parsed.errorMessage == null ? "Bad image request." : parsed.errorMessage, parsed.errorParam),
+                null, null, null, null);
+        }
+        TaiModelSpec spec = null;
+        String dir;
+        int typeHint = parsed.typeHint;
+        String param = parsed.modelPath != null ? "model_path" : "model";
+        if (parsed.modelPath != null) {
+            dir = parsed.modelPath;
+        } else {
+            String modelId = parsed.modelId == null ? "" : parsed.modelId;
+            spec = resolveModel(request, modelId);
+            if (spec == null) {
+                return new PreparedImage(openAiRequestError(404, "model_not_found", "Unknown model: " + modelId, "model"),
+                    null, null, null, null);
+            }
+            if (!spec.isImageGeneration()) {
+                return new PreparedImage(openAiRequestError(400, "not_an_image_model",
+                    "Model '" + modelId + "' is not an image model.", "model"), null, null, null, null);
+            }
+            if (spec.localPath == null || spec.localPath.trim().isEmpty()) {
+                return new PreparedImage(openAiRequestError(404, "model_file_missing",
+                    "Model '" + modelId + "' is not installed.", "model"), null, null, null, null);
+            }
+            dir = spec.localPath;
+            if (typeHint == TaiDiffusionPackage.TYPE_AUTO) {
+                int declared = TaiDiffusionPackage.parseType(spec.architecture);
+                typeHint = declared == -2 ? TaiDiffusionPackage.TYPE_AUTO : declared;
+            }
+        }
+        TaiDiffusionPackage.Result pkg = TaiDiffusionPackage.inspect(new File(dir), typeHint);
+        if (!pkg.ok()) {
+            int status = TaiDiffusionPackage.FAIL_NOT_A_DIRECTORY.equals(pkg.failure) ? 404 : 400;
+            return new PreparedImage(openAiRequestError(status, pkg.failure == null ? "image_model_invalid" : pkg.failure,
+                pkg.message, param), null, null, null, null);
+        }
+        TaiImageRequest.Refusal typeRefusal = TaiImageRequest.validateForPackage(parsed, pkg.type, pkg.supportsImageInput);
+        if (typeRefusal != null) {
+            return new PreparedImage(openAiRequestError(typeRefusal.statusCode, typeRefusal.code, typeRefusal.message,
+                typeRefusal.param), null, null, null, null);
+        }
+        if (spec == null) spec = TaiDiffusionPackage.syntheticSpec(dir, pkg.type, pkg.totalBytes);
+        return new PreparedImage(null, parsed, spec, dir, pkg);
+    }
+
+    /**
+     * {@code POST /v1/ai/images/generations} from the app process: validates, hands the run to the
+     * runtime process (which writes the PNG under {@code cacheDir/tai-ipc}), then returns the image
+     * inline as base64 or moves it to the request's {@code output} path. Progress (0-100) is
+     * reported as it arrives. Answers the OpenAI-shaped {@code {created, data, tai}} or an error
+     * envelope. When {@code progress} throws (the HTTP client went away) the generation is asked to
+     * discard its result and the exception is rethrown.
+     */
+    @NonNull
+    public JSONObject generateImage(@NonNull String body, @NonNull ImageProgress progress) throws JSONException, IOException {
+        JSONObject request = parseBody(body);
+        PreparedImage prepared = prepareImage(request);
+        if (prepared.refusal != null) return prepared.refusal;
+        TaiImageRequest parsed = prepared.request;
+        if (parsed == null) return error(500, "image_request_invalid", "The image request could not be read.");
+        JSONObject summary;
+        if (!shouldDelegateRuntime()) {
+            // In-process (a runtime override): run straight through the router.
+            final IOException[] failure = new IOException[1];
+            summary = runPreparedImage(prepared, percent -> {
+                try {
+                    progress.onProgress(percent);
+                } catch (IOException e) {
+                    failure[0] = e;
+                    MultiBackendTaiRuntime router = ttsRouter();
+                    if (router != null) router.cancelImage();
+                }
+            });
+            if (failure[0] != null) {
+                discardImageFile(summary);
+                throw failure[0];
+            }
+        } else {
+            if (runtimeClient == null) return error(500, "runtime_client_unavailable", "On-device AI runtime service client is unavailable.");
+            if (prepared.spec != null && parsed.modelPath == null) request.put(INTERNAL_MODEL_SPEC, prepared.spec.toJson());
+            final JSONObject[] holder = new JSONObject[1];
+            try {
+                runtimeClient.stream(TaiRuntimeIpc.OP_IMAGE_GENERATE, request.toString(), new OpenAiStreamSink() {
+                    @Override
+                    public void onEvent(@NonNull JSONObject event) throws IOException {
+                        if (event.has("progress")) {
+                            progress.onProgress(event.optInt("progress", 0));
+                        } else if (event.has("result")) {
+                            holder[0] = event.optJSONObject("result");
+                        } else if (event.has("error")) {
+                            holder[0] = event;
+                        }
+                    }
+
+                    @Override
+                    public void onDone() {
+                    }
+                });
+            } catch (IOException | RuntimeException e) {
+                // The client went away mid-run: have the runtime throw the image away.
+                try {
+                    cancelImage();
+                } catch (JSONException ignored) {
+                }
+                throw e;
+            }
+            summary = holder[0];
+            if (summary == null) return error(500, "image_stream_incomplete", "The image runtime ended without a result.");
+        }
+        if (summary.has("error") && !summary.has("file")) return summary;
+        return finishImage(summary, parsed, prepared);
+    }
+
+    @NonNull
+    private JSONObject finishImage(@NonNull JSONObject summary, @NonNull TaiImageRequest parsed,
+                                   @NonNull PreparedImage prepared) throws JSONException, IOException {
+        File file = new File(summary.optString("file", ""));
+        if (!file.isFile()) return error(500, "image_file_missing", "The generated image could not be found.");
+        JSONObject item = new JSONObject();
+        try {
+            if (parsed.outputPath != null) {
+                File target = new File(parsed.outputPath);
+                File parent = target.getParentFile();
+                if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+                    return openAiRequestError(400, "invalid_output", "The output folder could not be created.", "output");
+                }
+                if (!file.renameTo(target)) {
+                    try (java.io.InputStream in = new java.io.FileInputStream(file);
+                         java.io.OutputStream out = new java.io.FileOutputStream(target)) {
+                        byte[] buffer = new byte[64 * 1024];
+                        int read;
+                        while ((read = in.read(buffer)) > 0) out.write(buffer, 0, read);
+                    }
+                }
+                item.put("path", target.getAbsolutePath());
+            } else {
+                item.put("b64_json", Base64.getEncoder().encodeToString(readAllBytes(file)));
+            }
+        } finally {
+            //noinspection ResultOfMethodCallIgnored
+            file.delete();
+        }
+        JSONObject tai = new JSONObject();
+        for (String key : new String[] {"width", "height", "steps", "seed", "backend", "memoryMode", "modelType", "loadMs",
+                "generateMs", "evicted"}) {
+            if (summary.has(key)) tai.put(key, summary.get(key));
+        }
+        tai.put("model", prepared.spec == null ? "" : prepared.spec.id);
+        JSONObject response = new JSONObject();
+        response.put("created", System.currentTimeMillis() / 1000L);
+        response.put("data", new JSONArray().put(item));
+        response.put("tai", tai);
+        return response;
+    }
+
+    private static void discardImageFile(@Nullable JSONObject summary) {
+        if (summary == null) return;
+        String file = summary.optString("file", "");
+        if (!file.isEmpty()) {
+            //noinspection ResultOfMethodCallIgnored
+            new File(file).delete();
+        }
+    }
+
+    /** The runtime-process half of {@link #generateImage}: progress events, then the result or an error. */
+    void generateImageToEvents(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        PreparedImage prepared = prepareImage(parseBody(body));
+        JSONObject result;
+        final IOException[] failure = new IOException[1];
+        if (prepared.refusal != null) {
+            result = prepared.refusal;
+        } else {
+            result = runPreparedImage(prepared, percent -> {
+                if (failure[0] != null) return;
+                try {
+                    sink.onEvent(new JSONObject().put("progress", percent));
+                } catch (IOException | JSONException e) {
+                    failure[0] = e instanceof IOException ? (IOException) e : new IOException(e.getMessage());
+                }
+            });
+        }
+        if (failure[0] != null) {
+            discardImageFile(result);
+            throw failure[0];
+        }
+        if (result.has("error") && !result.has("file")) {
+            sink.onEvent(result);
+        } else {
+            sink.onEvent(new JSONObject().put("result", result));
+        }
+        sink.onDone();
+    }
+
+    /** Admission, then the run through the router; the runtime summary (file and timings) or an error envelope. */
+    @NonNull
+    private JSONObject runPreparedImage(@NonNull PreparedImage prepared, @NonNull java.util.function.IntConsumer progress)
+            throws JSONException {
+        MultiBackendTaiRuntime router = ttsRouter();
+        TaiImageRequest parsed = prepared.request;
+        TaiModelSpec spec = prepared.spec;
+        TaiDiffusionPackage.Result pkg = prepared.pkg;
+        if (router == null || parsed == null || spec == null || pkg == null || prepared.modelDir == null) {
+            return openAiRequestError(501, "capability_not_supported", "Image generation needs the multi-backend runtime.", "model");
+        }
+        ImageLoadDecision decision = decideImageLoad(router, spec, pkg, parsed);
+        if (decision.refusal != null) return decision.refusal;
+        File dir = new File(appContext.getCacheDir(), STT_IPC_DIR);
+        //noinspection ResultOfMethodCallIgnored
+        dir.mkdirs();
+        File output = new File(dir, "tai-image-" + System.nanoTime() + ".png");
+        MnnDiffusionRuntime.Params params = new MnnDiffusionRuntime.Params(spec, prepared.modelDir, pkg.type,
+            parsed.backend, decision.memoryMode, pkg.peakBytes, parsed.prompt, parsed.inputImage, output,
+            parsed.widthFor(pkg.type), parsed.heightFor(pkg.type), parsed.stepsFor(pkg.type), parsed.seed,
+            parsed.cfgScaleFor(pkg.type));
+        // Sana reports no progress of its own before the end; say the run has started.
+        progress.accept(0);
+        JSONObject result = router.generateImage(params, progress::accept);
+        if (!decision.evicted.isEmpty() && result.has("file")) {
+            JSONArray evicted = new JSONArray();
+            for (String id : decision.evicted) evicted.put(id);
+            result.put("evicted", evicted);
+        }
+        return result;
+    }
+
+    private static final class ImageLoadDecision {
+        @Nullable final JSONObject refusal;
+        final int memoryMode;
+        @NonNull final List<String> evicted;
+
+        ImageLoadDecision(@Nullable JSONObject refusal, int memoryMode, @NonNull List<String> evicted) {
+            this.refusal = refusal;
+            this.memoryMode = memoryMode;
+            this.evicted = evicted;
+        }
+    }
+
+    /**
+     * The budget for an image run: the fastest memory mode whose estimate fits (see
+     * {@link TaiImageAdmission}), with idle embeddings, speech, other image models and chat closed
+     * if that is what it takes. A resident image model in the requested shape needs no plan.
+     */
+    @NonNull
+    private ImageLoadDecision decideImageLoad(@NonNull MultiBackendTaiRuntime router, @NonNull TaiModelSpec spec,
+                                              @NonNull TaiDiffusionPackage.Result pkg, @NonNull TaiImageRequest request)
+            throws JSONException {
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+        List<TaiResidency.Entry> residents = router.residency().snapshot();
+        TaiResidency.Entry resident = router.residency().find(TaiResidency.Kind.IMAGE, spec.id);
+        if (resident != null && (request.memoryMode < 0 || request.memoryMode == resident.window)) {
+            return new ImageLoadDecision(null, resident.window, Collections.<String>emptyList());
+        }
+        long available = TaiResidency.creditedAvailable(availableMemory(device), residents, TaiResidency.Kind.IMAGE,
+            TaiModelSpec.BACKEND_MNN_DIFFUSION);
+        TaiImageAdmission.Decision decision = TaiImageAdmission.decide(pkg.peakBytes, request.memoryMode, request.backend,
+            device.physicalMemoryBytes, available,
+            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.IMAGE, TaiModelSpec.BACKEND_MNN_DIFFUSION,
+                null, System.currentTimeMillis()),
+            mode -> TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device, TaiModelSpec.BACKEND_MNN_DIFFUSION,
+                request.backend, mode + 1), gateConditions());
+        if (!decision.fits) return new ImageLoadDecision(openAiError(insufficientMemory(spec.displayName, decision.plan)), decision.memoryMode,
+            Collections.<String>emptyList());
+        return new ImageLoadDecision(null, decision.memoryMode, evict(decision.plan));
+    }
+
+    /** Discards the image generation in flight; answers {@code {ok, cancelled}}. Never waits for the engine. */
+    @NonNull
+    public JSONObject cancelImage() throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_IMAGE_CANCEL, "{}", RUNTIME_STATUS_TIMEOUT_MS);
+        MultiBackendTaiRuntime router = ttsRouter();
+        boolean cancelled = router != null && router.cancelImage();
+        return new JSONObject().put("ok", true).put("cancelled", cancelled);
+    }
+
+    /** How long dawn should wait before retrying an embedding request refused for memory. */
+    private static final int EMBEDDING_MEMORY_RETRY_AFTER_SECONDS = 20;
+
+    /**
+     * The budget for a speech model that is not resident yet, the embedding decision's twin: the
+     * measured or file-size estimate (× 1.9, see {@link TaiResidency#STT_FACTOR_TENTHS}) against
+     * what is free plus the STT resident it replaces, idle embeddings — and, for STT alone, idle
+     * chat — evicted if that is what it takes. {@code null} means go ahead.
+     */
+    @Nullable
+    private JSONObject decideSttLoad(@NonNull TaiModelSpec spec) throws JSONException {
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+        List<TaiResidency.Entry> residents = residency().snapshot();
+        long available = TaiResidency.creditedAvailable(availableMemory(device), residents,
+            TaiResidency.Kind.STT, spec.backend);
+        long worst = TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 0);
+        TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
+            : TaiLoadBudget.Estimate.ratio(TaiResidency.sttEstimateBytes(spec), 0L);
+        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
+            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.STT, spec.backend,
+                TaiFunction.VOICE_TYPING, System.currentTimeMillis()), gateConditions());
+        if (!plan.fits) return openAiError(insufficientMemory(spec.displayName, plan));
+        evict(plan);
+        return null;
+    }
+
+    /**
+     * The measured load costs of this model on this device, as the budget asks for them; with none
+     * of its own yet, the shipped {@link TaiLoadPriors} for the bundled Gemma files, so the first
+     * load is planned on a measurement rather than the seed that refused it.
+     */
+    @NonNull
+    private TaiLoadBudget.History measuredHistory(@NonNull TaiModelSpec spec, @NonNull TaiDeviceCapabilities device) {
+        long fileBytes = TaiResidency.fileBytes(spec);
+        // What lies above the measured windows is carried up by the seed slope, and a vision key with
+        // no samples of its own borrows the text key's plus the encoders' share of the file.
+        long slope = TaiLoadBudget.seedSlopeBytes(spec.backend, fileBytes, kvBytesPerToken(spec));
+        long encoderDelta = fileBytes / 10L;
+        return (accelerator, contextTokens) -> {
+            long measured = TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device,
+                spec.backend, accelerator, contextTokens, slope, encoderDelta);
+            return measured > 0L ? measured : TaiLoadPriors.bytes(spec, accelerator, contextTokens, slope);
+        };
+    }
+
+    /** The architecture's KV bytes per token for an MNN model whose config says so; {@code 0} keeps the file-size slope. */
+    private static long kvBytesPerToken(@NonNull TaiModelSpec spec) {
+        return TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) ? TaiLoadBudget.mnnKvBytesPerToken(spec.localPath) : 0L;
+    }
+
+    /**
+     * Free memory for the gate: {@link TaiMemInfo}'s reading (MemAvailable on every release), or
+     * the device snapshot's {@code availMem} when the reading has nothing.
+     */
+    private static long availableMemory(@NonNull TaiMemInfo.Reading memory, @NonNull TaiDeviceCapabilities device) {
+        return memory.availBytes > 0L ? memory.availBytes : device.availableMemoryBytes;
+    }
+
+    private long availableMemory(@NonNull TaiDeviceCapabilities device) {
+        return availableMemory(TaiMemInfo.read(appContext), device);
+    }
+
+    /** The memory limits every plan in this process is made under; the runtime's watch reads the same file. */
+    @NonNull
+    private TaiLoadBudget.Conditions gateConditions() {
+        return TaiMemInfo.conditions(appContext);
+    }
+
+    /** Carries out a plan's evictions through the router; the ids actually closed, in order. */
+    @NonNull
+    private List<String> evict(@NonNull TaiLoadBudget.Plan plan) throws JSONException {
+        if (plan.evicted.isEmpty()) return Collections.emptyList();
+        TaiRuntime local = localRuntime();
+        if (!(local instanceof MultiBackendTaiRuntime)) return Collections.emptyList();
+        List<String> evicted = ((MultiBackendTaiRuntime) local).evict(plan.evicted);
+        for (TaiResidency.Entry victim : plan.evicted) {
+            if (!evicted.contains(victim.modelId)) continue;
+            TaiEventLog.log(appContext, TaiEventLog.EVICT, victim.modelId, victim.backend, victim.accelerator,
+                victim.window, 0L, victim.bytes(), "load plan, " + victim.kind.name().toLowerCase(java.util.Locale.ROOT));
+        }
+        return evicted;
+    }
+
+    /** The refusal every load path answers when the budget says no, chat and embedding alike. */
+    @NonNull
+    static JSONObject insufficientMemory(@NonNull String displayName, @NonNull TaiLoadBudget.Plan plan) throws JSONException {
+        JSONObject refusal = new JSONObject();
+        refusal.put("ok", false);
+        refusal.put("error", "insufficient_memory");
+        refusal.put("message", "Not enough free memory to load " + displayName + ". Close some apps and try again.");
+        refusal.put("_statusCode", 409);
+        refusal.put("memoryBudget", planJson(plan));
+        return refusal;
+    }
+
+    /** The registry of resident models; an empty one when a test has injected a bare runtime. */
+    @NonNull
+    private TaiResidency residency() {
+        TaiRuntime local = localRuntime();
+        return local instanceof MultiBackendTaiRuntime ? ((MultiBackendTaiRuntime) local).residency() : new TaiResidency();
+    }
+
+    /** What the resident chat model holds by the registry's estimate; published for the app process. */
+    public long residentChatBytes() {
+        if (!(runtime instanceof MultiBackendTaiRuntime)) return 0L;
+        return ((MultiBackendTaiRuntime) runtime).residency().bytes(TaiResidency.Kind.CHAT, null);
+    }
+
+    @NonNull
+    static JSONObject planJson(@NonNull TaiLoadBudget.Plan plan) throws JSONException {
+        JSONObject json = new JSONObject();
+        json.put("fits", plan.fits);
+        json.put("accelerator", plan.accelerator == null ? JSONObject.NULL : plan.accelerator);
+        json.put("contextWindow", plan.contextWindow);
+        json.put("estimatedBytes", plan.estimatedBytes);
+        json.put("estimateSource", plan.estimateSource);
+        json.put("reclaimableBytes", plan.reclaimableBytes);
+        json.put("availableBytes", plan.availableBytes);
+        json.put("reserveBytes", plan.reserveBytes);
+        json.put("neededFreeBytes", plan.neededFreeBytes());
+        json.put("measured", plan.measured);
+        json.put("overcommitted", plan.overcommitted);
+        JSONArray evicted = new JSONArray();
+        for (TaiResidency.Entry entry : plan.evicted) evicted.put(entry.modelId);
+        json.put("evicted", evicted);
+        return json;
     }
 
     @NonNull
@@ -1277,8 +3996,18 @@ public final class TaiManager {
             TaiRuntimeHistory.recordSuccess(appContext, spec, preflight.device, spec.backend, accelerator);
             return;
         }
+        if (!shouldRecordFailure(result)) return;
         TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend, accelerator,
             result.optString("message", result.optString("error", "load_failed")));
+    }
+
+    /**
+     * Whether a non-ok load result is a verdict on its accelerator. A cancelled load once wrote
+     * "Model load cancelled." as a GPU failure and demoted the GPU for good; see
+     * {@link TaiRuntimeHistory#isRuntimeVerdict}.
+     */
+    static boolean shouldRecordFailure(@NonNull JSONObject result) {
+        return !result.optBoolean("ok", false) && TaiRuntimeHistory.isRuntimeVerdict(result.optString("error", ""));
     }
 
     @NonNull
@@ -1296,6 +4025,9 @@ public final class TaiManager {
         TaiRuntimeOptions options = suppliedOptions == null
             ? settings.getRuntimeOptions(spec)
             : TaiRuntimeOptions.fromJson(suppliedOptions);
+        // The feature's plan over the settings; the explicit fields below still win, as a pick for this request.
+        TaiFeaturePlan plan = featurePlan(request);
+        if (plan != null) options = plan.applyTo(options, spec.id);
         Integer maxTokens = integerOverride(request, "max_tokens", integerOverride(request, "max_completion_tokens", null));
         Integer topK = integerOverride(request, "top_k", null);
         Double topP = doubleOverride(request, "top_p", null);
@@ -1311,8 +4043,81 @@ public final class TaiManager {
         }
         Boolean thinking = booleanOverride(request, "thinking");
         Boolean speculative = booleanOverride(request, "speculative_decoding");
-        return options.withGenerationOverrides(maxTokens, topK, topP, temperature, accelerator,
-            contextWindow, threadCount, precision, memoryMode, thinking, speculative);
+        // "load_class": "momentary" declares a load the caller will unload within a minute, such as
+        // a background job; the budget then keeps the lower peak floor instead of the hold
+        // floor, and the runtime process itself unloads the model three minutes after the load
+        // starts (TaiRuntimeService). The field rides in the request body to the runtime process,
+        // which resolves it here again, so the decision made there sees the flag. Any other value
+        // leaves the load ordinary.
+        TaiRuntimeOptions overridden = options.withGenerationOverrides(maxTokens, topK, topP, temperature,
+            accelerator, contextWindow, threadCount, precision, memoryMode, thinking, speculative);
+        if (request.has("load_class") && "momentary".equals(request.optString("load_class", "").trim())) {
+            overridden = overridden.withMomentary(Boolean.TRUE);
+        }
+        return overridden;
+    }
+
+    /**
+     * The plan of the feature a request names: the one the app process resolved, in the runtime
+     * process; resolved here otherwise. {@code null} for a request that names no feature.
+     */
+    @Nullable
+    private TaiFeaturePlan featurePlan(@NonNull JSONObject request) {
+        if (runtimeProcess) return TaiFeaturePlan.fromJson(request.optJSONObject(INTERNAL_FEATURE_PLAN));
+        TaiFunction feature = TaiCallerRequests.featureOf(request);
+        return feature == null ? null : TaiFeaturePlans.forContext(appContext).plan(feature);
+    }
+
+    /**
+     * Whether the resident {@code spec} can serve a feature's request as it is (decision 5): its window is
+     * at least the one the feature asks, or the load that put it there asked as much and the memory budget
+     * gave less, which a reload would only repeat. A request that names no feature always reuses.
+     */
+    private boolean residentServes(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) {
+        if (options.feature == null) return true;
+        TaiResidency.Entry resident = residency().find(TaiResidency.Kind.CHAT, spec.id);
+        if (resident == null) return true;
+        long memory = TaiDeviceCapabilities.detect(appContext).memoryBytes;
+        int wanted = TaiContextWindowPolicy.effectiveEndpointContextWindow(spec, memory, options.contextWindow);
+        return TaiResidency.serves(resident, wanted,
+            asked -> TaiContextWindowPolicy.effectiveEndpointContextWindow(spec, memory, asked > 0 ? asked : null));
+    }
+
+    /** Records the window a successful load asked for on the resident it produced; later uses never change it. */
+    private void markLoadedAsking(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) {
+        Integer asked = options.contextWindow;
+        residency().markLoadedAsking(TaiResidency.Kind.CHAT, spec.id, asked == null ? 0 : asked);
+    }
+
+    /** Records which feature used the resident chat model, for its groups and the next window check. */
+    private void markUsedByFeature(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) {
+        residency().markUsedBy(TaiResidency.Kind.CHAT, spec.id, TaiFunction.fromId(options.feature));
+    }
+
+    /**
+     * An explicit load for a feature whose model the runtime already holds well enough: the state as it
+     * is, marked {@code reused}, instead of a reload that costs seconds and a second memory peak.
+     * {@code null} when the load should go ahead.
+     */
+    @Nullable
+    private JSONObject reuseForFeature(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
+        if (options.feature == null || !localRuntime().isModelLoaded(spec.id) || !residentServes(spec, options)) return null;
+        markUsedByFeature(spec, options);
+        return residentAsIs(spec);
+    }
+
+    /**
+     * The answer for a load served by the resident {@code spec} as it is: the state, marked
+     * {@code reused}. Records nothing; a caller whose feature the resident serves marks that itself.
+     */
+    @NonNull
+    private JSONObject residentAsIs(@NonNull TaiModelSpec spec) throws JSONException {
+        JSONObject result = new JSONObject();
+        result.put("ok", true);
+        result.put("reused", true);
+        result.put("modelId", spec.id);
+        result.put("runtime", localRuntime().getState().toJson());
+        return result;
     }
 
     @Nullable
@@ -1368,6 +4173,34 @@ public final class TaiManager {
                 : direct);
         }
         return withDeviceContextWindow(TaiModelVariants.resolve(migratedId, this::lookupBaseModel));
+    }
+
+    /**
+     * What a client is told a chat model's window is: the loaded engine's when it is resident,
+     * otherwise what a load would be given with the memory free now. Advertising the RAM tier
+     * instead promised 32k to a phone that could only load 4k, and clients sized their prompts to
+     * the promise.
+     */
+    @NonNull
+    private TaiModelSpec advertisedContextWindow(@NonNull TaiModelSpec spec, @NonNull TaiDeviceCapabilities device,
+                                                 @NonNull TaiRuntimePresence.Snapshot presence, boolean explicitContext) {
+        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) return spec;
+        if (presence.loaded && spec.id.equals(presence.modelId) && presence.contextWindow > 0) {
+            return spec.withEndpointContextWindow(Math.min(spec.endpointContextWindow, presence.contextWindow));
+        }
+        // The same credit decideLoad takes from the registry, published by the runtime process so
+        // this process advertises the window the load would actually be given — the same floor,
+        // measured history and GPU cap too. Evictions are not modelled here: they do not change
+        // the window, only whether the load goes ahead.
+        long available = availableMemory(device);
+        if (available > 0L && presence.loaded) available += presence.residentChatBytes;
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, TaiResidency.fileBytes(spec),
+            false, device.physicalMemoryBytes, available,
+            TaiLoadPreflight.autoAccelerators(appContext, spec, device, TaiModelProfile.forModel(spec)),
+            spec.endpointContextWindow, null, 0, explicitContext,
+            measuredHistory(spec, device), Collections.<TaiResidency.Entry>emptyList())
+            .withConditions(gateConditions()));
+        return spec.withEndpointContextWindow(Math.min(spec.endpointContextWindow, plan.contextWindow));
     }
 
     /**
@@ -1441,7 +4274,7 @@ public final class TaiManager {
         String code = nestedSourceError == null
             ? source.optString("error", source.optString("code", "tai_error"))
             : nestedSourceError.optString("code", source.optString("code", "tai_error"));
-        String message = source.optString("message", "TAI request failed");
+        String message = source.optString("message", "On-device AI request failed");
         JSONObject error = new JSONObject();
         error.put("message", message);
         error.put("type", "invalid_request_error");
@@ -1717,7 +4550,7 @@ public final class TaiManager {
         limitations.put("/v1/models lists endpoint capabilities for loadable LiteRT-LM/MNN models only; source model-card capabilities are informational.");
         limitations.put("GGUF/raw weight files are not supported because this APK does not include a GGUF/llama.cpp backend.");
         limitations.put("Audio output is not available from the local LiteRT-LM or MNN runners.");
-        limitations.put("OpenAI function tools are returned for client-side execution; TAI does not automatically execute shell commands or device actions.");
+        limitations.put("OpenAI function tools are returned for client-side execution; On-device AI does not automatically execute shell commands or device actions.");
         return limitations;
     }
 
@@ -1762,8 +4595,12 @@ public final class TaiManager {
             throw new JSONException("Chat request has no user, assistant, or tool messages");
         }
 
+        // _tai_no_system_prompt (the category sort): the user's own TAI system prompt is not injected.
+        // A system message the client sent still counts. The flag is read here and goes no further.
         String systemPrompt = clientSystemPrompt.length() > 0
-            ? clientSystemPrompt.toString() : settings.getSystemPrompt(spec.id);
+            ? clientSystemPrompt.toString()
+            : TaiCallerRequests.wantsNoSystemPrompt(request) ? "" : settings.getSystemPrompt(spec.id);
+        TaiCallerRequests.stripPrivateFlags(request);
         JSONArray toolsJson = request.optJSONArray("tools");
         List<ToolProvider> tools = toolProviders(toolsJson, request.opt("tool_choice"));
         systemPrompt = applyToolChoiceInstruction(systemPrompt, request.opt("tool_choice"), toolsJson);
@@ -1811,7 +4648,7 @@ public final class TaiManager {
                 @NonNull
                 @Override
                 public String execute(@NonNull String paramsJsonString) {
-                    throw new UnsupportedOperationException("TAI uses client-side tool execution.");
+                    throw new UnsupportedOperationException("On-device AI uses client-side tool execution.");
                 }
             }));
         }
@@ -2105,7 +4942,11 @@ public final class TaiManager {
             if (cut >= 0) normalized = normalized.substring(0, cut);
             cut = normalized.indexOf('#');
             if (cut >= 0) normalized = normalized.substring(0, cut);
+            String fileName = normalized.substring(normalized.lastIndexOf('/') + 1);
             if (normalized.endsWith(".tflite")) {
+                capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+            } else if (normalized.endsWith(".litertlm") && fileName.contains("embeddinggemma")) {
+                // EmbeddingGemma 2 ships as a .litertlm bundle served by LiteRtLmEmbeddingRuntime.
                 capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
             } else {
                 capabilities.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);

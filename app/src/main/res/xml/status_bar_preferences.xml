@@ -2,24 +2,15 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_clock_status_header">
-        <ListPreference
-            app:key="top_pane_clock_style"
-            app:title="@string/settings_clock_style_title"
-            app:entries="@array/termux_top_pane_clock_style_entries"
-            app:entryValues="@array/termux_top_pane_clock_style_values"
-            app:defaultValue="slab"
-            app:useSimpleSummaryProvider="true" />
-        <com.termux.app.fragments.settings.SegmentedPillPreference
-            app:key="top_pane_clock_alignment"
-            app:title="@string/settings_clock_alignment_title"
-            app:summary="@string/settings_clock_alignment_summary"
-            app:defaultValue="left" />
+    <PreferenceCategory app:title="@string/settings_status_clock_header">
         <SwitchPreferenceCompat
             app:key="top_pane_clock_am_pm"
             app:title="@string/settings_use_12_hour_title"
             app:summary="@string/settings_use_12_hour_summary"
             app:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_status_indicators_header">
         <SwitchPreferenceCompat
             app:key="status_widget_cpu"
             app:title="@string/settings_cpu_usage_title"
@@ -30,6 +21,9 @@
             app:title="@string/settings_memory_usage_title"
             app:summary="@string/settings_memory_usage_summary"
             app:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_status_weather_header">
         <SwitchPreferenceCompat
             app:key="status_widget_weather"
             app:title="@string/settings_weather_title"
@@ -42,15 +36,20 @@
             app:defaultValue="false"
             app:dependency="status_widget_weather" />
         <Preference
-            app:key="top_pane_notification_access"
+            app:key="status_widget_weather_location"
             app:persistent="false"
-            app:title="@string/termux_top_pane_notification_access_title"
-            app:summary="@string/termux_top_pane_notification_access_summary" />
+            app:title="@string/settings_weather_location_title"
+            app:summary="@string/settings_weather_location_summary_device"
+            app:dependency="status_widget_weather" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_status_more_header">
         <Preference
-            app:key="essential_notification_rules_manage"
+            app:key="status_bar_notifications_link"
             app:persistent="false"
-            app:title="@string/settings_essential_notifications_title"
-            app:summary="@string/settings_essential_notifications_summary" />
+            app:title="@string/settings_destination_notifications"
+            app:summary="@string/settings_status_bar_notifications_link_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.NotificationsPreferencesFragment" />
     </PreferenceCategory>
 
 </PreferenceScreen>

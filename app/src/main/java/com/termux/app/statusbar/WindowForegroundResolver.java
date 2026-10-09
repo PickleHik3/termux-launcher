@@ -327,6 +327,7 @@ public final class WindowForegroundResolver {
         if (process.isEmpty()) return null;
         process = process.toLowerCase(Locale.ROOT);
         String wrapped = unwrapInterpreter(process, argv);
+        if (wrapped == null) wrapped = unwrapLane(process, argv);
         if (wrapped != null) process = wrapped;
         String openFile = null;
         if (TerminalWindowBar.isEditor(process)) {
@@ -441,6 +442,18 @@ public final class WindowForegroundResolver {
      * out rather than guessing: an eval flag's value is code, not a name, and an argument after an
      * unrecognized flag could just as easily be that flag's own value as a script path.
      */
+    /**
+     * The tool a privileged-lane client is running: {@code tl-priv run <path> [args]} relays a
+     * catalog binary that runs as shell, so the chip should name {@code btop}, not the relay.
+     */
+    @Nullable
+    @VisibleForTesting
+    static String unwrapLane(@NonNull String process, @NonNull String[] argv) {
+        if (!process.equals("tl-priv") || argv.length < 3 || !argv[1].equals("run")) return null;
+        String name = basename(argv[2]).toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._+-]", "");
+        return name.isEmpty() ? null : name;
+    }
+
     @Nullable
     @VisibleForTesting
     static String unwrapInterpreter(@NonNull String interpreter, @NonNull String[] argv) {

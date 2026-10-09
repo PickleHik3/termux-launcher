@@ -20,7 +20,7 @@ not listed is upstream's code unchanged, and should be updated by taking upstrea
 Termux:X11 is a second app: the `termux-x11` command starts the server as `app_process`, which
 class-loads that app's APK and hands its running activity a Binder. A launcher cannot embed
 another app's surface on Android 14–16, so the only way to put an X display inside the home
-screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
+screen is to own the server. See `project-docs/reference/launcher/pane-wall-x11-study.md`.
 
 ## What is not vendored
 
@@ -112,6 +112,21 @@ screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
 - **`LorieView.onCursorNameChanged(String)` (new)** is the Java end of that event: it keeps the
   last name (`getCursorName()`) and forwards it to an optional `CursorNameListener`. Upstream has
   no such method, so a nightly merge must carry it forward with the native patch.
+- **`LorieView.nativeDestroy` and `surfaceChanged` are plain natives**, not `@FastNative` as
+  upstream declares them. Both block on the renderer thread (`Renderer::destroy` joins it,
+  `Renderer::setWindow` waits for it to release the EGL surface), and `@FastNative` keeps the
+  calling thread Runnable, which ART's suspend-all cannot stop. The renderer is a JNI-attached
+  thread that must pass a JNI transition to finish (`reportViewport`'s `CallVoidMethod`, and
+  `DetachCurrentThread` on its way out); with a GC pending it parks there until the suspend-all
+  completes, which needs the main thread to stop, which is joining the renderer. The runtime
+  aborts after its suspend timeout (`SuspendAll timeout; remaining threads: main`). Seen on a
+  Nothing Phone (2), Android 16, when a wallpaper change made the launcher `recreate()` with the
+  Display page attached; any recreate with the page attached can reach it. Upstream never sees
+  it because its activity holds the view for the life of the process. The native side is
+  untouched — the C signature of a `@FastNative` and a plain native are the same — so this needs
+  no rebuild of `libXlorie.so`. A nightly merge must keep the two annotations off. The remaining
+  `@FastNative` entries only take `stateLock` briefly or `write()` a socket; `sendTextEvent` sleeps
+  2.5 ms per character and is the one to watch if a long paste ever stalls the GC.
 - **`stub/`** is upstream's `shell-loader/stub` — compile-only declarations of the hidden
   framework classes `CmdEntryPoint` reaches for while it runs outside an app process.
 - Only `res/values/arrays.xml` and `res/xml/preferences.xml` are vendored from upstream's
@@ -218,3 +233,15 @@ field.
   host's `CursorNameListener` are untouched; nothing new is resolved with `FindMethodOrDie`.
 - **Merging.** 0003 applies after 0002 and edits the same file, below the block 0002 adds. Carry
   the two forward together, and rebuild the prebuilts from the same commit as always.
+
+## A touch the Android gesture lost is ended on the X side (2026-10-08)
+
+`InputEventSender.sendTouchEvent` replaces upstream's `pointers[]` sweep with a `down[]` array of
+the ids the X server has seen begin and not end (32 long; an id outside it is ignored, never
+thrown). Upstream ended only the pointer at `getActionIndex()` on UP and CANCEL, and its
+move-time sweep never reset `pointers[]`, so after one gesture cancelled with two fingers down,
+or whose POINTER_UP was dropped, the server held a touch forever and every later finger reached
+Firefox as a second touch (a one-finger drag pinch-zoomed). Now DOWN ends every stale id before
+its Begin, MOVE ends every held id the event lacks, and UP and CANCEL end every pointer in the
+event and every held id. POINTER_UP still ends only the lifting pointer. The wire calls are
+unchanged; the native side ignores an End for an inactive id.

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_x11_group_touch">
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="touchMode"
+            app:title="@string/settings_x11_touch_mode_title"
+            android:defaultValue="1"
+            app:entries="@array/x11_touch_mode_entries"
+            app:entryValues="@array/x11_touch_mode_values" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_x11_group_keyboard">
+        <SwitchPreferenceCompat
+            app:key="x11_android_keyboard"
+            app:title="@string/settings_x11_android_keyboard_title"
+            app:summary="@string/settings_x11_android_keyboard_summary"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="x11_keyboard_follows_text"
+            app:title="@string/settings_x11_keyboard_follows_text_title"
+            app:summary="@string/settings_x11_keyboard_follows_text_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_x11_group_clipboard">
+        <SwitchPreferenceCompat
+            app:key="clipboardEnable"
+            app:title="@string/settings_x11_clipboard_title"
+            app:summary="@string/settings_x11_clipboard_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

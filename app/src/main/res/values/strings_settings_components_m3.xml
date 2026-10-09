@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Optional service that is off: a state, not a failure. -->
+    <string name="settings_optional_status_not_enabled">Not enabled</string>
+    <string name="settings_optional_action_enable">Enable</string>
+</resources>

@@ -1,0 +1,862 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 8.13.2" type="baseline" client="gradle" dependencies="false" name="AGP (8.13.2)" variant="all" version="8.13.2">
+
+    <issue
+        id="MissingSuperCall"
+        message="Overriding method should call `super.onBackPressed`"
+        errorLine1="    public void onBackPressed() {"
+        errorLine2="                ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/activities/ReportActivity.java"
+            line="187"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="MissingSuperCall"
+        message="Overriding method should call `super.onBackPressed`"
+        errorLine1="    public void onBackPressed() {"
+        errorLine2="                ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/activities/TextIOActivity.java"
+            line="229"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="WrongCommentType"
+        message="This block comment looks like it was intended to be a javadoc comment"
+        errorLine1="        /* Get info for all the Termux app plugins listed in {@link TermuxConstants#TERMUX_PLUGIN_APP_PACKAGE_NAMES_LIST}. */"
+        errorLine2="                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/TermuxUtils.java"
+            line="52"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="            return fileName.toLowerCase();"
+        errorLine2="                            ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/file/FileUtils.java"
+            line="129"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="                    return FileUtilsErrno.ERRNO_CANNOT_OVERWRITE_A_DIFFERENT_FILE_TYPE.getError(label + &quot;source file&quot;, mode.toLowerCase(), srcFilePath, destFilePath, destFileType.getName(), srcFileType.getName());"
+        errorLine2="                                                                                                                            ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/file/FileUtils.java"
+            line="995"
+            column="125"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="            return value.toLowerCase();"
+        errorLine2="                         ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/settings/properties/SharedProperties.java"
+            line="604"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="        switch (value.trim().toLowerCase()) {"
+        errorLine2="                             ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/settings/preferences/TermuxAppSharedPreferences.java"
+            line="1082"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toUpperCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="            ShellEnvironmentUtils.putToEnvIfSet(environment, ENV_TERMUX_APP__APK_RELEASE, TermuxUtils.getAPKRelease(signingCertificateSHA256Digest).replaceAll(&quot;[^a-zA-Z]&quot;, &quot;_&quot;).toUpperCase());"
+        errorLine2="                                                                                                                                                                                 ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/shell/command/environment/TermuxAppShellEnvironment.java"
+            line="180"
+            column="178"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="        String[] parts = value.toLowerCase().trim().split(&quot;\\+&quot;);"
+        errorLine2="                               ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/settings/properties/TermuxSharedProperties.java"
+            line="434"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toUpperCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="        switch(signingCertificateSHA256Digest.toUpperCase()) {"
+        errorLine2="                                              ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/TermuxUtils.java"
+            line="649"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;`/data/`&quot;; use `Context.getFilesDir().getPath()` instead"
+        errorLine1="        if (!filesDir.equals(&quot;/data/user/0/&quot; + context.getPackageName() + &quot;/files&quot;) &amp;&amp; !filesDir.equals(&quot;/data/data/&quot; + context.getPackageName() + &quot;/files&quot;))"
+        errorLine2="                             ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/AndroidUtils.java"
+            line="44"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;`/data/`&quot;; use `Context.getFilesDir().getPath()` instead"
+        errorLine1="        if (!filesDir.equals(&quot;/data/user/0/&quot; + context.getPackageName() + &quot;/files&quot;) &amp;&amp; !filesDir.equals(&quot;/data/data/&quot; + context.getPackageName() + &quot;/files&quot;))"
+        errorLine2="                                                                                                        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/AndroidUtils.java"
+            line="44"
+            column="105"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        if ((FileUtils.isPathInDirPath(filePath, Environment.getExternalStorageDirectory().getAbsolutePath(), true) || FileUtils.isPathInDirPath(filePath, &quot;/sdcard&quot;, true)) &amp;&amp; !PermissionUtils.checkPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {"
+        errorLine2="                                                                                                                                                           ~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/interact/ShareUtils.java"
+            line="190"
+            column="156"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        } else if (path.startsWith(&quot;/sdcard/&quot;)) {"
+        errorLine2="                                   ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/file/TermuxFileUtils.java"
+            line="126"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="            return &quot;/sdcard&quot;;"
+        errorLine2="                   ~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/file/TermuxFileUtils.java"
+            line="127"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="SimpleDateFormat"
+        message="To get local formatting use `getDateInstance()`, `getDateTimeInstance()`, or `getTimeInstance()`, or use `new SimpleDateFormat(String template, Locale locale)` with for example `Locale.US` for ASCII dates."
+        errorLine1="            return new SimpleDateFormat(format).format(calendar.getTime());"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/file/filesystem/FileTime.java"
+            line="147"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="CoreLibDesugaringV1"
+        message="Core library desugaring runtime library version 1.1.5 does not support `compileSdk=35` or later; please upgrade to version 2.1.5"
+        errorLine1="    coreLibraryDesugaring &quot;com.android.tools:desugar_jdk_libs:1.1.5&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="91"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.appcompat:appcompat than 1.6.1 is available: 1.8.0"
+        errorLine1="        implementation &quot;androidx.appcompat:appcompat:1.6.1&quot;"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="21"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.annotation:annotation than 1.9.0 is available: 1.10.0"
+        errorLine1="        implementation &quot;androidx.annotation:annotation:1.9.0&quot;"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="22"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.core:core than 1.13.1 is available: 1.19.0"
+        errorLine1="        implementation &quot;androidx.core:core:1.13.1&quot;"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="23"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of com.google.android.material:material than 1.12.0 is available: 1.14.0"
+        errorLine1="        implementation &quot;com.google.android.material:material:1.12.0&quot;"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="24"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.window:window than 1.1.0 is available: 1.5.1"
+        errorLine1="        implementation &quot;androidx.window:window:1.1.0&quot;"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="32"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.test.ext:junit than 1.1.5 is available: 1.3.0"
+        errorLine1="    androidTestImplementation &quot;androidx.test.ext:junit:1.1.5&quot;"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="90"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.google.guava:guava than 24.1-jre is available: 33.7.1-jre"
+        errorLine1="        implementation &quot;com.google.guava:guava:24.1-jre&quot;"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="25"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of commons-io:commons-io than 2.16.1 is available: 2.22.0"
+        errorLine1="        implementation &quot;commons-io:commons-io:2.16.1&quot;"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="37"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.json:json than 20240303 is available: 20260814"
+        errorLine1="    testImplementation &quot;org.json:json:20240303&quot;"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="88"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.robolectric:robolectric than 4.13 is available: 4.17"
+        errorLine1="    testImplementation &quot;org.robolectric:robolectric:4.13&quot;"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="89"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct can only be accessed from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="        Hct source = Hct.fromInt(opaque);"
+        errorLine2="        ~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="102"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.fromInt can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="        Hct source = Hct.fromInt(opaque);"
+        errorLine2="                         ~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="102"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.getChroma can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="        if (source.getChroma() &lt; NEUTRAL_CHROMA)"
+        errorLine2="                   ~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="103"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.getChroma can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="        return vivid(source.getHue(), source.getChroma(), onDarkGlass);"
+        errorLine2="                                             ~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="105"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.getHue can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="        return vivid(source.getHue(), source.getChroma(), onDarkGlass);"
+        errorLine2="                            ~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="105"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct can only be accessed from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="            Hct source = Hct.fromInt(opaque);"
+        errorLine2="            ~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="127"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.fromInt can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="            Hct source = Hct.fromInt(opaque);"
+        errorLine2="                             ~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="127"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.getChroma can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="            if (source.getChroma() &lt; NEUTRAL_CHROMA) {"
+        errorLine2="                       ~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="128"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.getHue can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="            double hue = source.getHue();"
+        errorLine2="                                ~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="132"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.getChroma can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="            out[i] = vivid(hue, source.getChroma(), onDarkGlass);"
+        errorLine2="                                       ~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="143"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.fromInt can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="        return Hct.fromInt(rowLabelColor | 0xFF000000).getTone() >= 50d;"
+        errorLine2="                   ~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="155"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.getTone can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="        return Hct.fromInt(rowLabelColor | 0xFF000000).getTone() >= 50d;"
+        errorLine2="                                                       ~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="155"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.from can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="        return Hct.from(hue, chroma, tone).toInt() | 0xFF000000;"
+        errorLine2="                   ~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="168"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Hct.toInt can only be called from within the same library group (referenced groupId=`com.google.android.material` from groupId=`tl-wt-lint`)"
+        errorLine1="        return Hct.from(hue, chroma, tone).toInt() | 0xFF000000;"
+        errorLine2="                                           ~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/PlaceSwitchGlyph.java"
+            line="168"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
+        errorLine1="            resourceId = context.getResources().getIdentifier(name, defType, defPackage);"
+        errorLine2="                                                ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/resource/ResourceUtils.java"
+            line="54"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;and&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;error_has_not_requested_legacy_external_storage&quot;>The \&quot;%1$s\&quot; package is targeting targetSdkVersion %2$d and is running on android sdk %3$d but has not set `requestLegacyExternalStorage` to  `true` in app manifest&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="38"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="NotifyDataSetChanged"
+        message="It will always be more efficient to use more specific change events if you can. Rely on `notifyDataSetChanged` as a last resort."
+        errorLine1="        adapter.notifyDataSetChanged();"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/activities/ReportActivity.java"
+            line="154"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/AndroidUtils.java"
+            line="46"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/terminal/io/BellHandler.java"
+            line="53"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="                if (Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP) {"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/ExtraKeysView.java"
+            line="920"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/ExtraKeysView.java"
+            line="1777"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/extrakeys/ExtraKeysView.java"
+            line="1787"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/file/FileUtils.java"
+            line="1031"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/file/FileUtils.java"
+            line="1041"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 23"
+        errorLine1="    @RequiresApi(api = Build.VERSION_CODES.M)"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/view/KeyboardUtils.java"
+            line="128"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/notification/NotificationUtils.java"
+            line="103"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="        if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.O)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/notification/NotificationUtils.java"
+            line="120"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="            return (String) ReflectionUtils.invokeField(ApplicationInfo.class, Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.O ? &quot;seinfo&quot; : &quot;seInfo&quot;, applicationInfo).value;"
+        errorLine2="                                                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PackageUtils.java"
+            line="210"
+            column="80"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="        if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.O)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PackageUtils.java"
+            line="228"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 24"
+        errorLine1="    @RequiresApi(api = Build.VERSION_CODES.N)"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PackageUtils.java"
+            line="572"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 24"
+        errorLine1="    @RequiresApi(api = Build.VERSION_CODES.N)"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PackageUtils.java"
+            line="588"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 23"
+        errorLine1="    @RequiresApi(api = Build.VERSION_CODES.M)"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PermissionUtils.java"
+            line="87"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 23"
+        errorLine1="    @RequiresApi(api = Build.VERSION_CODES.M)"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PermissionUtils.java"
+            line="110"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="        if (requestCode &lt; 0 || Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.M)"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PermissionUtils.java"
+            line="284"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 23"
+        errorLine1="    @RequiresApi(api = Build.VERSION_CODES.M)"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PermissionUtils.java"
+            line="324"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PermissionUtils.java"
+            line="434"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="        if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.M)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PermissionUtils.java"
+            line="460"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PermissionUtils.java"
+            line="504"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="        if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.M)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/android/PermissionUtils.java"
+            line="533"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="            if (storagePermissionRequestCode >= 0 &amp;&amp; Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {"
+        errorLine2="                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/interact/ShareUtils.java"
+            line="192"
+            column="54"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/terminal/io/TerminalExtraKeys.java"
+            line="78"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)"
+        errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/shell/command/environment/TermuxAppShellEnvironment.java"
+            line="167"
+            column="16"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="        if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.O)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/crash/TermuxCrashUtils.java"
+            line="340"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/notification/TermuxNotificationUtils.java"
+            line="72"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="        if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.O)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/termux/plugins/TermuxPluginUtils.java"
+            line="355"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="            isInMultiWindowMode = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) &amp;&amp; ((AppCompatActivity) context).isInMultiWindowMode();"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/view/ViewUtils.java"
+            line="82"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="            isInMultiWindowMode = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) &amp;&amp; ((Activity) context).isInMultiWindowMode();"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/shared/view/ViewUtils.java"
+            line="87"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 21"
+        errorLine1="        &lt;item name=&quot;android:statusBarColor&quot; tools:targetApi=&quot;l&quot;>?attr/termuxColorSurfaceBase&lt;/item>"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-night/themes.xml"
+            line="51"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 21"
+        errorLine1="        &lt;item name=&quot;colorPrimaryDark&quot; tools:targetApi=&quot;l&quot;>?attr/colorPrimary&lt;/item>"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-night/themes.xml"
+            line="52"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 21"
+        errorLine1="        &lt;item name=&quot;android:statusBarColor&quot; tools:targetApi=&quot;l&quot;>?attr/termuxColorSurfaceBase&lt;/item>"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/themes.xml"
+            line="53"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="UselessParent"
+        message="This `HorizontalScrollView` layout or its `LinearLayout` parent is possibly unnecessary"
+        errorLine1="                &lt;HorizontalScrollView"
+        errorLine2="                 ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_text_io.xml"
+            line="54"
+            column="18"/>
+    </issue>
+
+</issues>

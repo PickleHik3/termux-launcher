@@ -1,5 +1,7 @@
 package com.termux.ai;
 
+import android.content.Context;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -22,12 +24,38 @@ import java.util.List;
  * {@code mnn_embeddings_unavailable} error instead of crashing the runtime process.
  */
 final class MnnEmbeddingRuntime implements AutoCloseable {
+    private final TaiResidency residency;
+    /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
+    @Nullable private final Context appContext;
     @Nullable private MnnEmbeddingSession session;
+    @Nullable private String loadedModelId;
     @Nullable private String loadedConfigPath;
     private int outputDimensions = 0;
 
+    MnnEmbeddingRuntime(@NonNull TaiResidency residency) {
+        this(residency, null);
+    }
+
+    MnnEmbeddingRuntime(@NonNull TaiResidency residency, @Nullable Context context) {
+        this.residency = residency;
+        this.appContext = context == null ? null : context.getApplicationContext();
+    }
+
     @NonNull
     synchronized JSONObject embed(@NonNull TaiModelSpec spec, @NonNull List<String> inputs, int dimensions) throws JSONException {
+        return embed(spec, inputs, dimensions, LiteRtEmbeddingRuntime.INPUT_TYPE_DOCUMENT, null, false);
+    }
+
+    /**
+     * {@code inputType} and {@code title} are EmbeddingGemma's task-prefix parameters (dawn brief
+     * item 1) and are not applied here: MNN embedding packages are not EmbeddingGemma, and the
+     * router only ever calls this overload for uniformity with {@link LiteRtEmbeddingRuntime}.
+     * {@code throttled} still lowers this thread's scheduling priority while a chat generation is
+     * active (dawn brief item 5); MNN's embedding session has no thread-count knob of its own.
+     */
+    @NonNull
+    synchronized JSONObject embed(@NonNull TaiModelSpec spec, @NonNull List<String> inputs, int dimensions,
+                                   @NonNull String inputType, @Nullable String title, boolean throttled) throws JSONException {
         if (spec.localPath == null || spec.localPath.trim().isEmpty()) {
             return error(404, "model_file_missing", "MNN embedding model config path is missing.");
         }
@@ -39,7 +67,7 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
             return error(404, "model_file_not_readable", "MNN embedding models must point to a readable config.json file.");
         }
         try {
-            ensureLoaded(config);
+            ensureLoaded(spec, config);
         } catch (UnsatisfiedLinkError e) {
             return error(501, "mnn_embeddings_unavailable",
                 "This build's MNN native library does not expose embeddings. Update to a build with MNN embedding support.");
@@ -53,16 +81,26 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
         }
         try {
             JSONArray data = new JSONArray();
-            for (int i = 0; i < inputs.size(); i++) {
-                float[] vector = session.embed(inputs.get(i));
-                float[] shaped = shapeVector(vector, dimensions);
-                JSONObject item = new JSONObject();
-                item.put("object", "embedding");
-                item.put("index", i);
-                JSONArray json = new JSONArray();
-                for (float value : shaped) json.put((double) value);
-                item.put("embedding", json);
-                data.put(item);
+            residency.setBusy(TaiResidency.Kind.EMBEDDING, spec.id, true);
+            int priorPriority = throttled ? lowerThreadPriority() : Integer.MIN_VALUE;
+            try {
+                for (int i = 0; i < inputs.size(); i++) {
+                    float[] vector = session.embed(inputs.get(i));
+                    float[] shaped = shapeVector(vector, dimensions);
+                    JSONObject item = new JSONObject();
+                    item.put("object", "embedding");
+                    item.put("index", i);
+                    JSONArray json = new JSONArray();
+                    for (float value : shaped) json.put((double) value);
+                    item.put("embedding", json);
+                    // This backend does not report a tokenizer count; dawn treats a missing "tokens"
+                    // as "not truncated, unknown length" rather than 500ing on a long input.
+                    item.put("truncated", false);
+                    data.put(item);
+                }
+            } finally {
+                residency.setBusy(TaiResidency.Kind.EMBEDDING, spec.id, false);
+                if (throttled) restoreThreadPriority(priorPriority);
             }
             JSONObject usage = new JSONObject();
             usage.put("prompt_tokens", 0);
@@ -81,15 +119,28 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
         }
     }
 
-    private void ensureLoaded(@NonNull File config) {
+    private void ensureLoaded(@NonNull TaiModelSpec spec, @NonNull File config) {
         String configPath = config.getAbsolutePath();
         if (session != null && configPath.equals(loadedConfigPath) && session.isLoaded()) return;
         close();
         MnnEmbeddingSession created = new MnnEmbeddingSession();
-        created.load(configPath);
+        // The same MemAvailable meter a chat load runs, across native load only.
+        TaiLoadMeter meter = TaiLoadMeter.start(appContext);
+        long measured;
+        try {
+            created.load(configPath);
+        } finally {
+            measured = meter.stop();
+        }
         session = created;
+        loadedModelId = spec.id;
         loadedConfigPath = configPath;
         outputDimensions = created.dim();
+        residency.register(TaiResidency.Entry.embedding(spec, 0).withMeasured(measured >= 0L ? measured : null));
+        if (measured >= 0L && appContext != null) {
+            TaiRuntimeHistory.recordMeasuredLoad(appContext, spec, TaiDeviceCapabilities.detect(appContext),
+                TaiModelSpec.BACKEND_MNN_LLM, "cpu", 0, measured);
+        }
     }
 
     /**
@@ -124,12 +175,36 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
         return response;
     }
 
+    /**
+     * Drops this calling thread to background scheduling priority while a chat generation is
+     * running elsewhere in the process, so an embedding batch does not starve it of CPU (dawn
+     * brief item 5). Returns the priority to restore afterward.
+     */
+    static int lowerThreadPriority() {
+        int prior = android.os.Process.getThreadPriority(android.os.Process.myTid());
+        try {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+        } catch (Throwable ignored) {
+            // Not fatal: some test/host JVMs refuse this call outright.
+        }
+        return prior;
+    }
+
+    static void restoreThreadPriority(int priorPriority) {
+        try {
+            android.os.Process.setThreadPriority(priorPriority);
+        } catch (Throwable ignored) {
+        }
+    }
+
     @Override
     public synchronized void close() {
         if (session != null) {
             try { session.release(); } catch (Throwable ignored) { }
             session = null;
         }
+        if (loadedModelId != null) residency.deregister(TaiResidency.Kind.EMBEDDING, loadedModelId);
+        loadedModelId = null;
         loadedConfigPath = null;
         outputDimensions = 0;
     }

@@ -1,0 +1,431 @@
+package com.termux.app.fragments.settings.termux;
+
+import android.content.Context;
+import android.os.Build;
+import android.text.format.DateUtils;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.chip.Chip;
+import com.termux.R;
+import com.termux.ai.TaiBenchStats;
+import com.termux.ai.TaiBenchSuite;
+import com.termux.ai.TaiFeatureCheck;
+import com.termux.ai.TaiFeatureCheckRunner;
+import com.termux.ai.TaiFunction;
+import com.termux.ai.TaiModelSpec;
+
+import java.util.Locale;
+
+/**
+ * The benchmark screens' building blocks, in the Model centre's dress, all stock Material 3: a
+ * filled {@link MaterialCardView}, section headers in the title-small style, text on the type
+ * scale, {@link Chip} status pills and {@link MaterialButton} actions, and the number formats
+ * every screen shares. Colours are the theme's roles and sizes its text appearances, so light and
+ * dark both hold.
+ */
+final class TaiBenchViews {
+    private TaiBenchViews() {
+    }
+
+    /** A card: {@link #outer} goes into the list, {@link #core} takes the content. */
+    static final class Card {
+        @NonNull final FrameLayout outer;
+        @NonNull final MaterialCardView shell;
+        @NonNull final LinearLayout core;
+
+        Card(@NonNull FrameLayout outer, @NonNull MaterialCardView shell, @NonNull LinearLayout core) {
+            this.outer = outer;
+            this.shell = shell;
+            this.core = core;
+        }
+    }
+
+    static int dp(@NonNull Context context, float value) {
+        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, context.getResources().getDisplayMetrics()));
+    }
+
+    static int color(@NonNull Context context, int attr) {
+        return TaiModelCentreAdapter.color(context, attr);
+    }
+
+    /** The text appearance a theme attribute (textAppearanceBodyMedium, ...) points at. */
+    static int appearance(@NonNull Context context, int attr) {
+        TypedValue value = new TypedValue();
+        context.getTheme().resolveAttribute(attr, value, true);
+        return value.resourceId;
+    }
+
+    private static void style(@NonNull TextView view, int appearanceAttr, int colorAttr) {
+        view.setTextAppearance(appearance(view.getContext(), appearanceAttr));
+        view.setTextColor(TaiModelCentreAdapter.role(view.getContext(), colorAttr));
+    }
+
+    @NonNull
+    static Card card(@NonNull Context context) {
+        FrameLayout outer = new FrameLayout(context);
+        outer.setPadding(dp(context, 16), dp(context, 4), dp(context, 16), dp(context, 4));
+        MaterialCardView shell = new MaterialCardView(context, null,
+            com.google.android.material.R.attr.materialCardViewFilledStyle);
+        LinearLayout core = new LinearLayout(context);
+        core.setOrientation(LinearLayout.VERTICAL);
+        core.setPadding(dp(context, 16), dp(context, 16), dp(context, 16), dp(context, 16));
+        shell.addView(core, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        outer.addView(shell, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return new Card(outer, shell, core);
+    }
+
+    /** The Model centre's section header: title-small in the primary role, a dim fact at the end. */
+    @NonNull
+    static View sectionHeader(@NonNull Context context, @NonNull CharSequence title, @NonNull CharSequence end) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setBaselineAligned(true);
+        row.setPadding(dp(context, 16), dp(context, 16), dp(context, 16), dp(context, 8));
+        TextView text = new TextView(context);
+        text.setText(title);
+        style(text, com.google.android.material.R.attr.textAppearanceTitleSmall, androidx.appcompat.R.attr.colorPrimary);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) text.setAccessibilityHeading(true);
+        row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        if (end.length() > 0) {
+            TextView fact = new TextView(context);
+            fact.setText(end);
+            style(fact, com.google.android.material.R.attr.textAppearanceLabelMedium, com.google.android.material.R.attr.colorOnSurfaceVariant);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.setMarginStart(dp(context, 16));
+            row.addView(fact, params);
+        }
+        return row;
+    }
+
+    /** A card's title line. */
+    @NonNull
+    static TextView title(@NonNull Context context, @NonNull CharSequence text) {
+        TextView view = new TextView(context);
+        view.setText(text);
+        style(view, com.google.android.material.R.attr.textAppearanceTitleMedium, com.google.android.material.R.attr.colorOnSurface);
+        return view;
+    }
+
+    /** A plain secondary line. */
+    @NonNull
+    static TextView body(@NonNull Context context, @NonNull CharSequence text) {
+        TextView view = new TextView(context);
+        view.setText(text);
+        style(view, com.google.android.material.R.attr.textAppearanceBodyMedium, com.google.android.material.R.attr.colorOnSurfaceVariant);
+        return view;
+    }
+
+    /** A small detail line (package names, figures); the type scale's body-small. */
+    @NonNull
+    static TextView mono(@NonNull Context context, @NonNull CharSequence text) {
+        TextView view = new TextView(context);
+        view.setText(text);
+        style(view, com.google.android.material.R.attr.textAppearanceBodySmall, com.google.android.material.R.attr.colorOnSurfaceVariant);
+        return view;
+    }
+
+    /** A big figure, for a tile or the Result headline, on the type scale entry {@code appearanceAttr}. */
+    @NonNull
+    static TextView figure(@NonNull Context context, @NonNull CharSequence text, int appearanceAttr) {
+        TextView view = new TextView(context);
+        view.setText(text);
+        style(view, appearanceAttr, com.google.android.material.R.attr.colorOnSurface);
+        return view;
+    }
+
+    /** A big figure sized by the old sp request: the nearest type scale entry (headline for 30sp and up). */
+    @NonNull
+    static TextView figure(@NonNull Context context, @NonNull CharSequence text, float sp) {
+        return figure(context, text, sp >= 30f ? com.google.android.material.R.attr.textAppearanceHeadlineLarge
+            : sp >= 16f ? com.google.android.material.R.attr.textAppearanceTitleLarge
+            : com.google.android.material.R.attr.textAppearanceTitleMedium);
+    }
+
+    /** A status chip in a tone; empty text hides it. */
+    @NonNull
+    static TextView pill(@NonNull Context context, @NonNull CharSequence text, @NonNull TaiModelCentreRows.Tone tone) {
+        Chip pill = new Chip(context);
+        pill.setText(text);
+        pill.setCheckable(false);
+        pill.setClickable(false);
+        pill.setFocusable(false);
+        pill.setSingleLine(true);
+        TaiModelCentreAdapter.tonePill(pill, tone);
+        pill.setVisibility(text.length() == 0 ? View.GONE : View.VISIBLE);
+        return pill;
+    }
+
+    /** The quiet backend chip ("LiteRT", "MNN"). */
+    @NonNull
+    static TextView backendPill(@NonNull Context context, @NonNull String backend) {
+        return pill(context, backendLabel(context, backend), TaiModelCentreRows.Tone.NEUTRAL);
+    }
+
+    /** The one loud button: Run a benchmark, Start, Run this model again. A filled button. */
+    @NonNull
+    static TextView goButton(@NonNull Context context, @NonNull CharSequence text) {
+        MaterialButton button = new MaterialButton(context);
+        button.setText(text);
+        return button;
+    }
+
+    /** The quiet button: Show why, Skip the wait, Stop. A tonal button. */
+    @NonNull
+    static TextView ghostButton(@NonNull Context context, @NonNull CharSequence text) {
+        MaterialButton button = (MaterialButton) LayoutInflater.from(context).inflate(R.layout.view_tai_button_tonal, null, false);
+        button.setText(text);
+        return button;
+    }
+
+    /** A button in the error role: Stop, Delete results. */
+    @NonNull
+    static TextView errorButton(@NonNull Context context, @NonNull CharSequence text) {
+        MaterialButton button = (MaterialButton) LayoutInflater.from(context).inflate(R.layout.view_tai_button_error, null, false);
+        button.setText(text);
+        return button;
+    }
+
+    /** Enables or disables a button; a stock button draws its own disabled state. */
+    static void setEnabled(@NonNull View button, boolean enabled) {
+        button.setEnabled(enabled);
+        if (!(button instanceof MaterialButton)) button.setAlpha(enabled ? 1f : 0.45f);
+    }
+
+    /** A horizontal row of views with a gap between them. */
+    @NonNull
+    static LinearLayout row(@NonNull Context context, int gapDp, @NonNull View... children) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        for (int i = 0; i < children.length; i++) {
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            if (i > 0) params.setMarginStart(dp(context, gapDp));
+            row.addView(children[i], params);
+        }
+        return row;
+    }
+
+    /** {@link LinearLayout.LayoutParams} for a block with a top margin. */
+    @NonNull
+    static LinearLayout.LayoutParams block(@NonNull Context context, int topDp) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(context, topDp);
+        return params;
+    }
+
+    // ---- words and numbers ----
+
+    @NonNull
+    static String backendLabel(@NonNull Context context, @Nullable String backend) {
+        if (TaiModelSpec.BACKEND_LITERT_LM.equals(backend)) return context.getString(R.string.tai_centre_pill_backend_litert);
+        if (TaiModelSpec.BACKEND_MNN_LLM.equals(backend)) return context.getString(R.string.tai_centre_pill_backend_mnn);
+        return backend == null ? "" : backend;
+    }
+
+    /** "CPU", "GPU". */
+    @NonNull
+    static String processorLabel(@NonNull String accelerator) {
+        return accelerator.toUpperCase(Locale.ROOT);
+    }
+
+    /** "21.3 tok/s"; "—" with nothing measured. */
+    @NonNull
+    static String tps(@NonNull Context context, double value) {
+        if (Double.isNaN(value) || value <= 0.0) return context.getString(R.string.tai_bench_none);
+        return context.getString(R.string.tai_bench_tps, value >= 100.0 ? String.format(Locale.US, "%.0f", value)
+            : String.format(Locale.US, "%.1f", value));
+    }
+
+    /** "380 ms" or "1.4 s"; "—" with nothing measured. */
+    @NonNull
+    static String millis(@NonNull Context context, double value) {
+        if (Double.isNaN(value) || value <= 0.0) return context.getString(R.string.tai_bench_none);
+        if (value < 1000.0) return context.getString(R.string.tai_bench_ms, Math.round(value));
+        return context.getString(R.string.tai_bench_seconds, String.format(Locale.US, "%.1f", value / 1000.0));
+    }
+
+    /** A feature's name as the feature check shows it: "Tidy dictation", "Dawn search". */
+    @NonNull
+    static String featureName(@NonNull Context context, @NonNull TaiFunction feature) {
+        switch (feature) {
+            case TIDY_DICTATION: return context.getString(R.string.tai_check_name_cleanup);
+            case APP_CATEGORIES: return context.getString(R.string.tai_check_name_sorting);
+            case DAWN_CHAT: return context.getString(R.string.tai_check_name_dawn_chat);
+            case EMBEDDINGS: return context.getString(R.string.tai_check_name_dawn_search);
+            case READ_ALOUD: return context.getString(R.string.tai_check_name_read_aloud);
+            default: return context.getString(R.string.tai_check_name_assistant);
+        }
+    }
+
+    /**
+     * A feature check's one plain figure from its speed: "A minute of speech tidied in 6 s", "0.9 s per
+     * app", "Writes 14 tokens a second", "Reads 40 notes a second", "Speaks in 0.3 s"; empty when not measured.
+     */
+    @NonNull
+    static String featureFigure(@NonNull Context context, @NonNull TaiFunction feature, double speed) {
+        double figure = TaiFeatureCheck.figure(feature, speed);
+        if (figure <= 0.0 || Double.isNaN(figure) || Double.isInfinite(figure)) return "";
+        String number = figure < 10.0 ? String.format(Locale.US, "%.1f", figure) : String.format(Locale.US, "%.0f", figure);
+        switch (TaiFeatureCheck.unitOf(feature)) {
+            case SECONDS_PER_MINUTE_OF_SPEECH: return context.getString(R.string.tai_check_figure_cleanup, number);
+            case SECONDS_PER_APP: return context.getString(R.string.tai_check_figure_sorting, number);
+            case NOTES_PER_SECOND: return context.getString(R.string.tai_check_figure_search, number);
+            case SECONDS_TO_FIRST_SOUND: return context.getString(R.string.tai_check_figure_read_aloud, number);
+            default: return context.getString(R.string.tai_check_figure_chat, number);
+        }
+    }
+
+    /** "0.6 s", "14 s": a wait in seconds, one decimal under ten; "—" with nothing measured. */
+    @NonNull
+    static String waitSeconds(@NonNull Context context, double ms) {
+        if (Double.isNaN(ms) || ms <= 0.0) return context.getString(R.string.tai_bench_none);
+        double seconds = ms / 1000.0;
+        return context.getString(R.string.tai_bench_seconds, seconds < 10.0 ? String.format(Locale.US, "%.1f", seconds)
+            : String.format(Locale.US, "%.0f", seconds));
+    }
+
+    /**
+     * The three plain numbers of a result: "Starts in 0.6 s · 14 tok/s · Reads long page in 4 s".
+     * A figure that was not measured is left out.
+     */
+    @NonNull
+    static String summaryLine(@NonNull Context context, double decodeTps, double ttftMs, double readMs) {
+        StringBuilder line = new StringBuilder();
+        if (!Double.isNaN(ttftMs) && ttftMs > 0.0) line.append(context.getString(R.string.tai_bench_summary_starts, waitSeconds(context, ttftMs)));
+        if (!Double.isNaN(decodeTps) && decodeTps > 0.0) {
+            if (line.length() > 0) line.append(" · ");
+            line.append(context.getString(R.string.tai_bench_tps, TaiBenchLeaderboard.formatTpsValue(decodeTps)));
+        }
+        if (!Double.isNaN(readMs) && readMs > 0.0) {
+            if (line.length() > 0) line.append(" · ");
+            line.append(context.getString(R.string.tai_bench_summary_reads, waitSeconds(context, readMs)));
+        }
+        return line.length() == 0 ? context.getString(R.string.tai_bench_none) : line.toString();
+    }
+
+    /** "Memory: 1.9 GB"; empty with nothing measured. */
+    @NonNull
+    static String memoryLine(@NonNull Context context, long bytes) {
+        return bytes <= 0L ? "" : context.getString(R.string.tai_bench_memory, TaiModelCentreRows.formatBytes(bytes));
+    }
+
+    /** "1.2 GB"; "—" with nothing measured. */
+    @NonNull
+    static String bytes(@NonNull Context context, long value) {
+        if (value <= 0L) return context.getString(R.string.tai_bench_none);
+        return TaiModelCentreRows.formatBytes(value);
+    }
+
+    /** "about 2 min", "about 12 min", "about 1 h 10 min". */
+    @NonNull
+    static String duration(@NonNull Context context, long ms) {
+        long minutes = Math.max(1L, Math.round(ms / 60_000.0));
+        if (minutes < 60L) return context.getString(R.string.tai_bench_about_minutes, minutes);
+        return context.getString(R.string.tai_bench_about_hours, minutes / 60L, minutes % 60L);
+    }
+
+    /** "3:42" for a countdown. */
+    @NonNull
+    static String clock(long ms) {
+        long seconds = Math.max(0L, ms / 1000L);
+        return String.format(Locale.US, "%d:%02d", seconds / 60L, seconds % 60L);
+    }
+
+    /** "2 hours ago", "yesterday"; never a future time. */
+    @NonNull
+    static CharSequence ago(long timestamp) {
+        long now = System.currentTimeMillis();
+        return DateUtils.getRelativeTimeSpanString(Math.min(timestamp, now), now, DateUtils.MINUTE_IN_MILLIS);
+    }
+
+    /** The verdict's word and tone: Smooth, Usable, Slow, Broken. */
+    @NonNull
+    static String verdictLabel(@NonNull Context context, @Nullable String verdict) {
+        if (verdict == null) return "";
+        switch (verdict) {
+            case TaiBenchStats.VERDICT_SMOOTH: return context.getString(R.string.tai_bench_verdict_smooth);
+            case TaiBenchStats.VERDICT_USABLE: return context.getString(R.string.tai_bench_verdict_usable);
+            case TaiBenchStats.VERDICT_SLOW: return context.getString(R.string.tai_bench_verdict_slow);
+            case TaiBenchStats.VERDICT_BROKEN: return context.getString(R.string.tai_bench_verdict_broken);
+            case TaiBenchStats.VERDICT_CRASHED: return context.getString(R.string.tai_bench_verdict_crashed);
+            default: return "";
+        }
+    }
+
+    @NonNull
+    static TaiModelCentreRows.Tone verdictTone(@Nullable String verdict) {
+        if (verdict == null) return TaiModelCentreRows.Tone.NEUTRAL;
+        switch (verdict) {
+            case TaiBenchStats.VERDICT_SMOOTH: return TaiModelCentreRows.Tone.ACCENT;
+            case TaiBenchStats.VERDICT_USABLE: return TaiModelCentreRows.Tone.NEUTRAL;
+            case TaiBenchStats.VERDICT_SLOW: return TaiModelCentreRows.Tone.WARN;
+            default: return TaiModelCentreRows.Tone.ERROR;
+        }
+    }
+
+    /** The phase's word for the stepper. */
+    @NonNull
+    static String phaseLabel(@NonNull Context context, @NonNull String phase) {
+        switch (phase) {
+            case TaiBenchSuite.PHASE_LOAD: return context.getString(R.string.tai_bench_phase_load);
+            case TaiBenchSuite.PHASE_WARMUP: return context.getString(R.string.tai_bench_phase_warmup);
+            case TaiBenchSuite.PHASE_CHAT: return context.getString(R.string.tai_bench_phase_chat);
+            case TaiBenchSuite.PHASE_LONG_INPUT: return context.getString(R.string.tai_bench_phase_long_input);
+            case TaiBenchSuite.PHASE_CHECK: return context.getString(R.string.tai_bench_phase_check);
+            case TaiFeatureCheckRunner.PHASE_FEATURE: return context.getString(R.string.tai_check_phase_feature);
+            default: return phase;
+        }
+    }
+
+    /** "Test 1 of 3: Chat" for the three tests; the load and warm-up have their own words. */
+    @NonNull
+    static String testLabel(@NonNull Context context, @Nullable String phase) {
+        int number = TaiBenchRunState.testNumber(phase);
+        if (number == 0) {
+            return context.getString(TaiBenchSuite.PHASE_WARMUP.equals(phase) ? R.string.tai_bench_test_warmup : R.string.tai_bench_test_loading);
+        }
+        int name = number == 1 ? R.string.tai_bench_test_chat : number == 2 ? R.string.tai_bench_test_long_input : R.string.tai_bench_test_sanity;
+        return context.getString(R.string.tai_bench_test_title, number, TaiBenchRunState.TEST_COUNT, context.getString(name));
+    }
+
+    @NonNull
+    static String presetLabel(@NonNull Context context, @Nullable TaiBenchSuite.Preset preset) {
+        if (preset == null) return "";
+        switch (preset) {
+            case QUICK: return context.getString(R.string.tai_bench_preset_quick);
+            default: return context.getString(R.string.tai_bench_preset_standard);
+        }
+    }
+
+    /** "Cool", "Warm", "Hot" for a thermal status name; "—" when unknown. */
+    @NonNull
+    static String heatLabel(@NonNull Context context, @Nullable String thermalStatus) {
+        if (thermalStatus == null) return context.getString(R.string.tai_bench_none);
+        switch (thermalStatus) {
+            case "none": return context.getString(R.string.tai_bench_heat_cool);
+            case "light": return context.getString(R.string.tai_bench_heat_light);
+            case "moderate": return context.getString(R.string.tai_bench_heat_warm);
+            default: return context.getString(R.string.tai_bench_heat_hot);
+        }
+    }
+
+    /** "72%", "72% · charging"; "—" when unknown. */
+    @NonNull
+    static String batteryLabel(@NonNull Context context, int percent, boolean charging) {
+        if (percent < 0) return context.getString(R.string.tai_bench_none);
+        return charging ? context.getString(R.string.tai_bench_battery_charging, percent)
+            : context.getString(R.string.tai_bench_battery, percent);
+    }
+}

@@ -28,6 +28,14 @@ public final class X11Defaults {
         try {
             Prefs display = new Prefs(context.getApplicationContext());
             if (!display.get().contains("touchMode")) display.touchMode.put("2");
+            // Scaled is the mode the Display page calls the default (user, 2026-09-22) and the one
+            // the scale rail writes the moment it is dragged, so a fresh display starts on it
+            // rather than flipping modes under the user the first time they touch the rail.
+            // At 100 it is the screen's own pixels — LorieView divides by the scale — so this
+            // changes the mode, not the geometry.
+            if (!display.get().contains("displayResolutionMode")) {
+                display.displayResolutionMode.put("scaled");
+            }
         } catch (RuntimeException ignored) {
             // No display store yet; the server's own default stands.
         }

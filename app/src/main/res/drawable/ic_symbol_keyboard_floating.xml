@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A floating keyboard: a screen outline with the keyboard as a smaller card inset from every
+     edge. The Layout editor's keyboard-type chip; tinted by the chip. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="?attr/colorControlNormal"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M5,3h14a1,1 0 0 1 1,1v16a1,1 0 0 1 -1,1h-14a1,1 0 0 1 -1,-1v-16a1,1 0 0 1 1,-1z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.6" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M8,12.5h8a1,1 0 0 1 1,1v3a1,1 0 0 1 -1,1h-8a1,1 0 0 1 -1,-1v-3a1,1 0 0 1 1,-1z" />
+</vector>

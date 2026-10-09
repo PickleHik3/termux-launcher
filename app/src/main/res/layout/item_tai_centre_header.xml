@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Model centre: the device line on top of every segment, "Tier 2 · 12 GB · Snapdragon 8+ Gen 1 · Android 16". -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tai_centre_device_line"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="16dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="16dp"
+    android:textAppearance="?attr/textAppearanceLabelLarge"
+    android:textColor="?attr/colorOnSurfaceVariant" />

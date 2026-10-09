@@ -39,6 +39,24 @@ public final class DockGlassRendering {
     @NonNull
     public static int[] lightModelSlice(int accent, int topSheenAlpha, int midSheenAlpha,
                                         int bottomFootAlpha, float sliceStart, float sliceEnd) {
+        return lightModelSlice(accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha, sliceStart,
+            sliceEnd, 1f);
+    }
+
+    /**
+     * {@link #lightModelSlice(int, int, int, int, float, float)} with the accent sheen scaled by
+     * {@code sheenStrength} (0..1, the Tint control): the sheen is the accent's own tint, the
+     * foot is not. 1 is the model as it always was.
+     */
+    @NonNull
+    public static int[] lightModelSlice(int accent, int topSheenAlpha, int midSheenAlpha,
+                                        int bottomFootAlpha, float sliceStart, float sliceEnd,
+                                        float sheenStrength) {
+        if (sheenStrength < 1f) {
+            float strength = Math.max(0f, sheenStrength);
+            topSheenAlpha = Math.round(topSheenAlpha * strength);
+            midSheenAlpha = Math.round(midSheenAlpha * strength);
+        }
         float start = Math.max(0f, Math.min(1f, sliceStart));
         float end = Math.max(start, Math.min(1f, sliceEnd));
         List<Integer> colors = new ArrayList<>();

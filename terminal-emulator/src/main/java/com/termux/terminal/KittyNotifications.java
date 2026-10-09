@@ -41,12 +41,12 @@ public final class KittyNotifications {
     }
 
     /** Payload types this terminal understands. */
-    private static final String SUPPORTED_PAYLOAD_TYPES = "title,body,close,?,alive";
+    private static final String SUPPORTED_PAYLOAD_TYPES = "title,body,buttons,close,?,alive";
 
     /**
      * What the terminal answers a capability query with: the parts of the protocol it really
-     * honours. Icons and buttons are left out on purpose — the notification always wears the
-     * launcher's own icon and carries no buttons, so a program should not plan around them.
+     * honours. Icons are left out on purpose — the notification always wears the launcher's
+     * own icon, so a program should not plan around them. Buttons are honoured (up to three).
      */
     private static final String CAPABILITIES = "p=" + SUPPORTED_PAYLOAD_TYPES
         + ":a=focus,report:o=always,unfocused,invisible:u=0,1,2:c=1:w=1";
@@ -176,7 +176,10 @@ public final class KittyNotifications {
 
     /**
      * The user tapped a notification. Returns the escape to send the program, or null when it did
-     * not ask to be told. {@code button} is 0 for the notification itself, or the button's number.
+     * not ask to be told. {@code button} is 0 for the notification itself, or the button's
+     * 1-based number. Per https://sw.kovidgoyal.net/kitty/desktop-notifications/ (activation
+     * reporting, {@code a=report}) a button press answers {@code OSC 99 ; i=id ; number ST} and a
+     * click on the body answers with an empty payload.
      *
      * <p>A tap takes the notification away, so it stops being live either way.
      */
@@ -240,8 +243,9 @@ public final class KittyNotifications {
         return keys;
     }
 
+    /** A name bounded to what the protocol allows; null reads as unnamed. */
     @NonNull
-    private static String clampId(@Nullable String id) {
+    static String clampId(@Nullable String id) {
         if (id == null) return "";
         return id.length() > MAX_ID_LENGTH ? id.substring(0, MAX_ID_LENGTH) : id;
     }
@@ -416,8 +420,12 @@ public final class KittyNotifications {
             if (!buttons.isEmpty()) {
                 for (String label : buttons.split(String.valueOf(BUTTON_SEPARATOR), -1)) {
                     // A button's label is read by the user too, so it is cleaned like a title.
-                    String cleaned = clean(label, false);
-                    if (!cleaned.isEmpty()) buttonLabels.add(cleaned);
+                    // An empty one keeps its place: the protocol reports a press by position.
+                    buttonLabels.add(clean(label, false));
+                }
+                while (!buttonLabels.isEmpty()
+                    && buttonLabels.get(buttonLabels.size() - 1).isEmpty()) {
+                    buttonLabels.remove(buttonLabels.size() - 1);
                 }
             }
             String application = applicationName == null || applicationName.isEmpty()

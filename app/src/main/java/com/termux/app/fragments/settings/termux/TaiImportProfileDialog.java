@@ -61,7 +61,9 @@ final class TaiImportProfileDialog {
             String[] modes = {TaiModelProfile.THINKING_NONE, TaiModelProfile.THINKING_TOGGLEABLE, TaiModelProfile.THINKING_ALWAYS};
             listener.onSave(new TaiModelProfile(profile.compatibleAccelerators, profile.defaultMaxTokens,
                 profile.defaultTopK, profile.defaultTopP, profile.defaultTemperature, profile.minDeviceMemoryInGb,
-                "user-artifact-profile", modes[mode.getSelectedItemPosition()], first, last, tokens));
+                "user-artifact-profile", modes[mode.getSelectedItemPosition()], first, last, tokens,
+                // The dialog edits the mode, not how the template is told; that stays the family's.
+                profile.thinkingSwitch));
             dialog.dismiss();
         }));
         dialog.show();

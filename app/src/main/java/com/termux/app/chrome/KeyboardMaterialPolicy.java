@@ -8,7 +8,7 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
  * What material the in-app keyboard renders, given the form it is in and whether the place it is
  * on lets it lie over the content instead of shrinking it.
  *
- * <p>The rule (keyboard-overlays spec, D1 and D3) is one sentence: <em>overlays are solid, the
+ * <p>The rule is one sentence: <em>overlays are solid, the
  * dock is glass</em>. Anything lying over content is one opaque Material surface — no wallpaper
  * crop, no frost, no glass slice, no rim — and it ignores the Keyboard surface's opacity and its
  * scheme background colour, because both describe how much of the wallpaper shows through a
@@ -83,5 +83,33 @@ public final class KeyboardMaterialPolicy {
     public static boolean solidFillIsRounded(@NonNull KeyboardForm form, boolean overlays,
                                              boolean capsule) {
         return hostMaterial(form, overlays) == Material.SOLID && capsule;
+    }
+
+    /** A material that is not blending between two places: the host paints one of the table's rows. */
+    public static final float NO_TRAVEL = -1f;
+
+    /**
+     * How solid the docked keyboard's host is while the wall stands {@code fraction} of the way
+     * from one place to the next with the keyboard up on both: 0 is the glass, 1 the opaque panel,
+     * and the panel's alpha in between. At {@code fraction} 0 or 1 this is exactly the material
+     * the place at rest paints, so the settle that follows changes nothing visible; the swap used
+     * to land whole at settle, an opaque panel appearing over the glass in one frame.
+     *
+     * <p>{@link #NO_TRAVEL} when there is nothing to blend: the two places paint the same
+     * material, one of them has the keyboard down (it travels in or out as a whole, in the
+     * material of the place that has it up), or the form is not the docked one — the split
+     * halves and the floating card paint their own panel on every place.</p>
+     */
+    public static float travelSolidness(@NonNull KeyboardForm form, boolean fromOverlays,
+                                        boolean towardOverlays, boolean fromKeyboardUp,
+                                        boolean towardKeyboardUp, float fraction) {
+        if (form != KeyboardForm.DOCKED || !fromKeyboardUp || !towardKeyboardUp) return NO_TRAVEL;
+        Material from = hostMaterial(form, fromOverlays);
+        Material toward = hostMaterial(form, towardOverlays);
+        if (from == toward) return NO_TRAVEL;
+        float clamped = fraction < 0f ? 0f : fraction > 1f ? 1f : fraction;
+        float a = from == Material.SOLID ? 1f : 0f;
+        float b = toward == Material.SOLID ? 1f : 0f;
+        return a + (b - a) * clamped;
     }
 }

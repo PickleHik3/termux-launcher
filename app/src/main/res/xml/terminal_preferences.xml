@@ -9,14 +9,31 @@
             app:summary="@string/termux_fullscreen_summary"
             android:defaultValue="false" />
         <SwitchPreferenceCompat
+            app:key="terminal_padding_fill"
+            app:title="@string/settings_terminal_padding_fill_title"
+            app:summary="@string/settings_terminal_padding_fill_summary"
+            android:defaultValue="true" />
+        <ListPreference
+            app:key="terminal_cursor_trail_style"
+            app:title="@string/settings_terminal_cursor_trail_style_title"
+            app:entries="@array/settings_terminal_cursor_trail_style_entries"
+            app:entryValues="@array/settings_terminal_cursor_trail_style_values"
+            app:defaultValue="default"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="terminal_retro_effect"
+            app:title="@string/settings_terminal_retro_effect_title"
+            app:entries="@array/settings_terminal_retro_effect_entries"
+            app:entryValues="@array/settings_terminal_retro_effect_values"
+            app:defaultValue="none"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_terminal_compat_header">
+        <SwitchPreferenceCompat
             app:key="terminal_margin_adjustment"
             app:title="@string/settings_adjust_keyboard_title"
             app:summary="@string/settings_adjust_keyboard_summary" />
-        <SwitchPreferenceCompat
-            app:key="show_in_recents_when_not_default"
-            app:title="@string/settings_show_recents_title"
-            app:summary="@string/settings_show_recents_summary"
-            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_clipboard_header">
@@ -26,9 +43,9 @@
             app:summary="@string/settings_osc52_clipboard_read_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
-            app:key="terminal_trim_wrapped_trailing_spaces"
-            app:title="@string/settings_trim_wrapped_trailing_spaces_title"
-            app:summary="@string/settings_trim_wrapped_trailing_spaces_summary"
+            app:key="terminal_clipboard_cleanup"
+            app:title="@string/settings_clipboard_cleanup_title"
+            app:summary="@string/settings_clipboard_cleanup_summary"
             android:defaultValue="true" />
     </PreferenceCategory>
 
@@ -62,15 +79,6 @@
             app:summary="@string/settings_pane_agent_api_summary"
             app:dependency="split_pane_controls"
             android:defaultValue="true" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:title="@string/settings_lazy_mode_header">
-        <SwitchPreferenceCompat
-            app:key="lazy_mode"
-            app:icon="@drawable/ic_symbol_battery_saver"
-            app:title="@string/settings_lazy_mode_title"
-            app:summary="@string/settings_lazy_mode_summary"
-            app:defaultValue="false" />
     </PreferenceCategory>
 
 </PreferenceScreen>

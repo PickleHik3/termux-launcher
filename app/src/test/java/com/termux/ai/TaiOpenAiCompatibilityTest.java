@@ -295,6 +295,18 @@ public class TaiOpenAiCompatibilityTest {
     }
 
     @Test
+    public void endpointCapabilities_liteRtLmEmbeddingGemma2ExposesOnlyEmbeddings() {
+        LinkedHashSet<String> declared = new LinkedHashSet<>();
+        declared.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+
+        LinkedHashSet<String> endpoint = TaiModelSpec.endpointCapabilitiesFor(
+            "embeddinggemma-2-text-vision-440m", TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, declared,
+            "/models/embeddinggemma-2-text-vision-440m.litertlm");
+
+        assertEquals(java.util.Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS), endpoint);
+    }
+
+    @Test
     public void openAiModels_codexDiscoveryRequiresToolsAndSixteenKContext() throws Exception {
         JSONArray models = new JSONArray()
             .put(new JSONObject().put("id", "short-tools")

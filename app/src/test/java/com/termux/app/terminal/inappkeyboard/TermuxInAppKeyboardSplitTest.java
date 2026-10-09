@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 
 import juloo.keyboard2.Keyboard2View;
 import juloo.keyboard2.KeyboardData;
+import juloo.keyboard2.SplitLayout;
 
 /** The split keyboard type as the host applies it: the parted layout and the gap on the view. */
 @RunWith(RobolectricTestRunner.class)
@@ -79,13 +80,16 @@ public class TermuxInAppKeyboardSplitTest {
         mController.onKeyboardFormChanged(PlaceLayout.KeyboardForm.SPLIT);
 
         KeyboardData split = viewKeyboard();
-        float gap = mPreferences.getInAppKeyboardSplitGapFraction() * docked.keysWidth;
+        // The gap is a fraction of the two halves together, and every row ends on the right
+        // edge of a keyboard that is both halves and the gap wide.
+        float halves = 2f * SplitLayout.halfUnits(docked);
+        float gap = mPreferences.getInAppKeyboardSplitGapFraction() * halves;
         assertEquals(gap, keyboardView().getSplitGapUnits(), EPS);
-        assertEquals(docked.keysWidth + gap, split.keysWidth, EPS);
+        assertEquals(halves + gap, split.keysWidth, EPS);
         assertEquals(docked.rows.size(), split.rows.size());
         for (int i = 0; i < split.rows.size(); i++)
             assertEquals("row " + i + " parts",
-                docked.rows.get(i).keysWidth + gap, split.rows.get(i).keysWidth, EPS);
+                halves + gap, split.rows.get(i).keysWidth, EPS);
     }
 
     @Test

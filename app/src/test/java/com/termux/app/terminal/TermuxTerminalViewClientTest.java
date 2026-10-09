@@ -82,6 +82,18 @@ public class TermuxTerminalViewClientTest {
     }
 
     @Test
+    public void passingCtrlSpaceToAndroidIsOffByDefaultAndFollowsTheSetting() throws IOException {
+        FakeTerminalHost host = host();
+        TermuxTerminalViewClient client = client(host);
+        assertFalse(client.shouldPassCtrlSpaceToAndroid());
+
+        host.preferences().setPassCtrlSpaceToAndroidEnabled(true);
+        assertTrue(client.shouldPassCtrlSpaceToAndroid());
+        // Independent of the ctrl-space-workaround property.
+        assertFalse(client.shouldUseCtrlSpaceWorkaround());
+    }
+
+    @Test
     public void charBasedInputAndCtrlSpaceWorkaroundFollowTheirProperties() throws IOException {
         TermuxTerminalViewClient off = client(host());
         assertFalse(off.shouldEnforceCharBasedInput());

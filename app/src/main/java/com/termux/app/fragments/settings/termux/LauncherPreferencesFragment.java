@@ -5,17 +5,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.Settings;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationManagerCompat;
-import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
-import androidx.preference.SwitchPreferenceCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.app.notice.AppNotice;
@@ -23,10 +19,8 @@ import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.PillPreference;
-import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.launcher.LauncherLockAccessibilityAccess;
-import com.termux.app.launcher.LauncherUseCaseMode;
 import com.termux.app.launcher.PinnedAppsEditor;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
@@ -37,22 +31,27 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 @Keep
 public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
 
-    private static final String KEY_USE_CASE_MODE = "app_launcher_use_case_mode";
-    /** The home surfaces the use case switch owns, in screen order. The apps row is not one of
-     *  them any more: it is per place now, and the mode writes it straight into the layout store. */
-    private static final String[] USE_CASE_SURFACE_KEYS = {
-        "app_launcher_az_row_enabled",
-        "app_launcher_drawer_enabled",
-        "app_launcher_widget_pane_enabled",
-    };
-    private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
-
     private static final String KEY_STORAGE = "app_launcher_storage_access";
     private static final String KEY_HELP = "app_launcher_help";
     private static final String KEY_NOTIFICATION_ACCESS = "app_launcher_notification_access";
     private static final String KEY_ACCESSIBILITY_LOCK = "app_launcher_accessibility_lock_access";
     private static final String KEY_NOTIFICATION_SETTINGS = "app_launcher_notification_settings";
     private static final String KEY_APP_PERMISSIONS = "app_launcher_app_permissions";
+
+    /**
+     * The XML this page inflates. The overview is this class itself; each focused subpage (dock,
+     * search, lock) is a thin subclass naming its own XML and title, so the click listeners below
+     * keep working on whichever of their rows a page holds (every lookup is null-tolerant).
+     */
+    @androidx.annotation.XmlRes
+    protected int preferencesXml() {
+        return R.xml.launcher_preferences;
+    }
+
+    @androidx.annotation.StringRes
+    protected int titleRes() {
+        return R.string.settings_destination_launcher_apps;
+    }
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -61,26 +60,14 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             return;
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(context));
-        setPreferencesFromResource(R.xml.launcher_preferences, rootKey);
+        setPreferencesFromResource(preferencesXml(), rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         configurePermissionActions(context);
         configureHelp(context);
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();
 
-        SwitchPreferenceCompat notificationDotsPreference = findPreference("app_launcher_notification_dots");
-        if (notificationDotsPreference != null) {
-            notificationDotsPreference.setOnPreferenceChangeListener((preference, newValue) -> {
-                boolean enabled = Boolean.TRUE.equals(newValue);
-                if (enabled && !LauncherNotificationAccess.isEnabled(context)) {
-                    showNotificationAccessPrompt(context);
-                }
-                return true;
-            });
-            updateNotificationDotsSummary(context, notificationDotsPreference);
-        }
-
-        ListPreference lockMethodPreference = findPreference("app_launcher_az_lock_method");
+        Preference lockMethodPreference = findPreference("app_launcher_az_lock_method");
         if (lockMethodPreference != null) {
             lockMethodPreference.setOnPreferenceChangeListener((preference, newValue) -> {
                 if ("accessibility".equals(newValue) && !LauncherLockAccessibilityAccess.isEnabled(context)) {
@@ -124,45 +111,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
                 return true;
             });
         }
-
-        // Last: it wraps the surface switches' change listeners, so they must already be set.
-        configureUseCaseMode();
-    }
-
-    /**
-     * Wires the launcher / terminal-only chooser. The mode is the user's stored choice, so the
-     * indicator stays put when a single surface below is flipped — only the mode itself moves it.
-     * Switching mode rewrites the surface switches, read back posted because a preference change
-     * listener fires before the new value reaches the data store.
-     */
-    private void configureUseCaseMode() {
-        SegmentedPillPreference mode = findPreference(KEY_USE_CASE_MODE);
-        if (mode == null) return;
-        mode.setSegments(
-            new String[]{LauncherUseCaseMode.MODE_LAUNCHER, LauncherUseCaseMode.MODE_TERMINAL},
-            new int[]{R.string.settings_use_case_launcher, R.string.settings_use_case_terminal});
-        mode.setOnPreferenceChangeListener((preference, newValue) -> {
-            MAIN_HANDLER.post(this::syncUseCaseSurfaceSwitches);
-            return true;
-        });
-    }
-
-    /** Pushes the post-switch surface states onto the switches the mode just rewrote. */
-    private void syncUseCaseSurfaceSwitches() {
-        Context context = getContext();
-        if (context == null) return;
-        TermuxStylePreferencesDataStore store = TermuxStylePreferencesDataStore.getInstance(context);
-        for (String key : USE_CASE_SURFACE_KEYS) {
-            SwitchPreferenceCompat surface = findPreference(key);
-            if (surface == null) continue;
-            boolean value = store.getBoolean(key, true);
-            if (surface.isChecked() != value) surface.setChecked(value);
-        }
-        SwitchPreferenceCompat recents = findPreference("show_in_recents_when_not_default");
-        if (recents != null) {
-            boolean value = store.getBoolean("show_in_recents_when_not_default", true);
-            if (recents.isChecked() != value) recents.setChecked(value);
-        }
     }
 
     private void updateDrawerLayoutSummary() {
@@ -185,14 +133,10 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         Context context = getContext();
         if (context == null) return;
         if (getActivity() != null) {
-            getActivity().setTitle(R.string.settings_destination_launcher_apps);
+            getActivity().setTitle(titleRes());
         }
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();
-        SwitchPreferenceCompat notificationDotsPreference = findPreference("app_launcher_notification_dots");
-        if (notificationDotsPreference != null) {
-            updateNotificationDotsSummary(context, notificationDotsPreference);
-        }
     }
 
     private void configurePermissionActions(@NonNull Context context) {
@@ -263,22 +207,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
                 ? R.string.termux_app_launcher_access_status_on
                 : R.string.termux_app_launcher_access_status_off);
         }
-    }
-
-    private void updateNotificationDotsSummary(Context context, SwitchPreferenceCompat preference) {
-        boolean accessEnabled = LauncherNotificationAccess.isEnabled(context);
-        preference.setSummary(accessEnabled
-            ? R.string.termux_app_launcher_notification_dots_summary
-            : R.string.termux_app_launcher_notification_dots_summary_needs_access);
-    }
-
-    private void showNotificationAccessPrompt(Context context) {
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_app_launcher_notification_access_title)
-            .setMessage(R.string.termux_app_launcher_notification_access_message)
-            .setPositiveButton(R.string.termux_app_launcher_notification_access_enable, (dialog, which) -> openNotificationAccessSettings(context))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
     }
 
     private void openNotificationAccessSettings(Context context) {

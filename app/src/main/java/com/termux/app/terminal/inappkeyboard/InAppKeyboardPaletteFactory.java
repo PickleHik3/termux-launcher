@@ -10,6 +10,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.chrome.GlassLook;
 
 import juloo.keyboard2.Theme;
 
@@ -17,6 +18,12 @@ import juloo.keyboard2.Theme;
 public final class InAppKeyboardPaletteFactory {
 
     private static final double MIN_TEXT_CONTRAST = 4.5d;
+
+    // How far each part of a keyboard on Obsidian glass sits from the capsule, toward its ink.
+    private static final float KEY_LIFT = 0.16f;
+    private static final float FUNCTION_LIFT = 0.08f;
+    private static final float LABEL_LIFT = 0.90f;
+    private static final float SUB_LABEL_LIFT = 0.68f;
 
     private InAppKeyboardPaletteFactory() {}
 
@@ -138,7 +145,7 @@ public final class InAppKeyboardPaletteFactory {
         SourceRoles roles = resolve(context);
         int tertiary = materialColor(context, com.google.android.material.R.attr.colorTertiary,
             ColorUtils.blendARGB(roles.primary, roles.secondary, 0.5f));
-        int error = materialColor(context, com.google.android.material.R.attr.colorError,
+        int error = materialColor(context, androidx.appcompat.R.attr.colorError,
             0xFFBA1A1A);
         return new int[] {
             // Keep the original six entries first so persisted per-key assignments migrate
@@ -215,18 +222,46 @@ public final class InAppKeyboardPaletteFactory {
      */
     @NonNull
     public static Theme.Palette createGlass(@NonNull Context context, String variant) {
+        return createGlass(context, variant, GlassLook.SCHEME);
+    }
+
+    /**
+     * {@link #createGlass(Context, String)} on the surface the preset draws. Under a
+     * {@code scheme} look nothing changes. Under an Obsidian look the capsule is the look's tint,
+     * not the theme's panel colour, so the chips, their legends and the glass they are contrasted
+     * against are derived from that same surface colour and the keys read as part of the capsule.
+     */
+    @NonNull
+    public static Theme.Palette createGlass(@NonNull Context context, String variant,
+                                            @NonNull GlassLook look) {
         String normalizedVariant = variant == null || "dock".equals(variant)
             ? "system" : variant;
         Theme.Palette base = create(context, normalizedVariant);
         boolean night = isNightMode(context);
         int glassBase = resolveDockGlassBaseColor(context);
+        int baseKey = base.keyBackground;
+        int baseSpace = base.spaceBarBackground;
+        int baseFunction = base.functionKeyBackground;
+        int baseLabel = base.labelColor;
+        int baseSubLabel = base.subLabelColor;
+        int baseFunctionLabel = base.functionLabelColor;
+        if (look.obsidianTint) {
+            glassBase = surfaceTinted(look, glassBase);
+            night = ColorUtils.calculateLuminance(glassBase) < 0.5d;
+            baseKey = chipOn(glassBase, KEY_LIFT);
+            baseSpace = baseKey;
+            baseFunction = chipOn(glassBase, FUNCTION_LIFT);
+            baseLabel = chipOn(glassBase, LABEL_LIFT);
+            baseSubLabel = chipOn(glassBase, SUB_LABEL_LIFT);
+            baseFunctionLabel = baseSubLabel;
+        }
 
         // Glass keeps the Material tiers legible: letters are the most solid chip, function keys
         // let more glass through so they sit one tone lower, and Enter stays a filled accent button.
-        int key = ColorUtils.setAlphaComponent(base.keyBackground, night ? 150 : 180);
+        int key = ColorUtils.setAlphaComponent(baseKey, night ? 150 : 180);
         int action = ColorUtils.setAlphaComponent(base.actionKeyBackground, night ? 228 : 236);
-        int function = ColorUtils.setAlphaComponent(base.functionKeyBackground, night ? 96 : 124);
-        int space = ColorUtils.setAlphaComponent(base.spaceBarBackground, night ? 150 : 180);
+        int function = ColorUtils.setAlphaComponent(baseFunction, night ? 96 : 124);
+        int space = ColorUtils.setAlphaComponent(baseSpace, night ? 150 : 180);
         int activated = ColorUtils.setAlphaComponent(base.activatedKeyBackground, 216);
 
         int keyOnBase = ColorUtils.compositeColors(key, glassBase);
@@ -234,11 +269,11 @@ public final class InAppKeyboardPaletteFactory {
         int functionOnBase = ColorUtils.compositeColors(function, glassBase);
         int activatedOnBase = ColorUtils.compositeColors(activated, glassBase);
 
-        int label = ensureContrast(base.labelColor, keyOnBase);
-        int subLabel = ensureContrast(base.subLabelColor, keyOnBase);
+        int label = ensureContrast(baseLabel, keyOnBase);
+        int subLabel = ensureContrast(baseSubLabel, keyOnBase);
         int actionLabel = ensureContrast(base.actionLabelColor, actionOnBase);
         int actionSubLabel = ensureContrast(base.actionSubLabelColor, actionOnBase);
-        int functionLabel = ensureContrast(base.functionLabelColor, functionOnBase);
+        int functionLabel = ensureContrast(baseFunctionLabel, functionOnBase);
         int activatedLabel = ensureContrast(base.activatedLabelColor, activatedOnBase);
         // Re-sunk against the composited chip; see the non-glass path for why RGB, not alpha.
         int pressedLabel = ColorUtils.blendARGB(activatedOnBase, activatedLabel, 130f / 255f);
@@ -263,6 +298,22 @@ public final class InAppKeyboardPaletteFactory {
         );
     }
 
+    /** The capsule's flat colour under {@code look}: its tint with the wash over it, opaque. */
+    @ColorInt
+    private static int surfaceTinted(@NonNull GlassLook look, @ColorInt int glassBase) {
+        return opaque(look.flatTint(opaque(glassBase)));
+    }
+
+    /**
+     * A tone of the capsule's own colour: {@code surface} moved {@code amount} toward white on a
+     * dark capsule and toward black on a light one, so chips and legends share its hue.
+     */
+    @ColorInt
+    private static int chipOn(@ColorInt int surface, float amount) {
+        int ink = ColorUtils.calculateLuminance(surface) < 0.5d ? Color.WHITE : Color.BLACK;
+        return ColorUtils.blendARGB(surface, ink, amount);
+    }
+
     private static SourceRoles resolve(@NonNull Context context) {
         int surface = materialColor(context, com.google.android.material.R.attr.colorSurface,
             ContextCompat.getColor(context, R.color.termux_surface_base));
@@ -271,7 +322,7 @@ public final class InAppKeyboardPaletteFactory {
         int surfaceVariant = materialColor(context,
             com.google.android.material.R.attr.colorSurfaceVariant,
             ColorUtils.blendARGB(surface, onSurface, 0.08f));
-        int primary = materialColor(context, com.google.android.material.R.attr.colorPrimary,
+        int primary = materialColor(context, androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
         int secondary = materialColor(context, com.google.android.material.R.attr.colorSecondary,
             primary);

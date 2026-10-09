@@ -12,13 +12,38 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class TaiModelProfile {
-    public static final String SOURCE_EDGE_GALLERY_1_0_15 = "google-ai-edge-gallery-1.0.15";
+    // Value is Gallery's model_allowlist 1_0_19 (the constant name is kept for source
+    // compatibility with existing profile source strings). The allowlist values are unchanged
+    // from 1_0_15 through 1_0_19 (checked by parsing each file); only the label was stale.
+    public static final String SOURCE_EDGE_GALLERY_1_0_15 = "google-ai-edge-gallery-1.0.19";
     public static final String SOURCE_LITERT_COMMUNITY = "litert-community-model-card";
     public static final String THINKING_NONE = "none";
     public static final String THINKING_TOGGLEABLE = "toggleable";
     public static final String THINKING_ALWAYS = "always";
+    /**
+     * How a chat template is told to think. The default sends {@code enable_thinking} as the
+     * string "true" when thinking is on and leaves the key out when it is off, because LiteRT-LM
+     * hands a string to Jinja and any non-empty string, "false" included, reads as true there.
+     * That only switches thinking off for templates that treat a missing key as off (Gemma 4).
+     */
+    public static final String THINKING_SWITCH_TEMPLATE_KEY = "template_key";
+    /**
+     * {@code enable_thinking} as a real JSON boolean, on and off. LiteRT-LM's Kotlin
+     * {@code JsonConvertersKt.toJsonElement} turns a {@link Boolean} into a JSON boolean (and a
+     * {@link String} into a JSON string), so a template that tests {@code enable_thinking is false}
+     * (MiniCPM5) sees an actual false instead of a truthy string.
+     */
+    public static final String THINKING_SWITCH_TEMPLATE_BOOLEAN = "template_boolean";
+    /**
+     * The family's own flag in the system prompt. SmolLM3 reads {@code /no_think} there (upstream
+     * card: "provide the /think and /no_think flags through the system prompt"), and its LiteRT
+     * templates carry no {@code enable_thinking} at all.
+     */
+    public static final String THINKING_SWITCH_SYSTEM_FLAG = "system_flag";
 
     public final List<String> compatibleAccelerators;
     public final int defaultMaxTokens;
@@ -31,6 +56,7 @@ public final class TaiModelProfile {
     public final int maxContextTokens;
     @Nullable public final String thinkingChannelStart;
     @Nullable public final String thinkingChannelEnd;
+    public final String thinkingSwitch;
 
     public TaiModelProfile(
         @NonNull List<String> compatibleAccelerators,
@@ -64,6 +90,16 @@ public final class TaiModelProfile {
     public TaiModelProfile(List<String> compatibleAccelerators, int defaultMaxTokens, int defaultTopK,
             double defaultTopP, double defaultTemperature, Integer minDeviceMemoryInGb, String source,
             String thinkingMode, String thinkingChannelStart, String thinkingChannelEnd, int maxContextTokens) {
+        this(compatibleAccelerators, defaultMaxTokens, defaultTopK, defaultTopP, defaultTemperature,
+            minDeviceMemoryInGb, source, thinkingMode, thinkingChannelStart, thinkingChannelEnd, maxContextTokens,
+            THINKING_SWITCH_TEMPLATE_KEY);
+    }
+
+    public TaiModelProfile(List<String> compatibleAccelerators, int defaultMaxTokens, int defaultTopK,
+            double defaultTopP, double defaultTemperature, Integer minDeviceMemoryInGb, String source,
+            String thinkingMode, String thinkingChannelStart, String thinkingChannelEnd, int maxContextTokens,
+            String thinkingSwitch) {
+        this.thinkingSwitch = normalizeThinkingSwitch(thinkingSwitch);
         this.maxContextTokens = Math.max(0, maxContextTokens);
         ArrayList<String> normalized = new ArrayList<>();
         for (String accelerator : compatibleAccelerators) {
@@ -85,6 +121,21 @@ public final class TaiModelProfile {
 
     @NonNull
     public static TaiModelProfile forModel(@NonNull TaiModelSpec modelSpec) {
+        TaiModelProfile profile = resolve(modelSpec);
+        if (!TaiModelSpec.BACKEND_LITERT_LM.equals(modelSpec.backend)) return profile;
+        // The Gemma 4 -gpu/-web bundles hold only a GPU_ARTISAN decoder: a CPU load fails with
+        // "TF_LITE_PREFILL_DECODE not found in the model". Older imports saved them as GPU + CPU;
+        // correcting it here heals those installs without a re-import.
+        if (TaiImportProfiles.artisanBundle(modelSpec.localPath) && profile.supports("cpu")) {
+            profile = profile.withAccelerators(Collections.singletonList("gpu"));
+        }
+        // Granite 4.2's template thinks unless told not to, and older imports saved it without a
+        // thinking switch: healed here for the same reason, without a re-import.
+        return TaiImportProfiles.withGraniteThinkingSwitch(profile, modelSpec.id + " " + modelSpec.localPath);
+    }
+
+    @NonNull
+    private static TaiModelProfile resolve(@NonNull TaiModelSpec modelSpec) {
         String id = normalizedIdentity(modelSpec.id);
         String path = modelSpec.localPath == null ? "" : modelSpec.localPath.toLowerCase(Locale.ROOT);
         // This provider package has fixed, published runtime behavior. Override the legacy generic
@@ -101,6 +152,10 @@ public final class TaiModelProfile {
             return new TaiModelProfile(Collections.singletonList("cpu"), 1024, 40, 0.90d, 0.80d,
                 modelSpec.recommendedRamGb > 0 ? modelSpec.recommendedRamGb : null, "tai-mnn-config-default");
         }
+        // Gallery's maxTokens (AL:19,65) is EngineConfig.maxNumTokens, the total KV-cache budget.
+        // Its 32000 maxContextLength slider (AL:18-19,64-65) is an app ceiling, not the model's:
+        // the window stays on TAI's RAM tiers up to the catalog's 32768, capped on GPU by the
+        // budget. 4000 stays the default output cap (doc: "the effect is harmless" for Gemma 4).
         if ("gemma4e2bit".equals(id) || "gemma4e2bitlitertlm".equals(id) || path.contains("gemma-4-e2b-it.litertlm")) {
             return edgeGalleryThinkingProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 8);
         }
@@ -111,24 +166,92 @@ public final class TaiModelProfile {
             || path.contains("mobile_actions_q8_ekv1024")) {
             return edgeGalleryProfile(Collections.singletonList("cpu"), 1024, 0.0d, 6);
         }
+        // Gallery gives DeepSeek/Qwen no separate maxContextLength (AL:169-185): the allowlist's
+        // 4096 is both the total window and the value Gallery would otherwise use as an output
+        // cap. TAI keeps 4096 as the context window but trims the output cap so a full prompt
+        // still fits (doc recommendation 2: "an output cap of 4096 inside a 4096 window leaves
+        // no room for the prompt").
         if ("deepseekr1distillqwen15blitertlm".equals(id)
             || path.contains("deepseek-r1-distill-qwen-1.5b_multi-prefill-seq_q8_ekv4096.litertlm")) {
-            return edgeGalleryProfile(Arrays.asList("gpu", "cpu"), 4096, 1.0d, 6);
+            return edgeGalleryProfile(Arrays.asList("gpu", "cpu"), sensibleOutputCap(4096), 1.0d, 6, 4096);
         }
         if ("qwen2515binstructlitertlm".equals(id)
             || path.contains("qwen2.5-1.5b-instruct_multi-prefill-seq_q8_ekv4096.litertlm")) {
-            return new TaiModelProfile(Arrays.asList("gpu", "cpu"), 4096, 20, 0.80d, 0.70d, 6,
-                SOURCE_EDGE_GALLERY_1_0_15);
+            return new TaiModelProfile(Arrays.asList("gpu", "cpu"), sensibleOutputCap(4096), 20, 0.80d, 0.70d, 6,
+                SOURCE_EDGE_GALLERY_1_0_15, THINKING_NONE, null, null, 4096);
         }
         if ("tinygarden270m".equals(id) || path.contains("tiny_garden_q8_ekv1024")) {
             return edgeGalleryProfile(Collections.singletonList("cpu"), 1024, 0.0d, 6);
         }
+        // Gemma 3n: Gallery defaults it CPU-first, unlike Gemma 4's GPU-first order
+        // (AL:110,130 vs AL:20,66), with vision GPU regardless of the main backend ("must be
+        // GPU for Gemma 3n", G:ui/llmchat/LlmChatModelHelper.kt:136). No separate
+        // maxContextLength is given, so 4096 is both the window and (trimmed) the output cap.
+        if (id.contains("gemma3ne2bit") || path.contains("gemma-3n-e2b-it")) {
+            return edgeGalleryProfile(Arrays.asList("cpu", "gpu"), sensibleOutputCap(4096), 1.0d, 8, 4096);
+        }
+        if (id.contains("gemma3ne4bit") || path.contains("gemma-3n-e4b-it")) {
+            return edgeGalleryProfile(Arrays.asList("cpu", "gpu"), sensibleOutputCap(4096), 1.0d, 12, 4096);
+        }
+        // Gemma3-1B-IT (AL:134-151): GPU-first, no vision/audio, fixed 1024 with no
+        // maxContextLength slider — the same "no separate ceiling" shape as MobileActions/
+        // TinyGarden above, so context and output cap both stay 1024.
+        if (id.contains("gemma31bit") || path.contains("gemma3-1b-it")) {
+            return edgeGalleryProfile(Arrays.asList("gpu", "cpu"), 1024, 1.0d, 6, 1024);
+        }
 
+        // A litert-community publication the importer keeps a family table for (SmolLM3, Qwen3.5,
+        // MiniCPM5, MedGemma, FunctionGemma, EmbeddingGemma): an import that arrived without a
+        // runtime profile (the HTTP and CLI path) still gets its card's defaults.
+        if (!modelSpec.builtInCatalogEntry) {
+            TaiImportProfiles.Match family = TaiImportProfiles.match(modelSpec.id + " " + path);
+            if (family != null) return family.profile;
+        }
+
+        // litert-community files that carry an `_ekvNNNN` token (e.g. `..._ekv4096.litertlm`)
+        // use that number as Gallery's own maxTokens for every allowlisted file that has it
+        // (AL: `_ekv4096` -> 4096, `_ekv1024` -> 1024). Treat it as a default context window for
+        // an otherwise-unmatched import, not a hard limit: the user's own runtimeProfile (checked
+        // above) still overrides it (doc recommendation 3).
+        Integer ekvContext = extractEkvContext(path);
+        if (ekvContext != null) {
+            List<String> ekvAccelerators = modelSpec.builtInCatalogEntry
+                ? Arrays.asList("gpu", "cpu")
+                : Collections.singletonList("cpu");
+            return new TaiModelProfile(ekvAccelerators, sensibleOutputCap(ekvContext), 64, 0.95d, 1.0d, null,
+                modelSpec.builtInCatalogEntry ? "tai-catalog-default" : "edge-gallery-import-default",
+                THINKING_NONE, null, null, ekvContext);
+        }
+
+        // No filename match and no `ekv` token: Gallery's own import default is exactly this,
+        // CPU-only with a 1024-token window (G:ui/modelmanager/ModelImportDialog.kt:97-103,
+        // G:data/Consts.kt:43-46).
         List<String> accelerators = modelSpec.builtInCatalogEntry
             ? Arrays.asList("gpu", "cpu")
             : Collections.singletonList("cpu");
         return new TaiModelProfile(accelerators, 1024, 64, 0.95d, 1.0d, null,
             modelSpec.builtInCatalogEntry ? "tai-catalog-default" : "edge-gallery-import-default");
+    }
+
+    /** {@code min(1024, context/4)}: a default output cap that always leaves room for a prompt. */
+    static int sensibleOutputCap(int contextTokens) {
+        return Math.max(1, Math.min(1024, contextTokens / 4));
+    }
+
+    private static final Pattern EKV_TOKEN = Pattern.compile("ekv(\\d+)");
+
+    /** The `ekvNNNN` token from a litert-community file name, or {@code null} when absent. */
+    @Nullable
+    static Integer extractEkvContext(@Nullable String path) {
+        if (path == null) return null;
+        Matcher matcher = EKV_TOKEN.matcher(path);
+        if (!matcher.find()) return null;
+        try {
+            int value = Integer.parseInt(matcher.group(1));
+            return value > 0 ? value : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     @NonNull
@@ -150,7 +273,8 @@ public final class TaiModelProfile {
             profile.optString("thinkingMode", fallback.thinkingMode),
             nullableString(profile, "thinkingChannelStart", fallback.thinkingChannelStart),
             nullableString(profile, "thinkingChannelEnd", fallback.thinkingChannelEnd),
-            profile.optInt("maxContextTokens", fallback.maxContextTokens)
+            profile.optInt("maxContextTokens", fallback.maxContextTokens),
+            profile.optString("thinkingSwitch", fallback.thinkingSwitch)
         );
     }
 
@@ -167,8 +291,24 @@ public final class TaiModelProfile {
             json.optString("thinkingMode", THINKING_NONE),
             nullableString(json, "thinkingChannelStart", null),
             nullableString(json, "thinkingChannelEnd", null),
-            json.optInt("maxContextTokens", 0)
+            json.optInt("maxContextTokens", 0),
+            json.optString("thinkingSwitch", THINKING_SWITCH_TEMPLATE_KEY)
         );
+    }
+
+    /** This profile with other processors; everything else unchanged. */
+    @NonNull
+    public TaiModelProfile withAccelerators(@NonNull List<String> accelerators) {
+        return new TaiModelProfile(accelerators, defaultMaxTokens, defaultTopK, defaultTopP, defaultTemperature,
+            minDeviceMemoryInGb, source, thinkingMode, thinkingChannelStart, thinkingChannelEnd, maxContextTokens,
+            thinkingSwitch);
+    }
+
+    /** This profile with another thinking mode and switch; everything else unchanged. */
+    @NonNull
+    public TaiModelProfile withThinking(@NonNull String mode, @NonNull String switchKind) {
+        return new TaiModelProfile(compatibleAccelerators, defaultMaxTokens, defaultTopK, defaultTopP, defaultTemperature,
+            minDeviceMemoryInGb, source, mode, thinkingChannelStart, thinkingChannelEnd, maxContextTokens, switchKind);
     }
 
     public boolean supports(@NonNull String accelerator) {
@@ -192,6 +332,7 @@ public final class TaiModelProfile {
         json.put("maxContextTokens", maxContextTokens);
         json.put("thinkingChannelStart", thinkingChannelStart == null ? JSONObject.NULL : thinkingChannelStart);
         json.put("thinkingChannelEnd", thinkingChannelEnd == null ? JSONObject.NULL : thinkingChannelEnd);
+        json.put("thinkingSwitch", thinkingSwitch);
         return json;
     }
 
@@ -202,9 +343,23 @@ public final class TaiModelProfile {
     }
 
     @NonNull
+    private static TaiModelProfile edgeGalleryProfile(List<String> accelerators, int maxTokens, double temperature,
+            int minMemoryGb, int maxContextTokens) {
+        return new TaiModelProfile(accelerators, maxTokens, 64, 0.95d, temperature, minMemoryGb,
+            SOURCE_EDGE_GALLERY_1_0_15, THINKING_NONE, null, null, maxContextTokens);
+    }
+
+    @NonNull
     private static TaiModelProfile edgeGalleryThinkingProfile(List<String> accelerators, int maxTokens, double temperature, int minMemoryGb) {
         return new TaiModelProfile(accelerators, maxTokens, 64, 0.95d, temperature, minMemoryGb,
             SOURCE_EDGE_GALLERY_1_0_15, THINKING_TOGGLEABLE, null, null);
+    }
+
+    @NonNull
+    private static TaiModelProfile edgeGalleryThinkingProfile(List<String> accelerators, int maxTokens, double temperature,
+            int minMemoryGb, int maxContextTokens) {
+        return new TaiModelProfile(accelerators, maxTokens, 64, 0.95d, temperature, minMemoryGb,
+            SOURCE_EDGE_GALLERY_1_0_15, THINKING_TOGGLEABLE, null, null, maxContextTokens);
     }
 
     @NonNull
@@ -229,6 +384,12 @@ public final class TaiModelProfile {
     private static String normalizeThinkingMode(@Nullable String value) {
         if (THINKING_ALWAYS.equals(value) || THINKING_TOGGLEABLE.equals(value)) return value;
         return THINKING_NONE;
+    }
+
+    @NonNull
+    private static String normalizeThinkingSwitch(@Nullable String value) {
+        if (THINKING_SWITCH_TEMPLATE_BOOLEAN.equals(value) || THINKING_SWITCH_SYSTEM_FLAG.equals(value)) return value;
+        return THINKING_SWITCH_TEMPLATE_KEY;
     }
 
     @Nullable

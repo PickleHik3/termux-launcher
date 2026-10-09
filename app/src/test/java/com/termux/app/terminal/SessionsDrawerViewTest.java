@@ -42,6 +42,13 @@ import java.util.List;
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class SessionsDrawerViewTest {
 
+    @org.junit.Before
+    public void themeTheApplication() {
+        // The drawer's rows hold Material widgets now, which need a Material theme to inflate.
+        RuntimeEnvironment.getApplication().setTheme(
+            com.termux.R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+    }
+
     /**
      * The drawer is under half the terminal wide, so on a phone three actions no longer fit across
      * a row; a strip that clipped its last one would lose Close. It stacks instead, and unstacks

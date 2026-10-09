@@ -10,6 +10,10 @@ state of an edition, read it as of that release, not as of today.
 Each version's **Editions** list carries only what was exclusive to the Nix (`com.termux.launcher.nix`)
 or VAJ (`io.vaj.tl`) build; everything above it applies to all three.
 
+**Versioning.** From v1.0.0 every edition ships the same plain `X.Y.Z`; the edition is in the tag
+(`vX.Y.Z`, `nix-vX.Y.Z`, `vaj-vX.Y.Z`) and the APK name, and hotfixes bump the patch number. Older
+entries keep the tags they shipped under (`-nix`, `-vaj`, `+hotfixN`, `-a`).
+
 ---
 
 ## v0.2.39
@@ -163,7 +167,8 @@ sessions grow.
 - **Four ready-made looks:** Classic, Mist, Slate and Bare. Each preview is a
   small phone mock drawn over your own wallpaper, so you can see a look before
   you apply it. One tap applies it, one tap undoes it. A fifth **Custom** slot
-  saves your own.
+  saves your own. Mist now follows Obsidian-Music's glass: an ink-blue tint,
+  a diagonal gradient rim, and springier sheet arrival with a deeper backdrop.
 - **Pick a clock face by looking at it** — all six are drawn as themselves
   instead of listed by name.
 - Rounded corners for the sessions indicator and the window pills, so the two

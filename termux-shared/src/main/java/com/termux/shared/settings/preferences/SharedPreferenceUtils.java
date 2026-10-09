@@ -48,6 +48,7 @@ public class SharedPreferenceUtils {
      * default if failed to read a valid value, like in case of an exception.
      */
     public static boolean getBoolean(SharedPreferences sharedPreferences, String key, boolean def) {
+        sharedPreferences = SharedPreferencesPreview.readsFor(sharedPreferences);
         if (sharedPreferences == null) {
             Logger.logError(LOG_TAG, "Error getting boolean value for the \"" + key + "\" key from null shared preferences. Returning default value \"" + def + "\".");
             return def;
@@ -92,6 +93,7 @@ public class SharedPreferenceUtils {
      * default if failed to read a valid value, like in case of an exception.
      */
     public static float getFloat(SharedPreferences sharedPreferences, String key, float def) {
+        sharedPreferences = SharedPreferencesPreview.readsFor(sharedPreferences);
         if (sharedPreferences == null) {
             Logger.logError(LOG_TAG, "Error getting float value for the \"" + key + "\" key from null shared preferences. Returning default value \"" + def + "\".");
             return def;
@@ -136,6 +138,7 @@ public class SharedPreferenceUtils {
      * default if failed to read a valid value, like in case of an exception.
      */
     public static int getInt(SharedPreferences sharedPreferences, String key, int def) {
+        sharedPreferences = SharedPreferencesPreview.readsFor(sharedPreferences);
         if (sharedPreferences == null) {
             Logger.logError(LOG_TAG, "Error getting int value for the \"" + key + "\" key from null shared preferences. Returning default value \"" + def + "\".");
             return def;
@@ -210,6 +213,7 @@ public class SharedPreferenceUtils {
      * default if failed to read a valid value, like in case of an exception.
      */
     public static long getLong(SharedPreferences sharedPreferences, String key, long def) {
+        sharedPreferences = SharedPreferencesPreview.readsFor(sharedPreferences);
         if (sharedPreferences == null) {
             Logger.logError(LOG_TAG, "Error getting long value for the \"" + key + "\" key from null shared preferences. Returning default value \"" + def + "\".");
             return def;
@@ -255,6 +259,7 @@ public class SharedPreferenceUtils {
      * default if failed to read a valid value, like in case of an exception.
      */
     public static String getString(SharedPreferences sharedPreferences, String key, String def, boolean defIfEmpty) {
+        sharedPreferences = SharedPreferencesPreview.readsFor(sharedPreferences);
         if (sharedPreferences == null) {
             Logger.logError(LOG_TAG, "Error getting String value for the \"" + key + "\" key from null shared preferences. Returning default value \"" + def + "\".");
             return def;
@@ -303,6 +308,7 @@ public class SharedPreferenceUtils {
      * default if failed to read a valid value, like in case of an exception.
      */
     public static Set<String> getStringSet(SharedPreferences sharedPreferences, String key, Set<String> def) {
+        sharedPreferences = SharedPreferencesPreview.readsFor(sharedPreferences);
         if (sharedPreferences == null) {
             Logger.logError(LOG_TAG, "Error getting Set<String> value for the \"" + key + "\" key from null shared preferences. Returning default value \"" + def + "\".");
             return def;
@@ -348,6 +354,7 @@ public class SharedPreferenceUtils {
      * like in case of an exception.
      */
     public static int getIntStoredAsString(SharedPreferences sharedPreferences, String key, int def) {
+        sharedPreferences = SharedPreferencesPreview.readsFor(sharedPreferences);
         if (sharedPreferences == null) {
             Logger.logError(LOG_TAG, "Error getting int value for the \"" + key + "\" key from null shared preferences. Returning default value \"" + def + "\".");
             return def;

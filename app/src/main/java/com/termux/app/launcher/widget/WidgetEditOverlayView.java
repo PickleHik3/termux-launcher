@@ -11,6 +11,7 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.material.M3;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
@@ -89,39 +90,43 @@ public final class WidgetEditOverlayView extends View {
         setClickable(true);
         framePaint.setStyle(Paint.Style.STROKE);
         framePaint.setStrokeWidth(dp(2f));
-        framePaint.setColor(0xE6FFFFFF);
+        int primary = M3.primary(context);
+        int error = M3.error(context);
+        int onSurface = M3.onSurface(context);
+        framePaint.setColor(primary);
         // The same stroke family as the frame, thinner and dimmer: editable, not selected.
         outlinePaint.setStyle(Paint.Style.STROKE);
         outlinePaint.setStrokeWidth(dp(1.5f));
-        outlinePaint.setColor(0x59FFFFFF);
+        outlinePaint.setColor(M3.outlineVariant(context));
         handlePaint.setStyle(Paint.Style.FILL);
-        handlePaint.setColor(0xFFFFFFFF);
+        handlePaint.setColor(primary);
         handleRingPaint.setStyle(Paint.Style.STROKE);
         handleRingPaint.setStrokeWidth(dp(1.5f));
-        handleRingPaint.setColor(0x66000000);
+        handleRingPaint.setColor(M3.color(context, com.google.android.material.R.attr.colorSurface,
+            com.google.android.material.R.color.m3_sys_color_dark_surface));
         ghostStrokePaint.setStyle(Paint.Style.STROKE);
         ghostStrokePaint.setStrokeWidth(dp(1.5f));
-        ghostStrokePaint.setColor(0xB3FFFFFF);
+        ghostStrokePaint.setColor(primary);
         ghostFillPaint.setStyle(Paint.Style.FILL);
-        ghostFillPaint.setColor(0x1AFFFFFF);
+        ghostFillPaint.setColor(M3.stateLayer(primary, M3.STATE_DRAGGED));
         // The same ghost in the colour of a refusal: this page has no room for the widget, so the
         // drop will spring back. Red rather than simply hidden, because a ghost that vanishes over
         // one page and reappears over the next reads as a glitch.
         blockedStrokePaint.setStyle(Paint.Style.STROKE);
         blockedStrokePaint.setStrokeWidth(dp(1.5f));
-        blockedStrokePaint.setColor(0xCCFF6B6B);
+        blockedStrokePaint.setColor(error);
         blockedFillPaint.setStyle(Paint.Style.FILL);
-        blockedFillPaint.setColor(0x33FF6B6B);
+        blockedFillPaint.setColor(M3.stateLayer(error, M3.STATE_DRAGGED));
         chipPaint.setStyle(Paint.Style.FILL);
-        chipPaint.setColor(0xE6202124);
+        chipPaint.setColor(M3.surfaceContainerHigh(context));
         chipCrossPaint.setStyle(Paint.Style.STROKE);
         chipCrossPaint.setStrokeWidth(dp(1.8f));
         chipCrossPaint.setStrokeCap(Paint.Cap.ROUND);
-        chipCrossPaint.setColor(0xFFFFFFFF);
+        chipCrossPaint.setColor(onSurface);
         chipGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
         chipGlyphPaint.setTextAlign(Paint.Align.CENTER);
         chipGlyphPaint.setTextSize(dp(13f));
-        chipGlyphPaint.setColor(0xFFFFFFFF);
+        chipGlyphPaint.setColor(onSurface);
     }
 
     public void setListener(@Nullable Listener value) { listener = value; }

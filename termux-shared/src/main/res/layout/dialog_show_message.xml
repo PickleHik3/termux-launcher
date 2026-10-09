@@ -16,7 +16,7 @@
             android:id="@+id/dialog_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textAppearance="@style/TextAppearance.AppCompat.Title"
+            android:textAppearance="?attr/textAppearanceTitleLarge"
             android:textColor="?attr/termuxColorOnAccentContainer"/>
     </LinearLayout>
 

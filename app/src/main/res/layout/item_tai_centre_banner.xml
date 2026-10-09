@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Model centre: the follow-up strip a finished download leaves ("Whisper Base installed · Use
+     for voice"), with its one action and a dismiss. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="16dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="4dp">
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/tai_centre_banner"
+        style="@style/Widget.Material3.CardView.Filled"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        app:cardBackgroundColor="?attr/colorSecondaryContainer">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="8dp">
+
+            <ImageView
+                android:id="@+id/tai_centre_banner_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_tai_check"
+                app:tint="?attr/colorOnSecondaryContainer" />
+
+            <TextView
+                android:id="@+id/tai_centre_banner_text"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_weight="1"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="?attr/colorOnSecondaryContainer" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tai_centre_banner_action"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="?attr/colorOnSecondaryContainer" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tai_centre_banner_dismiss"
+                style="?attr/materialIconButtonStyle"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/tai_centre_action_dismiss"
+                app:icon="@drawable/ic_tai_close"
+                app:iconTint="?attr/colorOnSecondaryContainer" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+</FrameLayout>

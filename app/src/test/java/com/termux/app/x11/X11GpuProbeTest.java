@@ -46,6 +46,34 @@ public class X11GpuProbeTest {
         assertTrue(result.toEnv().contains("export MESA_LOADER_DRIVER_OVERRIDE=zink\n"));
     }
 
+    /** The Setup GUI Apps screen's second command: the install first, the exports after it. */
+    @Test public void theGraphicsCommandInstallsFirstAndEndsWithoutANewline() {
+        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
+        in.kgsl = true;
+        in.kgslModel = "Adreno730v2";
+
+        String command = X11GpuProbe.evaluate(in).toCommand();
+
+        String[] lines = command.split("\n", -1);
+        assertEquals("# Adreno730v2: turnip-zink", lines[0]);
+        assertEquals("pkg install -y mesa mesa-vulkan-icd-freedreno", lines[1]);
+        assertEquals("export MESA_LOADER_DRIVER_OVERRIDE=zink", lines[lines.length - 2]);
+        assertEquals("export TU_DEBUG=noconform", lines[lines.length - 1]);
+        assertFalse("the user's own Enter runs the last line", command.endsWith("\n"));
+    }
+
+    /** virgl needs a helper alive in Termux, and the command has to say so. */
+    @Test public void theGraphicsCommandNamesTheHelperWhenTheProfileNeedsOne() {
+        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
+        in.eglVendor = "mali";
+        in.glRenderer = "Mali-G78";
+
+        String command = X11GpuProbe.evaluate(in).toCommand();
+
+        assertTrue(command, command.contains("# then keep this running in Termux: "
+            + "virgl_test_server_android --angle-gl &"));
+    }
+
     @Test public void adrenoWithoutThePackagesStillRecommendsZinkAndNamesThem() {
         X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
         in.kgsl = true;

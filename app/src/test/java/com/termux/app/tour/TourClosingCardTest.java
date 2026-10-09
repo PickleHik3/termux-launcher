@@ -36,18 +36,18 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void everyEditionGetsTheSameSixSectionsWithAHeadingAndASentence() {
+    public void everyEditionGetsTheSameSevenSectionsWithAHeadingAndASentence() {
         for (TourEdition edition : TourEdition.values()) {
             List<TourClosingCard.Section> sections = TourClosingCard.sections(edition);
-            assertEquals("six sections for " + edition, 6, sections.size());
+            assertEquals("seven sections for " + edition, 7, sections.size());
             for (TourClosingCard.Section section : sections) {
                 assertNotEquals("no heading for " + edition, 0, section.headingRes);
                 assertNotEquals("no copy for " + edition, 0, section.copyRes);
             }
-            // The first three sections read the same everywhere; nix has its own sentence for
+            // The first five sections read the same everywhere; nix has its own sentence for
             // extras (no pkg, so no tlstore) and for graphical apps (no "Get GUI apps" screen).
-            assertEquals(TourClosingCard.sections(TourEdition.TERMUX).subList(0, 3),
-                sections.subList(0, 3));
+            assertEquals(TourClosingCard.sections(TourEdition.TERMUX).subList(0, 5),
+                sections.subList(0, 5));
             if (edition == TourEdition.NIX) {
                 assertTrue("nix has no pkg, so no command on the card",
                     TourClosingCard.commandResources(edition).isEmpty());
@@ -91,16 +91,30 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void picturesSitBeforeTheGraphicalAppsAndPointAtHelpRatherThanACommand() {
-        // Decision (user, 2026-09-21): a sentence, not a command. The terminal draws pictures
-        // without being asked; the one line some older programs need is a habit, not a paste, and
-        // it keeps its caveats in Help.
+    public void minimalModeAndVoiceFollowTheEditorsAndCarryNoCommand() {
+        // The run teaches neither, and a newcomer who does not know they exist will not look.
         for (TourEdition edition : TourEdition.values()) {
             List<TourClosingCard.Section> sections = TourClosingCard.sections(edition);
-            TourClosingCard.Section pictures = sections.get(sections.size() - 2);
-            assertEquals(R.string.tour_closing_pictures_heading, pictures.headingRes);
-            assertEquals(R.string.tour_closing_pictures_copy, pictures.copyRes);
-            assertFalse("pictures have nothing to run", pictures.hasCommand());
+            TourClosingCard.Section minimal = sections.get(3);
+            assertEquals(R.string.tour_closing_minimal_heading, minimal.headingRes);
+            assertEquals(R.string.tour_closing_minimal_copy, minimal.copyRes);
+            assertFalse("minimal mode has nothing to run", minimal.hasCommand());
+            TourClosingCard.Section voice = sections.get(4);
+            assertEquals(R.string.tour_closing_voice_heading, voice.headingRes);
+            assertEquals(R.string.tour_closing_voice_copy, voice.copyRes);
+            assertFalse("voice has nothing to run", voice.hasCommand());
+        }
+    }
+
+    @Test
+    public void theNeovimPicturesRecipeIsHelpsAndNotTheClosingCards() {
+        // It is a one-line workaround for one older program: it stays in help under "Pictures in
+        // the terminal", which is where its caveats can be qualified.
+        for (TourEdition edition : TourEdition.values()) {
+            for (TourClosingCard.Section section : TourClosingCard.sections(edition)) {
+                assertNotEquals("pictures on the closing card",
+                    R.string.help_topic_pictures_title, section.headingRes);
+            }
         }
     }
 
@@ -116,7 +130,7 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void customizeSitsBetweenTheShortcutsAndTheExtrasAndCarriesNoCommand() {
+    public void customizeIsThirdAndCarriesNoCommand() {
         // The run teaches no lesson about the editors, so the way to them is said here.
         for (TourEdition edition : TourEdition.values()) {
             TourClosingCard.Section customize = TourClosingCard.sections(edition).get(2);
@@ -129,7 +143,7 @@ public class TourClosingCardTest {
     @Test
     public void theExtrasSectionIsTheCardsOneCommandExceptOnNix() {
         for (TourEdition edition : TourEdition.values()) {
-            TourClosingCard.Section extras = TourClosingCard.sections(edition).get(3);
+            TourClosingCard.Section extras = TourClosingCard.sections(edition).get(5);
             assertEquals(R.string.tour_closing_extras_heading, extras.headingRes);
             if (edition == TourEdition.NIX) {
                 assertEquals(R.string.tour_closing_extras_copy_nix, extras.copyRes);

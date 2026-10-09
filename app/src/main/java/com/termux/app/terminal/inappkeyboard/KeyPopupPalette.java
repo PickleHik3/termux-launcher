@@ -31,7 +31,7 @@ public final class KeyPopupPalette {
 
     @NonNull
     public static KeyPopupPalette resolve(@NonNull Context context) {
-        int primary = role(context, com.google.android.material.R.attr.colorPrimary, 0xFFE9B308);
+        int primary = role(context, androidx.appcompat.R.attr.colorPrimary, 0xFFE9B308);
         int onSurface = role(context, com.google.android.material.R.attr.colorOnSurface, 0xFFF2EFE8);
         return new KeyPopupPalette(opaque(primary), opaque(onSurface));
     }

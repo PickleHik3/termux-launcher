@@ -1,8 +1,13 @@
+<!-- The launcher shell is a spatial arrangement the user builds (panes, dock, rails, keys,
+     status strip), placed by absolute geometry, so it never mirrors: it stays left to right in
+     every locale. Reading-order surfaces inside it (the sheet plane below) opt back in with
+     layoutDirection="locale". -->
 <com.termux.app.terminal.TermuxActivityRootView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/activity_termux_root_view"
+    android:layoutDirection="ltr"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -28,6 +33,16 @@
             android:layout_height="match_parent"
             android:importantForAccessibility="no"
             android:visibility="invisible" />
+
+        <!-- The joined Docked frame's glass: one sheet behind the status bar, the canvas band, the
+             dock rows and the keyboard, so there is no seam between them. Dressed (and shown) by
+             applyFrameGutterGlass only while the shape model has a joined frame card. -->
+        <View
+            android:id="@+id/docked_frame_glass"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
 
         <FrameLayout
             android:id="@+id/terminal_status_bar_background"
@@ -98,7 +113,7 @@
             <com.termux.app.statusbar.StatusBarSwipeLayout
                 android:id="@+id/terminal_window_bar_host"
                 android:layout_width="match_parent"
-                android:layout_height="96dp"
+                android:layout_height="91dp"
                 android:clipChildren="false"
                 android:clipToPadding="false"
                 android:visibility="gone">
@@ -148,7 +163,7 @@
                 <com.termux.app.statusbar.TopPaneWidgetSlot
                     android:id="@+id/terminal_top_widget_area"
                     android:layout_width="match_parent"
-                    android:layout_height="68dp"
+                    android:layout_height="65dp"
                     android:layout_gravity="top"
                     android:elevation="6dp"
                     android:outlineProvider="none"
@@ -395,6 +410,18 @@
                         app:realtimeBlurRadius="10dp"
                         app:realtimeOverlayColor="@android:color/transparent" />
 
+                    <!-- Wallpaper-mode frost: the shared pre-blurred frame at this capsule's
+                         own place on screen, which the blur above cannot see. While it shows,
+                         the live blur is GONE; WallpaperFrostPainter.applyOffDockSheet()
+                         installs it. -->
+                    <ImageView
+                        android:id="@+id/place_az_bar_host_frost"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:importantForAccessibility="no"
+                        android:visibility="gone" />
+
                     <View
                         android:id="@+id/place_az_bar_host_surface"
                         android:layout_width="match_parent"
@@ -436,6 +463,18 @@
                         android:layout_height="match_parent"
                         app:realtimeBlurRadius="10dp"
                         app:realtimeOverlayColor="@android:color/transparent" />
+
+                    <!-- Wallpaper-mode frost: the shared pre-blurred frame at this plank's
+                         own place on screen, which the blur above cannot see. While it shows,
+                         the live blur is GONE; WallpaperFrostPainter.applyOffDockSheet()
+                         installs it. -->
+                    <ImageView
+                        android:id="@+id/place_off_dock_plank_frost"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:importantForAccessibility="no"
+                        android:visibility="gone" />
 
                     <View
                         android:id="@+id/place_off_dock_plank_surface"
@@ -604,7 +643,7 @@
                 android:id="@+id/accessory_surface_host"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_above="@id/accessory_keyboard_column"
                 android:layout_alignWithParentIfMissing="true"
                 android:clipChildren="true"
                 android:clipToPadding="true"
@@ -657,7 +696,7 @@
                 android:id="@+id/apps_bar_az_fx_underlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_above="@id/accessory_keyboard_column"
                 android:layout_alignWithParentIfMissing="true"
                 android:clickable="false"
                 android:focusable="false"
@@ -670,10 +709,11 @@
                  The band touching the canvas keeps a sheet of glass of its own; the rest stand on
                  the dock's (accessory_surface_host, inset below it). They used to
                  hang off each other by layout_above, which pinned them to the shipped order and
-                 left every other one unrenderable. The stack is anchored above the keyboard
-                 container and falls back to the parent's bottom when that is gone or has been
-                 lifted out by the floating/split keyboard, which is the one thing the old chain's
-                 alignWithParentIfMissing was there for.
+                 left every other one unrenderable. The stack is anchored above the keyboard's
+                 column, which holds the keyboard and any bands a place stands under it; with the
+                 keyboard gone or lifted out by the floating/split keyboard the column is only
+                 those bands, or nothing, and the stack sits on them or on the parent's bottom.
+                 Bands under the keyboard are the one part of the bottom edge not standing here.
 
                  Declared top to bottom in the shipped order, so the screen before the first
                  arrangement pass is the one the chain drew. Each row stands in a host of its own,
@@ -686,7 +726,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:edgeStackEdge="bottom"
-                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_above="@id/accessory_keyboard_column"
                 android:layout_alignWithParentIfMissing="true"
                 android:clipChildren="false"
                 android:clipToPadding="false">
@@ -781,145 +821,188 @@
                 android:id="@+id/apps_bar_az_fx_overlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_above="@id/accessory_keyboard_column"
                 android:layout_alignWithParentIfMissing="true"
                 android:clickable="false"
                 android:focusable="false"
                 android:visibility="gone" />
 
+            <!-- The keyboard and the bands standing under it, bottom-anchored as one column: the
+                 keyboard on top and accessory_under_keyboard_stack below it, so the bands a place
+                 stands under the keyboard stay under it whatever height it takes. Everything the
+                 dock stands over the keyboard is anchored above this column, not the keyboard, so
+                 with the keyboard closed, or lifted out by the floating form, the dock's rows sit
+                 straight on the bands under it and nothing opens between them. Holding only the
+                 keyboard, the column is exactly the keyboard and every arrangement that has ever
+                 shipped lays out as it did.
+                 FloatingKeyboardController takes inapp_keyboard_container out of here and puts it
+                 back at the same index. -->
             <LinearLayout
-                android:id="@+id/inapp_keyboard_container"
+                android:id="@+id/accessory_keyboard_column"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_alignParentBottom="true"
                 android:orientation="vertical"
-                android:visibility="gone">
+                android:clipChildren="false"
+                android:clipToPadding="false">
 
                 <LinearLayout
-                    android:id="@+id/inapp_keyboard_height_adjust_controls"
+                    android:id="@+id/inapp_keyboard_container"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:visibility="gone">
 
-                    <FrameLayout
+                    <LinearLayout
+                        android:id="@+id/inapp_keyboard_height_adjust_controls"
                         android:layout_width="match_parent"
-                        android:layout_height="36dp">
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <FrameLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent"
+                                android:layout_gravity="center"
+                                android:gravity="center"
+                                android:orientation="horizontal">
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/inapp_keyboard_height_adjust_cancel"
+                                    style="?attr/materialIconButtonStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:contentDescription="@string/termux_in_app_keyboard_height_adjust_cancel"
+                                    app:icon="@drawable/ic_symbol_close" />
+
+                                <FrameLayout
+                                    android:id="@+id/inapp_keyboard_height_adjust_handle"
+                                    android:layout_width="88dp"
+                                    android:layout_height="match_parent"
+                                    android:contentDescription="@string/termux_in_app_keyboard_height_adjust_handle"
+                                    android:clickable="true"
+                                    android:focusable="true">
+
+                                    <com.google.android.material.bottomsheet.BottomSheetDragHandleView
+                                        android:id="@+id/inapp_keyboard_height_adjust_handle_indicator"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_gravity="center" />
+                                </FrameLayout>
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/inapp_keyboard_height_adjust_confirm"
+                                    style="?attr/materialIconButtonStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:contentDescription="@string/termux_in_app_keyboard_height_adjust_confirm"
+                                    app:icon="@drawable/ic_symbol_check" />
+                            </LinearLayout>
+                        </FrameLayout>
 
                         <LinearLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="match_parent"
-                            android:layout_gravity="center"
-                            android:gravity="center"
-                            android:orientation="horizontal">
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp">
 
                             <TextView
-                                android:id="@+id/inapp_keyboard_height_adjust_cancel"
-                                android:layout_width="40dp"
-                                android:layout_height="32dp"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="@string/termux_in_app_keyboard_height_adjust_cancel"
-                                android:gravity="center"
-                                android:text="@string/termux_in_app_keyboard_height_adjust_cancel_symbol"
-                                android:textColor="?attr/termuxColorOnSurface"
-                                android:textSize="18sp" />
+                                android:id="@+id/inapp_keyboard_key_spacing_label"
+                                android:layout_width="92dp"
+                                android:layout_height="wrap_content"
+                                android:maxLines="1"
+                                android:text="@string/termux_in_app_keyboard_key_spacing"
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="?attr/termuxColorOnSurface" />
 
-                            <FrameLayout
-                                android:id="@+id/inapp_keyboard_height_adjust_handle"
-                                android:layout_width="88dp"
-                                android:layout_height="match_parent"
-                                android:contentDescription="@string/termux_in_app_keyboard_height_adjust_handle"
-                                android:clickable="true"
-                                android:focusable="true">
-
-                                <View
-                                    android:id="@+id/inapp_keyboard_height_adjust_handle_indicator"
-                                    android:layout_width="52dp"
-                                    android:layout_height="4dp"
-                                    android:layout_gravity="center"
-                                    android:background="?attr/termuxColorOnSurfaceVariant" />
-                            </FrameLayout>
-
-                            <TextView
-                                android:id="@+id/inapp_keyboard_height_adjust_confirm"
-                                android:layout_width="40dp"
-                                android:layout_height="32dp"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="@string/termux_in_app_keyboard_height_adjust_confirm"
-                                android:gravity="center"
-                                android:text="@string/termux_in_app_keyboard_height_adjust_confirm_symbol"
-                                android:textColor="?attr/termuxColorOnSurface"
-                                android:textSize="18sp" />
+                            <com.google.android.material.slider.Slider
+                                android:id="@+id/inapp_keyboard_key_spacing_slider"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:contentDescription="@string/termux_in_app_keyboard_key_spacing_slider"
+                                android:valueFrom="0.0"
+                                android:valueTo="200.0"
+                                android:stepSize="1.0" />
                         </LinearLayout>
-                    </FrameLayout>
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="28dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingStart="8dp"
-                        android:paddingEnd="8dp">
-
-                        <TextView
-                            android:id="@+id/inapp_keyboard_key_spacing_label"
-                            android:layout_width="92dp"
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:maxLines="1"
-                            android:text="@string/termux_in_app_keyboard_key_spacing"
-                            android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="11sp" />
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp">
 
-                        <SeekBar
-                            android:id="@+id/inapp_keyboard_key_spacing_slider"
-                            android:layout_width="0dp"
-                            android:layout_height="28dp"
-                            android:layout_weight="1"
-                            android:contentDescription="@string/termux_in_app_keyboard_key_spacing_slider"
-                            android:max="200"
-                            android:splitTrack="false" />
+                            <TextView
+                                android:id="@+id/inapp_keyboard_key_corner_radius_label"
+                                android:layout_width="92dp"
+                                android:layout_height="wrap_content"
+                                android:maxLines="1"
+                                android:text="@string/termux_in_app_keyboard_key_corner_radius"
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="?attr/termuxColorOnSurface" />
+
+                            <com.google.android.material.slider.Slider
+                                android:id="@+id/inapp_keyboard_key_corner_radius_slider"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:contentDescription="@string/termux_in_app_keyboard_key_corner_radius_slider"
+                                android:valueFrom="0.0"
+                                android:valueTo="240.0"
+                                android:stepSize="1.0" />
+                        </LinearLayout>
                     </LinearLayout>
 
-                    <LinearLayout
+                    <FrameLayout
+                        android:id="@+id/inapp_keyboard_suggestion_host"
                         android:layout_width="match_parent"
-                        android:layout_height="28dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingStart="8dp"
-                        android:paddingEnd="8dp">
+                        android:layout_height="wrap_content"
+                        android:visibility="gone" />
 
-                        <TextView
-                            android:id="@+id/inapp_keyboard_key_corner_radius_label"
-                            android:layout_width="92dp"
-                            android:layout_height="wrap_content"
-                            android:maxLines="1"
-                            android:text="@string/termux_in_app_keyboard_key_corner_radius"
-                            android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="11sp" />
-
-                        <SeekBar
-                            android:id="@+id/inapp_keyboard_key_corner_radius_slider"
-                            android:layout_width="0dp"
-                            android:layout_height="28dp"
-                            android:layout_weight="1"
-                            android:contentDescription="@string/termux_in_app_keyboard_key_corner_radius_slider"
-                            android:max="240"
-                            android:splitTrack="false" />
-                    </LinearLayout>
+                    <FrameLayout
+                        android:id="@+id/inapp_keyboard_view_host"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
                 </LinearLayout>
 
-                <FrameLayout
-                    android:id="@+id/inapp_keyboard_suggestion_host"
+                <!-- The bottom bands a place stands under the keyboard, outermost last as in every
+                     bottom stack (EdgeStackPolicy.underKeyboard). applyEdgeStacks() moves the
+                     hosts in and out of here, and hides it while it holds none. While it holds
+                     any it is a card of the dock's material (applyUnderKeyboardStackGlass), with
+                     the air above and under it as margins the stack's height counts
+                     (UnderKeyboardBand). -->
+                <com.termux.app.place.EdgeStackView
+                    android:id="@+id/accessory_under_keyboard_stack"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    app:edgeStackEdge="bottom"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
                     android:visibility="gone" />
-
-                <FrameLayout
-                    android:id="@+id/inapp_keyboard_view_host"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
             </LinearLayout>
         </RelativeLayout>
+
+        <!-- The minimised A–Z index: a half-pill tab flush against the screen's side, outside the
+             pane's border, and the letters it slides out over the canvas while held. The whole
+             screen, over the content and the dock, so a touch on the tab reaches it before the
+             pane wall (and its border hold-drag) sees the stream; a touch anywhere else is
+             refused and goes on to whatever is under it. It claims no band. Under the floating
+             keyboard, the editors and the sheets. syncAzBarHosts() configures and shows it. -->
+        <com.termux.app.AzPullTabLayer
+            android:id="@+id/place_az_tab_layer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentBottom="true"
+            android:visibility="gone" />
 
         <!-- Where the keyboard goes when the place's keyboard type is Floating: the whole content
              region, so the frame inside it can be dragged anywhere and still be touchable, and
@@ -938,24 +1021,32 @@
             android:elevation="14dp"
             android:visibility="gone" />
 
-        <!-- Capture layer for the surface editor's surface taps and drag gestures. Sized in code to
-             each surface's measured rect (expanded upward so the top-border handle is inside the hit
-             area); the frame itself is not clickable, so touches outside the groups fall through.
-
-             A tap on a group selects that surface, a horizontal drag walks its screen-edge margin,
-             and the ring says which one the pill is pointing at. -->
+        <!-- The Appearance editor's tap layer. It covers the whole frame while the editor is up,
+             so nothing under it - the terminal, the dock's apps, the keyboard's keys - receives a
+             touch; each group below is laid in code over its element's measured rect, and a tap on
+             one selects that element. Elevated over the floating keyboard's host so a floating
+             keyboard is a tap target too, not a keyboard. -->
         <FrameLayout
             android:id="@+id/surface_tuning_gesture_overlay"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_alignParentTop="true"
             android:layout_alignParentBottom="true"
-            android:elevation="12dp"
+            android:elevation="18dp"
             android:visibility="gone">
 
-            <!-- The canvas is a surface, not empty space, so it takes taps too. First child, so the
-                 three bounded surfaces above it win wherever their rects overlap this one: a
-                 FrameLayout offers a touch to its children back to front. -->
+            <!-- The bare wallpaper: first child and the whole frame, so every element's group
+                 above it wins wherever they overlap (a FrameLayout offers a touch to its children
+                 back to front) and a touch between elements lands here. -->
+            <FrameLayout
+                android:id="@+id/surface_tuning_wallpaper_gesture_group"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_gravity="top"
+                android:clickable="true"
+                android:focusable="false"
+                android:visibility="gone" />
+
             <FrameLayout
                 android:id="@+id/surface_tuning_canvas_gesture_group"
                 android:layout_width="match_parent"
@@ -973,25 +1064,6 @@
                 android:clickable="true"
                 android:focusable="false"
                 android:visibility="gone">
-
-                <!-- The clock's own control: laid over the live clock in code while the status bar
-                     is the surface being edited, with the ▾ drawn at its trailing edge. Clickable in
-                     its own right: a child takes the touch before the group's select-and-drag
-                     handler sees it. -->
-                <TextView
-                    android:id="@+id/surface_tuning_status_clock_handle"
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="top|start"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_vertical|end"
-                    android:paddingEnd="8dp"
-                    android:text="@string/termux_surface_tuning_clock_chevron"
-                    android:textColor="?attr/termuxColorPrimary"
-                    android:textSize="13sp"
-                    android:visibility="gone" />
             </FrameLayout>
 
             <FrameLayout
@@ -1012,62 +1084,14 @@
                 android:focusable="false"
                 android:visibility="gone" />
 
-            <!-- One outline per surface the editor can act on, positioned in code to that
-                 surface's own rect — not to its capture group, which overhangs it, and a ring drawn
-                 on that would sit a finger's width above the thing it identifies.
-
-                 With nothing picked they are all drawn and breathe together, which is the whole
-                 invitation to touch one. With a surface picked its outline alone stands, steady,
-                 and is what identifies the target; the card's own position never has to. -->
+            <!-- The selection: one 2dp colorPrimary outline on the tapped element, positioned in
+                 code to that element's own rect. Nothing else glows. -->
             <View
-                android:id="@+id/surface_editor_ring_status"
+                android:id="@+id/surface_editor_selection_outline"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_gravity="top"
                 android:importantForAccessibility="no"
-                android:visibility="gone" />
-
-            <View
-                android:id="@+id/surface_editor_ring_dock"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_gravity="top"
-                android:importantForAccessibility="no"
-                android:visibility="gone" />
-
-            <View
-                android:id="@+id/surface_editor_ring_keyboard"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_gravity="top"
-                android:importantForAccessibility="no"
-                android:visibility="gone" />
-
-            <View
-                android:id="@+id/surface_editor_ring_canvas"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_gravity="top"
-                android:importantForAccessibility="no"
-                android:visibility="gone" />
-
-            <!-- Value echo for peeking controls. The pill fades while a control whose surface sits
-                 under it is dragged, so the number it is changing has to appear somewhere the user
-                 is already looking. Not clickable: it is a read-out over the live surface. -->
-            <TextView
-                android:id="@+id/surface_tuning_peek_readout"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:background="@drawable/dock_tuning_done_pill"
-                android:clickable="false"
-                android:focusable="false"
-                android:importantForAccessibility="no"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="7dp"
-                android:textColor="?attr/termuxColorOnAccentContainer"
-                android:textSize="13sp"
-                android:textStyle="bold"
                 android:visibility="gone" />
         </FrameLayout>
 
@@ -1080,39 +1104,6 @@
             android:layout_above="@id/accessory_stack_container"
             android:layout_alignWithParentIfMissing="true"
             android:elevation="16dp"
-            android:visibility="gone" />
-
-        <!-- The surface editor. Not a card pinned above the accessory stack any more: an attached
-             pill that parks next to whichever surface it is editing, carrying one property at a
-             time. The host fills the region so the pill can be placed anywhere inside it, and is
-             deliberately not clickable, so a touch outside the pill reaches the surface underneath
-             and selects it. Elevation clears the gesture overlay, which the pill must sit over.
-
-             Populated from surface_editor_pill.xml on the editor's first open. -->
-        <FrameLayout
-            android:id="@+id/surface_editor_pill_host"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_alignParentTop="true"
-            android:layout_alignParentBottom="true"
-            android:elevation="20dp"
-            android:visibility="gone" />
-
-        <!-- The Layout editor, the surface editor's sibling: a miniature of the place on screen,
-             parked over the live place so the real thing stays visible behind it. The host fills
-             the region and takes the touches the card does not, so a drag aimed at the miniature
-             that lands beside it cannot reach the terminal underneath.
-
-             Populated from layout_editor.xml on the editor's first open. -->
-        <FrameLayout
-            android:id="@+id/layout_editor_host"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_alignParentTop="true"
-            android:layout_alignParentBottom="true"
-            android:clickable="true"
-            android:elevation="20dp"
-            android:focusable="true"
             android:visibility="gone" />
 
         <com.termux.app.LauncherAzGestureFxView
@@ -1213,9 +1204,14 @@
              Above the palette in z because a sheet is modal and the palette collapses before it
              opens one, and below the rename chip because a rename can be started from a sheet.
              INVISIBLE rather than gone so the host stays measured and the blur gates its own work
-             on isShown(). -->
+             on isShown().
+
+             The one part of the shell that follows the locale's direction: a sheet is reading-order
+             UI. Cards are placed by absolute LEFT margins, so the plane's direction mirrors only
+             what is inside them. -->
         <FrameLayout
             android:id="@+id/terminal_sheet_host"
+            android:layoutDirection="locale"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipChildren="false"

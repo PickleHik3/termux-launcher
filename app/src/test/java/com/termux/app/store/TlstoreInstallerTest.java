@@ -46,6 +46,7 @@ public class TlstoreInstallerTest {
     private static final byte[] MOTD =
         "#!/system/bin/sh\nprintf '%s\\n' 'Welcome to Termux Launcher.'\n"
             .getBytes(StandardCharsets.UTF_8);
+    private static final byte[] TLSTORE_UI = "ELF-fixture-arm64-v8a".getBytes(StandardCharsets.UTF_8);
 
     private static TlstoreInstaller.AssetSource assets(byte[] script, boolean includeTrustedKey) {
         return assets(script, includeTrustedKey, MOTD);
@@ -53,6 +54,12 @@ public class TlstoreInstallerTest {
 
     private static TlstoreInstaller.AssetSource assets(byte[] script, boolean includeTrustedKey,
                                                         byte[] motd) {
+        return assets(script, includeTrustedKey, motd, null);
+    }
+
+    /** {@code tlstoreUi}, when not null, is served under {@code tlstore/tlstore-ui-arm64-v8a}. */
+    private static TlstoreInstaller.AssetSource assets(byte[] script, boolean includeTrustedKey,
+                                                        byte[] motd, byte[] tlstoreUi) {
         return name -> {
             if (name.equals("tlstore/tlstore")) return new ByteArrayInputStream(script);
             if (name.equals("tlstore/catalog.tsv")) return new ByteArrayInputStream(CATALOG);
@@ -60,7 +67,11 @@ public class TlstoreInstallerTest {
                 if (!includeTrustedKey) throw new FileNotFoundException(name);
                 return new ByteArrayInputStream(TRUSTED_KEY);
             }
-            if (name.equals("tlstore/motd.sh")) return new ByteArrayInputStream(motd);
+            if (name.equals("motd.sh")) return new ByteArrayInputStream(motd);
+            if (name.equals("tlstore/tlstore-ui-arm64-v8a")) {
+                if (tlstoreUi == null) throw new FileNotFoundException(name);
+                return new ByteArrayInputStream(tlstoreUi);
+            }
             throw new FileNotFoundException(name);
         };
     }
@@ -130,6 +141,38 @@ public class TlstoreInstallerTest {
 
         assertArrayEquals(newerScript, Files.readAllBytes(installer.tlstoreScript().toPath()));
         assertTrue(text(installer.markerFile()).contains(" v" + TlstoreInstaller.VERSION + " "));
+    }
+
+    @Test public void aSelfUpdatedNewerTlstoreIsNotDowngraded() throws IOException {
+        installer.install();
+        // tlstore updated itself (script and UI) past what this APK bundles.
+        byte[] selfUpdated = ("#!/usr/bin/env sh\n" + TlstoreInstaller.MARKER_PREAMBLE
+            + "\nTLSTORE_VERSION=0.9\necho self-updated\n").getBytes(StandardCharsets.UTF_8);
+        Files.write(installer.tlstoreScript().toPath(), selfUpdated);
+        byte[] selfUpdatedUi = "ELF-self-updated".getBytes(StandardCharsets.UTF_8);
+        Files.write(installer.tlstoreUiFile().toPath(), selfUpdatedUi);
+        // A new APK (new marker) bundling an older tlstore.
+        Files.write(installer.markerFile().toPath(),
+            (TlstoreInstaller.MARKER_PREAMBLE + " v0 com.termux.test\n").getBytes(StandardCharsets.UTF_8));
+        byte[] bundledOlder = ("#!/usr/bin/env sh\n" + TlstoreInstaller.MARKER_PREAMBLE
+            + "\nTLSTORE_VERSION=0.5\necho bundled\n").getBytes(StandardCharsets.UTF_8);
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(bundledOlder, true));
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
+
+        assertArrayEquals(selfUpdated, Files.readAllBytes(installer.tlstoreScript().toPath()));
+        assertArrayEquals(selfUpdatedUi, Files.readAllBytes(installer.tlstoreUiFile().toPath()));
+    }
+
+    @Test public void versionsCompareNumerically() {
+        assertEquals("0.5", TlstoreInstaller.tlstoreVersion("#!/bin/sh\nTLSTORE_VERSION=0.5\n"));
+        assertEquals(null, TlstoreInstaller.tlstoreVersion("#!/bin/sh\necho\n"));
+        assertTrue(TlstoreInstaller.isNewerVersion("0.10", "0.9"));
+        assertTrue(TlstoreInstaller.isNewerVersion("1.0", "0.9.9"));
+        assertFalse(TlstoreInstaller.isNewerVersion("0.5", "0.5"));
+        assertFalse(TlstoreInstaller.isNewerVersion("0.4", "0.5"));
+        assertFalse(TlstoreInstaller.isNewerVersion(null, "0.5"));
     }
 
     @Test public void aForeignTlIsLeftAloneAndNothingIsOverwritten() throws IOException {
@@ -221,6 +264,116 @@ public class TlstoreInstallerTest {
         assertTrue(installer.tlstoreScript().exists());
         assertTrue(installer.catalogFile().exists());
         assertTrue(installer.markerFile().exists());
+    }
+
+    // --- tlstore-ui ---
+
+    @Test public void aBundledUiBinaryIsInstalledAndExecutable() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
+
+        assertArrayEquals(TLSTORE_UI, Files.readAllBytes(installer.tlstoreUiFile().toPath()));
+        assertFalse(Files.isSymbolicLink(installer.tlstoreUiFile().toPath()));
+        assertTrue(installer.tlstoreUiFile().canExecute());
+    }
+
+    @Test public void aDeviceAbiWithNoBundledUiBinaryGetsNothingWritten() throws IOException {
+        // The APK only carries arm64-v8a; this "device" only reports x86_64.
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"x86_64"});
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
+
+        assertFalse("nothing to fall back from but the list, so nothing is written",
+            installer.tlstoreUiFile().exists());
+        // Everything else still installs; a missing tlstore-ui is not a failure.
+        assertTrue(installer.tlstoreScript().exists());
+    }
+
+    @Test public void aChangedUiBinaryIsRewrittenOnAVersionBump() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+        installer.install();
+        Files.write(installer.markerFile().toPath(),
+            (TlstoreInstaller.MARKER_PREAMBLE + " v0 com.termux.test\n")
+                .getBytes(StandardCharsets.UTF_8));
+        byte[] newerUi = "ELF-fixture-newer".getBytes(StandardCharsets.UTF_8);
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, newerUi), new String[]{"arm64-v8a"});
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
+
+        assertArrayEquals(newerUi, Files.readAllBytes(installer.tlstoreUiFile().toPath()));
+    }
+
+    @Test public void aForeignUiBinaryIsLeftAloneAcrossAVersionBump() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+        installer.install();
+        Files.write(installer.tlstoreUiFile().toPath(), "not ours".getBytes(StandardCharsets.UTF_8));
+        Files.write(installer.markerFile().toPath(),
+            (TlstoreInstaller.MARKER_PREAMBLE + " v0 com.termux.test\n")
+                .getBytes(StandardCharsets.UTF_8));
+        byte[] newerUi = "ELF-fixture-newer".getBytes(StandardCharsets.UTF_8);
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, newerUi), new String[]{"arm64-v8a"});
+
+        TlstoreInstaller.Result result = installer.install();
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, result);
+        assertEquals("the foreign file must survive", "not ours",
+            text(installer.tlstoreUiFile()));
+    }
+
+    // --- tlstore-ui refresh on every start, even when the outer marker is already up to date ---
+
+    @Test public void anUnchangedUiBinaryIsUntouchedOnAnUpToDateInstall() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+        installer.install();
+        long mtimeBefore = installer.tlstoreUiFile().lastModified();
+
+        // Same applicationId, same versionName, same bundled binary: the outer marker matches,
+        // so this is the UP_TO_DATE path — the one that used to skip tlstore-ui entirely.
+        assertEquals(TlstoreInstaller.Result.UP_TO_DATE, installer.install());
+
+        assertArrayEquals(TLSTORE_UI, Files.readAllBytes(installer.tlstoreUiFile().toPath()));
+        assertEquals("untouched, not just byte-identical", mtimeBefore,
+            installer.tlstoreUiFile().lastModified());
+    }
+
+    @Test public void aChangedUiBinaryIsRewrittenEvenWithTheSameVersionName() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+        installer.install();
+        // Same applicationId and versionName as a fresh build during development would carry —
+        // the outer marker does not change, only the bundled asset's bytes do.
+        byte[] newerUi = "ELF-fixture-newer-same-versionName".getBytes(StandardCharsets.UTF_8);
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, newerUi), new String[]{"arm64-v8a"});
+
+        assertEquals(TlstoreInstaller.Result.UP_TO_DATE, installer.install());
+
+        assertArrayEquals("a changed binary must reach the phone even without a version bump",
+            newerUi, Files.readAllBytes(installer.tlstoreUiFile().toPath()));
+    }
+
+    @Test public void aForeignUiBinaryIsLeftAloneOnAnUpToDateInstall() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+        installer.install();
+        Files.write(installer.tlstoreUiFile().toPath(), "not ours".getBytes(StandardCharsets.UTF_8));
+        // Same applicationId/versionName/asset as the first install; only the on-disk file
+        // changed, out from under this class — the outer marker still matches.
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+
+        assertEquals(TlstoreInstaller.Result.UP_TO_DATE, installer.install());
+
+        assertEquals("the foreign file must survive", "not ours",
+            text(installer.tlstoreUiFile()));
     }
 
     private static int countTempFiles(File dir) {

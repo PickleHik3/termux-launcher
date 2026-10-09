@@ -6,6 +6,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.SystemClock;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -142,7 +143,7 @@ public class TextSelectionHandleView extends View {
         coords[0] += mPointX;
         coords[1] += mPointY;
         if (mHandle != null)
-            mHandle.showAtLocation(terminalView, 0, coords[0], coords[1]);
+            mHandle.showAtLocation(terminalView, Gravity.TOP | Gravity.LEFT, coords[0], coords[1]);
     }
 
     public void hide() {

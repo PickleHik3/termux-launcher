@@ -129,7 +129,7 @@ public class KittyNotificationsTest extends TerminalTestCase {
 		String answer = mOutput.getOutputAndClear();
 		assertTrue(answer, answer.startsWith("\033]99;i=q1:p=?;"));
 		assertTrue(answer, answer.endsWith("\033\\"));
-		assertTrue(answer, answer.contains("p=title,body,close,?,alive"));
+		assertTrue(answer, answer.contains("p=title,body,buttons,close,?,alive"));
 		assertTrue(answer, answer.contains("a=focus,report"));
 		assertTrue(answer, answer.contains("u=0,1,2"));
 		// Nothing is shown for a query.

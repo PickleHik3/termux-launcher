@@ -1,3 +1,9 @@
+/*
+ * Adapted from herdr agent-detection manifests, herdr contributors.
+ * SPDX-License-Identifier: Apache-2.0
+ * Modified for Termux Launcher: ordered Java title/screen rules and launcher state mapping.
+ * See LICENSE-TERMINAL-EMULATOR for the Apache-2.0 text and THIRD_PARTY_NOTICES.md.
+ */
 package com.termux.app.terminal;
 
 import androidx.annotation.NonNull;

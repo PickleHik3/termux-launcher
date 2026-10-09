@@ -13,6 +13,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.SuggestionBarView;
+import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.chrome.ChromeShade;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedAppItem;
@@ -108,7 +109,7 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
                 padPx + (shown / 2) * (miniPx + gapPx));
             // Grid-size render on purpose: the cache key carries the pixel size, so asking at
             // miniPx would mint a second entry per member; the view downscales the shared one.
-            mini.setImageDrawable(dock.getRenderedIcon(entry, iconPx));
+            dock.bindRenderedIcon(mini, entry, iconPx);
             dock.applyIconColorFilter(mini);
             mini.setVisibility(VISIBLE);
             shown++;
@@ -116,6 +117,7 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
         for (int i = shown; i < minis.length; i++) {
             ImageView mini = minis[i];
             if (mini == null) continue;
+            AsyncIconBinder.cancel(mini);
             mini.setImageDrawable(null);
             mini.setVisibility(GONE);
         }
@@ -178,6 +180,7 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
         // artwork is released.
         for (ImageView mini : minis) {
             if (mini == null) continue;
+            AsyncIconBinder.cancel(mini);
             mini.setImageDrawable(null);
             mini.setVisibility(GONE);
         }

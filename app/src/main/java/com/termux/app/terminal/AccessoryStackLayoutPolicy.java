@@ -78,16 +78,25 @@ public final class AccessoryStackLayoutPolicy {
         return toolbar + apps + az + gap;
     }
 
-    /** Applies the three independent row switches before summing the explicitly-sized stack. */
+    /**
+     * Applies the three independent row switches before summing the explicitly-sized stack.
+     *
+     * <p>{@code appsRowStripPx} is the band the apps row's page ticks stand in, which is part of
+     * that row wherever it stands in the stack: its host holds the strip beside the icons, laid
+     * out even while there is only one page to show. It used to be counted only while the
+     * letters were on the dock too, from when it was the gap between those two rows, so with the
+     * letters minimised, off or on another edge the dock came out one strip shorter than the
+     * rows standing in it.
+     */
     public static int computeCombinedHeight(boolean appsRowEnabled, boolean azRowEnabled,
                                             boolean extraKeysRowEnabled, int appsBarHeightPx,
                                             int azRowHeightPx, int extraKeysRowHeightPx,
-                                            int appsAzGapPx) {
+                                            int appsRowStripPx) {
         int apps = appsRowEnabled ? appsBarHeightPx : 0;
         int az = azRowEnabled ? azRowHeightPx : 0;
         int extraKeys = extraKeysRowEnabled ? extraKeysRowHeightPx : 0;
-        int gap = appsRowEnabled && azRowEnabled ? appsAzGapPx : 0;
-        return computeCombinedHeight(extraKeys, apps, az, gap);
+        int strip = appsRowEnabled ? appsRowStripPx : 0;
+        return computeCombinedHeight(extraKeys, apps, az, strip);
     }
 
     public static int computeAppsBarInterRowGapPx(boolean azEnabled, float density, float iconScale) {

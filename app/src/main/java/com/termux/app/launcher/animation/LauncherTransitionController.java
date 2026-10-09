@@ -6,6 +6,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.RectF;
 import android.os.Build;
+import android.os.SystemClock;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
@@ -22,12 +23,21 @@ public final class LauncherTransitionController {
 
     private static final String LOG_TAG = "LauncherTransitionController";
     private static final int SAFE_MODE_FAILURE_THRESHOLD = 3;
+    /**
+     * How long a HOME resolution is trusted without an {@link #invalidateDefaultHome} call. The
+     * preferred-home broadcast is not delivered on every Android build (a role change need not
+     * send it), so the cache also expires on its own.
+     */
+    private static final long DEFAULT_HOME_TTL_MS = 60_000L;
 
     @NonNull
     private final Activity activity;
     @NonNull
     private final TermuxAppSharedPreferences preferences;
     private int transitionFailureCount = 0;
+    /** Whether this app was the default home at {@link #defaultHomeCheckedAtMs}; main thread. */
+    private boolean defaultHome;
+    private long defaultHomeCheckedAtMs = -1L;
 
     public LauncherTransitionController(@NonNull Activity activity, @NonNull TermuxAppSharedPreferences preferences) {
         this.activity = activity;
@@ -91,7 +101,25 @@ public final class LauncherTransitionController {
         }
     }
 
+    /**
+     * Drops the cached HOME resolution, so the next launch asks the package manager again. Call
+     * it when the preferred home activity changes.
+     */
+    public void invalidateDefaultHome() {
+        defaultHomeCheckedAtMs = -1L;
+    }
+
+    /** {@link #resolveDefaultHome}, held between launches rather than resolved on every one. */
     private boolean isDefaultHome() {
+        long now = SystemClock.elapsedRealtime();
+        if (defaultHomeCheckedAtMs < 0 || now - defaultHomeCheckedAtMs >= DEFAULT_HOME_TTL_MS) {
+            defaultHome = resolveDefaultHome();
+            defaultHomeCheckedAtMs = now;
+        }
+        return defaultHome;
+    }
+
+    private boolean resolveDefaultHome() {
         Intent home = new Intent(Intent.ACTION_MAIN);
         home.addCategory(Intent.CATEGORY_HOME);
         PackageManager packageManager = activity.getPackageManager();

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Model centre / speech cards: the chosen (checked) card is outlined in the primary role. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="?attr/colorPrimary" android:state_checked="true" />
+    <item android:color="@android:color/transparent" />
+</selector>

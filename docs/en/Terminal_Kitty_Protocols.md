@@ -1,7 +1,21 @@
-# Kitty protocols and terminal compatibility
+# Graphics, protocols and compatibility
 
-Termux Launcher implements modern application-facing terminal protocols directly in the native
-terminal. Programs negotiate them; users normally do not enable a compatibility switch.
+What the terminal offers programs beyond stock Termux: pictures, the kitty keyboard protocol, text
+sizing, colour-scheme reports, the clipboard protocols, and the cursor trail and screen effects.
+Programs negotiate the protocols themselves; there is no compatibility switch to turn on.
+
+## What works without setup
+
+- Underline styles: single, double, curly, dotted and dashed, with their own colour (SGR 58).
+- Shaping for combining marks, Indic conjuncts, Arabic (in logical order), emoji joined with ZWJ,
+  flags and programming ligatures, all within fixed cells.
+- The kitty keyboard protocol and the kitty multiple-cursors protocol (below).
+- Pictures through kitty graphics, Sixel and iTerm inline images (below).
+- Text sizing (OSC 66), colour-scheme reports, OSC 52 and OSC 5522 clipboard access, OSC 99
+  notifications and the OSC 9;4 progress ring.
+
+`timg -pk` (PNG), `chafa -f kitty` (raw RGBA) and yazi image previews work with no configuration.
+Programs that do not negotiate the keyboard protocol keep the normal Termux key encoding.
 
 ## Terminal identity and detection
 
@@ -13,7 +27,7 @@ TERM_PROGRAM_VERSION=<installed version>
 ```
 
 `TERM` remains `xterm-256color` by default. To use a different terminal identity for programs that
-string-match it, set this in `~/.termux/termux.properties` — the app seeds that file with the
+string-match it, set this in `~/.termux/termux.properties`. The app seeds that file with the
 property documented and commented out, so it is already there to uncomment:
 
 ```properties
@@ -115,6 +129,58 @@ the normal Termux key encoder.
 The Kitty multiple-cursors protocol supports point and rectangular cursors, cursor shape, and color.
 This is independent of the launcher's animated input cursor trail.
 
+## Cursor trail
+
+When the cursor jumps, inside a pane or from one pane to another, a short animated trail follows
+it. Ordinary one-cell typing is not animated, and there is no trail while you are scrolled back.
+Over a text-sizing block the trail covers the whole enlarged cursor.
+
+Pick its look in **Settings → Terminal → Terminal display → Cursor trail**, or in **Appearance →
+Look**: choose **Custom**, tap the terminal, then **Cursor trail**:
+
+- **Default**: kitty's own trail, a solid shape that shears toward the cursor and is gone once it
+  lands.
+- **Motion blur**: a soft, wide smear of blurred cursor copies that lags behind and lingers.
+- **Railgun**: a thin, white-hot beam from the old position that vanishes in a blink, throwing a
+  few sparks.
+- **Torpedo**: a pointed body that travels the path nose first into the cursor, leaving a faint
+  wake of rings.
+- **Pixie dust**: glittering dust that drifts off the path and falls.
+- **Comet**: a tapered streak with a glowing head that draws in behind the cursor.
+
+**Toggle cursor trail** in the [command palette](Command_Palette_And_Actions.md) turns it on or
+off. It is also off in Android's power-save mode and when reduced motion is on.
+
+The Default style is a port of kitty's own `cursor_trail.c`: each corner of the shape chases the
+cursor at its own rate, so the leading edge arrives first. kitty's own directives tune it, read
+from `~/.config/kitty/kitty.conf`:
+
+- `cursor_trail <ms>`: a positive value sets the delay before a cursor move becomes a new target.
+  kitty's `0` does not switch the trail off here; use **Toggle cursor trail**.
+- `cursor_trail_decay <fast> <slow>`: the fastest and slowest decay times, in seconds. Motion blur
+  and Torpedo take longer with a longer slow time, Railgun's shot with a longer fast time; Comet
+  and Pixie dust keep their own timing.
+- `cursor_trail_start_threshold <x> [y]`: how many cells a move must cross before a trail shows.
+- `cursor_trail_color <color>|none`: colours every style; `none` (the default) uses the cursor's
+  colour.
+
+`custom_shaders cursor-trail-motion-blur | cursor-trail-railgun | cursor-trail-torpedo | cursor-trail-pixiedust | cursor-trail-default`
+in `kitty.conf` picks a style and overrides the Settings choice; any other shader name is ignored.
+Motion blur, Railgun and Torpedo are this app's own takes on the kitty shaders they are named
+after; Pixie dust follows kitty's particles.
+
+## Terminal effect and edge colours
+
+**Settings → Terminal → Terminal display → Terminal effect** gives the whole home screen a **CRT**,
+**CRT (green)**, **CRT (amber)** or **TFT grid** look; **None** is the default. It is also on the
+terminal's **Custom** row in **Appearance → Look**, and needs Android 13 or newer. The effect
+covers every terminal pane and the status bar, dock, bars and keyboard around them, with the
+scanlines fixed to the screen. Only the panes curve like a tube; the bars stay flat so every key is
+where you touch it.
+
+**Extend edge colors** in the same section ("Match pane padding to nearby terminal colors."), on
+by default, fills a pane's padding with the terminal colours next to it.
+
 ## Kitty graphics Tier 2
 
 The terminal supports:
@@ -202,13 +268,71 @@ What a program can rely on:
 Full-screen programs redraw on resize anyway; the narrow-pane rule matters only for text already in
 the scrollback.
 
-## Current boundaries
+## Notifications (OSC 99), progress (OSC 9;4) and the clipboard (OSC 52)
 
-- File (`t=f`) and temporary-file (`t=t`) transmissions are accepted; a `t=t` file is deleted only when its path carries `tty-graphics-protocol` and sits in a temporary directory. Shared-memory (`t=s`) transmission is not implemented: Android has no `shm_open`.
-- Unsupported or excessive requests return bounded protocol errors rather than consuming unbounded
-  memory.
-- Image geometry follows terminal cells, so changing a pane's size or font metrics may cause the
-  sending application to redraw or resend an image.
+- **OSC 99** posts a notification in the phone's shade: named, replaceable, with an urgency. Its
+  buttons become Android notification actions, and pressing one reports back to the program by
+  number. Tapping the notification returns to the pane.
+- **OSC 9;4;state;pct** sets the progress ring on the window chip.
+- **OSC 52** writes the Android clipboard, and with `?` reads it. A write from a pane needs the
+  launcher on screen; a read also needs **Settings → Terminal → Clipboard → Let programs read the
+  clipboard**.
 
-For the complete protocol-level feature list, see
-[Rendering and application compatibility](Terminal_Modernization.md#rendering-and-application-compatibility).
+Each escape shares one implementation with `launcherctl`, for a process that has no terminal to
+write an escape into, such as a coding agent's tool runner: `launcherctl notify` (and
+`notify --close` to remove one), `launcherctl progress`, and `launcherctl clipboard copy|paste`.
+They attribute to the current pane unless `--pane` says otherwise. `launcherctl clipboard copy`
+writes even while the launcher is off screen. See [LauncherCtl](LauncherCtl.md) and
+[LauncherCtl API](LauncherCtl_API.md#notifications-the-progress-ring-and-the-clipboard).
+
+## Extended clipboard (OSC 5522)
+
+`kitten clipboard` works. The terminal implements kitty's
+[clipboard protocol](https://sw.kovidgoyal.net/kitty/clipboard/) for text, on the same Android
+clipboard `OSC 52` uses and under the same rules: a write needs the launcher on screen, and a read
+needs it on screen and *Settings → Terminal → Let programs read the clipboard* on. A refused read
+is answered `status=EPERM`.
+
+- **Read** (`type=read`): `text/plain` and `text/plain;charset=utf-8` are answered `OK`, `DATA`
+  packets (3 KiB of text each, under the requested name) and `DONE`. The payload `.` lists the
+  types on offer (both text names, none for an empty clipboard).
+- **Write** (`type=write`, `wdata` chunks, a bare `wdata` to end, optional `walias`): the text is
+  assembled, put on the clipboard, and answered `type=write:status=DONE`. Chunks may split base64
+  groups; bad base64 is `EINVAL`, more than 64 MiB `EFBIG`.
+- **`id`** is echoed on every answer, stripped to the spec's characters.
+- **Not text**: reading a type other than text is `ENOSYS`; a write that carries only non-text
+  types is `ENOSYS`, and non-text data next to text is dropped. `loc=primary` is `ENOSYS` (Android
+  has no primary selection).
+- **Not implemented**: the `pw`/`name` permission cache (both ignored; the setting is the gate),
+  and the paste-events mode (`CSI ? 5522 h`).
+- A refused read and an unset clipboard both reach the terminal as "nothing", so both answer
+  `EPERM`; an empty but readable clipboard answers `OK`/`DONE` with no data.
+
+## kitty's own tools
+
+`kitten` installs from [tlstore](Tlstore.md). `kitten icat` works: it warns that it cannot create
+shared memory and falls back to sending the picture through the terminal. `kitten clipboard` works
+(OSC 5522, above). `kitten @` remote control does nothing.
+
+## Key inspector
+
+**Key inspector** in the [command palette](Command_Palette_And_Actions.md) shows each key event,
+the binding that claimed it, the active kitty keyboard flags, and the exact bytes written to the
+shell. It has no shortcut of its own, so it can inspect any key.
+
+## Current limitations
+
+- File (`t=f`) and temporary-file (`t=t`) transfers are accepted; a `t=t` file is deleted only when
+  its path contains `tty-graphics-protocol` and sits in a temporary folder. Shared-memory (`t=s`)
+  transfer is not possible: Android has no `shm_open`.
+- Unsupported or oversized requests get a protocol error instead of using unbounded memory.
+- Image geometry follows terminal cells, so changing a pane's size or font may make the program
+  redraw or resend a picture.
+- kitty file transfer (OSC 5113) and kitty remote control are not implemented.
+- There is no bidirectional paragraph layout; complex scripts are shaped in logical order.
+- Drawing uses Android's canvas; there is no GPU glyph atlas or custom gamma.
+- The legacy-computing wedges, inverse shades, pattern fills and the octant block are drawn from
+  the font, not as geometry (see [Terminal fonts](Terminal_Fonts.md#box-drawing-blocks-braille-and-powerline)).
+- Workspace files do not record a window's layout, so a restored window starts under manual
+  control.
+- The launcher has one terminal screen; it does not open several top-level Android windows.

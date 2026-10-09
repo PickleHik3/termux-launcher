@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Agenda and Calendar widgets: states. -->
+    <string name="bw_calendar_allow_access">Allow calendar access</string>
+    <string name="bw_calendar_allow_short">Allow access</string>
+    <string name="bw_calendar_no_events_today">No events today</string>
+    <string name="bw_calendar_nothing_else_today">Nothing else today</string>
+    <string name="bw_calendar_no_events">No events</string>
+    <plurals name="bw_calendar_events_count">
+        <item quantity="one">%1$d event</item>
+        <item quantity="other">%1$d events</item>
+    </plurals>
+    <string name="bw_calendar_today_count">%1$d today</string>
+
+    <!-- Agenda and Calendar widgets: labels beside an event. -->
+    <string name="bw_calendar_now">now</string>
+    <string name="bw_calendar_in_minutes">in %1$d min</string>
+    <string name="bw_calendar_in_hours">in %1$d h</string>
+    <string name="bw_calendar_tomorrow">Tomorrow</string>
+    <string name="bw_calendar_all_day">All day</string>
+    <string name="bw_calendar_today">Today</string>
+    <string name="bw_calendar_untitled">(No title)</string>
+
+    <!-- Agenda and Calendar widgets: headings. %1$s is a date or a month name. -->
+    <string name="bw_calendar_next_heading">%1$s · Next</string>
+    <string name="bw_calendar_weekday_month">%1$s, %2$s</string>
+    <string name="bw_calendar_month_week">%1$s · week %2$d</string>
+    <string name="bw_calendar_month_weeks">%1$s · weeks %2$d–%3$d</string>
+    <string name="bw_calendar_joined">%1$s · %2$s</string>
+
+    <!-- Agenda and Calendar widgets: what a screen reader says. -->
+    <string name="bw_calendar_cd_agenda">%1$s. %2$s</string>
+    <string name="bw_calendar_cd_next">Next: %1$s, %2$s</string>
+    <string name="bw_calendar_cd_access">Calendar access is off. Tap to allow it.</string>
+    <string name="bw_calendar_cd_open_event">%1$s, %2$s. Opens the event.</string>
+
+    <!-- Agenda and Calendar widgets: the sample day the picker shows. -->
+    <string name="bw_calendar_sample_standup">Standup</string>
+    <string name="bw_calendar_sample_standup_place">Google Meet</string>
+    <string name="bw_calendar_sample_library">KU library meeting</string>
+    <string name="bw_calendar_sample_library_place">Shuwaikh campus</string>
+    <string name="bw_calendar_sample_gym">Gym</string>
+    <string name="bw_calendar_sample_gym_place">Salmiya</string>
+    <string name="bw_calendar_sample_dentist">Dentist</string>
+</resources>

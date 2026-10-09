@@ -60,4 +60,44 @@ public class TopPaneModelsTest {
         assertEquals(playing.title, paused.title);
         assertEquals(playing.positionMs, paused.positionMs);
     }
+
+    @Test
+    public void mediaStatesReadingTheSameAreEqual() {
+        TopPaneMediaState a = new TopPaneMediaState("com.music", "Weightless",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 5L);
+        TopPaneMediaState b = new TopPaneMediaState("com.music", "Weightless",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 5L);
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+        // Missing text normalises to empty, so null and "" are the same reading.
+        assertEquals(new TopPaneMediaState("p", null, null, null, null, 0L, 0L, false),
+            new TopPaneMediaState("p", "", "", "", null, 0L, 0L, false));
+    }
+
+    @Test
+    public void anyPlaybackChangeMakesMediaStatesDiffer() {
+        TopPaneMediaState base = new TopPaneMediaState("com.music", "Weightless",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 5L);
+        assertFalse(base.equals(base.withPlaying(false)));
+        assertFalse(base.equals(new TopPaneMediaState("com.music", "Weightless",
+            "Marconi Union", "YouTube Music", null, 31L, 100L, true, 5L)));
+        assertFalse(base.equals(new TopPaneMediaState("com.music", "Weightless",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 6L)));
+        assertFalse(base.equals(new TopPaneMediaState("com.music", "Other",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 5L)));
+        assertFalse(base.equals(new TopPaneMediaState("com.other", "Weightless",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 5L)));
+        assertFalse(base.equals(null));
+    }
+
+    @Test
+    public void theMediaRowStandsOnTheDigitsLineWithinTheAir() {
+        // Slot 96 tall at density 1, row 44 tall: anchored on a digit line at 40 it starts at 18.
+        assertEquals(18, TopPaneSlotBudget.anchoredTop(96, 44, 40f, 1f));
+        // A line too high for the air pins the row to the air (5), too low to the foot (96-5-44).
+        assertEquals(5, TopPaneSlotBudget.anchoredTop(96, 44, 10f, 1f));
+        assertEquals(47, TopPaneSlotBudget.anchoredTop(96, 44, 90f, 1f));
+        // No line (a compact face): the slot's centre, as before.
+        assertEquals(26, TopPaneSlotBudget.anchoredTop(96, 44, -1f, 1f));
+    }
 }

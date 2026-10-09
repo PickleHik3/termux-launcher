@@ -52,11 +52,19 @@ public final class PlaceChromePolicy {
     }
 
     /**
-     * The alphabets row is its own index. With an apps row to ride the matches land in that row;
-     * without one they ride a floating strip above the letters, so the switch is the only thing
-     * that decides whether the row is there.
+     * The alphabets row as a band of its own on its edge. With an apps row to ride the matches
+     * land in that row; without one they ride a floating strip above the letters.
      */
     public static boolean azRowShown(@NonNull PlaceLayout layout) {
+        return EdgeStackPolicy.claimsBand(layout, Element.AZ);
+    }
+
+    /**
+     * Whether the index is on screen, which is what keeps the scrub, the catalogue and the
+     * letters' ink alive. Since the minimised pull tab went, this is {@link #azRowShown}; both
+     * names stay because the callers ask two different questions.
+     */
+    public static boolean azIndexShown(@NonNull PlaceLayout layout) {
         return EdgeStackPolicy.isShown(layout, Element.AZ);
     }
 
@@ -66,7 +74,7 @@ public final class PlaceChromePolicy {
      * landscape has always done, and so does an edge of its own.
      */
     public static boolean azIndexStandsAlone(@NonNull PlaceLayout layout) {
-        return azRowShown(layout) && !azRidesAppsRow(layout);
+        return azIndexShown(layout) && !azRidesAppsRow(layout);
     }
 
     /**

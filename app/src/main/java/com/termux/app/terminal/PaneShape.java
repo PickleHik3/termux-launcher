@@ -61,4 +61,22 @@ public final class PaneShape {
     public static int contentInsetForBounds(float requestedRadiusPx, int widthPx, int heightPx) {
         return contentInsetPx(radiusForBounds(requestedRadiusPx, widthPx, heightPx));
     }
+
+    /**
+     * The margin one edge takes when the content along it already starts {@code headroomPx} in
+     * from the content box's own edge, so that the content sits the same {@code sideInsetPx} off
+     * this edge as off the others.
+     *
+     * <p>A terminal's first row of cells does not start at its view's top: the renderer sets it
+     * {@code mFontLineSpacingAndAscent} down. That headroom is clearance the top edge already has,
+     * so the margin only makes up the rest of the inset — the first cell's corner then lands at
+     * ({@code sideInsetPx}, {@code sideInsetPx}), the 45° point {@link #contentInsetPx} clears,
+     * exactly where the last row's corner lands against the bottom arc. Never below 0: headroom
+     * past the inset is simply not clearance this edge has to add.
+     *
+     * @return the edge's own margin, before the headroom
+     */
+    public static int topInsetPx(int sideInsetPx, int headroomPx) {
+        return Math.max(0, sideInsetPx - Math.max(0, headroomPx));
+    }
 }

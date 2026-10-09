@@ -168,4 +168,29 @@ public class WidgetGridSizePopupTest {
         assertTrue("dismissing twice is harmless", !popup.isShowing());
         popup.dismiss();
     }
+
+    @Test
+    public void aScreenReaderAndTheKeysStepTheWheelThroughTheSamePathAsADrag() {
+        Activity activity = activity();
+        Sizes sizes = new Sizes();
+        WidgetGridSizePopup popup = shown(activity, page(activity), sizes, 4, 6);
+        GridSizeWheelView columns = wheels(popup.content()).get(0);
+
+        assertTrue(columns.performAccessibilityAction(
+            android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null));
+        assertEquals(5, columns.value());
+        assertTrue(columns.onKeyDown(android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+            new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,
+                android.view.KeyEvent.KEYCODE_DPAD_DOWN)));
+        assertEquals(4, columns.value());
+        // The listener, which is what keeps the grid, heard both.
+        assertEquals(java.util.Arrays.asList("5x6", "4x6"), sizes.log);
+
+        android.view.accessibility.AccessibilityNodeInfo info =
+            android.view.accessibility.AccessibilityNodeInfo.obtain();
+        columns.onInitializeAccessibilityNodeInfo(info);
+        assertEquals(android.widget.SeekBar.class.getName(), info.getClassName().toString());
+        assertEquals(4, (int) info.getRangeInfo().getCurrent());
+        assertEquals(GridSizeWheelPolicy.columns().maximum(), (int) info.getRangeInfo().getMax());
+    }
 }

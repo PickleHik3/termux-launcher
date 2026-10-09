@@ -44,10 +44,6 @@
     <string name="termux_terminal_view_key_logging_enabled_on">В журналах Logcat будут записи для ключей просмотра терминала. Они очень многословны и должны быть отключены при нормальных обстоятельствах, иначе это вызовет проблемы с производительностью.</string>
     <string name="termux_crash_report_notifications_enabled_title">Уведомления об отчетах о сбоях</string>
     <string name="termux_crash_report_notifications_enabled_off">Отключите уведомления для отчетов о сбоях.</string>
-    <string name="termux_soft_keyboard_enabled_on">Мягкая клавиатура будет включена. (По умолчанию)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Программная клавиатура, только если нет оборудования</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_off">Регулировка маржи терминала будет отключена.</string>
-    <string name="termux_terminal_view_activity_remove_title">Запретить оставаться в недавних приложениях</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Появление</string>
     <string name="donate_preference_title">Пожертвовать</string>
     <string name="bootstrap_error_body">&TERMUX_APP_NAME; не удалось установить загрузочные пакеты.</string>
@@ -81,16 +77,6 @@
     <string name="termux_plugin_error_notifications_enabled_off">Отключите вспышки и уведомления об ошибках плагина.</string>
     <string name="termux_plugin_error_notifications_enabled_on">Показывать вспышки и уведомления об ошибках плагина. (По умолчанию)</string>
     <string name="termux_crash_report_notifications_enabled_on">Показывать уведомления для отчетов о сбоях. (По умолчанию)</string>
-    <string name="termux_keyboard_header">Клавиатура</string>
-    <string name="termux_soft_keyboard_enabled_title">Программная клавиатура включена</string>
-    <string name="termux_soft_keyboard_enabled_off">Программная клавиатура будет отключена.</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Программная клавиатура будет включена, даже если подключена аппаратная клавиатура. (По умолчанию)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Программная клавиатура будет включена, только если аппаратная клавиатура не подключена.</string>
-    <string name="termux_terminal_view_view_header">Вид</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_title">Регулировка маржи терминала</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_on">Регулировка маржи терминала будет включена. Его следует включить, чтобы попытаться решить проблему, когда программная клавиатура закрывает часть дополнительных клавиш/вида терминала. Если это вызывает мерцание экрана на ваших устройствах, отключите его. (По умолчанию)</string>
-    <string name="termux_terminal_view_activity_remove_off">После закрытия всех сеансов терминала &TERMUX_APP_NAME; закроется и останется видимым в недавних приложениях.</string>
-    <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; закроется и удалит себя из недавних приложений, если нет активных сеансов терминала. (По умолчанию)</string>
     <string name="bootstrap_error_not_primary_user_message">&TERMUX_APP_NAME; может быть запущен только как основной пользователь.
 \nДвоичные файлы Bootstrap, скомпилированные для &TERMUX_APP_NAME; имеют жестко заданный путь $PREFIX и не могут быть установлены ни по какому другому пути, кроме:
 \n%1$s.</string>

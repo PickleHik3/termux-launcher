@@ -103,4 +103,35 @@ public class SystemStatsControllerTest {
         // A copy, not the caller's collection: the selection map is reused between samples.
         assertFalse(merged == fresh);
     }
+
+    @Test
+    public void aSnapshotKeepsItsValuesWhenTheWorkingCopyMovesOn() {
+        SystemStatsController.Stats working = new SystemStatsController.Stats();
+        working.cpuPercent = 42;
+        working.corePercent = new int[] {10, 20};
+        working.memTotalKb = 8_000_000L;
+        working.memUsedKb = 3_000_000L;
+        working.top = new java.util.ArrayList<>(java.util.Collections.singletonList(
+            new SystemStatsController.Proc(1, "init", 1.0, 2048L, false)));
+        working.stale = true;
+
+        SystemStatsController.Stats snapshot = working.snapshot();
+        working.cpuPercent = 7;
+        working.corePercent[0] = 99;
+        working.memUsedKb = 1L;
+        working.top.clear();
+        working.stale = false;
+
+        assertEquals(42, snapshot.cpuPercent);
+        assertEquals(10, snapshot.corePercent[0]);
+        assertEquals(3_000_000L, snapshot.memUsedKb);
+        assertEquals(1, snapshot.top.size());
+        assertTrue(snapshot.stale);
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void aSnapshotsProcessListCannotBeEdited() {
+        new SystemStatsController.Stats().snapshot().top.add(
+            new SystemStatsController.Proc(1, "init", 1.0, 2048L, false));
+    }
 }

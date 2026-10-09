@@ -9,6 +9,38 @@ import java.util.Random;
 /** "ESC ]" is the Operating System Command. */
 public class OperatingSystemControlTest extends TerminalTestCase {
 
+	/**
+	 * setProgress is the one place a report lands, for the escape and for the launcher's local API
+	 * alike: a negative percentage keeps the last value, an out-of-range one is clamped, and a state
+	 * this terminal has no ring for is refused rather than treated as a reset.
+	 */
+	public void testSetProgressIsTheOnePath() {
+		withTerminalSized(10, 10);
+		assertTrue(mTerminal.setProgress(TerminalEmulator.PROGRESS_STATE_NORMAL, 42));
+		assertEquals(TerminalEmulator.PROGRESS_STATE_NORMAL, mTerminal.getProgressState());
+		assertEquals(42, mTerminal.getProgressValue());
+
+		assertTrue(mTerminal.setProgress(TerminalEmulator.PROGRESS_STATE_ERROR, -1));
+		assertEquals(TerminalEmulator.PROGRESS_STATE_ERROR, mTerminal.getProgressState());
+		assertEquals(42, mTerminal.getProgressValue());
+
+		assertTrue(mTerminal.setProgress(TerminalEmulator.PROGRESS_STATE_PAUSED, 140));
+		assertEquals(100, mTerminal.getProgressValue());
+
+		assertFalse(mTerminal.setProgress(9, 10));
+		assertEquals(TerminalEmulator.PROGRESS_STATE_PAUSED, mTerminal.getProgressState());
+		assertEquals(100, mTerminal.getProgressValue());
+
+		assertTrue(mTerminal.setProgress(TerminalEmulator.PROGRESS_STATE_NONE, 55));
+		assertEquals(TerminalEmulator.PROGRESS_STATE_NONE, mTerminal.getProgressState());
+		assertEquals(0, mTerminal.getProgressValue());
+
+		// The escape reaches the same method: a report after a direct call continues from it.
+		enterString("\033]9;4;1\007");
+		assertEquals(TerminalEmulator.PROGRESS_STATE_NORMAL, mTerminal.getProgressState());
+		assertEquals(0, mTerminal.getProgressValue());
+	}
+
 	/** OSC 9;4 is the ConEmu/Windows Terminal progress report: state, then an optional percentage. */
 	public void testProgressReport() {
 		withTerminalSized(10, 10);

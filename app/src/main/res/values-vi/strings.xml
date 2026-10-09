@@ -72,10 +72,6 @@
     <string name="termux_plugin_error_notifications_enabled_title">Thông báo lỗi plugin</string>
     <string name="termux_plugin_error_notifications_enabled_off">Tắt đèn flash và thông báo lỗi plugin.</string>
     <string name="termux_crash_report_notifications_enabled_off">Tắt thông báo cho các báo cáo sự cố.</string>
-    <string name="termux_keyboard_header">Bàn phím</string>
-    <string name="termux_soft_keyboard_enabled_off">Bàn phím mềm sẽ bị tắt.</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Bàn phím mềm chỉ khi không có phần cứng</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Bàn phím mềm sẽ được bật ngay cả khi bàn phím cứng được kết nối. (Mặc định)</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Vẻ bề ngoài</string>
     <string name="donate_preference_title">Donate</string>
     <string name="title_share_selected_text">Văn bản đầu cuối</string>
@@ -85,16 +81,6 @@
     <string name="termux_terminal_view_key_logging_enabled_on">Nhật ký logcat sẽ có các mục nhập cho các khóa xem thiết bị đầu cuối. Những điều này rất dài dòng và nên bị vô hiệu hóa trong những trường hợp thông thường nếu không sẽ gây ra vấn đề về hiệu suất.</string>
     <string name="termux_plugin_error_notifications_enabled_on">Hiển thị đèn flash và thông báo lỗi plugin. (Mặc định)</string>
     <string name="termux_crash_report_notifications_enabled_on">Hiển thị thông báo cho các báo cáo sự cố. (Mặc định)</string>
-    <string name="termux_soft_keyboard_enabled_title">Đã bật bàn phím mềm</string>
-    <string name="termux_soft_keyboard_enabled_on">Bàn phím mềm sẽ được bật. (Mặc định)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Bàn phím mềm sẽ chỉ được bật nếu không có bàn phím cứng nào được kết nối.</string>
     <string name="title_file_received">Lưu tệp trong ~/downloads/</string>
-    <string name="termux_terminal_view_view_header">Xem</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_title">Điều chỉnh ký quỹ đầu cuối</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_off">Điều chỉnh ký quỹ đầu cuối sẽ bị vô hiệu hóa.</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_on">Điều chỉnh ký quỹ đầu cuối sẽ được kích hoạt. Cần kích hoạt tính năng này để cố gắng khắc phục sự cố trong đó bàn phím mềm che một phần các phím phụ/chế độ xem thiết bị đầu cuối. Nếu nó gây ra hiện tượng nhấp nháy màn hình trên thiết bị của bạn, hãy tắt nó đi. (Mặc định)</string>
-    <string name="termux_terminal_view_activity_remove_title">Ngăn không cho lưu lại các ứng dụng gần đây</string>
-    <string name="termux_terminal_view_activity_remove_off">Sau khi đóng tất cả các phiên cuối, &TERMUX_APP_NAME; sẽ đóng và vẫn hiển thị trong các ứng dụng gần đây.</string>
-    <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; sẽ đóng và xóa chính nó khỏi các ứng dụng gần đây nếu không có phiên cuối nào đang hoạt động. (Mặc định)</string>
     <string name="termux_crash_report_notifications_enabled_title">Thông báo về báo cáo sự cố</string>
 </resources>

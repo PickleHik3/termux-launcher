@@ -200,5 +200,10 @@ public class X11LinuxAppRunnerSandboxRetryTest {
             listeners.add(onExit);
             return startSucceeds;
         }
+
+        @Override public void askBeforeReplacingSession(@NonNull String message,
+                                                        @NonNull Runnable onYes) {
+            throw new AssertionError("an app never takes the display from anything");
+        }
     }
 }

@@ -98,7 +98,25 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_PANE_CLOSE = "pane.close";
     public static final String TOOL_PANE_WRITE = "pane.write";
     public static final String TOOL_PANE_READ = "pane.read";
+    /**
+     * A whole new window (not a split) opened and driven through the local API, the same way
+     * {@link #TOOL_PANE_OPEN} opens a pane; ownership is the same {@link AgentPaneRegistry}. Not
+     * to be confused with {@link #TOOL_WINDOW_NEW}, the window strip's own + (Ctrl+Alt+C): that
+     * one starts a plain shell for the person in front of the screen and needs the Activity
+     * visible; this one runs a given command for a script and works with another app in front.
+     */
+    public static final String TOOL_WINDOW_OPEN = "window.open";
     public static final String TOOL_AGENT_STATUS = "agent.status";
+    /**
+     * The signals a program sends around the terminal — a shade notification, the progress ring,
+     * the clipboard — offered over the local API for processes that have no terminal to write the
+     * escape into. Each runs the same {@link ShellSignals} method its escape does. They take an
+     * optional {@code pane} to attribute to; without one, the current pane.
+     */
+    public static final String TOOL_SHELL_NOTIFY = "shell.notify";
+    public static final String TOOL_SHELL_PROGRESS = "shell.progress";
+    public static final String TOOL_CLIPBOARD_WRITE = "clipboard.write";
+    public static final String TOOL_CLIPBOARD_READ = "clipboard.read";
     /** Most transcript lines one pane.read returns; enough to see a screen and its recent past. */
     static final int PANE_READ_MAX_LINES = 500;
     static final int PANE_READ_DEFAULT_LINES = 60;
@@ -139,6 +157,9 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_KEYBOARD_SET_FORM = "keyboard.set_form";
     public static final String TOOL_KEYBOARD_SHOW = "keyboard.show";
     public static final String TOOL_KEYBOARD_HIDE = "keyboard.hide";
+    public static final String TOOL_KEYBOARD_CLIPBOARD = "keyboard.clipboard";
+    public static final String TOOL_KEYBOARD_TOGGLE_ENABLED = "keyboard.toggle_enabled";
+    public static final String TOOL_VOICE_DICTATE = "voice.dictate";
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
@@ -155,6 +176,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_APP_LAUNCH = "app.launch";
     public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
     public static final String TOOL_APP_OPEN_DRAWER = "app.open_drawer";
+    public static final String TOOL_APP_OPEN_APP_DRAWER = "app.open_app_drawer";
     public static final String TOOL_APP_CLOSE_DRAWER = "app.close_drawer";
     public static final String TOOL_TERMINAL_ACTION_SHEET = "terminal.action_sheet";
     public static final String TOOL_SESSION_ACTIVATE_BY_INDEX = "session.activate_by_index";
@@ -206,6 +228,19 @@ public final class TerminalActionDispatcher {
     }
 
     /**
+     * Called from {@link TermuxTerminalSessionActivityClient#onSessionFinished}, for every
+     * session, not just ones a caller might have held the keyboard for — cheaper than asking
+     * first. If {@code session} was holding the in-app keyboard down via
+     * {@code keyboard.hide --hold}, nothing will ever call {@code keyboard.show} for it now that
+     * it is gone, so this shows the keyboard itself rather than leaving it stuck down.
+     */
+    public void onSessionFinished(@NonNull TerminalSession session) {
+        if (!KeyboardHoldTracker.getInstance().releaseOnSessionFinished(session.mHandle)) return;
+        TerminalHost host = currentHost();
+        if (host != null) host.showInAppKeyboard(true);
+    }
+
+    /**
      * Terminal actions that do not need the Activity on screen: the pane routes an agent in a
      * shell drives through the local API. Each only touches session/view state — opening,
      * listing, focusing, reading, writing or closing a pane — and never calls anything that
@@ -223,6 +258,15 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_CLOSE:
             case TOOL_PANE_WRITE:
             case TOOL_PANE_READ:
+            case TOOL_WINDOW_OPEN:
+            // The signals decide for themselves what a stopped launcher may do: a notification
+            // goes to the shade precisely when nobody is looking, a progress report is state on
+            // the shell for the chip to read when the terminal is next seen, and the clipboard
+            // refuses with its own code rather than the generic one.
+            case TOOL_SHELL_NOTIFY:
+            case TOOL_SHELL_PROGRESS:
+            case TOOL_CLIPBOARD_WRITE:
+            case TOOL_CLIPBOARD_READ:
                 return true;
             default:
                 return false;
@@ -265,6 +309,7 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_CLOSE:
             case TOOL_PANE_WRITE:
             case TOOL_PANE_READ:
+            case TOOL_WINDOW_OPEN:
             case TOOL_AGENT_STATUS:
             case TOOL_WINDOW_NEW:
             case TOOL_WINDOW_CLOSE:
@@ -284,6 +329,9 @@ public final class TerminalActionDispatcher {
             case TOOL_KEYBOARD_SET_FORM:
             case TOOL_KEYBOARD_SHOW:
             case TOOL_KEYBOARD_HIDE:
+            case TOOL_KEYBOARD_CLIPBOARD:
+            case TOOL_KEYBOARD_TOGGLE_ENABLED:
+            case TOOL_VOICE_DICTATE:
             case TOOL_TERMINAL_TOGGLE_TOOLBAR:
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
@@ -314,6 +362,7 @@ public final class TerminalActionDispatcher {
             case TOOL_APP_COMMAND_PALETTE:
             case TOOL_APP_LAUNCH:
             case TOOL_APP_KEY_INSPECTOR:
+            case TOOL_APP_OPEN_APP_DRAWER:
             case TOOL_APP_OPEN_DRAWER:
             case TOOL_APP_CLOSE_DRAWER:
             case TOOL_TERMINAL_ACTION_SHEET:
@@ -325,6 +374,10 @@ public final class TerminalActionDispatcher {
             case TOOL_CLIPBOARD_COPY_SELECTED:
             case TOOL_FONTS_PICK:
             case TOOL_FONTS_INSTALL:
+            case TOOL_SHELL_NOTIFY:
+            case TOOL_SHELL_PROGRESS:
+            case TOOL_CLIPBOARD_WRITE:
+            case TOOL_CLIPBOARD_READ:
                 return true;
             default:
                 return false;
@@ -622,6 +675,52 @@ public final class TerminalActionDispatcher {
                         arguments.optString("tag", "").trim(), command);
                     return ok().put("pane", paneRecord(host, opened));
                 }
+                case TOOL_WINDOW_OPEN: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    List<String> command = new java.util.ArrayList<>();
+                    Object rawCommand = arguments.opt("command");
+                    if (rawCommand instanceof JSONArray) {
+                        JSONArray array = (JSONArray) rawCommand;
+                        for (int i = 0; i < array.length(); i++) {
+                            if (!(array.get(i) instanceof String)) {
+                                return error(400, "bad_request", "'command' must be an array of strings");
+                            }
+                            command.add(array.getString(i));
+                        }
+                    } else if (rawCommand instanceof String) {
+                        // A command line rather than argv: hand it to sh so quoting and pipes work.
+                        String line = ((String) rawCommand).trim();
+                        if (!line.isEmpty()) {
+                            command.add("sh");
+                            command.add("-c");
+                            command.add(line);
+                        }
+                    } else if (rawCommand != null && rawCommand != JSONObject.NULL) {
+                        return error(400, "bad_request", "'command' must be a string or an array of strings");
+                    }
+                    // Unlike pane.open, a window with nothing to run is not a useful primitive: a
+                    // plain new window already exists as window.new (Ctrl+Alt+C / the strip's +).
+                    if (command.isEmpty()) return error(400, "bad_request", "Missing 'command'");
+                    String title = arguments.optString("title", "").trim();
+                    boolean focus = arguments.optBoolean("focus", true);
+                    TerminalSession opened = host.openCommandWindow(command, null,
+                        title.isEmpty() ? null : title, focus);
+                    if (opened == null) {
+                        return error(409, "window_open_failed",
+                            "No window could be opened: there is no active terminal session, the"
+                                + " terminal limit is reached, or the window could never be given a size");
+                    }
+                    AgentPaneRegistry.getInstance().register(opened.mHandle, "", command);
+                    int columns = 0, rows = 0;
+                    if (opened.getEmulator() != null) {
+                        columns = opened.getEmulator().mColumns;
+                        rows = opened.getEmulator().mRows;
+                    }
+                    return ok().put("id", opened.mHandle)
+                        .put("window", windowIndexOf(host, opened))
+                        .put("columns", columns)
+                        .put("rows", rows);
+                }
                 case TOOL_PANE_LIST: {
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     TerminalPaneController controller = host.paneController();
@@ -737,6 +836,87 @@ public final class TerminalActionDispatcher {
                     host.reportAgentStatus(target, agent.isEmpty() ? null : agent, state);
                     return ok().put("id", target.mHandle)
                         .put("state", clear ? "clear" : raw.toLowerCase(java.util.Locale.ROOT));
+                }
+                case TOOL_SHELL_NOTIFY: {
+                    TermuxTerminalSessionActivityClient client = host.sessionClient();
+                    if (client == null) return error(503, "unavailable", "Terminal session client is not ready");
+                    TerminalSession target = signalTarget(host, arguments);
+                    if (target == null) return signalTargetMissing(host, arguments, toolName);
+                    // "close" takes down the message of that id, as OSC 99's p=close does.
+                    String closeId = arguments.optString("close", "").trim();
+                    if (!closeId.isEmpty()) {
+                        client.signals().notifyClose(target, closeId);
+                        return ok().put("pane", target.mHandle).put("id", closeId).put("closed", true);
+                    }
+                    String title = arguments.optString("title", "");
+                    String body = arguments.optString("body", "");
+                    if (title.trim().isEmpty() && body.trim().isEmpty()) {
+                        return error(400, "bad_request", "Missing 'body' (or 'title')");
+                    }
+                    Integer urgency = parseUrgency(arguments.opt("urgency"));
+                    if (urgency == null) {
+                        return error(400, "bad_request", "'urgency' must be low, normal or critical");
+                    }
+                    com.termux.terminal.KittyNotification notification =
+                        com.termux.terminal.KittyNotification.plain(
+                            arguments.optString("id", ""), title, body, urgency);
+                    boolean shown = client.signals().notify(target, notification);
+                    return ok().put("pane", target.mHandle)
+                        .put("id", notification.getId())
+                        .put("shown", shown);
+                }
+                case TOOL_SHELL_PROGRESS: {
+                    TermuxTerminalSessionActivityClient client = host.sessionClient();
+                    if (client == null) return error(503, "unavailable", "Terminal session client is not ready");
+                    TerminalSession target = signalTarget(host, arguments);
+                    if (target == null) return signalTargetMissing(host, arguments, toolName);
+                    int percent = -1;
+                    if (arguments.has("percent")) {
+                        percent = arguments.optInt("percent", Integer.MIN_VALUE);
+                        if (percent < 0 || percent > 100) {
+                            return error(400, "bad_request", "'percent' must be 0-100");
+                        }
+                    }
+                    // A bare percentage is a normal report; "clear" is state 0 by another name.
+                    Object rawState = arguments.opt("state");
+                    Integer state = rawState == null
+                        ? (percent >= 0 ? (Integer) com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NORMAL : null)
+                        : parseProgressState(rawState);
+                    if (state == null) {
+                        return error(400, "bad_request",
+                            "'state' must be one of clear, normal, error, indeterminate, paused (or a percent)");
+                    }
+                    if (!client.signals().progress(target, state, percent)) {
+                        return error(409, "pane_not_ready", "That pane has no terminal to report on yet");
+                    }
+                    com.termux.terminal.TerminalEmulator emulator = target.getEmulator();
+                    return ok().put("pane", target.mHandle)
+                        .put("state", progressStateName(state))
+                        .put("percent", emulator == null ? 0 : emulator.getProgressValue());
+                }
+                case TOOL_CLIPBOARD_WRITE: {
+                    TermuxTerminalSessionActivityClient client = host.sessionClient();
+                    if (client == null) return error(503, "unavailable", "Terminal session client is not ready");
+                    if (!arguments.has("text") || arguments.isNull("text")) {
+                        return error(400, "bad_request", "Missing 'text'");
+                    }
+                    String text = arguments.optString("text", "");
+                    client.signals().clipboardWriteFromApi(text);
+                    return ok().put("length", text.length());
+                }
+                case TOOL_CLIPBOARD_READ: {
+                    TermuxTerminalSessionActivityClient client = host.sessionClient();
+                    if (client == null) return error(503, "unavailable", "Terminal session client is not ready");
+                    String refusal = client.signals().clipboardReadRefusal();
+                    if (ShellSignals.REFUSAL_READ_DISABLED.equals(refusal)) {
+                        return error(403, refusal,
+                            "Reading the clipboard is switched off in Settings > Terminal > Let programs read the clipboard");
+                    }
+                    if (refusal != null) {
+                        return error(409, refusal, "The launcher is not on screen, so the clipboard cannot be read");
+                    }
+                    String text = client.signals().clipboardRead();
+                    return ok().put("text", text == null ? "" : text);
                 }
                 case TOOL_PANE_EQUALIZE:
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
@@ -957,6 +1137,9 @@ public final class TerminalActionDispatcher {
                     return ok().put("keyInspectorOpen", host.toggleKeyInspector());
                 // The drawer these two bindings name is the sessions drawer: one panel out of the
                 // terminal's leading edge, which is what the pair always meant.
+                case TOOL_APP_OPEN_APP_DRAWER:
+                    host.openAppDrawer();
+                    return ok();
                 case TOOL_APP_OPEN_DRAWER:
                     host.showSessionBrowser();
                     return ok();
@@ -997,7 +1180,8 @@ public final class TerminalActionDispatcher {
                         if (shareClient == null) return error(503, "unavailable", "Terminal view client is not ready");
                         shareClient.shareSelectedText();
                     } else {
-                        com.termux.shared.interact.ShareUtils.copyTextToClipboard(host.context(), selected);
+                        // A copy made inside the launcher: the clipboard and the keyboard's history.
+                        ClipboardHistory.copy(host.context(), selected);
                     }
                     return ok().put("characters", selected.length());
                 }
@@ -1145,6 +1329,22 @@ public final class TerminalActionDispatcher {
                         return error(503, "unavailable", "The place on screen is not settled yet");
                     return ok().put("form", form.storageValue());
                 }
+                case TOOL_KEYBOARD_CLIPBOARD: {
+                    if (!host.isInAppKeyboardEnabled())
+                        return error(409, "unavailable", "The in-app keyboard is not enabled");
+                    // Flip; a false answer with the keyboard down means there was nothing to
+                    // stand the panel over, which the caller can fix with keyboard.show first.
+                    boolean shown = host.toggleKeyboardClipboard();
+                    return ok().put("shown", shown);
+                }
+                case TOOL_KEYBOARD_TOGGLE_ENABLED: {
+                    TermuxTerminalViewClient viewClient = host.viewClient();
+                    if (viewClient == null) return error(503, "unavailable", "Terminal view client is not ready");
+                    return ok().put("enabled", viewClient.toggleKeyboardTurnedOff());
+                }
+                case TOOL_VOICE_DICTATE:
+                    // Start or stop; the text waits in the dictation panel, never typed on its own.
+                    return ok().put("listening", host.toggleVoiceDictation());
                 case TOOL_KEYBOARD_SHOW:
                 case TOOL_KEYBOARD_HIDE: {
                     // Deliberately not background-safe: both put a keyboard on screen or take one
@@ -1155,6 +1355,12 @@ public final class TerminalActionDispatcher {
                         return error(400, "bad_request", "'source' must be manual or focus");
                     boolean fromFocus = "focus".equals(source);
                     boolean show = TOOL_KEYBOARD_SHOW.equals(toolName);
+                    // "hold" is a program's own request (tlstore-ui today) to keep the keyboard
+                    // down for as long as it is on screen, rather than for just this one call the
+                    // way source=focus/manual already is. keyboard.show always releases a hold,
+                    // whoever calls it; a hold outlives its session through onSessionFinished
+                    // below, in case the program never calls show back.
+                    boolean hold = !show && arguments.optBoolean("hold", false);
                     // The Display place can be typed into with the phone's own keyboard, which is
                     // there to answer whether or not the in-app keyboard is switched on.
                     if (!host.isInAppKeyboardEnabled() && !host.displayTakesSystemKeyboard())
@@ -1163,7 +1369,13 @@ public final class TerminalActionDispatcher {
                         ? host.showInAppKeyboard(fromFocus) : host.hideInAppKeyboard(fromFocus);
                     if (!applied)
                         return error(409, "unavailable", "The in-app keyboard is not on screen");
-                    return ok().put("source", source).put("keyboardShown", show);
+                    if (show) {
+                        KeyboardHoldTracker.getInstance().release();
+                    } else if (hold) {
+                        TerminalSession session = host.currentSession();
+                        if (session != null) KeyboardHoldTracker.getInstance().hold(session.mHandle);
+                    }
+                    return ok().put("source", source).put("keyboardShown", show).put("held", hold);
                 }
 
                 case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:
@@ -1401,6 +1613,76 @@ public final class TerminalActionDispatcher {
         return id.isEmpty() ? null : host.findPaneById(id);
     }
 
+    /**
+     * The shell a signal is attributed to: the pane named by {@code pane}, or the current pane
+     * when none is named — the case for a process with no terminal, which has no
+     * {@code TERMUX_LAUNCHER_PANE} to pass along. Null when the named pane does not exist, or
+     * nothing is named and there is no current session.
+     */
+    @Nullable
+    private static TerminalSession signalTarget(@NonNull TerminalHost host, @NonNull JSONObject arguments) {
+        String id = arguments.optString("pane", "").trim();
+        return id.isEmpty() ? host.currentSession() : host.findPaneById(id);
+    }
+
+    @NonNull
+    private static JSONObject signalTargetMissing(@NonNull TerminalHost host, @NonNull JSONObject arguments,
+                                                  @NonNull String toolName) {
+        String id = arguments.optString("pane", "").trim();
+        if (id.isEmpty()) return noSession(toolName);
+        return error(404, "pane_not_found", "No pane with id " + id);
+    }
+
+    /**
+     * {@code low}, {@code normal}, {@code critical} or the protocol's 0-2; absent is unset. Null
+     * for anything else.
+     */
+    @Nullable
+    static Integer parseUrgency(@Nullable Object raw) {
+        if (raw == null || JSONObject.NULL.equals(raw)) return com.termux.terminal.KittyNotification.URGENCY_UNSET;
+        if (raw instanceof Number) {
+            int value = ((Number) raw).intValue();
+            return value >= com.termux.terminal.KittyNotification.URGENCY_LOW
+                && value <= com.termux.terminal.KittyNotification.URGENCY_CRITICAL ? value : null;
+        }
+        switch (String.valueOf(raw).trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "": return com.termux.terminal.KittyNotification.URGENCY_UNSET;
+            case "low": case "0": return com.termux.terminal.KittyNotification.URGENCY_LOW;
+            case "normal": case "1": return com.termux.terminal.KittyNotification.URGENCY_NORMAL;
+            case "critical": case "2": return com.termux.terminal.KittyNotification.URGENCY_CRITICAL;
+            default: return null;
+        }
+    }
+
+    /** The OSC 9;4 state a name or number stands for, or null for one this terminal has no ring for. */
+    @Nullable
+    static Integer parseProgressState(@NonNull Object raw) {
+        if (raw instanceof Number) {
+            int value = ((Number) raw).intValue();
+            return progressStateName(value) == null ? null : value;
+        }
+        switch (String.valueOf(raw).trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "clear": case "none": case "0": return com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NONE;
+            case "normal": case "1": return com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NORMAL;
+            case "error": case "2": return com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR;
+            case "indeterminate": case "3": return com.termux.terminal.TerminalEmulator.PROGRESS_STATE_INDETERMINATE;
+            case "paused": case "4": return com.termux.terminal.TerminalEmulator.PROGRESS_STATE_PAUSED;
+            default: return null;
+        }
+    }
+
+    @Nullable
+    static String progressStateName(int state) {
+        switch (state) {
+            case com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NONE: return "clear";
+            case com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NORMAL: return "normal";
+            case com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR: return "error";
+            case com.termux.terminal.TerminalEmulator.PROGRESS_STATE_INDETERMINATE: return "indeterminate";
+            case com.termux.terminal.TerminalEmulator.PROGRESS_STATE_PAUSED: return "paused";
+            default: return null;
+        }
+    }
+
     @NonNull
     private static JSONObject paneNotFound(@NonNull JSONObject arguments) {
         if (!arguments.has("id") || arguments.optString("id", "").trim().isEmpty()) {
@@ -1449,6 +1731,19 @@ public final class TerminalActionDispatcher {
             record.put("agent", agent);
         }
         return record;
+    }
+
+    /**
+     * The index of the window holding {@code session} among {@link TerminalHost#currentSessionWindows()}
+     * — the same numbering {@code pane.list} reports windows under — or -1 when there is no pane
+     * controller or the window cannot be found there (e.g. a different session's tab).
+     */
+    private static int windowIndexOf(@NonNull TerminalHost host, @NonNull TerminalSession session) {
+        TerminalPaneController controller = host.paneController();
+        if (controller == null) return -1;
+        TerminalPaneController.Window window = controller.windowOf(session);
+        if (window == null) return -1;
+        return host.currentSessionWindows().indexOf(window);
     }
 
     /** The last {@code count} lines of {@code text}, with trailing blank lines dropped. */

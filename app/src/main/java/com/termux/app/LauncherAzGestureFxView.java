@@ -110,6 +110,10 @@ public final class LauncherAzGestureFxView extends View {
     @Nullable private String focusedAppPreviewLabelLayoutText;
     private int focusedAppPreviewLabelLayoutWidth = -1;
     private float focusedAppPreviewLabelLayoutTextSize = -1f;
+    /** The label and width bounds the cached layout was last confirmed for. */
+    @Nullable private String focusedAppPreviewLabelLayoutSource;
+    private int focusedAppPreviewLabelLayoutMaxWidth = -1;
+    private int focusedAppPreviewLabelLayoutMinWidth = -1;
     private boolean darkThemeActive = true;
     @NonNull private RenderLayer renderLayer = RenderLayer.OVERLAY;
 
@@ -895,10 +899,20 @@ public final class LauncherAzGestureFxView extends View {
         if (label == null || label.isEmpty()) {
             return null;
         }
-        String displayLabel = addPreviewLabelBreakOpportunities(label);
         previewLabelPaint.setTextSize(clamp(sourceIconSize * 0.22f, dp(9.5f), dp(11.5f)));
         int maxInnerWidth = Math.round(clamp(getWidth() * 0.30f, dp(78f), dp(124f)));
         int minInnerWidth = Math.round(dp(38f));
+        // The layout is a function of the label, the text size and the two width bounds (the
+        // paint's face never changes), so a frame that repeats them reuses it without building
+        // the display string or measuring it again.
+        if (focusedAppPreviewLabelLayout != null
+            && label.equals(focusedAppPreviewLabelLayoutSource)
+            && focusedAppPreviewLabelLayoutTextSize == previewLabelPaint.getTextSize()
+            && focusedAppPreviewLabelLayoutMaxWidth == maxInnerWidth
+            && focusedAppPreviewLabelLayoutMinWidth == minInnerWidth) {
+            return focusedAppPreviewLabelLayout;
+        }
+        String displayLabel = addPreviewLabelBreakOpportunities(label);
         float measuredTextWidth = previewLabelPaint.measureText(displayLabel);
         int textWidth = Math.max(minInnerWidth, Math.min(maxInnerWidth, Math.round(measuredTextWidth + dp(1f))));
         StaticLayout layout = focusedAppPreviewLabelLayout;
@@ -918,6 +932,9 @@ public final class LauncherAzGestureFxView extends View {
             focusedAppPreviewLabelLayoutWidth = textWidth;
             focusedAppPreviewLabelLayoutTextSize = previewLabelPaint.getTextSize();
         }
+        focusedAppPreviewLabelLayoutSource = label;
+        focusedAppPreviewLabelLayoutMaxWidth = maxInnerWidth;
+        focusedAppPreviewLabelLayoutMinWidth = minInnerWidth;
         return layout;
     }
 

@@ -12,16 +12,15 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.Slot;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * What a bar dropped on the miniature writes, and the word each of its positions goes by. Pure: a
  * store in, a write out, nothing drawn, so the picture and the Layout editor's drops are testable
  * on their own.
  *
- * <p>What a place offers that no bar can be dragged into — its keyboard, its grid — is
- * {@link com.termux.app.place.PlaceArrangeModel}'s, which answers for one orientation at a time,
- * the way an editor standing on the live screen needs.
+ * <p>What the layout offers that no bar can be dragged into — the keyboard's height, chin and
+ * type, the grid's cells — is a handle or a chip on the layout canvas, written through
+ * {@link com.termux.app.layouteditor.LayoutEditorPlan} one orientation at a time.
  */
 public final class LayoutChooserModel {
 
@@ -41,34 +40,50 @@ public final class LayoutChooserModel {
      * @return whether the drop was a legal one — a bar dropped somewhere it cannot stand writes
      *     nothing, so the picture springs it back instead.
      */
-    public static boolean applyDrop(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
+    public static boolean applyDrop(@NonNull PlaceLayoutStore places,
                                     @NonNull PlaceOrientation orientation,
                                     @NonNull MiniatureDragPolicy.Bar bar, @Nullable Edge edge,
                                     int index) {
+        return applyDrop(places, orientation, bar, edge, index, false);
+    }
+
+    /**
+     * As {@link #applyDrop(PlaceLayoutStore, PlaceOrientation, MiniatureDragPolicy.Bar, Edge,
+     * int)}, into a gap on either side of the keyboard: {@code underKeyboard} puts the bar in the
+     * bottom edge's group under it, where {@code index} counts from the screen edge up to the
+     * keyboard. A bar that may not stand there is refused, so the picture springs it back.
+     */
+    public static boolean applyDrop(@NonNull PlaceLayoutStore places,
+                                    @NonNull PlaceOrientation orientation,
+                                    @NonNull MiniatureDragPolicy.Bar bar, @Nullable Edge edge,
+                                    int index, boolean underKeyboard) {
         Element element = bar.element();
-        PlaceLayout layout = places.resolve(place, orientation);
+        if (underKeyboard && (edge != Edge.BOTTOM || !element.underKeyboardAllowed()))
+            return false;
+        PlaceLayout layout = places.resolve(orientation);
         PlaceLayout next;
         if (edge == null) {
-            // The status bar is never hidden, so the tray is not one of its targets.
+            // An element that may not hide has no tray; none refuses today.
             if (!element.hideAllowed()) return false;
             next = EdgeStackPolicy.withAway(layout, element);
         } else if (index < 0) {
-            next = layout.withSlot(element, Slot.on(edge, element));
+            next = layout.withSlot(element,
+                Slot.on(edge, element).withUnderKeyboard(underKeyboard));
         } else {
-            next = EdgeStackPolicy.withDrop(layout, element, edge, index);
+            next = EdgeStackPolicy.withDrop(layout, element, edge, index, underKeyboard);
         }
         for (Element each : Element.values()) {
             Slot slot = next.slot(each);
-            if (!slot.equals(layout.slot(each))) places.setSlot(place, orientation, each, slot);
+            if (!slot.equals(layout.slot(each))) places.setSlot(orientation, each, slot);
         }
         return true;
     }
 
     /** A bar dropped on an edge without a gap picked: the band it has always taken there. */
-    public static boolean applyDrop(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
+    public static boolean applyDrop(@NonNull PlaceLayoutStore places,
                                     @NonNull PlaceOrientation orientation,
                                     @NonNull MiniatureDragPolicy.Bar bar, @Nullable Edge edge) {
-        return applyDrop(places, place, orientation, bar, edge, -1);
+        return applyDrop(places, orientation, bar, edge, -1);
     }
 
     /** The word for an edge. Shared with the miniature, which names the same positions. */

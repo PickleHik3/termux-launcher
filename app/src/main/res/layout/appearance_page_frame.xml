@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one bar of the Appearance surface, over each page's own content: back, then the
+     Wallpaper | Look | Layout | Icon pack pill (appearance_page_mode_slot,
+     GONE until AppearanceEditorPage shows it; centred in the title's slot, 40dp segments in the
+     64dp bar; 8dp side padding so four segments, Undo and Done fit 360dp), then Undo (Look and Layout, while there is something to undo) and Done (the filled button: it commits every page's pending changes and closes). The
+     bar is the same on every page: only the pill's selection and the end actions change. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:layoutDirection="locale"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:id="@+id/appearance_page_bar"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/appearance_page_bar_height"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_page_back"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/wallpaper_picker_back"
+            android:tooltipText="@string/wallpaper_picker_back"
+            app:icon="@drawable/ic_symbol_arrow_back"
+            app:iconSize="24dp"
+            app:iconTint="?attr/colorOnSurface" />
+
+        <TextView
+            android:id="@+id/appearance_page_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:accessibilityHeading="true"
+            android:ellipsize="end"
+            android:gravity="start|center_vertical"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceTitleLarge"
+            android:textColor="?attr/colorOnSurface" />
+
+        <FrameLayout
+            android:id="@+id/appearance_page_mode_slot"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:visibility="gone">
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/appearance_page_mode"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:contentDescription="@string/appearance_editor_mode_description"
+                app:checkedButton="@+id/appearance_page_mode_look"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/appearance_page_mode_wallpaper"
+                style="@style/Widget.Termux.Editor.Segment"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:ellipsize="none"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                app:icon="@drawable/segment_icon_wallpaper"
+                android:text="@string/appearance_page_wallpaper" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/appearance_page_mode_look"
+                style="@style/Widget.Termux.Editor.Segment"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:ellipsize="none"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                app:icon="@drawable/segment_icon_look"
+                android:text="@string/appearance_editor_mode_look" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/appearance_page_mode_layout"
+                style="@style/Widget.Termux.Editor.Segment"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:ellipsize="none"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                app:icon="@drawable/segment_icon_layout"
+                android:text="@string/action_layout_editor" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/appearance_page_mode_icon_pack"
+                style="@style/Widget.Termux.Editor.Segment"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:ellipsize="none"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                app:icon="@drawable/segment_icon_icon_pack"
+                android:text="@string/wallpaper_picker_icon_pack" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+        </FrameLayout>
+
+        <!-- 48dp tall, as every icon button in the bar: it appears and goes with the dirty state. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_page_undo"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/appearance_editor_undo"
+            android:tooltipText="@string/appearance_editor_undo"
+            android:visibility="gone"
+            app:icon="@drawable/ic_symbol_undo"
+            app:iconSize="24dp"
+            app:iconTint="?attr/colorOnSurface" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_page_done"
+            style="@style/Widget.Material3.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:maxLines="1"
+            android:text="@string/appearance_editor_done"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/appearance_page_content"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+</LinearLayout>

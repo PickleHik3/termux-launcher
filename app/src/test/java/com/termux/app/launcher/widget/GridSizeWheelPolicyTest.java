@@ -112,4 +112,41 @@ public class GridSizeWheelPolicyTest {
         assertEquals(2, backwards.clamp(1));
         assertEquals(8, backwards.clamp(9));
     }
+
+    @Test
+    public void atTheDefaultTextSizeTheWheelKeepsItsOldPitchAndWidth() {
+        // 20sp digits at 1x: about 15dp tall, 11dp wide each. The fixed sizes win.
+        float textSize = 20f * DENSITY;
+        assertEquals(28f * DENSITY, GridSizeWheelPolicy.pitchPx(DENSITY, 15f * DENSITY, textSize),
+            0.01f);
+        assertEquals(52f * DENSITY, GridSizeWheelPolicy.widthPx(DENSITY, 22f * DENSITY, textSize),
+            0.01f);
+    }
+
+    @Test
+    public void largeTextSpreadsTheNumbersAndWidensTheWheel() {
+        // The same digits at a 2x font scale.
+        float textSize = 40f * DENSITY;
+        float pitch = GridSizeWheelPolicy.pitchPx(DENSITY, 30f * DENSITY, textSize);
+        float width = GridSizeWheelPolicy.widthPx(DENSITY, 44f * DENSITY, textSize);
+        assertTrue("numbers clear each other: " + pitch, pitch > 30f * DENSITY);
+        assertTrue("and more than the old pitch", pitch > 28f * DENSITY);
+        assertTrue("two digits fit with room: " + width, width > 52f * DENSITY);
+    }
+
+    @Test
+    public void aDragCountsInTheWheelsOwnPitch() {
+        GridSizeWheelPolicy policy = GridSizeWheelPolicy.rows();
+        assertEquals(3, GridSizeWheelPolicy.stepsForPitch(-100f, 30f));
+        assertEquals(0, GridSizeWheelPolicy.stepsForPitch(-29f, 30f));
+        assertEquals(-10f, GridSizeWheelPolicy.leftoverForPitch(-100f, 30f), 0.01f);
+        assertEquals(7, policy.valueForPitch(4, -100f, 30f));
+        assertEquals(policy.maximum(), policy.valueForPitch(policy.maximum(), -900f, 30f));
+    }
+
+    @Test
+    public void theLongestNumberDecidesTheDigitCount() {
+        assertEquals(1, GridSizeWheelPolicy.columns().maximumDigits());
+        assertEquals(2, GridSizeWheelPolicy.rows().maximumDigits());
+    }
 }

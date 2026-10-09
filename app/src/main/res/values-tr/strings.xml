@@ -32,10 +32,6 @@
     <string name="termux_crash_report_notifications_enabled_title">Çökme Raporu Bildirimleri</string>
     <string name="termux_crash_report_notifications_enabled_off">Çökme raporları için bildirimleri devre dışı bırakın.</string>
     <string name="termux_crash_report_notifications_enabled_on">Çökme raporları için bildirimleri göster. (Varsayılan)</string>
-    <string name="termux_keyboard_header">Klavye</string>
-    <string name="termux_soft_keyboard_enabled_off">Klavye devre dışı bırakılacaktır.</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Sanal klavye, yalnızca herhangi bir donanım klavyesi bağlı değilse etkinleştirilecektir.</string>
-    <string name="termux_terminal_view_view_header">Görünüm</string>
     <string name="permission_run_command_description">&amp;TERMUX_APP_NAME içinde isteğe bağlı komutlar yürütün; ortam ve erişim dosyaları</string>
     <string name="bootstrap_error_title">Önyükleme paketleri yüklenemiyor</string>
     <string name="permission_run_command_label">&amp;TERMUX_APP_NAME içinde komutları çalıştırın; çevre</string>
@@ -77,24 +73,14 @@
     <string name="error_run_command_service_invalid_intent_action">RunCommandService için geçersiz eylem: `%1$s`</string>
     <string name="error_run_command_service_api_help">RUN_COMMAND kullanımı hakkında daha fazla bilgi için %1$s adresini ziyaret edin.</string>
     <string name="title_activity_termux_settings">&TERMUX_APP_NAME; Ayarlar</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_off">Terminal kenar boşluğu ayarı devre dışı bırakılacak.</string>
     <string name="error_termux_service_start_failed_general">TermuxService başlatılamadı. Hata mesajı için logcat\'i kontrol edin.</string>
     <string name="error_termux_service_start_failed_bg">Android arka plan kısıtlamaları nedeniyle uygulama arka plandayken TermuxService başlatılamadı.</string>
     <string name="termux_debugging_preferences_summary">Hata ayıklama için tercihler</string>
     <string name="termux_terminal_view_key_logging_enabled_title">Terminal Görünüm Anahtarı Günlükleme</string>
     <string name="termux_logging_header">Günlükleme</string>
-    <string name="termux_soft_keyboard_enabled_title">Klavye Etkin</string>
     <string name="termux_terminal_view_key_logging_enabled_off">Günlükler, terminal görünüm anahtarları için girişlere sahip olmayacaktır. (Varsayılan)</string>
     <string name="termux_plugin_error_notifications_enabled_off">Eklenti hataları için flaşları ve bildirimleri devre dışı bırakın.</string>
     <string name="termux_plugin_error_notifications_enabled_on">Eklenti hataları için flaşları ve bildirimleri göster. (Varsayılan)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Eğer Yalnızca Donanım Yoksa Sanal Klavye Etkin</string>
-    <string name="termux_soft_keyboard_enabled_on">Klavye etkinleştirilecektir. (Varsayılan)</string>
-    <string name="termux_terminal_view_activity_remove_title">Son uygulamalarda kalmasını engelle</string>
-    <string name="termux_terminal_view_activity_remove_off">Tüm terminal oturumları kapatıldığında, &TERMUX_APP_NAME; kapanacak ve son uygulamalarda görünür kalacaktır.</string>
-    <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; etkin terminal oturumu yoksa kapanacak ve kendisini son uygulamalardan kaldıracaktır. (Varsayılan)</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Görünüm</string>
     <string name="donate_preference_title">Bağış Yap</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Donanım klavyesi bağlı olsa bile sanal klavye etkinleştirilecektir. (Varsayılan)</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_title">Terminal Kenar Boşluğu Ayarı</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_on">Terminal kenar boşluğu ayarı etkinleştirilecektir. Sanal klavyenin ekstra tuşların/terminal görünümünün bir bölümünü kapladığı sorunu düzeltmeye çalışmak için etkinleştirilmelidir. Cihazlarınızda ekran titremesine neden oluyorsa, devre dışı bırakın. (Varsayılan)</string>
 </resources>

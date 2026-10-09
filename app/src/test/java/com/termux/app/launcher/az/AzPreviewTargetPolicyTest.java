@@ -61,8 +61,9 @@ public class AzPreviewTargetPolicyTest {
     private static PlaceLayout bottomStack(List<Element> order, Set<Element> hidden,
                                            Edge statusEdge) {
         Map<Element, Slot> slots = new EnumMap<>(Element.class);
-        // The status bar is never hidden. On the bottom it is the innermost band, which is where
-        // the launcher has always drawn it and the only place it keeps glass of its own.
+        // The status bar stands on an edge in every case here. On the bottom it is the innermost
+        // band, which is where the launcher has always drawn it and the only place it keeps glass
+        // of its own.
         slots.put(Element.STATUS, Slot.on(statusEdge,
             statusEdge == Edge.BOTTOM ? order.size() : 0));
         for (int i = 0; i < order.size(); i++) {

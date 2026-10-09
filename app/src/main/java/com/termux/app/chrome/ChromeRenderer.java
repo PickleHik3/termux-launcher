@@ -50,6 +50,15 @@ public final class ChromeRenderer {
 
         @Nullable TermuxAppSharedPreferences preferences();
 
+        /**
+         * The user's one legibility control, which multiplies every band's contrast target. Read
+         * from the preferences' "Terminal contrast" choice; default while there are none.
+         */
+        @NonNull
+        default LegibilityLevel legibilityLevel() {
+            return LegibilityLevel.of(preferences());
+        }
+
         float dpToPx(float dp);
 
         // ---- theme values the glass material is mixed from
@@ -84,6 +93,34 @@ public final class ChromeRenderer {
             return false;
         }
 
+        /**
+         * What leads the top edge's stack, which the strip behind the system status bar continues
+         * in the docked style ({@link ChromeEdgeRule#statusInsetLead}); NONE while the strip is
+         * not shown.
+         */
+        @NonNull
+        default ChromeEdgeRule.TopLead topStackLead() {
+            return roundedDockStyle() ? ChromeEdgeRule.TopLead.NONE
+                : ChromeEdgeRule.TopLead.WINDOW_BAR;
+        }
+
+        /** The screen edge the status bar stands on. */
+        @NonNull
+        default com.termux.app.place.PlaceLayout.Edge statusBarEdge() {
+            return com.termux.app.place.PlaceLayout.Edge.TOP;
+        }
+
+        /**
+         * The status bar's edges that take no rim and no bend, as {@link ChromeEdgeRule} bits.
+         * The live chrome answers from the shape model: Docked, only an edge facing the opening
+         * is a rim and every join and screen edge is a seam; Floating has none. This default is
+         * the same rule for a bar alone on its edge.
+         */
+        default int statusBarSeamEdges() {
+            return roundedDockStyle() ? ChromeEdgeRule.NONE
+                : ChromeEdgeRule.ALL & ~ChromeEdgeRule.innerEdge(statusBarEdge());
+        }
+
         // ---- the wallpaper the blurred frames are captured from: WallpaperBlurCache.Source
 
         /** Blurs a captured frame with the shared renderer; a fake overrides this to skip the blur. */
@@ -99,6 +136,32 @@ public final class ChromeRenderer {
 
         boolean wallpaperPassthroughEnabled();
 
+        /**
+         * The wallpaper's live x-offset every frost follows, or null while no wallpaper here can
+         * pan (a fake, or a host without a wall). See {@link WallpaperParallax}.
+         */
+        @Nullable
+        default WallpaperParallax wallpaperParallax() {
+            return null;
+        }
+
+        /**
+         * Fancier Glass: the refraction every frost draws the shared frame through, or null for
+         * the plain frost — the switch off, a wallpaper the launcher did not set, a phone below
+         * API 33. See {@link FancierGlassPolicy}.
+         */
+        @Nullable
+        default GlassRefraction.Look fancierGlassLook() {
+            return null;
+        }
+
+        /**
+         * The corner a full-pane plane's glass — the palette, the sheet, the drawer — is clipped
+         * to, in px, so a plane's rim can follow its outline. 0 where the planes are square.
+         */
+        default float planeGlassCornerRadiusPx() {
+            return 0f;
+        }
 
         /** The dock's effective blur radius (0 while a live wallpaper or the slider disables it). */
         int effectiveDockBlurRadiusDp();
@@ -184,6 +247,21 @@ public final class ChromeRenderer {
     private final Runnable mCommitRunnable = this::commit;
     private final ViewTreeObserver.OnPreDrawListener mCommitPreDrawListener = this::commitBeforeDraw;
 
+    /**
+     * The root view until its first frame draws; null before the first request found it and
+     * after that frame. While it is set, top-pane frost passes after the first are held for that
+     * frame's pre-draw — see {@link #holdFrostForFirstFrame()}.
+     */
+    @Nullable private View mFirstFrameGate;
+    /** True once the root has drawn a frame (or was already attached when first seen). */
+    private boolean mFirstFrameDrawn;
+    /** Whether a top-pane frost pass has run yet. */
+    private boolean mFrostRanOnce;
+    /** A top-pane frost pass was asked for before the first frame and waits for its pre-draw. */
+    private boolean mFrostHeld;
+    private final ViewTreeObserver.OnPreDrawListener mFirstFramePreDrawListener =
+        this::onFirstFramePreDraw;
+
     private final Runnable mRenderSyncRunnable;
     private final Runnable mBlurHeartbeatRunnable;
     private final Runnable mBlurRecoveryRunnable;
@@ -201,26 +279,7 @@ public final class ChromeRenderer {
     public ChromeRenderer(@NonNull Surfaces surfaces, @Nullable Executor blurWorker) {
         mSurfaces = surfaces;
         mBlurWorker = blurWorker;
-        mRenderSyncRunnable = () -> {
-            mRenderSyncPending = false;
-            mRenderSyncAskedForItself = false;
-            // What the pass is for is re-cutting the crops that went stale under settled
-            // geometry. Anything the apply below invalidates is therefore work this pass cannot
-            // do — it has already read the geometry — and earns the one follow-up pass; anything
-            // it merely asks for again does not. Two page changes cost 37 of these passes for a
-            // handful of distinct states, because the apply asks unconditionally (Pong, 2026-09-09).
-            long dirtyBefore = mLedger.dirtyGeneration();
-            mRenderSyncRunning = true;
-            try {
-                mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
-                mSurfaces.enforceAccessoryFxInvariants();
-            } finally {
-                mRenderSyncRunning = false;
-            }
-            if (mRenderSyncAskedForItself && mLedger.dirtyGeneration() != dirtyBefore) {
-                requestSync(SCOPE_ACCESSORY_RENDER);
-            }
-        };
+        mRenderSyncRunnable = () -> runRenderSync(mSurfaces.buildChromeSpec());
         mBlurHeartbeatRunnable = new Runnable() {
             @Override
             public void run() {
@@ -269,6 +328,20 @@ public final class ChromeRenderer {
     }
 
     /**
+     * Dresses every glass surface again from the current state, as a launch does: the ink's
+     * memory is dropped (polarity included), every crop is marked stale and one full pass is
+     * asked for. A change that moves the whole chrome at once, such as the Style, calls this
+     * instead of nudging the layers it thinks it touched.
+     */
+    public void redressFromState() {
+        mInk.resetForRedress();
+        mLedger.markAllBackdropsDirty();
+        mLedger.markFrostDirty();
+        requestSync(SCOPE_BACKDROPS | SCOPE_KEYBOARD_BACKDROP | SCOPE_TOP_PANE_FROST
+            | SCOPE_APPLY_THIS_FRAME | SCOPE_ACCESSORY_RENDER);
+    }
+
+    /**
      * The shared pre-blurred frames have gone. Every crop cut from one is stale, and so is every
      * wallpaper sample the chrome's ink was measured from — one callback for both, so no path can
      * drop the frames and leave the ink believing in a wallpaper that is no longer there.
@@ -290,8 +363,8 @@ public final class ChromeRenderer {
 
     /**
      * A frame the worker finished has just been filed. Every surface that drew nothing for want of
-     * it re-cuts its crop now: the accessory backdrops, the keyboard's, the top pane's frost and
-     * the terminal glass, then one coalesced render.
+     * it takes it now: the accessory backdrops, the keyboard's, the top pane's frost and the
+     * terminal glass, then one coalesced render.
      */
     private void onBlurFrameReady() {
         if (mDestroyed) return;
@@ -332,6 +405,42 @@ public final class ChromeRenderer {
     }
 
     /**
+     * A full apply against settled layout — a pre-draw gate's, which cannot wait for a post. It is
+     * the very pass a pending accessory render would run a moment later, so while one is pending
+     * it runs in that one's place: the posted pass is withdrawn and a follow-up is booked only if
+     * this one left something stale. With nothing pending it is a plain apply.
+     */
+    public void applySettled(@NonNull ChromeSpec spec) {
+        if (!mRenderSyncPending) {
+            mSurfaces.applyChromeSpec(spec);
+            return;
+        }
+        mHandler.removeCallbacks(mRenderSyncRunnable);
+        runRenderSync(spec);
+    }
+
+    private void runRenderSync(@NonNull ChromeSpec spec) {
+        mRenderSyncPending = false;
+        mRenderSyncAskedForItself = false;
+        // What the pass is for is re-cutting the crops that went stale under settled geometry.
+        // Anything the apply below invalidates is therefore work this pass cannot do — it has
+        // already read the geometry — and earns the one follow-up pass; anything it merely asks
+        // for again does not. Two page changes cost 37 of these passes for a handful of distinct
+        // states, because the apply asks unconditionally (Pong, 2026-09-09).
+        long dirtyBefore = mLedger.dirtyGeneration();
+        mRenderSyncRunning = true;
+        try {
+            mSurfaces.applyChromeSpec(spec);
+            mSurfaces.enforceAccessoryFxInvariants();
+        } finally {
+            mRenderSyncRunning = false;
+        }
+        if (mRenderSyncAskedForItself && mLedger.dirtyGeneration() != dirtyBefore) {
+            requestSync(SCOPE_ACCESSORY_RENDER);
+        }
+    }
+
+    /**
      * Whether a trace is being recorded, and whether we may even ask. {@code Trace.isEnabled}
      * arrived in API 29 and this app runs from 26, where the call site does not resolve at all —
      * every chrome request threw {@link NoSuchMethodError} on Android 8 and 9, which for a home
@@ -342,6 +451,7 @@ public final class ChromeRenderer {
     }
 
     private void sync(int scopes) {
+        armFirstFrameGate();
         noteChromeShade();
         if ((scopes & SCOPE_WALLPAPER_BLUR_CACHE) != 0) {
             mBlurCache.clear();
@@ -358,13 +468,8 @@ public final class ChromeRenderer {
         if ((scopes & SCOPE_APPLY_THIS_FRAME) != 0) {
             scheduleCommit();
         }
-        if ((scopes & SCOPE_TOP_PANE_FROST) != 0) {
-            Trace.beginSection("Frost.updateTopPane");
-            try {
-                mFrost.updateTopPane();
-            } finally {
-                Trace.endSection();
-            }
+        if ((scopes & SCOPE_TOP_PANE_FROST) != 0 && !holdFrostForFirstFrame()) {
+            runTopPaneFrost();
         }
         if ((scopes & SCOPE_ACCESSORY_RENDER) != 0) {
             if (mRenderSyncRunning) {
@@ -407,6 +512,94 @@ public final class ChromeRenderer {
             }
         }
         ChromeShade.note(measured ? mInk.polarity() : ChromeShade.polarityOf(base), base);
+    }
+
+    private void runTopPaneFrost() {
+        mFrostRanOnce = true;
+        Trace.beginSection("Frost.updateTopPane");
+        try {
+            mFrost.updateTopPane();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    // ------------------------------------------------------- first-frame frost hold
+
+    /**
+     * Watches the root for its first frame, from the first request onwards. A root already
+     * attached when first seen may have drawn already, so nothing is held for it.
+     */
+    private void armFirstFrameGate() {
+        if (mFirstFrameDrawn || mFirstFrameGate != null) return;
+        View gate = mSurfaces.findChromeView(R.id.activity_termux_root_view);
+        if (gate == null) return;
+        if (gate.isAttachedToWindow()) {
+            mFirstFrameDrawn = true;
+            return;
+        }
+        // A detached view hands out its floating observer, which the window adopts on attach.
+        gate.getViewTreeObserver().addOnPreDrawListener(mFirstFramePreDrawListener);
+        mFirstFrameGate = gate;
+    }
+
+    /**
+     * Whether this top-pane frost pass waits for the first frame's pre-draw instead of running now.
+     *
+     * <p>A cold start asked for the pass from onCreate, onStart, both onResumes and every apply
+     * before anything was drawn — 6 to 19 ms each on Pong, nine of them ahead of the first frame,
+     * and every one before the first layout cut its frost against views that had no size yet.
+     * Nobody sees any of them until that frame draws, so the passes after the first are folded into
+     * one, run in that frame's pre-draw against settled layout. The first still runs at once: it is
+     * what asks the blur worker for the frames the backdrop, the gutter and the panes need, and
+     * those take long enough that asking late would show later.</p>
+     */
+    private boolean holdFrostForFirstFrame() {
+        if (mFirstFrameDrawn || mFirstFrameGate == null || !mFrostRanOnce) return false;
+        mFrostHeld = true;
+        return true;
+    }
+
+    /**
+     * The first frame's pre-draw: the commit this frame owes runs first (as its own gate would),
+     * then the held frost, cut against what that apply laid out. If either moved a view the draw
+     * is cancelled for one more layout, as {@link #commitBeforeDraw()} does, and the gate stays
+     * up for the frame that does draw.
+     */
+    private boolean onFirstFramePreDraw() {
+        View gate = mFirstFrameGate;
+        if (mDestroyed || gate == null) {
+            releaseFirstFrameGate();
+            return true;
+        }
+        boolean ran = mCommitPending || mFrostHeld;
+        if (mCommitPending) commit();
+        if (mFrostHeld) {
+            mFrostHeld = false;
+            runTopPaneFrost();
+        }
+        // Only a layout this callback caused cancels the draw; anyone else's is theirs to judge.
+        if (ran && gate.isLayoutRequested()) return false;
+        releaseFirstFrameGate();
+        return true;
+    }
+
+    private void releaseFirstFrameGate() {
+        mFirstFrameDrawn = true;
+        View gate = mFirstFrameGate;
+        mFirstFrameGate = null;
+        if (gate == null) return;
+        ViewTreeObserver observer = gate.getViewTreeObserver();
+        if (observer.isAlive()) observer.removeOnPreDrawListener(mFirstFramePreDrawListener);
+        // Nothing may be left held once the gate is gone; a torn-down renderer just drops it.
+        boolean held = mFrostHeld;
+        mFrostHeld = false;
+        if (held && !mDestroyed) runTopPaneFrost();
+    }
+
+    /** True while a top-pane frost pass waits for the first frame. */
+    boolean isFrostHeldForFirstFrame() {
+        return mFrostHeld;
     }
 
     /** True while a coalesced accessory render is waiting for its main-loop turn. */
@@ -495,10 +688,14 @@ public final class ChromeRenderer {
 
     /**
      * A new wallpaper (or a wallpaper the app can suddenly read) invalidates every pre-blurred
-     * frame and every crop taken from one.
+     * frame and every crop taken from one — but tagged as a wallpaper change, so the surface that
+     * refills each radius crossfades into it rather than swapping outright. Cleared directly rather
+     * than through {@link #SCOPE_WALLPAPER_BLUR_CACHE}, which is the untagged clear a rotation or a
+     * radius change asks for.
      */
     public void onWallpaperChanged() {
-        requestSync(SCOPE_WALLPAPER_BLUR_CACHE | SCOPE_BACKDROPS | SCOPE_ACCESSORY_RENDER);
+        mBlurCache.clearForWallpaperChange();
+        requestSync(SCOPE_BACKDROPS | SCOPE_ACCESSORY_RENDER);
     }
 
     /**
@@ -562,6 +759,7 @@ public final class ChromeRenderer {
 
     public void onDestroy() {
         mDestroyed = true;
+        releaseFirstFrameGate();
         if (mBlurWorker instanceof ExecutorService) ((ExecutorService) mBlurWorker).shutdownNow();
         unscheduleCommit();
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);

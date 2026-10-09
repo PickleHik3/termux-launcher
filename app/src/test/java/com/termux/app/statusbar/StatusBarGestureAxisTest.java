@@ -9,15 +9,15 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Which swipe pages the wall and which one folds the bar, per edge. The two gestures are always
- * perpendicular: the wall is dragged along the bar, the bar's own form changes across it.
+ * Which swipe folds the bar, per edge. The bar's own form changes across it, whichever edge it
+ * stands on; a drag along it is never the bar's.
  */
 public class StatusBarGestureAxisTest {
 
-    /** A stream with both gestures armed, as the bar's own chrome arms them. */
+    /** A stream with the fold armed, as the bar's own chrome arms it. */
     private static StatusBarGesturePolicy policy(Edge edge, TopStatusBarState state) {
         return new StatusBarGesturePolicy(new StatusBarGesturePolicy.Down(0, 10, 10, 10, 10,
-            100, state, false, false, false, false, true, true, 8, edge));
+            100, state, false, false, false, false, true, 8, edge));
     }
 
     @Test public void onlyTheSideEdgesStandTheBarInAColumn() {
@@ -34,23 +34,16 @@ public class StatusBarGestureAxisTest {
         assertEquals(-1f, StatusBarGesturePolicy.expandSign(Edge.RIGHT), 0f);
     }
 
-    @Test public void aRowPagesSidewaysAndFoldsVertically() {
-        assertEquals(StatusBarGesturePolicy.Claim.WALL_PAGING,
+    @Test public void aDragAlongTheBarIsNobodysOnEveryEdge() {
+        // Sideways along a row, up and down along a column: the wall is paged from the pane's
+        // border, never from the bar, so the drag along it is left to a child or to nobody.
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
             policy(Edge.TOP, TopStatusBarState.EXPANDED).move(90, 22));
-        assertEquals(StatusBarGesturePolicy.Claim.WALL_PAGING,
-            policy(Edge.BOTTOM, TopStatusBarState.EXPANDED).move(90, 22));
-        // Travel along the bar is what the wall is dragged by, sign included.
-        StatusBarGesturePolicy paged = policy(Edge.BOTTOM, TopStatusBarState.EXPANDED);
-        paged.move(-70, 22);
-        assertEquals(-80f, paged.pagingDelta(), 0.01f);
-    }
-
-    @Test public void aColumnPagesUpAndDown() {
-        StatusBarGesturePolicy left = policy(Edge.LEFT, TopStatusBarState.EXPANDED);
-        assertEquals(StatusBarGesturePolicy.Claim.WALL_PAGING, left.move(22, 90));
-        // Down the screen is towards the places that follow, exactly as to the right is on a row.
-        assertEquals(80f, left.pagingDelta(), 0.01f);
-        assertEquals(StatusBarGesturePolicy.Claim.WALL_PAGING,
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
+            policy(Edge.BOTTOM, TopStatusBarState.EXPANDED).move(-70, 22));
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
+            policy(Edge.LEFT, TopStatusBarState.EXPANDED).move(22, 90));
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
             policy(Edge.RIGHT, TopStatusBarState.EXPANDED).move(22, -70));
     }
 
@@ -91,11 +84,11 @@ public class StatusBarGestureAxisTest {
         }
     }
 
-    @Test public void theCurlThatStartsASwipeAlongTheBarNeverFoldsIt() {
-        // The same forgiveness the top bar has, on a column: a first slop across the bar is not
-        // yet a fold while the wall is in reach.
-        StatusBarGesturePolicy curl = policy(Edge.LEFT, TopStatusBarState.EXPANDED);
-        assertEquals(StatusBarGesturePolicy.Claim.PENDING, curl.move(-1, 20));
-        assertEquals(StatusBarGesturePolicy.Claim.WALL_PAGING, curl.move(-1, 90));
+    @Test public void aFirstSlopAcrossTheBarFoldsItAtOnce() {
+        // One slop of travel across the bar decides: the doubled slop the wall's drag once asked
+        // for, so a curl at the start of a sideways swipe did not fold the bar, went with it.
+        StatusBarGesturePolicy column = policy(Edge.LEFT, TopStatusBarState.EXPANDED);
+        assertEquals(StatusBarGesturePolicy.Claim.PENDING, column.move(4, 12));
+        assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE, column.move(1, 12));
     }
 }

@@ -30,13 +30,69 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         default void onWallPageSettled(@NonNull PaneWallPage page) { }
         /** The wall committed to a different page, before the slide finishes. */
         default void onWallPageChanged(@NonNull PaneWallPage page) { }
-        /**
-         * The wall was moved by something other than the finger that was dragging it. Every
-         * surface that can drive a drag — the status bar, the window strip — must let go.
-         */
-        default void onWallDragInterrupted() { }
         /** The wall moved: signed distance from the current page's rest, for the place switch. */
         default void onWallOffsetChanged(float offsetPx) { }
+        /** The Terminal page just went fully off screen, or just came back; see
+         *  {@link PaneWallLayout.Listener#onTerminalOffScreenChanged}. */
+        default void onTerminalOffScreenChanged(boolean offScreen) { }
+        /**
+         * How much of the pages' outlines the slide leaves showing changed
+         * ({@link PaneWallPolicy#outlineAlpha}). The wall's own pages take it themselves; the
+         * terminal's panes draw their rims through their controller, which the host owns.
+         */
+        default void onWallOutlineAlphaChanged(float alpha) { }
+        /**
+         * Whether the pages a border drag pulls tip like planks ({@link PlankTilt}): Fancier
+         * Glass on, with the phone animating. Asked as the drag claims the finger.
+         */
+        default boolean isPlankTiltEnabled() { return false; }
+        /**
+         * A vertical swipe off the page's bottom border asked for the keyboard: {@code open} up,
+         * closed down. On every place and in every mode, and it turns a keyboard switched off
+         * back on, as the keyboard key does: it is the one way back that is always there. Only
+         * for a swipe the keyboard could not follow ({@link #onKeyboardRevealBegin}).
+         */
+        default void onBorderKeyboardSwipe(boolean open) { }
+        /**
+         * The keyboard swipe was claimed, going up ({@code opening}) or down, and the keyboard is
+         * to follow the finger: the keyboard's height in px the finger drives it over, or 0 where
+         * it cannot follow, and the swipe then asks through {@link #onBorderKeyboardSwipe} on
+         * release. See {@link PaneWallLayout.Listener#onKeyboardRevealBegin}.
+         */
+        default int onKeyboardRevealBegin(boolean opening) { return 0; }
+        /** How much of the keyboard a swipe it follows shows this frame, 0 down to 1 up. */
+        default void onKeyboardRevealProgress(float reveal) { }
+        /** The keyboard a swipe carried came to rest, up ({@code open}) or down. */
+        default void onKeyboardRevealEnd(boolean open) { }
+        /**
+         * Whether a vertical swipe off the page's top border drives the status bar's fold: where
+         * the bar stands along the top, can unfold, and is not put away. Asked on every frame the
+         * wall draws its grabbers; see {@link PaneWallLayout.Listener#isBorderStatusSwipeEnabled}.
+         */
+        default boolean isBorderStatusSwipeEnabled() { return false; }
+        /** The border's insets in px; see {@link PaneWallLayout.Listener#borderInsetsPx}. */
+        @Nullable default int[] borderInsetsPx() { return null; }
+        /**
+         * A swipe off the top border asked for the bar unfolded ({@code expand}) or folded, for a
+         * swipe the fold did not follow ({@link #onStatusFoldBegin} answered 0, or reduced motion).
+         */
+        default void onBorderStatusSwipe(boolean expand) { }
+        /**
+         * The status bar swipe was claimed, going down ({@code expanding}) or up: the fold's whole
+         * way in px for the finger to drive, or 0 where it cannot follow. See
+         * {@link PaneWallLayout.Listener#onStatusFoldBegin}.
+         */
+        default int onStatusFoldBegin(boolean expanding) { return 0; }
+        /** The finger has the bar {@code towardOpenPx} from the form it had, positive opening. */
+        default void onStatusFoldProgress(float towardOpenPx) { }
+        /** The fold's finger let go or lost it: land the bar unfolded ({@code expanded}) or folded. */
+        default void onStatusFoldEnd(boolean expanded, float towardOpenVelocityPxPerSec) { }
+        /**
+         * A page sunk under a held border ({@link PageSink}) is drawn at {@code scale} about its
+         * centre; 1 once it is back up. The terminal's frame line is drawn outside its page and
+         * has to follow by hand.
+         */
+        default void onPageSinkChanged(@NonNull PaneWallPage page, float scale) { }
     }
 
     /** Saved-instance-state key for the page the wall is showing. */
@@ -47,6 +103,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Nullable private WidgetPaneFrame mWidgetsPage;
     @Nullable private com.termux.app.x11.X11PaneFrame mDisplayPage;
     @Nullable private PaneSurfaceStyle mStyle;
+    /** How much of the pages' outlines the last frame left showing; 1 at rest. */
+    private float mOutlineAlpha = 1f;
 
     public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host) {
         mWall = wall;
@@ -118,12 +176,28 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
+     * Take the Display place off the wall: the page's view goes, and the X view's native context
+     * goes with it when the view leaves the window. The wall is told about its places first, so
+     * one resting on the Display page hands over to the terminal while the page is still there.
+     */
+    public void detachDisplayPage() {
+        com.termux.app.x11.X11PaneFrame page = mDisplayPage;
+        if (page == null) return;
+        mDisplayPage = null;
+        refreshPages();
+        mWall.setPageView(PaneWallPage.DISPLAY, null);
+        mWall.removeView(page);
+    }
+
+    /**
      * Dress every non-terminal page from the surface style. The terminal pages dress themselves
      * through {@code TerminalPaneController}; this is the same pass for the rest of the wall, and
      * it runs on the same triggers — a wallpaper change, a blur change, an editor slider tick.
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
+        // The grabber wears the rims' accent; a re-dress is where a scheme change arrives.
+        mWall.refreshGrabberColor();
         if (mWidgetsPage != null) mWidgetsPage.applyStyle(style);
         if (mDisplayPage != null) mDisplayPage.applyStyle(style);
     }
@@ -211,32 +285,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mWall.goTo(PaneWallPolicy.homePage(), animate);
     }
 
-    // ---- Dragging, from the status bar ------------------------------------------------------
-
-    /** True while a sideways drag on the status bar has anywhere to take the wall. */
-    public boolean canDrag() {
-        return mWall.areGesturesEnabled() && mWall.pages().size() > 1;
-    }
-
-    /** Take a drag. False when the wall has nowhere to go, leaving the gesture to its owner. */
-    public boolean beginDrag() {
-        if (!canDrag()) return false;
-        mWall.beginDrag();
-        return true;
-    }
-
-    public void dragTo(float dxPx) {
-        mWall.dragTo(dxPx);
-    }
-
-    public void endDrag(float velocityPxPerSec) {
-        mWall.endDrag(velocityPxPerSec);
-    }
-
-    public void cancelDrag() {
-        mWall.cancelDrag();
-    }
-
     /** Hold the wall still while another surface owns the gesture. */
     public void setGesturesEnabled(boolean enabled) {
         mWall.setGesturesEnabled(enabled);
@@ -276,12 +324,102 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     @Override
-    public void onWallDragInterrupted() {
-        mHost.onWallDragInterrupted();
+    public void onWallOffsetChanged(float offsetPx) {
+        // The pages' glass is aimed at the wallpaper in screen space and the wall moves them by
+        // translation, which never redraws a child: each page re-aims its slab for this frame.
+        if (mWidgetsPage != null) mWidgetsPage.onWallMoved();
+        if (mDisplayPage != null) mDisplayPage.onWallMoved();
+        syncOutlineAlpha(offsetPx);
+        mHost.onWallOffsetChanged(offsetPx);
+    }
+
+    /**
+     * The pages' outlines fade out over the first stretch of a slide and back in over the last,
+     * so one edge shows while two pages share the screen. Written only when the number moves,
+     * which is a few frames at either end; a page pressed into a line's outer edge keeps its
+     * outline, since it is alone on screen.
+     */
+    private void syncOutlineAlpha(float offsetPx) {
+        float alpha = PaneWallPolicy.blendsPlaces(mWall.pages(), mWall.currentPage(), offsetPx)
+            ? PaneWallPolicy.outlineAlpha(offsetPx, mWall.getWidth()) : 1f;
+        if (alpha == mOutlineAlpha) return;
+        mOutlineAlpha = alpha;
+        if (mWidgetsPage != null) mWidgetsPage.setOutlineTravelAlpha(alpha);
+        if (mDisplayPage != null) mDisplayPage.setOutlineTravelAlpha(alpha);
+        mHost.onWallOutlineAlphaChanged(alpha);
     }
 
     @Override
-    public void onWallOffsetChanged(float offsetPx) {
-        mHost.onWallOffsetChanged(offsetPx);
+    public void onTerminalOffScreenChanged(boolean offScreen) {
+        mHost.onTerminalOffScreenChanged(offScreen);
+    }
+
+    @Override
+    public boolean isBorderKeyboardSwipeEnabled() {
+        return true;
+    }
+
+    @Override
+    public void onBorderKeyboardSwipe(boolean open) {
+        mHost.onBorderKeyboardSwipe(open);
+    }
+
+    @Override
+    public int onKeyboardRevealBegin(boolean opening) {
+        return mHost.onKeyboardRevealBegin(opening);
+    }
+
+    @Override
+    public void onKeyboardRevealProgress(float reveal) {
+        mHost.onKeyboardRevealProgress(reveal);
+    }
+
+    @Override
+    public void onKeyboardRevealEnd(boolean open) {
+        mHost.onKeyboardRevealEnd(open);
+    }
+
+    @Override
+    public boolean isBorderStatusSwipeEnabled() {
+        return mHost.isBorderStatusSwipeEnabled();
+    }
+
+    @Override
+    @Nullable
+    public int[] borderInsetsPx() {
+        return mHost.borderInsetsPx();
+    }
+
+    @Override
+    public void onBorderStatusSwipe(boolean expand) {
+        mHost.onBorderStatusSwipe(expand);
+    }
+
+    @Override
+    public int onStatusFoldBegin(boolean expanding) {
+        return mHost.onStatusFoldBegin(expanding);
+    }
+
+    @Override
+    public void onStatusFoldProgress(float towardOpenPx) {
+        mHost.onStatusFoldProgress(towardOpenPx);
+    }
+
+    @Override
+    public void onStatusFoldEnd(boolean expanded, float towardOpenVelocityPxPerSec) {
+        mHost.onStatusFoldEnd(expanded, towardOpenVelocityPxPerSec);
+    }
+
+    @Override
+    public void onPageSinkChanged(@NonNull PaneWallPage page, float scale) {
+        mHost.onPageSinkChanged(page, scale);
+    }
+
+    @Override
+    public boolean isPlankTiltEnabled(@NonNull PaneWallPage page) {
+        // Every place, the Display too: its picture is a SurfaceView a rotation leaves flat, so the
+        // wall tips it only while a still copy stands in for the surface (SurfacePage), and slides
+        // it flat until then.
+        return mHost.isPlankTiltEnabled();
     }
 }

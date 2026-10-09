@@ -2,7 +2,6 @@ package com.termux.app.launcher.popup;
 
 import android.content.Context;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,9 +14,10 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 
-import com.termux.app.chrome.ChromeInk;
+import com.google.android.material.divider.MaterialDivider;
+import com.google.android.material.shape.MaterialShapeDrawable;
 import com.termux.app.chrome.ChromeShade;
-import com.termux.app.chrome.OnGlass;
+import com.termux.app.material.M3;
 
 /**
  * Builds and styles the generic rows every text menu in the launcher is made of, plus the shell
@@ -63,12 +63,10 @@ public final class MenuRowFactory {
     @NonNull
     public TextView addActionRow(@NonNull LinearLayout shell, @NonNull String title, int iconRes,
                                  boolean chevron, int tintBase, @NonNull Runnable action) {
-        Drawable leading = iconRes != 0 ? loadMenuIcon(iconRes, dp(16), theme.textColor()) : null;
-        // The chevron is a glyph, not a decoration: it says the row opens a side menu. 62% of the
-        // text colour reads on the dark panel; on a light one the polarity may buy it more alpha.
+        Drawable leading = iconRes != 0 ? loadMenuIcon(iconRes, dp(16), rowInk()) : null;
+        // The chevron is a glyph, not a decoration: it says the row opens a side menu.
         Drawable trailing = chevron
-            ? loadMenuIcon(chevronRes(), dp(13), ChromeShade.tinted(
-                (theme.textColor() & 0x00FFFFFF) | (0x9E << 24), OnGlass.TARGET_LARGE_TEXT))
+            ? loadMenuIcon(chevronRes(), dp(13), M3.onSurfaceVariant(context))
             : null;
         return addRow(shell, title, leading, trailing, iconRes != 0 || chevron, tintBase, action);
     }
@@ -78,7 +76,7 @@ public final class MenuRowFactory {
     public TextView addCheckableRow(@NonNull LinearLayout shell, @NonNull String title,
                                     int checkIconRes, boolean checked, int tintBase,
                                     @NonNull Runnable action) {
-        Drawable trailing = checked ? loadMenuIcon(checkIconRes, dp(16), theme.textColor()) : null;
+        Drawable trailing = checked ? loadMenuIcon(checkIconRes, dp(16), rowInk()) : null;
         return addRow(shell, title, null, trailing, checked, tintBase, action);
     }
 
@@ -88,8 +86,9 @@ public final class MenuRowFactory {
                             boolean hasGlyphs, int tintBase, @NonNull Runnable action) {
         TextView actionRow = new TextView(context);
         actionRow.setText(title);
-        actionRow.setTextColor(theme.textColor());
-        actionRow.setTextSize(12f);
+        actionRow.setTextColor(rowInk());
+        M3.textAppearance(actionRow, com.google.android.material.R.attr.textAppearanceLabelLarge);
+        actionRow.setTextColor(rowInk());
         actionRow.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         actionRow.setPadding(dp(8), dp(7), dp(8), dp(7));
         actionRow.setClickable(true);
@@ -104,15 +103,18 @@ public final class MenuRowFactory {
         return actionRow;
     }
 
-    /** Hairline group separator between two groups of rows. */
+    /** The M3 text colour of a menu row: {@code colorOnSurface}. */
+    private int rowInk() {
+        return M3.onSurface(context);
+    }
+
+    /** Group separator between two groups of rows, the theme's divider. */
     public void addDivider(@NonNull LinearLayout shell) {
-        View divider = new View(context);
+        MaterialDivider divider = new MaterialDivider(context);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(1)));
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMargins(dp(8), dp(5), dp(8), dp(4));
         divider.setLayoutParams(lp);
-        divider.setBackgroundColor(ChromeShade.tinted(
-            (theme.textColor() & 0x00FFFFFF) | (0x24 << 24), ChromeShade.TARGET_FILL));
         shell.addView(divider);
     }
 
@@ -131,17 +133,10 @@ public final class MenuRowFactory {
 
     /** Paints a row as idle or as the one under the finger. */
     public void styleRow(@NonNull TextView row, boolean highlighted, int tintBase) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(8));
-        if (highlighted) {
-            bg.setColor(armedFill(tintBase));
-            bg.setStroke(dp(1), armedStroke(tintBase));
-            row.setTextColor(theme.selectedTextColor());
-        } else {
-            bg.setColor(0x00000000);
-            bg.setStroke(0, 0x00000000);
-            row.setTextColor(theme.textColor());
-        }
+        MaterialShapeDrawable bg = M3.surface(context,
+            com.google.android.material.R.attr.shapeAppearanceCornerSmall,
+            highlighted ? armedFill(M3.onSurface(context)) : 0x00000000);
+        row.setTextColor(rowInk());
         row.setBackground(bg);
     }
 
@@ -176,49 +171,12 @@ public final class MenuRowFactory {
     }
 
     /**
-     * The fill of the row under the finger.
-     *
-     * <p>What says "this row is armed" is that it does not look like its neighbour, and the
-     * neighbour is the bare panel — the unselected rows draw nothing at all. Leaning the armed row
-     * toward white is how it said that over a dark panel; over a light one the same blend walks it
-     * straight into the panel, so the direction follows the chrome's polarity. The panel's opacity
-     * is a user preference, so the glass can be very thin and the lean is then all there is; the
-     * result is held to a separation rather than to the blend that produced it.</p>
+     * The fill of the row under the finger: the M3 dragged state layer of {@code onSurface}. An
+     * unselected row draws nothing, so the armed row is held to a separation from the bare panel
+     * rather than to the layer alone; the panel's opacity is a user preference and may be thin.
      */
-    static int armedFill(int tintBase) {
-        int toward = highlightToward();
-        return ChromeShade.tinted(
-            blendColors((0x8C << 24) | (tintBase & 0x00FFFFFF), 0x66000000 | toward, 0.35f),
+    static int armedFill(int onSurface) {
+        return ChromeShade.tinted(M3.stateLayer(onSurface, M3.STATE_DRAGGED),
             ChromeShade.TARGET_STATE);
-    }
-
-    /** The armed row's own edge, which is what survives when the panel is at its thinnest. */
-    static int armedStroke(int tintBase) {
-        int toward = highlightToward();
-        return ChromeShade.tinted(
-            blendColors(0x99000000 | toward, (0xFF << 24) | (tintBase & 0x00FFFFFF), 0.5f),
-            ChromeShade.TARGET_RIM);
-    }
-
-    /** Which way an armed row leans off the panel: into light over dark glass, into shadow over light. */
-    private static int highlightToward() {
-        return ChromeShade.polarity() == ChromeInk.Polarity.DARK_INK ? 0x000000 : 0xFFFFFF;
-    }
-
-    static int blendColors(int from, int to, float ratio) {
-        float clamped = Math.max(0f, Math.min(1f, ratio));
-        int fromA = (from >> 24) & 0xFF;
-        int fromR = (from >> 16) & 0xFF;
-        int fromG = (from >> 8) & 0xFF;
-        int fromB = from & 0xFF;
-        int toA = (to >> 24) & 0xFF;
-        int toR = (to >> 16) & 0xFF;
-        int toG = (to >> 8) & 0xFF;
-        int toB = to & 0xFF;
-        int outA = Math.round(fromA + ((toA - fromA) * clamped));
-        int outR = Math.round(fromR + ((toR - fromR) * clamped));
-        int outG = Math.round(fromG + ((toG - fromG) * clamped));
-        int outB = Math.round(fromB + ((toB - fromB) * clamped));
-        return (outA << 24) | (outR << 16) | (outG << 8) | outB;
     }
 }

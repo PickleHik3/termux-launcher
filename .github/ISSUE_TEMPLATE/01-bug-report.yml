@@ -1,33 +1,28 @@
 name: "Bug report"
-description: "Create a report to help us improve"
+description: "Create a report to help us improve Termux Launcher"
 title: "[Bug]: "
 labels: ["bug report"]
 body:
   - type: markdown
     attributes:
       value: |
-        **THIS IS A BUG TRACKER OF THE TERMUX APP. IF YOU HAVE ISSUES WITH A PACKAGE INSIDE THE APP, THEN PLEASE OPEN AN ISSUE AT [TERMUX/TERMUX-PACKAGES](https://github.com/termux/termux-packages) INSTEAD.**
-        If you are unsure if this is a bug with the Termux app itself or any of the packages, kindly open up the bug at [termux/termux-packages](https://github.com/termux/termux-packages) as it's very likely that it belongs there.
+        This is the bug tracker of **Termux Launcher**. If the problem is with a package installed inside the app, please report it to the package's own project instead.
 
         Use search before you open an issue to check whether your issue has been already reported and perhaps solved.
 
-        Android versions lower than 12 are not supported.
-
-        If you have issues installing packages then please see https://github.com/termux/termux-packages/issues/6726.
+        Termux Launcher needs Android 8 (API 26) or newer.
   - type: textarea
     attributes:
       label: Problem description
       description: |
-        A clear and concise description of what the problem is. You may attach the logs, screenshots, screen video recording and whatever else that will help to understand the issue.
-
-        Issues without proper description will be closed without solution.
+        A clear and concise description of what the problem is. You may attach logs, screenshots, a screen recording, or anything else that helps to understand the issue.
     validations:
       required: true
   - type: textarea
     attributes:
-      label: Steps to reproduce the behavior.
+      label: Steps to reproduce
       description: |
-        Please list all necessary commands that are needed to reproduce the issue.
+        List everything needed to reproduce the issue.
     validations:
       required: true
   - type: textarea
@@ -36,12 +31,12 @@ body:
   - type: textarea
     attributes:
       label: System information
-      description: Please provide info about your device
+      description: Please provide info about your app and device.
       value: |
-        * Termux Monet version:
-        * Is Nightly or Stable?:
-        * Android OS version:
+        * Termux Launcher version (Settings → About, or `echo $TERMUX_VERSION` in the terminal):
+        * Edition (Termux / Nix / VAJ):
+        * Nightly or release:
+        * Android version:
         * Device model:
-        *
     validations:
       required: true

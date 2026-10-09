@@ -371,9 +371,20 @@ public final class TourStep {
      */
     public boolean taughtOnTheTerminal() {
         for (String target : targets)
-            if (!TourTargets.STATUS_BAR.equals(target) && !TourTargets.NONE.equals(target))
-                return true;
+            if (!isOnEveryPlace(target)) return true;
         return false;
+    }
+
+    /**
+     * The controls every place has: the status bar, and the page's own border with the two pills
+     * on it, which the wall draws on the Widgets page and the display as it does on the terminal.
+     * A card about one of them can be read wherever the wall rests.
+     */
+    private static boolean isOnEveryPlace(String target) {
+        return TourTargets.STATUS_BAR.equals(target) || TourTargets.NONE.equals(target)
+            || TourTargets.PAGE_BORDER.equals(target)
+            || TourTargets.KEYBOARD_GRABBER.equals(target)
+            || TourTargets.STATUS_GRABBER.equals(target);
     }
 
     /** Whether this is the closing card, which ends the run on its own action. */

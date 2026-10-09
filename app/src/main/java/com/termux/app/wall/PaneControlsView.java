@@ -14,6 +14,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 
@@ -21,17 +22,22 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
+import androidx.customview.widget.ExploreByTouchHelper;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.chrome.GlassRefraction;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * The tab a wall page drops from the corner that was tapped: the same fill, stroke and motion a
@@ -61,9 +67,12 @@ public final class PaneControlsView extends View {
     /**
      * The tab's one material, the same on every screen: the theme's panel colour as a scrim,
      * over the app's shared wallpaper blur when it has one. Two strengths, both fixed — the tab
-     * does not follow the page's own tint, blur or grain. Following them put a pane's film grain
-     * on a 40dp tab, where it read as static (pong, 2026-09-20), and a pane's faint tint left the
-     * buttons on bare terminal text.
+     * does not follow the page's own tint or blur. Following them left the buttons on bare
+     * terminal text when a pane's tint was faint. Fancier Glass is the one thing it does follow:
+     * the blur is then drawn through the same refraction as the slab it grows out of, rimmed along
+     * the tab's own free edge, with the scrim over it unchanged. The grain is the dock's own, laid
+     * once and static ({@link #setGrainPercent}): a glass surface without it read as a different
+     * material beside the ones that wear it.
      */
     /** The scrim's alpha, out of 255, over the wallpaper blur: enough to read on any picture. */
     public static final int SCRIM_ON_FROST_ALPHA = 184;
@@ -98,6 +107,15 @@ public final class PaneControlsView extends View {
     }
 
     /**
+     * A button's name read afresh each time a screen reader asks, for the buttons whose press
+     * does something different depending on state: minimal mode in or out, tiling on or off.
+     * It must name what a press does now, so a fixed string would go stale.
+     */
+    public interface Description {
+        @NonNull CharSequence get();
+    }
+
+    /**
      * One button of the tab: an id the page knows, and either a glyph, a short label, or a mark it
      * draws itself.
      */
@@ -107,26 +125,65 @@ public final class PaneControlsView extends View {
         final boolean isGlyph;
         @Nullable final Mark mark;
         final int tint;
+        /** What the button is called to accessibility services; a glyph has no words of its own. */
+        @Nullable final CharSequence description;
+        /** Names the button as it is now, when a fixed {@link #description} would go stale. */
+        @Nullable final Description describer;
 
         private Action(int id, @NonNull String text, boolean isGlyph, @Nullable Mark mark,
-                       int tint) {
+                       int tint, @Nullable CharSequence description) {
+            this(id, text, isGlyph, mark, tint, description, null);
+        }
+
+        private Action(int id, @NonNull String text, boolean isGlyph, @Nullable Mark mark,
+                       int tint, @Nullable CharSequence description,
+                       @Nullable Description describer) {
+            this.describer = describer;
             this.id = id;
             this.text = text;
             this.isGlyph = isGlyph;
             this.mark = mark;
             this.tint = tint;
+            this.description = description;
         }
 
         /** A Nerd Font glyph in a square button. */
         @NonNull
         public static Action glyph(int id, @NonNull String glyph) {
-            return new Action(id, glyph, true, null, TINT_PRIMARY);
+            return glyph(id, glyph, (CharSequence) null);
+        }
+
+        /** A Nerd Font glyph in a square button, named for TalkBack by {@code description}. */
+        @NonNull
+        public static Action glyph(int id, @NonNull String glyph,
+                                   @Nullable CharSequence description) {
+            return new Action(id, glyph, true, null, TINT_PRIMARY, description);
+        }
+
+        /** A Nerd Font glyph whose name follows the state it is in. */
+        @NonNull
+        public static Action glyph(int id, @NonNull String glyph, @NonNull Description describer) {
+            return new Action(id, glyph, true, null, TINT_PRIMARY, null, describer);
+        }
+
+        /** What a screen reader says for this button right now; null when it has no name. */
+        @Nullable
+        CharSequence spokenDescription() {
+            if (describer != null) return describer.get();
+            return description;
         }
 
         /** A short read-out — the grid's size, or the help question mark — as wide as its text. */
         @NonNull
         public static Action label(int id, @NonNull String text) {
-            return new Action(id, text, false, null, TINT_PRIMARY);
+            return new Action(id, text, false, null, TINT_PRIMARY, text);
+        }
+
+        /** A short read-out that a screen reader should name differently, such as the ? as Help. */
+        @NonNull
+        public static Action label(int id, @NonNull String text,
+                                   @NonNull CharSequence description) {
+            return new Action(id, text, false, null, TINT_PRIMARY, description);
         }
 
         /** A hand-drawn mark, in a square button the size a glyph's would be. */
@@ -138,7 +195,21 @@ public final class PaneControlsView extends View {
         /** As above, in one of the tab's other colours. */
         @NonNull
         public static Action drawn(int id, @NonNull Mark mark, int tint) {
-            return new Action(id, "", false, mark, tint);
+            return new Action(id, "", false, mark, tint, null);
+        }
+
+        /** As above, named by {@code describer} as the state is now. */
+        @NonNull
+        public static Action drawn(int id, @NonNull Mark mark, int tint,
+                                   @NonNull Description describer) {
+            return new Action(id, "", false, mark, tint, null, describer);
+        }
+
+        /** As above, named for TalkBack by {@code description}: a drawn mark has no words. */
+        @NonNull
+        public static Action drawn(int id, @NonNull Mark mark, int tint,
+                                   @Nullable CharSequence description) {
+            return new Action(id, "", false, mark, tint, description);
         }
     }
 
@@ -174,6 +245,11 @@ public final class PaneControlsView extends View {
     private final RectF mBounds = new RectF();
     /** Scratch for the shape the tab is painted through; never allocated per frame. */
     private final RectF mClip = new RectF();
+    /** The static grain tile over the scrim, or null for none. */
+    @Nullable private android.graphics.drawable.Drawable mGrain;
+    private int mGrainPercent;
+    /** The keyboard focus ring around one button; scratch, never allocated per frame. */
+    private final RectF mFocusRing = new RectF();
     @Nullable private FrameSource mFrameSource;
     private final Frame mFrame = new Frame();
     /** One hit rectangle per action, in this view's coordinates; recomputed with the geometry. */
@@ -198,8 +274,17 @@ public final class PaneControlsView extends View {
     private final Matrix mFrostMatrix = new Matrix();
     private final Rect mFrostRect = new Rect();
     private final int[] mLocation = new int[2];
+    /** The wallpaper's live x-offset the frost follows, or null while nothing pans. */
+    @Nullable private com.termux.app.chrome.WallpaperParallax mParallax;
     private final int[] mRootLocation = new int[2];
     @Nullable private ColorFilter mFrostFilter;
+    /** Fancier Glass on the tab's blur, or null for the plain frost. */
+    @Nullable private GlassRefraction.Look mLook;
+    /** The program the blur draws through while {@link #mLook} is set and the phone runs one. */
+    @Nullable private GlassRefraction.Program mProgram;
+    /** Scratch for the frost's aim and the rim's rect; never allocated per frame. */
+    private final float[] mAim = new float[4];
+    private final float[] mRim = new float[4];
     /** Scratch for the tab's path points; never allocated per frame. */
     private final float[] mPathPoints = new float[CornerTabGeometry.PATH_POINTS * 2];
     /** The corner it comes out of; {@link CornerZones#NONE} until a page or the default says. */
@@ -214,17 +299,119 @@ public final class PaneControlsView extends View {
         super(context);
         mGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
-        mGlyphPaint.setTextSize(dp(14));
+        mGlyphPaint.setTextSize(sp(14));
         mLabelPaint.setTypeface(Typeface.DEFAULT_BOLD);
         mLabelPaint.setTextAlign(Paint.Align.CENTER);
-        mLabelPaint.setTextSize(dp(12));
+        mLabelPaint.setTextSize(sp(12));
         mMarkPaint.setStyle(Paint.Style.STROKE);
         mMarkPaint.setStrokeCap(Paint.Cap.ROUND);
         mMarkPaint.setStrokeWidth(dp(1.35f));
         setWillNotDraw(false);
         setClickable(false);
+        // Focusable only while the tab is out (see syncAccessibility), and never in touch mode:
+        // the tab is reachable by Tab and the arrow keys but never takes the terminal's focus
+        // off it by being touched or by appearing.
         setFocusable(false);
+        setFocusableInTouchMode(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        ViewCompat.setAccessibilityDelegate(this, mAccessibility);
+    }
+
+    /**
+     * The tab's buttons as virtual views, while the tab is out: the view draws them itself, so
+     * without this TalkBack finds nothing to name or press. Down, the view stays out of the tree
+     * so the overlay it lives on never takes accessibility focus over the page.
+     */
+    private final ExploreByTouchHelper mAccessibility = new ExploreByTouchHelper(this) {
+        private final RectF mBoundsF = new RectF();
+
+        /**
+         * What a screen reader says for a button: its description, else its label for a labelled
+         * button, else nothing. Every caller names its glyphs and marks, so the nothing is a
+         * guard, not a path: ExploreByTouchHelper throws on a node with neither text nor
+         * description, and a silent node would be no use anyway.
+         */
+        @Nullable
+        private CharSequence spoken(@Nullable Action action) {
+            if (action == null) return null;
+            CharSequence named = action.spokenDescription();
+            if (named != null && named.length() > 0) return named;
+            if (!action.isGlyph && action.mark == null && !action.text.isEmpty()) return action.text;
+            return null;
+        }
+
+        @Override
+        protected int getVirtualViewAt(float x, float y) {
+            int id = actionAt(x, y);
+            if (id == ACTION_NONE) return ExploreByTouchHelper.INVALID_ID;
+            int index = indexOf(id);
+            return index < 0 || spoken(mActions.get(index)) == null
+                ? ExploreByTouchHelper.INVALID_ID : id;
+        }
+
+        @Override
+        protected void getVisibleVirtualViews(List<Integer> virtualViewIds) {
+            if (!isControlsShown()) return;
+            for (Action action : mActions) {
+                if (spoken(action) != null) virtualViewIds.add(action.id);
+            }
+        }
+
+        @Override
+        protected void onPopulateNodeForVirtualView(int virtualViewId,
+                                                    @NonNull AccessibilityNodeInfoCompat node) {
+            int index = indexOf(virtualViewId);
+            Action action = index < 0 ? null : mActions.get(index);
+            CharSequence spoken = spoken(action);
+            // Never null: the helper requires text or a description on every node it hands out.
+            node.setContentDescription(spoken != null ? spoken
+                : getResources().getString(android.R.string.untitled));
+            node.setClassName(android.widget.Button.class.getName());
+            node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+            Rect bounds = new Rect(0, 0, 1, 1);
+            if (actionBounds(virtualViewId, mBoundsF)) mBoundsF.roundOut(bounds);
+            node.setBoundsInParent(bounds);
+        }
+
+        @Override
+        protected boolean onPerformActionForVirtualView(int virtualViewId, int action,
+                                                        @Nullable android.os.Bundle arguments) {
+            return action == AccessibilityNodeInfoCompat.ACTION_CLICK && activate(virtualViewId);
+        }
+
+        @Override
+        protected void onVirtualViewKeyboardFocusChanged(int virtualViewId, boolean hasFocus) {
+            invalidate();
+        }
+    };
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        return mAccessibility.dispatchKeyEvent(event) || super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    protected void onFocusChanged(boolean gainFocus, int direction,
+                                  @Nullable Rect previouslyFocusedRect) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
+        mAccessibility.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
+    }
+
+    @Override
+    protected boolean dispatchHoverEvent(android.view.MotionEvent event) {
+        return mAccessibility.dispatchHoverEvent(event) || super.dispatchHoverEvent(event);
+    }
+
+    /** In the accessibility tree only while the tab is out and has buttons to name. */
+    private void syncAccessibility() {
+        int wanted = mShown && !mRetracting && !mActions.isEmpty()
+            ? IMPORTANT_FOR_ACCESSIBILITY_YES : IMPORTANT_FOR_ACCESSIBILITY_NO;
+        if (getImportantForAccessibility() != wanted) setImportantForAccessibility(wanted);
+        // The same condition gates the keyboard: Tab and the arrows reach the buttons only while
+        // the tab is out; when it goes, focus (and the helper's virtual focus) goes with it.
+        boolean keyboardReachable = wanted == IMPORTANT_FOR_ACCESSIBILITY_YES;
+        if (isFocusable() != keyboardReachable) setFocusable(keyboardReachable);
+        mAccessibility.invalidateRoot();
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -256,25 +443,88 @@ public final class PaneControlsView extends View {
      */
     public void setPaneGlass(@Nullable Bitmap frame, @NonNull Rect frameRect,
                              @Nullable ColorFilter frostFilter) {
+        setPaneGlass(frame, frameRect, frostFilter, null);
+    }
+
+    /**
+     * {@link #setPaneGlass(Bitmap, Rect, ColorFilter)} that also follows the wallpaper's
+     * parallax, sampling the frame {@code parallax.offsetPx()} further along on every draw; null
+     * while nothing pans.
+     */
+    public void setPaneGlass(@Nullable Bitmap frame, @NonNull Rect frameRect,
+                             @Nullable ColorFilter frostFilter,
+                             @Nullable com.termux.app.chrome.WallpaperParallax parallax) {
+        setPaneGlass(frame, frameRect, frostFilter, parallax, null);
+    }
+
+    /**
+     * {@link #setPaneGlass(Bitmap, Rect, ColorFilter, com.termux.app.chrome.WallpaperParallax)}
+     * under Fancier Glass: the blur is bent at the tab's rim and lit along it, through
+     * {@link GlassRefraction}, while the scrim over it stays the tab's own. Null is the plain
+     * frost — the default mode, and what every phone below API 33 draws whatever it is handed.
+     */
+    public void setPaneGlass(@Nullable Bitmap frame, @NonNull Rect frameRect,
+                             @Nullable ColorFilter frostFilter,
+                             @Nullable com.termux.app.chrome.WallpaperParallax parallax,
+                             @Nullable GlassRefraction.Look look) {
         Bitmap live = frame != null && !frame.isRecycled() ? frame : null;
-        if (live == mFrostFrame && mFrostFilter == frostFilter && mFrostRect.equals(frameRect)) {
+        if (live == mFrostFrame && mFrostFilter == frostFilter && mFrostRect.equals(frameRect)
+            && mParallax == parallax && Objects.equals(look, mLook)) {
             return;
         }
+        mParallax = parallax;
+        mLook = look;
+        if (live != mFrostFrame || mFrostShader == null) {
+            // CLAMP and a shader, as every other glass surface here draws the same frame: it does
+            // not always reach the screen's full width, and a plain drawBitmap left a sharp strip.
+            mFrostShader = live == null
+                ? null : new BitmapShader(live, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        }
         mFrostFrame = live;
-        // CLAMP and a shader, as every other glass surface here draws the same frame: it does not
-        // always reach the screen's full width, and a plain drawBitmap left a sharp strip.
-        mFrostShader = live == null
-            ? null : new BitmapShader(live, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        mFrostPaint.setShader(mFrostShader);
         mFrostPaint.setColorFilter(frostFilter);
         mFrostFilter = frostFilter;
         mFrostRect.set(frameRect);
+        syncRefraction();
         invalidate();
+    }
+
+    /**
+     * Points the frost paint at the program or at the frame's own shader, whichever the look
+     * asks for and the phone can run; on a dress, never per draw, since the program captures its
+     * input when it is set.
+     */
+    private void syncRefraction() {
+        BitmapShader shader = mFrostShader;
+        GlassRefraction.Look look = mLook;
+        if (look == null || shader == null || !GlassRefraction.available()) {
+            mProgram = null;
+            mFrostPaint.setShader(shader);
+            return;
+        }
+        float density = getResources().getDisplayMetrics().density;
+        GlassRefraction.Program program = mProgram;
+        if (program == null || program.density() != density) {
+            program = GlassRefraction.Program.create(density);
+        }
+        mProgram = program;
+        if (program == null) {
+            // The driver refused the program: the plain frost is the look this phone gets.
+            mFrostPaint.setShader(shader);
+            return;
+        }
+        program.setLook(look);
+        program.setInput(shader);
+        program.applyTo(mFrostPaint);
     }
 
     /** True while the tab shows the wallpaper blur under its scrim. */
     public boolean hasPaneGlass() {
         return mFrostShader != null;
+    }
+
+    /** True while the tab's blur is drawn through the refraction program rather than plain. */
+    public boolean refracts() {
+        return mProgram != null;
     }
 
     /**
@@ -340,6 +590,7 @@ public final class PaneControlsView extends View {
         for (int i = mAlerted.size() - 1; i >= 0; i--) {
             if (indexOf(mAlerted.get(i)) < 0) mAlerted.remove(i);
         }
+        syncAccessibility();
         invalidate();
     }
 
@@ -384,6 +635,7 @@ public final class PaneControlsView extends View {
         animateTo(1f, false);
         mShown = true;
         mRetracting = false;
+        syncAccessibility();
     }
 
     /**
@@ -397,6 +649,7 @@ public final class PaneControlsView extends View {
         mProgress = 1f;
         mShown = true;
         mRetracting = false;
+        syncAccessibility();
         invalidate();
     }
 
@@ -404,6 +657,7 @@ public final class PaneControlsView extends View {
         if (!mShown || mRetracting) return;
         animateTo(0f, true);
         mRetracting = true;
+        syncAccessibility();
     }
 
     /**
@@ -416,6 +670,7 @@ public final class PaneControlsView extends View {
         mShown = false;
         mRetracting = false;
         mCorner = CornerZones.NONE;
+        syncAccessibility();
         invalidate();
     }
 
@@ -423,6 +678,8 @@ public final class PaneControlsView extends View {
     public boolean activate(int id) {
         if (mListener == null || indexOf(id) < 0) return false;
         mListener.onPaneControlAction(id);
+        // A state-named button (minimal, tiling) may read differently now.
+        mAccessibility.invalidateRoot();
         return true;
     }
 
@@ -539,7 +796,7 @@ public final class PaneControlsView extends View {
         // The fill runs a hair past the edge and is trimmed there by the clip, so no anti-aliased
         // seam opens up between the tab and the border it comes out from behind.
         CornerTabGeometry.buildTabFill(corner(), mClip, mTab, radius, dp(1), mPathPoints, mPath);
-        drawMaterial(canvas, surface);
+        drawMaterial(canvas, surface, radius);
 
         // One line around frame and tab together: the frame's own stroke is the tab's outer edge,
         // so all the tab draws is the boundary it shares with the page's interior. Drawing its
@@ -561,6 +818,14 @@ public final class PaneControlsView extends View {
                 : action.tint == TINT_ERROR ? error
                 : action.tint == TINT_TERTIARY ? tertiary : primary;
             int color = ColorUtils.setAlphaComponent(tint, alpha);
+            if (hasFocus() && mAccessibility.getKeyboardFocusedVirtualViewId() == action.id) {
+                mPaint.setStyle(Paint.Style.STROKE);
+                mPaint.setStrokeWidth(dp(1.5f));
+                mPaint.setColor(color);
+                mFocusRing.set(mButtons[i]);
+                mFocusRing.inset(dp(2), dp(2));
+                canvas.drawRoundRect(mFocusRing, dp(6), dp(6), mPaint);
+            }
             if (action.mark != null) {
                 mMarkPaint.setStyle(Paint.Style.STROKE);
                 mMarkPaint.setStrokeCap(Paint.Cap.ROUND);
@@ -580,13 +845,35 @@ public final class PaneControlsView extends View {
      * on screen under the panel scrim, or the scrim alone, stronger, when there is no blur. One
      * recipe for every screen — a terminal pane, the Display page, the Widgets page — so the
      * buttons read the same wherever the corner is.
+     *
+     * @param radiusPx the tab's one free corner, which the refraction's rim turns
      */
-    private void drawMaterial(@NonNull Canvas canvas, int surface) {
+    private void drawMaterial(@NonNull Canvas canvas, int surface, float radiusPx) {
         int save = canvas.save();
         canvas.clipPath(mPath);
-        boolean frosted = mFrostFrame != null && !mFrostFrame.isRecycled() && mFrostShader != null;
+        GlassRefraction.Program program = mProgram;
+        // A software canvas refuses a RuntimeShader outright: a RealtimeBlurView drawing the
+        // window into its bitmap is one. That pass only feeds another view's blur, so the tab
+        // gives it the scrim alone rather than a draw that throws.
+        boolean frosted = mFrostFrame != null && !mFrostFrame.isRecycled() && mFrostShader != null
+            && (program == null || canvas.isHardwareAccelerated());
         if (frosted) {
-            aimFrost();
+            aimFrost(mFrostFrame);
+            if (program != null) {
+                // The same aim, as uniforms; the rim runs along the tab's own free edge and its
+                // one corner, and past the two edges that are the frame's.
+                program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
+                GlassRefraction.Look look = mLook;
+                float reach = look == null ? 0f
+                    : GlassRefraction.seamReachPx(look, program.density(), radiusPx);
+                GlassRefraction.rimRect(mRim, mTab.left, mTab.top, mTab.right, mTab.bottom, reach,
+                    CornerTabGeometry.refractionSeams(corner()));
+                program.setRect(mRim[0], mRim[1], mRim[2], mRim[3], radiusPx);
+            } else {
+                mFrostMatrix.setScale(mAim[0], mAim[1]);
+                mFrostMatrix.postTranslate(mAim[2], mAim[3]);
+                mFrostShader.setLocalMatrix(mFrostMatrix);
+            }
             mFrostPaint.setAlpha(Math.round(255f * mProgress));
             canvas.drawRect(mTab.left - dp(1), mTab.top - dp(1), mTab.right + dp(1),
                 mTab.bottom + dp(1), mFrostPaint);
@@ -595,7 +882,25 @@ public final class PaneControlsView extends View {
         mPaint.setColor(scaleAlpha(ColorUtils.setAlphaComponent(surface,
             frosted ? SCRIM_ON_FROST_ALPHA : SCRIM_ALPHA)));
         canvas.drawRect(mClip, mPaint);
+        if (mGrain != null) {
+            mGrain.setBounds((int) Math.floor(mClip.left), (int) Math.floor(mClip.top),
+                (int) Math.ceil(mClip.right), (int) Math.ceil(mClip.bottom));
+            mGrain.draw(canvas);
+        }
         canvas.restoreToCount(save);
+    }
+
+    /**
+     * The dock's grain over the tab's scrim, 0..100; 0 draws none. Static: the shared seeded tile,
+     * so a tab at rest costs nothing more than before.
+     */
+    public void setGrainPercent(int percent) {
+        int clamped = Math.max(0, Math.min(100, percent));
+        if (clamped == mGrainPercent) return;
+        mGrainPercent = clamped;
+        mGrain = clamped > 0
+            ? com.termux.app.DockGlassRendering.createGrainLayer(getResources(), clamped) : null;
+        invalidate();
     }
 
     /** The colour at its own alpha scaled by the slide, so the material fades in with the tab. */
@@ -604,43 +909,33 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * Point the frost shader at the wallpaper under this view. Recomputed on every draw: the tab
-     * is out only briefly and the overlay it lives in moves under the keyboard, so caching by
-     * position buys nothing here and risks a stale aim.
+     * Aim the frost at the wallpaper under this view, into {@link #mAim}: scale then translate,
+     * as {@code SharedFrameDrawable}'s aim states it. Recomputed on every draw: the tab is out
+     * only briefly and the overlay it lives in moves under the keyboard, so caching by position
+     * buys nothing here and risks a stale aim.
      */
-    private void aimFrost() {
-        if (mFrostFrame == null || mFrostShader == null) return;
-        layoutOriginOnScreen(mLocation);
-        float scaleX = mFrostRect.width() / (float) Math.max(1, mFrostFrame.getWidth());
-        float scaleY = mFrostRect.height() / (float) Math.max(1, mFrostFrame.getHeight());
-        mFrostMatrix.reset();
-        mFrostMatrix.setScale(scaleX, scaleY);
-        mFrostMatrix.postTranslate(mFrostRect.left - mLocation[0], mFrostRect.top - mLocation[1]);
-        mFrostShader.setLocalMatrix(mFrostMatrix);
+    private void aimFrost(@NonNull Bitmap frame) {
+        float slideX = layoutOriginOnScreen(mLocation);
+        // Past the page's slide and the wallpaper's parallax, exactly as the slab aims: the tab
+        // is cut from the same glass and has to show the same wallpaper mid-slide.
+        float shiftX = slideX + (mParallax == null ? 0f : mParallax.offsetPx());
+        mAim[0] = mFrostRect.width() / (float) Math.max(1, frame.getWidth());
+        mAim[1] = mFrostRect.height() / (float) Math.max(1, frame.getHeight());
+        mAim[2] = mFrostRect.left - mLocation[0] - shiftX;
+        mAim[3] = mFrostRect.top - mLocation[1];
     }
 
     /**
      * This view's position on screen as laid out, ignoring every transform on the way up — the
-     * same anchor the pane's own slab uses, so the tab's frost lines up with the slab it grows
-     * out of while the pane tilts or slides under a finger.
+     * same anchor the pane's own slab uses ({@link com.termux.app.chrome.GlassAnchor}), so the
+     * tab's frost lines up with the slab it grows out of while the pane tilts or slides under a
+     * finger. The one transform that is not ignored is the wall page's slide, returned rather
+     * than folded in, since a page travelling over the wallpaper shows the wallpaper it is over.
+     *
+     * @return the wall page's translation on the way up, in px; 0 off the wall
      */
-    private void layoutOriginOnScreen(@NonNull int[] out) {
-        float x = 0f;
-        float y = 0f;
-        View view = this;
-        while (true) {
-            x += view.getLeft();
-            y += view.getTop();
-            android.view.ViewParent parent = view.getParent();
-            if (!(parent instanceof View)) break;
-            View parentView = (View) parent;
-            x -= parentView.getScrollX();
-            y -= parentView.getScrollY();
-            view = parentView;
-        }
-        view.getLocationOnScreen(mRootLocation);
-        out[0] = Math.round(x) + mRootLocation[0];
-        out[1] = Math.round(y) + mRootLocation[1];
+    private float layoutOriginOnScreen(@NonNull int[] out) {
+        return com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, out, mRootLocation);
     }
 
     private void drawText(@NonNull Canvas canvas, @NonNull RectF button, @NonNull Action action,
@@ -651,10 +946,42 @@ public final class PaneControlsView extends View {
         canvas.drawText(action.text, button.centerX(), baseline, paint);
     }
 
+    /**
+     * A detach lands whatever motion was under way. The terminal's pane tree takes this view off
+     * its host and puts it back on every render, and a render follows the dismiss that the
+     * minimal glyph asks for in the same call — so a cancelled retract used to leave the tab
+     * fully drawn, {@code mShown} and {@code mRetracting} both true: nothing on the wall could put
+     * it away again (a tap off it asks {@link #isControlsShown}, which said no) and nothing could
+     * bring it back either. A retract that was cut short is a tab that is gone; a reveal that was
+     * cut short is a tab that is out.
+     */
     @Override
     protected void onDetachedFromWindow() {
-        if (mAnimator != null) mAnimator.cancel();
+        landMotion();
         super.onDetachedFromWindow();
+    }
+
+    /** Where the tab was heading, asserted at once; nothing while it is at rest. */
+    private void landMotion() {
+        if (mAnimator == null) return;
+        ValueAnimator animator = mAnimator;
+        mAnimator = null;
+        animator.cancel();
+        if (mRetracting) {
+            mProgress = 0f;
+            mShown = false;
+            mRetracting = false;
+            mCorner = CornerZones.NONE;
+        } else if (mShown) {
+            mProgress = 1f;
+        }
+        invalidate();
+    }
+
+    /** Font-scale-aware px for a size in sp. */
+    private float sp(float value) {
+        return android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, value,
+            getResources().getDisplayMetrics());
     }
 
     private float dp(float value) {

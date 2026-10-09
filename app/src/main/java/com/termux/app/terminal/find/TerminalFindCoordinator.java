@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
+import com.termux.terminal.ClipboardCleanup;
 import com.termux.terminal.TerminalBuffer;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.view.TerminalFindOverlay;
@@ -158,11 +159,19 @@ public final class TerminalFindCoordinator implements TerminalFindController.Hos
         host.installFindInterceptor(null);
         TerminalView terminalView = pane;
         if (terminalView != null) terminalView.setFindOverlay(null);
+        boolean clipboardCleanupEnabled = terminalView != null && terminalView.mEmulator != null
+            && terminalView.mEmulator.isClipboardCleanupEnabled();
         pane = null;
         hideBar();
         if (yankedText != null && !yankedText.isEmpty()) {
-            host.copyToClipboard(yankedText);
-            host.onYanked(yankedText);
+            // Each row is already trimmed of trailing spaces (TerminalFindModel#trimTrailing);
+            // Clipboard Cleanup additionally drops trailing tabs and any blank rows a LINE or
+            // BLOCK yank left at the end of the selection.
+            if (clipboardCleanupEnabled) yankedText = ClipboardCleanup.forCopy(yankedText);
+            if (!yankedText.isEmpty()) {
+                host.copyToClipboard(yankedText);
+                host.onYanked(yankedText);
+            }
         }
     }
 

@@ -82,7 +82,7 @@ public class InAppKeyboardExtraKeysTest {
     public void defaultsMatchTheTerminalFirstSelection() {
         Map<KeyValue, KeyboardData.PreferredPos> defaults =
             InAppKeyboardExtraKeys.resolve(InAppKeyboardExtraKeys.defaultStoredValue());
-        String[] expected = { "tab", "esc", "capslock", "copy", "paste", "cut", "alt" };
+        String[] expected = { "tab", "esc", "capslock", "copy", "paste", "cut", "alt", "switch_clipboard" };
         for (String name : expected)
             assertTrue(name + " should be enabled by default",
                 defaults.containsKey(KeyValue.getKeyByName(name)));
@@ -117,6 +117,38 @@ public class InAppKeyboardExtraKeysTest {
         // Named by what it does, not by the generic tool glyph its cap would draw.
         assertEquals("Keyboard type",
             InAppKeyboardExtraKeys.displayName(InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM));
+    }
+
+    /**
+     * The clipboard key is on by default and keeps the bundled layout's own slot for it — the
+     * Ctrl key's south-west corner — so a fresh install finds the panel where the layout put it.
+     */
+    @Test
+    public void theClipboardKeyIsOnByDefaultAndKeepsItsSlotOnTheBundledLayout() {
+        assertTrue(java.util.Arrays.asList(InAppKeyboardExtraKeys.catalog())
+            .contains(InAppKeyboardExtraKeys.KEY_CLIPBOARD));
+        assertTrue(InAppKeyboardExtraKeys.defaultEnabled(InAppKeyboardExtraKeys.KEY_CLIPBOARD));
+        assertTrue(InAppKeyboardExtraKeys.defaultStoredValue()
+            .contains(InAppKeyboardExtraKeys.KEY_CLIPBOARD));
+        assertEquals("Clipboard", InAppKeyboardExtraKeys.displayName(InAppKeyboardExtraKeys.KEY_CLIPBOARD));
+
+        KeyValue key = KeyValue.getKeyByName(InAppKeyboardExtraKeys.KEY_CLIPBOARD);
+        assertNotNull(key);
+        assertEquals(KeyValue.Event.SWITCH_CLIPBOARD, key.getEvent());
+
+        KeyboardData bundled = KeyboardData.load(resources,
+            juloo.keyboard2.R.xml.termux_launcher_qwerty);
+        assertNotNull(bundled);
+        KeyboardData withDefaults = LayoutModifier.modify(bundled,
+            options(InAppKeyboardExtraKeys.defaultStoredValue()), resources);
+        KeyboardData.Row bottom = withDefaults.rows.get(withDefaults.rows.size() - 1);
+        // Slot 2 is the north-east corner, the easy swipe off a key at the left edge; the Ctrl
+        // key is the row's first.
+        assertEquals(key, bottom.keys.get(0).getKeyValue(2));
+
+        // Off, the loc slot goes with it.
+        KeyboardData without = LayoutModifier.modify(bundled, options("copy"), resources);
+        assertFalse(without.getKeys().containsKey(key));
     }
 
     /** Picked, it merges into the layout like any other catalogue key. */

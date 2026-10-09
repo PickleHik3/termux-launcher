@@ -106,6 +106,18 @@ public final class CornerTabGeometry {
     }
 
     /**
+     * The tab's edges that are the frame's own, as {@link GlassRefraction} seams: the edge it slid
+     * out of and the frame side its outer end sits on. Under Fancier Glass the tab's rim runs only
+     * along the boundary it draws for itself ({@link #tabPathPoints}) and turns its one free
+     * corner; along the other two the frame's stroke is already the line, and a second light
+     * there would be the double line the tab's outline was cut back to avoid.
+     */
+    public static int refractionSeams(int corner) {
+        return (CornerZones.isTop(corner) ? GlassRefraction.SEAM_TOP : GlassRefraction.SEAM_BOTTOM)
+            | (CornerZones.isLeft(corner) ? GlassRefraction.SEAM_LEFT : GlassRefraction.SEAM_RIGHT);
+    }
+
+    /**
      * Whether a point lies on or inside the frame's border — the rounded rectangle the border's
      * inner edge traces. This is the shape everything a tab paints has to stay within, and the
      * shape the callers clip to.

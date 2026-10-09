@@ -115,15 +115,43 @@ public class X11PaneFrameGlassTest {
         assertEquals(View.GONE, mask.getVisibility());
     }
 
+    /**
+     * With the glass off but the border preference on, the page still wears its frame line — the
+     * plain stroke, rounded to the same radius, with the arcs that round the surface — so the
+     * border drag that pages the wall has the same line to find here as on the terminal. Off
+     * both, the page wears nothing.
+     */
+    @Test
+    public void theBorderPreferenceDressesThePageWithAPlainLineWithoutGlass() {
+        X11PaneFrame page = page(activity());
+        page.applyStyle(new Style(false, true));
+        assertNotNull("the plain stroke", page.getForeground());
+        PaneGlassBackdropView mask = page.findViewById(R.id.x11_pane_corner_mask);
+        assertEquals(View.VISIBLE, mask.getVisibility());
+        PaneGlassBackdropView glass = page.findViewById(R.id.x11_pane_glass);
+        assertEquals("no slab without the glass", View.GONE, glass.getVisibility());
+
+        page.applyStyle(new Style(false, false));
+        assertEquals("nothing at all", null, page.getForeground());
+        assertEquals(View.GONE, mask.getVisibility());
+    }
+
     /** A style with nothing but the switch and a radius: the slab needs no wallpaper to show. */
     private static final class Style implements PaneSurfaceStyle {
         private final boolean mGlass;
+        private final boolean mBorder;
 
         Style(boolean glass) {
+            this(glass, glass);
+        }
+
+        Style(boolean glass, boolean border) {
             mGlass = glass;
+            mBorder = border;
         }
 
         @Override public boolean isPaneGlassActive() { return mGlass; }
+        @Override public boolean paneBorderEnabled() { return mBorder; }
         @Override @Nullable public Bitmap paneGlassBlurFrame() { return null; }
         @Override @NonNull public Rect paneGlassBlurFrameRect() { return new Rect(); }
         @Override @Nullable public android.graphics.ColorFilter paneGlassFrostFilter() {

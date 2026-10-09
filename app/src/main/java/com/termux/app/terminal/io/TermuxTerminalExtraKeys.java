@@ -69,6 +69,10 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
             // {@link #getExtraKeysStyleInternalPropertyValueFromValue(String)}
             String pageKey = PAGE_PROPERTY_KEYS[Math.max(0, Math.min(i, PAGE_PROPERTY_KEYS.length - 1))];
             String extrakeys = (String) mActivity.getProperties().getInternalPropertyValue(pageKey, false);
+            // The shipped row carries a switch for each place; the ones whose place the wall
+            // does not have are dropped from it — and from it only, since a row the user wrote
+            // keeps every key and has the dead ones greyed instead.
+            extrakeys = ExtraKeysDefaultRow.forWall(extrakeys, mActivity.availableWallPages());
             String extraKeysStyle = (String) mActivity.getProperties().getInternalPropertyValue(TermuxPropertyConstants.KEY_EXTRA_KEYS_STYLE, true);
             ExtraKeysConstants.ExtraKeyDisplayMap extraKeyDisplayMap = ExtraKeysInfo.getCharDisplayMapForStyle(extraKeysStyle);
             if (ExtraKeysConstants.EXTRA_KEY_DISPLAY_MAPS.DEFAULT_CHAR_DISPLAY.equals(extraKeyDisplayMap) && !TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE.equals(extraKeysStyle)) {
@@ -77,7 +81,7 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
             }
             mExtraKeysInfo = new ExtraKeysInfo(extrakeys, extraKeysStyle, ExtraKeysConstants.CONTROL_CHARS_ALIASES);
         } catch (JSONException e) {
-            Logger.showToast(mActivity, "Could not load and set the \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS + "\" property from the properties file: " + e.toString(), true);
+            com.termux.app.notice.AppNotice.show(mActivity, "Could not load and set the \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS + "\" property from the properties file: " + e.toString(), true);
             Logger.logStackTraceWithMessage(LOG_TAG, "Could not load and set the \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS + "\" property from the properties file: ", e);
             try {
                 mExtraKeysInfo = new ExtraKeysInfo(
@@ -85,7 +89,7 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
                     TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE,
                     ExtraKeysConstants.CONTROL_CHARS_ALIASES);
             } catch (JSONException e2) {
-                Logger.showToast(mActivity, "Can't create default extra keys", true);
+                com.termux.app.notice.AppNotice.show(mActivity, "Can't create default extra keys", true);
                 Logger.logStackTraceWithMessage(LOG_TAG, "Could create default extra keys: ", e);
                 mExtraKeysInfo = null;
             }
@@ -183,14 +187,15 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
         return label.append(key).toString();
     }
 
-    /** Tools whose effect is its own readout: the wall's places and mouse mode, which chips itself. */
+    /** Tools whose effect is its own readout: the wall's places, mouse mode, which chips itself, and dictation's pill. */
     private static boolean announcesItself(@NonNull String key) {
         if (!key.startsWith(LAUNCHER_TOOL_KEY_PREFIX)) return false;
         String spec = key.substring(LAUNCHER_TOOL_KEY_PREFIX.length());
         int colon = spec.indexOf(':');
         String toolName = colon > 0 ? spec.substring(0, colon) : spec;
         return toolName.startsWith("wall.")
-            || com.termux.launcherctl.LauncherToolRegistry.TOOL_MOUSE_TOGGLE.equals(toolName);
+            || com.termux.launcherctl.LauncherToolRegistry.TOOL_MOUSE_TOGGLE.equals(toolName)
+            || com.termux.launcherctl.LauncherToolRegistry.TOOL_VOICE_DICTATE.equals(toolName);
     }
 
     /**

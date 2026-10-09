@@ -36,7 +36,7 @@ public class AppDrawerSearchOnOpenPreferenceTest {
             app, R.xml.app_drawer_preferences, null);
 
         SwitchPreferenceCompat found = screen.findPreference(KEY);
-        assertEquals("Open the keyboard with the drawer", found.getTitle().toString());
+        assertEquals("Open keyboard automatically", found.getTitle().toString());
         assertFalse(found.isChecked());
     }
 

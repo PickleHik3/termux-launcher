@@ -53,6 +53,7 @@ public final class StatusBarWidgetView extends LinearLayout {
     @Nullable private Integer mMutedInk;
     /** The stats share a floor so a value ticking between widths does not shift its neighbours. */
     private static final int MIN_WIDTH_WITH_VALUE_DP = 34;
+    private static final long VALUE_FADE_MS = 120L;
 
     public StatusBarWidgetView(Context context) {
         this(context, null);
@@ -164,7 +165,9 @@ public final class StatusBarWidgetView extends LinearLayout {
      */
     public void setIconGlyph(@NonNull CharSequence glyph) {
         if (mGlyph.getTypeface() == null) return;
-        mGlyph.setText(glyph);
+        // Only on a change: this runs on every window-bar refresh, and a TextView's setText
+        // requests a layout of the whole cluster whether or not the glyph differs.
+        if (!android.text.TextUtils.equals(mGlyph.getText(), glyph)) mGlyph.setText(glyph);
         mGlyph.setVisibility(VISIBLE);
         mIcon.setVisibility(GONE);
         hideAnimation();
@@ -216,10 +219,42 @@ public final class StatusBarWidgetView extends LinearLayout {
      */
     public void setValue(@NonNull CharSequence value) {
         boolean empty = android.text.TextUtils.isEmpty(value);
-        mValue.setVisibility(empty ? GONE : VISIBLE);
-        setMinimumWidth(empty ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP));
+        int visibility = empty ? GONE : VISIBLE;
+        if (mValue.getVisibility() != visibility) mValue.setVisibility(visibility);
+        // Only on a change: View.setMinimumWidth requests a layout every time it is called, and
+        // this is called from the stats cluster's layout listener. Unconditional, it scheduled a
+        // layout from every layout for as long as the Widgets place was up (2026-10-07).
+        int minimumWidth = empty ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP);
+        if (getMinimumWidth() != minimumWidth) setMinimumWidth(minimumWidth);
         if (android.text.TextUtils.equals(mValue.getText(), value)) return;
         mValue.setText(value);
+    }
+
+    /**
+     * {@link #setValue}, with the old text fading out and the new one in, for a change the user
+     * did not ask for (the weather shortening to make room), so it does not jump.
+     */
+    public void setValueFading(@NonNull CharSequence value) {
+        if (android.text.TextUtils.equals(mValue.getText(), value)
+                || !isAttachedToWindow() || !android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            setValue(value);
+            return;
+        }
+        mValue.animate().cancel();
+        mValue.animate().alpha(0f).setDuration(VALUE_FADE_MS).withEndAction(() -> {
+            setValue(value);
+            mValue.animate().alpha(1f).setDuration(VALUE_FADE_MS).start();
+        }).start();
+    }
+
+    /** How wide {@code value} draws in the value's text. */
+    public float valueWidthOf(@NonNull CharSequence value) {
+        return mValue.getPaint().measureText(value, 0, value.length());
+    }
+
+    /** The widget less its text: the icon and the gap after it. */
+    public int widthWithoutValue() {
+        return mValue.getVisibility() == VISIBLE ? getWidth() - mValue.getWidth() : getWidth();
     }
 
     /** Gives CPU, memory and weather distinct wallpaper-derived Material roles. */
@@ -281,7 +316,7 @@ public final class StatusBarWidgetView extends LinearLayout {
         int secondary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSecondary,
             ContextCompat.getColor(context, R.color.termux_secondary));
         int tertiary = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiary, primary);
+            com.termux.shared.R.attr.termuxColorTertiary, primary);
         int roleColor = mColorRole == ColorRole.SECONDARY ? secondary
             : mColorRole == ColorRole.TERTIARY ? tertiary : primary;
         if (mMuted) {
