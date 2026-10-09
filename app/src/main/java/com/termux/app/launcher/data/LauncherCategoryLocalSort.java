@@ -16,11 +16,31 @@ import java.util.Map;
  * fit app sorting's window ({@link LauncherCategorySortPrompt#fitsWindow}). An app a batch reply
  * leaves out is asked once more on its own, in the single-app prompt.
  *
+ * <p>{@link #FAILURES_TO_STOP} failed requests in a row (an exception, a timeout, no reply or an
+ * empty one; never a reply that merely names no category) stop the run: the runtime is gone, and
+ * every later request would wait out its own timeout to fail the same way. What was answered stays.
+ *
  * <p>Pure: the requests themselves are the caller's {@link Requests}.
  */
 public final class LauncherCategoryLocalSort {
 
+    /** Failed requests in a row that end a run. */
+    static final int FAILURES_TO_STOP = 3;
+
     private LauncherCategoryLocalSort() {}
+
+    /** Counts failed requests in a row; any request that brought a reply back resets it. */
+    static final class Breaker {
+        private int failures;
+
+        void record(@NonNull Answer answer) {
+            failures = answer.error != null ? failures + 1 : 0;
+        }
+
+        boolean tripped() {
+            return failures >= FAILURES_TO_STOP;
+        }
+    }
 
     /** What the sort asks of its caller. */
     public interface Requests {
@@ -42,9 +62,12 @@ public final class LauncherCategoryLocalSort {
     /** How the run ended. */
     public static final class Result {
         public final int requests;
+        /** True when {@link #FAILURES_TO_STOP} failed requests in a row ended the run. */
+        public final boolean stalled;
 
-        Result(int requests) {
+        Result(int requests, boolean stalled) {
             this.requests = requests;
+            this.stalled = stalled;
         }
     }
 
@@ -76,10 +99,12 @@ public final class LauncherCategoryLocalSort {
     @NonNull
     public static Result run(@NonNull List<AppEntry> pending, @NonNull Requests requests) {
         int sent = 0;
+        Breaker breaker = new Breaker();
         for (List<AppEntry> batch : batches(pending)) {
-            if (requests.cancelled()) break;
+            if (requests.cancelled() || breaker.tripped()) break;
             sent++;
             Answer answer = requests.batch(batch);
+            breaker.record(answer);
             // Only what was asked counts, whatever else the reply named.
             Map<String, String> answered = new LinkedHashMap<>();
             List<AppEntry> missing = new ArrayList<>();
@@ -89,13 +114,15 @@ public final class LauncherCategoryLocalSort {
                 else missing.add(app);
             }
             for (AppEntry app : missing) {
-                if (requests.cancelled()) break;
+                if (requests.cancelled() || breaker.tripped()) break;
                 sent++;
-                String slug = requests.single(app).slugByPackage.get(app.packageName);
+                Answer single = requests.single(app);
+                breaker.record(single);
+                String slug = single.slugByPackage.get(app.packageName);
                 if (slug != null) answered.put(app.packageName, slug);
             }
             requests.settled(answered, batch.size());
         }
-        return new Result(sent);
+        return new Result(sent, breaker.tripped());
     }
 }

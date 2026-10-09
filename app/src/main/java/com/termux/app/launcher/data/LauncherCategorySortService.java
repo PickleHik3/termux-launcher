@@ -260,7 +260,9 @@ public final class LauncherCategorySortService extends Service {
                              @NonNull LauncherAppDataProvider provider) throws Exception {
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_SORTING));
         String stopError = null;
+        boolean stalled = false;
         if (TaiCallerRequests.isRemoteModel(modelId)) {
+            // Stops on the first failed request already: see LauncherCategoryRemoteSort.
             LauncherCategoryRemoteSort.Result result = LauncherCategoryRemoteSort.run(pending,
                 new RemoteRequests(manager, modelId, labelByPackage, assignments));
             stopError = result.error;
@@ -270,7 +272,7 @@ public final class LauncherCategorySortService extends Service {
                 String label = labelByPackage.get(packageName);
                 apps.add(new LauncherCategorySortPrompt.AppEntry(packageName, label == null ? packageName : label));
             }
-            LauncherCategoryLocalSort.run(apps, new LocalRequests(manager, modelId, assignments));
+            stalled = LauncherCategoryLocalSort.run(apps, new LocalRequests(manager, modelId, assignments)).stalled;
         }
         int assigned = assignments.assigned;
 
@@ -281,6 +283,8 @@ public final class LauncherCategorySortService extends Service {
 
         String done = state.cancelRequested
             ? getString(R.string.settings_app_drawer_category_sort_cancelled, assigned)
+            : stalled
+            ? getString(R.string.settings_app_drawer_category_sort_stalled, assigned)
             : stopError != null
             ? getString(R.string.settings_app_drawer_category_sort_stopped, assigned, stopError)
             : getString(R.string.settings_app_drawer_category_sort_done, assigned, assignments.merged.size());

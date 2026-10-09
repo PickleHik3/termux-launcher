@@ -1,6 +1,7 @@
 package com.termux.app.launcher.data;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.launcher.data.LauncherCategoryRemoteSort.Answer;
@@ -86,6 +87,42 @@ public class LauncherCategoryLocalSortTest {
         assertEquals(8, fake.settledCount);
     }
 
+    @Test
+    public void theBreakerTripsOnThreeFailuresInARowAndAnyReplyResetsIt() {
+        LauncherCategoryLocalSort.Breaker breaker = new LauncherCategoryLocalSort.Breaker();
+        breaker.record(Answer.failed("timeout"));
+        breaker.record(Answer.failed("timeout"));
+        // A reply that names nothing is still a reply.
+        breaker.record(Answer.of(Collections.<String, String>emptyMap()));
+        breaker.record(Answer.failed("timeout"));
+        breaker.record(Answer.failed("timeout"));
+        assertFalse(breaker.tripped());
+        breaker.record(Answer.failed("timeout"));
+        assertTrue(breaker.tripped());
+    }
+
+    @Test
+    public void aDeadRuntimeStopsTheRunAfterThreeFailedRequests() {
+        Fake fake = new Fake();
+        fake.failing = true;
+        LauncherCategoryLocalSort.Result result = LauncherCategoryLocalSort.run(apps(40), fake);
+        // The first batch fails, then two of its apps alone: three in a row, and nothing more is sent.
+        assertTrue(result.stalled);
+        assertEquals(LauncherCategoryLocalSort.FAILURES_TO_STOP, result.requests);
+        assertEquals(1, fake.batches);
+        assertEquals(2, fake.singles.size());
+        assertEquals(8, fake.settledCount);
+    }
+
+    @Test
+    public void unparseableRepliesNeverStopTheRun() {
+        Fake fake = new Fake();
+        LauncherCategoryLocalSort.Result result = LauncherCategoryLocalSort.run(apps(16), fake);
+        assertFalse(result.stalled);
+        assertEquals(2, fake.batches);
+        assertEquals(16, fake.singles.size());
+    }
+
     static final class Fake implements LauncherCategoryLocalSort.Requests {
         final Map<String, String> batchAnswers = new HashMap<>();
         final Map<String, String> singleAnswers = new HashMap<>();
@@ -94,6 +131,7 @@ public class LauncherCategoryLocalSortTest {
         int settledCount;
         int batches;
         int cancelAfterBatches = Integer.MAX_VALUE;
+        boolean failing;
 
         @Override public boolean cancelled() {
             return batches >= cancelAfterBatches;
@@ -101,11 +139,13 @@ public class LauncherCategoryLocalSortTest {
 
         @Override public Answer batch(List<AppEntry> apps) {
             batches++;
+            if (failing) return Answer.failed("no reply");
             return Answer.of(new HashMap<>(batchAnswers));
         }
 
         @Override public Answer single(AppEntry app) {
             singles.add(app.packageName);
+            if (failing) return Answer.failed("no reply");
             String slug = singleAnswers.get(app.packageName);
             return Answer.of(slug == null ? Collections.<String, String>emptyMap()
                 : Collections.singletonMap(app.packageName, slug));
