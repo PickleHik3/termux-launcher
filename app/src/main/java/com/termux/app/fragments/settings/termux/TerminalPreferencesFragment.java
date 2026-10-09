@@ -13,7 +13,7 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 
 /**
- * The terminal's own page: panes and their tmux-style controls, lazy mode, full screen, system
+ * The terminal's own page: panes and their tmux-style controls, full screen, system
  * keyboard compatibility, and whether the launcher stays reachable from Recents.
  *
  * <p>Splits the terminal half out of the old combined Terminal &amp; status page; the clock and
@@ -29,6 +29,8 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         PreferenceManager manager = getPreferenceManager();
         manager.setPreferenceDataStore(new TerminalPreferencesDataStore(context));
         setPreferencesFromResource(R.xml.terminal_preferences, rootKey);
+        androidx.preference.Preference retro = findPreference("terminal_retro_effect");
+        if (retro != null) retro.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
         SettingsLayoutUtils.applyScreenLayout(this);
     }
 
@@ -53,19 +55,29 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
 
         @Override public void putBoolean(String key, boolean value) {
             if ("split_pane_controls".equals(key)) io.putBoolean("compatibility_mode", !value);
-            else if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)) view.putBoolean(key, value);
+            else if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)
+                || "terminal_padding_fill".equals(key)) view.putBoolean(key, value);
             else if ("show_in_recents_when_not_default".equals(key)) style.putBoolean(key, value);
             else io.putBoolean(key, value);
         }
 
         @Override public boolean getBoolean(String key, boolean fallback) {
             if ("split_pane_controls".equals(key)) return !io.getBoolean("compatibility_mode", !fallback);
-            if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)) return view.getBoolean(key, fallback);
+            if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)
+                || "terminal_padding_fill".equals(key)) return view.getBoolean(key, fallback);
             if ("show_in_recents_when_not_default".equals(key)) return style.getBoolean(key, fallback);
             return io.getBoolean(key, fallback);
         }
 
-        @Override public void putString(String key, @Nullable String value) { io.putString(key, value); }
-        @Override public String getString(String key, @Nullable String fallback) { return io.getString(key, fallback); }
+        private static boolean isViewStringKey(String key) {
+            return "terminal_cursor_trail_style".equals(key) || "terminal_retro_effect".equals(key);
+        }
+
+        @Override public void putString(String key, @Nullable String value) {
+            if (isViewStringKey(key)) view.putString(key, value); else io.putString(key, value);
+        }
+        @Override public String getString(String key, @Nullable String fallback) {
+            return isViewStringKey(key) ? view.getString(key, fallback) : io.getString(key, fallback);
+        }
     }
 }

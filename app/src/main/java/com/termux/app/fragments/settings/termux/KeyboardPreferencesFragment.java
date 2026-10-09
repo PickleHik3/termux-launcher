@@ -8,14 +8,15 @@ import android.os.Bundle;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.preference.ListPreference;
 import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
+import com.termux.ai.TaiSpeechModels;
 import com.termux.app.TermuxActivity;
 import com.termux.app.settings.TermuxPropertiesFile;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
@@ -28,9 +29,9 @@ import com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys;
 import com.termux.app.terminal.inappkeyboard.TapCorrectionController;
 import com.termux.app.terminal.inappkeyboard.TapModelStore;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import java.io.File;
@@ -56,12 +57,14 @@ import juloo.keyboard2.KeyboardData;
 public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
     private static final String KEY_EXTRA_KEYS = "in_app_keyboard_extra_keys";
-    static final String KEY_KEYBOARD_FORM = "in_app_keyboard_form";
     private static final String KEY_CREDITS_GITHUB = "keyboard_credits_github";
     private static final String KEY_CREDITS_PLAY = "keyboard_credits_play";
     private static final String KEY_DOCS_LAYOUTS = "keyboard_docs_layouts";
     private static final String KEY_DOCS_KEYS = "keyboard_docs_keys";
     private static final String KEY_TAP_CORRECTION_RESET = "in_app_keyboard_tap_correction_reset";
+    private static final String KEY_VOICE_ENGINE = "keyboard_voice_engine";
+    private static final String KEY_VOICE_MODEL = "keyboard_voice_model";
+    private static final String KEY_VOICE_POLISH_MODEL = "keyboard_voice_polish_model";
 
     private static final String UPSTREAM_GITHUB_URL =
         "https://github.com/Julow/Unexpected-Keyboard";
@@ -72,12 +75,21 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String DOCS_KEYS_URL =
         "https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Possible-key-values.md";
 
-    /** The same three types the Layout page offers, under the same labels. */
-    private static final String[] KEYBOARD_FORM_VALUES = {"docked", "floating", "split"};
-    private static final int[] KEYBOARD_FORM_LABELS = {
-        R.string.settings_layout_keyboard_form_docked,
-        R.string.settings_layout_keyboard_form_floating,
-        R.string.settings_layout_keyboard_form_split};
+
+    /**
+     * The XML this page inflates. The overview is this class itself; each focused subpage is a
+     * thin subclass that names its own XML and title, so every listener below keeps working on
+     * whichever of its rows the page holds (each lookup is null-tolerant).
+     */
+    @androidx.annotation.XmlRes
+    protected int preferencesXml() {
+        return R.xml.termux_keyboard_preferences;
+    }
+
+    @androidx.annotation.StringRes
+    protected int titleRes() {
+        return R.string.settings_destination_keyboard_input;
+    }
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -88,10 +100,23 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         KeyboardPreferencesDataStore store = KeyboardPreferencesDataStore.getInstance(context);
         store.forgetTermuxProperties();
         preferenceManager.setPreferenceDataStore(store);
-        setPreferencesFromResource(R.xml.termux_keyboard_preferences, rootKey);
+        setPreferencesFromResource(preferencesXml(), rootKey);
 
-        ListPreference inputMethodPreference = findPreference("keyboard_input_method");
-        if (inputMethodPreference != null) {
+        // Keyboard sizes are percentage ratios, whichever page holds them.
+        for (String key : new String[] {"in_app_keyboard_floating_width",
+            "in_app_keyboard_floating_height", "in_app_keyboard_split_gap"}) {
+            Preference slider = findPreference(key);
+            if (slider instanceof com.termux.app.fragments.settings.SliderPreference)
+                ((com.termux.app.fragments.settings.SliderPreference) slider).setValueSuffix("%");
+        }
+
+        SegmentedPillPreference inputMethodPreference = findPreference("keyboard_input_method");
+        if (inputMethodPreference == null) {
+            // A focused subpage has no input-method row of its own: it follows the stored choice,
+            // so the built-in keyboard's rows dim there exactly as they do on the overview.
+            updateBuiltInKeyboardRows("built_in".equals(
+                store.getString("keyboard_input_method", "built_in")));
+        } else {
             updateBuiltInKeyboardRows("built_in".equals(inputMethodPreference.getValue()));
             inputMethodPreference.setOnPreferenceChangeListener((preference, newValue) -> {
                 updateBuiltInKeyboardRows("built_in".equals(newValue));
@@ -99,9 +124,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             });
         }
 
-        SegmentedPillPreference keyboardForm = findPreference(KEY_KEYBOARD_FORM);
-        if (keyboardForm != null)
-            keyboardForm.setSegments(KEYBOARD_FORM_VALUES, KEYBOARD_FORM_LABELS);
 
         MultiSelectListPreference extraKeysPreference = findPreference(KEY_EXTRA_KEYS);
         if (extraKeysPreference != null)
@@ -115,10 +137,19 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         if (tapReset != null) {
             refreshTapCorrectionSummary(tapReset);
             tapReset.setOnPreferenceClickListener(preference -> {
-                TapModelStore.delete(TapCorrectionController.modelFile(context));
-                refreshTapCorrectionSummary(preference);
-                // The running keyboard holds its own copy; it re-reads the file on the way back.
-                TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
+                new MaterialAlertDialogBuilder(context)
+                    .setTitle(R.string.settings_keyboard_tap_correction_reset_confirm_title)
+                    .setMessage(R.string.settings_keyboard_tap_correction_reset_confirm_message)
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.settings_keyboard_tap_correction_reset_confirm_action,
+                        (dialog, which) -> {
+                            TapModelStore.delete(TapCorrectionController.modelFile(context));
+                            refreshTapCorrectionSummary(preference);
+                            // The running keyboard holds its own copy; it re-reads the file on the
+                            // way back.
+                            TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
+                        })
+                    .show();
                 return true;
             });
         }
@@ -129,7 +160,70 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             return true;
         });
 
+        SegmentedPillPreference voiceEngine = findPreference(KEY_VOICE_ENGINE);
+        if (voiceEngine != null) {
+            voiceEngine.setOnPreferenceChangeListener((preference, newValue) -> {
+                // On-device needs a speech model; without one the choice would only ever fall
+                // back, so the screen that downloads one opens instead and the row stays as it was.
+                if (TermuxPreferenceConstants.TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE.equals(newValue)
+                    && TaiSpeechModels.resolveActive(context) == null) {
+                    openSpeechModelSettings(context);
+                    return false;
+                }
+                return true;
+            });
+        }
+        Preference voiceModel = findPreference(KEY_VOICE_MODEL);
+        if (voiceModel != null) voiceModel.setOnPreferenceClickListener(preference -> {
+            openSpeechModelSettings(context);
+            return true;
+        });
+
+        Preference polishModel = findPreference(KEY_VOICE_POLISH_MODEL);
+        if (polishModel != null) polishModel.setOnPreferenceClickListener(preference -> {
+            // The Cleanup model choice is the TIDY_DICTATION function's picker sheet.
+            TaiFunctionPickerSheet.show(this, com.termux.ai.TaiFunction.TIDY_DICTATION);
+            return true;
+        });
+        refreshPolishModelSummary(context);
+
         SettingsLayoutUtils.applyScreenLayout(this);
+    }
+
+    /**
+     * The Speech model screen: the installed speech models, which one is in use, and downloads.
+     * Pushed in place via {@link com.termux.app.activities.SettingsActivity#openScreen} rather than
+     * relaunched with {@code startActivity}, so Back returns here instead of closing Settings --
+     * this fragment only ever lives inside SettingsActivity, so the cast is always safe.
+     */
+    private void openSpeechModelSettings(@NonNull Context context) {
+        if (getActivity() instanceof com.termux.app.activities.SettingsActivity) {
+            ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
+                SpeechModelPreferencesFragment.class,
+                R.string.settings_keyboard_voice_model_title, null);
+        }
+    }
+
+    /** The chosen model's plain name, "Automatic" when the stored id is empty, the remote id for a remote pick, "Raw text" for off. */
+    private void refreshPolishModelSummary(@NonNull Context context) {
+        Preference polishModel = findPreference(KEY_VOICE_POLISH_MODEL);
+        if (polishModel == null) return;
+        String modelId = TermuxAppSharedPreferences.build(context, true).getInAppKeyboardVoicePolishModelId();
+        if (modelId.isEmpty()) {
+            polishModel.setSummary(R.string.cleanup_model_automatic_title);
+            return;
+        }
+        if (com.termux.ai.TaiFunctionModels.VALUE_OFF.equals(modelId)) {
+            polishModel.setSummary(R.string.tai_callers_cleanup_raw_text);
+            return;
+        }
+        if (com.termux.ai.TaiFunctionModels.isRemote(modelId)) {
+            polishModel.setSummary(modelId.substring(com.termux.ai.TaiFunctionModels.REMOTE_PREFIX.length()));
+            return;
+        }
+        com.termux.ai.TaiModelSpec spec = com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher
+            .installedChatModels(context).get(modelId);
+        polishModel.setSummary(spec == null ? getString(R.string.cleanup_model_automatic_title) : spec.displayName);
     }
 
     private void refreshTapCorrectionSummary(Preference preference) {
@@ -180,6 +274,10 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         Preference layout = findPreference("keyboard_layout");
         Preference shapes = findPreference("keyboard_shapes");
         Preference feedback = findPreference("keyboard_feedback");
+        for (String key : new String[] {"keyboard_sub_layout", "keyboard_sub_size", "keyboard_sub_typing"}) {
+            Preference row = findPreference(key);
+            if (row != null) row.setEnabled(enabled);
+        }
         if (layout != null) layout.setEnabled(enabled);
         if (shapes != null) shapes.setEnabled(enabled);
         if (feedback != null) feedback.setEnabled(enabled);
@@ -189,11 +287,13 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     public void onResume() {
         super.onResume();
         if (getActivity() != null) {
-            getActivity().setTitle(R.string.settings_destination_keyboard_input);
+            getActivity().setTitle(titleRes());
         }
         // The file may have been hand-edited while the screen was away.
-        if (getContext() != null)
+        if (getContext() != null) {
             KeyboardPreferencesDataStore.getInstance(getContext()).forgetTermuxProperties();
+            refreshPolishModelSummary(getContext());
+        }
     }
 
     private void bindLinkPreference(@NonNull String key, @NonNull String url) {
@@ -280,6 +380,12 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         mPreferences = TermuxAppSharedPreferences.build(context, true);
     }
 
+    /** Forgets the cached store, so a test builds one against its own preferences. */
+    @androidx.annotation.VisibleForTesting
+    static synchronized void resetForTesting() {
+        mInstance = null;
+    }
+
     public static synchronized KeyboardPreferencesDataStore getInstance(Context context) {
         Context application = context.getApplicationContext();
         // One process has one application, so this only rebuilds under a test that made another.
@@ -320,6 +426,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_hide_on_hardware":
                 mPreferences.setSoftKeyboardEnabledOnlyIfNoHardware(value);
                 break;
+            case "pass_ctrl_space_to_android":
+                mPreferences.setPassCtrlSpaceToAndroidEnabled(value);
+                break;
             case "in_app_keyboard_enabled":
                 mPreferences.setInAppKeyboardEnabled(value);
                 break;
@@ -335,6 +444,12 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_tap_correction":
                 mPreferences.setInAppKeyboardTapCorrectionEnabled(value);
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
+                break;
+            case "keyboard_voice_sounds":
+                mPreferences.setInAppKeyboardVoiceSoundsEnabled(value);
+                break;
+            case "keyboard_voice_polish":
+                mPreferences.setInAppKeyboardVoicePolishEnabled(value);
                 break;
             case "extra_keys_text_all_caps":
                 // A property, not a preference: the row reads it from termux.properties, so this
@@ -357,6 +472,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         switch (key) {
             case "in_app_keyboard_hide_on_hardware":
                 return mPreferences.isSoftKeyboardEnabledOnlyIfNoHardware();
+            case "pass_ctrl_space_to_android":
+                return mPreferences.isPassCtrlSpaceToAndroidEnabled();
             case "in_app_keyboard_enabled":
                 return mPreferences.isInAppKeyboardEnabled();
             case "in_app_keyboard_haptics_enabled":
@@ -367,6 +484,10 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isInAppKeyboardKeyPopupEnabled();
             case "in_app_keyboard_tap_correction":
                 return mPreferences.isInAppKeyboardTapCorrectionEnabled();
+            case "keyboard_voice_sounds":
+                return mPreferences.isInAppKeyboardVoiceSoundsEnabled();
+            case "keyboard_voice_polish":
+                return mPreferences.isInAppKeyboardVoicePolishEnabled();
             case "extra_keys_text_all_caps": {
                 String stored = termuxProperties()
                     .getProperty(TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS);
@@ -384,9 +505,6 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null)
             return;
         switch (key) {
-            case "in_app_keyboard_bottom_padding":
-                putKeyboardChin(value);
-                break;
             // The shape sliders are percentages on screen and fractions in the store, and each is
             // remembered for the orientation the phone is being held in.
             case "in_app_keyboard_floating_width":
@@ -411,8 +529,6 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null)
             return defValue;
         switch (key) {
-            case "in_app_keyboard_bottom_padding":
-                return keyboardChin();
             case "in_app_keyboard_floating_width":
                 return Math.round(mPreferences.getInAppKeyboardFloatingWidthScale() * 100f);
             case "in_app_keyboard_floating_height":
@@ -437,69 +553,43 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_theme":
                 mPreferences.setInAppKeyboardTheme(value);
                 break;
-            case KeyboardPreferencesFragment.KEY_KEYBOARD_FORM:
-                putKeyboardForm(value);
+
+            case "keyboard_voice_engine":
+                mPreferences.setInAppKeyboardVoiceEngine(value);
+                break;
+            case "keyboard_voice_language":
+                mPreferences.setInAppKeyboardVoiceLanguage(value);
+                break;
+            case "keyboard_voice_pause_ms":
+                // A list row: the value is the chosen entry's string, the store keeps an int.
+                int pauseMs;
+                try {
+                    pauseMs = Integer.parseInt(value == null ? "" : value.trim());
+                } catch (NumberFormatException e) {
+                    pauseMs = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_PAUSE_MS;
+                }
+                mPreferences.setInAppKeyboardVoicePauseMs(pauseMs);
+                break;
+            case "keyboard_voice_silence_timeout_ms":
+                int silenceMs;
+                try {
+                    silenceMs = Integer.parseInt(value == null ? "" : value.trim());
+                } catch (NumberFormatException e) {
+                    silenceMs = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS;
+                }
+                mPreferences.setInAppKeyboardVoiceSilenceTimeoutMs(silenceMs);
+                break;
+            case "keyboard_voice_polish_level":
+                mPreferences.setInAppKeyboardVoicePolishLevel(value);
+                break;
+            case "keyboard_voice_mic_sensitivity":
+                mPreferences.setInAppKeyboardVoiceMicSensitivity(value);
                 break;
             default:
                 break;
         }
     }
 
-    /**
-     * The air under the last key row, for every place at once in the orientation the phone is in.
-     * Like the keyboard type below it, the allowance belongs to a place and an orientation now;
-     * this row is the blunt one, for a user fitting the keys to their phone's chin rather than to
-     * one screen.
-     */
-    private void putKeyboardChin(int dp) {
-        PlaceLayoutStore places = places();
-        if (places == null) return;
-        PlaceOrientation orientation = orientation();
-        for (PaneWallPage place : PaneWallPage.values())
-            places.setKeyboardChinDp(place, orientation, dp);
-    }
-
-    /** The allowance the places agree on, or the terminal's where they have been set apart. */
-    private int keyboardChin() {
-        PlaceLayoutStore places = places();
-        if (places == null) return 0;
-        return places.keyboardChinDp(PaneWallPage.TERMINAL, orientation());
-    }
-
-    /**
-     * The keyboard type, for every place at once in the orientation the phone is in. The Layout
-     * page is where one place is given a type of its own; this row is the blunt one, for a user
-     * who wants the same keyboard wherever they are.
-     */
-    private void putKeyboardForm(@Nullable String value) {
-        PlaceLayoutStore places = places();
-        if (places == null) return;
-        KeyboardForm form = KeyboardForm.parse(value, KeyboardForm.DOCKED);
-        PlaceOrientation orientation = orientation();
-        boolean changed = false;
-        for (PaneWallPage place : PaneWallPage.values()) {
-            if (places.keyboardForm(place, orientation) == form) continue;
-            places.setKeyboardForm(place, orientation, form);
-            changed = true;
-        }
-        // The keyboard is arranged by the activity, so the change lands on the way back to it.
-        if (changed) TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
-    }
-
-    /** The type every place agrees on, or nothing at all when they do not. */
-    @NonNull
-    private String keyboardForm() {
-        PlaceLayoutStore places = places();
-        if (places == null) return KeyboardForm.DOCKED.storageValue();
-        PlaceOrientation orientation = orientation();
-        KeyboardForm shared = null;
-        for (PaneWallPage place : PaneWallPage.values()) {
-            KeyboardForm form = places.keyboardForm(place, orientation);
-            if (shared == null) shared = form;
-            else if (shared != form) return SegmentedPillPreference.VALUE_NONE;
-        }
-        return shared == null ? KeyboardForm.DOCKED.storageValue() : shared.storageValue();
-    }
 
     @Override
     @Nullable
@@ -512,8 +602,24 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isSoftKeyboardEnabled() ? "android" : "none";
             case "in_app_keyboard_theme":
                 return mPreferences.getInAppKeyboardTheme();
-            case KeyboardPreferencesFragment.KEY_KEYBOARD_FORM:
-                return keyboardForm();
+
+            case "keyboard_voice_engine":
+                // Never picked: show what the voice key will use (on-device once a speech model is in).
+                if (!mPreferences.isInAppKeyboardVoiceEngineChosen()
+                    && com.termux.ai.TaiSpeechModels.resolveActive(mContext) != null) {
+                    return TermuxPreferenceConstants.TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE;
+                }
+                return mPreferences.getInAppKeyboardVoiceEngine();
+            case "keyboard_voice_language":
+                return mPreferences.getInAppKeyboardVoiceLanguage();
+            case "keyboard_voice_pause_ms":
+                return String.valueOf(mPreferences.getInAppKeyboardVoicePauseMs());
+            case "keyboard_voice_silence_timeout_ms":
+                return String.valueOf(mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs());
+            case "keyboard_voice_polish_level":
+                return mPreferences.getInAppKeyboardVoicePolishLevel();
+            case "keyboard_voice_mic_sensitivity":
+                return mPreferences.getInAppKeyboardVoiceMicSensitivity();
             default:
                 return defValue;
         }

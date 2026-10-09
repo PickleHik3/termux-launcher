@@ -13,6 +13,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -35,8 +36,8 @@ public class DockAppearancePreferencesTest {
         preferences.setExtraKeysBlurRadius(-4);
         assertEquals(0, preferences.getExtraKeysBlurRadius());
 
-        preferences.setExtraKeysBlurRadius(31);
-        assertEquals(30, preferences.getExtraKeysBlurRadius());
+        preferences.setExtraKeysBlurRadius(49);
+        assertEquals(48, preferences.getExtraKeysBlurRadius());
     }
 
     @Test
@@ -115,7 +116,7 @@ public class DockAppearancePreferencesTest {
         preferences.setStatusBarGrain(101);
         preferences.setStatusBarCornerRadius(44);
 
-        assertEquals(30, preferences.getStatusBarBlurRadius());
+        assertEquals(48, preferences.getStatusBarBlurRadius());
         assertEquals(0, preferences.getStatusBarOpacity());
         assertEquals(100, preferences.getStatusBarGrain());
         assertEquals(40, preferences.getStatusBarCornerRadius());
@@ -135,23 +136,20 @@ public class DockAppearancePreferencesTest {
     }
 
     @Test
-    public void surfaceEdgeInsetsAreIndependentOnceDetachedAndClampedToTheirSliderBounds() {
-        // While linked these three name the same Base gap, so independence is what detaching buys.
+    public void surfaceEdgeInsetsCannotBeDetachedAndAreClampedToTheirSliderBounds() {
+        // Side gap is one Margin: a detach is ignored, so all three keep naming the Base gap.
         preferences.detachSurfaceValue(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
             TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP, 0);
-        preferences.detachSurfaceValue(TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP, 0);
-        preferences.detachSurfaceValue(TermuxAppSharedPreferences.SurfaceSlot.STATUS,
-            TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP, 0);
+        assertTrue(preferences.isSurfaceInheriting(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
+            TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP));
 
         preferences.setDockHorizontalInset(-3);
-        preferences.setInAppKeyboardHorizontalInset(96);
-        preferences.setStatusBarHorizontalInset(24);
-
         assertEquals(0, preferences.getDockHorizontalInset());
+        assertEquals(0, preferences.getStatusBarHorizontalInset());
+
+        preferences.setInAppKeyboardHorizontalInset(96);
         assertEquals(TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET,
             preferences.getInAppKeyboardHorizontalInset());
-        assertEquals(24, preferences.getStatusBarHorizontalInset());
     }
 
     @Test

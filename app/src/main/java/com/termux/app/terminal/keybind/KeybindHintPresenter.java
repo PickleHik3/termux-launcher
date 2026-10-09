@@ -555,7 +555,7 @@ public final class KeybindHintPresenter {
         chip.setSingleLine(true);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        if (spaced) params.leftMargin = Math.round(dpToPx(12));
+        if (spaced) params.setMarginStart(Math.round(dpToPx(12)));
         strip.addView(chip, params);
         return chip;
     }
@@ -631,7 +631,7 @@ public final class KeybindHintPresenter {
         int swatchSize = Math.round(dpToPx(3.5f));
         LinearLayout.LayoutParams swatchParams =
             new LinearLayout.LayoutParams(swatchSize, swatchSize);
-        swatchParams.rightMargin = Math.round(dpToPx(4.5f));
+        swatchParams.setMarginEnd(Math.round(dpToPx(4.5f)));
         header.addView(swatch, swatchParams);
 
         TextView titleView = new TextView(context());
@@ -647,7 +647,7 @@ public final class KeybindHintPresenter {
         rule.setBackgroundColor(withAlphaComponent(groupColor, 51));
         LinearLayout.LayoutParams ruleParams = new LinearLayout.LayoutParams(0,
             Math.max(1, Math.round(dpToPx(0.5f))), 1f);
-        ruleParams.leftMargin = Math.round(dpToPx(6));
+        ruleParams.setMarginStart(Math.round(dpToPx(6)));
         header.addView(rule, ruleParams);
         group.addView(header, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -685,9 +685,9 @@ public final class KeybindHintPresenter {
             label.setEllipsize(TextUtils.TruncateAt.END);
             LinearLayout.LayoutParams labelParams =
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-            labelParams.leftMargin = Math.round(dpToPx(4.5f));
-            labelParams.rightMargin =
-                i % KeybindHintModel.COLUMNS == 0 ? Math.round(dpToPx(8)) : 0;
+            labelParams.setMarginStart(Math.round(dpToPx(4.5f)));
+            labelParams.setMarginEnd(
+                i % KeybindHintModel.COLUMNS == 0 ? Math.round(dpToPx(8)) : 0);
             cell.addView(label, labelParams);
 
             row.addView(cell, new LinearLayout.LayoutParams(0,

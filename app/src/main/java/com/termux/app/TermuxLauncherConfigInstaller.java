@@ -12,6 +12,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Ships the launcher's user-editable configuration files into {@code ~/.termux}.
@@ -64,15 +65,45 @@ final class TermuxLauncherConfigInstaller {
         {PROPERTIES_FILE_NAME, PROPERTIES_FILE_NAME}
     };
 
+    /** Set once the live files have been seeded in this process. */
+    private static final AtomicBoolean sSeeded = new AtomicBoolean();
+    /** Set once the examples have been refreshed in this process. */
+    private static final AtomicBoolean sExamplesRefreshed = new AtomicBoolean();
+
     private TermuxLauncherConfigInstaller() {}
 
+    /**
+     * Seeds and refreshes once per process. The application and the activity's bootstrap callback
+     * both ask; whichever runs second finds the work done.
+     *
+     * <p>Seeding stays on the calling thread: the seeded properties file carries a live default
+     * that the activity's first properties read has to see, and when the files are already there
+     * seeding is three stats. Refreshing the examples reads and compares every asset, and nothing
+     * reads the examples at startup, so that half runs on the installer thread.
+     */
     static void ensureInstalled(Context context) {
-        try {
-            install(context, new File(TermuxConstants.TERMUX_DATA_HOME_DIR_PATH));
-        } catch (IOException e) {
-            Logger.logErrorExtended(LOG_TAG,
-                "Failed to install launcher configuration files: " + e.getMessage());
+        File termuxDataHome = new File(TermuxConstants.TERMUX_DATA_HOME_DIR_PATH);
+        if (!sSeeded.get()) {
+            try {
+                seedMissing(context, termuxDataHome);
+                sSeeded.set(true);
+            } catch (IOException e) {
+                Logger.logErrorExtended(LOG_TAG,
+                    "Failed to seed launcher configuration files: " + e.getMessage());
+            }
         }
+        if (sExamplesRefreshed.get()) return;
+        Context appContext = context.getApplicationContext();
+        TermuxApplication.installerExecutor().execute(() -> {
+            if (sExamplesRefreshed.get()) return;
+            try {
+                refreshExamples(appContext, termuxDataHome);
+                sExamplesRefreshed.set(true);
+            } catch (IOException e) {
+                Logger.logErrorExtended(LOG_TAG,
+                    "Failed to install launcher configuration examples: " + e.getMessage());
+            }
+        });
     }
 
     /**
@@ -82,6 +113,11 @@ final class TermuxLauncherConfigInstaller {
      * path. Returns the number of files written.
      */
     static int install(Context context, File termuxDataHome) throws IOException {
+        return refreshExamples(context, termuxDataHome) + seedMissing(context, termuxDataHome);
+    }
+
+    /** Rewrites every example whose content drifted from the assets; returns how many. */
+    private static int refreshExamples(Context context, File termuxDataHome) throws IOException {
         int written = 0;
         File examples = new File(termuxDataHome, EXAMPLES_RELATIVE_PATH);
         ensureDirectory(examples);
@@ -94,7 +130,12 @@ final class TermuxLauncherConfigInstaller {
             }
             restrictFileToOwner(target);
         }
+        return written;
+    }
 
+    /** Writes each live file that is absent, and never touches one that exists; returns how many. */
+    private static int seedMissing(Context context, File termuxDataHome) throws IOException {
+        int written = 0;
         // Only create ~/.termux when it is missing; its existing permissions are the
         // user's business, not ours.
         if (!termuxDataHome.isDirectory() && !termuxDataHome.mkdirs()) {

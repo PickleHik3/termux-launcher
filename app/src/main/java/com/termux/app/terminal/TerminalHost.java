@@ -180,6 +180,18 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Renames the current session, which only the activity owns while split panes are on. */
     boolean promptCurrentSessionRename();
 
+    /**
+     * Reads {@code text} aloud with the reading card up (the dictation card's shell: the sentence
+     * being heard marked, Pause, the voice and Stop). False when there is nowhere to show the card,
+     * and the caller reads without it.
+     */
+    default boolean showReadAloudCard(@NonNull String text) {
+        return false;
+    }
+
+    /** Stops the reading the card shows, if any, and closes the card; no-op when it is down. */
+    default void closeReadAloudCard() {}
+
     // --- Modal surfaces ---
 
     /**
@@ -289,6 +301,23 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     @Nullable default TerminalSession openCommandPane(@NonNull List<String> command,
                                                       @Nullable String cwd, @Nullable String title,
                                                       boolean focus) {
+        return null;
+    }
+
+    /**
+     * Open a NEW full-size window (not a split) running {@code command} through the user's login
+     * shell, the way tapping the window strip's + does — or null when none can be opened (no
+     * session, terminal limit reached, service not ready, split panes disabled by compatibility
+     * mode, or the window could never actually start; see the implementation's own doc). Unlike
+     * {@link #openCommandPane}, the window is the command's: it closes when the command exits
+     * (unless it is the last window, which becomes the empty home as any last window does).
+     * {@code title} names the window, i.e. its chip. {@code focus} switches the window strip to
+     * it; false leaves whichever window is on screen alone, with the new one still running behind
+     * it.
+     */
+    @Nullable default TerminalSession openCommandWindow(@NonNull List<String> command,
+                                                         @Nullable String cwd, @Nullable String title,
+                                                         boolean focus) {
         return null;
     }
 
@@ -485,6 +514,9 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void openAppsBar();
 
+    /** Opens the launcher's app drawer, the apps grid the pinned apps row pulls down. */
+    void openAppDrawer();
+
     void showCommandPalette();
 
     void showExtraKeysRowEditor();
@@ -505,6 +537,23 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      * answers a request there whether or not the launcher's own keyboard is switched on.
      */
     default boolean displayTakesSystemKeyboard() {
+        return false;
+    }
+
+    /**
+     * Flips the in-app keyboard's clipboard panel, answering whether it is now up. False when
+     * there is no keyboard on screen to stand it over.
+     */
+    default boolean toggleKeyboardClipboard() {
+        return false;
+    }
+
+    /**
+     * Starts a dictation when none is listening, on whichever place is on screen, or stops the
+     * one that is; the text waits in the dictation panel either way. Answers whether a dictation
+     * is listening now.
+     */
+    default boolean toggleVoiceDictation() {
         return false;
     }
 

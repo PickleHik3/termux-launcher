@@ -504,6 +504,9 @@ public final class TerminalRenderer {
     private final RectF mKittyDestRect = new RectF();
     private final RectF mKittyCellRect = new RectF();
     private final Paint mKittyImagePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    /** The kitty placement layer, collected once a frame and painted in its two passes. */
+    private final KittyLayerPainter mKittyLayer = new KittyLayerPainter();
+    private final KittyLayerPainter.CanvasTarget mKittyLayerTarget = new KittyLayerPainter.CanvasTarget();
 
     /** Reused when drawing curly underlines, to keep the render loop allocation free. */
     private final Path mDecorationPath = new Path();
@@ -522,6 +525,17 @@ public final class TerminalRenderer {
 
     /** Reused when a text sizing block's cursor rectangle is computed, for the same reason. */
     private final float[] mBlockCursorRect = new float[4];
+
+    /**
+     * The text sizing block the cursor stood in on the last frame drawn, kept for the cursor trail,
+     * which has to aim at everything the cursor covers rather than its one cell. Recorded with the
+     * cursor position it was resolved at, since the trail's frame callback can run before the
+     * frame that draws a move; see {@link #copyCursorBlock}. Plain ints, so a frame allocates
+     * nothing for it. {@code mCursorBlockRows} is 0 when the cursor stood in no block.
+     */
+    private int mCursorBlockAtRow = Integer.MIN_VALUE;
+    private int mCursorBlockAtColumn = Integer.MIN_VALUE;
+    private int mCursorBlockRow, mCursorBlockColumn, mCursorBlockRows, mCursorBlockColumns;
 
     /** Which visible rows this frame has to record; grown to the visible row count and reused. */
     private boolean[] mChangedRows = new boolean[0];
@@ -889,6 +903,22 @@ public final class TerminalRenderer {
         }
     }
 
+    /**
+     * The ground a frame is drawn on, laid over whatever the canvas's clip lets through: the
+     * foreground under reverse video, the pane's overlay on a transparent frame, otherwise nothing.
+     * {@link #render} lays it itself; a view that narrows the clip before rendering lays it first
+     * over the whole of itself, so the ground does not stop at the clip.
+     */
+    final void clearFrame(TerminalEmulator emulator, Canvas canvas, boolean transparentBackground,
+                          int transparentOverlayColor) {
+        if (emulator.isReverseVideo()) {
+            canvas.drawColor(emulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_FOREGROUND],
+                PorterDuff.Mode.SRC);
+        } else if (transparentBackground) {
+            canvas.drawColor(transparentOverlayColor, PorterDuff.Mode.SRC);
+        }
+    }
+
     private boolean[] changedRowsBuffer(int visibleRows) {
         if (mChangedRows.length < visibleRows) mChangedRows = new boolean[visibleRows];
         return mChangedRows;
@@ -971,13 +1001,24 @@ public final class TerminalRenderer {
         final int cursorShape = mEmulator.getCursorStyle();
         mEmulator.setCellSize((int) mFontWidth, (int) mFontLineSpacing);
         mUrlUnderlines.prepare(screen, topRow, endRow, columns, mEmulator.mRows, mUrlUnderlineColor != 0);
-        if (reverseVideo) {
-            canvas.drawColor(palette[TextStyle.COLOR_INDEX_FOREGROUND], PorterDuff.Mode.SRC);
-        } else if (transparentBackground) {
-            canvas.drawColor(transparentOverlayColor, PorterDuff.Mode.SRC);
+        mKittyLayer.collect(mEmulator, topRow, Math.max(0, endRow - topRow));
+        clearFrame(mEmulator, canvas, transparentBackground, transparentOverlayColor);
+        // D2: a cursor standing anywhere inside a text sizing block covers the whole block, so the
+        // block is resolved once per frame and every row it reaches is told about it. A focused
+        // pane resolves it even while its cursor blinks off or is hidden, so the trail aiming at
+        // it keeps one target through a blink or a redraw that hides the cursor.
+        final TerminalBuffer.TextBlock cursorBlock;
+        if (mCursorSuppressed) {
+            mCursorBlockAtRow = Integer.MIN_VALUE;
+            mCursorBlockAtColumn = Integer.MIN_VALUE;
+            cursorBlock = null;
+        } else {
+            final TerminalBuffer.TextBlock standingIn = screen.getTextBlockAt(cursorRow, cursorCol);
+            recordCursorBlock(cursorRow, cursorCol, standingIn);
+            cursorBlock = cursorVisible ? standingIn : null;
         }
         if (drawRowsThroughNodes(mEmulator, canvas, screen, palette, topRow, endRow, columns,
-            cursorRow, cursorCol, cursorVisible, cursorShape, selectionY1, selectionY2,
+            cursorRow, cursorCol, cursorVisible, cursorBlock, cursorShape, selectionY1, selectionY2,
             selectionX1, selectionX2, boldWithBright, reverseVideo, transparentBackground,
             transparentOverlayColor, horizontalOffset, extraRows)) {
             drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
@@ -985,10 +1026,6 @@ public final class TerminalRenderer {
         }
         mRowsRecordedLastFrame = Math.max(0, endRow - topRow);
         mImageRowsRecordedLastFrame = 0;
-        // D2: a cursor standing anywhere inside a text sizing block covers the whole block, so the
-        // block is resolved once per frame and every row it reaches is told about it.
-        final TerminalBuffer.TextBlock cursorBlock =
-            cursorVisible ? screen.getTextBlockAt(cursorRow, cursorCol) : null;
         final CursorSpan span = mCursorSpan;
         final Selection selection = mSelection;
         selection.set(selectionY1, selectionY2, selectionX1, selectionX2);
@@ -1007,6 +1044,7 @@ public final class TerminalRenderer {
                 cursorShape, selection, row, boldWithBright, reverseVideo, horizontalOffset,
                 palette[TextStyle.COLOR_INDEX_CURSOR]);
         }
+        paintKittyLayer(canvas, true, topRow, horizontalOffset);
         heightOffset = mFontLineSpacingAndAscent;
         for (int row = topRow; row < endRow; row++) {
             heightOffset += mFontLineSpacing;
@@ -1026,7 +1064,20 @@ public final class TerminalRenderer {
                 columns, span.column, span.columns, cursorShape, selection, boldWithBright,
                 reverseVideo, horizontalOffset);
         }
+        paintKittyLayer(canvas, false, topRow, horizontalOffset);
         drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
+    }
+
+    /**
+     * One pass of the kitty placement layer, straight onto the canvas. It is never recorded into a
+     * row node: a placement moves without any cell moving, so it is simply drawn fresh each frame
+     * from where it is now — a handful of bitmap draws, with nothing to go stale.
+     */
+    private void paintKittyLayer(Canvas canvas, boolean underText, int topRow, float horizontalOffset) {
+        if (mKittyLayer.isEmpty()) return;
+        mKittyLayer.paint(mKittyLayerTarget.into(canvas), underText, topRow, mFontWidth,
+            mFontLineSpacing, mFontLineSpacingAndAscent, horizontalOffset);
+        mKittyLayerTarget.into(null);
     }
 
     /**
@@ -1047,7 +1098,9 @@ public final class TerminalRenderer {
     private boolean drawRowsThroughNodes(TerminalEmulator mEmulator, Canvas canvas,
                                          TerminalBuffer screen, int[] palette, int topRow,
                                          int endRow, int columns, int cursorRow, int cursorCol,
-                                         boolean cursorVisible, int cursorShape, int selectionY1,
+                                         boolean cursorVisible,
+                                         @Nullable TerminalBuffer.TextBlock cursorBlock,
+                                         int cursorShape, int selectionY1,
                                          int selectionY2, int selectionX1, int selectionX2,
                                          boolean boldWithBright, boolean reverseVideo,
                                          boolean transparentBackground, int transparentOverlayColor,
@@ -1062,8 +1115,8 @@ public final class TerminalRenderer {
         final int visibleRows = endRow - topRow;
         if (viewWidth <= 0 || viewHeight <= 0 || visibleRows <= 0) return false;
         recordAndReplayRows((android.graphics.RecordingCanvas) canvas, mEmulator, screen, palette,
-            topRow, endRow, columns, cursorRow, cursorCol, cursorVisible, cursorShape, selectionY1,
-            selectionY2, selectionX1, selectionX2, boldWithBright, reverseVideo,
+            topRow, endRow, columns, cursorRow, cursorCol, cursorVisible, cursorBlock, cursorShape,
+            selectionY1, selectionY2, selectionX1, selectionX2, boldWithBright, reverseVideo,
             transparentBackground, transparentOverlayColor, horizontalOffset, extraRows, viewWidth,
             viewHeight, visibleRows);
         return true;
@@ -1074,6 +1127,7 @@ public final class TerminalRenderer {
                                      TerminalEmulator mEmulator, TerminalBuffer screen,
                                      int[] palette, int topRow, int endRow, int columns,
                                      int cursorRow, int cursorCol, boolean cursorVisible,
+                                     @Nullable TerminalBuffer.TextBlock cursorBlock,
                                      int cursorShape, int selectionY1, int selectionY2,
                                      int selectionX1, int selectionX2, boolean boldWithBright,
                                      boolean reverseVideo, boolean transparentBackground,
@@ -1095,9 +1149,6 @@ public final class TerminalRenderer {
         mImageGenerationSource = mEmulator;
         int recorded = 0;
         int imageRowsRecorded = 0;
-        // D2: the block the cursor stands on, resolved once, so every row it covers paints it.
-        final TerminalBuffer.TextBlock cursorBlock =
-            cursorVisible ? screen.getTextBlockAt(cursorRow, cursorCol) : null;
         final CursorSpan span = mCursorSpan;
         final Selection selection = mSelection;
         selection.set(selectionY1, selectionY2, selectionX1, selectionX2);
@@ -1209,6 +1260,7 @@ public final class TerminalRenderer {
         }
         for (int index = 0; index < visibleRows; index++)
             canvas.drawRenderNode(nodes.background(index));
+        paintKittyLayer(canvas, true, topRow, horizontalOffset);
         for (int index = 0; index < visibleRows; index++)
             canvas.drawRenderNode(nodes.glyphs(index));
         // Images last, over the cells the glyph pass deliberately left blank, which is the order
@@ -1217,6 +1269,7 @@ public final class TerminalRenderer {
             final android.graphics.RenderNode images = nodes.images(index);
             if (images.hasDisplayList()) canvas.drawRenderNode(images);
         }
+        paintKittyLayer(canvas, false, topRow, horizontalOffset);
         mRowsRecordedLastFrame = recorded;
         mImageRowsRecordedLastFrame = imageRowsRecorded;
     }
@@ -1882,7 +1935,8 @@ public final class TerminalRenderer {
         final float left = horizontalOffset + column * mFontWidth;
         final float top = heightOffset - mFontLineSpacing;
         mSixelRect.set(left, top, left + mFontWidth, top + mFontLineSpacing);
-        canvas.drawBitmap(bitmap, screen.getSixelRect(codePoint, style), mSixelRect, null);
+        // Filtered: the slice is scaled from the whole-pixel cell it was cut for to the real one.
+        canvas.drawBitmap(bitmap, screen.getSixelRect(codePoint, style), mSixelRect, mKittyImagePaint);
     }
 
     /** Draw the image slice addressed by one placeholder cell, clipped to that cell. */
@@ -3070,6 +3124,42 @@ public final class TerminalRenderer {
         mImageGenerationSource = null;
         mRowsRecordedLastFrame = 0;
         mImageRowsRecordedLastFrame = 0;
+    }
+
+    private void recordCursorBlock(int cursorRow, int cursorCol,
+                                   @Nullable TerminalBuffer.TextBlock block) {
+        mCursorBlockAtRow = cursorRow;
+        mCursorBlockAtColumn = cursorCol;
+        if (block == null) {
+            mCursorBlockRows = 0;
+            return;
+        }
+        mCursorBlockRow = block.row;
+        mCursorBlockColumn = block.column;
+        mCursorBlockRows = block.rows;
+        mCursorBlockColumns = block.columns;
+    }
+
+    /**
+     * The text sizing block a cursor at ({@code cursorRow}, {@code cursorCol}) stands in, copied
+     * into {@code out} as {@code row, column, rows, columns}, the row external and negative when
+     * the block's top has scrolled into the transcript. It is the block the last frame drew the
+     * cursor over; only when the cursor has moved since that frame (the trail's frame callback can
+     * run ahead of the frame that draws a move) is it looked up on the screen now, and kept for
+     * the calls after.
+     *
+     * @return false when the cursor stands in no block.
+     */
+    public boolean copyCursorBlock(@NonNull TerminalBuffer screen, int cursorRow, int cursorCol,
+                                   @NonNull int[] out) {
+        if (cursorRow != mCursorBlockAtRow || cursorCol != mCursorBlockAtColumn)
+            recordCursorBlock(cursorRow, cursorCol, screen.getTextBlockAt(cursorRow, cursorCol));
+        if (mCursorBlockRows <= 0) return false;
+        out[0] = mCursorBlockRow;
+        out[1] = mCursorBlockColumn;
+        out[2] = mCursorBlockRows;
+        out[3] = mCursorBlockColumns;
+        return true;
     }
 
     /** @return true when the flag changed, so the caller can skip a needless invalidate */

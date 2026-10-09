@@ -1,6 +1,7 @@
 ---
 status: accepted
 date: 2026-09-15
+amended-by: 0003 (the store is no longer keyed by place; the sizes stay in it, per orientation)
 ---
 
 # Keyboard height, keyboard chin and dock height live in the per-place, per-orientation layout store

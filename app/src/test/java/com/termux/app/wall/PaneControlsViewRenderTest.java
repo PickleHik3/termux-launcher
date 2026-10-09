@@ -265,6 +265,32 @@ public class PaneControlsViewRenderTest {
         assertTrue("blur leaked past the tab: " + hex(outside), near(outside, BEHIND));
     }
 
+    /**
+     * Fancier Glass handed to a phone that runs no AGSL is the plain frost, drawn exactly as the
+     * default mode draws it: the look is taken, nothing refracts, and the blur still shows.
+     */
+    @Test
+    public void aLookBelowAndroid13KeepsThePlainBlur() {
+        final int frostColor = 0xFF3060A0;
+        Bitmap frost = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+        frost.eraseColor(frostColor);
+        PaneControlsView view = view(CornerZones.BOTTOM_LEFT, null);
+        view.setPaneGlass(frost, new android.graphics.Rect(0, 0, WIDTH, HEIGHT), null, null,
+            com.termux.app.chrome.GlassRefraction.Look.DEFAULT);
+        assertTrue(view.hasPaneGlass());
+        assertTrue("no program below API 33", !view.refracts());
+        Bitmap bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(BEHIND);
+        view.draw(canvas);
+        RectF tab = new RectF();
+        view.tabBounds(tab);
+        int pixel = bitmap.getPixel(Math.round(tab.centerX()), Math.round(tab.centerY()));
+        int expected = ColorUtils.compositeColors(
+            ColorUtils.setAlphaComponent(panel(), PaneControlsView.SCRIM_ON_FROST_ALPHA), frostColor);
+        assertTrue("the tab is not the blur under the scrim: " + hex(pixel), near(pixel, expected));
+    }
+
     private static boolean near(int pixel, int expected) {
         return Math.abs(Color.red(pixel) - Color.red(expected)) <= TOLERANCE
             && Math.abs(Color.green(pixel) - Color.green(expected)) <= TOLERANCE

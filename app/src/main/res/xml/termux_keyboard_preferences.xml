@@ -2,7 +2,43 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_terminal_key_row_header">
+    <PreferenceCategory app:key="keyboard_main" app:title="@string/settings_input_method_header">
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="keyboard_input_method"
+            app:title="@string/settings_on_screen_keyboard_title"
+            app:entries="@array/settings_keyboard_input_method_entries"
+            app:entryValues="@array/settings_keyboard_input_method_values"
+            app:defaultValue="built_in" />
+        <Preference
+            app:key="keyboard_sub_voice"
+            app:persistent="false"
+            app:title="@string/settings_keyboard_sub_voice_title"
+            app:summary="@string/settings_keyboard_sub_voice_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardVoicePreferencesFragment" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="keyboard_built_in" app:title="@string/settings_keyboard_built_in_header">
+        <Preference
+            app:key="keyboard_sub_layout"
+            app:persistent="false"
+            app:title="@string/settings_keyboard_sub_layout_title"
+            app:summary="@string/settings_keyboard_sub_layout_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardLayoutPreferencesFragment" />
+        <Preference
+            app:key="keyboard_sub_size"
+            app:persistent="false"
+            app:title="@string/settings_keyboard_sub_size_title"
+            app:summary="@string/settings_keyboard_sub_size_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardSizePreferencesFragment" />
+        <Preference
+            app:key="keyboard_sub_typing"
+            app:persistent="false"
+            app:title="@string/settings_keyboard_sub_typing_title"
+            app:summary="@string/settings_keyboard_sub_typing_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardTypingPreferencesFragment" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="keyboard_terminal_hardware" app:title="@string/settings_terminal_key_row_header">
         <Preference
             app:key="edit_extra_keys_row"
             app:persistent="false"
@@ -14,112 +50,18 @@
             app:title="@string/settings_extra_keys_all_caps_title"
             app:summary="@string/settings_extra_keys_all_caps_summary"
             android:defaultValue="true" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:title="@string/settings_input_method_header">
-        <ListPreference
-            app:key="keyboard_input_method"
-            app:title="@string/settings_on_screen_keyboard_title"
-            app:entries="@array/settings_keyboard_input_method_entries"
-            app:entryValues="@array/settings_keyboard_input_method_values"
-            app:defaultValue="built_in"
-            app:useSimpleSummaryProvider="true" />
-        <SwitchPreferenceCompat
-            app:key="in_app_keyboard_hide_on_hardware"
-            app:title="@string/settings_hide_keyboard_hardware_title"
-            app:summary="@string/settings_hide_keyboard_hardware_summary" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:key="keyboard_layout" app:title="@string/settings_layout_header">
-        <MultiSelectListPreference
-            app:key="in_app_keyboard_extra_keys"
-            app:summary="@string/settings_extra_keys_summary"
-            app:title="@string/settings_extra_keys_title" />
         <Preference
-            app:key="in_app_keyboard_custom_layout"
-            app:summary="@string/termux_in_app_keyboard_custom_layout_summary"
-            app:title="@string/termux_in_app_keyboard_custom_layout_title" />
-        <Preference
-            app:key="in_app_keyboard_layouts"
-            app:fragment="com.termux.app.fragments.settings.termux.KeyboardLayoutsFragment"
+            app:key="keyboard_sub_hardware"
             app:persistent="false"
-            app:summary="@string/settings_keyboard_layouts_summary"
-            app:title="@string/settings_keyboard_layouts_title" />
+            app:title="@string/settings_keyboard_sub_hardware_title"
+            app:summary="@string/settings_keyboard_sub_hardware_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardHardwarePreferencesFragment" />
         <Preference
-            app:key="keyboard_docs_layouts"
-            app:summary="@string/termux_keyboard_docs_layouts_summary"
-            app:title="@string/settings_layout_documentation_title" />
-        <Preference
-            app:key="keyboard_docs_keys"
-            app:summary="@string/termux_keyboard_docs_keys_summary"
-            app:title="@string/settings_supported_keys_title" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:key="keyboard_shapes" app:title="@string/settings_keyboard_shapes_header">
-        <com.termux.app.fragments.settings.SegmentedPillPreference
-            app:key="in_app_keyboard_form"
-            app:title="@string/settings_keyboard_form_title"
-            app:summary="@string/settings_keyboard_form_summary"
-            app:defaultValue="docked" />
-        <SeekBarPreference
-            app:key="in_app_keyboard_floating_width"
-            app:title="@string/settings_keyboard_floating_width_title"
-            app:summary="@string/settings_keyboard_floating_width_summary"
-            android:defaultValue="90"
-            app:min="35"
-            android:max="100"
-            app:showSeekBarValue="true" />
-        <SeekBarPreference
-            app:key="in_app_keyboard_floating_height"
-            app:title="@string/settings_keyboard_floating_height_title"
-            app:summary="@string/settings_keyboard_floating_height_summary"
-            android:defaultValue="100"
-            app:min="60"
-            android:max="160"
-            app:showSeekBarValue="true" />
-        <SeekBarPreference
-            app:key="in_app_keyboard_split_gap"
-            app:title="@string/settings_keyboard_split_gap_title"
-            app:summary="@string/settings_keyboard_split_gap_summary"
-            android:defaultValue="12"
-            app:min="0"
-            android:max="45"
-            app:showSeekBarValue="true" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:key="keyboard_typing" app:title="@string/settings_typing_header">
-        <SwitchPreferenceCompat
-            app:key="in_app_keyboard_tap_correction"
-            app:title="@string/settings_keyboard_tap_correction_title"
-            app:summary="@string/settings_keyboard_tap_correction_summary"
-            android:defaultValue="false" />
-        <Preference
-            app:key="in_app_keyboard_tap_correction_reset"
+            app:key="keyboard_vibration_link"
             app:persistent="false"
-            app:title="@string/settings_keyboard_tap_correction_reset_title" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:key="keyboard_feedback" app:title="@string/settings_feedback_header">
-        <SwitchPreferenceCompat
-            app:key="in_app_keyboard_haptics_enabled"
-            app:summary="@string/termux_in_app_keyboard_haptics_summary"
-            app:title="@string/settings_haptic_feedback_title" />
-        <SwitchPreferenceCompat
-            app:key="in_app_keyboard_key_sound_enabled"
-            app:summary="@string/termux_in_app_keyboard_key_sound_summary"
-            app:title="@string/settings_keypress_sound_title" />
-        <SwitchPreferenceCompat
-            app:key="in_app_keyboard_key_popup"
-            app:defaultValue="true"
-            app:summary="@string/termux_in_app_keyboard_key_popup_summary"
-            app:title="@string/settings_key_popup_title" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:key="keyboard_credits" app:title="@string/settings_keyboard_credits_header">
-        <Preference app:key="keyboard_credits_text" app:selectable="false"
-            app:summary="@string/termux_keyboard_credits_summary" app:title="@string/termux_keyboard_credits_text" />
-        <Preference app:key="keyboard_credits_github" app:title="@string/termux_keyboard_credits_github_title" />
-        <Preference app:key="keyboard_credits_play" app:title="@string/termux_keyboard_credits_play_title" />
+            app:title="@string/settings_keyboard_vibration_link_title"
+            app:summary="@string/settings_keyboard_vibration_link_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.AppBehaviorPreferencesFragment" />
     </PreferenceCategory>
 
 </PreferenceScreen>

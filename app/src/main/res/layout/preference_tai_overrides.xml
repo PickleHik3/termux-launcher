@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingStart="24dp"
+    android:paddingStart="@dimen/settings_gutter"
     android:paddingTop="2dp"
-    android:paddingEnd="24dp"
+    android:paddingEnd="@dimen/settings_gutter"
     android:paddingBottom="8dp" />

@@ -56,8 +56,6 @@ public final class MaterialTerminalColorScheme {
      * six indistinguishable slots; the ceiling keeps a vivid one from producing the 2014-accent neon
      * this replaced. Between them the slots are exactly as saturated as the theme is.
      */
-    private static final double ANSI_CHROMA_MIN = 28d;
-    private static final double ANSI_CHROMA_MAX = 52d;
 
     /**
      * How much chroma the neutral slots and the foreground carry.
@@ -103,12 +101,12 @@ public final class MaterialTerminalColorScheme {
             R.color.termux_surface_base);
         int foreground = materialColor(context, com.google.android.material.R.attr.colorOnSurface,
             R.color.termux_on_surface);
-        int primary = materialColor(context, com.google.android.material.R.attr.colorPrimary,
+        int primary = materialColor(context, androidx.appcompat.R.attr.colorPrimary,
             R.color.termux_primary);
         // Raw, not materialColor: the anchor is only replaced when the theme really carries an error
         // role. An app-resource fallback would be a colour of ours, not one of the theme's, and the
         // whole point of the substitution is to keep red inside the theme's own tonal system.
-        int themeError = MaterialColors.getColor(context, com.google.android.material.R.attr.colorError, 0);
+        int themeError = MaterialColors.getColor(context, androidx.appcompat.R.attr.colorError, 0);
 
         boolean dark = perceivedBrightness(surface) < 128;
         // Read before the tone move so a surface pushed to tone 4 or 99 — where HCT cannot hold much
@@ -131,7 +129,7 @@ public final class MaterialTerminalColorScheme {
 
         props.putAll(ansiSlots(primaryHct.getHue(), primaryHct.getChroma(),
             themeError != 0 ? Hct.fromInt(themeError).getHue() : ANSI_HUE_ANCHORS[0],
-            surfaceHct.getHue(), surfaceHct.getChroma(), dark));
+            surfaceHct.getHue(), surfaceHct.getChroma(), dark, level));
 
         applyAnsiContrastFloor(props, background, level);
 
@@ -186,10 +184,20 @@ public final class MaterialTerminalColorScheme {
     @VisibleForTesting
     static Properties ansiSlots(double sourceHue, double sourceChroma, double redHue,
                                 double neutralHue, double neutralChroma, boolean dark) {
+        return ansiSlots(sourceHue, sourceChroma, redHue, neutralHue, neutralChroma, dark,
+            TerminalContrastLevel.DEFAULT);
+    }
+
+    /** As above, with the accent chroma band and tones the level's recipe asks for. */
+    @NonNull
+    @VisibleForTesting
+    static Properties ansiSlots(double sourceHue, double sourceChroma, double redHue,
+                                double neutralHue, double neutralChroma, boolean dark,
+                                @NonNull TerminalContrastLevel level) {
         Properties slots = new Properties();
-        double chroma = Math.max(ANSI_CHROMA_MIN, Math.min(ANSI_CHROMA_MAX, sourceChroma));
-        double normalTone = dark ? 80d : 40d;
-        double brightTone = dark ? 90d : 30d;
+        double chroma = Math.max(level.chromaMin, Math.min(level.chromaMax, sourceChroma));
+        double normalTone = dark ? level.normalToneDark : level.normalToneLight;
+        double brightTone = dark ? level.brightToneDark : level.brightToneLight;
         for (int slot = 1; slot <= 6; slot++) {
             double hue = harmonizeHue(slot == 1 ? redHue : ANSI_HUE_ANCHORS[slot - 1], sourceHue);
             slots.setProperty("color" + slot, hex(Hct.from(hue, chroma, normalTone).toInt()));
@@ -298,18 +306,44 @@ public final class MaterialTerminalColorScheme {
                                               @NonNull TerminalContrastLevel level,
                                               @NonNull Properties activeTerminalProps) {
         Properties active = createMaterialRoleProperties(context, activeTerminalProps, level);
+        Configuration base = context.getResources().getConfiguration();
         return PaletteSet.of(active,
-            paletteForNightMode(context, level, Configuration.UI_MODE_NIGHT_YES),
-            paletteForNightMode(context, level, Configuration.UI_MODE_NIGHT_NO));
+            paletteForNightMode(context, base, level, Configuration.UI_MODE_NIGHT_YES),
+            paletteForNightMode(context, base, level, Configuration.UI_MODE_NIGHT_NO));
     }
 
-    /** The export as it would be with {@code nightMode} forced, or {@code null} if that failed. */
+    /**
+     * As {@link #createPaletteSet(Context, TerminalContrastLevel, Properties)}, split for the UI
+     * thread: the active palette, which reads the caller's own theme, is built here; the two
+     * forced-mode palettes, which only feed the exported files, are built when the returned source
+     * runs on the export thread. They resolve their attributes through a configuration context and
+     * theme that the source creates and only that thread ever touches, the way the application's
+     * night-flip export already builds all three, from a snapshot of the caller's configuration
+     * taken here — so the files say exactly what the single-thread build would have said.
+     */
+    @NonNull
+    public static java.util.concurrent.Callable<PaletteSet> paletteSetSource(
+        @NonNull Context context, @NonNull TerminalContrastLevel level,
+        @NonNull Properties activeTerminalProps) {
+        Properties active = createMaterialRoleProperties(context, activeTerminalProps, level);
+        Configuration base = new Configuration(context.getResources().getConfiguration());
+        Context application = context.getApplicationContext();
+        return () -> PaletteSet.of(active,
+            paletteForNightMode(application, base, level, Configuration.UI_MODE_NIGHT_YES),
+            paletteForNightMode(application, base, level, Configuration.UI_MODE_NIGHT_NO));
+    }
+
+    /**
+     * The export as it would be with {@code nightMode} forced onto {@code base}, or {@code null} if
+     * that failed. The new contexts are confined to the calling thread.
+     */
     @Nullable
     private static Properties paletteForNightMode(@NonNull Context context,
+                                                  @NonNull Configuration base,
                                                   @NonNull TerminalContrastLevel level,
                                                   int nightMode) {
         try {
-            Configuration configuration = new Configuration(context.getResources().getConfiguration());
+            Configuration configuration = new Configuration(base);
             configuration.uiMode = (configuration.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | nightMode;
             Context themed = new ContextThemeWrapper(
                 context.createConfigurationContext(configuration),
@@ -339,7 +373,7 @@ public final class MaterialTerminalColorScheme {
                                                           @NonNull TerminalContrastLevel level) {
         Properties props = new Properties();
 
-        putMaterialColor(props, "primary", context, com.google.android.material.R.attr.colorPrimary,
+        putMaterialColor(props, "primary", context, androidx.appcompat.R.attr.colorPrimary,
             R.color.termux_primary);
         putMaterialColor(props, "on_primary", context, com.google.android.material.R.attr.colorOnPrimary,
             R.color.termux_on_primary);
@@ -351,7 +385,7 @@ public final class MaterialTerminalColorScheme {
             R.color.termux_primary);
         putMaterialColor(props, "on_tertiary", context, com.google.android.material.R.attr.colorOnTertiary,
             R.color.termux_on_primary);
-        putMaterialColor(props, "error", context, com.google.android.material.R.attr.colorError,
+        putMaterialColor(props, "error", context, androidx.appcompat.R.attr.colorError,
             R.color.termux_error);
         putMaterialColor(props, "on_error", context, com.google.android.material.R.attr.colorOnError,
             R.color.termux_surface_base);
@@ -562,7 +596,7 @@ public final class MaterialTerminalColorScheme {
      * primary, secondary and tertiary where they were, and such a change used to read as "unchanged".
      */
     private static final int[] PALETTE_ATTRS = {
-        com.google.android.material.R.attr.colorPrimary,
+        androidx.appcompat.R.attr.colorPrimary,
         com.google.android.material.R.attr.colorOnPrimary,
         com.google.android.material.R.attr.colorPrimaryContainer,
         com.google.android.material.R.attr.colorOnPrimaryContainer,
@@ -574,7 +608,7 @@ public final class MaterialTerminalColorScheme {
         com.google.android.material.R.attr.colorOnTertiary,
         com.google.android.material.R.attr.colorTertiaryContainer,
         com.google.android.material.R.attr.colorOnTertiaryContainer,
-        com.google.android.material.R.attr.colorError,
+        androidx.appcompat.R.attr.colorError,
         com.google.android.material.R.attr.colorOnError,
         com.google.android.material.R.attr.colorErrorContainer,
         com.google.android.material.R.attr.colorOnErrorContainer,
@@ -649,12 +683,7 @@ public final class MaterialTerminalColorScheme {
     static int surfaceTone(@ColorInt int color, @NonNull TerminalContrastLevel level) {
         boolean dark = perceivedBrightness(color) < 128;
         Hct source = Hct.fromInt(color);
-        double tone;
-        switch (level) {
-            case SOFTER: tone = dark ? 14d : 94d; break;
-            case HARDER: tone = dark ? 4d : 99d; break;
-            default: tone = dark ? 8d : 97d; break;
-        }
+        double tone = dark ? level.bgToneDark : level.bgToneLight;
         return Hct.from(source.getHue(), source.getChroma(), tone).toInt();
     }
 

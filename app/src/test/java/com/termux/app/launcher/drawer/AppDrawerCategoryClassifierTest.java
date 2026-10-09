@@ -58,6 +58,36 @@ public class AppDrawerCategoryClassifierTest {
         assertEquals(Source.LINUX_APP, assignment.source);
     }
 
+    @Test public void aWholeDesktopGoesToItsOwnGroupRatherThanToLinuxApps() {
+        AppDrawerCategoryClassifier classifier = new AppDrawerCategoryClassifier(
+            AppDrawerCuratedCategoryMap.empty());
+        LauncherAppEntry entry = linuxApp(X11Apps.qualifySession("", "xfce"), "Xfce Session");
+        AppDrawerCategoryAssignment assignment = classifier.assign(entry, 28, NO_ROLES);
+        assertEquals(AppDrawerCategory.DESKTOPS, assignment.category);
+        assertEquals(Source.LINUX_APP, assignment.source);
+    }
+
+    @Test public void aDesktopInsideAContainerGoesToTheSameGroupAsAPrefixOne() {
+        AppDrawerCategoryClassifier classifier = new AppDrawerCategoryClassifier(
+            AppDrawerCuratedCategoryMap.empty());
+        LauncherAppEntry entry = linuxApp(X11Apps.qualifySession("debian", "xfce"), "Xfce Session");
+        AppDrawerCategoryAssignment assignment = classifier.assign(entry, 28, NO_ROLES);
+        assertEquals(AppDrawerCategory.DESKTOPS, assignment.category);
+        assertEquals(Source.LINUX_APP, assignment.source);
+    }
+
+    @Test public void anApplicationNamedLikeASessionStaysInLinuxApps() {
+        AppDrawerCategoryClassifier classifier = new AppDrawerCategoryClassifier(
+            AppDrawerCuratedCategoryMap.empty());
+        // The marker lives in the id, not in the file name: an app whose desktop file merely
+        // begins with the word must not be mistaken for a whole desktop.
+        assertEquals(AppDrawerCategory.LINUX_APPS,
+            classifier.assign(linuxApp("session-viewer", "Session Viewer"), 28, NO_ROLES).category);
+        assertEquals(AppDrawerCategory.LINUX_APPS,
+            classifier.assign(linuxApp(X11Apps.qualify("debian", "sessionizer"), "Sessionizer"),
+                28, NO_ROLES).category);
+    }
+
     @Test public void userOverrideBeatsTheLinuxAppsRule() {
         Map<String, AppDrawerCategory> overrides =
             Collections.singletonMap(X11Apps.PACKAGE, AppDrawerCategory.PRODUCTIVITY);

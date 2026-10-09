@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_launcher_search_header">
+        <EditTextPreference
+            app:key="app_launcher_input_char"
+            app:title="@string/settings_app_search_prefix_title"
+            app:summary="@string/settings_app_search_prefix_summary"
+            android:defaultValue="%"
+            android:inputType="text" />
+        <Preference
+            app:key="app_launcher_reset_usage_ranking"
+            app:title="@string/settings_reset_usage_ranking_title"
+            app:summary="@string/settings_reset_usage_ranking_summary" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_voice_details_header">
+        <Preference
+            app:key="keyboard_voice_details_cleanup"
+            app:persistent="false"
+            app:selectable="false"
+            app:title="@string/settings_voice_details_cleanup_title"
+            app:summary="@string/settings_voice_details_cleanup_summary" />
+        <Preference
+            app:key="keyboard_voice_details_off"
+            app:persistent="false"
+            app:selectable="false"
+            app:title="@string/settings_voice_details_off_title"
+            app:summary="@string/settings_voice_details_off_summary" />
+        <Preference
+            app:key="keyboard_voice_details_shell"
+            app:persistent="false"
+            app:selectable="false"
+            app:title="@string/settings_voice_details_shell_title"
+            app:summary="@string/settings_voice_details_shell_summary" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

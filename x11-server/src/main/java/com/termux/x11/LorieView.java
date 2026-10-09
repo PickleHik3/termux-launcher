@@ -759,8 +759,15 @@ public class LorieView extends SurfaceView implements InputStub {
     }
 
     @FastNative private native long nativeInit();
-    @FastNative private native void nativeDestroy(long ptr);
-    @FastNative private native void surfaceChanged(long ptr, Surface surface);
+    // Not @FastNative, unlike upstream: both wait for the renderer thread — nativeDestroy joins
+    // it, surfaceChanged waits for it to drop the EGL surface. A @FastNative call keeps this
+    // thread Runnable, so a GC that asks every thread to stop can never stop it; the renderer,
+    // which has to pass a JNI transition to finish (reportViewport, DetachCurrentThread), parks
+    // at that transition until the GC gets its stop, and the three wait on each other until ART
+    // aborts the process ("SuspendAll timeout; remaining threads: main"). Any recreate() of the
+    // activity while the page is attached could reach it — a wallpaper change did.
+    private native void nativeDestroy(long ptr);
+    private native void surfaceChanged(long ptr, Surface surface);
     @FastNative private native void setFiltering(long ptr, int filtering);
     @FastNative private native void setClipboardSyncEnabled(long ptr, boolean enabled, boolean ignored);
     @FastNative private native void sendClipboardAnnounce(long ptr);

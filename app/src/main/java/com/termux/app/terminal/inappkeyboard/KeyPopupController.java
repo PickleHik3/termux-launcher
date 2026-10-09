@@ -47,7 +47,8 @@ public final class KeyPopupController implements Keyboard2View.KeyPopupListener 
         mKeyboardView = keyboardView;
         mOverlay = overlay;
         Context context = host.getContext();
-        mOverlay.setTypefaces(keyboardView.labelFont(), Theme.getKeyFont(context));
+        mOverlay.setTypefaces(keyboardView.labelFont(), Theme.getKeyFont(context),
+            keyboardView.symbolFont());
         mOverlay.setPalette(KeyPopupPalette.resolve(context));
         mOverlay.setReducedMotion(ReducedMotion.isEnabled(context));
     }
@@ -84,7 +85,8 @@ public final class KeyPopupController implements Keyboard2View.KeyPopupListener 
         Context context = mHost.getContext();
         mOverlay.setPalette(KeyPopupPalette.resolve(context));
         mOverlay.setReducedMotion(ReducedMotion.isEnabled(context));
-        mOverlay.setTypefaces(mKeyboardView.labelFont(), Theme.getKeyFont(context));
+        mOverlay.setTypefaces(mKeyboardView.labelFont(), Theme.getKeyFont(context),
+            mKeyboardView.symbolFont());
     }
 
     /** The keyboard is going away: drop every popup and leave the host as it was found. */

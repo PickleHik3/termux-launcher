@@ -1,0 +1,57 @@
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- The picker (D5): the installed speech models as cards, one of them in use. Getting more
+         is the Model centre's job; the row below opens it on its Speech segment. -->
+    <PreferenceCategory
+        app:key="speech_model_installed"
+        app:title="@string/speech_model_installed_header">
+        <Preference
+            app:key="speech_model_pick"
+            app:title="@string/tai_callers_speech_pick_title"
+            app:order="0"
+            app:persistent="false"/>
+        <Preference
+            app:key="speech_model_empty"
+            app:title="@string/speech_model_empty_title"
+            app:summary="@string/speech_model_empty_summary"
+            app:persistent="false"
+            app:selectable="false"/>
+        <Preference
+            app:key="speech_model_get_more"
+            app:title="@string/speech_picker_get_more_title"
+            app:summary="@string/speech_picker_get_more_summary"
+            app:order="1000"
+            app:persistent="false"/>
+        <Preference
+            app:key="speech_model_idle_unload"
+            app:title="@string/speech_model_idle_unload_title"
+            app:order="1001"
+            app:persistent="false"/>
+    </PreferenceCategory>
+
+    <!-- Speech output (KittenTTS): the voice and speed Read aloud, tai speak and the API use when a
+         request names none, and a sample to hear them. The model itself comes from the Model
+         centre's Speech segment, under Voice output. -->
+    <PreferenceCategory
+        app:key="speech_output"
+        app:title="@string/speech_output_header">
+        <Preference
+            app:key="speech_output_missing"
+            app:title="@string/speech_output_missing_title"
+            app:summary="@string/speech_output_missing_summary"
+            app:persistent="false"/>
+        <Preference
+            app:key="speech_output_voice"
+            app:title="@string/speech_output_voice_title"
+            app:persistent="false"/>
+        <Preference
+            app:key="speech_output_speed"
+            app:title="@string/speech_output_speed_title"
+            app:persistent="false"/>
+        <Preference
+            app:key="speech_output_sample"
+            app:title="@string/speech_output_sample_title"
+            app:summary="@string/speech_output_sample_summary"
+            app:persistent="false"/>
+    </PreferenceCategory>
+</PreferenceScreen>

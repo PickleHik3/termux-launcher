@@ -55,6 +55,10 @@ public final class SystemStatsCardView extends LinearLayout {
 
     public SystemStatsCardView(@NonNull Context context) {
         super(context);
+        // A monospace readout like top's: core columns c0, c1, … and bars that fill left to right.
+        // It keeps that order in a right-to-left locale rather than reversing the columns under
+        // bars that would still fill the other way.
+        setLayoutDirection(LAYOUT_DIRECTION_LTR);
         setOrientation(VERTICAL);
         mOnSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));

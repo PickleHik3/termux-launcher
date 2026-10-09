@@ -199,8 +199,22 @@ public class TourCardVisibilityTest {
 
     @Test
     public void aLessonTaughtOnTheTerminalAsksForTheWayBackWhenTheWallIsElsewhere() {
+        java.util.Set<String> onEveryPlace = new java.util.HashSet<>(java.util.Arrays.asList(
+            TourRun.BORDER_DRAG, TourRun.KEYBOARD, TourRun.STATUS_SWIPE));
         for (String id : TourRun.lessons()) {
+            if (onEveryPlace.contains(id)) continue;
             assertEquals(id + " away from the terminal", TourCardVisibility.AWAY,
+                TourCardVisibility.decide(step(id), 0, NOTHING, false));
+        }
+    }
+
+    @Test
+    public void theBorderLessonsAreTaughtOnWhicheverPlaceTheWallRestsOn() {
+        // The border and the two pills on it are drawn round every page, so a card about one is
+        // read where it is; the border drag in particular is made on the way to another place.
+        for (String id : new String[] {TourRun.BORDER_DRAG, TourRun.KEYBOARD,
+                TourRun.STATUS_SWIPE}) {
+            assertEquals(id + " away from the terminal", TourCardVisibility.NORMAL,
                 TourCardVisibility.decide(step(id), 0, NOTHING, false));
         }
     }

@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Appearance surface's Overview (appearance-round-2026-10-04.md; it was the wallpaper picker
+     page), modelled on
+     project-docs/reference/lock-wallpaper/reference-nothing-picker.png. WallpaperPickerPage fills
+     it; the surface adds it to the activity's content and sets the system bar insets as padding.
+
+     Top to bottom:
+       (no bar: back, the Wallpaper | Look | Layout | Icon pack pill and Done are the surface's shared frame,
+         appearance_page_frame, around this page);
+       a 4dp progress bar, invisible until Done is applying;
+       the pager (the rest of the height): Lock then Home, each a small label ("Lock screen",
+         "Home screen") over a card at the 360x800 aspect of the lock cutout, the neighbour peeking
+         (WallpaperPickerPage sizes the cards, less the label, and the padding);
+       the thumbnail strip card: Same as Home (Lock only) then up to five photos last applied
+         (six tiles), in equal cells across the row (no heading, no pre-made backgrounds); each
+         thumbnail is at most 112 tall and shrinks, aspect kept, so six fit the row's width
+         (WallpaperPickerLogic.stripThumbSize), never clipped; then Choose photo; then, only
+         while the launcher's own wallpaper is not the one on screen, one line saying that setting
+         it here gives the glass more to work with (WallpaperPickerPage.applyGlassHint).
+
+     Fixed heights, dp: 4 + (4 + 12 + 112 + 4 + 48 + [16 + 8] + 4 + 16); the bracketed hint
+     line (BodySmall, 16 at the default text size, more at a larger one) is GONE once the
+     wallpaper is set here. The pager is weighted, so it gives up whatever the strip card takes:
+     the cards are sized from the pager's height (WallpaperPickerLogic.cardSize) and never
+     overlap the card below.
+     The page follows the locale's direction; the cards' content does not mirror. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/wallpaper_picker_page"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:layoutDirection="locale"
+    android:orientation="vertical">
+
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/wallpaper_picker_progress"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:indeterminate="true"
+        android:visibility="invisible" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/wallpaper_picker_pager"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:overScrollMode="never" />
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/wallpaper_picker_strip_card"
+        style="@style/Widget.Termux.CardView.Filled"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="12dp"
+            android:paddingBottom="4dp">
+
+            <!-- Equal cells across the row, each tile centred in its share: evenly spaced. Thumbnails
+                 shrink to fit six cells in this width (12dp side padding), so the 112dp is a maximum. -->
+            <LinearLayout
+                android:id="@+id/wallpaper_picker_strip"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/wallpaper_picker_photo"
+                    style="@style/Widget.Material3.Button.TextButton.Icon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:text="@string/wallpaper_picker_photo"
+                    app:icon="@drawable/ic_symbol_photo"
+                    app:iconSize="24dp" />
+            </LinearLayout>
+
+            <!-- One line under Choose photo while the in-app wallpaper is not on screen. Its 8dp
+                 bottom margin and the column's 4dp bottom padding give the text the 12dp the
+                 strip has above it. -->
+            <TextView
+                android:id="@+id/wallpaper_picker_glass_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="1"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="@string/wallpaper_picker_glass_hint"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:visibility="gone" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+</LinearLayout>

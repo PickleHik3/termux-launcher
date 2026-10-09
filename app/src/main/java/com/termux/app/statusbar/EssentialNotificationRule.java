@@ -12,6 +12,11 @@ import java.util.Locale;
  * One rule that pins a matching notification into the widget slot. A rule matches on package and/or
  * a case-insensitive substring of the title or body; an empty field means "any". A rule with both
  * fields empty would pin everything and is rejected by {@link #isUsable()}.
+ *
+ * <p>A rule can be switched off without being deleted ({@link #enabled}, JSON key {@code enabled};
+ * "Mute this rule" on a pinned card's long-press menu, or the switch on the rule's card in
+ * Settings). Rules stored before the key existed have no {@code enabled} and read as on. A
+ * disabled rule never matches.</p>
  */
 public final class EssentialNotificationRule {
 
@@ -20,13 +25,28 @@ public final class EssentialNotificationRule {
     public final String match;
     /** Whether dismissing the pin should also cancel the source notification. */
     public final boolean clearOnDismiss;
+    /** Whether the rule pins anything at all; a muted rule is kept but never matches. */
+    public final boolean enabled;
 
     public EssentialNotificationRule(@NonNull String id, @Nullable String packageName,
                                      @Nullable String match, boolean clearOnDismiss) {
+        this(id, packageName, match, clearOnDismiss, true);
+    }
+
+    public EssentialNotificationRule(@NonNull String id, @Nullable String packageName,
+                                     @Nullable String match, boolean clearOnDismiss,
+                                     boolean enabled) {
         this.id = id;
         this.packageName = packageName == null ? "" : packageName.trim();
         this.match = match == null ? "" : match.trim();
         this.clearOnDismiss = clearOnDismiss;
+        this.enabled = enabled;
+    }
+
+    /** This rule with {@link #enabled} set to {@code value}; everything else kept. */
+    @NonNull
+    public EssentialNotificationRule withEnabled(boolean value) {
+        return new EssentialNotificationRule(id, packageName, match, clearOnDismiss, value);
     }
 
     public boolean isUsable() {
@@ -34,7 +54,7 @@ public final class EssentialNotificationRule {
     }
 
     public boolean matches(@Nullable String pkg, @Nullable String title, @Nullable String body) {
-        if (!isUsable()) return false;
+        if (!enabled || !isUsable()) return false;
         if (!packageName.isEmpty() && !packageName.equalsIgnoreCase(pkg == null ? "" : pkg.trim())) {
             return false;
         }
@@ -55,6 +75,7 @@ public final class EssentialNotificationRule {
             json.put("package", packageName);
             json.put("match", match);
             json.put("clear", clearOnDismiss);
+            json.put("enabled", enabled);
         } catch (JSONException ignored) {
         }
         return json;
@@ -67,7 +88,7 @@ public final class EssentialNotificationRule {
         if (id.isEmpty()) return null;
         EssentialNotificationRule rule = new EssentialNotificationRule(id,
             json.optString("package", ""), json.optString("match", ""),
-            json.optBoolean("clear", false));
+            json.optBoolean("clear", false), json.optBoolean("enabled", true));
         return rule.isUsable() ? rule : null;
     }
 }

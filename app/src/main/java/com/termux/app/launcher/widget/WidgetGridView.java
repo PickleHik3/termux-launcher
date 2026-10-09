@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.termux.app.haptics.Haptics;
 
 /** Non-scrolling exact-cell host. Provider collections retain their own nested scrolling. */
 public final class WidgetGridView extends ViewGroup {
@@ -38,6 +39,7 @@ public final class WidgetGridView extends ViewGroup {
     @Nullable private LauncherWidgetHostController controller;
     @Nullable private Listener listener;
     @NonNull private WidgetGridDefinition definition = WidgetGridDefinition.DEFAULT;
+    @Nullable private BuiltinFactory builtinFactory;
     @NonNull private List<LauncherWidgetRecord> records = Collections.emptyList();
     private final Map<Integer, WidgetCellView> cells = new HashMap<>();
     private final Map<Integer, Long> committedSizes = new HashMap<>();
@@ -54,8 +56,8 @@ public final class WidgetGridView extends ViewGroup {
 
     public WidgetGridView(@NonNull Context context) {
         super(context);
-        edgePadding = Math.round(6f * getResources().getDisplayMetrics().density);
-        gap = Math.round(8f * getResources().getDisplayMetrics().density);
+        edgePadding = Math.round(WidgetGridMetrics.EDGE_DP * getResources().getDisplayMetrics().density);
+        gap = Math.round(WidgetGridMetrics.GAP_DP * getResources().getDisplayMetrics().density);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setClipChildren(true);
         setClipToPadding(true);
@@ -140,7 +142,11 @@ public final class WidgetGridView extends ViewGroup {
                 }
             });
             View content = null;
-            if (record.state == LauncherWidgetRecord.State.ACTIVE && controller != null) {
+            if (record.isBuiltin()) {
+                // The launcher's own view, asked for on every render so a resize or a settings
+                // change reaches the one already on screen.
+                content = builtinFactory == null ? null : builtinFactory.viewFor(record);
+            } else if (record.state == LauncherWidgetRecord.State.ACTIVE && controller != null) {
                 content = controller.createHostView(record.appWidgetId);
             }
             if (content == null || record.state == LauncherWidgetRecord.State.PROVIDER_MISSING) {
@@ -161,7 +167,10 @@ public final class WidgetGridView extends ViewGroup {
                 removeView(entry.getValue()); stale.add(entry.getKey());
             }
         }
-        for (int id : stale) { cells.remove(id); committedSizes.remove(id); deliveredSizes.remove(id); }
+        for (int id : stale) {
+            cells.remove(id); committedSizes.remove(id); deliveredSizes.remove(id);
+            if (id < 0 && builtinFactory != null) builtinFactory.release(id);
+        }
         requestLayout();
     }
 
@@ -203,7 +212,7 @@ public final class WidgetGridView extends ViewGroup {
     private void fireEmptyLongPress() {
         if (!emptyLongPressPending) return;
         emptyLongPressPending = false;
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         if (listener != null) listener.onEmptySpaceLongPressed(emptyDownRawX, emptyDownRawY);
     }
 
@@ -218,6 +227,16 @@ public final class WidgetGridView extends ViewGroup {
     }
 
     @Nullable public WidgetCellView cellForId(int id) { return cells.get(id); }
+
+    /** Supplies the views of the launcher's own widgets; the grid never builds one itself. */
+    public interface BuiltinFactory {
+        /** The live view for {@code record}, brought up to date with its span and settings. */
+        @Nullable View viewFor(@NonNull LauncherWidgetRecord record);
+        /** The cell for {@code appWidgetId} left this page; its view may be dropped. */
+        default void release(int appWidgetId) { }
+    }
+
+    public void setBuiltinFactory(@Nullable BuiltinFactory value) { builtinFactory = value; }
 
     @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int width = MeasureSpec.getSize(widthMeasureSpec);
@@ -258,6 +277,22 @@ public final class WidgetGridView extends ViewGroup {
     private boolean sizeDeliveryPending;
 
     /**
+     * Whether the wall rests on this page. Being on screen is not enough: the terminal's keyboard
+     * resizes the whole wall, so a page sliding out or in passes through sizes no one sees at
+     * rest, and a provider told one re-renders for it — then again on the way back, which is the
+     * widget squeezed and snapping to size after the page lands. At rest by default, for a grid
+     * that stands on no wall.
+     */
+    private boolean pageAtRest = true;
+
+    /** The wall came to rest on this page, or left it; a size held meanwhile goes out now. */
+    public void setPageAtRest(boolean atRest) {
+        if (pageAtRest == atRest) return;
+        pageAtRest = atRest;
+        if (atRest && sizeDeliveryPending) scheduleSizeDelivery();
+    }
+
+    /**
      * A layout pass that changed a cell's size waits this long for the next one before the size
      * reaches the provider. The grid is laid out once per frame while the wall slides or the
      * status bar animates between places, and each delivery makes the provider re-render and push
@@ -281,7 +316,7 @@ public final class WidgetGridView extends ViewGroup {
      * at the edges.
      */
     private void deliverCommittedSizes() {
-        if (controller == null || !isShown()) return;
+        if (controller == null || !isShown() || !pageAtRest) return;
         sizeDeliveryPending = false;
         int orientation = getResources().getConfiguration().orientation;
         for (LauncherWidgetRecord record : records) {

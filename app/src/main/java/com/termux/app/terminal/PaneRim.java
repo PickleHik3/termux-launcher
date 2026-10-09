@@ -1,12 +1,19 @@
 package com.termux.app.terminal;
 
 import android.animation.ValueAnimator;
+import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.ColorFilter;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
@@ -14,52 +21,65 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 
 /**
- * One frame's focus rim: the lit glass edge on a slab, or the stock stroke when glass is off.
- * Held by whoever owns the frame — one instance per frame — and re-applied on every render; it
- * reuses the live drawable when nothing but focus can have changed, and crossfades alpha and hue
- * in place when it has.
+ * One frame's border, rendered from what {@link PaneBorderStyle} decided: the shared glass rim,
+ * the focus colour, or the attention glow. Held by whoever owns the frame — one instance per
+ * frame — and re-applied on every render; it reuses the live drawable when nothing has changed
+ * and fades a new one in when the kind does.
  *
- * <p>Shared by the terminal panes and by the pane wall's non-terminal pages. It knows nothing
- * about what the frame contains, so a page supplies the same three answers a pane does: is glass
- * on, at what radius, and does this frame have the focus.
+ * <p>Shared by the terminal panes and by the pane wall's non-terminal pages. It decides nothing
+ * about which border a frame wears: a page supplies the decision, a radius and its style.
  */
 public final class PaneRim {
 
-    private static final int GLASS_FOCUSED_ALPHA = 255;
+    /** The plain stroke's width: the shared rim's hairline, the line a corner tab lines up against. */
+    public static final float STOCK_STROKE_DP = 1f;
+
+    /** {@link #STOCK_STROKE_DP} in pixels. */
+    public static float stockStrokePx(float density) {
+        return STOCK_STROKE_DP * density;
+    }
+
     /**
-     * An unfocused pane still has to show its edges. At 110 over frost the outline-variant rim
-     * disappeared wherever the pane held no text, so a fresh split read as one slab with a line
-     * through it; the unfocused rim is now the outline colour at two thirds, distinct from the
-     * accent-coloured focused rim by hue as well as by weight.
+     * Whether a page with no glass still wears the plain line: the border preference is on
+     * ({@link PaneSurfaceStyle#paneBorderEnabled}), so every place's frame draws its line.
      */
-    private static final int GLASS_UNFOCUSED_ALPHA = 170;
+    public static boolean plainBorderWanted(@Nullable PaneSurfaceStyle style) {
+        return style != null && style.paneBorderEnabled();
+    }
+
     /**
-     * The same rim on the light band. Two thirds of a hue that was authored against dark glass is
-     * the one reading that survived the light theme worst: the rim renderer can raise a tinted
-     * stroke's own alpha to keep it visible, but this multiplier is applied on top of that, so an
-     * unfocused pane still lost the third of the edge the renderer had just bought back.
+     * The theme's border colours: the Material active colour for focus, and for attention the
+     * error role, the same colour the window bar's bell and blocked chip wear.
      */
-    private static final int GLASS_UNFOCUSED_ALPHA_ON_LIGHT = 214;
-    private static final int STOCK_FOCUSED_ALPHA = 255;
-    private static final int STOCK_UNFOCUSED_ALPHA = 128;
-    /** How long the focus crossfade runs. */
-    private static final long FOCUS_BORDER_MS = 160L;
+    @NonNull
+    public static PaneBorderStyle.Palette palette(@NonNull Context context) {
+        int focus = MaterialColors.getColor(context,
+            androidx.appcompat.R.attr.colorPrimary,
+            ContextCompat.getColor(context, R.color.termux_primary));
+        int attention = MaterialColors.getColor(context,
+            androidx.appcompat.R.attr.colorError,
+            ContextCompat.getColor(context, R.color.termux_error));
+        return new PaneBorderStyle.Palette(focus, attention);
+    }
+
+    /** How long a border of a new kind fades in. */
+    private static final long FADE_MS = 160L;
 
     private Drawable mDrawable;
+    private PaneBorderStyle.Kind mKind;
+    private int mColour;
     private boolean mGlass;
-    private boolean mActive;
-    private int mFocusedTint;
-    private int mUnfocusedTint;
-    private int mCurrentTint;
+    private boolean mGradientRim;
+    private boolean mDocked;
     private float mRadiusPx;
     private ValueAnimator mAnimator;
-
-    /** How far an unfocused glass rim dims, which depends on what the pane is standing on. */
-    private static int glassUnfocusedAlpha() {
-        return com.termux.app.chrome.ChromeShade.polarity()
-            == com.termux.app.chrome.ChromeInk.Polarity.DARK_INK
-            ? GLASS_UNFOCUSED_ALPHA_ON_LIGHT : GLASS_UNFOCUSED_ALPHA;
-    }
+    /** The alpha the kind asks for, before the wall's travel takes its share. */
+    private int mBaseAlpha = 255;
+    /**
+     * How much of the rim the wall's travel leaves showing, 1 at rest: a page mid-slide draws
+     * no outline, so two frames are never seen side by side (PaneWallPolicy#outlineAlpha).
+     */
+    private float mTravelAlpha = 1f;
 
     /**
      * Whether animators are honoured at all. Cached read of the same setting the system exposes;
@@ -76,84 +96,111 @@ public final class PaneRim {
     }
 
     /**
-     * Put the rim on {@code frame}, or crossfade the one already there to a new focus state.
+     * Put the decided border on {@code frame}.
      *
-     * @param radiusPx the slab radius as the surface asks for it; the rim drawable caps it
-     *                 against the frame's live bounds on every draw
-     * @return true while the frame carries a rim, false when there is nothing to draw (in which
-     *         case the caller can drop this instance)
+     * @param glass whether the pane is a glass slab (the focus colour then uses the lit rim)
+     * @param radiusPx the pane's radius as the surface asks for it; every drawable caps it
+     *                 against the frame's live bounds on each draw ({@link PaneShape})
+     * @param style where the shared rim and the pulse preference come from; null in a bare test
+     * @return true while the frame carries a border
      */
     public boolean apply(@NonNull FrameLayout frame, boolean glass, float radiusPx,
-                         boolean active) {
-        // Unlike the dock's white glass edge, a pane's rim is also its focus indicator, so it
-        // carries a Material colour and a wide alpha spread: the focused pane glows in the accent,
-        // the rest fall back to a dim neutral outline. A white rim at two alphas could not say
-        // which pane has the keyboard.
-        int focusedTint = 0;
-        int unfocusedTint = 0;
-        // The stroke traces the pane's own corners too — it is drawn over the same clip — so both
-        // rims take the radius, not just the glass one.
+                         @NonNull PaneBorderStyle.Decision decision,
+                         @Nullable PaneSurfaceStyle style) {
         float radius = Math.max(0f, radiusPx);
-        if (glass) {
-            focusedTint = MaterialColors.getColor(frame.getContext(),
-                com.google.android.material.R.attr.colorPrimary,
-                ContextCompat.getColor(frame.getContext(), R.color.termux_primary));
-            unfocusedTint = MaterialColors.getColor(frame.getContext(),
-                com.google.android.material.R.attr.colorOutline,
-                ContextCompat.getColor(frame.getContext(), R.color.termux_outline_variant));
-        }
+        boolean gradientRim = style != null && style.paneGlassRimWanted();
+        boolean pulses = animationsEnabled() && (style == null || style.paneAttentionPulses());
+        boolean docked = style != null && style.paneDocked();
 
-        // Reuse the live drawable when nothing but focus can have changed. A focus flip then
-        // crossfades it in place, and an unchanged re-application (every render calls this) leaves
-        // a mid-flight crossfade running instead of stamping the end state over it.
-        boolean reusable = mDrawable != null && mGlass == glass
-            && frame.getForeground() == mDrawable && mRadiusPx == radius
-            && (!glass || (mFocusedTint == focusedTint && mUnfocusedTint == unfocusedTint));
+        boolean reusable = mDrawable != null && frame.getForeground() == mDrawable
+            && mKind == decision.kind && mColour == decision.colour && mGlass == glass
+            && mRadiusPx == radius && mGradientRim == gradientRim && mDocked == docked;
         if (reusable) {
-            if (mActive != active) {
-                mActive = active;
-                animateFocus();
-            }
+            if (mDrawable instanceof PaneAttentionGlow)
+                ((PaneAttentionGlow) mDrawable).setPulsing(pulses);
             return true;
         }
 
+        boolean kindChanged = mDrawable != null && mKind != decision.kind;
         cancel();
+        releaseDrawable();
+        mKind = decision.kind;
+        mColour = decision.colour;
         mGlass = glass;
-        mActive = active;
-        mFocusedTint = focusedTint;
-        mUnfocusedTint = unfocusedTint;
+        mGradientRim = gradientRim;
+        mDocked = docked;
         mRadiusPx = radius;
-        if (glass) {
-            mCurrentTint = active ? focusedTint : unfocusedTint;
-            mDrawable = new com.termux.app.GlassRimDrawable(
-                frame.getResources().getDisplayMetrics().density, radius, mCurrentTint);
-            mDrawable.setAlpha(active ? GLASS_FOCUSED_ALPHA : glassUnfocusedAlpha());
-        } else {
-            Drawable border = ContextCompat.getDrawable(frame.getContext(),
-                R.drawable.pane_active_border);
-            if (border != null) {
-                border = border.mutate();
-                // The drawable carries the stroke and the theme colour; its corners come from the
-                // pane, so the stroke rounds exactly where the frame's clip does rather than at
-                // the shape's own fixed radius.
-                if (border instanceof GradientDrawable)
-                    ((GradientDrawable) border).setCornerRadius(radius);
-                border.setAlpha(active ? STOCK_FOCUSED_ALPHA : STOCK_UNFOCUSED_ALPHA);
+        float density = frame.getResources().getDisplayMetrics().density;
+        switch (decision.kind) {
+            case ATTENTION: {
+                PaneAttentionGlow glow = new PaneAttentionGlow(density, radius, decision.colour);
+                glow.setPulsing(pulses);
+                mDrawable = glow;
+                break;
             }
-            mDrawable = border;
+            case FOCUS:
+                // Docked, the focused pane wears the active colour along its own edges of the
+                // divider and nowhere else; the opening has no border of its own.
+                if (docked) {
+                    mDrawable = new PaneDividerEdges(frame, decision.colour, density);
+                    break;
+                }
+                mDrawable = glass
+                    ? new com.termux.app.GlassRimDrawable(density, radius, decision.colour)
+                    : stroke(radius, decision.colour, density);
+                break;
+            default:
+                mDrawable = docked
+                    ? new PaneDividerEdges(frame, lineColour(frame.getContext()), density)
+                    : new SharedRim(frame.getContext(), style, radius, density);
+                break;
         }
         frame.setForeground(mDrawable);
-        return mDrawable != null;
+        setBaseAlpha(255);
+        if (kindChanged && animationsEnabled()) fadeIn();
+        return true;
     }
 
-    /** Take the rim off {@code frame} and stop any crossfade. */
+    /** The plain line's colour: the outline role at the shared rim's hairline strength. */
+    private static int lineColour(@NonNull Context context) {
+        return ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOutline,
+            ContextCompat.getColor(context, R.color.termux_outline_variant)), 150);
+    }
+
+    private static Drawable stroke(float radius, int colour, float density) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(Color.TRANSPARENT);
+        d.setCornerRadius(radius);
+        d.setStroke(Math.max(1, Math.round(stockStrokePx(density))), colour);
+        return d;
+    }
+
+    /**
+     * How much of the border the wall's slide leaves showing, 0 to 1. Composed with the kind's
+     * alpha rather than written over it, so a fade under way keeps its course and the border comes
+     * back at settle at exactly the strength it had.
+     */
+    public void setTravelAlpha(float alpha) {
+        float clamped = Float.isNaN(alpha) ? 1f : Math.max(0f, Math.min(1f, alpha));
+        if (mTravelAlpha == clamped) return;
+        mTravelAlpha = clamped;
+        if (mDrawable != null) mDrawable.setAlpha(Math.round(mBaseAlpha * mTravelAlpha));
+    }
+
+    private void setBaseAlpha(int alpha) {
+        mBaseAlpha = alpha;
+        if (mDrawable != null) mDrawable.setAlpha(Math.round(alpha * mTravelAlpha));
+    }
+
+    /** Take the border off {@code frame} and stop any fade or pulse. */
     public void clear(@NonNull FrameLayout frame) {
         cancel();
-        mDrawable = null;
+        releaseDrawable();
         frame.setForeground(null);
     }
 
-    /** Stop any crossfade, leaving the rim where it is. */
+    /** Stop any fade, leaving the border where it is. */
     public void cancel() {
         if (mAnimator == null) return;
         ValueAnimator superseded = mAnimator;
@@ -161,58 +208,83 @@ public final class PaneRim {
         superseded.cancel();
     }
 
-    /**
-     * Crossfades the rim between its focused and unfocused treatment instead of snapping. Alpha
-     * and (on glass) rim hue move together, so the eye gets a short motion path across the layout
-     * on "move pane focus" even though no geometry changes. Starts from wherever the drawable
-     * currently is, so an interrupted crossfade reverses smoothly.
-     */
-    private void animateFocus() {
-        final Drawable border = mDrawable;
-        if (border == null) return;
-        // Read the mid-flight values before cancelling: a reversed crossfade continues from
-        // wherever the rim currently is. The superseded animator's end listener checks mAnimator
-        // so it cannot stamp its own end state over these.
-        final int fromAlpha = border.getAlpha();
-        final int fromTint = mCurrentTint;
-        cancel();
-        final int toAlpha = mGlass
-            ? (mActive ? GLASS_FOCUSED_ALPHA : glassUnfocusedAlpha())
-            : (mActive ? STOCK_FOCUSED_ALPHA : STOCK_UNFOCUSED_ALPHA);
-        final int toTint = mActive ? mFocusedTint : mUnfocusedTint;
-        final boolean tinted = mGlass && border instanceof com.termux.app.GlassRimDrawable;
-        if (!animationsEnabled()) {
-            border.setAlpha(toAlpha);
-            if (tinted) {
-                mCurrentTint = toTint;
-                ((com.termux.app.GlassRimDrawable) border).setTint(toTint);
-            }
-            return;
-        }
-        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(FOCUS_BORDER_MS);
+    private void releaseDrawable() {
+        if (mDrawable instanceof PaneAttentionGlow) ((PaneAttentionGlow) mDrawable).release();
+        mDrawable = null;
+        mKind = null;
+    }
+
+    /** The one short fade a border of a new kind gets, so focus and attention do not pop. */
+    private void fadeIn() {
+        setBaseAlpha(0);
+        ValueAnimator animator = ValueAnimator.ofInt(0, 255);
+        animator.setDuration(FADE_MS);
         animator.setInterpolator(PaneMotionOverlayView.standardInterpolator());
-        animator.addUpdateListener(a -> {
-            float fraction = (float) a.getAnimatedValue();
-            border.setAlpha(Math.round(fromAlpha + (toAlpha - fromAlpha) * fraction));
-            if (tinted) {
-                mCurrentTint = ColorUtils.blendARGB(fromTint, toTint, fraction);
-                ((com.termux.app.GlassRimDrawable) border).setTint(mCurrentTint);
-            }
-        });
+        animator.addUpdateListener(a -> setBaseAlpha((int) a.getAnimatedValue()));
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(android.animation.Animator animation) {
-                if (mAnimator != animation) return; // superseded by a newer crossfade
+                if (mAnimator != animation) return; // superseded
                 mAnimator = null;
-                border.setAlpha(toAlpha);
-                if (tinted) {
-                    mCurrentTint = toTint;
-                    ((com.termux.app.GlassRimDrawable) border).setTint(toTint);
-                }
+                setBaseAlpha(255);
             }
         });
         mAnimator = animator;
         animator.start();
+    }
+
+    /**
+     * The rim every other surface wears, cut at this pane's radius capped for its live bounds.
+     * The style builds it (hairline or gradient, per preset); a bare style falls back to the
+     * outline-colour hairline.
+     */
+    private static final class SharedRim extends Drawable {
+        private final PaneSurfaceStyle mStyle;
+        private final float mRequestedRadiusPx;
+        private final float mDensity;
+        private final int mFallbackColour;
+        private Drawable mInner;
+        private float mInnerRadiusPx = -1f;
+        private int mAlpha = 255;
+
+        SharedRim(@NonNull Context context, @Nullable PaneSurfaceStyle style, float radiusPx,
+                  float density) {
+            mStyle = style;
+            mRequestedRadiusPx = radiusPx;
+            mDensity = density;
+            mFallbackColour = lineColour(context);
+        }
+
+        @Override
+        protected void onBoundsChange(@NonNull Rect bounds) {
+            float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, bounds.width(),
+                bounds.height());
+            if (mInner == null || radius != mInnerRadiusPx) {
+                Drawable built = mStyle == null ? null : mStyle.paneRimDrawable(radius);
+                mInner = built != null ? built : stroke(radius, mFallbackColour, mDensity);
+                mInnerRadiusPx = radius;
+                mInner.setAlpha(mAlpha);
+            }
+            mInner.setBounds(bounds);
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            if (mInner != null) mInner.draw(canvas);
+        }
+
+        @Override public void setAlpha(int alpha) {
+            mAlpha = alpha;
+            if (mInner != null) mInner.setAlpha(alpha);
+            invalidateSelf();
+        }
+
+        @Override public void setColorFilter(@Nullable ColorFilter colorFilter) {
+            if (mInner != null) mInner.setColorFilter(colorFilter);
+        }
+
+        @Override public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
+        }
     }
 }

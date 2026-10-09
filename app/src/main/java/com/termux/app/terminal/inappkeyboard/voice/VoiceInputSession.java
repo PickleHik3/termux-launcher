@@ -1,0 +1,637 @@
+package com.termux.app.terminal.inappkeyboard.voice;
+
+import android.content.Context;
+import android.media.AudioFormat;
+import android.media.AudioRecord;
+import android.media.MediaRecorder;
+import android.os.Handler;
+import android.os.Looper;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.termux.BuildConfig;
+import com.termux.ai.TaiManager;
+import com.termux.shared.logger.Logger;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * One dictation (the voice key, or the Dictate key) with the on-device engine: the microphone is
+ * read on a capture thread, {@link VoiceActivityDetector} cuts the stream into segments, each segment is written
+ * under {@code cacheDir/tai-ipc} and sent through {@link TaiManager#transcribe} on a single
+ * {@code voice-stt} thread — in order, so results come back in order — and every result reaches
+ * the {@link Host} on the main thread. {@code sttWarm} goes out as the microphone opens so the
+ * model loads while the user speaks. {@link VoiceFeedback} marks the open, the end and a failure
+ * with a blip and a haptic; the first {@link VoiceLeadInDiscard#START_TONE_MS} of capture are
+ * dropped so the start blip is never transcribed.
+ *
+ * <p>The session ends on the configured silence timeout ({@link VoiceSilenceTimeout}, or never for
+ * "Until tap"), a second tap (the voice key or the Dictate key), the pill's pause, a press of ✓
+ * or Copy, the keyboard that started it going down, the activity pausing, or the first failure;
+ * {@link #stop} releases the microphone at once and lets segments already captured finish,
+ * {@link #cancel} (the pill's ×, a swipe of the card, the activity going away) drops them too.
+ * Every phrase is delivered as heard; the optional cleanup is one pass over the whole
+ * session once it has ended, owned by the host ({@link VoiceSessionCleanup}). The activity never
+ * blocks on it: the only main-thread work is the callbacks.
+ */
+public final class VoiceInputSession {
+
+    private static final String LOG_TAG = "VoiceInputSession";
+    /** Per-segment STT deadline: {@code base + multiplier × the segment's own audio length}. */
+    private static final long SEGMENT_TIMEOUT_BASE_MS = 5_000L;
+    private static final long SEGMENT_TIMEOUT_AUDIO_MULTIPLIER = 3L;
+    /** Where debug builds keep {@code segment-N.pcm} and {@code session-<timestamp>.pcm} for the replay rig. */
+    private static final String DEBUG_DIR = "voice-debug";
+    /** How many whole-session recordings {@link #pruneOldSessionRecordings} keeps; older ones are deleted. */
+    private static final int MAX_SESSION_RECORDINGS = 5;
+
+    /** Why the microphone was released. */
+    public enum EndReason { SILENCE, USER, HIDDEN, PAUSED, DESTROYED, FAILED }
+
+    /** Everything the activity decides per session, read once at the start. */
+    public static final class Config {
+        /** The installed speech model id; empty lets the runtime pick the settings' one. */
+        @NonNull public final String modelId;
+        /** The forced language for a multilingual graph, or {@code null} for an {@code .en} one. */
+        @Nullable public final String language;
+        public final int pauseMs;
+        public final int windowSeconds;
+        /** {@link VoiceSilenceTimeout#UNTIL_TAP} disables the timeout ("Until tap"). */
+        public final int silenceTimeoutMs;
+        /** The keyboard's "Voice sounds" setting: start/stop/error blips ({@link VoiceFeedback}). */
+        public final boolean soundsEnabled;
+        /** The keyboard's key-haptics setting, which the voice cues follow. */
+        public final boolean hapticsEnabled;
+        /** The "Mic sensitivity" setting: how far quiet speech is lifted for the voiced decision. */
+        @NonNull public final VoiceMicSensitivity micSensitivity;
+
+        public Config(@NonNull String modelId, @Nullable String language,
+                      int pauseMs, int windowSeconds, int silenceTimeoutMs,
+                      boolean soundsEnabled, boolean hapticsEnabled,
+                      @NonNull VoiceMicSensitivity micSensitivity) {
+            this.modelId = modelId;
+            this.language = language;
+            this.pauseMs = pauseMs;
+            this.windowSeconds = windowSeconds;
+            this.silenceTimeoutMs = silenceTimeoutMs;
+            this.soundsEnabled = soundsEnabled;
+            this.hapticsEnabled = hapticsEnabled;
+            this.micSensitivity = micSensitivity;
+        }
+    }
+
+    /** Called on the main thread. */
+    public interface Host {
+        /** The microphone is open and being read. */
+        void onListening();
+
+        /**
+         * The VAD has just closed a segment (silence after speech, or the pause/window limit) and
+         * handed it to the STT thread — well before its transcript can come back, so the pill can
+         * acknowledge the phrase at once instead of only once it transcribes.
+         */
+        void onSegmentCaptured();
+
+        /**
+         * One segment {@link #onSegmentCaptured} announced has come back, as text or as nothing
+         * (non-speech, a failure): exactly once per captured segment, in the order they settle,
+         * which is before its text (if any) reaches {@link #onTranscript}.
+         */
+        void onSegmentSettled();
+
+        /**
+         * The speech model has warmed and the voiced decision is loaded: the pill's "Warming up"
+         * chip can go. Recording has been running all along; nothing waited for this.
+         */
+        void onSpeechReady();
+
+        /**
+         * A level sample, roughly every 30 ms while listening, with the VAD's noise floor at that
+         * moment (the level meter measures from it, not an absolute dBFS scale).
+         */
+        void onLevel(float rms, boolean voiced, float noiseFloor);
+
+        /** A non-empty transcript, in the order its segment was spoken. */
+        void onTranscript(@NonNull String text);
+
+        /**
+         * The microphone has closed but at least one captured segment is still transcribing —
+         * shown as a "Transcribing…" pill, since {@link #onListening}'s "Listening…" no longer fits.
+         */
+        void onDraining();
+
+        /**
+         * The runtime refused or failed ({@code stt_model_not_configured}, {@code insufficient_memory},
+         * a transcription error, or the microphone could not be opened). The session has already
+         * stopped; {@code anyTranscriptDelivered} says whether text got through before it did.
+         */
+        void onFailure(@NonNull String code, @NonNull String message, boolean anyTranscriptDelivered);
+
+        /** The microphone is released and no more transcripts will come. */
+        void onEnded(@NonNull EndReason reason);
+    }
+
+    private final Context appContext;
+    private final Config config;
+    private final Host host;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService sttExecutor = Executors.newSingleThreadExecutor(
+        runnable -> new Thread(runnable, "voice-stt"));
+    private final VoiceResultSequencer<String> sequencer = new VoiceResultSequencer<>();
+    private final VoiceFeedback feedback;
+    private final AtomicBoolean stopRequested = new AtomicBoolean();
+    /** The speech model's warm-up and the voiced decision's load, counted down to {@link Host#onSpeechReady}. */
+    private final AtomicInteger warmingParts = new AtomicInteger(2);
+    private final AtomicBoolean failed = new AtomicBoolean();
+    /** Segments handed to the STT thread, counted on the capture thread before the microphone is released. */
+    private final AtomicInteger submitted = new AtomicInteger();
+
+    /** Null once the capture thread has released it; the main thread reads it to know the session is over. */
+    @Nullable private volatile AudioRecord record;
+    @Nullable private Thread captureThread;
+    /** Results still queued after {@link #cancel} are not worth an IPC round trip. */
+    private volatile boolean cancelled;
+    /** Capture-thread state: the next segment's number. */
+    private int nextSequence;
+    /** Main-thread state. */
+    private int delivered;
+    private boolean anyTranscript;
+    private boolean ended;
+    private boolean discardResults;
+    @Nullable private EndReason endReason;
+
+    public VoiceInputSession(@NonNull Context context, @NonNull Config config, @NonNull Host host) {
+        this.appContext = context.getApplicationContext();
+        this.config = config;
+        this.host = host;
+        this.feedback = new VoiceFeedback(appContext, config.soundsEnabled, config.hapticsEnabled);
+    }
+
+    /**
+     * Opens the microphone and starts listening; false when it could not be opened (the host is
+     * not told separately). Needs {@code RECORD_AUDIO}, which the caller checks.
+     */
+    public boolean start() {
+        int minBytes = AudioRecord.getMinBufferSize(VoiceActivityDetector.SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+        int bufferBytes = Math.max(minBytes, VoiceActivityDetector.FRAME_SAMPLES * 2 * 8);
+        AudioRecord recorder;
+        try {
+            recorder = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                VoiceActivityDetector.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT, bufferBytes);
+        } catch (IllegalArgumentException | SecurityException e) {
+            Logger.logError(LOG_TAG, "AudioRecord refused: " + e.getMessage());
+            return false;
+        }
+        if (recorder.getState() != AudioRecord.STATE_INITIALIZED) {
+            recorder.release();
+            Logger.logError(LOG_TAG, "AudioRecord did not initialise");
+            return false;
+        }
+        try {
+            recorder.startRecording();
+        } catch (IllegalStateException e) {
+            recorder.release();
+            Logger.logError(LOG_TAG, "AudioRecord.startRecording failed: " + e.getMessage());
+            return false;
+        }
+        record = recorder;
+        // The cue goes out the moment the microphone is live; the capture thread drops the
+        // lead-in the tone occupies so the blip never becomes the first "phrase".
+        feedback.onStart();
+        // The model loads while the first words are spoken; a refusal here ends the session
+        // before any segment is sent, which is the fast path to the fallback.
+        sttExecutor.execute(this::warm);
+        Thread thread = new Thread(() -> capture(recorder), "voice-capture");
+        captureThread = thread;
+        thread.start();
+        mainHandler.post(host::onListening);
+        return true;
+    }
+
+    /** Releases the microphone; segments already captured still transcribe and deliver. */
+    public void stop(@NonNull EndReason reason) {
+        if (!stopRequested.compareAndSet(false, true)) return;
+        mainHandler.post(() -> {
+            if (endReason == null) endReason = reason;
+            maybeEnd();
+        });
+        AudioRecord recorder = record;
+        if (recorder != null) {
+            // read() returns once the recorder stops, so the capture thread exits within a frame
+            // and releases it; stopping from here means the microphone closes even if that thread
+            // is slow to come around.
+            try {
+                recorder.stop();
+            } catch (IllegalStateException ignored) {
+            }
+        }
+    }
+
+    /**
+     * Releases the microphone and drops every result still in flight — the undelivered segments
+     * finish transcribing (or time out) on their own but are never delivered. Ends the session at
+     * once even when {@link #stop} has already been called and is only waiting on those segments.
+     * Only the pill's ×, a swipe of the card and the activity going away do this; the pill's
+     * pause, the voice key and the Dictate key stop and deliver.
+     */
+    public void cancel(@NonNull EndReason reason) {
+        cancelled = true;
+        mainHandler.post(() -> {
+            discardResults = true;
+            if (endReason == null) endReason = reason;
+            maybeEnd();
+        });
+        stop(reason);
+    }
+
+    public boolean isStopRequested() {
+        return stopRequested.get();
+    }
+
+    // ------------------------------------------------------------------ capture thread
+
+    private void capture(@NonNull AudioRecord recorder) {
+        // Silero decides what is speech; without its model (or LiteRT) the energy detector does,
+        // as it always used to. Built here rather than in start() so the main thread never reads
+        // the 1.2 MB model; the recorder is already running, but the load takes tens of
+        // milliseconds against a buffer of at least 240 ms, and the first 180 ms are the start
+        // tone's lead-in, which is dropped anyway.
+        long speechLoadStart = System.nanoTime();
+        SileroVoiceDecider speech = SileroVad.openDecider(appContext);
+        Logger.logDebug(LOG_TAG, String.format(Locale.ROOT, "voiced decision: %s (%d ms to load), mic sensitivity %s",
+            speech != null ? "silero" : "energy", (System.nanoTime() - speechLoadStart) / 1_000_000,
+            config.micSensitivity.storageValue));
+        warmedPart();
+        VoiceActivityDetector detector = new VoiceActivityDetector(new VoiceActivityDetector.Listener() {
+            // One debug line per second of what the detector saw, for tuning it on a device.
+            private int statFrames, statVoiced;
+            private float statPeak, statSum;
+
+            @Override
+            public void onLevel(float rms, boolean voiced, float noiseFloor) {
+                statFrames++;
+                if (voiced) statVoiced++;
+                statPeak = Math.max(statPeak, rms);
+                statSum += rms;
+                if (statFrames == 1000 / VoiceActivityDetector.FRAME_MS) {
+                    Logger.logDebug(LOG_TAG, String.format(Locale.ROOT,
+                        "level: peak=%.1f mean=%.1f floor=%.1f dBFS voiced=%d/%d",
+                        dbfs(statPeak), dbfs(statSum / statFrames), dbfs(noiseFloor), statVoiced, statFrames));
+                    statFrames = 0;
+                    statVoiced = 0;
+                    statPeak = 0f;
+                    statSum = 0f;
+                }
+                mainHandler.post(() -> {
+                    if (!ended) host.onLevel(rms, voiced, noiseFloor);
+                });
+            }
+
+            @Override
+            public void onSegment(@NonNull short[] pcm, int voicedFrames) {
+                mainHandler.post(() -> {
+                    if (!ended) host.onSegmentCaptured();
+                });
+                submitSegment(nextSequence++, pcm, voicedFrames);
+            }
+
+            @Override
+            public void onSilenceTimeout() {
+                stop(EndReason.SILENCE);
+            }
+        }, config.pauseMs, config.windowSeconds, config.silenceTimeoutMs, speech, config.micSensitivity);
+        // In front of the detector, not inside it: frames dropped here never reach the pre-roll.
+        VoiceLeadInDiscard leadIn = new VoiceLeadInDiscard(
+            feedback.playsTones() ? VoiceLeadInDiscard.START_TONE_MS : 0, VoiceActivityDetector.SAMPLE_RATE);
+        short[] buffer = new short[VoiceActivityDetector.FRAME_SAMPLES];
+        OutputStream sessionRecording = BuildConfig.DEBUG ? openSessionRecording() : null;
+        try {
+            while (!stopRequested.get()) {
+                int read = recorder.read(buffer, 0, buffer.length);
+                if (read <= 0) {
+                    if (read < 0) Logger.logWarn(LOG_TAG, "AudioRecord.read: " + read);
+                    break;
+                }
+                int drop = leadIn.take(read);
+                if (drop < read) {
+                    detector.feed(buffer, drop, read - drop);
+                    if (sessionRecording != null) writePcmLittleEndian(sessionRecording, buffer, drop, read - drop);
+                }
+            }
+            // A tap in the middle of a phrase still sends what was said.
+            if (!failed.get()) detector.finish();
+        } finally {
+            if (speech != null) speech.close();
+            if (sessionRecording != null) {
+                try {
+                    sessionRecording.close();
+                } catch (IOException e) {
+                    Logger.logWarn(LOG_TAG, "closing the session recording failed: " + e.getMessage());
+                }
+                pruneOldSessionRecordings();
+            }
+            try {
+                recorder.stop();
+            } catch (IllegalStateException ignored) {
+            }
+            recorder.release();
+            record = null;
+            stopRequested.set(true);
+            mainHandler.post(() -> {
+                if (endReason == null) endReason = EndReason.FAILED;
+                // The mic has just closed; a segment already sent for transcription still has to
+                // come back (or time out) before the session actually ends.
+                if (!ended && !discardResults && submitted.get() > delivered) host.onDraining();
+                maybeEnd();
+            });
+        }
+    }
+
+    private void submitSegment(int sequence, @NonNull short[] pcm, int voicedFrames) {
+        submitted.incrementAndGet();
+        sttExecutor.execute(() -> transcribe(sequence, pcm, voicedFrames));
+    }
+
+    // ------------------------------------------------------------------ STT thread
+
+    private void warm() {
+        if (failed.get() || stopRequested.get()) return;
+        try {
+            JSONObject request = new JSONObject();
+            if (!config.modelId.isEmpty()) request.put("model", config.modelId);
+            JSONObject result = TaiManager.getInstance(appContext).sttWarm(request.toString());
+            Failure failure = Failure.of(result);
+            if (failure != null) fail(failure);
+            else warmedPart();
+        } catch (JSONException | RuntimeException e) {
+            fail(new Failure("stt_warm_failed", String.valueOf(e.getMessage())));
+        }
+    }
+
+    /** One of the speech model's warm-up and the voiced decision's load is done; both → {@link Host#onSpeechReady}. */
+    private void warmedPart() {
+        if (warmingParts.decrementAndGet() != 0) return;
+        mainHandler.post(() -> {
+            if (!ended) host.onSpeechReady();
+        });
+    }
+
+    private void transcribe(int sequence, @NonNull short[] pcm, int voicedFrames) {
+        long segmentMs = pcm.length * 1000L / VoiceActivityDetector.SAMPLE_RATE;
+        long voicedMs = voicedFrames * (long) VoiceActivityDetector.FRAME_MS;
+        if (failed.get() || cancelled) {
+            logPhrase(segmentMs, voicedMs, 0, null, 0, "dropped");
+            deliver(sequence, "");
+            return;
+        }
+        long start = System.nanoTime();
+        File audio = null;
+        try {
+            if (BuildConfig.DEBUG) keepForDebugging(sequence, pcm);
+            // Levelled first: see VoiceGain. The segment is ours alone, so scaling in place is safe.
+            VoiceGain.apply(pcm);
+            audio = writePcm(pcm);
+            JSONObject request = new JSONObject();
+            request.put("file", audio.getAbsolutePath());
+            if (!config.modelId.isEmpty()) request.put("model", config.modelId);
+            if (config.language != null) request.put("language", config.language);
+            // A deadline per segment, not the IPC client's flat 120 s: a hung runtime would
+            // otherwise leave the pill and the pressed key up for minutes with nothing to show for
+            // it. base.en does a short phrase in well under a second, so this has plenty of room.
+            long timeoutMs = SEGMENT_TIMEOUT_BASE_MS + SEGMENT_TIMEOUT_AUDIO_MULTIPLIER * segmentMs;
+            JSONObject result = TaiManager.getInstance(appContext).transcribe(request.toString(), timeoutMs);
+            long transcribeMs = (System.nanoTime() - start) / 1_000_000L;
+            Failure failure = Failure.of(result);
+            if (failure != null) {
+                logPhrase(segmentMs, voicedMs, transcribeMs, result, 0, "failed");
+                fail(failure);
+                deliver(sequence, "");
+                return;
+            }
+            String text = result.optString("text", "");
+            logPhrase(segmentMs, voicedMs, transcribeMs, result, text.length(), outcomeFor(text));
+            // Delivered as heard: any cleanup is one pass over the whole session once it has ended
+            // (VoiceSessionCleanup), so no phrase ever waits for a chat model.
+            deliver(sequence, text);
+        } catch (IOException | JSONException | RuntimeException e) {
+            long transcribeMs = (System.nanoTime() - start) / 1_000_000L;
+            logPhrase(segmentMs, voicedMs, transcribeMs, null, 0, "failed");
+            fail(new Failure("stt_failed", String.valueOf(e.getMessage())));
+            deliver(sequence, "");
+        } finally {
+            // The runtime process deletes the file once read; this covers every other exit.
+            if (audio != null) {
+                //noinspection ResultOfMethodCallIgnored
+                audio.delete();
+            }
+        }
+    }
+
+    /**
+     * The same classification the activity is about to apply to {@code text} — a dropped
+     * non-speech segment or ordinary text — purely so the log's "outcome" field matches what
+     * actually happens to it.
+     */
+    @NonNull
+    private String outcomeFor(@NonNull String text) {
+        return VoiceTextSanitizer.clean(text).trim().isEmpty() ? "dropped" : "text";
+    }
+
+    /**
+     * One line per phrase: durations and the runtime's own timing breakdown when it sent one, the
+     * transcript's length and what became of it — never the transcript itself.
+     */
+    private static void logPhrase(long segmentMs, long voicedMs, long transcribeMs,
+                                  @Nullable JSONObject result, int textLength, @NonNull String outcome) {
+        StringBuilder message = new StringBuilder("phrase: segmentMs=").append(segmentMs)
+            .append(" voicedMs=").append(voicedMs)
+            .append(" transcribeMs=").append(transcribeMs);
+        JSONObject timings = result == null ? null : result.optJSONObject("timings");
+        if (timings != null) {
+            message.append(" melMs=").append(timings.optLong("melMs"))
+                .append(" encodeMs=").append(timings.optLong("encodeMs"))
+                .append(" decodeMs=").append(timings.optLong("decodeMs"))
+                .append(" decodeSteps=").append(timings.optLong("decodeSteps"));
+        }
+        message.append(" textLength=").append(textLength).append(" outcome=").append(outcome);
+        Logger.logInfo(LOG_TAG, message.toString());
+    }
+
+    /** Little-endian PCM16 at 16 kHz mono under {@code cacheDir/tai-ipc}, the form the runtime reads raw. */
+    @NonNull
+    private File writePcm(@NonNull short[] pcm) throws IOException {
+        File dir = new File(appContext.getCacheDir(), TaiManager.STT_IPC_DIR);
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot create " + dir);
+        File out = new File(dir, "stt-" + UUID.randomUUID() + ".pcm");
+        ByteBuffer bytes = ByteBuffer.allocate(pcm.length * 2).order(ByteOrder.LITTLE_ENDIAN);
+        bytes.asShortBuffer().put(pcm);
+        try (FileOutputStream stream = new FileOutputStream(out)) {
+            stream.write(bytes.array());
+        }
+        return out;
+    }
+
+    /**
+     * Debug builds keep each segment as captured (before {@link VoiceGain}) in
+     * {@code cache/voice-debug/segment-N.pcm}, N cycling through 0–7, to replay it with
+     * {@code tai transcribe} when a phrase comes out wrong.
+     */
+    private void keepForDebugging(int sequence, @NonNull short[] pcm) {
+        File dir = new File(appContext.getCacheDir(), DEBUG_DIR);
+        if (!dir.isDirectory() && !dir.mkdirs()) return;
+        ByteBuffer bytes = ByteBuffer.allocate(pcm.length * 2).order(ByteOrder.LITTLE_ENDIAN);
+        bytes.asShortBuffer().put(pcm);
+        try (FileOutputStream stream = new FileOutputStream(new File(dir, "segment-" + (sequence % 8) + ".pcm"))) {
+            stream.write(bytes.array());
+        } catch (IOException e) {
+            Logger.logWarn(LOG_TAG, "keeping the debug segment failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Debug builds also keep the whole session's audio as the VAD sees it (after the lead-in
+     * discard) in {@code cache/voice-debug/session-<yyyyMMdd-HHmmss>.pcm}, for
+     * {@code VoiceReplayRig} to feed back through the same detector on a host machine. Streamed
+     * from the capture thread through a small buffer, never held in memory as one array; {@code null}
+     * when the file could not be opened, which the capture loop then simply does not record to.
+     */
+    @Nullable
+    private OutputStream openSessionRecording() {
+        File dir = new File(appContext.getCacheDir(), DEBUG_DIR);
+        if (!dir.isDirectory() && !dir.mkdirs()) return null;
+        String name = "session-" + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".pcm";
+        try {
+            return new BufferedOutputStream(new FileOutputStream(new File(dir, name)));
+        } catch (IOException e) {
+            Logger.logWarn(LOG_TAG, "opening the session recording failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** {@code pcm[offset, offset + count)} as little-endian PCM16 bytes, straight to {@code out}. */
+    private static void writePcmLittleEndian(@NonNull OutputStream out, @NonNull short[] pcm, int offset, int count) {
+        try {
+            byte[] bytes = new byte[count * 2];
+            for (int i = 0; i < count; i++) {
+                short sample = pcm[offset + i];
+                bytes[i * 2] = (byte) sample;
+                bytes[i * 2 + 1] = (byte) (sample >> 8);
+            }
+            out.write(bytes);
+        } catch (IOException e) {
+            Logger.logWarn(LOG_TAG, "writing the session recording failed: " + e.getMessage());
+        }
+    }
+
+    /** Deletes every {@code session-*.pcm} beyond the {@link #MAX_SESSION_RECORDINGS} newest (by name, which sorts chronologically). */
+    private void pruneOldSessionRecordings() {
+        File dir = new File(appContext.getCacheDir(), DEBUG_DIR);
+        File[] files = dir.listFiles((d, name) -> name.startsWith("session-") && name.endsWith(".pcm"));
+        if (files == null || files.length <= MAX_SESSION_RECORDINGS) return;
+        Arrays.sort(files, (a, b) -> b.getName().compareTo(a.getName()));
+        for (int i = MAX_SESSION_RECORDINGS; i < files.length; i++) {
+            //noinspection ResultOfMethodCallIgnored
+            files[i].delete();
+        }
+    }
+
+    private void fail(@NonNull Failure failure) {
+        if (!failed.compareAndSet(false, true)) return;
+        Logger.logWarn(LOG_TAG, "voice input failed: " + failure.code + ": " + failure.message);
+        mainHandler.post(() -> {
+            if (endReason == null) endReason = EndReason.FAILED;
+            if (!discardResults) host.onFailure(failure.code, failure.message, anyTranscript);
+        });
+        stop(EndReason.FAILED);
+    }
+
+    // ------------------------------------------------------------------ main thread
+
+    private void deliver(int sequence, @NonNull String text) {
+        mainHandler.post(() -> {
+            delivered++;
+            List<String> ready = sequencer.offer(sequence, text);
+            if (!discardResults && !ended) {
+                host.onSegmentSettled();
+                for (String item : ready) {
+                    if (item.trim().isEmpty()) continue;
+                    anyTranscript = true;
+                    host.onTranscript(item);
+                }
+            }
+            maybeEnd();
+        });
+    }
+
+    /** Ends once the microphone is released and every captured segment has come back. */
+    private void maybeEnd() {
+        if (ended || !stopRequested.get() || record != null) return;
+        if (!discardResults && delivered < submitted.get()) return;
+        ended = true;
+        sttExecutor.shutdown();
+        EndReason reason = endReason == null ? EndReason.FAILED : endReason;
+        Logger.logInfo(LOG_TAG, "session ended: " + reason + ", segments=" + submitted.get()
+            + " delivered=" + delivered);
+        // The activity going away is not something to chime about; every other end is.
+        if (reason == EndReason.FAILED) feedback.onError();
+        else if (reason != EndReason.DESTROYED) feedback.onStop();
+        feedback.release();
+        host.onEnded(reason);
+    }
+
+    private static float dbfs(float rms) {
+        return rms <= 0f ? -100f : (float) (20.0 * Math.log10(rms));
+    }
+
+    /**
+     * An error answer from the runtime, in either of its shapes: flat {@code {error, message}} or
+     * OpenAI's nested one. Package-private so {@link LocalTaiVoiceTextPolisher} reads chat answers
+     * the same way.
+     */
+    static final class Failure {
+        final String code;
+        final String message;
+
+        Failure(@NonNull String code, @NonNull String message) {
+            this.code = code;
+            this.message = message;
+        }
+
+        @Nullable
+        static Failure of(@Nullable JSONObject result) {
+            if (result == null) return new Failure("stt_no_answer", "No answer from the speech runtime.");
+            JSONObject nested = result.optJSONObject("error");
+            if (nested != null) {
+                return new Failure(nested.optString("code", "tai_error"), nested.optString("message", ""));
+            }
+            String flat = result.optString("error", "");
+            if (!flat.isEmpty()) return new Failure(flat, result.optString("message", ""));
+            if (result.optInt("_statusCode", 200) >= 400) {
+                return new Failure("http_" + result.optInt("_statusCode"), result.optString("message", ""));
+            }
+            return null;
+        }
+    }
+}

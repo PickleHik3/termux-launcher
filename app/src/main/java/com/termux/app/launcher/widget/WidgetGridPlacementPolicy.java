@@ -29,7 +29,7 @@ public final class WidgetGridPlacementPolicy {
     public static Result findPlacement(@NonNull WidgetGridDefinition grid,
                                        @NonNull List<LauncherWidgetRecord> records,
                                        int columnSpan, int rowSpan) {
-        return findPlacement(grid, records, columnSpan, rowSpan, -1);
+        return findPlacement(grid, records, columnSpan, rowSpan, IGNORE_NONE);
     }
 
     @NonNull
@@ -54,8 +54,14 @@ public final class WidgetGridPlacementPolicy {
 
     public static boolean validate(@NonNull WidgetGridDefinition grid,
                                    @NonNull List<LauncherWidgetRecord> records) {
-        return occupancy(grid, records, -1) != null;
+        return occupancy(grid, records, IGNORE_NONE) != null;
     }
+
+    /**
+     * The id to pass when no record is to be left out of the occupancy: zero, which no widget has
+     * (app widgets are positive, built-ins negative).
+     */
+    public static final int IGNORE_NONE = 0;
 
     public static boolean canPlace(@NonNull WidgetGridDefinition grid,
                                    @NonNull List<LauncherWidgetRecord> records,

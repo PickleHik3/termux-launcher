@@ -65,8 +65,11 @@ public class LauncherToolRegistryTest {
         // then by the keyboard layout pair, then by the four keyboard-type and
         // keyboard-visibility tools, and finally by pane.layout, pane.move_to_edge and wall.go,
         // whose one enum argument the palette and the extra-keys picker both offer as a row per
-        // value rather than as a prompt, and by app.open_help, the command palette's door to help.
-        assertEquals(80, registry.getUiTools().size());
+        // value rather than as a prompt, and by app.open_help, the command palette's door to help,
+        // and by keyboard.clipboard, the keyboard's clipboard panel on a key or a chord, and by
+        // keyboard.toggle_enabled, which turns the keyboard off so a tap no longer raises it, and by
+        // voice.dictate, the Dictate key that starts a dictation on any place.
+        assertEquals(84, registry.getUiTools().size());
     }
 
     @Test
@@ -486,6 +489,22 @@ public class LauncherToolRegistryTest {
             assertTrue(name + " is available with it",
                 tool.availabilityIn(context(true, true, false, true)).available);
         }
+    }
+
+    @Test
+    public void voiceDictate_isUserFacingUnboundAndNeedsNoLauncherKeyboard() {
+        LauncherToolRegistry.ToolMetadata tool = registry.getTool("voice.dictate");
+        assertNotNull(tool);
+        assertEquals(LauncherToolRegistry.CATEGORY_KEYBOARD, tool.category);
+        assertTrue(tool.titleRes != 0);
+        assertTrue(tool.descriptionRes != 0);
+        assertEquals(LauncherToolRegistry.ToolRisk.LOW, tool.risk);
+        assertFalse(tool.requiresConfirmation);
+        assertTrue(tool.defaultBindings.isEmpty());
+        // Home, Display and Android's keyboard are what it is for.
+        assertTrue(tool.availabilityIn(context(true, false, false, false)).available);
+        // The pill is its readout; naming it in a notice too would be clutter.
+        assertTrue(tool.selfEvident);
     }
 
     @Test

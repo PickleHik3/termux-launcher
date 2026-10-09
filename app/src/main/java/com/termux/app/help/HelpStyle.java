@@ -120,11 +120,10 @@ final class HelpStyle {
     }
 
     /**
-     * The card a recorded clip plays in: the same corner and the same faint fill as the note and
-     * the rows around it, so a moving picture sits in the page like everything else. The fill is
-     * only ever seen for the instant before the first frame arrives.
+     * The card a topic's diagram sits in: the same corner and the same faint fill as the note and
+     * the rows around it, so the drawing sits in the page like everything else.
      */
-    GradientDrawable clipCard() {
+    GradientDrawable diagramCard() {
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(ColorUtils.setAlphaComponent(dress.textColor, 20));
         shape.setCornerRadius(dp(10));
@@ -160,44 +159,47 @@ final class HelpStyle {
         return view;
     }
 
-    /** A button of the panel. */
+    /** A tonal button of the panel. */
     TextView button(String label, boolean enabled, Runnable onClick) {
-        TextView view = new TextView(context);
+        com.google.android.material.button.MaterialButton view =
+            new com.google.android.material.button.MaterialButton(context);
         view.setText(label);
         view.setContentDescription(label);
-        view.setTextSize(14);
         view.setAllCaps(false);
-        view.setGravity(Gravity.CENTER);
         view.setMinHeight(dp(48));
         view.setMinWidth(dp(48));
         view.setSingleLine(true);
         view.setEllipsize(TextUtils.TruncateAt.END);
-        view.setPadding(dp(12), dp(8), dp(12), dp(8));
-        view.setTextColor(enabled ? accent : ColorUtils.setAlphaComponent(dress.textColor, 97));
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(ColorUtils.setAlphaComponent(accent, enabled ? 28 : 12));
-        shape.setCornerRadius(dp(10));
-        view.setBackground(shape);
+        int onSurface = com.termux.app.material.M3.onSurface(context);
+        int container = com.termux.app.material.M3.color(context,
+            com.google.android.material.R.attr.colorSecondaryContainer,
+            com.google.android.material.R.color.m3_sys_color_dark_secondary_container);
+        int onContainer = com.termux.app.material.M3.color(context,
+            com.google.android.material.R.attr.colorOnSecondaryContainer,
+            com.google.android.material.R.color.m3_sys_color_dark_on_secondary_container);
+        int[][] states = {{-android.R.attr.state_enabled}, {}};
+        view.setBackgroundTintList(new android.content.res.ColorStateList(states, new int[] {
+            com.termux.app.material.M3.stateLayer(onSurface,
+                com.termux.app.material.M3.DISABLED_CONTAINER), container}));
+        view.setTextColor(new android.content.res.ColorStateList(states, new int[] {
+            com.termux.app.material.M3.stateLayer(onSurface,
+                com.termux.app.material.M3.DISABLED_CONTENT), onContainer}));
         view.setEnabled(enabled);
-        view.setFocusable(enabled);
-        view.setClickable(enabled);
         if (enabled && onClick != null) view.setOnClickListener(v -> onClick.run());
         return view;
     }
 
-    /** A link in the page: the utility links, and the two that leave for the web. */
+    /** A text button in the page: the utility links, and the two that leave for the web. */
     TextView link(String label, Runnable onClick) {
-        TextView view = new TextView(context);
+        com.google.android.material.button.MaterialButton view =
+            new com.google.android.material.button.MaterialButton(context, null,
+                androidx.appcompat.R.attr.borderlessButtonStyle);
         view.setText(label);
         view.setContentDescription(label);
-        view.setTextSize(14);
-        view.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        view.setAllCaps(false);
         view.setTextColor(accent);
         view.setMinHeight(dp(48));
-        view.setGravity(Gravity.CENTER_VERTICAL);
-        view.setPadding(dp(4), dp(8), dp(4), dp(8));
-        view.setClickable(true);
-        view.setFocusable(true);
+        view.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         if (onClick != null) view.setOnClickListener(v -> onClick.run());
         return view;
     }
@@ -278,10 +280,10 @@ final class HelpStyle {
         return params;
     }
 
-    LinearLayout.LayoutParams beside(int leftMargin) {
+    LinearLayout.LayoutParams beside(int startMargin) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.leftMargin = leftMargin;
+        params.setMarginStart(startMargin);
         return params;
     }
 

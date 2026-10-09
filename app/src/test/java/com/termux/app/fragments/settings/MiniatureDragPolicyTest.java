@@ -25,7 +25,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Where a bar lifted off the Layout editor's miniature may be dropped: every bar, both
+ * Where a bar lifted off the layout canvas may be dropped: every bar, both
  * orientations, and both states of the pinned apps row, which is what decides whether the
  * A&#8211;Z index has an edge of its own to be dragged to at all.
  *
@@ -56,19 +56,44 @@ public class MiniatureDragPolicyTest {
         Arrays.asList(Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT);
 
     @Test
+    public void theDocksRowsAreOfferedTheSideUnderTheKeyboardAndTheStatusBarIsNot() {
+        PlaceLayout layout = layout(RowPlacement.BOTTOM);
+        for (Bar bar : new Bar[] {Bar.APPS_ROW, Bar.AZ_INDEX, Bar.EXTRA_KEYS}) {
+            Targets offered = targets(bar, PlaceOrientation.PORTRAIT, layout);
+            assertEquals(bar + ": nothing stands under it yet, so one gap", 1,
+                offered.gapsUnderKeyboard());
+            assertTrue(offered.underKeyboardDrops.get(0).underKeyboard);
+        }
+        assertEquals(0, targets(Bar.STATUS_BAR, PlaceOrientation.PORTRAIT, layout)
+            .gapsUnderKeyboard());
+    }
+
+    @Test
+    public void aGapUnderTheKeyboardIsOneRegionAndTheBottomsOwnGapsAnother() {
+        Slot over = new Slot(Edge.BOTTOM, 0, 10f, 0f, 0f, 10f, 10f);
+        Slot under = new Slot(Edge.BOTTOM, 0, 20f, 0f, 15f, 10f, 20f, true);
+        Slot top = new Slot(Edge.TOP, 0, 0f, 0f, 0f, 10f, 5f, true);
+        assertFalse(over.sameGroup(under));
+        assertTrue(under.sameGroup(new Slot(Edge.BOTTOM, 1, 18f, 0f, 16f, 10f, 20f, true)));
+        assertFalse("only the bottom has an under side", top.underKeyboard);
+    }
+
+    @Test
     public void everyBarIsNamedForAnElementAndBackAgain() {
         for (Bar bar : Bar.values()) assertSame(bar, Bar.of(bar.element()));
         assertSame(Element.AZ, Bar.AZ_INDEX.element());
     }
 
     @Test
-    public void theStatusBarMovesBetweenEdgesAndNeverHides() {
+    public void theStatusBarMovesBetweenEdgesAndMayHideLikeTheRest() {
+        // Paging is the border drag, so nothing rides the status bar's swipe any more and the
+        // tray is one of its targets like any other bar's.
         for (RowPlacement appsRow : RowPlacement.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 Targets offered = targets(Bar.STATUS_BAR, orientation, layout(appsRow));
                 assertEquals(orientation + ": a column down the side is allowed in both",
                     EVERY_EDGE, edges(offered));
-                assertFalse("the status bar is never hidden", offered.tray);
+                assertTrue("the status bar may be put away", offered.tray);
             }
         }
     }
@@ -121,7 +146,7 @@ public class MiniatureDragPolicyTest {
 
     @Test
     public void aHiddenAzIndexUnderThePinnedAppsComesBackToAnyEdge() {
-        // Its chip in the tray is lifted by the same grip as any other and lands wherever it is
+        // Its chip in the tray is lifted like any other bar and lands wherever it is
         // dropped; the bottom is simply where it rejoins the row.
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             Targets hidden = targets(Bar.AZ_INDEX, orientation, layout(RowPlacement.BOTTOM, false));
@@ -146,7 +171,7 @@ public class MiniatureDragPolicyTest {
 
     @Test
     public void anAlreadyHiddenAzIndexIsOfferedTheSameEdgesItWouldStandOn() {
-        // A chip in the tray is lifted by the same grip and dropped on the same slots; the stored
+        // A chip in the tray is lifted like any bar and dropped on the same slots; the stored
         // shown/hidden switch is not what decides where it may go.
         Targets hidden = targets(Bar.AZ_INDEX, PlaceOrientation.LANDSCAPE,
             layout(RowPlacement.HIDDEN, false));
@@ -251,5 +276,17 @@ public class MiniatureDragPolicyTest {
         assertEquals(2, gap.index);
         assertEquals(88f, gap.line, 0.0001f);
         assertFalse(gap.isTray());
+    }
+
+    // ---- The trash and its popup ---------------------------------------------------------------
+
+    @Test
+    public void theTrashIsOutlinedWhileNothingIsHiddenAndFilledOnceSomethingIs() {
+        assertSame(MiniatureDragPolicy.TrashState.EMPTY, MiniatureDragPolicy.trashState(0));
+        assertSame(MiniatureDragPolicy.TrashState.FILLED, MiniatureDragPolicy.trashState(1));
+        assertSame(MiniatureDragPolicy.TrashState.FILLED, MiniatureDragPolicy.trashState(5));
+        assertEquals("3", MiniatureDragPolicy.badgeText(3));
+        assertEquals("a count that outgrows the disc is capped", "9+",
+            MiniatureDragPolicy.badgeText(12));
     }
 }

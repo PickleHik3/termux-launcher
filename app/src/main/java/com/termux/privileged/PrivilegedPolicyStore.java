@@ -13,8 +13,24 @@ public final class PrivilegedPolicyStore {
     public static final String KEY_MASTER_ENABLED = "priv_master_enabled";
     public static final String KEY_PREFER_SHIZUKU = "priv_prefer_shizuku";
     public static final String KEY_ALLOW_SHELL_FALLBACK = "priv_allow_shell_fallback";
+    /** The privileged lane: catalog tools marked {@code priv=shizuku} may run as shell (see {@code com.termux.privileged.lane}). */
+    public static final String KEY_LANE_ENABLED = "priv_lane_enabled";
 
     private PrivilegedPolicyStore() {
+    }
+
+    /** True when the master switch and the lane's own switch are both on; the lane refuses every request otherwise. */
+    public static boolean isLaneEnabled(Context context) {
+        return isMasterEnabled(context) && isLaneSwitchOn(context);
+    }
+
+    /** The lane's own switch alone, for the settings row, which shows it even while the master switch is off. */
+    public static boolean isLaneSwitchOn(Context context) {
+        return getPrefs(context).getBoolean(KEY_LANE_ENABLED, true);
+    }
+
+    public static void setLaneEnabled(Context context, boolean enabled) {
+        getPrefs(context).edit().putBoolean(KEY_LANE_ENABLED, enabled).apply();
     }
 
     public static boolean isMasterEnabled(Context context) {

@@ -37,8 +37,8 @@ public class StatusBarSwipeLayoutTest {
 
     @Test
     public void sidewaysSwipes_neverChangeTheForm() {
-        // The bar is the pager: a sideways drag moves the wall or nothing. Folding and unfolding
-        // belong to the vertical drag alone, whichever form the bar is in.
+        // A sideways drag on the bar is nobody's: the wall is paged from the pane's border, and
+        // folding and unfolding belong to the vertical drag alone, whichever form the bar is in.
         StatusBarSwipeLayout view = createView();
         List<Boolean> requests = new ArrayList<>();
         view.setCollapsed(true);
@@ -76,27 +76,17 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void windowBarEdgeOverswipeStaysTheStripsOwnStreamThroughRealDispatch() {
+    public void aSidewaysStreamOnTheWindowBarNeverReachesTheSwipeHostThroughRealDispatch() {
         StatusBarSwipeLayout view = createView();
         TerminalWindowBar bar = new TerminalWindowBar(view.getContext(), null);
         bar.setId(R.id.terminal_window_bar);
-        List<String> barRequests = new ArrayList<>();
         List<String> parentRequests = new ArrayList<>();
-        bar.setOnEdgeOverswipeListener(new TerminalWindowBar.OnEdgeOverswipeListener() {
-            @Override public boolean onEdgeOverswipeBegin() { barRequests.add("begin"); return true; }
-            @Override public void onEdgeOverswipe(float dxPx) { }
-            @Override public void onEdgeOverswipeEnd(float velocityPxPerSec) {
-                barRequests.add("end");
-            }
-            @Override public void onEdgeOverswipeCancel() { barRequests.add("cancel"); }
-        });
         view.setListener(collapsed -> parentRequests.add("swipe"));
         view.addView(bar, new FrameLayout.LayoutParams(200, 30));
         bar.layout(0, 0, 200, 30);
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 20, 15));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 90, 15));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 90, 15));
-        assertEquals(java.util.Arrays.asList("begin", "end"), barRequests);
         assertTrue(parentRequests.isEmpty());
     }
 
@@ -116,7 +106,7 @@ public class StatusBarSwipeLayoutTest {
         swipe(view, 100f, 105f, 70f, 15f);
         assertEquals(0, requests.size());
 
-        // A sideways drag with no wall to move is nobody's, and never a form change.
+        // A sideways drag is nobody's, and never a form change.
         requests.clear();
         swipe(view, 160f, 30f, 40f, 40f);
         assertEquals(0, requests.size());
@@ -163,55 +153,6 @@ public class StatusBarSwipeLayoutTest {
         assertNotEquals(0xFFB0B0B0, view.pullHintColor());
         assertEquals(androidx.core.content.ContextCompat.getColor(view.getContext(),
             R.color.termux_primary), view.pullHintColor());
-    }
-
-    /** Records the wall-drag stream the bar sends. */
-    private static final class WallListener implements StatusBarSwipeLayout.Listener {
-        final List<String> events = new ArrayList<>();
-        @Override public void onCollapsedStateRequested(boolean collapsed) { events.add("form"); }
-        @Override public boolean onWallDragBegin() { events.add("begin"); return true; }
-        @Override public void onWallDrag(float dxPx) { events.add("drag"); }
-        @Override public void onWallDragEnd(float velocityPxPerSec) { events.add("end"); }
-        @Override public void onWallDragCancel() { events.add("cancel"); }
-    }
-
-    @Test
-    public void cancelWallDragEndsTheStreamWithoutAnEndOrCancel() {
-        StatusBarSwipeLayout view = createView();
-        view.setWallAvailable(true);
-        WallListener listener = new WallListener();
-        view.setListener(listener);
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 40f));
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 160f, 40f));
-        assertEquals(java.util.Arrays.asList("begin", "drag"), listener.events);
-
-        // The wall moved on its own (a tile tap, wall.go, Home) and says so.
-        view.cancelWallDrag();
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 190f, 40f));
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 190f, 40f));
-
-        assertEquals("the rest of that finger reaches nobody",
-            java.util.Arrays.asList("begin", "drag"), listener.events);
-
-        // The next touch starts clean.
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 40f));
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 160f, 40f));
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 160f, 40f));
-        assertEquals(java.util.Arrays.asList("begin", "drag", "begin", "drag", "end"),
-            listener.events);
-    }
-
-    @Test
-    public void cancelWallDragWithNoDragUnderWayIsANoOp() {
-        StatusBarSwipeLayout view = createView();
-        view.setWallAvailable(true);
-        WallListener listener = new WallListener();
-        view.setListener(listener);
-
-        view.cancelWallDrag();
-        swipe(view, 100f, 160f, 40f, 40f);
-
-        assertEquals(java.util.Arrays.asList("begin", "drag", "end"), listener.events);
     }
 
     private static StatusBarSwipeLayout createView() {

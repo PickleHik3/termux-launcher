@@ -46,7 +46,7 @@ public class WidgetPickerSearchFocusSeamTest {
         assertEquals(2, fixture.events.size());
         assertNull(fixture.events.get(1)); // the terminal's keyboard arrangement comes back
         assertFalse(search.hasFocus());
-        assertFalse(search.isFocusable());
+        assertFalse(search.isFocusableInTouchMode());
         assertEquals("", search.getText().toString());
     }
 
@@ -58,6 +58,19 @@ public class WidgetPickerSearchFocusSeamTest {
         search.clearFocus();
         assertEquals(2, fixture.events.size());
         assertNull(fixture.events.get(1));
+    }
+
+    @Test public void keyboardFocusReachesSearchWithoutTheImeUntilEnter() {
+        Fixture fixture = new Fixture();
+        fixture.controller.openPicker();
+        EditText search = fixture.pane.picker().searchField();
+        assertTrue(search.isFocusable()); assertFalse(search.isFocusableInTouchMode());
+        assertTrue(search.requestFocus());
+        assertTrue(fixture.events.isEmpty()); // landing on the field is not asking for the keyboard
+        assertTrue(search.dispatchKeyEvent(new android.view.KeyEvent(
+            android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ENTER)));
+        assertEquals(1, fixture.events.size());
+        assertSame(search, fixture.events.get(0));
     }
 
     private static final class Fixture {

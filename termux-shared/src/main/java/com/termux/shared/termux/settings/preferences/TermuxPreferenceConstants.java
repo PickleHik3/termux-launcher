@@ -171,6 +171,11 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED = true;
 
+        /** How the launcher's own widgets are drawn: {@code tonal} or {@code pane}. */
+        public static final String KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE =
+            "app_launcher_builtin_widget_style";
+        public static final String DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE = "tonal";
+
         /** The widget pane's grid: how many columns across and rows down a page has. */
         public static final String KEY_APP_LAUNCHER_WIDGET_GRID_COLUMNS = "app_launcher_widget_grid_columns";
 
@@ -290,16 +295,21 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_WALL_LAST_PAGE = "wall_last_page";
 
         /**
-         * Defines the key for the launcher / terminal-only use case the user picked. Stored rather
-         * than derived from the surface switches: the surfaces stay individually settable after a
-         * mode is picked, and a derived mode would jump between the two the moment one is flipped.
+         * Defines the key for the usage mode the user picked: the terminal alone, the terminal
+         * with the home screen, or both with the Linux display. Stored rather than derived from
+         * the surface switches: the surfaces stay individually settable after a mode is picked,
+         * and a derived mode would jump between presets the moment one is flipped. The value
+         * {@link #APP_LAUNCHER_USE_CASE_MODE_LAUNCHER} is what the older two-way switch wrote;
+         * it is read once and mapped by {@code LauncherUseCaseMode}, never written again.
          */
         public static final String KEY_APP_LAUNCHER_USE_CASE_MODE = "app_launcher_use_case_mode";
 
         public static final String APP_LAUNCHER_USE_CASE_MODE_LAUNCHER = "launcher";
         public static final String APP_LAUNCHER_USE_CASE_MODE_TERMINAL = "terminal";
+        public static final String APP_LAUNCHER_USE_CASE_MODE_HOME = "home";
+        public static final String APP_LAUNCHER_USE_CASE_MODE_DISPLAY = "display";
         public static final String DEFAULT_APP_LAUNCHER_USE_CASE_MODE =
-            APP_LAUNCHER_USE_CASE_MODE_LAUNCHER;
+            APP_LAUNCHER_USE_CASE_MODE_HOME;
 
         /**
          * Defines the key holding the launcher surface states captured when the user switched to
@@ -319,19 +329,40 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_APP_LAUNCHER_NOTIFICATION_DOTS = false;
 
         /**
-         * Defines the key for persisting notification history to {@code ~/.launcherctl}.
+         * Defines the key for the packages whose notifications are written to the history under
+         * {@code ~/.launcherctl}. A string set, empty by default.
          *
-         * <p>Separate from notification access itself, and off by default. Notification access is
-         * granted for dots, the status bar and the top pane, all of which only need notifications
-         * in memory. Writing their contents -- titles, texts, expanded texts, so SMS bodies, email
-         * previews and 2FA codes -- into the Termux home puts them inside the shell's trust domain,
-         * where every package and script running under the app UID can read them. That is a second,
-         * larger decision, so it is asked separately rather than inherited from the grant.
+         * <p>History is opt-in per app and separate from notification access itself. Notification
+         * access is granted for dots, the status bar and the top pane, all of which only need
+         * notifications in memory. Writing their contents -- titles, texts, expanded texts, so SMS
+         * bodies, email previews and 2FA codes -- into the Termux home puts them inside the shell's
+         * trust domain, where every package and script running under the app UID can read them.
+         * That is a second, larger decision, so it is asked separately and only for the apps the
+         * user names; an empty set records nothing.
          */
-        public static final String KEY_APP_LAUNCHER_NOTIFICATION_HISTORY =
-            "app_launcher_notification_history";
+        public static final String KEY_APP_NOTIFICATION_HISTORY_PACKAGES =
+            "app_notification_history_packages";
 
-        public static final boolean DEFAULT_APP_LAUNCHER_NOTIFICATION_HISTORY = false;
+        /**
+         * Defines the key for how many days a recorded notification is kept before it is pruned.
+         * Allowed values are {@link #MIN_APP_NOTIFICATION_HISTORY_RETENTION_DAYS} to
+         * {@link #MAX_APP_NOTIFICATION_HISTORY_RETENTION_DAYS}.
+         */
+        public static final String KEY_APP_NOTIFICATION_HISTORY_RETENTION_DAYS =
+            "app_notification_history_retention_days";
+
+        public static final int DEFAULT_APP_NOTIFICATION_HISTORY_RETENTION_DAYS = 30;
+        public static final int MIN_APP_NOTIFICATION_HISTORY_RETENTION_DAYS = 1;
+        public static final int MAX_APP_NOTIFICATION_HISTORY_RETENTION_DAYS = 365;
+
+        /**
+         * Defines the key for masking one-time codes (4-8 digits next to words like code, OTP or
+         * PIN) before a notification is written to the history. On by default.
+         */
+        public static final String KEY_APP_NOTIFICATION_HISTORY_MASK_CODES =
+            "app_notification_history_mask_codes";
+
+        public static final boolean DEFAULT_APP_NOTIFICATION_HISTORY_MASK_CODES = true;
 
         /**
          * Defines the key for the optional dynamic "most used apps" dock page.
@@ -352,18 +383,40 @@ public final class TermuxPreferenceConstants {
         public static final float MAX_APP_LAUNCHER_BAR_HEIGHT = 3.0f;
 
         /**
-         * Defines the visual surface style for the app launcher dock.
+         * Defines the Style of the whole chrome: {@code docked} or {@code floating}. The key keeps
+         * its old name; the values were {@code default} / {@code rounded} until the one-time
+         * migration of the Style rework ({@link #KEY_LAYOUT_STYLE_MIGRATED}).
          */
         public static final String KEY_APP_LAUNCHER_DOCK_STYLE = "app_launcher_dock_style";
 
-        public static final String APP_LAUNCHER_DOCK_STYLE_DEFAULT = "default";
+        public static final String APP_LAUNCHER_DOCK_STYLE_DOCKED = "docked";
 
-        public static final String APP_LAUNCHER_DOCK_STYLE_ROUNDED = "rounded";
+        public static final String APP_LAUNCHER_DOCK_STYLE_FLOATING = "floating";
+
+        /** Old name of {@link #APP_LAUNCHER_DOCK_STYLE_DOCKED}; same stored value. */
+        @Deprecated
+        public static final String APP_LAUNCHER_DOCK_STYLE_DEFAULT = APP_LAUNCHER_DOCK_STYLE_DOCKED;
+
+        /** Old name of {@link #APP_LAUNCHER_DOCK_STYLE_FLOATING}; same stored value. */
+        @Deprecated
+        public static final String APP_LAUNCHER_DOCK_STYLE_ROUNDED = APP_LAUNCHER_DOCK_STYLE_FLOATING;
+
+        /** Stored value of Docked before the Style rework. Read by the migration only. */
+        public static final String APP_LAUNCHER_DOCK_STYLE_LEGACY_DEFAULT = "default";
+
+        /** Stored value of Floating before the Style rework. Read by the migration only. */
+        public static final String APP_LAUNCHER_DOCK_STYLE_LEGACY_ROUNDED = "rounded";
 
         /** Pre-unification persisted value. Read for migration, but never write it again. */
         public static final String APP_LAUNCHER_DOCK_STYLE_LEGACY_VALARIE_CAPSULE = "valarie_capsule";
 
-        public static final String DEFAULT_APP_LAUNCHER_DOCK_STYLE = APP_LAUNCHER_DOCK_STYLE_DEFAULT;
+        public static final String DEFAULT_APP_LAUNCHER_DOCK_STYLE = APP_LAUNCHER_DOCK_STYLE_DOCKED;
+
+        /** Retired with the Style rework: Docked covers it. Removed by the migration, never read. */
+        public static final String KEY_LEGACY_TERMINAL_FLUSH_DOCK = "terminal_flush_dock";
+
+        /** Set once the Style migration has renamed the style values and dropped the retired keys. */
+        public static final String KEY_LAYOUT_STYLE_MIGRATED = "layout_style_migrated";
 
         /** Custom capsule corner radius in dp, or -1 to follow the selected dock style. */
         public static final String KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS =
@@ -557,17 +610,52 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT = "status_widget_weather_fahrenheit";
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT = false;
 
+        /**
+         * The label of a place picked in Settings ("Salmiya, Hawalli") that the weather is fetched
+         * for instead of the device's location. Empty means the device's last known location, which
+         * is what needs the location permission; a place picked here never does.
+         */
+        public static final String KEY_STATUS_WIDGET_WEATHER_LOCATION = "status_widget_weather_location";
+        public static final String DEFAULT_STATUS_WIDGET_WEATHER_LOCATION = "";
+
+        /**
+         * The picked place's coordinates as "latitude,longitude" (Locale.ROOT decimals), stored with
+         * the label so the forecast is fetched without searching for the place again. Kept as one
+         * string because a float preference would round the coordinates.
+         */
+        public static final String KEY_STATUS_WIDGET_WEATHER_LOCATION_COORDS = "status_widget_weather_location_coords";
+        public static final String DEFAULT_STATUS_WIDGET_WEATHER_LOCATION_COORDS = "";
+
         /** Animate the terminal cursor between its old and new cell instead of jumping. */
         public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
         public static final boolean DEFAULT_TERMINAL_CURSOR_TRAIL = true;
+
+        /**
+         * Paint the empty band between a pane's text grid and its rounded border with the
+         * background colour of the nearest edge cell (Ghostty's {@code window-padding-color =
+         * extend}), so a full-screen app that paints its own background reaches the pane's border.
+         */
+        public static final String KEY_TERMINAL_PADDING_FILL = "terminal_padding_fill";
+        public static final boolean DEFAULT_TERMINAL_PADDING_FILL = true;
+
+        /** Cursor trail style id (default, motion_blur, railgun, torpedo, pixiedust, comet). */
+        public static final String KEY_TERMINAL_CURSOR_TRAIL_STYLE = "terminal_cursor_trail_style";
+        public static final String DEFAULT_TERMINAL_CURSOR_TRAIL_STYLE = "default";
+
+        /** Retro terminal effect id (none, crt, crt_green, crt_amber, tft). Global, API 33+. */
+        public static final String KEY_TERMINAL_RETRO_EFFECT = "terminal_retro_effect";
+        public static final String DEFAULT_TERMINAL_RETRO_EFFECT = "none";
 
         /** Whether an OSC 52 query ("ESC ] 52 ; c ; ? BEL") may read the Android clipboard. */
         public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
         public static final boolean DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = true;
 
-        /** Whether copying a wrapped row trims its trailing padding spaces like an unwrapped row. */
-        public static final String KEY_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES = "terminal_trim_wrapped_trailing_spaces";
-        public static final boolean DEFAULT_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES = true;
+        /**
+         * Whether copy drops a line's trailing spaces and tabs and trailing blank lines, and a
+         * single-line paste drops its trailing whitespace and newline.
+         */
+        public static final String KEY_TERMINAL_CLIPBOARD_CLEANUP = "terminal_clipboard_cleanup";
+        public static final boolean DEFAULT_TERMINAL_CLIPBOARD_CLEANUP = true;
 
         /**
          * Defines the key for showing focused app names while scrubbing the dock.
@@ -617,6 +705,11 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_APP_LAUNCHER_AZ_ROW_ENABLED = "app_launcher_az_row_enabled";
 
         public static final boolean DEFAULT_APP_LAUNCHER_AZ_ROW_ENABLED = true;
+
+        /** Master switch for every haptic the app raises; the per-feature haptics are ANDed with it. */
+        public static final String KEY_APP_HAPTICS_ENABLED = "app_haptics_enabled";
+
+        public static final boolean DEFAULT_APP_HAPTICS_ENABLED = true;
 
         /** Defines whether A-Z and app-row focus changes emit subtle haptic ticks. */
         public static final String KEY_APP_LAUNCHER_ROW_HAPTICS = "app_launcher_row_haptics";
@@ -678,6 +771,16 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_IN_APP_KEYBOARD_ENABLED = true;
 
         /**
+         * Whether the user has switched the keyboard off. Off, a tap on the terminal or a text
+         * field taking focus no longer raises either keyboard; only the keyboard key, or the
+         * palette's on/off action, brings it back. Unlike the input method choice this is a
+         * temporary stance, so it keeps whichever keyboard the user picked in Settings.
+         */
+        public static final String KEY_KEYBOARD_TURNED_OFF = "keyboard_turned_off";
+
+        public static final boolean DEFAULT_KEYBOARD_TURNED_OFF = false;
+
+        /**
          * Defines the key for the in-app keyboard color theme.
          */
         public static final String KEY_IN_APP_KEYBOARD_THEME = "in_app_keyboard_theme";
@@ -721,6 +824,100 @@ public final class TermuxPreferenceConstants {
             "in_app_keyboard_tap_correction";
 
         public static final boolean DEFAULT_IN_APP_KEYBOARD_TAP_CORRECTION = false;
+
+        /**
+         * Which engine the in-app keyboard's voice key uses: {@code system} (the Android
+         * recognizer, an activity) or {@code on_device} (the installed Whisper speech model in the
+         * TAI runtime). The system engine stays the default: it needs no model download.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_ENGINE = "keyboard_voice_engine";
+
+        public static final String IN_APP_KEYBOARD_VOICE_ENGINE_SYSTEM = "system";
+
+        public static final String IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE = "on_device";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_ENGINE = IN_APP_KEYBOARD_VOICE_ENGINE_SYSTEM;
+
+        /**
+         * The language a multilingual speech model is forced to, as an ISO 639-1 code, or
+         * {@code auto} for the keyboard layout's language, then the system locale.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_LANGUAGE = "keyboard_voice_language";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_LANGUAGE = "auto";
+
+        /** The pause, in milliseconds, that closes a spoken phrase and sends it for transcription. */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_PAUSE_MS = "keyboard_voice_pause_ms";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_VOICE_PAUSE_MS = 600;
+
+        public static final int[] IN_APP_KEYBOARD_VOICE_PAUSE_MS_CHOICES = {400, 600, 800, 1200};
+
+        /**
+         * How long without speech ends a voice-input session: 5 s, 10 s (default), 30 s, or 0 for
+         * "Until tap" (no timeout; only a tap, hiding the keyboard, or a failure ends it).
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS =
+            "keyboard_voice_silence_timeout_ms";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS = 5_000;
+
+        /** 0 is "Until tap": no timeout. */
+        public static final int[] IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS_CHOICES =
+            {5_000, 10_000, 30_000, 0};
+
+        /**
+         * Whether on-device voice input plays a short blip when the microphone opens and another
+         * when the session ends (haptics follow {@link #KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED}).
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_SOUNDS = "keyboard_voice_sounds";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_SOUNDS = true;
+
+        /**
+         * Whether a dictation session's text (never a short command) is cleaned up by the local
+         * Gemma chat model for punctuation, casing and mis-hearings in one pass once the session
+         * ends; the phrases are typed as heard first and the line is swapped when it is untouched.
+         * Off by default: it costs a model load and a few seconds at the end.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_POLISH = "keyboard_voice_polish";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH = true;
+
+        /**
+         * The installed chat model "Polish dictation" is pinned to, or an empty string for
+         * Automatic (Gemma 4 E4B when the phone meets its RAM recommendation, or E2B is not there
+         * to fall back on, else E2B).
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_POLISH_MODEL = "keyboard_voice_polish_model";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_MODEL = "";
+
+        /**
+         * How far the dictation cleanup goes: {@code light} (punctuation, capitals, fillers and
+         * self-corrections only) or {@code polished} (also grammar and awkward phrasing, in the
+         * speaker's words; the default).
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_POLISH_LEVEL = "keyboard_voice_polish_level";
+
+        public static final String IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_LIGHT = "light";
+
+        public static final String IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_POLISHED = "polished";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_LEVEL = IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_POLISHED;
+
+        /**
+         * How readily quiet speech opens a phrase in on-device dictation: {@code normal} (the
+         * default, which keeps background talk out) or {@code high} (for speaking softly; it may
+         * hear a TV or a conversation close by). See {@code VoiceMicSensitivity}.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY = "keyboard_voice_mic_sensitivity";
+
+        public static final String IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY_NORMAL = "normal";
+
+        public static final String IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY_HIGH = "high";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY = IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY_NORMAL;
 
         /**
          * Defines the key for the absolute path of a user-imported label font file,
@@ -932,12 +1129,60 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 100;
 
         /**
+         * The keyboard's own blur radius (dp), read only while the KEYBOARD slot's blur is detached
+         * from Base. Legacy installs stored {@code -1} here for "same as the dock".
+         */
+        public static final String KEY_IN_APP_KEYBOARD_BLUR_RADIUS = "in_app_keyboard_blur_radius";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS = -1;
+
+        public static final int MIN_IN_APP_KEYBOARD_BLUR_RADIUS = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_BLUR_RADIUS = 48;
+
+        /**
+         * The keyboard's own film-grain strength (percent), read only while the KEYBOARD slot's
+         * grain is detached from Base. Legacy installs stored {@code -1} here for "same as the dock".
+         */
+        public static final String KEY_IN_APP_KEYBOARD_GRAIN = "in_app_keyboard_grain";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_GRAIN = -1;
+
+        public static final int MIN_IN_APP_KEYBOARD_GRAIN = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_GRAIN = 100;
+
+        /**
+         * Opacity in percent of the keyboard's whole backdrop stack — the blurred wallpaper crop
+         * and the tint above it together — as opposed to {@link #KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY},
+         * which is only the tint's own colour intensity. {@code -1} renders the stack fully opaque,
+         * exactly as every keyboard has until now; a lower value lets the plain wallpaper show
+         * through the whole slab.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY =
+            "in_app_keyboard_backdrop_opacity";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY = -1;
+
+        public static final int MIN_IN_APP_KEYBOARD_BACKDROP_OPACITY = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY = 100;
+
+        /**
          * Defines the key for whether the soft keyboard will be enabled only if no hardware keyboard
          * attached, for cases where users want to use a hardware keyboard instead.
          */
         public static final String KEY_SOFT_KEYBOARD_ENABLED_ONLY_IF_NO_HARDWARE = "soft_keyboard_enabled_only_if_no_hardware";
 
         public static final boolean DEFAULT_VALUE_KEY_SOFT_KEYBOARD_ENABLED_ONLY_IF_NO_HARDWARE = false;
+
+        /**
+         * Defines the key for whether a hardware keyboard Ctrl+Space is passed to Android instead
+         * of being sent to the terminal, so the system can switch the hardware keyboard language.
+         */
+        public static final String KEY_PASS_CTRL_SPACE_TO_ANDROID = "pass_ctrl_space_to_android";
+
+        public static final boolean DEFAULT_VALUE_KEY_PASS_CTRL_SPACE_TO_ANDROID = false;
 
         /**
          * Defines the key for whether termux will remove itself from the recent apps screen when
@@ -979,6 +1224,58 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_LAZY_MODE = "lazy_mode";
         public static final boolean DEFAULT_VALUE_LAZY_MODE = false;
+
+        /**
+         * Fancier Glass: every glass surface bends the wallpaper at its rim and catches a light
+         * along its edge, on top of the frost it already wears. On by default wherever it can run (every Look sets its depth). Needs Android 13
+         * and a wallpaper set from inside the launcher; anywhere else the switch is offered
+         * disabled, or not at all, and the glass is the default look.
+         */
+        public static final String KEY_FANCIER_GLASS = "fancier_glass";
+        public static final boolean DEFAULT_VALUE_FANCIER_GLASS = true;
+
+        /**
+         * How far the wallpaper is bent under a glass rim, in dp of displacement. The three
+         * refraction knobs are global: one look for every glass surface, never per surface. Their
+         * defaults are exactly the numbers the dock's refraction always used, so switching Fancier
+         * Glass on changes nothing about the dock and only lends the same rim to the other
+         * surfaces.
+         */
+        public static final String KEY_FANCIER_GLASS_BEND = "fancier_glass_bend";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_BEND = 9;
+        public static final int MIN_FANCIER_GLASS_BEND = 0;
+        public static final int MAX_FANCIER_GLASS_BEND = 30;
+
+        /** How far in from the rim the bend reaches, in dp. */
+        public static final String KEY_FANCIER_GLASS_EDGE_WIDTH = "fancier_glass_edge_width";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_EDGE_WIDTH = 20;
+        public static final int MIN_FANCIER_GLASS_EDGE_WIDTH = 1;
+        public static final int MAX_FANCIER_GLASS_EDGE_WIDTH = 60;
+
+        /** How bright the hairline along the rim is, as a percentage of the brightest it can be. */
+        public static final String KEY_FANCIER_GLASS_EDGE_LIGHT = "fancier_glass_edge_light";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT = 18;
+        public static final int MIN_FANCIER_GLASS_EDGE_LIGHT = 0;
+        public static final int MAX_FANCIER_GLASS_EDGE_LIGHT = 100;
+
+        /**
+         * The bevel: a specular band along the rim, lit from the top-left with a faint shade at the
+         * bottom-right, as a percentage of the strongest it can be. 0 (the default, and every Look
+         * but Clear and Mist) draws nothing, so the rim is the plain hairline it always was.
+         */
+        public static final String KEY_FANCIER_GLASS_SPECULAR = "fancier_glass_specular";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_SPECULAR = 0;
+        public static final int MIN_FANCIER_GLASS_SPECULAR = 0;
+        public static final int MAX_FANCIER_GLASS_SPECULAR = 100;
+
+        /**
+         * Chromatic dispersion at the rim: red, green and blue are bent by slightly different
+         * amounts, as a percentage of the widest split. 0 (the default) samples all three alike.
+         */
+        public static final String KEY_FANCIER_GLASS_DISPERSION = "fancier_glass_dispersion";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_DISPERSION = 0;
+        public static final int MIN_FANCIER_GLASS_DISPERSION = 0;
+        public static final int MAX_FANCIER_GLASS_DISPERSION = 100;
 
         /**
          * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.
@@ -1130,13 +1427,6 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_VALUE_DOCK_GLASS_GRAIN = 18;
 
         /**
-         * Defines whether the terminal's bottom cell remainder is absorbed by the dock glass.
-         */
-        public static final String KEY_TERMINAL_FLUSH_DOCK = "terminal_flush_dock";
-
-        public static final boolean DEFAULT_VALUE_TERMINAL_FLUSH_DOCK = false;
-
-        /**
          * Defines whether a thin outline border is drawn around the terminal surface.
          */
         public static final String KEY_TERMINAL_BORDER_ENABLED = "terminal_border_enabled";
@@ -1150,6 +1440,8 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_SURFACE_BASE_BLUR = "surface_base_blur";
         public static final String KEY_SURFACE_BASE_OPACITY = "surface_base_opacity";
         public static final String KEY_SURFACE_BASE_GRAIN = "surface_base_grain";
+        /** How much of the Material colour tint the glass wears, percent; 100 is the shipped tint. */
+        public static final String KEY_SURFACE_BASE_TINT = "surface_base_tint";
         public static final String KEY_SURFACE_BASE_CORNER_RADIUS = "surface_base_corner_radius";
         public static final String KEY_SURFACE_BASE_SIDE_GAP = "surface_base_side_gap";
 
@@ -1161,6 +1453,12 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_SURFACE_BASE_BLUR = 8;
         public static final int DEFAULT_SURFACE_BASE_OPACITY = 34;
         public static final int DEFAULT_SURFACE_BASE_GRAIN = 18;
+        public static final int DEFAULT_SURFACE_BASE_TINT = 100;
+        /** Each surface's own tint strength, consulted once it has detached from Base. */
+        public static final String KEY_DOCK_TINT_STRENGTH = "dock_tint_strength";
+        public static final String KEY_STATUS_BAR_TINT_STRENGTH = "status_bar_tint_strength";
+        public static final String KEY_TERMINAL_TINT_STRENGTH = "terminal_tint_strength";
+        public static final String KEY_IN_APP_KEYBOARD_TINT_STRENGTH = "in_app_keyboard_tint_strength";
         public static final int DEFAULT_SURFACE_BASE_CORNER_RADIUS = 24;
         public static final int DEFAULT_SURFACE_BASE_SIDE_GAP = 12;
 
@@ -1179,6 +1477,35 @@ public final class TermuxPreferenceConstants {
         /** Glass at 50 reproduces the shipped Base triple exactly (8 / 34 / 18). */
         public static final String DEFAULT_SURFACE_MATERIAL = SURFACE_MATERIAL_GLASS;
         public static final int DEFAULT_SURFACE_MATERIAL_INTENSITY = 50;
+
+        /*
+         * What a preset carries beyond the numbers: the glass's tint colour, its rim, and how glass
+         * surfaces move. Each is a small enum-like string so a preset stays a plain map and the
+         * selection ring's match test keeps working; an unknown value reads as the default, so a
+         * look written by a newer build degrades to the shipped one.
+         */
+        public static final String KEY_SURFACE_GLASS_TINT = "surface_glass_tint";
+        /** The tint follows the colour scheme's background: what every install has always drawn. */
+        public static final String GLASS_TINT_SCHEME = "scheme";
+        /** Obsidian-Music's ink-blue glass, a white wash over it; white in a light theme. */
+        public static final String GLASS_TINT_OBSIDIAN = "obsidian";
+        /** Glass in Material colours: the scheme tint toward primary container, a surface-tint wash. */
+        public static final String GLASS_TINT_MATERIAL = "material";
+        public static final String DEFAULT_SURFACE_GLASS_TINT = GLASS_TINT_SCHEME;
+
+        public static final String KEY_SURFACE_GLASS_RIM = "surface_glass_rim";
+        /** The 1dp containing stroke in the outline colour: what every install has always drawn. */
+        public static final String GLASS_RIM_HAIRLINE = "hairline";
+        /** The 1dp stroke as a diagonal white gradient, bright top-left and faint bottom-right. */
+        public static final String GLASS_RIM_GRADIENT = "gradient";
+        public static final String DEFAULT_SURFACE_GLASS_RIM = GLASS_RIM_HAIRLINE;
+
+        public static final String KEY_SURFACE_GLASS_MOTION = "surface_glass_motion";
+        /** Glass surfaces move exactly as they always have. */
+        public static final String GLASS_MOTION_CLASSIC = "classic";
+        /** Obsidian-Music's springs: scale and blur settle in, a slower fade, a deeper scrim. */
+        public static final String GLASS_MOTION_MIST = "mist";
+        public static final String DEFAULT_SURFACE_GLASS_MOTION = GLASS_MOTION_CLASSIC;
 
         /**
          * The look the user pinned as the editor's Custom preset, as the preset format's JSON.
@@ -1213,6 +1540,12 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_KEYBOARD_OPACITY_SENTINEL_HEALED =
             "keyboard_opacity_sentinel_healed";
+
+        /**
+         * Set once the keyboard's legacy blur and grain keys have been folded into the KEYBOARD
+         * slot of the inheritance model (a stored number detaches, {@code -1} follows).
+         */
+        public static final String KEY_KEYBOARD_GLASS_SLOT_FOLDED = "keyboard_glass_slot_folded";
 
         /** The pre-tuned-look keyboard-opacity default, which doubled as the "untouched" sentinel. */
         public static final int LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL = 100;
@@ -1263,6 +1596,24 @@ public final class TermuxPreferenceConstants {
             "managed_wallpaper_system_id";
 
         public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID = -1;
+
+        /**
+         * The system's lock wallpaper id right after the launcher's last wallpaper set, so a lock
+         * wallpaper set by another app is noticed. 0 or absent means no baseline yet.
+         */
+        public static final String KEY_MANAGED_WALLPAPER_LOCK_ID =
+            "managed_wallpaper_lock_id";
+
+        public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_LOCK_ID = 0;
+
+        /**
+         * The Lock wallpaper slot: {@code same_as_home} (default, follows the Home slot),
+         * or {@code photo}.
+         */
+        public static final String KEY_WALLPAPER_LOCK_CHOICE = "wallpaper_lock_choice";
+        public static final String VALUE_WALLPAPER_LOCK_SAME_AS_HOME = "same_as_home";
+        public static final String VALUE_WALLPAPER_LOCK_PHOTO = "photo";
+        public static final String DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE = VALUE_WALLPAPER_LOCK_SAME_AS_HOME;
         
         /**
          * Defines the key for whether terminal colors should follow Material dynamic colors.
@@ -1297,6 +1648,15 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_USE_SYSTEM_WALLPAPER = "use_system_wallpaper";
 
         public static final boolean DEFAULT_VALUE_USE_SYSTEM_WALLPAPER = true;
+
+        /**
+         * Defines the key for whether a managed wallpaper pans as the places slide (parallax). Only
+         * a wallpaper set through the launcher's own picker can pan, and only in portrait; the
+         * system's reduce-motion setting turns it off regardless.
+         */
+        public static final String KEY_WALLPAPER_PARALLAX = "wallpaper_parallax";
+
+        public static final boolean DEFAULT_VALUE_WALLPAPER_PARALLAX = true;
 
         /**
          * Defines the key for whether the wallpaper-read storage permission prompt has been shown.

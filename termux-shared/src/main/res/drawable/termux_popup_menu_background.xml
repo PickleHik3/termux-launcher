@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- popupMenuBackground: Medium shape (12dp, termux_corner_medium) on colorSurfaceContainer. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="?attr/colorSurfaceContainer" />
+    <corners android:radius="@dimen/termux_corner_medium" />
+    <padding android:top="8dp" android:bottom="8dp" />
+</shape>

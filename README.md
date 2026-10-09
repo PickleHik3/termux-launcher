@@ -1,5 +1,12 @@
 # Termux Launcher
 
+> [!TIP]
+> **Termux Launcher v1.0 is out!**
+>
+> It's been exactly almost a year since I asked GPT-5 Codex (god bless its soul) to add sixel image drawing to [TEL](https://github.com/t-e-l/tel). A few too many “just one more feature”s later, the launcher I'd always pictured in my head is finally here for you all.
+>
+> [Get the release](https://github.com/PickleHik3/termux-launcher/releases/tag/v1.0.0) · [Read the full story](project-docs/release-notes-v1.0.0.md#the-long-read)
+
 > [!NOTE]
 > **This project is entirely vibe-coded.**
 > I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been stable so far, does not appear to have any noticeable impact on battery life, and uses about ~350 MB of RAM at idle (for reference, something like smart launcher uses about 250 on fresh install).
@@ -20,10 +27,10 @@
 > side by side. Termux is a trademark of its respective owners.
 
 <p align="center">
-  <img src="screenshots/banner.png" alt="Termux Launcher hero showing terminal-first Android features and five device screenshots" width="100%">
+  <img src="screenshots/banner.webp" alt="Termux Launcher hero showing terminal-first Android features and five device screenshots" width="100%">
 </p>
 
-**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Releases & changelog](https://github.com/PickleHik3/termux-launcher/releases) | [Local AI API](docs/en/LauncherCtl_API.md) | [Termux AI](docs/en/Termux_AI.md)
+**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Releases & changelog](https://github.com/PickleHik3/termux-launcher/releases) | [Local AI API](docs/en/LauncherCtl_API.md) | [On-device AI](docs/en/On_Device_AI.md)
 
 
 ## About
@@ -33,7 +40,7 @@ What started out as me just wanting sixel image drawing in [TEL](https://github.
 All credits go to the amazing developers and contributors of Termux, TEL, and Termux:Monet.
 
 <p align="center">
-  <img src="screenshots/demo.gif" alt="Termux Launcher walkthrough showing the command palette, Kitty graphics, split panes, media, and keyboard shortcuts" width="360">
+  <img src="screenshots/demo.webp" alt="Termux Launcher walkthrough showing the command palette, Kitty graphics, split panes, media, and keyboard shortcuts" width="360">
 </p>
 
 ## Features
@@ -119,10 +126,12 @@ In-repo references:
 
 - [Programs and agents inside the terminal](docs/en/Programs_Inside_The_Terminal.md): **read this before assuming stock Termux behaviour** from a script or an AI agent running in a pane: the extra environment variables, the escape sequences the terminal accepts, `launcherctl`, and the one `am start` that must never be run.
 - [Local AI API](docs/en/LauncherCtl_API.md): OpenAI/Ollama-compatible localhost endpoint, app launch, model management, auth, and route tables.
-- [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
+- [On-device AI](docs/en/On_Device_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
 - [Building showcase tools](docs/en/Building_Terminal_Showcase_Tools.md): reproducible recipes for Sigye and animated-Kitty Fastfetch, on device and cross-built.
 - [VAJ to Nix migration](docs/en/VAJ_To_Nix_Migration.md): moving off the deprecated VAJ edition.
 - [Developer Docs](docs/en/Developer_Docs.md): advanced API routes, runtime notes, helper scripts, and security details.
+- [Glossary](docs/GLOSSARY.md): the words the code, the docs and the developer use.
+- [Developer specs and research](project-docs/README.md): active specs, delivered records, research and the backlog.
 
 ## Upstream Base
 
@@ -139,5 +148,22 @@ project. See [LICENSE](LICENSE), [license exceptions](LICENSE-EXCEPTIONS.md), an
 **Settings > Open-source licenses**.
 
 Bundled assets carry their own licenses: the weather animations are
-[Meteocons](https://github.com/basmilius/meteocons) (MIT, Copyright 2020-present Bas Milius), and
-the icon font is [Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts) (SIL OFL 1.1).
+[Meteocons](https://github.com/basmilius/meteocons) (MIT, Copyright 2020-present Bas Milius), the
+voice key's speech detector is [Silero VAD](https://github.com/snakers4/silero-vad) (MIT, Copyright
+2020-present Silero Team), and the icon font is [Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts) (MIT for the Symbols-only font, with separate licenses for its glyph sources).
+
+### Thanks to the projects behind the launcher
+
+Alongside Termux, Termux:Monet and TEL, a huge thank you to
+[Termux:X11](https://github.com/termux/termux-x11) for the Linux display,
+[Unexpected Keyboard](https://github.com/Julow/Unexpected-Keyboard) for the embedded keyboard,
+[kitty](https://github.com/kovidgoyal/kitty) for its terminal protocols and the code adapted here,
+[Noctalia](https://github.com/noctalia-dev/noctalia-shell) for the theme templates, and
+[herdr](https://github.com/herdrdev/herdr) for the agent-detection rules.
+
+[Ghostty](https://github.com/ghostty-org/ghostty), [Hyprland](https://github.com/hyprwm/Hyprland)
+and [focus.nvim](https://github.com/nvim-focus/focus.nvim) inspired the terminal padding, pane
+tiling and focused-pane behaviour. Thanks also to the speech-model authors, Google AI Edge and
+the LiteRT conversion contributors, and the authors of dawn, fastfetch, sigye and the other
+[tlstore tools](https://github.com/PickleHik3/tlstore). This launcher would not exist without
+all that work. The [notices](THIRD_PARTY_NOTICES.md) describe what is included and adapted.

@@ -21,6 +21,26 @@ public class TourFingerTraceTest {
     }
 
     @Test
+    public void aBorderDragHoldsStillFirstAndThenDragsSidewaysOnItsRow() {
+        float centerX = (LEFT + RIGHT) / 2f;
+        float centerY = (TOP + BOTTOM) / 2f;
+        // The hold: the finger lands on the border and does not move, which is what tells the
+        // border drag from the sideways swipe the content keeps for itself.
+        for (float progress : new float[] {0f, 0.1f, TourFingerTrace.HOLD_DRAG_HOLD}) {
+            at(TourGesture.HOLD_DRAG, progress);
+            assertEquals("held at " + progress, centerX, point[0], 0.01f);
+            assertEquals(centerY, point[1], 0.01f);
+        }
+        at(TourGesture.HOLD_DRAG, 0.7f);
+        float midX = point[0];
+        assertTrue("then it drags to the right", midX > centerX);
+        assertEquals(centerY, point[1], 0.01f);
+        at(TourGesture.HOLD_DRAG, 1f);
+        assertTrue("and keeps going", point[0] > midX);
+        assertEquals(centerY, point[1], 0.01f);
+    }
+
+    @Test
     public void aHorizontalSwipeCrossesTheControlAndStaysOnItsRow() {
         at(TourGesture.SWIPE_LEFT, 0f);
         float startX = point[0];

@@ -32,14 +32,6 @@ public final class WindowActivityRing {
     }
 
     /**
-     * How many positions the arc visits per turn in lazy mode, and how often it moves. Eight stops
-     * at ~6 Hz reads as a spinner — the CLI kind — at a fraction of the cost of one frame per vsync,
-     * which is what lazy mode exists to avoid; a ring that did not move at all read as stuck.
-     */
-    public static final int LAZY_STEPS = 8;
-    public static final long LAZY_TICK_MS = SPIN_MS / LAZY_STEPS;
-
-    /**
      * How many positions the smooth arc visits per turn, and how often it moves. The arc used to be
      * driven one step per vsync, which on a 120 Hz panel is 154 redraws of every working pill per
      * turn for a ring a few pixels wide; 38 stops is past the point where a thin arc reads as
@@ -48,13 +40,6 @@ public final class WindowActivityRing {
      */
     public static final int SMOOTH_STEPS = 38;
     public static final long SMOOTH_TICK_MS = SPIN_MS / SMOOTH_STEPS;
-
-    /** {@code phase} quantised to {@code steps} equal stops per turn, so the arc jumps rather than glides. */
-    public static float steppedPhase(float phase, int steps) {
-        int safeSteps = Math.max(1, steps);
-        float clamped = Math.max(0f, Math.min(0.999999f, phase));
-        return (float) Math.floor(clamped * safeSteps) / safeSteps;
-    }
 
     /** Where the indeterminate arc starts at {@code phase}: one full clockwise turn per cycle. */
     public static float indeterminateStartDeg(float phase) {

@@ -16,7 +16,6 @@ public class TaiModelRegistryTest {
 
         assertNotNull(registry.getModel(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
         assertNotNull(registry.getModel(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
-        assertNotNull(registry.getModel(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M));
         assertEquals(TaiModelCatalog.entries().size(), registry.getBuiltInModels().size());
     }
 

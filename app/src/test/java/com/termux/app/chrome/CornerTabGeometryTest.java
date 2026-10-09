@@ -452,6 +452,49 @@ public class CornerTabGeometryTest {
         }
     }
 
+    /**
+     * Under Fancier Glass the tab's rim is its own boundary only: the edge it slid out of and the
+     * frame side its outer end sits on are the frame's stroke already, so those two are seams and
+     * the light runs along the free edge and around the one corner the tab turns.
+     */
+    @Test
+    public void theTabsRimRunsOnlyAlongItsOwnFreeEdge() {
+        assertEquals(GlassRefraction.SEAM_TOP | GlassRefraction.SEAM_LEFT,
+            CornerTabGeometry.refractionSeams(CornerZones.TOP_LEFT));
+        assertEquals(GlassRefraction.SEAM_TOP | GlassRefraction.SEAM_RIGHT,
+            CornerTabGeometry.refractionSeams(CornerZones.TOP_RIGHT));
+        assertEquals(GlassRefraction.SEAM_BOTTOM | GlassRefraction.SEAM_LEFT,
+            CornerTabGeometry.refractionSeams(CornerZones.BOTTOM_LEFT));
+        assertEquals(GlassRefraction.SEAM_BOTTOM | GlassRefraction.SEAM_RIGHT,
+            CornerTabGeometry.refractionSeams(CornerZones.BOTTOM_RIGHT));
+
+        RectF pane = new RectF(0f, 0f, 400f, 300f);
+        RectF tab = new RectF();
+        RectF[] buttons = {new RectF(), new RectF()};
+        float[] rim = new float[4];
+        float reach = 50f;
+        for (int corner : CORNERS) {
+            CornerTabGeometry.layout(corner, pane, PAIR, 2, GAP, PAD, HEIGHT, 1f, MARGIN, HOLD,
+                1f, tab, buttons);
+            GlassRefraction.rimRect(rim, tab.left, tab.top, tab.right, tab.bottom, reach,
+                CornerTabGeometry.refractionSeams(corner));
+            String where = "corner " + corner;
+            boolean left = CornerZones.isLeft(corner);
+            boolean top = CornerZones.isTop(corner);
+            // The free side, toward the pane's middle, and the free edge, facing its interior,
+            // are where the tab ends: the rim is on them.
+            assertEquals(where + " free side", left ? tab.right : tab.left,
+                left ? rim[2] : rim[0], 0.001f);
+            assertEquals(where + " free edge", top ? tab.bottom : tab.top,
+                top ? rim[3] : rim[1], 0.001f);
+            // The frame's side and the edge it slid out of are pushed past the tab.
+            assertEquals(where + " frame side", left ? tab.left - reach : tab.right + reach,
+                left ? rim[0] : rim[2], 0.001f);
+            assertEquals(where + " slide edge", top ? tab.top - reach : tab.bottom + reach,
+                top ? rim[1] : rim[3], 0.001f);
+        }
+    }
+
     private void assertPoints(String where, float[] expected) {
         for (int i = 0; i < expected.length; i++) {
             assertEquals(where + " point " + (i / 2) + (i % 2 == 0 ? " x" : " y"),

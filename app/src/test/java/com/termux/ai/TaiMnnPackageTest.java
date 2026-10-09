@@ -25,6 +25,17 @@ public class TaiMnnPackageTest {
         assertFalse(files.contains("q8/llm.mnn"));
     }
 
+    @Test public void eagleSpeculativePackageIncludesItsDraftGraphs() throws Exception {
+        JSONObject config = new JSONObject().put("speculative_type", "eagle").put("hidden_states", true);
+        Set<String> files = TaiMnnPackage.files(config, new LinkedHashSet<>(Arrays.asList(
+            "llm.mnn", "llm.mnn.weight", "tokenizer.txt", "eagle.mnn", "eagle.mnn.weight",
+            "eagle_fc.mnn", "eagle_fc.mnn.weight", "eagle_d2t.mnn")));
+        assertTrue(files.containsAll(Arrays.asList("eagle.mnn", "eagle.mnn.weight",
+            "eagle_fc.mnn", "eagle_fc.mnn.weight", "eagle_d2t.mnn")));
+        assertFalse(files.contains("eagle_d2t.mnn.weight"));
+        assertFalse(TaiMnnPackage.files(new JSONObject(), new LinkedHashSet<>(Arrays.asList("eagle.mnn"))).contains("eagle.mnn"));
+    }
+
     @Test public void rejectsDependenciesOutsidePackage() throws Exception {
         try {
             TaiMnnPackage.files(new JSONObject().put("llm_model", "../other.mnn"), new LinkedHashSet<>());
@@ -39,6 +50,19 @@ public class TaiMnnPackageTest {
         try { TaiMnnPackage.validate(dir.resolve("config.json").toFile()); fail("Missing vision graph accepted"); }
         catch (java.io.IOException expected) { assertTrue(expected.getMessage().contains("vision.mnn")); }
         Files.write(dir.resolve("vision.mnn"), new byte[]{1});
+        TaiMnnPackage.validate(dir.resolve("config.json").toFile());
+    }
+
+    @Test public void embeddingFileIsRequiredOnlyWhereItExists() throws Exception {
+        JSONObject config = new JSONObject().put("embedding_file", "embeddings_int4.bin");
+        assertFalse(TaiMnnPackage.files(config, new LinkedHashSet<>(Arrays.asList(
+            "llm.mnn", "llm.mnn.weight", "tokenizer.txt"))).contains("embeddings_int4.bin"));
+        assertTrue(TaiMnnPackage.files(config, new LinkedHashSet<>(Arrays.asList(
+            "llm.mnn", "llm.mnn.weight", "tokenizer.txt", "embeddings_int4.bin"))).contains("embeddings_int4.bin"));
+
+        Path dir = temporary.newFolder().toPath();
+        Files.write(dir.resolve("config.json"), "{\"embedding_file\":\"embeddings_int4.bin\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        for (String name : Arrays.asList("llm.mnn", "llm.mnn.weight", "tokenizer.txt")) Files.write(dir.resolve(name), new byte[]{1});
         TaiMnnPackage.validate(dir.resolve("config.json").toFile());
     }
 }

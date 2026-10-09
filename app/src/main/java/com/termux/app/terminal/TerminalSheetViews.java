@@ -107,7 +107,7 @@ public final class TerminalSheetViews {
         button.setContentDescription(description);
         if (primary) {
             button.setTextColor(MaterialColors.getColor(context,
-                com.google.android.material.R.attr.colorPrimary,
+                androidx.appcompat.R.attr.colorPrimary,
                 button.getCurrentTextColor()));
         }
         android.util.TypedValue background = new android.util.TypedValue();
@@ -118,7 +118,7 @@ public final class TerminalSheetViews {
         button.setOnClickListener(v -> action.run());
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             40 * density, 40 * density);
-        params.leftMargin = 4 * density;
+        params.setMarginStart(4 * density);
         button.setLayoutParams(params);
         return button;
     }
@@ -209,7 +209,7 @@ public final class TerminalSheetViews {
         button.setOnClickListener(v -> action.run());
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.leftMargin = 8 * density;
+        params.setMarginStart(8 * density);
         row.addView(button, params);
     }
 

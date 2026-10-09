@@ -264,4 +264,12 @@ public class WindowForegroundResolverTest {
         assertEquals(-1L, resolver.get(10).cpuSinceMs);
         assertFalse(resolver.get(10).isWorkingAsOf(1100L, 500L));
     }
+
+    @Test
+    public void unwrapLaneNamesTheRelayedTool() {
+        assertEquals("btop", WindowForegroundResolver.unwrapLane("tl-priv", new String[]{"tl-priv", "run",
+            "/data/data/com.termux/files/home/.local/lib/tlstore/priv/btop"}));
+        assertNull(WindowForegroundResolver.unwrapLane("tl-priv", new String[]{"tl-priv"}));
+        assertNull(WindowForegroundResolver.unwrapLane("btop", new String[]{"btop", "run", "/x/y"}));
+    }
 }

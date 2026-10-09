@@ -72,6 +72,11 @@ public final class TourSignalRelay implements TourSignals {
         return mPlace == null || mHomePlace == null || mHomePlace.equals(mPlace);
     }
 
+    /** Whether the status bar is unfolded, as far as the run knows; compact until it has said. */
+    public boolean isStatusBarExpanded() {
+        return Boolean.FALSE.equals(mStatusBarCollapsed);
+    }
+
     /** The status bar's resting state, once it has settled there. */
     public void onStatusBarCollapsedSettled(boolean collapsed) {
         if (mStatusBarCollapsed != null && mStatusBarCollapsed == collapsed) return;

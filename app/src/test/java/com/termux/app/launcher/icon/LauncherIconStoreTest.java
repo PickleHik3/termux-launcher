@@ -340,4 +340,35 @@ public class LauncherIconStoreTest {
         assertNotNull(store.artwork(ref("a")));
         assertTrue("priming means the loader is never asked", loads.isEmpty());
     }
+
+    // ------------------------------------------------------------------ loading on the worker
+
+    /**
+     * Loads now run on the worker while the main thread may evict. A load that began before an
+     * eviction is answered but not kept, so it cannot put back artwork the eviction removed.
+     */
+    @Test
+    public void aLoadOverlappingAnInvalidation_isAnsweredButNotKept() {
+        LauncherIconStore[] holder = new LauncherIconStore[1];
+        Drawable loaded = artwork(64);
+        holder[0] = new LauncherIconStore(resources, 256, appRef -> {
+            holder[0].invalidateAll();
+            return loaded;
+        });
+
+        assertSame(loaded, holder[0].artwork(ref("a")));
+        assertEquals(0, holder[0].sizeBytes());
+    }
+
+    @Test
+    public void aLoadOverlappingAnIconPackSwitch_isAnsweredButNotKept() {
+        LauncherIconStore[] holder = new LauncherIconStore[1];
+        holder[0] = new LauncherIconStore(resources, 256, appRef -> {
+            holder[0].setIconPackIdentity("com.pack.b:1");
+            return artwork(64);
+        });
+
+        assertNotNull(holder[0].artwork(ref("a")));
+        assertEquals(0, holder[0].sizeBytes());
+    }
 }

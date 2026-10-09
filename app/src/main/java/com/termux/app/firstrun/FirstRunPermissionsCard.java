@@ -28,7 +28,10 @@ public final class FirstRunPermissionsCard {
     public enum Item {
         /** Reading the system wallpaper, which is what the glass bands are coloured from. */
         WALLPAPER,
-        /** Coarse location, which is all the weather widget needs. */
+        /**
+         * Where the weather is for: a place the user searches for, or the device's coarse
+         * location, which is all the weather widget needs.
+         */
         WEATHER,
         /** The embedded Linux display, which is a setting rather than a permission. */
         DISPLAY
@@ -70,14 +73,30 @@ public final class FirstRunPermissionsCard {
         public final State state;
         /** Whether the control is a switch rather than a button. */
         public final boolean isSwitch;
+        /**
+         * The place the weather row follows, as the search labelled it; empty while it follows
+         * the device, and on every other row.
+         */
+        @NonNull public final String place;
 
         Row(Item item, @StringRes int titleRes, @StringRes int copyRes, State state,
-            boolean isSwitch) {
+            boolean isSwitch, @NonNull String place) {
             this.item = item;
             this.titleRes = titleRes;
             this.copyRes = copyRes;
             this.state = state;
             this.isSwitch = isSwitch;
+            this.place = place;
+        }
+
+        /** Whether the row carries the place search: only the weather row does. */
+        public boolean searchesPlace() {
+            return item == Item.WEATHER;
+        }
+
+        /** Whether the weather follows a picked place rather than the device. */
+        public boolean followsPlace() {
+            return !place.isEmpty();
         }
 
         /** Whether a switch row is on. */
@@ -87,28 +106,61 @@ public final class FirstRunPermissionsCard {
 
         /**
          * Whether this row carries a button. A permission already granted shows its state and
-         * nothing to press; a refused one keeps the button, so a second tap can ask again.
+         * nothing to press; a refused one keeps the button, so a second tap can ask again. The
+         * weather row following a picked place keeps it too: it is the way back to the device.
          */
         public boolean hasButton() {
-            return !isSwitch && state != State.GRANTED;
+            return !isSwitch && (state != State.GRANTED || followsPlace());
         }
 
         /** The button's label, or 0 on a row that carries none. */
         @StringRes
         public int buttonRes() {
-            return hasButton() ? R.string.first_run_permissions_allow : 0;
+            if (!hasButton()) return 0;
+            return searchesPlace() ? R.string.first_run_permissions_use_location
+                : R.string.first_run_permissions_allow;
         }
 
-        /** The word beside a permission row that has already been answered, or 0. */
+        /**
+         * The word beside a permission row that has already been answered, or 0. A weather row
+         * following a picked place says the place instead, so it has no word here.
+         */
         @StringRes
         public int statusRes() {
-            if (isSwitch) return 0;
+            if (isSwitch || followsPlace()) return 0;
             switch (state) {
                 case GRANTED: return R.string.first_run_permissions_allowed;
                 case DENIED: return R.string.first_run_permissions_denied;
                 default: return 0;
             }
         }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof Row)) return false;
+            Row row = (Row) other;
+            return item == row.item && titleRes == row.titleRes && copyRes == row.copyRes
+                && state == row.state && isSwitch == row.isSwitch && place.equals(row.place);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(item, titleRes, copyRes, state, isSwitch, place);
+        }
+    }
+
+    /**
+     * What the weather still asks of the user, as {@link #shouldShow} weighs it: nothing once a
+     * place is picked, since the weather then never reads the device's location, and otherwise
+     * where the location permission stands.
+     *
+     * @param weather where the location permission stands, or null with the widget switched off
+     * @param place   the picked place, or empty while the weather follows the device
+     */
+    @Nullable
+    public static State weatherToAsk(@Nullable State weather, @NonNull String place) {
+        return place.isEmpty() ? weather : null;
     }
 
     /**
@@ -123,8 +175,8 @@ public final class FirstRunPermissionsCard {
      * @param firstRunChainDone whether this install has already been through the first-run chain
      * @param cardSeen          whether this card has already been shown and answered
      * @param wallpaper         where the wallpaper read stands
-     * @param weather           where the location permission stands, or null when the weather
-     *                          widget is switched off and the row is not offered at all
+     * @param weather           what the weather still asks, from {@link #weatherToAsk}: null
+     *                          when the widget is switched off or a place is picked
      * @param replay            whether Settings asked for the tour again. A replay is the tour and
      *                          nothing else — the user asked to be walked through the launcher,
      *                          not to be asked for permissions a second time — so it answers no
@@ -169,22 +221,26 @@ public final class FirstRunPermissionsCard {
      * display server in it.
      *
      * @param weather        where the location permission stands, or null for no weather row
+     * @param weatherPlace   the place the weather follows, or empty while it follows the device;
+     *                       the row then shows the place and asks for nothing
      * @param displayOffered whether this build carries a display server at all
      * @param displayOn      whether the embedded display is switched on right now
      */
     @NonNull
     public static List<Row> rows(@NonNull State wallpaper, @Nullable State weather,
-                                 boolean displayOffered, boolean displayOn) {
+                                 @NonNull String weatherPlace, boolean displayOffered,
+                                 boolean displayOn) {
         List<Row> rows = new ArrayList<>(3);
         rows.add(new Row(Item.WALLPAPER, R.string.first_run_permissions_wallpaper_title,
-            R.string.first_run_permissions_wallpaper_copy, wallpaper, false));
+            R.string.first_run_permissions_wallpaper_copy, wallpaper, false, ""));
         if (weather != null)
             rows.add(new Row(Item.WEATHER, R.string.first_run_permissions_weather_title,
-                R.string.first_run_permissions_weather_copy, weather, false));
+                R.string.first_run_permissions_weather_copy, weather, false,
+                weatherPlace.trim()));
         if (displayOffered)
             rows.add(new Row(Item.DISPLAY, R.string.first_run_permissions_display_title,
                 R.string.first_run_permissions_display_copy,
-                displayOn ? State.GRANTED : State.NOT_ASKED, true));
+                displayOn ? State.GRANTED : State.NOT_ASKED, true, ""));
         return Collections.unmodifiableList(rows);
     }
 

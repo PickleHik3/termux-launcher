@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Built-in Weather widget. -->
+    <string name="bw_feeds_weather_empty">No weather yet</string>
+    <string name="bw_feeds_weather_no_location">Weather needs a location fix</string>
+    <string name="bw_feeds_weather_tap_refresh">Tap to refresh</string>
+    <string name="bw_feeds_weather_place_unknown">Current location</string>
+    <!-- Today's high and low, e.g. "36 / 24". -->
+    <string name="bw_feeds_weather_range_short">%1$s / %2$s</string>
+    <!-- e.g. "36/24", when there is no condition to lead it. -->
+    <string name="bw_feeds_weather_range_compact">%1$s/%2$s</string>
+    <!-- e.g. "Clear · 36/24". -->
+    <string name="bw_feeds_weather_condition_range">%1$s · %2$s/%3$s</string>
+    <!-- e.g. "H 36 L 24". -->
+    <string name="bw_feeds_weather_range_long">H %1$s L %2$s</string>
+    <string name="bw_feeds_weather_wind">%1$d km/h</string>
+    <!-- Spoken: "Weather in Kuwait City: 34 degrees", then ", clear", then ", high 36 low 24". -->
+    <string name="bw_feeds_weather_cd_place">Weather in %1$s: %2$s degrees</string>
+    <string name="bw_feeds_weather_cd">Weather: %1$s degrees</string>
+    <string name="bw_feeds_weather_cd_range">high %1$s low %2$s</string>
+    <string name="bw_feeds_weather_cd_empty">Weather: %1$s. Tap to refresh</string>
+
+    <!-- Built-in Media widget. -->
+    <string name="bw_feeds_media_nothing_playing">Nothing playing</string>
+    <string name="bw_feeds_media_allow_access">Allow notification access</string>
+    <string name="bw_feeds_media_allow_access_hint">Tap to show what\'s playing</string>
+    <string name="bw_feeds_media_play">Play</string>
+    <string name="bw_feeds_media_pause">Pause</string>
+    <string name="bw_feeds_media_previous">Previous</string>
+    <string name="bw_feeds_media_next">Next</string>
+    <string name="bw_feeds_media_cd_playing">Playing %1$s by %2$s</string>
+    <string name="bw_feeds_media_cd_playing_title">Playing %1$s</string>
+    <string name="bw_feeds_media_cd_paused">Paused %1$s by %2$s</string>
+    <string name="bw_feeds_media_cd_paused_title">Paused %1$s</string>
+    <string name="bw_feeds_media_cd_nothing">Media: nothing playing</string>
+    <string name="bw_feeds_media_cd_access">Media: allow notification access to show what\'s playing</string>
+</resources>

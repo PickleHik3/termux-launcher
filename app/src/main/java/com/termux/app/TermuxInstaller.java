@@ -2,7 +2,11 @@ package com.termux.app;
 
 import android.app.Activity;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import android.app.ProgressDialog;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
+import com.termux.app.material.M3;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.os.Build;
@@ -133,7 +137,7 @@ final class TermuxInstaller {
         } else if (FileUtils.fileExists(TERMUX_PREFIX_DIR_PATH, false)) {
             Logger.logInfo(LOG_TAG, "The termux prefix directory \"" + TERMUX_PREFIX_DIR_PATH + "\" does not exist but another file exists at its destination.");
         }
-        final ProgressDialog progress = ProgressDialog.show(activity, null, activity.getString(R.string.bootstrap_installer_body), true, false);
+        final AlertDialog progress = showInstallProgress(activity);
         new Thread() {
 
             @Override
@@ -361,6 +365,31 @@ final class TermuxInstaller {
         if (culprits.isEmpty())
             return "";
         return "\n\n" + context.getString(R.string.bootstrap_error_exec_restricted_shared_uid_packages) + "\n" + TextUtils.join("\n", culprits);
+    }
+
+    /** The installer's progress: a modal Material dialog with an indeterminate linear indicator. */
+    private static AlertDialog showInstallProgress(final Activity activity) {
+        int pad = Math.round(24 * activity.getResources().getDisplayMetrics().density);
+        LinearLayout body = new LinearLayout(activity);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(pad, pad, pad, pad);
+        TextView message = new TextView(activity);
+        message.setText(activity.getString(R.string.bootstrap_installer_body));
+        M3.textAppearance(message, com.google.android.material.R.attr.textAppearanceBodyMedium);
+        body.addView(message, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        LinearProgressIndicator bar = new LinearProgressIndicator(activity);
+        bar.setIndeterminate(true);
+        LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        barParams.topMargin = pad;
+        body.addView(bar, barParams);
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
+            .setView(body)
+            .setCancelable(false)
+            .create();
+        dialog.show();
+        return dialog;
     }
 
     public static void showBootstrapErrorDialog(Activity activity, Runnable whenDone, String message) {

@@ -22,6 +22,7 @@ import com.termux.app.RowHapticTickHelper;
 import com.termux.app.chrome.GlassInk;
 import com.termux.app.chrome.OnGlass;
 import com.termux.app.SuggestionBarView;
+import com.termux.app.haptics.Haptics;
 
 /**
  * The drawer's A-Z rope: a strip of letters down the plane's right edge that hangs off the
@@ -124,7 +125,7 @@ public final class AppDrawerRopeColumnView extends View {
         // The same resolution prepareOverlay uses for the plane's own accent, so the focused letter
         // and the drawer's glass tint are the one colour rather than two ideas of the theme.
         mFocusColor = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorPrimary,
+            androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
         mFillPaint.setTextAlign(Paint.Align.CENTER);
         mOutlinePaint.setTextAlign(Paint.Align.CENTER);
@@ -479,7 +480,7 @@ public final class AppDrawerRopeColumnView extends View {
             && RowHapticTickHelper.isBoundaryCrossing(mHapticIndex, index)) {
             // Per boundary, never per frame: every letter change also auto-scrolls the grid, and a
             // tick on each MOVE would buzz continuously for the length of a scrub.
-            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+            Haptics.tick(this, HapticFeedbackConstants.CLOCK_TICK);
         }
         mHapticIndex = index;
         invalidate();

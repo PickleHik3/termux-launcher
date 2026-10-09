@@ -3,22 +3,101 @@ package com.termux.ai;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 public final class TaiModelCatalog {
-    private static final String UNVERIFIED_ARTIFACT_POLICY = "Import-only: models.yaml provides repository URL and estimates, but no verified artifact path, revision, and checksum policy exists in code.";
+    /** The one Parakeet speech-to-text entry; the speech model picker's "Parakeet" engine. */
+    public static final String PARAKEET_TDT_V3_ID = "parakeet-tdt-0.6b-v3";
+    /** The one speech-output entry: KittenTTS nano 0.8, the Model centre's "Voice output" row. */
+    public static final String KITTEN_TTS_NANO_ID = "kittentts-nano-0.8";
+    /** EmbeddingGemma 300M: the v1 .tflite embedder, kept below the EmbeddingGemma 2 entries. */
+    public static final String EMBEDDING_GEMMA_300M_ID = "embeddinggemma-300m";
+    /** EmbeddingGemma 2 Text+Vision 440M: the recommended embedder (text input only for now). */
+    public static final String EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID = "embeddinggemma-2-text-vision-440m";
+    /** EmbeddingGemma 2 Text 270M: the smaller text-only EmbeddingGemma 2. */
+    public static final String EMBEDDING_GEMMA_2_TEXT_270M_ID = "embeddinggemma-2-text-270m";
     private static final Map<String, CatalogEntry> BUILT_IN_ENTRIES = buildEntries();
     private static volatile Map<String, CatalogEntry> entries = BUILT_IN_ENTRIES;
     private TaiModelCatalog() {}
 
+    /** Drops a remote overlay a test applied, so the next test sees the built-in catalogue. */
+    @androidx.annotation.VisibleForTesting
+    public static synchronized void resetForTesting() {
+        entries = BUILT_IN_ENTRIES;
+    }
+
     @NonNull public static Map<String, CatalogEntry> entries() { return entries; }
     @Nullable public static CatalogEntry get(@Nullable String modelId) { return modelId == null ? null : entries.get(modelId); }
+
+    /** {@link #entries()} minus speech models (speech-to-text and speech output) and embedding-only
+     *  models — the chat catalog screen, the installed chat-model list, and the default-assistant
+     *  picker should never show a Whisper, KittenTTS or EmbeddingGemma entry alongside chat models.
+     *  Speech models get their own sections on the Speech segment, embedders their own section at
+     *  the foot of the Chat segment ({@link #embeddingEntries()}). */
+    @NonNull
+    public static Map<String, CatalogEntry> chatEntries() {
+        LinkedHashMap<String, CatalogEntry> chat = new LinkedHashMap<>();
+        for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
+            if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
+            if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) continue;
+            if (isImageGeneration(entry.getValue())) continue;
+            if (isEmbeddingOnly(entry.getValue())) continue;
+            chat.put(entry.getKey(), entry.getValue());
+        }
+        return chat;
+    }
+
+    /** Embedding-only catalog entries (the Chat segment's "Embeddings" section). */
+    @NonNull
+    public static Map<String, CatalogEntry> embeddingEntries() {
+        LinkedHashMap<String, CatalogEntry> embeddings = new LinkedHashMap<>();
+        for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
+            if (isEmbeddingOnly(entry.getValue())) embeddings.put(entry.getKey(), entry.getValue());
+        }
+        return embeddings;
+    }
+
+    private static boolean isImageGeneration(@NonNull CatalogEntry entry) {
+        return TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(entry.backend)
+            || entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_GENERATION);
+    }
+
+    private static boolean isEmbeddingOnly(@NonNull CatalogEntry entry) {
+        return entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
+            && !entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+    }
+
+    /** Speech-output catalog entries only (the Speech segment's "Voice output" section). */
+    @NonNull
+    public static Map<String, CatalogEntry> ttsEntries() {
+        LinkedHashMap<String, CatalogEntry> tts = new LinkedHashMap<>();
+        for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
+            if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) {
+                tts.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return tts;
+    }
+
+    /** Speech-to-text catalog entries only (the TAI "Speech-to-text" settings section). */
+    @NonNull
+    public static Map<String, CatalogEntry> speechEntries() {
+        LinkedHashMap<String, CatalogEntry> speech = new LinkedHashMap<>();
+        for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
+            if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) {
+                speech.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return speech;
+    }
 
     /** Synthetic catalog entry for an installed model that isn't in the curated catalog (imported or
      *  added by Hugging Face URL), so the catalog screen lists and manages it alongside built-ins. */
@@ -114,6 +193,9 @@ public final class TaiModelCatalog {
                     item.optString("ramTier", ""), item.optBoolean("recommended", false),
                     item.optBoolean("downloadAvailable", true), item.optString("unavailableReason", ""));
                 if (!TaiModelSpec.isSupportedBackendFormat(entry.backend, entry.format)) continue;
+                // Remote payloads never add image models: they install through the importer, and a
+                // remote entry would have nowhere to download an MNN diffusion directory to yet.
+                if (TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(entry.backend)) continue;
                 merged.put(entry.modelId, entry);
             } catch (Exception ignored) {}
         }
@@ -134,64 +216,155 @@ public final class TaiModelCatalog {
             "gemma-4-E4B-it.litertlm", "Apache-2.0", 3_659_530_240L, "3.7 GB", "12GB+", false,
             tags("Text", "Vision", "Audio", "Code", "Reasoning", "Tools"),
             setOf("text_chat", "image_input", "audio_input", "tool_use", "code", "reasoning", "llm_thinking", "speculative_decoding")));
-        entries.put("qwen2.5-1.5b-instruct-litert-lm", liteRtImportOnly(
-            "qwen2.5-1.5b-instruct-litert-lm", "Qwen2.5 1.5B Instruct", "lightweight_text", "lightweight_alternative", false,
-            "Lightweight text, code, and multilingual", "litert-community/Qwen2.5-1.5B-Instruct",
-            1_597_931_520L, "1.5 GB", "6GB+", "q8", "Apache-2.0",
-            tags("Text", "Code", "Multilingual"), setOf("text_chat", "code", "multilingual")));
-        entries.put("deepseek-r1-distill-qwen-1.5b-litert-lm", liteRtAvailable(
-            "deepseek-r1-distill-qwen-1.5b-litert-lm", "DeepSeek-R1 Distill 1.5B", "reasoning", "reasoning_small", false,
-            "Small reasoning model", "litert-community/DeepSeek-R1-Distill-Qwen-1.5B",
-            "2f8b8ee90d8f93b15305b699e8772b277d074a9a",
-            "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm", "MIT",
-            1_833_451_520L, "1.7 GB", "6GB+", false, "deepseek-r1-distill-qwen", "q8",
-            "69b35f01759eed765641ab4af589bbe98131fd2825662a086d9037409b8c1295",
-            tags("Reasoning", "Text"), setOf("text_chat", "reasoning")));
-        entries.put(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M, liteRtAvailable(
-            TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M, "FunctionGemma 270M", "tool_calling", "experimental_launcher_agent", false,
-            "Mobile actions tool-call model", "litert-community/functiongemma-270m-ft-mobile-actions", "38942192c9b723af836d489074823ff33d4a3e7a",
-            "mobile_actions_q8_ekv1024.litertlm", "Gemma Terms of Use", 288_964_608L, "0.3 GB", "6GB+", true,
-            tags("Tools"), setOf("text_chat", "tool_use", "mobile_actions")));
-        // EmbeddingGemma is a raw .tflite served by LiteRtEmbeddingRuntime, not a chat .litertlm package.
-        // The text_embeddings capability + .tflite artifact make the downloader fetch the sentencepiece.model
-        // sidecar and route requests to the embedding runtime rather than the LiteRT-LM chat engine.
-        entries.put("embeddinggemma-300m", liteRtAvailable(
-            "embeddinggemma-300m", "EmbeddingGemma 300M", "embedding", "embedding_default", false,
-            "Text embeddings", "litert-community/embeddinggemma-300m", "870cbe05ef460385363c6b574c851ae5d8989ce3",
-            "embeddinggemma-300M_seq1024_mixed-precision.tflite", "Gemma Terms of Use", 183_329_528L, "183 MB", "4GB+", true,
-            "gemma", null, null,
-            tags("Embeddings"), setOf(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)));
-        // MNN-format embedding model — routes to MnnEmbeddingRuntime via the MNN Transformer::Embedding
-        // engine. config.json + text_embeddings capability make it an embedding package, not a chat model.
-        entries.put("qwen3-embedding-0.6b-mnn", mnnAvailable(
-            "qwen3-embedding-0.6b-mnn", "Qwen3 Embedding 0.6B", "embedding", "embedding_mnn", false,
-            "Text embeddings (MNN)", "taobao-mnn/Qwen3-Embedding-0.6B-MNN", 377_998_519L,
-            "378 MB", "4GB+", "qwen3", "int4", tags("Embeddings"), setOf(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)));
+        // The built-in catalogue is deliberately short: the two Gemma 4 chat models above, the
+        // speech models and EmbeddingGemma below. Every other model (Qwen, DeepSeek, FunctionGemma,
+        // the MNN packages, other embedding models) still runs when imported or added by link; it
+        // just is not offered here, so the model centre stays a list a person can read in one glance.
+        // Whisper ACFT speech-to-text (litert-community/whisper-acft, phase 1: catalog + downloader
+        // only — MultiBackendTaiRuntime routing is phase 2). Each size/language id ships two window
+        // graphs (5s, 10s, chosen at download time); the default artifact here is the 10s graph and
+        // the 5s graph is offered as a CatalogEntry.WindowVariant swapped in by CatalogEntry#withWindow.
+        // The tokenizer.json sidecar comes from the matching openai/whisper-{size}{.en} repo.
+        final String whisperAcftRevision = "f8ab0a00ea95f6e0f2cee200b18671a599a0b0d6";
+        entries.put("whisper-acft-base", whisperAvailable(
+            "whisper-acft-base", "Whisper ACFT Base", "Speech-to-text (multilingual)",
+            "litert-community/whisper-acft", whisperAcftRevision,
+            "base/acft_whisper_base_10s_drq.tflite", 101_391_632L,
+            "61d7dba161c3c1b77a940e5c658eaa9012b6f7cbec1058f845276abeed2805b5",
+            "97 MB", "6GB+",
+            whisperTokenizerSidecar("whisper-base", "e37978b90ca9030d5170a5c07aadb050351a65bb",
+                "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566"),
+            whisperWindows(
+                "base/acft_whisper_base_5s_drq.tflite", 100_879_632L,
+                "7a9dcec5528c37577cfe5df0bd53720cebaeb63981549fffc70825bab689e225",
+                "base/acft_whisper_base_10s_drq.tflite", 101_391_632L,
+                "61d7dba161c3c1b77a940e5c658eaa9012b6f7cbec1058f845276abeed2805b5")));
+        entries.put("whisper-acft-base-en", whisperAvailable(
+            "whisper-acft-base-en", "Whisper ACFT Base (English)", "Speech-to-text (English only)",
+            "litert-community/whisper-acft", whisperAcftRevision,
+            "base.en/acft_whisper_base.en_10s_drq.tflite", 101_390_600L,
+            "d993bf12bb49bb7ddf94779613293cca2c277d5c0582e4f04b4d4f7d8d331102",
+            "97 MB", "6GB+",
+            whisperTokenizerSidecar("whisper-base.en", "911407f4214e0e1d82085af863093ec0b66f9cd6",
+                "5eb60cec1e77aeeb6869a2bb5a8e01a84c3fe5d072d75369343021fe6f5310d0"),
+            whisperWindows(
+                "base.en/acft_whisper_base.en_5s_drq.tflite", 100_878_600L,
+                "aacded4e706c559d7e840716c54d872167754f57467ad4a80ac4e4d05a8d6d2f",
+                "base.en/acft_whisper_base.en_10s_drq.tflite", 101_390_600L,
+                "d993bf12bb49bb7ddf94779613293cca2c277d5c0582e4f04b4d4f7d8d331102")));
+        entries.put("whisper-acft-small", whisperAvailable(
+            "whisper-acft-small", "Whisper ACFT Small", "Speech-to-text (multilingual)",
+            "litert-community/whisper-acft", whisperAcftRevision,
+            "small/acft_whisper_small_10s_drq.tflite", 286_277_672L,
+            "f74c4c464b96ee1f52afb3d876e5eb89a87212cf538404b2747febf61c00ba1b",
+            "273 MB", "8GB+",
+            whisperTokenizerSidecar("whisper-small", "973afd24965f72e36ca33b3055d56a652f456b4d",
+                "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566"),
+            whisperWindows(
+                "small/acft_whisper_small_5s_drq.tflite", 285_509_672L,
+                "4695243bffbe1b7c8799b06e058395dec02c798f8a0a3dcff093c0797d562fc7",
+                "small/acft_whisper_small_10s_drq.tflite", 286_277_672L,
+                "f74c4c464b96ee1f52afb3d876e5eb89a87212cf538404b2747febf61c00ba1b")));
+        entries.put("whisper-acft-small-en", whisperAvailable(
+            "whisper-acft-small-en", "Whisper ACFT Small (English)", "Speech-to-text (English only)",
+            "litert-community/whisper-acft", whisperAcftRevision,
+            "small.en/acft_whisper_small.en_10s_drq.tflite", 286_276_128L,
+            "58edc288e8aad1da2a3df0545edadf5f1c6119ff70682e37031119ad89130daf",
+            "273 MB", "8GB+",
+            whisperTokenizerSidecar("whisper-small.en", "e8727524f962ee844a7319d92be39ac1bd25655a",
+                "5eb60cec1e77aeeb6869a2bb5a8e01a84c3fe5d072d75369343021fe6f5310d0"),
+            whisperWindows(
+                "small.en/acft_whisper_small.en_5s_drq.tflite", 285_508_128L,
+                "7c71a5d8f9b59f93ab17e63b568ef674716420bc8bbabcc5da315ab0576b96ef",
+                "small.en/acft_whisper_small.en_10s_drq.tflite", 286_276_128L,
+                "58edc288e8aad1da2a3df0545edadf5f1c6119ff70682e37031119ad89130daf")));
+        // NVIDIA Parakeet TDT 0.6B v3 (25 European languages, auto-detected; CC-BY-4.0 weights),
+        // Google's int8 stateful LiteRT conversion: one 5 s graph, no window choice, served by
+        // ParakeetSttRuntime. The tokenizer.json sidecar comes from NVIDIA's own repo (the
+        // conversion repo ships none). Sizes and hashes from the Hugging Face API (LFS sha256 for
+        // the graph; the tokenizer is a plain git blob, hashed after download). See
+        // project-docs/reference/voice-ai/parakeet-stt-research.md.
+        entries.put(PARAKEET_TDT_V3_ID, parakeetAvailable(
+            PARAKEET_TDT_V3_ID, "Parakeet TDT 0.6B v3", "Speech-to-text (25 European languages)",
+            "litert-community/parakeet-tdt-0.6b-v3", "50dae0cb8c7b39dda477966eff7150cd7fe206ae",
+            "parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite", 614_261_072L,
+            "334745b8bc7fd372b1c213516f0b6338bb827b1a2abb3e77ad35fe6fea5cd16b",
+            "586 MB", "8GB+",
+            new CatalogEntry.Sidecar(
+                "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/resolve/541d1f99c6b0c3cd0b11a95167540bb8edefd82b/tokenizer.json",
+                "tokenizer.json", "bd321b096832a3f270bd3b2a88823957920f1a5c5ada71114a26ea729d0cbe91")));
+        // KittenTTS nano 0.8 speech output (litert-community/kitten-tts-nano-0.8, Apache-2.0),
+        // served by KittenTtsRuntime. The main artifact is the fp32 predictor graph; the prosody
+        // and vocoder graphs and voices.npz are sidecars from the same repo, and the GPL-free
+        // phonemizer (the Clear BSD OpenPhonemizer dictionary, the MIT DeepPhonemizer graph and its
+        // vocabulary) comes from litert-community/Matcha-TTS, which publishes it. fp32 because the
+        // model card deploys fp32. sizeBytes is the whole package (94,365,672 bytes), so the space
+        // check and the progress bar cover every file; sha256 is the predictor's. Sizes and hashes
+        // from the Hugging Face API (LFS sha256; g2p_meta.json is a plain git blob, hashed after
+        // download). See scripts/tts-eval/.
+        final String kittenRevision = "d4662d891f9bf54b3d93432610d0d296d229e026";
+        final String matchaRevision = "8d650e794583c0b0869c87027c2f3a7c293902cb";
+        entries.put(KITTEN_TTS_NANO_ID, kittenTtsAvailable(
+            KITTEN_TTS_NANO_ID, "KittenTTS Nano 0.8", "Voice output (English)",
+            "litert-community/kitten-tts-nano-0.8", kittenRevision,
+            KittenTtsRuntime.PREDICTOR_FILE, 94_365_672L,
+            "0ca50bbf3c2fa1ba2c779e3851a5d3c8e59dbb68790a6c392d03eff4fac49296",
+            "90 MB", "4GB+",
+            Arrays.asList(
+                hfSidecar("litert-community/kitten-tts-nano-0.8", kittenRevision, KittenTtsRuntime.PROSODY_FILE,
+                    "99b90a4ac4f564068d57eab9eff04534dba31d430c2c831a825c81c328324532"),
+                hfSidecar("litert-community/kitten-tts-nano-0.8", kittenRevision, KittenTtsRuntime.VOCODER_FILE,
+                    "87afb43780fb78434418a143de100740e68d804aa8f45adfdeb0370c85ec4eaa"),
+                hfSidecar("litert-community/kitten-tts-nano-0.8", kittenRevision, KittenTtsRuntime.VOICES_FILE,
+                    "8aa7cee235abb0739cb51e6559685f65a4dacd95568833d05699b1633f519b3f"),
+                hfSidecar("litert-community/Matcha-TTS", matchaRevision, KittenTtsRuntime.PHONEMIZER_FILE,
+                    "6e4b481f6874dfabc32ce73bf6f0ea1ba6ab5986ee6f76a27779364be8a53c73"),
+                hfSidecar("litert-community/Matcha-TTS", matchaRevision, KittenTtsRuntime.DICTIONARY_FILE,
+                    "5b3493a8cd4d20b72c7b91415afaf3f32335ebd81f349698e1cedc898c59f979"),
+                hfSidecar("litert-community/Matcha-TTS", matchaRevision, KittenTtsRuntime.PHONEMIZER_META_FILE,
+                    "7b87bfeaaa072be236e8491d771b0cb97cc92c3e5d83e3558fff8849868810f5"))));
 
-        entries.put("qwen2.5-coder-1.5b-instruct-mnn", mnnAvailable(
-            "qwen2.5-coder-1.5b-instruct-mnn", "Qwen2.5-Coder 1.5B", "coding", "recommended_coder", true,
-            "Code and terminal assistant", "taobao-mnn/Qwen2.5-Coder-1.5B-Instruct-MNN", 971_254_765L,
-            "971 MB", "4GB-6GB+", "qwen2.5-coder", "int4", tags("Code", "Text", "Tools"), setOf("text_chat", "code", "tool_use")));
-        entries.put("qwen2.5-coder-7b-instruct-mnn", mnnAvailable(
-            "qwen2.5-coder-7b-instruct-mnn", "Qwen2.5-Coder 7B", "coding", "advanced_coder", false,
-            "Higher quality code model", "taobao-mnn/Qwen2.5-Coder-7B-Instruct-MNN", 4_426_674_424L,
-            "4.4 GB", "10GB-12GB+", "qwen2.5-coder", "int4", tags("Code", "Text"), setOf("text_chat", "code")));
-        entries.put("qwen2.5-0.5b-instruct-mnn", mnnAvailable(
-            "qwen2.5-0.5b-instruct-mnn", "Qwen2.5 0.5B", "lightweight_text", "tiny_general", false,
-            "Tiny general chat", "taobao-mnn/Qwen2.5-0.5B-Instruct-MNN", 556_808_791L,
-            "557 MB", "3GB+", "qwen2.5", "int4", tags("Text", "Multilingual"), setOf("text_chat", "multilingual")));
-        entries.put("qwen2.5-1.5b-instruct-mnn", mnnAvailable(
-            "qwen2.5-1.5b-instruct-mnn", "Qwen2.5 1.5B", "general_text", "lightweight_general", false,
-            "Lightweight text and multilingual", "taobao-mnn/Qwen2.5-1.5B-Instruct-MNN", 879_484_183L,
-            "879 MB", "4GB-6GB+", "qwen2.5", "int4", tags("Text", "Multilingual"), setOf("text_chat", "multilingual")));
-        entries.put("qwen2.5-3b-instruct-mnn", mnnAvailable(
-            "qwen2.5-3b-instruct-mnn", "Qwen2.5 3B", "general_text", "balanced_general", false,
-            "Balanced local multilingual assistant", "taobao-mnn/Qwen2.5-3B-Instruct-MNN", 2_369_484_250L,
-            "2.4 GB", "6GB-8GB+", "qwen2.5", "int4", tags("Text", "Multilingual"), setOf("text_chat", "multilingual")));
-        entries.put("deepseek-r1-1.5b-qwen-mnn", mnnAvailable(
-            "deepseek-r1-1.5b-qwen-mnn", "DeepSeek-R1 1.5B Qwen", "reasoning", "lightweight_reasoning", false,
-            "Small reasoning model", "taobao-mnn/DeepSeek-R1-1.5B-Qwen-MNN", 1_020_644_237L,
-            "1.0 GB", "4GB-6GB+", "deepseek-r1-qwen", "int4", tags("Reasoning", "Text"), setOf("text_chat", "reasoning")));
+        // EmbeddingGemma 2 (litert-community, Apache-2.0, not gated), one .litertlm bundle each with
+        // its tokenizer inside, served by LiteRtLmEmbeddingRuntime through LiteRT-LM's EmbeddingEngine.
+        // The Text+Vision 440M is the recommended embedder and listed first; its image input is not
+        // wired yet, so it declares text embeddings only. Sizes and hashes from the Hugging Face API
+        // (LFS sha256), revisions pinned. The per-SoC NPU variants in the repos are not offered.
+        entries.put(EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID, embeddingGemma2Available(
+            EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID, "EmbeddingGemma 2 Text+Vision 440M", "text_embeddings", true,
+            "litert-community/embeddinggemma-2-text-vision-440m-litert-lm", "e301f74d5551b0c2641bd5cb4652a76239d5c5f8",
+            "embeddinggemma-2-text-vision-440m.litertlm", 387_710_976L,
+            "92dcbea108899e5d6e30d919b0744f90d9967e80c67a4ab5503ac16d54f62eb0",
+            "388 MB", tags("Embeddings", "Vision")));
+        entries.put(EMBEDDING_GEMMA_2_TEXT_270M_ID, embeddingGemma2Available(
+            EMBEDDING_GEMMA_2_TEXT_270M_ID, "EmbeddingGemma 2 Text 270M", "text_embeddings_compact", false,
+            "litert-community/embeddinggemma-2-text-270m-litert-lm", "9be6e8b90982095dc05c2bd162e4b954ee4dbac7",
+            "embeddinggemma-2-text-270m.litertlm", 164_626_432L,
+            "2d079ee2f6f066b1f368e8d7c819f55214eaef1d0513b312321901f30ab286fb",
+            "165 MB", tags("Embeddings")));
+
+        // EmbeddingGemma 300M (litert-community/embeddinggemma-300m, Gemma Terms of Use), served on
+        // demand by LiteRtEmbeddingRuntime behind /v1/embeddings. Gated on Hugging Face, so the
+        // download needs the saved token. The portable mixed-precision graphs only (not the
+        // chip-specific ones): seq1024 is the artifact, the smaller seq512/seq256 windows and the
+        // SentencePiece tokenizer are hash-pinned sidecars. sizeBytes is the seq1024 graph's; the
+        // size estimate covers the whole package. Sizes and hashes from the Hugging Face API.
+        final String embeddingGemmaRepo = "litert-community/embeddinggemma-300m";
+        final String embeddingGemmaRevision = "29888fcee3216acadc7e844906e5fe0d79a61875";
+        entries.put(EMBEDDING_GEMMA_300M_ID, embeddingGemmaAvailable(
+            EMBEDDING_GEMMA_300M_ID, "EmbeddingGemma 300M", "Text embeddings (search, memory)",
+            embeddingGemmaRepo, embeddingGemmaRevision,
+            "embeddinggemma-300M_seq1024_mixed-precision.tflite", 183_329_528L,
+            "8b0b8bbd0aa95f9f747c25a6c87cd05a8286933282660f6a50da877662917e31",
+            "~520 MB", "4GB+",
+            Arrays.asList(
+                hfSidecar(embeddingGemmaRepo, embeddingGemmaRevision,
+                    "embeddinggemma-300M_seq512_mixed-precision.tflite",
+                    "ad09e81557203cb0e177abf9bf8727dfe138a7d394aa0f70f0b2ed16432e121a"),
+                hfSidecar(embeddingGemmaRepo, embeddingGemmaRevision,
+                    "embeddinggemma-300M_seq256_mixed-precision.tflite",
+                    "37115ef7bff76cd37dd86abe503ff511b1032bf85fc624a85c49c84899e92bc5"),
+                hfSidecar(embeddingGemmaRepo, embeddingGemmaRevision, "sentencepiece.model",
+                    "d6daa52d93d7aad10e8388bd526c4e501d914b47177398d1d9621f1fe48438c7"))));
 
         return Collections.unmodifiableMap(entries);
     }
@@ -200,40 +373,112 @@ public final class TaiModelCatalog {
                                                  String role, String repo, String revision, String file, String license, long size,
                                                  String sizeEstimate, String ramTier, boolean gated, LinkedHashSet<String> displayTags,
                                                  LinkedHashSet<String> capabilities) {
-        return liteRtAvailable(id, name, jobGroup, priority, recommended, role, repo, revision, file, license, size,
-            sizeEstimate, ramTier, gated, "gemma", null, null, displayTags, capabilities);
-    }
-
-    private static CatalogEntry liteRtAvailable(String id, String name, String jobGroup, String priority, boolean recommended,
-                                                 String role, String repo, String revision, String file, String license, long size,
-                                                 String sizeEstimate, String ramTier, boolean gated, String architecture,
-                                                 @Nullable String quantization, @Nullable String sha256,
-                                                 LinkedHashSet<String> displayTags, LinkedHashSet<String> capabilities) {
         return entry(id, name, role, repo, revision, file, license, size, gated, TaiModelSpec.BACKEND_LITERT_LM,
-            TaiModelSpec.FORMAT_LITERTLM, architecture, quantization,
+            TaiModelSpec.FORMAT_LITERTLM, "gemma", null,
             TaiModelSpec.defaultEndpointContextWindowFor(id, TaiModelSpec.BACKEND_LITERT_LM),
-            ramGb(ramTier), sha256, capabilities,
+            ramGb(ramTier), null, capabilities,
             jobGroup, priority, displayTags, sizeEstimate, ramTier, recommended, true, "");
     }
 
-    private static CatalogEntry liteRtImportOnly(String id, String name, String jobGroup, String priority, boolean recommended,
-                                                  String role, String repo, long size, String sizeEstimate, String ramTier,
-                                                  @Nullable String quantization, String license, LinkedHashSet<String> displayTags,
-                                                  LinkedHashSet<String> capabilities) {
-        return entry(id, name, role, repo, "main", null, license, size, false,
-            TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, "", quantization, 4096, ramGb(ramTier), null,
-            capabilities, jobGroup, priority, displayTags, sizeEstimate, ramTier, recommended, false, UNVERIFIED_ARTIFACT_POLICY);
+    /** A Whisper ACFT speech-to-text entry: {@code defaultArtifactPath/defaultSize/defaultSha256} is
+     *  the 10s window (the entry's resting state); {@code windows} carries both window variants so
+     *  {@link CatalogEntry#withWindow} can swap in the 5s graph at download time. */
+    private static CatalogEntry whisperAvailable(String id, String name, String role, String repo, String revision,
+                                                  String defaultArtifactPath, long defaultSize, String defaultSha256,
+                                                  String sizeEstimate, String ramTier,
+                                                  CatalogEntry.Sidecar tokenizerSidecar,
+                                                  Map<Integer, CatalogEntry.WindowVariant> windows) {
+        List<CatalogEntry.Sidecar> sidecars = Collections.singletonList(tokenizerSidecar);
+        LinkedHashSet<String> capabilities = setOf(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
+        return new CatalogEntry(id, name, role, repo, revision, defaultArtifactPath, "Apache-2.0", defaultSize,
+            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, "whisper-acft", "int8_drq",
+            128, 128, 128, ramGb(ramTier), defaultSha256, capabilities, null, null,
+            "speech_to_text", "speech_to_text", tags("Speech"), sizeEstimate, ramTier, false, true, "",
+            sidecars, windows);
     }
 
-    private static CatalogEntry mnnAvailable(String id, String name, String jobGroup, String priority, boolean recommended,
-                                             String role, String repo, long size, String sizeEstimate, String ramTier,
-                                             String architecture, String quantization, LinkedHashSet<String> displayTags,
-                                             LinkedHashSet<String> capabilities) {
-        int endpointContextWindow = id.startsWith("qwen2.5-coder-") ? 16_384 : 8192;
-        return entry(id, name, role, repo, "main", "config.json", "Apache-2.0", size, false,
-            TaiModelSpec.BACKEND_MNN_LLM, TaiModelSpec.FORMAT_MNN, architecture, quantization, endpointContextWindow,
-            ramGb(ramTier), null, capabilities, jobGroup, priority, displayTags, sizeEstimate, ramTier,
-            recommended, true, "");
+    /** A Parakeet TDT speech-to-text entry: one 5 s graph (its only window variant, so
+     *  {@link CatalogEntry#withWindow} is a no-op for any other window), the NVIDIA tokenizer as
+     *  its sidecar, {@link ParakeetSttRuntime#ARCHITECTURE} so the router picks that engine. */
+    private static CatalogEntry parakeetAvailable(String id, String name, String role, String repo, String revision,
+                                                   String artifactPath, long size, String sha256,
+                                                   String sizeEstimate, String ramTier,
+                                                   CatalogEntry.Sidecar tokenizerSidecar) {
+        List<CatalogEntry.Sidecar> sidecars = Collections.singletonList(tokenizerSidecar);
+        LinkedHashSet<String> capabilities = setOf(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
+        LinkedHashMap<Integer, CatalogEntry.WindowVariant> windows = new LinkedHashMap<>();
+        windows.put(5, new CatalogEntry.WindowVariant(5, artifactPath, size, sha256));
+        return new CatalogEntry(id, name, role, repo, revision, artifactPath, "CC-BY-4.0", size,
+            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, ParakeetSttRuntime.ARCHITECTURE, "int8",
+            128, 128, 128, ramGb(ramTier), sha256, capabilities, null, null,
+            "speech_to_text", "speech_to_text", tags("Speech", "Multilingual"), sizeEstimate, ramTier, false, true, "",
+            sidecars, windows);
+    }
+
+    /** A speech-output entry: the predictor graph as the artifact, the rest of the package as
+     *  sidecars, {@link KittenTtsRuntime#ARCHITECTURE} so the router picks that engine. No window
+     *  variants: speech output has no window to choose. */
+    private static CatalogEntry kittenTtsAvailable(String id, String name, String role, String repo, String revision,
+                                                   String artifactPath, long packageSize, String sha256,
+                                                   String sizeEstimate, String ramTier,
+                                                   List<CatalogEntry.Sidecar> sidecars) {
+        LinkedHashSet<String> capabilities = setOf(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH);
+        return new CatalogEntry(id, name, role, repo, revision, artifactPath, "Apache-2.0", packageSize,
+            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, KittenTtsRuntime.ARCHITECTURE, "fp32",
+            128, 128, 128, ramGb(ramTier), sha256, capabilities, null, null,
+            "text_to_speech", "text_to_speech", tags("Voice"), sizeEstimate, ramTier, false, true, "",
+            sidecars, null);
+    }
+
+    /** A text-embedding entry: the widest window graph as the artifact, the smaller windows and the
+     *  tokenizer as hash-pinned sidecars. Gated (the Gemma terms), so the download needs the saved
+     *  Hugging Face token. Embeddings only, never offered as a chat model or bench pick. */
+    private static CatalogEntry embeddingGemmaAvailable(String id, String name, String role, String repo, String revision,
+                                                        String artifactPath, long primarySize, String sha256,
+                                                        String sizeEstimate, String ramTier,
+                                                        List<CatalogEntry.Sidecar> sidecars) {
+        LinkedHashSet<String> capabilities = setOf(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+        return new CatalogEntry(id, name, role, repo, revision, artifactPath, "Gemma", primarySize,
+            true, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, TaiImportProfiles.FAMILY_EMBEDDINGGEMMA,
+            "mixed-precision", 1024, 1024, 128, ramGb(ramTier), sha256, capabilities, null, null,
+            "text_embeddings", "text_embeddings_legacy", tags("Embeddings"), sizeEstimate, ramTier, false, true, "",
+            sidecars, null);
+    }
+
+    /** An EmbeddingGemma 2 entry: one hash-pinned .litertlm with its tokenizer inside, no sidecars,
+     *  not gated (Apache-2.0). Window 2048 is the engine's input cap ({@link LiteRtLmEmbeddingRuntime#MAX_INPUT_TOKENS});
+     *  the model's own window, 8192, is the source window. Embeddings only, never a chat or bench pick. */
+    private static CatalogEntry embeddingGemma2Available(String id, String name, String priority, boolean recommended,
+                                                         String repo, String revision, String artifactPath, long size,
+                                                         String sha256, String sizeEstimate,
+                                                         LinkedHashSet<String> displayTags) {
+        LinkedHashSet<String> capabilities = setOf(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+        return new CatalogEntry(id, name, "Text embeddings", repo, revision, artifactPath, "Apache-2.0", size,
+            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, TaiImportProfiles.FAMILY_EMBEDDINGGEMMA,
+            "int4", LiteRtLmEmbeddingRuntime.MAX_INPUT_TOKENS, 8192, 128, ramGb("4GB+"), sha256, capabilities, null, null,
+            "text_embeddings", priority, displayTags, sizeEstimate, "4GB+", recommended, true, "",
+            null, null);
+    }
+
+    /** A sidecar file from a Hugging Face repo at a pinned revision. */
+    private static CatalogEntry.Sidecar hfSidecar(String repo, String revision, String file, String sha256) {
+        return new CatalogEntry.Sidecar("https://huggingface.co/" + repo + "/resolve/" + revision + "/" + file, file, sha256);
+    }
+
+    /** {@code url/localName/sha256} for the {@code tokenizer.json} sidecar of the matching
+     *  {@code openai/whisper-{size}{.en}} repo, at a pinned revision. */
+    private static CatalogEntry.Sidecar whisperTokenizerSidecar(String tokenizerRepo, String revision, String sha256) {
+        return new CatalogEntry.Sidecar(
+            "https://huggingface.co/openai/" + tokenizerRepo + "/resolve/" + revision + "/tokenizer.json",
+            "tokenizer.json", sha256);
+    }
+
+    private static Map<Integer, CatalogEntry.WindowVariant> whisperWindows(
+            String path5s, long size5s, String sha5s, String path10s, long size10s, String sha10s) {
+        LinkedHashMap<Integer, CatalogEntry.WindowVariant> windows = new LinkedHashMap<>();
+        windows.put(5, new CatalogEntry.WindowVariant(5, path5s, size5s, sha5s));
+        windows.put(10, new CatalogEntry.WindowVariant(10, path10s, size10s, sha10s));
+        return windows;
     }
 
     private static CatalogEntry entry(String id, String name, String role, String repo, String revision, @Nullable String file,
@@ -251,9 +496,6 @@ public final class TaiModelCatalog {
 
     private static int sourceContextWindowFor(String id, String backend, int endpointContextWindow) {
         if (TaiModelRegistry.MODEL_GEMMA_4_E2B_IT.equals(id) || TaiModelRegistry.MODEL_GEMMA_4_E4B_IT.equals(id)) return 32_768;
-        if (TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M.equals(id)) return 1024;
-        if ("qwen2.5-coder-7b-instruct-mnn".equals(id)) return 131_072;
-        if (TaiModelSpec.BACKEND_MNN_LLM.equals(backend) && id.startsWith("qwen2.5-")) return 32_768;
         return endpointContextWindow;
     }
 
@@ -271,7 +513,13 @@ public final class TaiModelCatalog {
         LinkedHashSet<String> tags = new LinkedHashSet<>();
         if (capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) tags.add("Text");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) tags.add("Embeddings");
+        if (capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) tags.add("Speech");
+        if (capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) tags.add("Voice");
+        if (capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_GENERATION)) tags.add("Image");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)) tags.add("Vision");
+        if (capabilities.contains(TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION)) tags.add("Depth");
+        if (capabilities.contains(TaiModelSpec.CAPABILITY_SCENE_SEGMENTATION)) tags.add("Scene");
+        if (capabilities.contains(TaiModelSpec.CAPABILITY_SUBJECT_SEGMENTATION)) tags.add("Subject");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) tags.add("Audio");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_CODE)) tags.add("Code");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE)) tags.add("Tools");
@@ -320,6 +568,13 @@ public final class TaiModelCatalog {
         @Nullable public final String toolMode;
         public final LinkedHashSet<String> capabilities, endpointCapabilities, sourceCapabilities, displayCapabilityTags;
         public final String providerPageUrl, downloadUrl;
+        /** Extra files a download must also fetch (e.g. a Whisper {@code tokenizer.json} from the
+         *  matching {@code openai/whisper-*} repo), reusing the downloader's .part/resume/hash helpers. */
+        public final List<Sidecar> sidecars;
+        /** Speech-only: the window graphs this entry's model id can be downloaded as (Whisper's
+         *  5s/10s pair; Parakeet's one 5s graph). Empty for every non-speech entry.
+         *  {@link #withWindow} swaps the active artifact. */
+        public final Map<Integer, WindowVariant> speechWindows;
 
         private CatalogEntry(String modelId, String displayName, String roleHint, String repositoryId,
                              String revision, @Nullable String artifactPath, String license, long sizeBytes,
@@ -331,6 +586,25 @@ public final class TaiModelCatalog {
                              String jobGroup, String priority,
                              LinkedHashSet<String> displayCapabilityTags, String sizeEstimate, String ramTier,
                              boolean recommended, boolean downloadAvailable, String unavailableReason) {
+            this(modelId, displayName, roleHint, repositoryId, revision, artifactPath, license, sizeBytes, gated,
+                backend, format, architecture, quantization, endpointContextWindow, sourceContextWindow,
+                defaultMaxOutputTokens, recommendedRamGb, sha256, sourceCapabilities, endpointCapabilities,
+                toolMode, jobGroup, priority, displayCapabilityTags, sizeEstimate, ramTier, recommended,
+                downloadAvailable, unavailableReason, Collections.<Sidecar>emptyList(),
+                Collections.<Integer, WindowVariant>emptyMap());
+        }
+
+        private CatalogEntry(String modelId, String displayName, String roleHint, String repositoryId,
+                             String revision, @Nullable String artifactPath, String license, long sizeBytes,
+                             boolean gated, String backend, String format, String architecture,
+                             @Nullable String quantization, int endpointContextWindow, int sourceContextWindow,
+                             int defaultMaxOutputTokens, int recommendedRamGb, @Nullable String sha256,
+                             LinkedHashSet<String> sourceCapabilities,
+                             @Nullable LinkedHashSet<String> endpointCapabilities, @Nullable String toolMode,
+                             String jobGroup, String priority,
+                             LinkedHashSet<String> displayCapabilityTags, String sizeEstimate, String ramTier,
+                             boolean recommended, boolean downloadAvailable, String unavailableReason,
+                             @Nullable List<Sidecar> sidecars, @Nullable Map<Integer, WindowVariant> speechWindows) {
             this.modelId = modelId; this.displayName = displayName; this.roleHint = roleHint;
             this.repositoryId = repositoryId; this.revision = revision; this.artifactPath = artifactPath;
             this.license = license; this.sizeBytes = sizeBytes; this.gated = gated; this.backend = backend;
@@ -349,6 +623,48 @@ public final class TaiModelCatalog {
             this.recommended = recommended; this.downloadAvailable = downloadAvailable; this.unavailableReason = unavailableReason;
             this.providerPageUrl = "https://huggingface.co/" + repositoryId;
             this.downloadUrl = !downloadAvailable || artifactPath == null ? null : providerPageUrl + "/resolve/" + revision + "/" + artifactPath + "?download=true";
+            this.sidecars = sidecars == null || sidecars.isEmpty()
+                ? Collections.<Sidecar>emptyList() : Collections.unmodifiableList(new ArrayList<>(sidecars));
+            this.speechWindows = speechWindows == null || speechWindows.isEmpty()
+                ? Collections.<Integer, WindowVariant>emptyMap() : Collections.unmodifiableMap(new LinkedHashMap<>(speechWindows));
+        }
+
+        /** Returns this entry with the given window's graph as its active artifact (id/capabilities
+         *  unchanged) so a download can fetch the 5s graph instead of the 10s default, or vice versa.
+         *  Returns {@code this} unchanged for a window this entry doesn't have (or a non-speech entry). */
+        @NonNull
+        public CatalogEntry withWindow(int windowSeconds) {
+            WindowVariant variant = speechWindows.get(windowSeconds);
+            if (variant == null) return this;
+            return new CatalogEntry(modelId, displayName, roleHint, repositoryId, revision, variant.artifactPath,
+                license, variant.sizeBytes, gated, backend, format, architecture, quantization,
+                endpointContextWindow, sourceContextWindow, defaultMaxOutputTokens, recommendedRamGb,
+                variant.sha256, sourceCapabilities, endpointCapabilities, toolMode, jobGroup, priority,
+                displayCapabilityTags, sizeEstimate, ramTier, recommended, downloadAvailable, unavailableReason,
+                sidecars, speechWindows);
+        }
+
+        /** A required extra file (e.g. Whisper's {@code tokenizer.json} from the paired
+         *  {@code openai/whisper-*} repo) downloaded alongside the main artifact. */
+        public static final class Sidecar {
+            public final String url;
+            public final String localName;
+            @Nullable public final String sha256;
+            public Sidecar(@NonNull String url, @NonNull String localName, @Nullable String sha256) {
+                this.url = url; this.localName = localName; this.sha256 = sha256;
+            }
+        }
+
+        /** One window-length graph of a speech-to-text model (Whisper's 5s/10s ACFT exports). */
+        public static final class WindowVariant {
+            public final int windowSeconds;
+            public final String artifactPath;
+            public final long sizeBytes;
+            @Nullable public final String sha256;
+            public WindowVariant(int windowSeconds, @NonNull String artifactPath, long sizeBytes, @Nullable String sha256) {
+                this.windowSeconds = windowSeconds; this.artifactPath = artifactPath;
+                this.sizeBytes = sizeBytes; this.sha256 = sha256;
+            }
         }
     }
 }

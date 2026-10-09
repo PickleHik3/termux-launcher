@@ -28,13 +28,15 @@ public class AccessoryStackLayoutPolicyTest {
 
     @Test
     public void combinedHeight_coversAllIndependentRowCombinations() {
+        // Updated with a reason: the 6 is the apps row's page-tick strip, which its host lays out
+        // whether or not the letters are on the dock, so every mask with the row counts it.
         int[] expected = {
             0,       // none
-            60,      // apps
+            66,      // apps + strip
             20,      // A-Z
-            86,      // apps + gap + A-Z
+            86,      // apps + strip + A-Z
             40,      // extra keys
-            100,     // apps + extra keys
+            106,     // apps + strip + extra keys
             60,      // A-Z + extra keys
             126      // all three
         };
@@ -46,6 +48,22 @@ public class AccessoryStackLayoutPolicyTest {
                     (mask & 4) != 0,
                     60, 20, 40, 6));
         }
+    }
+
+    /**
+     * The dock with the letters minimised, off or on another edge: the apps row's host is still
+     * its icons and the strip its ticks stand in, so the dock is exactly that over the keys. It
+     * used to come out one strip short, which left the rows off-centre in the glass.
+     */
+    @Test
+    public void theDockWithoutTheLettersStillCountsTheAppsRowsStrip() {
+        int strip = 27;
+        int combined = AccessoryStackLayoutPolicy.computeCombinedHeight(
+            true, false, true, 150, 0, 112, strip);
+        assertEquals(150 + strip + 112, combined);
+        // And a dock with no apps row has no strip to count.
+        assertEquals(112, AccessoryStackLayoutPolicy.computeCombinedHeight(
+            false, false, true, 150, 0, 112, strip));
     }
 
     @Test

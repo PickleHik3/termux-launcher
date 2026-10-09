@@ -22,7 +22,6 @@ import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.app.TermuxService;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.terminal.io.BellHandler;
@@ -81,12 +80,47 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private final android.graphics.Rect mPaneVisibleRect = new android.graphics.Rect();
     private boolean mForegroundRefreshPending;
     private int mLastMaterialTerminalPaletteSignature;
+    /** Cheap stamp (mtime, length) of colors.properties at the last non-dynamic apply. */
+    private long mLastColorsFileStamp = Long.MIN_VALUE;
     @NonNull private String mLastFontErrorSummary = "";
+    /** The resolved faces, so a new pane does not re-read and re-scan the font config. */
+    private final TerminalFontMemo mFontMemo = new TerminalFontMemo();
     private final Runnable mForegroundTerminalRefreshRunnable;
+
+    /**
+     * Lazy mode as last read, or null to read it again. Asked for on every posted redraw, so it is
+     * kept here and dropped whenever the preference changes, and on every start in case another
+     * process wrote it.
+     */
+    @Nullable private Boolean mLazyModeEnabled;
+    /** The store {@link #mLazyModeListener} is registered on, while started. */
+    @Nullable private android.content.SharedPreferences mLazyModeStore;
+    /** Held here: the store keeps its listeners weakly. */
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener mLazyModeListener =
+        (store, key) -> {
+            if (key == null || com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                .TERMUX_APP.KEY_LAZY_MODE.equals(key)) mLazyModeEnabled = null;
+        };
+
+    /**
+     * Notifications, the progress ring and the clipboard: the escape callbacks below hand these
+     * straight to it, and {@link TerminalActionDispatcher} reaches the same object for the local
+     * API's routes, so each signal has exactly one implementation.
+     */
+    @NonNull private final ShellSignals mSignals;
 
     public TermuxTerminalSessionActivityClient(@NonNull Context context, @NonNull TerminalHost host) {
         this.mContext = context;
         this.mHost = host;
+        this.mSignals = new ShellSignals(context, host, new ShellSignals.Notices() {
+            @Override @Nullable public String describe(@NonNull TerminalSession session) {
+                return toToastTitle(session);
+            }
+
+            @Override public void bringToFront(@NonNull TerminalSession session) {
+                setCurrentSession(session);
+            }
+        });
         this.mForegroundTerminalRefreshRunnable = () -> {
             mForegroundRefreshPending = false;
             if (!mHost.isVisible()) return;
@@ -108,6 +142,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * Should be called when onStart() is called
      */
     public void onStart() {
+        mLazyModeEnabled = null;
+        watchLazyMode();
         // The service has connected, but data may have changed since we were last in the foreground.
         // Get the session stored in shared preferences stored by {@link #onStop} if its valid,
         // otherwise get the last session currently running.
@@ -149,6 +185,33 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mDeferredScreenUpdateSessions.clear();
         mForegroundRefreshPending = false;
         mUiHandler.removeCallbacks(mForegroundTerminalRefreshRunnable);
+        unwatchLazyMode();
+    }
+
+    private void watchLazyMode() {
+        unwatchLazyMode();
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
+        android.content.SharedPreferences store = preferences == null ? null : preferences.getSharedPreferences();
+        if (store == null) return;
+        store.registerOnSharedPreferenceChangeListener(mLazyModeListener);
+        mLazyModeStore = store;
+    }
+
+    private void unwatchLazyMode() {
+        if (mLazyModeStore != null) mLazyModeStore.unregisterOnSharedPreferenceChangeListener(mLazyModeListener);
+        mLazyModeStore = null;
+        mLazyModeEnabled = null;
+    }
+
+    private boolean isLazyModeEnabled() {
+        Boolean cached = mLazyModeEnabled;
+        if (cached != null) return cached;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
+        boolean enabled = preferences != null && preferences.isLazyModeEnabled();
+        // Only a value something will tell us about is kept; otherwise it is read each time, as before.
+        if (mLazyModeStore != null && preferences != null
+            && preferences.getSharedPreferences() == mLazyModeStore) mLazyModeEnabled = enabled;
+        return enabled;
     }
 
     public void onImeVisibilityChanged(boolean visible) {
@@ -218,8 +281,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         //     (median 7ms, 3% janky): it competes with an already-ticking frame source.
         //
         // So: the frame clock exactly when nothing else is driving frames.
-        boolean pumpFrames = mHost.preferences() != null
-            && mHost.preferences().isLazyModeEnabled();
+        boolean pumpFrames = isLazyModeEnabled();
         if (pumpFrames) {
             changedView.postOnAnimation(redraw);
         } else {
@@ -240,15 +302,21 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return;
         if (!mHost.isVisible())
             return;
-        // Taken and emptied before a single pane is drawn, so a redraw that lands us back here —
-        // an accessibility event, a listener — finds nothing owed rather than the same list again.
-        java.util.List<TerminalSession> deferred =
-            new ArrayList<>(mDeferredScreenUpdateSessions);
-        mDeferredScreenUpdateSessions.clear();
-        for (TerminalSession session : deferred) {
-            com.termux.view.TerminalView view = mHost.viewForSession(session);
-            if (view != null)
-                drawScreen(view);
+        android.os.Trace.beginSection("Terminal.placeMayBeVisible");
+        try {
+            // Taken and emptied before a single pane is drawn, so a redraw that lands us back
+            // here — an accessibility event, a listener — finds nothing owed rather than the same
+            // list again.
+            java.util.List<TerminalSession> deferred =
+                new ArrayList<>(mDeferredScreenUpdateSessions);
+            mDeferredScreenUpdateSessions.clear();
+            for (TerminalSession session : deferred) {
+                com.termux.view.TerminalView view = mHost.viewForSession(session);
+                if (view != null)
+                    drawScreen(view);
+            }
+        } finally {
+            android.os.Trace.endSection();
         }
     }
 
@@ -306,6 +374,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     @Override
     public void onSessionFinished(@NonNull TerminalSession finishedSession) {
+        // Ahead of everything below: a session that held the in-app keyboard down for a program
+        // running in it (tlstore-ui's `keyboard.hide --hold`) must not leave it stuck down just
+        // because the shell exited instead of asking nicely with `keyboard.show`.
+        TerminalActionDispatcher.getInstance().onSessionFinished(finishedSession);
         // Nothing to paint for a shell that has ended, and no reason to hold it here until the
         // wall next moves.
         mDeferredScreenUpdateSessions.remove(finishedSession);
@@ -371,11 +443,16 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         }
     }
 
+    /** The signal paths this client feeds, for the local API to feed the same way. */
+    @NonNull
+    public ShellSignals signals() {
+        return mSignals;
+    }
+
+    /** An OSC 52 write, or the terminal's own copy: one clipboard path, see {@link ShellSignals}. */
     @Override
     public void onCopyTextToClipboard(@NonNull TerminalSession session, String text) {
-        if (!mHost.isVisible())
-            return;
-        ShareUtils.copyTextToClipboard(mContext, text);
+        if (text != null) mSignals.clipboardWrite(text);
     }
 
     @Override
@@ -388,18 +465,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
-     * Answer an OSC 52 clipboard read query ({@code ESC ] 52 ; c ; ? BEL}). Null (not the launcher
-     * being visible, the setting off, or nothing on the clipboard) reads as an empty clipboard to
-     * the caller, which still answers the query rather than leaving the program hanging.
+     * Answer an OSC 52 clipboard read query ({@code ESC ] 52 ; c ; ? BEL}). Null (the read refused
+     * — launcher not visible or the setting off — or nothing on the clipboard) reads as an empty
+     * clipboard to the caller, which still answers the query rather than leaving the program
+     * hanging. The rules themselves are {@link ShellSignals#clipboardReadRefusal()}.
      */
     @Override
     public String onReadTextFromClipboard(@NonNull TerminalSession session) {
-        if (!mHost.isVisible())
-            return null;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(mContext, false);
-        if (preferences == null || !preferences.isOsc52ClipboardReadEnabled())
-            return null;
-        return ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
+        return mSignals.clipboardRead();
     }
 
     @Override
@@ -426,51 +499,25 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
-     * A terminal notification is a bell with words: the window is marked the same way, and the
-     * message itself is shown — from any window, since unlike a bell it says something.
+     * A terminal notification (OSC 9, OSC 777) is a bell with words: the window is marked the
+     * same way, and the message itself is shown as an in-app notice — from any window, since
+     * unlike a bell it says something. See {@link ShellSignals#notice}.
      */
     @Override
     public void onNotification(@NonNull TerminalSession session, String title, String body) {
-        mHost.noteShellAttention(session);
-        if (!mHost.isVisible())
-            return;
-        String where = toToastTitle(session);
-        String headline = title != null && !title.trim().isEmpty() ? title.trim()
-            : (where == null || where.isEmpty() ? null
-                : mContext.getString(R.string.notice_shell_wants_attention, where));
-        String detail = body == null ? "" : body.trim();
-        if (headline == null && detail.isEmpty())
-            return;
-        AppNotice.shell(mContext, headline == null ? detail : headline,
-            headline == null || detail.isEmpty() ? null : detail,
-            "\uf0f3" /* nf-fa-bell */, true,
-            session == mHost.currentSession() ? null : () -> setCurrentSession(session));
+        mSignals.notice(session, title, body);
     }
 
-    /**
-     * A message with more to it than words: it can be named, replaced, taken down again, and
-     * marked urgent. That belongs in the phone's own notification shade, where the user reads it
-     * with the launcher put away and taps it to come back to the pane that sent it.
-     */
+    /** OSC 99: the phone's notification shade, through the same path the local API uses. */
     @Override
     public void onKittyNotification(@NonNull TerminalSession session,
                                     @NonNull com.termux.terminal.KittyNotification notification) {
-        mHost.noteShellAttention(session);
-        boolean visible = mHost.isVisible();
-        boolean inFront = session == mHost.currentSession();
-        if (!ShellNotifications.shouldShow(notification, visible, inFront))
-            return;
-        if (ShellNotifications.post(mContext, session, notification, visible, inFront) == null
-            && visible) {
-            // Nothing reached the shade — notifications are turned off for the launcher — so the
-            // message still gets the older in-app notice rather than being lost.
-            onNotification(session, notification.getTitle(), notification.getBody());
-        }
+        mSignals.notify(session, notification);
     }
 
     @Override
     public void onKittyNotificationClose(@NonNull TerminalSession session, @NonNull String id) {
-        ShellNotifications.close(mContext, session, id);
+        mSignals.notifyClose(session, id);
     }
 
     /**
@@ -511,14 +558,19 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     @Override
     public void onTerminalCursorStateChange(boolean enabled) {
-        // Do not start cursor blinking thread if activity is not visible
-        if (enabled && !mHost.isVisible()) {
-            Logger.logVerbose(LOG_TAG, "Ignoring call to start cursor blinking since activity is not visible");
-            return;
-        }
+        // A program running in a hidden pane (a TUI spinner, an agent) can toggle the cursor twice a
+        // second, and each toggle used to log and stop/restart the blinker. While the activity is not
+        // visible there is nothing to blink and the blinker is already stopped (TermuxTerminalViewClient
+        // .onStop), and onStart starts it again from the emulator's current cursor state.
+        if (!shouldApplyCursorStateChange(mHost.isVisible())) return;
         // If cursor is to enabled now, then start cursor blinking if blinking is enabled
         // otherwise stop cursor blinking
         mHost.focusedView().setTerminalCursorBlinkerState(enabled, false);
+    }
+
+    /** Whether a cursor show/hide from the emulator should touch the blinker: only while the activity is visible. */
+    static boolean shouldApplyCursorStateChange(boolean activityVisible) {
+        return activityVisible;
     }
 
     @Override
@@ -841,30 +893,44 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 && mHost.preferences().isTerminalDynamicColorsEnabled();
             final Properties props;
             if (dynamic) {
-                TerminalContrastLevel level = mHost.preferences().getTerminalContrastLevel();
+                TerminalContrastLevel level =
+                    com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences());
                 props = MaterialTerminalColorScheme.create(mContext, level);
                 mLastMaterialTerminalPaletteSignature =
                     MaterialTerminalColorScheme.signature(mContext, level);
-                // Built here, on the main thread, and handed over as finished values: the writer thread
-                // must not touch the theme or resources, and this way the files describe the same
-                // palette the terminal just took. The dark and light halves are derived beside it,
-                // off forced-mode configuration contexts, so the templates can dress a tool for the
-                // mode the phone is not in.
+                mLastColorsFileStamp = Long.MIN_VALUE;
+                // The active roles are built here, on the main thread, from the activity's theme, so
+                // the files describe the same palette the terminal just took. The dark and light
+                // halves, which only the files and templates use, are derived on the writer thread
+                // off forced-mode contexts that only it touches, so the templates can dress a tool
+                // for the mode the phone is not in without costing this thread two theme builds.
                 ThemeTemplates.exportPaletteAndRunPassAsync(mContext,
-                    MaterialTerminalColorScheme.createPaletteSet(mContext, level, props));
+                    MaterialTerminalColorScheme.paletteSetSource(mContext, level, props));
             } else {
                 props = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;
                 File colorsFile = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
+                mLastColorsFileStamp = colorsFileStamp();
                 if (colorsFile.isFile()) {
                     try (InputStream in = new FileInputStream(colorsFile)) {
                         props.load(in);
                     }
                     exportSchemeColorFiles(props);
+                } else {
+                    // No custom theme: rewrite the material-colors files from the scheme so shells
+                    // do not keep the old wallpaper palette.
+                    exportSchemeColorFiles(props);
                 }
             }
             TerminalColors.COLOR_SCHEME.updateWith(colorKeysOnly(props));
             resetAllSessionColors();
+            // A reset repaints nothing by itself: the emulator's onColorsChanged only reaches the
+            // window background. Every other door here (resume, a configuration change, a return
+            // from Settings) redraws the window anyway; the Appearance editor's Legibility does
+            // not, so without this the panes kept the old palette on screen until their next
+            // output. The row cache sees the palette move and re-records each row.
+            for (com.termux.view.TerminalView view : mHost.paneViews())
+                view.invalidate();
             updateBackgroundColor();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalColors()", e);
@@ -963,7 +1029,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     /** Load the configured faces and apply them to every pane that has a renderer. */
     public void applyTerminalFonts() {
         try {
-            TerminalFontLoader.Faces faces = TerminalFontLoader.load(TerminalFontConfig.load());
+            // Always a fresh load: this is the path a config edit or a return from Settings takes.
+            TerminalFontMemo.Entry loaded = mFontMemo.reload();
+            TerminalFontConfig.Result config = loaded.config;
+            TerminalFontLoader.Faces faces = loaded.faces;
             reportFontErrors(faces.errors);
             for (com.termux.view.TerminalView v : mHost.paneViews()) {
                 if (v.isFontInitialized())
@@ -973,6 +1042,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                         faces.boxDrawingPolicy, fallbackTypefaces(faces),
                         faces.symbolExpansion);
             }
+            // kitty.conf's cursor_trail* directives are read from the same file, at the same time.
+            if (mHost.paneController() != null)
+                mHost.paneController().applyCursorTrailKittyConfig(config);
             mHost.requestFlushDockGeometryUpdate();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalFonts()", e);
@@ -984,7 +1056,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (view == null || !view.isFontInitialized())
             return;
         try {
-            TerminalFontLoader.Faces faces = TerminalFontLoader.load(TerminalFontConfig.load());
+            TerminalFontLoader.Faces faces = mFontMemo.current().faces;
             for (String error : faces.errors) Logger.logError(LOG_TAG, "Font config: " + error);
             view.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                 faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,
@@ -1011,6 +1083,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             R.plurals.terminal_font_config_errors, errors.size(), errors.size()), true);
     }
 
+    private static long colorsFileStamp() {
+        File f = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
+        if (!f.isFile()) return -1L;
+        return f.lastModified() * 31L + f.length();
+    }
+
     /**
      * Rebuild the palette only if the Material roles or the contrast level actually moved. This is the
      * path for resume, configuration changes and wallpaper-colour callbacks: they fire whether or not
@@ -1018,12 +1096,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * every session, and two file writes that open shells watch.
      */
     public void refreshMaterialTerminalColorsIfNeeded() {
-        if (mHost.preferences() == null
-            || !mHost.preferences().isTerminalDynamicColorsEnabled()) {
+        if (mHost.preferences() == null) return;
+        if (!mHost.preferences().isTerminalDynamicColorsEnabled()) {
+            // A custom colors.properties is followed: re-read it only when it changed.
+            if (colorsFileStamp() != mLastColorsFileStamp) applyTerminalColors();
             return;
         }
         int signature = MaterialTerminalColorScheme.signature(mContext,
-            mHost.preferences().getTerminalContrastLevel());
+            com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()));
         if (signature == mLastMaterialTerminalPaletteSignature) return;
         applyTerminalColors();
     }
@@ -1086,28 +1166,27 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
-     * Push the "Trim trailing spaces on wrapped lines" preference into every live session's
-     * emulator, the same way {@link #resetAllSessionColors()} pushes a palette change: an
-     * emulator has no preferences access of its own, and a toggle should not need its shell
-     * reopened to take effect. Called for a newly shown session and again on the settings-return
-     * refresh.
+     * Push the "Clipboard Cleanup" preference into every live session's emulator, the same way
+     * {@link #resetAllSessionColors()} pushes a palette change: an emulator has no preferences
+     * access of its own, and a toggle should not need its shell reopened to take effect. Called
+     * for a newly shown session and again on the settings-return refresh.
      */
-    public void applyTrimWrappedTrailingSpacesPreference() {
-        boolean enabled = mHost.preferences() == null
-            || mHost.preferences().isTrimWrappedTrailingSpacesEnabled();
+    public void applyClipboardCleanupPreference() {
+        boolean clipboardCleanup = mHost.preferences() == null
+            || mHost.preferences().isClipboardCleanupEnabled();
         TermuxService service = mHost.service();
         if (service != null) {
             for (TermuxSession termuxSession : service.getTermuxSessions()) {
                 TerminalSession session = termuxSession.getTerminalSession();
                 if (session != null && session.getEmulator() != null) {
-                    session.getEmulator().setTrimWrappedTrailingSpaces(enabled);
+                    session.getEmulator().setClipboardCleanupEnabled(clipboardCleanup);
                 }
             }
             return;
         }
         TerminalSession session = mHost.currentSession();
         if (session != null && session.getEmulator() != null) {
-            session.getEmulator().setTrimWrappedTrailingSpaces(enabled);
+            session.getEmulator().setClipboardCleanupEnabled(clipboardCleanup);
         }
     }
 

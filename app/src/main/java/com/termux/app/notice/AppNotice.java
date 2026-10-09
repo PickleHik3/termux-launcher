@@ -151,10 +151,35 @@ public final class AppNotice {
      * queueing behind it, and it yields to any real notice.
      */
     public static void readout(@Nullable Context context, @Nullable CharSequence label) {
+        readout(context, label, AppNoticeItem.Hold.READOUT.ms);
+    }
+
+    /**
+     * A read-out that names something still under way — the place the wall is sliding to — and
+     * so is taken down by {@link #clearReadout} when it lands rather than by the clock. The hold
+     * is a ceiling for a landing that never comes. Raised again with a different label while up,
+     * it swaps the words in place like every read-out, so a slide redirected mid-way reads as
+     * one label changing.
+     */
+    public static void readout(@Nullable Context context, @Nullable CharSequence label,
+                               long holdMs) {
         if (context == null || TextUtils.isEmpty(label)) return;
         AppNoticeItem item = new AppNoticeItem(AppNoticeItem.Kind.INFO, label, null, null,
-            AppNoticeItem.Hold.READOUT.ms, null, false, null, true);
+            holdMs, null, false, null, true);
         post(context, item);
+    }
+
+    /** Takes down the read-out on the pill, if a read-out is what is there; a real notice stays. */
+    public static void clearReadout(@Nullable Context context) {
+        if (context == null) return;
+        Activity fromContext = activityOf(context);
+        Runnable clear = () -> {
+            Activity activity = usable(fromContext) ? fromContext : current();
+            AppNoticeHostView host = usable(activity) ? hostFor(activity) : null;
+            if (host != null) host.clearReadout();
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) clear.run();
+        else MAIN.post(clear);
     }
 
     /** A notice held for exactly as long as its kind is worth, rather than short-or-long. */

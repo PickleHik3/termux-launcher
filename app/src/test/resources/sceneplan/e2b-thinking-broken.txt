@@ -1,0 +1,16 @@
+```json
+{
+  "elements": [
+    {"name": "deep blue sky", "kind": "sky", "box": [0, 0, 1000, 400], "depth": "near", "motion": "still", "note": "Vibrant, deep blue color dominating the upper portion of the scene."},
+    {"name": "white cumulus clouds", "kind": "clouds", "box": [0, 0, 1000, 400], "depth": "near", "motion": "drift", "note": "Bright, fluffy clouds catching the warm light, suggesting gentle movement."},
+    {"name": "snow-capped mountain", "kind": "mountain", "box": [300, 350, 700, 700], "depth": "middle", "motion": "still", "note": "Majestic peak covered in white snow, illuminated by soft, warm light."},
+    {"name": "pink grass field", "kind": "grass", "box": [0, 600, 1000, 1000], "depth": "near", "motion": "sway", "note": "Dense, lush field with vibrant pink and purple hues, suggesting a gentle breeze."},
+    {"name": "lone cloaked figure", "kind": "figure", "box": [450, 650, 555, 75], "depth": "near", "motion": "still", "note": "A dark, solitary figure standing centered in the field, providing a focal point."}
+  ],
+  "scene": {
+    "time": "dawn",
+    "weather": "clear",    "light_direction": "low sun from the right",    "particles": "small reddish specks",    "mood": "ethereal, serene",    "do_not_animate": [
+    "lone cloaked figure"
+  ]
+}
+```

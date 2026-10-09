@@ -136,6 +136,34 @@ public final class X11GpuProbe {
             return line;
         }
 
+        /**
+         * What to paste into the terminal to give Linux apps this phone's graphics: the packages
+         * the top profile needs, and its exports for a shell the user drives by hand.
+         *
+         * <p>The exports are a convenience, not the point. Apps opened from the app drawer get
+         * them already - {@code X11LinuxAppRunner} probes and exports the best <em>installed</em>
+         * profile every time it starts one - so the install line above them is what actually
+         * changes anything, and the comment says so rather than leaving the user to wonder.
+         *
+         * <p>Ends without a newline, like the setup command on the same screen, so the user's own
+         * Enter is what runs the last line.
+         */
+        @NonNull
+        public String toCommand() {
+            Recommendation best = recommended() != null ? recommended() : ranked.get(ranked.size() - 1);
+            StringBuilder out = new StringBuilder();
+            out.append("# ").append(gpu).append(": ").append(best.profile.id).append('\n');
+            out.append("pkg install -y ").append(String.join(" ", best.packages)).append('\n');
+            if (best.serverCommand != null) {
+                out.append("# then keep this running in Termux: ")
+                    .append(best.serverCommand).append('\n');
+            }
+            out.append("# Apps opened from the app drawer already use this."
+                + " To start one from a terminal yourself:");
+            for (String line : best.env) out.append('\n').append("export ").append(line);
+            return out.toString();
+        }
+
         /** Shell-sourceable: the top profile's exports, then its helper as a comment. */
         @NonNull
         public String toEnv() {

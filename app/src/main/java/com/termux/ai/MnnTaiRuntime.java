@@ -2,6 +2,7 @@ package com.termux.ai;
 
 import android.content.Context;
 import android.net.Uri;
+import android.os.SystemClock;
 import android.util.Base64;
 import android.util.Pair;
 
@@ -26,6 +27,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -33,9 +37,28 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class MnnTaiRuntime implements TaiRuntime {
+    /**
+     * The bundled MNN release, as the benchmark record stamps it. The Java binding exposes no
+     * version call ({@code LlmSession} has none), so this is kept by hand with the native libraries.
+     */
+    public static final String RUNTIME_VERSION = "3.6.1";
+    private static final int DEFAULT_KEEP_WARM_MINUTES = 30;
+
     private final Context appContext;
+    /** Shared with the router's other runtimes; written wherever the session is set or released. */
+    private final TaiResidency residency;
+    /** Runs the idle / keep-warm expiry, the same way LiteRT's "tai-runtime-idle" thread does. */
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "tai-mnn-idle");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private LlmSession session;
+    /** The loaded model's meter waiting for its first request; taken by the next generation. Guarded by {@code this}. */
+    @Nullable private TaiLoadMeter.Pending pendingPrefill;
+    private ScheduledFuture<?> idleUnloadFuture;
+    private long idleUnloadAtMs;
     private String runtimeState = "unloaded";
     private String statusMessage = "MNN runtime is unloaded.";
     private String loadedModelId;
@@ -43,6 +66,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
     /** The loaded package's chat template has a {@code tools} branch; see {@link #chatTemplateSupportsTools}. */
     private boolean loadedTemplateSupportsTools;
     private TaiRuntimeOptions loadedOptions;
+    /** Whether the loaded session runs speculative decoding; see {@link #speculativeRan}. {@code null} with none. */
+    @Nullable private Boolean loadedSpeculativeRan;
     private long loadedAtMs;
     private long lastUsedAtMs;
     private long keepWarmUntilMs;
@@ -53,7 +78,12 @@ public final class MnnTaiRuntime implements TaiRuntime {
     private boolean unloadAfterGeneration;
 
     public MnnTaiRuntime(@NonNull Context context) {
+        this(context, new TaiResidency());
+    }
+
+    public MnnTaiRuntime(@NonNull Context context, @NonNull TaiResidency residency) {
         appContext = context.getApplicationContext();
+        this.residency = residency;
     }
 
     public static boolean isNativeRuntimeAvailable() {
@@ -82,10 +112,37 @@ public final class MnnTaiRuntime implements TaiRuntime {
             activeGenerationId,
             activeGenerationStartedAtMs,
             keepWarmUntilMs,
-            keepWarmUntilMs > 0L ? keepWarmUntilMs : 0L,
+            idleUnloadAtMs,
             loadedAtMs,
-            lastUsedAtMs
+            lastUsedAtMs,
+            speculativeJson(loadedSpeculativeRan)
         );
+    }
+
+    /** {@code {speculativeRan}} for the state, or {@code null} when it is not known. */
+    @Nullable
+    private static JSONObject speculativeJson(@Nullable Boolean ran) {
+        if (ran == null) return null;
+        try {
+            return new JSONObject().put("speculativeRan", ran.booleanValue());
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Whether a loaded session runs speculative decoding: its {@code speculative_type} survived into the
+     * config MNN loaded with. {@code effective} is MNN's own dump of that config, read first; {@code merged}
+     * is what this runtime handed it, for a dump that leaves the key out. Not asked always empties the type
+     * ({@link #applySpeculativeDecodingOverride}), so the answer is known either way; {@code null} only when
+     * neither config could be read.
+     */
+    @Nullable
+    static Boolean speculativeRan(@Nullable JSONObject effective, @Nullable JSONObject merged) {
+        JSONObject source = effective != null && effective.has("speculative_type") ? effective
+            : merged != null ? merged : effective;
+        if (source == null) return null;
+        return !source.optString("speculative_type", "").trim().isEmpty();
     }
 
     @Override
@@ -115,6 +172,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
         }
         String previous = loadedModelId;
         unloadAfterGeneration = false;
+        if (previous != null) {
+            TaiEventLog.log(appContext, TaiEventLog.UNLOAD, previous, TaiModelSpec.BACKEND_MNN_LLM,
+                loadedOptions == null ? null : backendName(loadedOptions), 0, 0L, 0L, null);
+        }
         releaseSessionLocked();
         runtimeState = "unloaded";
         statusMessage = "MNN runtime is unloaded.";
@@ -126,7 +187,22 @@ public final class MnnTaiRuntime implements TaiRuntime {
     @NonNull
     @Override
     public JSONObject keepWarm(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options, int minutes) throws JSONException {
-        return loadInternal(modelSpec, options, minutes);
+        int keepWarmMinutes = minutes > 0 ? minutes : DEFAULT_KEEP_WARM_MINUTES;
+        synchronized (this) {
+            // The model is already up: extend its warmth instead of paying a reload, as LiteRT does.
+            if (!generating && session != null && modelSpec.id.equals(loadedModelId)) {
+                keepWarmUntilMs = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(keepWarmMinutes);
+                statusMessage = "MNN model is warm.";
+                maybeRefreshStateLocked();
+                scheduleIdleUnloadLocked();
+                JSONObject data = stateEnvelopeLocked(true);
+                data.put("keepWarm", true);
+                data.put("keepWarmMinutes", keepWarmMinutes);
+                data.put("keepWarmUntilMs", keepWarmUntilMs);
+                return data;
+            }
+        }
+        return loadInternal(modelSpec, options, keepWarmMinutes);
     }
 
     @NonNull
@@ -205,8 +281,14 @@ public final class MnnTaiRuntime implements TaiRuntime {
                     : deviceCapabilities.mnnUnsupportedReason);
         }
         TaiRuntimeCrashMarker.markLoad(appContext, modelSpec, options, TaiModelSpec.BACKEND_MNN_LLM);
+        final long loadStartedMs = SystemClock.elapsedRealtime();
+        final int eventContext = options.contextWindow != null ? options.contextWindow : 0;
+        TaiEventLog.log(appContext, TaiEventLog.LOAD_START, modelSpec.id, TaiModelSpec.BACKEND_MNN_LLM,
+            backendName(options), eventContext, 0L, 0L, null);
         if (!isNativeRuntimeAvailable()) {
             TaiRuntimeCrashMarker.clear(appContext);
+            TaiEventLog.log(appContext, TaiEventLog.LOAD_FAIL, modelSpec.id, TaiModelSpec.BACKEND_MNN_LLM,
+                backendName(options), eventContext, 0L, 0L, "mnn_native_unavailable");
             TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
                 TaiModelSpec.BACKEND_MNN_LLM, backendName(options), "Native MNN runtime libraries are not available for this APK/ABI.");
             return error(501, "mnn_native_unavailable", "Native MNN runtime libraries are not available for this APK/ABI.");
@@ -220,13 +302,31 @@ public final class MnnTaiRuntime implements TaiRuntime {
         }
 
         LlmSession initialized;
+        long measured;
+        TaiLoadMeter loadMeter = null;
+        JSONObject mergedConfigObj;
         try {
-            String mergedConfig = mergedConfigJson(config, modelSpec, options);
-            String extraConfig = extraConfigJson(modelSpec);
+            mergedConfigObj = mergedConfigJson(config, modelSpec, options);
+            String mergedConfig = mergedConfigObj.toString();
+            String extraConfig = extraConfigJson(modelSpec, mergedConfigObj, config);
             initialized = new LlmSession();
-            initialized.load(config.getAbsolutePath(), null, mergedConfig, extraConfig);
+            // MemAvailable is sampled across native init and then on to the first request's first
+            // token (see TaiLoadMeter); the load figure is booked below, so a failed load never
+            // records one.
+            TaiLoadMeter meter = TaiLoadMeter.start(appContext);
+            boolean loadedOk = false;
+            try {
+                initialized.load(config.getAbsolutePath(), null, mergedConfig, extraConfig);
+                measured = meter.endLoad();
+                loadMeter = meter;
+                loadedOk = true;
+            } finally {
+                if (!loadedOk) meter.stop();
+            }
         } catch (Throwable t) {
             TaiRuntimeCrashMarker.clear(appContext);
+            TaiEventLog.log(appContext, TaiEventLog.LOAD_FAIL, modelSpec.id, TaiModelSpec.BACKEND_MNN_LLM,
+                backendName(options), eventContext, SystemClock.elapsedRealtime() - loadStartedMs, 0L, message(t));
             TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
                 TaiModelSpec.BACKEND_MNN_LLM, backendName(options), message(t));
             synchronized (this) {
@@ -236,8 +336,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
             }
         }
 
+        JSONObject effectiveConfig = safeJson(initialized.dumpConfig());
         synchronized (this) {
             session = initialized;
+            loadedSpeculativeRan = speculativeRan(effectiveConfig.length() == 0 ? null : effectiveConfig, mergedConfigObj);
             loadedModelId = modelSpec.id;
             loadedModelPath = config.getAbsolutePath();
             loadedTemplateSupportsTools = chatTemplateSupportsTools(config);
@@ -246,16 +348,34 @@ public final class MnnTaiRuntime implements TaiRuntime {
             lastUsedAtMs = loadedAtMs;
             keepWarmUntilMs = keepWarmMinutes > 0 ? loadedAtMs + TimeUnit.MINUTES.toMillis(keepWarmMinutes) : 0L;
             TaiRuntimeCrashMarker.clear(appContext);
+            String accelerator = TaiLoadPreflight.normalizeAccelerator(backendName(options));
+            if (accelerator == null) accelerator = "cpu";
+            int loadedContext = options.contextWindow != null ? options.contextWindow : TaiLoadBudget.FLOOR_CONTEXT;
+            if (measured >= 0L) {
+                TaiRuntimeHistory.recordMeasuredLoad(appContext, modelSpec, deviceCapabilities,
+                    TaiModelSpec.BACKEND_MNN_LLM, accelerator, loadedContext, measured);
+            }
+            if (pendingPrefill != null) pendingPrefill.abandon();
+            pendingPrefill = loadMeter == null ? null : new TaiLoadMeter.Pending(loadMeter, modelSpec,
+                deviceCapabilities, TaiModelSpec.BACKEND_MNN_LLM, accelerator, loadedContext);
+            residency.register(TaiResidency.Entry.chat(modelSpec, TaiModelSpec.BACKEND_MNN_LLM, accelerator, loadedContext)
+                .withMeasured(measured >= 0L ? measured : null));
             TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
                 TaiModelSpec.BACKEND_MNN_LLM, backendName(options));
+            TaiEventLog.log(appContext, TaiEventLog.LOAD_OK, modelSpec.id, TaiModelSpec.BACKEND_MNN_LLM,
+                accelerator, loadedContext, SystemClock.elapsedRealtime() - loadStartedMs, measured, null);
             runtimeState = "loaded";
             statusMessage = keepWarmUntilMs > 0L ? "MNN model loaded and warm." : "MNN model loaded.";
+            maybeRefreshStateLocked();
+            scheduleIdleUnloadLocked();
             JSONObject data = stateEnvelopeLocked(true);
             data.put("loadedModelId", loadedModelId);
             data.put("backend", backendName(options));
             data.put("modelPath", loadedModelPath);
             data.put("options", options.toJson());
-            data.put("effectiveConfig", safeJson(initialized.dumpConfig()));
+            data.put("effectiveConfig", effectiveConfig);
+            data.put("speculativeRan", loadedSpeculativeRan == null ? JSONObject.NULL : loadedSpeculativeRan);
+            if (measured >= 0L) data.put("measuredLoadBytes", measured);
             if (keepWarmUntilMs > 0L) {
                 data.put("keepWarm", true);
                 data.put("keepWarmMinutes", keepWarmMinutes);
@@ -276,6 +396,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         LlmSession activeSession;
         String generationId;
         long startedAt;
+        TaiLoadMeter.Pending prefill;
         synchronized (this) {
             JSONObject availabilityError = ensureLoadedForGenerationLocked(modelId);
             if (availabilityError != null) return availabilityError;
@@ -285,6 +406,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
             applyRequestConfigLocked(activeSession, options, request);
             generationId = beginGenerationLocked();
             startedAt = activeGenerationStartedAtMs;
+            prefill = pendingPrefill;
+            pendingPrefill = null;
         }
 
         StringBuilder responseBuilder = new StringBuilder();
@@ -298,6 +421,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
             HashMap<String, Object> nativeResult = activeSession.generateHistory(history, progress -> {
                 if (cancelRequested) return true;
                 if (progress == null) return false;
+                // The first token ends the first-prefill measurement of a fresh load.
+                if (prefill != null) prefill.firstToken();
                 synchronized (responseBuilder) {
                     responseBuilder.append(progress);
                 }
@@ -318,6 +443,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
                 wasCancelled = cancelRequested;
                 finishGenerationLocked(errorRef.get());
             }
+        }
+        if (prefill != null) {
+            prefill.finish(appContext, Math.max(0, metricInt(metrics, "prompt_len", "prompt_tokens", "prefill_tokens", "promptLen")),
+                errorRef.get() == null && !wasCancelled);
         }
 
         Throwable throwable = errorRef.get();
@@ -440,7 +569,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
     @Nullable
     private JSONObject ensureLoadedForGenerationLocked(@NonNull String modelId) throws JSONException {
         if (session == null || loadedModelId == null || !loadedModelId.equals(modelId)) {
-            return errorLocked(409, "model_not_loaded", "Load the downloaded MNN model first with tai load " + modelId + " or from the TAI settings UI.");
+            return errorLocked(409, "model_not_loaded", "Load the downloaded MNN model first with tai load " + modelId + " or from the On-device AI settings UI.");
         }
         return null;
     }
@@ -522,6 +651,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
         lastUsedAtMs = now;
         runtimeState = "generating";
         statusMessage = "Generating.";
+        cancelIdleUnloadLocked();
+        residency.setBusy(TaiResidency.Kind.CHAT, loadedModelId, true);
         return activeGenerationId;
     }
 
@@ -530,6 +661,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         activeGenerationId = null;
         activeGenerationStartedAtMs = 0L;
         lastUsedAtMs = System.currentTimeMillis();
+        residency.setBusy(TaiResidency.Kind.CHAT, loadedModelId, false);
         if (unloadAfterGeneration) {
             releaseSessionLocked();
             runtimeState = "unloaded";
@@ -547,14 +679,79 @@ public final class MnnTaiRuntime implements TaiRuntime {
         runtimeState = "loaded";
         cancelRequested = false;
         maybeRefreshStateLocked();
+        scheduleIdleUnloadLocked();
     }
 
+    /** Mirrors LiteRT: a loaded, idle model reports {@code idle-warm} while its keep-warm runs, {@code loaded} after. */
     private void maybeRefreshStateLocked() {
-        if (loadedModelId == null || generating || keepWarmUntilMs <= 0L) return;
-        if (System.currentTimeMillis() > keepWarmUntilMs) keepWarmUntilMs = 0L;
+        if (loadedModelId == null || generating) return;
+        if (keepWarmUntilMs > 0L && System.currentTimeMillis() > keepWarmUntilMs) keepWarmUntilMs = 0L;
+        if ("loaded".equals(runtimeState) || "idle-warm".equals(runtimeState)) {
+            runtimeState = keepWarmUntilMs > System.currentTimeMillis() ? "idle-warm" : "loaded";
+        }
+    }
+
+    /**
+     * The same expiry LiteRT chat has: the session is released at the later of the keep-warm end
+     * and the idle-unload setting counted from last use; neither set means it stays until an
+     * unload. Before this the keep-warm merely stopped being reported and the session stayed.
+     */
+    private void scheduleIdleUnloadLocked() {
+        cancelIdleUnloadLocked();
+        if (session == null) {
+            idleUnloadAtMs = 0L;
+            return;
+        }
+        long target = calculateUnloadAtMsLocked();
+        idleUnloadAtMs = target;
+        if (target <= 0L) return;
+        long delayMs = Math.max(1000L, target - System.currentTimeMillis());
+        idleUnloadFuture = scheduler.schedule(this::maybeUnloadAfterIdle, delayMs, TimeUnit.MILLISECONDS);
+    }
+
+    private void maybeUnloadAfterIdle() {
+        synchronized (this) {
+            if (session == null) return;
+            if (generating) {
+                scheduleIdleUnloadLocked();
+                return;
+            }
+            long target = calculateUnloadAtMsLocked();
+            idleUnloadAtMs = target;
+            long now = System.currentTimeMillis();
+            if (target > now) {
+                idleUnloadFuture = scheduler.schedule(this::maybeUnloadAfterIdle, target - now, TimeUnit.MILLISECONDS);
+                return;
+            }
+            if (target > 0L) {
+                releaseSessionLocked();
+                runtimeState = "unloaded";
+                statusMessage = "MNN model unloaded after idle or keep-warm timeout.";
+            }
+        }
+    }
+
+    private long calculateUnloadAtMsLocked() {
+        long target = 0L;
+        long now = System.currentTimeMillis();
+        if (keepWarmUntilMs > now) target = keepWarmUntilMs;
+        int idleMinutes = loadedOptions != null && loadedOptions.idleUnloadMinutes != null ? loadedOptions.idleUnloadMinutes : 0;
+        if (idleMinutes > 0) {
+            long idleTarget = lastUsedAtMs + TimeUnit.MINUTES.toMillis(idleMinutes);
+            target = Math.max(target, idleTarget);
+        }
+        return target;
+    }
+
+    private void cancelIdleUnloadLocked() {
+        if (idleUnloadFuture != null) {
+            idleUnloadFuture.cancel(false);
+            idleUnloadFuture = null;
+        }
     }
 
     private void releaseSessionLocked() {
+        cancelIdleUnloadLocked();
         if (session != null) {
             try {
                 session.release();
@@ -562,13 +759,22 @@ public final class MnnTaiRuntime implements TaiRuntime {
             }
         }
         session = null;
+        // Every release funnels through here: unload, the idle / keep-warm timer, the release
+        // before a replacing load, and the pending unload after a cancelled generation.
+        if (loadedModelId != null) residency.deregister(TaiResidency.Kind.CHAT, loadedModelId);
+        if (pendingPrefill != null) {
+            pendingPrefill.abandon();
+            pendingPrefill = null;
+        }
         loadedModelId = null;
         loadedModelPath = null;
         loadedTemplateSupportsTools = false;
         loadedOptions = null;
+        loadedSpeculativeRan = null;
         loadedAtMs = 0L;
         lastUsedAtMs = 0L;
         keepWarmUntilMs = 0L;
+        idleUnloadAtMs = 0L;
     }
 
     @NonNull
@@ -1065,7 +1271,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private String mergedConfigJson(@NonNull File config, @NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options) throws JSONException {
+    private JSONObject mergedConfigJson(@NonNull File config, @NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options) throws JSONException {
         JSONObject json = readJsonFile(config);
         File modelDir = config.getParentFile();
         if (modelDir != null && json.optString("tokenizer_file", "").trim().isEmpty()) {
@@ -1073,6 +1279,9 @@ public final class MnnTaiRuntime implements TaiRuntime {
         }
         if (!json.has("backend_type")) json.put("backend_type", "cpu");
         if (!json.has("thread_num")) json.put("thread_num", 4);
+        // "high" binds MNN's threads to the fastest clusters (Llm reads it into BackendConfig::Power_High);
+        // the default "normal" leaves them unpinned, free to land on the little cores.
+        if (!json.has("power")) json.put("power", "high");
         if (!json.has("precision")) json.put("precision", "low");
         if (!json.has("memory")) json.put("memory", "low");
         if (!json.has("max_all_tokens")) json.put("max_all_tokens", modelSpec.endpointContextWindow);
@@ -1093,7 +1302,25 @@ public final class MnnTaiRuntime implements TaiRuntime {
         if (options.topP != null) json.put("top_p", options.topP);
         if (options.topK != null) json.put("top_k", options.topK);
         applyThinkingOverride(json, options.thinkingEnabled);
-        return json.toString();
+        applySpeculativeDecodingOverride(json, options.speculativeDecodingEnabled);
+        return json;
+    }
+
+    /**
+     * EAGLE-3 speculative decoding is off by default for MNN: measured on-device it was slower
+     * than plain decoding on both CPU and GPU, so auto (null) writes an empty
+     * {@code speculative_type} just like explicit {@code false} does, turning off any package's
+     * own declaration. Only explicit {@code true} keeps the package's own {@code speculative_type}
+     * (and whatever it shipped for {@code hidden_states}) exactly as the config declares it, for a
+     * developer who wants to try it anyway. MNN merges this JSON over the package's own
+     * config.json, so removing the key would leave the package's "eagle" in force, and only an
+     * empty value turns it off (Llm::setSpeculativeConfig); {@code hidden_states} is left alone,
+     * since MNN reads it independently of Eagle. Explicit {@code true} on a package that never
+     * declared {@code speculative_type} is a no-op: there is no draft head to turn on.
+     */
+    private static void applySpeculativeDecodingOverride(@NonNull JSONObject json, @Nullable Boolean speculativeDecodingEnabled) throws JSONException {
+        if (Boolean.TRUE.equals(speculativeDecodingEnabled)) return;
+        if (json.has("speculative_type")) json.put("speculative_type", "");
     }
 
     @NonNull
@@ -1124,25 +1351,152 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private String cacheKey(@NonNull String value) {
+    static String cacheKey(@NonNull String value) {
         String key = value.replaceAll("[^A-Za-z0-9._-]", "_");
         return key.isEmpty() ? "model" : key;
     }
 
+    /** {@code <cacheDir>/tai-mnn-mmap/<modelId>}: the parent of every fingerprint dir for a model. */
     @NonNull
-    private String extraConfigJson(@NonNull TaiModelSpec modelSpec) throws JSONException {
+    private static File mmapModelRoot(@NonNull Context appContext, @NonNull String modelId) {
+        return new File(appContext.getCacheDir(), "tai-mnn-mmap/" + cacheKey(modelId));
+    }
+
+    /**
+     * Deletes a model's whole mmap cache root, fingerprint dirs and legacy flat files alike. Called
+     * on model delete and as the reset hook ({@code clearCache} on the load routes, {@code tai load
+     * --fresh}) for whenever a cache must be thrown away without waiting for it to be judged stale
+     * by its own fingerprint.
+     */
+    static void clearMmapCache(@NonNull Context context, @NonNull String modelId) {
+        deleteRecursively(mmapModelRoot(context.getApplicationContext(), modelId));
+    }
+
+    @NonNull
+    private String extraConfigJson(@NonNull TaiModelSpec modelSpec, @NonNull JSONObject mergedConfig, @NonNull File config) throws JSONException {
         JSONObject json = new JSONObject();
         json.put("is_r1", modelSpec.id.toLowerCase(Locale.ROOT).contains("r1")
             || (modelSpec.architecture != null && modelSpec.architecture.toLowerCase(Locale.ROOT).contains("r1")));
         // The native shim derives use_mmap from whether mmap_dir is non-empty and overwrites
         // any use_mmap/tmp_path in the merged config (llm_session.cpp) — so the directory must
         // be passed here, not in mergedConfigJson.
-        File mmapDir = new File(appContext.getCacheDir(), "tai-mnn-mmap/" + cacheKey(modelSpec.id));
+        //
+        // The directory is fingerprinted rather than reused as-is: on pong (2026-09-28, MNN
+        // 3.6.1) a model's mmap cache — the converted weights MNN writes into it once and then
+        // reuses whenever its sync marker is present — went bad after some unreproduced sequence
+        // of loads with different settings and two app reinstalls, and every reply after that was
+        // "!!!!!!!!" regardless of sampling. MNN never validates what it mmaps back in, so a
+        // corrupt or stale cache is silent until the output is read. Deleting the cache fixed it
+        // at once. The fingerprint folds in everything that should invalidate a cached weight set
+        // — the runtime build, the app build, the weight file's own identity, and the settings
+        // that shape what gets written — so a change in any of them lands in a fresh directory
+        // instead of reusing files that may not match, and the old ones are pruned so the cause
+        // doesn't need to be found for the fix to hold.
+        File modelRoot = mmapModelRoot(appContext, modelSpec.id);
+        String fingerprint = mmapFingerprint(mergedConfig, config, appUpdateStamp());
+        pruneMmapCacheSiblings(modelRoot, fingerprint);
+        File mmapDir = new File(modelRoot, fingerprint);
         if (!mmapDir.isDirectory()) mmapDir.mkdirs();
         json.put("mmap_dir", mmapDir.getAbsolutePath());
         json.put("keep_history", false);
         json.put("prompt_cache", true);
         return json.toString();
+    }
+
+    /**
+     * Deletes every sibling of {@code currentFingerprint} directly under {@code modelRoot}: other
+     * fingerprint directories from earlier loads, and any legacy flat file left by the
+     * pre-fingerprint layout (weights and sync markers written straight into the model's mmap
+     * root). Static and pure so it can be exercised on a temp directory without a device.
+     */
+    static void pruneMmapCacheSiblings(@NonNull File modelRoot, @NonNull String currentFingerprint) {
+        File[] children = modelRoot.listFiles();
+        if (children == null) return;
+        for (File child : children) {
+            if (child.isDirectory() && child.getName().equals(currentFingerprint)) continue;
+            deleteRecursively(child);
+        }
+    }
+
+    private static void deleteRecursively(@Nullable File file) {
+        if (file == null || !file.exists()) return;
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) deleteRecursively(child);
+        }
+        file.delete();
+    }
+
+    /**
+     * A short, stable hash of everything that should invalidate a model's mmap weight cache: the
+     * bundled MNN build, the app build that loaded it, the weight file's own size and mtime (its
+     * cheap stand-in for a content hash), and the load-affecting settings from the merged config.
+     * Pure and static: given the same inputs it always returns the same fingerprint, and changing
+     * any one of them changes it.
+     */
+    @NonNull
+    static String mmapFingerprint(
+        @NonNull JSONObject mergedConfig,
+        @NonNull File config,
+        long appUpdateStamp
+    ) {
+        File modelDir = config.getParentFile();
+        String weightFileName = mergedConfig.optString("llm_weight", "llm.mnn.weight");
+        if (weightFileName.trim().isEmpty()) weightFileName = "llm.mnn.weight";
+        File weightFile = modelDir == null ? null : new File(modelDir, weightFileName);
+        long weightSize = weightFile != null && weightFile.isFile() ? weightFile.length() : -1L;
+        long weightMtime = weightFile != null && weightFile.isFile() ? weightFile.lastModified() : -1L;
+        return mmapFingerprint(
+            RUNTIME_VERSION,
+            appUpdateStamp,
+            weightSize,
+            weightMtime,
+            mergedConfig.optString("backend_type", ""),
+            mergedConfig.optString("precision", ""),
+            mergedConfig.optString("memory", ""),
+            mergedConfig.optInt("thread_num", 0),
+            mergedConfig.optString("speculative_type", "")
+        );
+    }
+
+    @NonNull
+    static String mmapFingerprint(
+        @NonNull String runtimeVersion,
+        long appUpdateStamp,
+        long weightSize,
+        long weightMtime,
+        @NonNull String backendType,
+        @NonNull String precision,
+        @NonNull String memory,
+        int threadNum,
+        @NonNull String speculativeType
+    ) {
+        String material = runtimeVersion + '|' + appUpdateStamp + '|' + weightSize + '|' + weightMtime + '|'
+            + backendType + '|' + precision + '|' + memory + '|' + threadNum + '|' + speculativeType;
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(material.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (int i = 0; i < 8 && i < hash.length; i++) hex.append(String.format(Locale.ROOT, "%02x", hash[i]));
+            return hex.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return Integer.toHexString(material.hashCode());
+        }
+    }
+
+    /**
+     * The app build that loaded the model, so any update starts every model's mmap cache fresh
+     * rather than trusting a converted-weight cache the new build (or a new MNN release bundled
+     * with it) never wrote. {@code lastUpdateTime} survives a reinstall at the same version code,
+     * which is exactly the case that triggered this on pong.
+     */
+    private long appUpdateStamp() {
+        try {
+            return appContext.getPackageManager()
+                .getPackageInfo(appContext.getPackageName(), 0).lastUpdateTime;
+        } catch (Exception e) {
+            return 0L;
+        }
     }
 
     @NonNull

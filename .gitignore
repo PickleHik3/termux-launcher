@@ -61,12 +61,12 @@ knowledge-base.md
 CLAUDE.md
 project-ledger.md
 
-# Agent workspace (keep config/scripts tracked, ignore runtime logs)
-/work-logs/build-error.log
-/work-logs/build-last.log
-/work-logs/build-debug.log
-/work-logs/agent-log.md
-/work-logs/*.tmp
+# Agent workspace: runtime logs and scratch, never committed
+/work-logs/
+
+# Stray screenshots dropped in the repo root, and raw recording takes
+/*.png
+.raw-takes/
 
 # Reference repos
 reference-repos/
@@ -89,4 +89,17 @@ WhatsApp Video*
 # Reference-only handoff bundles (not part of app source)
 .artifacts/
 .gradle-codex-*/
-!app/src/main/assets/help-guide/*.mp4
+__pycache__/
+
+# Local notes, never committed
+project-docs/plans/TODO-voice-command-words.md
+
+# voice-eval harness output and caches (segments, transcripts, alignments; never audio in git)
+scripts/voice-eval/out/
+project-docs/reference/help-diagrams/out/
+
+# tts-eval listening samples and report (models cached in ~/.cache/termux-launcher/tts, never in git)
+scripts/tts-eval/out/
+
+# Layout editor v2 pack: the generator writes this archive; the sources are committed
+project-docs/reference/layout-editor-v2/layout-editor-v2.zip

@@ -194,6 +194,193 @@ public class EmbeddingsEndpointTest {
     }
 
     @Test
+    public void embeddings_withLiteRtLmEmbeddingGemma2_returnsVectorsAndModelsShowsItsWindow() throws Exception {
+        File tempFile = File.createTempFile("embeddinggemma-2-text-270m", ".litertlm");
+        tempFile.deleteOnExit();
+        manager.importModel(new JSONObject()
+            .put("path", tempFile.getAbsolutePath())
+            .put("modelId", "embeddinggemma-2-text-270m")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+        fakeRuntime.addEmbeddingsCapableModel("embeddinggemma-2-text-270m");
+        assertEmbeddingModelIsNotLoadable("embeddinggemma-2-text-270m");
+
+        HttpURLConnection conn = post("/v1/embeddings", new JSONObject()
+            .put("model", "embeddinggemma-2-text-270m")
+            .put("input", "hello world"));
+
+        assertEquals(200, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        assertEquals(768, response.getJSONArray("data").getJSONObject(0).getJSONArray("embedding").length());
+
+        HttpURLConnection models = get("/v1/models");
+        assertEquals(200, models.getResponseCode());
+        JSONObject entry = findModel(new JSONObject(readBody(models)), "embeddinggemma-2-text-270m");
+        assertTrue("the .litertlm embedder must be listed", entry != null);
+        assertEquals(2048, entry.getInt("_endpoint_context_window"));
+        assertFalse(entry.has("_endpoint_windows"));
+        assertEquals(768, entry.getInt("_endpoint_dimensions"));
+        JSONArray dims = entry.getJSONArray("_endpoint_matryoshka_dims");
+        assertEquals(4, dims.length());
+        assertEquals(768, dims.getInt(0));
+        assertEquals(128, dims.getInt(3));
+        JSONArray capabilities = entry.getJSONArray("_endpoint_capabilities");
+        assertEquals(1, capabilities.length());
+        assertEquals(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS, capabilities.getString(0));
+    }
+
+    @Test
+    public void embeddings_withInputTypeAndTitle_reachesTheRuntime() throws Exception {
+        File tempFile = File.createTempFile("embed-model", ".mnn");
+        tempFile.deleteOnExit();
+        manager.importModel(new JSONObject()
+            .put("path", tempFile.getAbsolutePath())
+            .put("modelId", "embed-input-type")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+        fakeRuntime.addEmbeddingsCapableModel("embed-input-type");
+        assertEmbeddingModelIsNotLoadable("embed-input-type");
+
+        HttpURLConnection conn = post("/v1/embeddings", new JSONObject()
+            .put("model", "embed-input-type")
+            .put("input", "hello world")
+            .put("input_type", "query")
+            .put("title", "My Note"));
+
+        assertEquals(200, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        assertEquals("query", response.getString("_inputType"));
+        assertEquals("query", fakeRuntime.lastInputType);
+        JSONObject item = response.getJSONArray("data").getJSONObject(0);
+        assertTrue(item.has("tokens"));
+        assertTrue(item.has("truncated"));
+    }
+
+    @Test
+    public void embeddings_withInvalidInputType_returns400() throws Exception {
+        File tempFile = File.createTempFile("embed-model", ".mnn");
+        tempFile.deleteOnExit();
+        manager.importModel(new JSONObject()
+            .put("path", tempFile.getAbsolutePath())
+            .put("modelId", "embed-bad-input-type")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+        fakeRuntime.addEmbeddingsCapableModel("embed-bad-input-type");
+        assertEmbeddingModelIsNotLoadable("embed-bad-input-type");
+
+        HttpURLConnection conn = post("/v1/embeddings", new JSONObject()
+            .put("model", "embed-bad-input-type")
+            .put("input", "hello world")
+            .put("input_type", "sideways"));
+
+        assertEquals(400, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        assertEquals("invalid_input_type", response.getJSONObject("error").getString("code"));
+    }
+
+    @Test
+    public void embeddings_withEncodingFormatBase64_returnsBase64Strings() throws Exception {
+        File tempFile = File.createTempFile("embed-model", ".mnn");
+        tempFile.deleteOnExit();
+        manager.importModel(new JSONObject()
+            .put("path", tempFile.getAbsolutePath())
+            .put("modelId", "embed-base64")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+        fakeRuntime.addEmbeddingsCapableModel("embed-base64");
+        assertEmbeddingModelIsNotLoadable("embed-base64");
+
+        HttpURLConnection conn = post("/v1/embeddings", new JSONObject()
+            .put("model", "embed-base64")
+            .put("input", "hello world")
+            .put("encoding_format", "base64"));
+
+        assertEquals(200, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        Object embedding = response.getJSONArray("data").getJSONObject(0).get("embedding");
+        assertTrue("expected a base64 string, got " + embedding.getClass(), embedding instanceof String);
+        byte[] decoded = java.util.Base64.getDecoder().decode((String) embedding);
+        assertEquals(0, decoded.length % 4);
+    }
+
+    @Test
+    public void embeddings_withBatchOverLimit_returns413NamingTheLimit() throws Exception {
+        File tempFile = File.createTempFile("embed-model", ".mnn");
+        tempFile.deleteOnExit();
+        manager.importModel(new JSONObject()
+            .put("path", tempFile.getAbsolutePath())
+            .put("modelId", "embed-batch")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+        fakeRuntime.addEmbeddingsCapableModel("embed-batch");
+        assertEmbeddingModelIsNotLoadable("embed-batch");
+
+        JSONArray oversizedBatch = new JSONArray();
+        for (int i = 0; i < 65; i++) oversizedBatch.put("piece " + i);
+        HttpURLConnection conn = post("/v1/embeddings", new JSONObject()
+            .put("model", "embed-batch")
+            .put("input", oversizedBatch));
+
+        assertEquals(413, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        assertEquals("batch_too_large", response.getJSONObject("error").getString("code"));
+        assertTrue(response.getJSONObject("error").getString("message").contains("64"));
+    }
+
+    @Test
+    public void embeddings_overTheRateLimit_returns429WithRetryAfter() throws Exception {
+        File tempFile = File.createTempFile("embed-model", ".mnn");
+        tempFile.deleteOnExit();
+        manager.importModel(new JSONObject()
+            .put("path", tempFile.getAbsolutePath())
+            .put("modelId", "embed-rate-limited")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+        fakeRuntime.addEmbeddingsCapableModel("embed-rate-limited");
+        assertEmbeddingModelIsNotLoadable("embed-rate-limited");
+
+        JSONObject requestBody = new JSONObject().put("model", "embed-rate-limited").put("input", "hi");
+        HttpURLConnection last = null;
+        for (int i = 0; i < 61; i++) {
+            last = post("/v1/embeddings", requestBody);
+            last.getResponseCode();
+        }
+        assertEquals(429, last.getResponseCode());
+        assertTrue("expected a Retry-After header", last.getHeaderField("Retry-After") != null);
+    }
+
+    @Test
+    public void tokenize_withNonLiteRtEmbeddingModel_returnsCapabilityNotSupported() throws Exception {
+        File tempFile = File.createTempFile("embed-model", ".mnn");
+        tempFile.deleteOnExit();
+        manager.importModel(new JSONObject()
+            .put("path", tempFile.getAbsolutePath())
+            .put("modelId", "embed-tokenize-mnn")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+        fakeRuntime.addEmbeddingsCapableModel("embed-tokenize-mnn");
+        assertEmbeddingModelIsNotLoadable("embed-tokenize-mnn");
+
+        HttpURLConnection conn = post("/v1/tokenize", new JSONObject()
+            .put("model", "embed-tokenize-mnn")
+            .put("input", "hello world"));
+
+        assertEquals(501, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        assertEquals("capability_not_supported", response.getJSONObject("error").getString("code"));
+    }
+
+    @Test
+    public void runtime_reportsEmbedderResidencyNextToChatRuntime() throws Exception {
+        HttpURLConnection conn = get("/v1/ai/runtime");
+        assertEquals(200, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        assertTrue(response.has("embedder"));
+        assertTrue(response.has("runtime"));
+        assertFalse(response.getJSONObject("embedder").getBoolean("loaded"));
+    }
+
+    @Test
     public void models_returnsStandardOpenAiListWithBackendAndCapabilities() throws Exception {
         File tempFile = File.createTempFile("listed-litert-model", ".litertlm");
         tempFile.deleteOnExit();
@@ -215,6 +402,97 @@ public class EmbeddingsEndpointTest {
         assertTrue(first.has("owned_by"));
         assertTrue(first.has("_backend"));
         assertTrue(first.has("_capabilities"));
+    }
+
+    @Test
+    public void models_embedderEntry_carriesTheDawnMetadataFields() throws Exception {
+        File tempFile = File.createTempFile("embed-model", ".tflite");
+        tempFile.deleteOnExit();
+        manager.importModel(new JSONObject()
+            .put("path", tempFile.getAbsolutePath())
+            .put("modelId", "embed-metadata-mnn")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+
+        HttpURLConnection conn = get("/v1/models");
+        assertEquals(200, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        JSONObject entry = findModel(response, "embed-metadata-mnn");
+        assertTrue("embedder entry must be present", entry != null);
+        assertTrue(entry.has("_revision"));
+        assertTrue(entry.getBoolean("_endpoint_normalized"));
+        assertEquals(64, entry.getInt("_endpoint_max_batch"));
+        assertEquals("priority", entry.getString("_endpoint_throttle_while_generating"));
+    }
+
+    @Test
+    public void models_embeddingGemma_reportsDimensionsAndMatryoshkaSizes() throws Exception {
+        File tempFile = File.createTempFile("embeddinggemma-300M_seq512_mixed-precision", ".tflite");
+        tempFile.deleteOnExit();
+        manager.importModel(new JSONObject()
+            .put("path", tempFile.getAbsolutePath())
+            .put("modelId", "embeddinggemma-300m")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+
+        HttpURLConnection conn = get("/v1/models");
+        assertEquals(200, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        JSONObject entry = findModel(response, "embeddinggemma-300m");
+        assertTrue("embeddinggemma entry must be present", entry != null);
+        assertEquals(768, entry.getInt("_endpoint_dimensions"));
+        assertEquals("the graph's seqNNNN is the window", 512, entry.getInt("_endpoint_context_window"));
+        JSONArray dims = entry.getJSONArray("_endpoint_matryoshka_dims");
+        assertEquals(768, dims.getInt(0));
+        assertEquals(128, dims.getInt(dims.length() - 1));
+    }
+
+    @Test
+    public void models_embeddingGemmaWithInstalledSiblings_reportsEveryWindow() throws Exception {
+        // A downloaded seq1024 primary with its smaller seq256/seq512 siblings already on disk
+        // (window-routing brief item 7): _endpoint_windows lists all three, ascending, and
+        // _endpoint_context_window is the largest of them, not just the primary's own file name.
+        File primary = File.createTempFile("embeddinggemma-300M_seq1024_mixed-precision", ".tflite");
+        primary.deleteOnExit();
+        File dir = primary.getParentFile();
+        String stem = primary.getName().replace("seq1024", "seq256");
+        File seq256 = new File(dir, stem);
+        seq256.createNewFile();
+        seq256.deleteOnExit();
+        stem = primary.getName().replace("seq1024", "seq512");
+        File seq512 = new File(dir, stem);
+        seq512.createNewFile();
+        seq512.deleteOnExit();
+
+        manager.importModel(new JSONObject()
+            .put("path", primary.getAbsolutePath())
+            .put("modelId", "embeddinggemma-300m-windows")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+
+        HttpURLConnection conn = get("/v1/models");
+        assertEquals(200, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        JSONObject entry = findModel(response, "embeddinggemma-300m-windows");
+        assertTrue("embeddinggemma entry must be present", entry != null);
+        assertEquals(1024, entry.getInt("_endpoint_context_window"));
+        JSONArray windows = entry.getJSONArray("_endpoint_windows");
+        assertEquals(3, windows.length());
+        assertEquals(256, windows.getInt(0));
+        assertEquals(512, windows.getInt(1));
+        assertEquals(1024, windows.getInt(2));
+
+        seq256.delete();
+        seq512.delete();
+    }
+
+    private static JSONObject findModel(JSONObject modelsResponse, String id) throws Exception {
+        JSONArray data = modelsResponse.getJSONArray("data");
+        for (int i = 0; i < data.length(); i++) {
+            JSONObject item = data.getJSONObject(i);
+            if (id.equals(item.optString("id", ""))) return item;
+        }
+        return null;
     }
 
     @Test
@@ -329,18 +607,30 @@ public class EmbeddingsEndpointTest {
 
         @Override
         public JSONObject embed(String modelId, String input) throws org.json.JSONException {
-            return embeddingResponse(modelId, java.util.Collections.singletonList(input), 768);
+            return embeddingResponse(modelId, java.util.Collections.singletonList(input), 768, "document", null);
         }
 
         @Override
         public JSONObject embed(TaiModelSpec spec, List<String> inputs, int dimensions) throws org.json.JSONException {
-            return embeddingResponse(spec.id, inputs, dimensions > 0 ? dimensions : 768);
+            return embeddingResponse(spec.id, inputs, dimensions > 0 ? dimensions : 768, "document", null);
         }
+
+        @Override
+        public JSONObject embed(TaiModelSpec spec, List<String> inputs, int dimensions, String inputType, String title)
+                throws org.json.JSONException {
+            lastInputType = inputType;
+            lastTitle = title;
+            return embeddingResponse(spec.id, inputs, dimensions > 0 ? dimensions : 768, inputType, title);
+        }
+
+        String lastInputType;
+        String lastTitle;
 
         // No "model not loaded" gate here on purpose: TaiManager.loadModel() rejects embedding-only
         // models outright ("embedding_model_not_loadable") because they are served on demand, so an
         // embedding model is never in loadedModels and gating on it could only ever fail.
-        private JSONObject embeddingResponse(String modelId, List<String> inputs, int dimensions) throws org.json.JSONException {
+        private JSONObject embeddingResponse(String modelId, List<String> inputs, int dimensions,
+                                             String inputType, String title) throws org.json.JSONException {
             if (!embeddingsCapableModels.contains(modelId)) {
                 JSONObject error = new JSONObject();
                 error.put("message", "Embeddings are not supported for model '" + modelId + "'.");
@@ -360,12 +650,16 @@ public class EmbeddingsEndpointTest {
                 item.put("object", "embedding");
                 item.put("embedding", embedding);
                 item.put("index", index);
+                item.put("tokens", 4);
+                item.put("truncated", false);
                 dataArray.put(item);
             }
             JSONObject response = new JSONObject();
             response.put("object", "list");
             response.put("data", dataArray);
             response.put("model", modelId);
+            response.put("_inputType", inputType);
+            if (title != null) response.put("_title", title);
             JSONObject usage = new JSONObject();
             usage.put("prompt_tokens", inputs.size() * 4);
             usage.put("total_tokens", inputs.size() * 4);

@@ -40,9 +40,9 @@ public class WidgetPickerInputFocusIntegrationTest {
         pane.picker().setReducedMotion(true); pane.picker().open();
         assertTrue(pane.picker().isOpen()); assertSame(window, activity.getWindow());
         // The picker carries a search field now. Merely being on screen must still take nothing:
-        // the field is not focusable until it is tapped, so the terminal keeps focus and the IME.
+        // the field is not focusable in touch mode until it is tapped, so the terminal keeps focus and the IME.
         EditText search = pane.picker().searchField();
-        assertFalse(search.isFocusable()); assertFalse(search.hasFocus());
+        assertFalse(search.isFocusableInTouchMode()); assertFalse(search.hasFocus());
         assertSame(terminal, root.findFocus());
         assertTrue(pane.onBackPressed()); assertSame(terminal, root.findFocus());
     }

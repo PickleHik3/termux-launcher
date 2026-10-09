@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The "What runs on this phone" welcome card (tai-device-tiers spec section 5). No tier
+     jargon beyond the header and no parameter counts in the copy. -->
+<resources>
+    <string name="tai_welcome_title">Models for this phone</string>
+    <!-- 1: tier number, 2: RAM in GB, 3: chip name, 4: Android version -->
+    <string name="tai_welcome_header">Tier %1$d · %2$d GB · %3$s · Android %4$s</string>
+    <!-- 1: tier number, 2: RAM in GB, 3: Android version -->
+    <string name="tai_welcome_header_no_chip">Tier %1$d · %2$d GB · Android %3$s</string>
+
+    <string name="tai_welcome_row_voice_title">Voice typing</string>
+    <string name="tai_welcome_row_voice_line">Turns what you say into text, offline.</string>
+    <string name="tai_welcome_row_read_aloud_title">Read aloud</string>
+    <string name="tai_welcome_row_read_aloud_line">Reads text out loud, offline.</string>
+    <string name="tai_welcome_row_assistant_title">Assistant and tidy dictation</string>
+    <string name="tai_welcome_row_assistant_line">Fixes punctuation after you speak; serves apps.</string>
+    <string name="tai_welcome_row_tidy_title">Tidy dictation</string>
+    <string name="tai_welcome_row_tidy_line">Fixes punctuation after you speak.</string>
+    <string name="tai_welcome_row_e4b_assistant_title">Assistant</string>
+    <string name="tai_welcome_row_e4b_assistant_line">Answers questions and sorts apps better.</string>
+    <string name="tai_welcome_row_dawn_title">Dawn notes integration</string>
+    <string name="tai_welcome_row_dawn_line">Lets Dawn notes find notes by meaning, not just by the words you typed.</string>
+
+    <string name="tai_welcome_background_warning">May close apps running in the background</string>
+    <string name="tai_welcome_installed">Installed</string>
+    <string name="tai_welcome_model_centre_line">Assistants and smart features: add your own model in the Model Centre.</string>
+
+    <!-- 1: selected download size, 2: free storage -->
+    <string name="tai_welcome_footer">Selected: %1$s · %2$s free</string>
+    <string name="tai_welcome_wifi_only">Wi-Fi only</string>
+    <string name="tai_welcome_later">Later</string>
+    <string name="tai_welcome_download">Download selected</string>
+    <string name="tai_welcome_reason_nothing">Tick something to download it.</string>
+    <string name="tai_welcome_reason_storage">Not enough free storage for this selection.</string>
+    <string name="tai_welcome_need_wifi">Connect to Wi-Fi to download, or switch Wi-Fi only off.</string>
+    <string name="tai_welcome_started">Downloads started. Progress is in the Model Centre.</string>
+
+    <string name="tai_welcome_pref_title">Models for this phone</string>
+    <string name="tai_welcome_pref_summary">Pick the models this phone can run and download them.</string>
+</resources>

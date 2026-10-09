@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Read aloud: a speaker with two sound waves, filled Material Symbols weight (drawn by Codex to match ic_symbol_mic). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="960" android:viewportHeight="960">
+    <group android:translateY="960"><path android:fillColor="?attr/termuxColorOnSurfaceVariant" android:pathData="M160,-600H280L446,-746Q458,-758 469,-751T480,-728V-232Q480,-216 469,-209T446,-214L280,-360H160Q120,-360 120,-400V-560Q120,-600 160,-600ZM580,-653.21A200,200 0 0,1 580,-306.79A40,40 0 0,1 540,-376.08A120,120 0 0,0 540,-583.92A40,40 0 0,1 580,-653.21ZM603.13,-818.29A360,360 0 0,1 603.13,-141.71A40,40 0 0,1 575.77,-216.89A280,280 0 0,0 575.77,-743.11A40,40 0 0,1 603.13,-818.29Z" /></group>
+</vector>

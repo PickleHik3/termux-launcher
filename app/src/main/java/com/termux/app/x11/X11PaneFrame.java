@@ -15,13 +15,17 @@ import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment;
+import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
+import com.termux.app.terminal.PaneBorderStyle;
 import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneSurfaceStyle;
 import com.termux.app.tour.TourEdition;
 import com.termux.app.wall.PaneControlsView;
+import com.termux.app.wall.SurfacePage;
+import com.termux.app.wall.SurfaceStandIn;
 import com.termux.view.HoldTiming;
 import com.termux.x11.LorieView;
 
@@ -45,12 +49,17 @@ import com.termux.x11.LorieView;
  * <p>While no server is running the page shows its empty state, which is where a home screen
  * rests: the launcher never starts a display on its own. A hold on one of the page's four corners
  * drops the same tab a pane's corner does, out of the corner that was held: power, the
- * display's settings, and the Appearance and Layout doors every place carries — and, while a
+ * display's settings, and the Appearance, Layout and Wallpaper doors every place carries — and, while a
  * display runs, the scale rail along the page's leading
  * edge, which is out only while that tab is. Between the corners the edges are X's: a maximised
  * window is touchable to its rim.
+ *
+ * <p>The wall's motions reach the picture through a still copy of it ({@link SurfacePage}): the
+ * surface itself takes no tilt and no layer, so for the length of a sink, a drag or a slide a
+ * plain view holding the display's last frame stands in its place, and the live surface comes
+ * back beneath it at rest. The X session runs on underneath; only the view is swapped.
  */
-public final class X11PaneFrame extends PaneContentFrame {
+public final class X11PaneFrame extends PaneContentFrame implements SurfacePage {
 
     /**
      * Where the empty state's guide button sends the user when the message names a missing
@@ -61,10 +70,10 @@ public final class X11PaneFrame extends PaneContentFrame {
         "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/X11_Display.md#turn-it-on";
 
     private static final int ACTION_HELP = 2;
-    /** The sliders, which open Appearance; package-private so a test can find the button. */
-    @androidx.annotation.VisibleForTesting static final int ACTION_EDITOR = 3;
-    /** The grid beside them, which opens Layout. */
-    @androidx.annotation.VisibleForTesting static final int ACTION_LAYOUT = 4;
+    /** "Appearance", which opens the wallpaper picker; package-private so a test can find it. */
+    @androidx.annotation.VisibleForTesting static final int ACTION_WALLPAPER = 5;
+    /** Minimal mode on or off for the Display place; the glyph shows which. */
+    @androidx.annotation.VisibleForTesting static final int ACTION_MINIMAL = 6;
 
     /** What the page needs from the launcher. */
     public interface Host {
@@ -81,6 +90,12 @@ public final class X11PaneFrame extends PaneContentFrame {
         default void openSurfaceEditor() {}
         /** The grid: open the Layout editor on this place, as every corner tab does. */
         default void openLayoutEditor() {}
+        /** The wallpaper glyph: open the in-app wallpaper picker, as every corner tab does. */
+        default void openWallpaperPicker() {}
+        /** Whether the Display place is in minimal mode, which the tab's glyph shows. */
+        default boolean isMinimalMode() { return false; }
+        /** The minimal-mode glyph: turn the Display place's minimal mode on or off. */
+        default void toggleMinimalMode() {}
         /**
          * True when one of the launcher's own chords claimed this key, in which case X must not
          * see it. Everything else is the display's.
@@ -153,6 +168,41 @@ public final class X11PaneFrame extends PaneContentFrame {
     private boolean mEnabled = true;
     /** The display's size while the frame around it animates; unset when it follows the frame. */
     private int mFrozenWidth = -1, mFrozenHeight = -1;
+    /** When the still copy stands in for the surface ({@link SurfaceStandIn}). */
+    private final SurfaceStandIn mStill = new SurfaceStandIn();
+    /** The copy's view, just above the display and below the corner mask; drawn only while up. */
+    @Nullable private StandInView mStandIn;
+    /** The one copy kept, standing in or not; null once it is dropped. */
+    @Nullable private android.graphics.Bitmap mStillBitmap;
+    /** What the wall asked to be told once the copy on its way is up. */
+    @Nullable private Runnable mOnStill;
+    /** The copies land, and the swap's timers run, on the main thread. */
+    private final Handler mStillHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mSwapBackstop = this::finishSwap;
+    private final Runnable mExpireStill = this::expireStill;
+    private int mSwapFramesLeft;
+    private final android.view.Choreographer.FrameCallback mSwapFrame =
+        new android.view.Choreographer.FrameCallback() {
+            @Override public void doFrame(long frameTimeNanos) {
+                if (--mSwapFramesLeft > 0) {
+                    android.view.Choreographer.getInstance().postFrameCallback(this);
+                } else {
+                    finishSwap();
+                }
+            }
+        };
+    /** Told the surface is back, so the stand-in can wait out the frames X takes to fill it. */
+    private final android.view.SurfaceHolder.Callback mStillSurfaceCallback =
+        new android.view.SurfaceHolder.Callback() {
+            @Override public void surfaceCreated(@NonNull android.view.SurfaceHolder holder) {}
+
+            @Override public void surfaceChanged(@NonNull android.view.SurfaceHolder holder,
+                                                 int format, int width, int height) {
+                if (mStill.state() == SurfaceStandIn.State.RESTORING) startSwapFrames();
+            }
+
+            @Override public void surfaceDestroyed(@NonNull android.view.SurfaceHolder holder) {}
+        };
 
     public X11PaneFrame(Context context) {
         super(context);
@@ -172,6 +222,16 @@ public final class X11PaneFrame extends PaneContentFrame {
         mGlass = findViewById(R.id.x11_pane_glass);
         mCornerMask = findViewById(R.id.x11_pane_corner_mask);
         mEmptyState = findViewById(R.id.x11_pane_empty);
+        if (mDisplay != null) {
+            // Above the display, so it covers the surface while both are up at the swap; below
+            // the corner mask, so the arcs round it as they round the picture.
+            mStandIn = new StandInView(getContext());
+            mStandIn.setVisibility(INVISIBLE);
+            addView(mStandIn, indexOfChild(mDisplay) + 1,
+                new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+            // After the display's own callback, which hands the surface to X first.
+            mDisplay.getHolder().addCallback(mStillSurfaceCallback);
+        }
         // The display is not registered as the pane's content on purpose: that clearance keeps a
         // terminal's text out of the arcs, but an X screen wants to fill the frame to its rim,
         // with the corner mask painting the arcs over it - not sit as a square inside a rounded
@@ -191,19 +251,31 @@ public final class X11PaneFrame extends PaneContentFrame {
         // The controls tab sits above everything, drawn only while shown; the frame itself
         // answers the taps, so the view never stands between a finger and X.
         mControls = new PaneControlsView(getContext());
-        mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, CornerTabGlyphs.POWER),
-            PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS),
-            PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
-            PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT),
-            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
+        mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, CornerTabGlyphs.POWER,
+                () -> getContext().getString(mRunning ? R.string.pane_controls_turn_display_off
+                    : R.string.pane_controls_turn_display_on)),
+            // Minimal mode gives the display the whole screen; the mark reads the state as it
+            // draws, so the same button is the way back.
+            PaneControlsView.Action.drawn(ACTION_MINIMAL, com.termux.app.chrome.MinimalModeGlyph
+                .mark(getContext(), () -> mHost != null && mHost.isMinimalMode()),
+                PaneControlsView.TINT_PRIMARY, () -> getContext().getString(
+                    mHost != null && mHost.isMinimalMode()
+                        ? R.string.pane_controls_leave_minimal_mode
+                        : R.string.pane_controls_enter_minimal_mode)),
+            PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS,
+                getContext().getString(R.string.pane_controls_open_settings)),
+            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.APPEARANCE,
+                getContext().getString(R.string.pane_controls_wallpaper_style)),
+            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
+                getContext().getString(R.string.pane_controls_help)));
         mControls.setListener(id -> {
             if (mHost == null) return;
             // Help first, the tab second: help reads the ? it was opened from while it is still
             // out, and puts the tab away itself.
             if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
-            else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
-            else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
+            else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
             else if (id == ACTION_POWER) mHost.toggleDisplayPower();
+            else if (id == ACTION_MINIMAL) { dismissControls(); mHost.toggleMinimalMode(); }
             else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
         });
         // The scale rail comes out with the tab, along the leading edge, while a display runs.
@@ -315,7 +387,7 @@ public final class X11PaneFrame extends PaneContentFrame {
     private void onHoldElapsed() {
         if (!mHold.holdElapsed()) return;
         cancelDisplayGesture();
-        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        Haptics.tick(this, android.view.HapticFeedbackConstants.LONG_PRESS);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
     }
 
@@ -385,7 +457,7 @@ public final class X11PaneFrame extends PaneContentFrame {
             case android.view.MotionEvent.ACTION_UP:
                 if (mControls != null && !mTouchMoved
                     && mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
-                    performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+                    Haptics.tick(this, android.view.HapticFeedbackConstants.CONTEXT_CLICK);
                     // Help runs while the tab is still out — it reads the ? to hang its own
                     // buttons beside it — and puts the tab away itself.
                     if (mPressedAction != ACTION_HELP) dismissControls();
@@ -410,7 +482,7 @@ public final class X11PaneFrame extends PaneContentFrame {
         switch (event.getActionMasked()) {
             case android.view.MotionEvent.ACTION_MOVE:
                 if (mRail.dragTo(event.getY())) {
-                    performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+                    Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
                 }
                 return true;
             case android.view.MotionEvent.ACTION_UP:
@@ -511,6 +583,11 @@ public final class X11PaneFrame extends PaneContentFrame {
         return !out.isEmpty();
     }
     private final android.graphics.RectF mHelpButtonBounds = new android.graphics.RectF();
+
+    /** Redraws the tab, whose minimal-mode glyph follows the place's state. */
+    public void invalidateControls() {
+        if (mControls != null) mControls.invalidate();
+    }
 
     public void dismissControls() {
         if (mControls != null) mControls.dismiss();
@@ -618,6 +695,8 @@ public final class X11PaneFrame extends PaneContentFrame {
         applyDisplaySurfaceVisibility();
         if (mEmptyState != null) mEmptyState.setVisibility(running ? GONE : VISIBLE);
         if (running) return;
+        // No picture of a display that is gone is worth keeping; one standing in goes at rest.
+        if (mStill.drop()) recycleStill();
         // Nothing to scale once the display is gone.
         if (mRail != null) mRail.dismiss();
         applyEmptyState();
@@ -734,9 +813,12 @@ public final class X11PaneFrame extends PaneContentFrame {
         if (mDisplay != null) mDisplay.setVisibility(displaySurfaceVisibility());
     }
 
-    /** The visibility the display view carries for the page's current state. */
+    /**
+     * The visibility the display view carries for the page's current state. Held down, too,
+     * while the still copy stands in for it and the page takes the wall's layer and tilt.
+     */
     int displaySurfaceVisibility() {
-        return mRunning && mPageOnScreen ? VISIBLE : INVISIBLE;
+        return mRunning && mPageOnScreen && !mStill.isStill() ? VISIBLE : INVISIBLE;
     }
 
     /**
@@ -810,6 +892,278 @@ public final class X11PaneFrame extends PaneContentFrame {
             int b = mDisplay.getBottom();
             mDisplay.layout(l, b - mFrozenHeight, l + mFrozenWidth, b);
         }
+        // The stand-in sits exactly where the surface does, frozen or not. It is only ever made
+        // INVISIBLE, never GONE, so showing it costs no layout mid-motion.
+        if (mStandIn != null && mDisplay != null) {
+            mStandIn.layout(mDisplay.getLeft(), mDisplay.getTop(), mDisplay.getRight(),
+                mDisplay.getBottom());
+        }
+    }
+
+    // ---- The still copy (SurfacePage) ---------------------------------------------------------
+
+    @Override
+    public void holdStill(@NonNull Runnable onReady) {
+        LorieView display = mDisplay;
+        int width = display == null ? 0 : display.getWidth();
+        int height = display == null ? 0 : display.getHeight();
+        SurfaceStandIn.Begin begin = mStill.begin(mRunning, isSurfaceLive(), width, height,
+            android.os.SystemClock.uptimeMillis());
+        switch (begin) {
+            case COPY:
+                mOnStill = onReady;
+                copySurface(width, height);
+                break;
+            case REUSE:
+                if (mStandIn == null || mStillBitmap == null || mStillBitmap.isRecycled()) {
+                    // The record and the pixels disagree: nothing to stand in after all.
+                    resetStill();
+                    return;
+                }
+                showStandIn();
+                onReady.run();
+                break;
+            case FLAT:
+                onReady.run();
+                break;
+            case KEEP:
+                if (mStill.isStill()) {
+                    // Taken back mid-swap: the stand-in is still up, and the surface goes down.
+                    cancelSwap();
+                    applyDisplaySurfaceVisibility();
+                    onReady.run();
+                } else {
+                    mOnStill = onReady;
+                }
+                break;
+            case NOTHING:
+            default:
+                break;
+        }
+    }
+
+    @Override
+    public boolean isStill() {
+        return mStill.isStill();
+    }
+
+    @Override
+    public void releaseStill() {
+        mOnStill = null;
+        switch (mStill.rest(mRunning && mPageOnScreen)) {
+            case SWAP:
+                // The surface first, beneath the stand-in; the stand-in once X has drawn into it,
+                // or by the backstop whatever happens, so a surface that never comes back cannot
+                // leave a frozen picture on the home screen.
+                applyDisplaySurfaceVisibility();
+                mStillHandler.removeCallbacks(mSwapBackstop);
+                mStillHandler.postDelayed(mSwapBackstop, SurfaceStandIn.SWAP_BACKSTOP_MS);
+                if (isSurfaceLive()) startSwapFrames();
+                break;
+            case REMOVE:
+                hideStandIn();
+                applyDisplaySurfaceVisibility();
+                break;
+            case NONE:
+            default:
+                break;
+        }
+    }
+
+    @Override
+    public void dropStill() {
+        resetStill();
+    }
+
+    /** Whether the surface is on screen with a buffer a copy can read. */
+    private boolean isSurfaceLive() {
+        LorieView display = mDisplay;
+        if (display == null || !mRunning || !mPageOnScreen || !isAttachedToWindow()
+                || display.getVisibility() != VISIBLE) {
+            return false;
+        }
+        android.view.Surface surface = display.getHolder().getSurface();
+        return surface != null && surface.isValid();
+    }
+
+    /**
+     * Copy the surface's current frame, into the kept copy's bitmap when it is the same size and
+     * a new one otherwise. Any failure on the way — no memory, a surface gone between the check
+     * and the call — is a failed copy, and the page moves as it did before there was one.
+     */
+    private void copySurface(int width, int height) {
+        final int generation = mStill.copyGeneration();
+        final int epoch = mStill.copyEpoch();
+        android.graphics.Bitmap target = mStillBitmap;
+        // Lent to the copy: until it lands there is no copy kept.
+        mStillBitmap = null;
+        mStillHandler.removeCallbacks(mExpireStill);
+        mStill.lendCache();
+        if (target != null && (target.isRecycled() || target.getWidth() != width
+                || target.getHeight() != height)) {
+            target.recycle();
+            target = null;
+        }
+        if (target == null) {
+            try {
+                target = android.graphics.Bitmap.createBitmap(width, height,
+                    android.graphics.Bitmap.Config.ARGB_8888);
+            } catch (OutOfMemoryError | IllegalArgumentException e) {
+                onCopied(generation, epoch, null, false);
+                return;
+            }
+        }
+        final android.graphics.Bitmap destination = target;
+        try {
+            android.view.PixelCopy.request(mDisplay, destination,
+                result -> onCopied(generation, epoch, destination,
+                    result == android.view.PixelCopy.SUCCESS),
+                mStillHandler);
+        } catch (RuntimeException e) {
+            onCopied(generation, epoch, destination, false);
+        }
+    }
+
+    /** A copy landed, or failed: stand it in, keep it for the next arrival, or let it go. */
+    private void onCopied(int generation, int epoch, @Nullable android.graphics.Bitmap bitmap,
+                          boolean success) {
+        boolean usable = success && bitmap != null && !bitmap.isRecycled();
+        SurfaceStandIn.Copied copied = mStill.copied(generation, epoch, usable,
+            usable ? bitmap.getWidth() : 0, usable ? bitmap.getHeight() : 0,
+            android.os.SystemClock.uptimeMillis());
+        if (copied == SurfaceStandIn.Copied.DROP) {
+            if (bitmap != null && bitmap != mStillBitmap) bitmap.recycle();
+            // The motion goes on as it began; nothing will be up to tell the wall about.
+            if (mStill.state() != SurfaceStandIn.State.COPYING) mOnStill = null;
+            return;
+        }
+        // The one copy kept from here.
+        if (mStillBitmap != null && mStillBitmap != bitmap) mStillBitmap.recycle();
+        mStillBitmap = bitmap;
+        if (copied == SurfaceStandIn.Copied.SHOW) {
+            showStandIn();
+            Runnable ready = mOnStill;
+            mOnStill = null;
+            if (ready != null) ready.run();
+        } else {
+            scheduleStillExpiry();
+        }
+    }
+
+    /** The stand-in up first, then the surface down: one frame, the same picture either way. */
+    private void showStandIn() {
+        if (mStandIn == null || mStillBitmap == null) return;
+        cancelSwap();
+        mStillHandler.removeCallbacks(mExpireStill);
+        mStandIn.setBitmap(mStillBitmap);
+        mStandIn.setVisibility(VISIBLE);
+        applyDisplaySurfaceVisibility();
+    }
+
+    /** The stand-in goes; its copy is kept a while for the next arrival, unless it was dropped. */
+    private void hideStandIn() {
+        cancelSwap();
+        if (mStandIn != null) {
+            mStandIn.setVisibility(INVISIBLE);
+            mStandIn.setBitmap(null);
+        }
+        if (mStill.hasCache()) scheduleStillExpiry();
+        else recycleStill();
+    }
+
+    private void startSwapFrames() {
+        android.view.Choreographer choreographer = android.view.Choreographer.getInstance();
+        choreographer.removeFrameCallback(mSwapFrame);
+        mSwapFramesLeft = SurfaceStandIn.SWAP_FRAMES;
+        choreographer.postFrameCallback(mSwapFrame);
+    }
+
+    /** The surface drew, or the backstop ran out: the stand-in comes down. */
+    private void finishSwap() {
+        if (mStill.swapped()) hideStandIn();
+        else cancelSwap();
+    }
+
+    private void cancelSwap() {
+        mStillHandler.removeCallbacks(mSwapBackstop);
+        android.view.Choreographer.getInstance().removeFrameCallback(mSwapFrame);
+        mSwapFramesLeft = 0;
+    }
+
+    private void scheduleStillExpiry() {
+        mStillHandler.removeCallbacks(mExpireStill);
+        mStillHandler.postDelayed(mExpireStill, SurfaceStandIn.ARRIVAL_MAX_AGE_MS);
+    }
+
+    /** A copy too old to stand in for an arrival is no longer worth its pixels. */
+    private void expireStill() {
+        if (mStill.expire(android.os.SystemClock.uptimeMillis())) recycleStill();
+    }
+
+    private void recycleStill() {
+        mStillHandler.removeCallbacks(mExpireStill);
+        android.graphics.Bitmap bitmap = mStillBitmap;
+        mStillBitmap = null;
+        if (bitmap != null) bitmap.recycle();
+    }
+
+    /** Nothing stands in and nothing is kept: the page left the wall or the window. */
+    private void resetStill() {
+        mOnStill = null;
+        cancelSwap();
+        mStill.reset();
+        if (mStandIn != null) {
+            mStandIn.setVisibility(INVISIBLE);
+            mStandIn.setBitmap(null);
+        }
+        recycleStill();
+        applyDisplaySurfaceVisibility();
+    }
+
+    /**
+     * The still copy of the display's last frame, drawn into the display's own bounds. A plain
+     * view, so the wall's layer, scale and tilt reach it like any other; it takes no touch, and
+     * a finger on it lands on the display beneath.
+     */
+    private static final class StandInView extends View {
+        @Nullable private android.graphics.Bitmap mBitmap;
+        private final android.graphics.Paint mPaint =
+            new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
+        private final android.graphics.Rect mBounds = new android.graphics.Rect();
+
+        StandInView(@NonNull Context context) {
+            super(context);
+            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        }
+
+        void setBitmap(@Nullable android.graphics.Bitmap bitmap) {
+            if (mBitmap == bitmap) return;
+            mBitmap = bitmap;
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(@NonNull android.graphics.Canvas canvas) {
+            android.graphics.Bitmap bitmap = mBitmap;
+            if (bitmap == null || bitmap.isRecycled()) return;
+            mBounds.set(0, 0, getWidth(), getHeight());
+            canvas.drawBitmap(bitmap, null, mBounds, mPaint);
+        }
+    }
+
+    /**
+     * The wall moved this page, or the wallpaper panned under it: the slab and the corner arcs
+     * re-aim at whatever is behind them now. Per frame of a slide, so nothing here but invalidates.
+     */
+    public void onWallMoved() {
+        if (mGlass != null) mGlass.invalidateGlassPosition();
+        if (mCornerMask != null) mCornerMask.invalidateGlassPosition();
+        if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
+    }
+
+    /** How much of the page's rim the wall's slide leaves showing; see PaneWallPolicy#outlineAlpha. */
+    public void setOutlineTravelAlpha(float alpha) {
+        mRim.setTravelAlpha(alpha);
     }
 
     /**
@@ -818,9 +1172,13 @@ public final class X11PaneFrame extends PaneContentFrame {
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
+        float density = getResources().getDisplayMetrics().density;
         boolean glass = PaneGlass.isActive(style);
-        float radiusPx = glass
-            ? PaneGlass.radiusPx(style, getResources().getDisplayMetrics().density) : 0f;
+        // The page's frame line, as the Widgets page's: the slab's lit rim on glass, the
+        // terminal's plain stroke while the border preference is on without it, so the border
+        // drag that pages the wall (BorderDrag) finds the same line on every place.
+        boolean border = glass || PaneRim.plainBorderWanted(style);
+        float radiusPx = border ? PaneGlass.radiusPx(style, density) : 0f;
         // The page's own slab, fed exactly as a pane's and the Widgets page's are. It stays
         // dressed while a display runs — the surface simply covers it — so the page has the glass
         // it should the moment the display stops, without a pass of its own to run then.
@@ -831,8 +1189,8 @@ public final class X11PaneFrame extends PaneContentFrame {
         // wall over its outer corner and it would read as hanging out past the rounded edge.
         if (mControls != null) {
             mControls.setPaneBorder(radiusPx, glass
-                ? com.termux.app.GlassRimRenderer.strokePx(
-                    getResources().getDisplayMetrics().density) : 0f);
+                ? com.termux.app.GlassRimRenderer.strokePx(density)
+                : border ? PaneRim.stockStrokePx(density) : 0f);
             PaneGlass.dressTab(style, mControls);
         }
         // The frame must not clip to its shape here: the mask's arcs lie exactly outside the
@@ -864,10 +1222,12 @@ public final class X11PaneFrame extends PaneContentFrame {
                     android.graphics.Color.TRANSPARENT, null, 0, radiusPx, null)) {
                     mCornerMask.invalidateGlassPosition();
                 }
+                // The arcs stand in for the wall behind the page, and the wall pans.
+                mCornerMask.setParallax(style.wallpaperParallax());
                 mCornerMask.setCornerMaskFallbackColor(style.wallBehindColor());
             }
         }
-        if (glass) mRim.apply(this, true, radiusPx, true);
+        if (border) mRim.apply(this, glass, radiusPx, PaneBorderStyle.lone(), style);
         else mRim.clear(this);
     }
 
@@ -887,5 +1247,7 @@ public final class X11PaneFrame extends PaneContentFrame {
         super.onDetachedFromWindow();
         cancelHold();
         mRim.cancel();
+        // A surface-sized bitmap is not carried out of the window.
+        resetStill();
     }
 }

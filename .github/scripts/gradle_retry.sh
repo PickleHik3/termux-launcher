@@ -21,11 +21,13 @@ while [ "$attempt" -le "$max_attempts" ]; do
     cmd+=(--refresh-dependencies)
   fi
 
+  # Read the status on the failing branch itself: after `if ...; fi` with no else, $? is the
+  # if-statement's own 0, which made a run whose every attempt failed exit green.
   if "${cmd[@]}"; then
     exit 0
+  else
+    last_exit_code=$?
   fi
-
-  last_exit_code=$?
   if [ "$attempt" -ge "$max_attempts" ]; then
     break
   fi

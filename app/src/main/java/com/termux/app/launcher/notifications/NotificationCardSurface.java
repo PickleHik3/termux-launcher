@@ -32,7 +32,9 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.text.BidiFormatter;
 
+import com.termux.R;
 import com.termux.app.launcher.popup.AnchoredMenuGeometry;
 
 import java.util.ArrayList;
@@ -52,6 +54,11 @@ import java.util.List;
 public final class NotificationCardSurface {
 
     private static final String LOG_TAG = "NotificationCardSurface";
+
+    /** Smallest interactive height for an action, Send or the reply field. */
+    private static final int MIN_TOUCH_DP = 48;
+    /** Transparent inset that keeps a 48dp touch box drawing as the compact 36dp pill. */
+    private static final int PILL_INSET_DP = 6;
 
     /** Materials, metrics and services the surface borrows from its host. */
     public interface Host {
@@ -273,7 +280,9 @@ public final class NotificationCardSurface {
         if (notification.actions != null) {
             for (Notification.Action action : notification.actions) {
                 if (action == null || action.actionIntent == null) continue;
-                String actionTitle = TextUtils.isEmpty(action.title) ? "Action" : action.title.toString();
+                String actionTitle = TextUtils.isEmpty(action.title)
+                    ? context.getString(R.string.notification_card_action_fallback)
+                    : action.title.toString();
                 Button actionButton = actionButton(actionTitle);
                 RemoteInput[] remoteInputs = action.getRemoteInputs();
                 RemoteInput freeform = firstFreeformRemoteInput(remoteInputs);
@@ -295,7 +304,7 @@ public final class NotificationCardSurface {
         }
 
         if (sbn.isClearable()) {
-            Button dismiss = actionButton("Dismiss");
+            Button dismiss = actionButton(context.getString(R.string.notification_card_dismiss));
             dismiss.setOnClickListener(v -> dismissCard(card, sbn));
             actionRow.addView(dismiss, actionLayoutParams(actionIndex++ > 0));
         }
@@ -371,14 +380,19 @@ public final class NotificationCardSurface {
         EditText reply = new EditText(context);
         reply.setSingleLine(true);
         if (!TextUtils.isEmpty(recipient)) {
-            reply.setHint("Reply to " + recipient);
+            reply.setHint(context.getString(R.string.notification_card_reply_to_hint,
+                BidiFormatter.getInstance().unicodeWrap(recipient.toString())));
         } else {
-            reply.setHint(TextUtils.isEmpty(freeform.getLabel()) ? "Reply" : freeform.getLabel());
+            reply.setHint(TextUtils.isEmpty(freeform.getLabel())
+                ? context.getString(R.string.notification_card_reply_hint) : freeform.getLabel());
         }
         reply.setTextColor(host.textColor());
         reply.setHintTextColor(host.subtleTextColor());
         reply.setTextSize(13f);
-        reply.setPadding(dp(10), 0, dp(8), 0);
+        reply.setPaddingRelative(dp(10), 0, dp(8), 0);
+        reply.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        reply.setMinHeight(dp(MIN_TOUCH_DP));
+        reply.setMinimumHeight(dp(MIN_TOUCH_DP));
         reply.setBackgroundColor(Color.TRANSPARENT);
         reply.setImeOptions(EditorInfo.IME_ACTION_SEND);
         reply.setOnTouchListener((view, event) -> {
@@ -387,11 +401,12 @@ public final class NotificationCardSurface {
             }
             return false;
         });
-        row.addView(reply, new LinearLayout.LayoutParams(0, dp(40), 1f));
+        row.addView(reply, new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         Button send = sendButton();
         LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(
-            dp(62), dp(36));
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         row.addView(send, sendLp);
         Runnable sendReply = () -> sendReply(sbn, action, remoteInputs, reply.getText().toString());
         send.setOnClickListener(v -> sendReply.run());
@@ -448,8 +463,8 @@ public final class NotificationCardSurface {
             withAlphaComponent(host.highlightAccentColor(), 0xB0));
         card.setBackground(highlight);
         // Padding, or the stroke clips the title and the action row.
-        card.setPadding(card.getPaddingLeft() + dp(4), card.getPaddingTop(),
-            card.getPaddingRight() + dp(4), card.getPaddingBottom() + dp(3));
+        card.setPaddingRelative(card.getPaddingStart() + dp(4), card.getPaddingTop(),
+            card.getPaddingEnd() + dp(4), card.getPaddingBottom() + dp(3));
         card.post(() -> card.requestRectangleOnScreen(
             new Rect(0, 0, card.getWidth(), card.getHeight()), false));
     }
@@ -518,7 +533,9 @@ public final class NotificationCardSurface {
             if (notification.actions != null) {
                 for (Notification.Action action : notification.actions) {
                     if (action == null || action.actionIntent == null) continue;
-                    String title = TextUtils.isEmpty(action.title) ? "Action" : action.title.toString();
+                    String title = TextUtils.isEmpty(action.title)
+                        ? host.context().getString(R.string.notification_card_action_fallback)
+                        : action.title.toString();
                     rowWidth += actionMeasuredWidth(actionTextPaint, title);
                     if (firstFreeformRemoteInput(action.getRemoteInputs()) != null)
                         hasReplyAction = true;
@@ -526,7 +543,8 @@ public final class NotificationCardSurface {
                 }
             }
             if (sbn.isClearable()) {
-                rowWidth += actionMeasuredWidth(actionTextPaint, "Dismiss");
+                rowWidth += actionMeasuredWidth(actionTextPaint,
+                    host.context().getString(R.string.notification_card_dismiss));
                 actionCount++;
             }
             if (actionCount > 1) rowWidth += dp(4) * (actionCount - 1);
@@ -585,56 +603,52 @@ public final class NotificationCardSurface {
     @NonNull
     private Button actionButton(@NonNull String title) {
         Context context = host.context();
-        Button button = new Button(context);
+        com.google.android.material.button.MaterialButton button =
+            new com.google.android.material.button.MaterialButton(context, null,
+                androidx.appcompat.R.attr.borderlessButtonStyle);
         button.setText(title);
+        com.termux.app.material.M3.textAppearance(button,
+            com.google.android.material.R.attr.textAppearanceLabelMedium);
         button.setTextColor(host.textColor());
-        button.setTextSize(11.5f);
-        button.setAllCaps(false);
         button.setSingleLine(true);
         button.setEllipsize(TextUtils.TruncateAt.END);
-        button.setTypeface(Typeface.DEFAULT_BOLD);
-        button.setMinHeight(0);
-        button.setMinimumHeight(0);
+        // 48dp touch box, drawn as the compact pill through the transparent insets.
+        button.setMinHeight(dp(MIN_TOUCH_DP));
+        button.setMinimumHeight(dp(MIN_TOUCH_DP));
+        button.setInsetTop(dp(PILL_INSET_DP));
+        button.setInsetBottom(dp(PILL_INSET_DP));
         button.setMinWidth(0);
         button.setMinimumWidth(0);
         button.setPadding(dp(10), 0, dp(10), 0);
-        TypedValue selectableBackground = new TypedValue();
-        if (context.getTheme().resolveAttribute(
-            android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
-            && selectableBackground.resourceId != 0) {
-            button.setBackgroundResource(selectableBackground.resourceId);
-        } else {
-            button.setBackgroundColor(0x00000000);
-        }
         return button;
     }
 
     @NonNull
     private Button sendButton() {
-        Button send = new Button(host.context());
-        send.setText("Send");
-        send.setAllCaps(false);
+        com.google.android.material.button.MaterialButton send =
+            new com.google.android.material.button.MaterialButton(host.context());
+        send.setText(R.string.notification_card_send);
         send.setSingleLine(true);
-        send.setTextSize(11.5f);
-        send.setTypeface(Typeface.DEFAULT_BOLD);
+        com.termux.app.material.M3.textAppearance(send,
+            com.google.android.material.R.attr.textAppearanceLabelMedium);
         send.setTextColor(host.sendButtonTextColor());
-        send.setMinWidth(0);
-        send.setMinimumWidth(0);
-        send.setMinHeight(0);
-        send.setMinimumHeight(0);
+        send.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+            host.sendButtonBackgroundColor()));
+        send.setMinWidth(dp(MIN_TOUCH_DP));
+        send.setMinimumWidth(dp(MIN_TOUCH_DP));
+        send.setMinHeight(dp(MIN_TOUCH_DP));
+        send.setMinimumHeight(dp(MIN_TOUCH_DP));
+        send.setInsetTop(dp(PILL_INSET_DP));
+        send.setInsetBottom(dp(PILL_INSET_DP));
         send.setPadding(dp(8), 0, dp(8), 0);
-        GradientDrawable background = new GradientDrawable();
-        background.setCornerRadius(dp(9));
-        background.setColor(host.sendButtonBackgroundColor());
-        send.setBackground(background);
         return send;
     }
 
     @NonNull
     private LinearLayout.LayoutParams actionLayoutParams(boolean withStartGap) {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, dp(40));
-        if (withStartGap) lp.leftMargin = dp(4);
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        if (withStartGap) lp.setMarginStart(dp(4));
         return lp;
     }
 

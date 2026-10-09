@@ -123,6 +123,28 @@ public class PaneContentFrameTouchTest {
         assertEquals(MotionEvent.ACTION_CANCEL, mContent.events.get(1).action);
     }
 
+    @Test
+    public void aSquarePaneWithARimStillKeepsTheContentOffTheStroke() {
+        // No arc, so no arc clearance — but the rim is 3px wide and the content must not sit
+        // under it: the margin is floored at the stroke plus 2dp (2px at this test's density).
+        mFrame.setPaneShape(0f, false);
+        mFrame.setRimStrokePx(3f);
+        mFrame.measure(View.MeasureSpec.makeMeasureSpec(FRAME_WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(FRAME_HEIGHT, View.MeasureSpec.EXACTLY));
+        mFrame.layout(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
+        int floor = (int) Math.ceil(3f + 2f * mFrame.getResources().getDisplayMetrics().density);
+        assertEquals(floor, mContent.getLeft());
+        assertEquals(floor, mContent.getTop());
+        assertEquals(FRAME_WIDTH - floor, mContent.getRight());
+        assertEquals(FRAME_HEIGHT - floor, mContent.getBottom());
+
+        // And the band the stroke leaves is still the terminal's to touch.
+        dispatch(MotionEvent.ACTION_DOWN, 1f, 200f);
+        assertEquals(1, mContent.events.size());
+        assertEquals(1f - floor, mContent.events.get(0).x, 0.001f);
+    }
+
     private void dispatch(int action, float x, float y) {
         long now = SystemClock.uptimeMillis();
         MotionEvent event = MotionEvent.obtain(now, now, action, x, y, 0);

@@ -84,7 +84,7 @@ public final class SurfaceEditorRows {
 
     private static final List<Row> ROWS = Collections.unmodifiableList(Arrays.asList(
         new Row(SurfaceSlot.DOCK, SurfaceProperty.BLUR,
-            R.string.termux_dock_tuning_blur, true, 30,
+            R.string.termux_dock_tuning_blur, true, 48,
             TermuxAppSharedPreferences::getExtraKeysBlurRadius,
             TermuxAppSharedPreferences::setExtraKeysBlurRadius),
         new Row(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
@@ -97,6 +97,11 @@ public final class SurfaceEditorRows {
             false, 100,
             TermuxAppSharedPreferences::getDockGlassGrain,
             TermuxAppSharedPreferences::setDockGlassGrain),
+        new Row(SurfaceSlot.DOCK, SurfaceProperty.TINT,
+            R.string.appearance_editor_tint_name,
+            false, 100,
+            TermuxAppSharedPreferences::getDockTintStrength,
+            TermuxAppSharedPreferences::setDockTintStrength),
         new Row(SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS,
             R.string.termux_dock_tuning_radius,
             true, 40,
@@ -107,18 +112,32 @@ public final class SurfaceEditorRows {
             TermuxAppSharedPreferences::getDockHorizontalInset,
             TermuxAppSharedPreferences::setDockHorizontalInset),
 
+        new Row(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR,
+            R.string.termux_dock_tuning_blur, true, 48,
+            TermuxAppSharedPreferences::getInAppKeyboardBlurRadius,
+            TermuxAppSharedPreferences::setInAppKeyboardBlurRadius),
+        new Row(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN,
+            R.string.termux_dock_tuning_grain,
+            false, 100,
+            TermuxAppSharedPreferences::getInAppKeyboardGrain,
+            TermuxAppSharedPreferences::setInAppKeyboardGrain),
         new Row(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
             R.string.termux_dock_tuning_opacity,
             false, 100,
             TermuxAppSharedPreferences::getInAppKeyboardBackgroundOpacity,
             TermuxAppSharedPreferences::setInAppKeyboardBackgroundOpacity),
+        new Row(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT,
+            R.string.appearance_editor_tint_name,
+            false, 100,
+            TermuxAppSharedPreferences::getInAppKeyboardTintStrength,
+            TermuxAppSharedPreferences::setInAppKeyboardTintStrength),
         new Row(SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP,
             R.string.termux_surface_tuning_edges, true, 48,
             TermuxAppSharedPreferences::getInAppKeyboardHorizontalInset,
             TermuxAppSharedPreferences::setInAppKeyboardHorizontalInset),
 
         new Row(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
-            R.string.termux_dock_tuning_blur, true, 30,
+            R.string.termux_dock_tuning_blur, true, 48,
             TermuxAppSharedPreferences::getStatusBarBlurRadius,
             TermuxAppSharedPreferences::setStatusBarBlurRadius),
         new Row(SurfaceSlot.STATUS, SurfaceProperty.OPACITY,
@@ -131,6 +150,11 @@ public final class SurfaceEditorRows {
             false, 100,
             TermuxAppSharedPreferences::getStatusBarGrain,
             TermuxAppSharedPreferences::setStatusBarGrain),
+        new Row(SurfaceSlot.STATUS, SurfaceProperty.TINT,
+            R.string.appearance_editor_tint_name,
+            false, 100,
+            TermuxAppSharedPreferences::getStatusBarTintStrength,
+            TermuxAppSharedPreferences::setStatusBarTintStrength),
         new Row(SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS,
             R.string.termux_dock_tuning_radius,
             true, 40,
@@ -142,7 +166,7 @@ public final class SurfaceEditorRows {
             TermuxAppSharedPreferences::setStatusBarHorizontalInset),
 
         new Row(SurfaceSlot.CANVAS, SurfaceProperty.BLUR,
-            R.string.termux_dock_tuning_blur, true, 30,
+            R.string.termux_dock_tuning_blur, true, 48,
             TermuxAppSharedPreferences::getTerminalGlassBlurRadius,
             TermuxAppSharedPreferences::setTerminalGlassBlurRadius),
         new Row(SurfaceSlot.CANVAS, SurfaceProperty.GRAIN,
@@ -150,6 +174,11 @@ public final class SurfaceEditorRows {
             false, 100,
             TermuxAppSharedPreferences::getTerminalGlassGrain,
             TermuxAppSharedPreferences::setTerminalGlassGrain),
+        new Row(SurfaceSlot.CANVAS, SurfaceProperty.TINT,
+            R.string.appearance_editor_tint_name,
+            false, 100,
+            TermuxAppSharedPreferences::getTerminalTintStrength,
+            TermuxAppSharedPreferences::setTerminalTintStrength),
         new Row(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
             R.string.termux_dock_tuning_terminal,
             false, 100,
@@ -160,20 +189,6 @@ public final class SurfaceEditorRows {
     @NonNull
     public static List<Row> rows() {
         return ROWS;
-    }
-
-    /**
-     * The preference keys a place takes for itself when it overrides a cell: the surface's own
-     * value, and its link to Base. Both, because a scoped number the shared link still calls
-     * inherited would never be read — a place that overrides a cell overrides its whole answer.
-     */
-    @NonNull
-    public static List<String> scopeKeys(@NonNull Row row) {
-        String override = TermuxAppSharedPreferences.surfaceOverrideKey(row.slot, row.property);
-        String link = TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX
-            + row.slot.key + "_" + row.property.key;
-        return override == null ? Collections.singletonList(link)
-            : Collections.unmodifiableList(Arrays.asList(override, link));
     }
 
     /** The row editing one cell, or null where the surface has no such property. */

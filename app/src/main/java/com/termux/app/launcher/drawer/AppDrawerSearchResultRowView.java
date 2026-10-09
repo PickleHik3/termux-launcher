@@ -80,7 +80,7 @@ public final class AppDrawerSearchResultRowView extends AppDrawerAppCellView {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams columnParams = new LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        columnParams.leftMargin = Math.round(ICON_TEXT_GAP_DP * density);
+        columnParams.setMarginStart(Math.round(ICON_TEXT_GAP_DP * density));
         addView(column, columnParams);
     }
 

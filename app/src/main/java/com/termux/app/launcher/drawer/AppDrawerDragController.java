@@ -16,6 +16,7 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.launcher.data.LauncherConfigRepository;
@@ -229,7 +230,7 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
             // until the drawer is closed and rebound.
             host.onAcceptedDrop();
         } else if (result == LauncherConfigRepository.MutationResult.CAPACITY) {
-            overlay.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+            Haptics.tick(overlay, HapticFeedbackConstants.CLOCK_TICK);
             AppNotice.show(overlay.getContext(), com.termux.R.string.folder_capacity_reached, false);
         }
         return accepted;

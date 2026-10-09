@@ -33,7 +33,9 @@ import com.termux.R;
  * single-line strip used when a pinned notification also claims the slot.
  *
  * <p>Transport glyphs are 24dp visually; their hit rects are expanded to 40dp so the controls stay
- * usable inside a 96dp bar.
+ * usable inside a 96dp bar. The full row keeps those targets clear of the neighbour place mark at
+ * the bar's end, and packs the art against the transport when no title fits; see
+ * {@link MediaWidgetLayout}.
  */
 public final class MediaWidgetView extends View {
 
@@ -66,10 +68,16 @@ public final class MediaWidgetView extends View {
     @Nullable private TopPaneMediaState mState;
     @Nullable private Drawable mAppIcon;
     private int mPressedTarget = TARGET_NONE;
+    /** What the slot leaves between this widget's end and the bar's end; see MediaWidgetLayout. */
+    private int mBarEndRoomPx;
 
     private int mOnSurface;
     private int mOnSurfaceVariant;
     private int mPrimary;
+    private int mPanelHigh;
+    private int mOutlineVariant;
+    private int mPrimaryContainer;
+    private int mOnPrimaryContainer;
 
     public MediaWidgetView(Context context) {
         this(context, null);
@@ -91,6 +99,24 @@ public final class MediaWidgetView extends View {
             com.termux.shared.R.attr.termuxColorOnSurfaceVariant, mOnSurface);
         mPrimary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
+        mPanelHigh = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            ContextCompat.getColor(context, R.color.termux_surface_panel_high));
+        mOutlineVariant = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOutlineVariant,
+            ContextCompat.getColor(context, R.color.termux_outline_variant));
+        mPrimaryContainer = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorPrimaryContainer,
+            ContextCompat.getColor(context, R.color.termux_primary_container));
+        mOnPrimaryContainer = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnPrimaryContainer,
+            ContextCompat.getColor(context, R.color.termux_on_primary_container));
+    }
+
+    /** The bar re-inked or the scheme changed: resolve the roles again. */
+    public void onThemeChanged() {
+        resolveColors();
+        invalidate();
     }
 
     public void setForm(@NonNull Form form) {
@@ -115,6 +141,13 @@ public final class MediaWidgetView extends View {
         return mState;
     }
 
+    /** How far this widget's end is from the bar's end, as the slot lays it out. */
+    public void setBarEndRoomPx(int px) {
+        if (mBarEndRoomPx == px) return;
+        mBarEndRoomPx = px;
+        invalidate();
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
@@ -125,18 +158,23 @@ public final class MediaWidgetView extends View {
     }
 
     private void drawFull(Canvas canvas, @NonNull TopPaneMediaState state) {
-        float art = dp(40f);
+        MediaWidgetLayout.Full layout = MediaWidgetLayout.full(getWidth(), mBarEndRoomPx,
+            getResources().getDisplayMetrics().density);
+        float art = dp(MediaWidgetLayout.ART_DP);
         float top = (getHeight() - art) / 2f;
-        drawArtwork(canvas, state, 0f, top, art, dp(4f), true);
+        if (layout.showsArt) {
+            drawArtwork(canvas, state, layout.artLeft, top, art, dp(4f), true);
+            // The art opens the owner app, and so does the title beside it when it is shown.
+            float ownerRight = layout.showsText ? layout.textRight : layout.artLeft + art;
+            mOwnerRect.set(Math.round(layout.artLeft), Math.round(top), Math.round(ownerRight),
+                Math.round(top + art));
+        } else {
+            mOwnerRect.setEmpty();
+        }
 
-        float transportWidth = dp(24f + 7f + 26f + 7f + 24f);
-        float textLeft = art + dp(8f);
-        float textRight = Math.max(textLeft, getWidth() - transportWidth - dp(8f));
-        float textWidth = textRight - textLeft;
-
-        mOwnerRect.set(0, Math.round(top), Math.round(textRight), Math.round(top + art));
-
-        if (textWidth > dp(24f)) {
+        if (layout.showsText) {
+            float textLeft = layout.textLeft;
+            float textWidth = layout.textRight - textLeft;
             // Title, subtitle and hairline share the 40dp art band with 6dp gaps.
             drawSingleLine(canvas, state.title, textLeft, top + dp(11.5f), textWidth, sp(10.5f),
                 mediumTypeface(), mOnSurface, 255);
@@ -145,14 +183,15 @@ public final class MediaWidgetView extends View {
             drawProgress(canvas, textLeft, top + dp(36.5f), textWidth, state.progress());
         }
 
-        float transportLeft = getWidth() - transportWidth;
-        drawTransport(canvas, transportLeft, getHeight() / 2f, state.playing, 24f, 26f, 7f, 14f, 255);
+        drawTransport(canvas, layout.transportLeft, getHeight() / 2f, state.playing,
+            MediaWidgetLayout.SKIP_BOX_DP, MediaWidgetLayout.PLAY_BOX_DP,
+            MediaWidgetLayout.TRANSPORT_GAP_DP, 14f, 255);
     }
 
     private void drawStrip(Canvas canvas, @NonNull TopPaneMediaState state) {
         mRect.set(0f, 0f, getWidth(), getHeight());
         mFillPaint.setShader(null);
-        mFillPaint.setColor(ColorUtils.setAlphaComponent(mPrimary, 20));
+        mFillPaint.setColor(mPanelHigh);
         canvas.drawRoundRect(mRect, dp(8f), dp(8f), mFillPaint);
 
         float art = dp(12f);
@@ -196,7 +235,7 @@ public final class MediaWidgetView extends View {
             mFillPaint.setShader(null);
         } else {
             mFillPaint.setShader(null);
-            mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface, 20));
+            mFillPaint.setColor(mPanelHigh);
             canvas.drawRoundRect(mRect, radius, radius, mFillPaint);
             Drawable icon = mAppIcon;
             if (icon != null) {
@@ -212,7 +251,7 @@ public final class MediaWidgetView extends View {
         mFillPaint.setStrokeWidth(dp(1f));
         // The mode's own on-surface ink, not a frozen near-white: a white rim is invisible on
         // light glass, and this pane stands on the same glass as the rest of the bar.
-        mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface, 15));
+        mFillPaint.setColor(mOutlineVariant);
         mRect.inset(dp(.5f), dp(.5f));
         canvas.drawRoundRect(mRect, radius, radius, mFillPaint);
         mFillPaint.setStyle(Paint.Style.FILL);
@@ -221,7 +260,7 @@ public final class MediaWidgetView extends View {
     private void drawProgress(Canvas canvas, float left, float top, float width, float progress) {
         mFillPaint.setShader(null);
         mRect.set(left, top, left + width, top + dp(2f));
-        mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface, 36));
+        mFillPaint.setColor(mOutlineVariant);
         canvas.drawRoundRect(mRect, dp(1f), dp(1f), mFillPaint);
         if (progress <= 0f) return;
         mRect.set(left, top, left + width * progress, top + dp(2f));
@@ -240,11 +279,13 @@ public final class MediaWidgetView extends View {
 
         setRect(mPlayPauseRect, x, centerY, playBox);
         mFillPaint.setShader(null);
-        mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface,
-            mPressedTarget == TARGET_PLAY_PAUSE ? 51 : 31));
+        // The play disc is the tonal pair; a press is the on-colour's state layer over it.
+        mFillPaint.setColor(mPressedTarget == TARGET_PLAY_PAUSE
+            ? ColorUtils.blendARGB(mPrimaryContainer, mOnPrimaryContainer, .12f)
+            : mPrimaryContainer);
         canvas.drawCircle(mPlayPauseRect.centerX(), mPlayPauseRect.centerY(), playBox / 2f, mFillPaint);
         drawGlyph(canvas, playing ? R.drawable.ic_media_pause : R.drawable.ic_media_play_arrow,
-            mPlayPauseRect, glyph, alpha, false);
+            mPlayPauseRect, glyph, 255, false, mOnPrimaryContainer);
         x += playBox + gap;
 
         setRect(mNextRect, x, centerY, box);
@@ -259,10 +300,15 @@ public final class MediaWidgetView extends View {
 
     private void drawGlyph(Canvas canvas, int drawableRes, Rect box, float glyph, int alpha,
                            boolean pressed) {
+        drawGlyph(canvas, drawableRes, box, glyph, alpha, pressed, mOnSurface);
+    }
+
+    private void drawGlyph(Canvas canvas, int drawableRes, Rect box, float glyph, int alpha,
+                           boolean pressed, int tint) {
         Drawable icon = AppCompatResources.getDrawable(getContext(), drawableRes);
         if (icon == null) return;
         icon = icon.mutate();
-        icon.setTint(mOnSurface);
+        icon.setTint(tint);
         icon.setAlpha(pressed ? Math.min(255, alpha + 40) : alpha);
         int half = Math.round(glyph / 2f);
         icon.setBounds(box.centerX() - half, box.centerY() - half,
@@ -354,7 +400,7 @@ public final class MediaWidgetView extends View {
         }
     }
 
-    /** Transport rects are expanded to a 40dp minimum so the 24dp glyphs stay tappable. */
+    /** Transport rects are expanded to a minimum so the small glyphs stay tappable. */
     private int hitTarget(float x, float y) {
         if (inExpanded(mPlayPauseRect, x, y)) return TARGET_PLAY_PAUSE;
         if (inExpanded(mPreviousRect, x, y)) return TARGET_PREVIOUS;
@@ -365,7 +411,7 @@ public final class MediaWidgetView extends View {
 
     private boolean inExpanded(Rect rect, float x, float y) {
         if (rect.isEmpty()) return false;
-        float minimum = dp(40f);
+        float minimum = dp(MediaWidgetLayout.TOUCH_DP);
         float growX = Math.max(0f, (minimum - rect.width()) / 2f);
         float growY = Math.max(0f, (minimum - rect.height()) / 2f);
         return x >= rect.left - growX && x <= rect.right + growX

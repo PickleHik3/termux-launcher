@@ -35,6 +35,8 @@ import java.util.regex.Pattern;
 public final class LauncherCategorySortPrompt {
 
     private static final Map<String, String> DESCRIPTION_BY_SLUG = buildDescriptions();
+    /** The reply cap of one app's answer: a category id, with room for a model that prefixes it with filler. */
+    public static final int MAX_TOKENS = 24;
 
     private LauncherCategorySortPrompt() {
     }
@@ -50,12 +52,15 @@ public final class LauncherCategorySortPrompt {
         descriptions.put("entertainment", "music, video and streaming");
         descriptions.put("shopping_food", "shopping, delivery, food and recipes");
         descriptions.put("finance", "banking, payments and investing");
-        descriptions.put("health", "health, fitness and medical");
+        // "sport, workouts" added 2026-10-05: on pong E2B went from 15/18 to 17/18 on an 18-app set (it fixed
+        // Strava and Calm) with no regressions.
+        descriptions.put("health", "health, fitness, sport, workouts and medical");
         descriptions.put("photo_video", "camera, gallery and photo or video editing");
         descriptions.put("travel", "maps, navigation, transport and travel booking");
         descriptions.put("information_reading", "news, search, reading, books and reference");
-        // In practice the classifier assigns this one from the package alone before an app ever
+        // In practice the classifier assigns these two from the package alone before an app ever
         // reaches this prompt; kept here only so the taxonomy stays exhaustive.
+        descriptions.put("desktops", "whole Linux desktop environments that take over the screen");
         descriptions.put("linux_apps", "apps that run inside a Linux distro on the device");
         descriptions.put("other", "anything that fits none of the above");
         return Collections.unmodifiableMap(descriptions);

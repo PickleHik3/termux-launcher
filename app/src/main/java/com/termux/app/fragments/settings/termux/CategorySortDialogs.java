@@ -4,17 +4,15 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.res.ColorStateList;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.RippleDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
-import android.util.TypedValue;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.UnderlineSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -25,18 +23,23 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 
-import com.google.android.material.color.MaterialColors;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
+import com.termux.app.material.M3;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.TaiDeviceCapabilities;
-import com.termux.ai.TaiModelRegistry;
+import com.termux.ai.TaiFunction;
+import com.termux.ai.TaiFeaturePlans;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherCategoryCatalogue;
 import com.termux.app.launcher.data.LauncherCategoryPasteImporter;
 import com.termux.app.launcher.data.LauncherCategoryPasteNotification;
+import com.termux.app.launcher.data.LauncherCategorySortPlan;
 import com.termux.app.launcher.data.LauncherCategorySortPrompt;
 import com.termux.shared.interact.ShareUtils;
 
@@ -55,10 +58,6 @@ import java.util.concurrent.Executors;
  */
 final class CategorySortDialogs {
 
-    /** Measured on-device throughput, used only for the "takes about N minutes" estimate. */
-    private static final int SECONDS_PER_APP_E4B = 3;
-    private static final int SECONDS_PER_APP_E2B = 1;
-
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     /**
      * The config read/merge/write is disk I/O and must not run on the click. One shared daemon
@@ -75,16 +74,48 @@ final class CategorySortDialogs {
     }
 
     /**
-     * @return the downloaded model this feature would use — E4B when present, else E2B — or null
-     *     when neither is installed. Availability is a separate question, see
+     * @return what a sort would ask: app sorting's feature load plan ({@link TaiFeaturePlans}), a local
+     *     model on an accelerator or the remote provider's model. Reads the model store, settings and
+     *     the evidence files: not for the main thread. Availability is a separate question, see
      *     {@link #unavailableReason}.
      */
+    @NonNull
+    static LauncherCategorySortPlan resolvePlan(@NonNull Context context) {
+        return LauncherCategorySortPlan.of(TaiFeaturePlans.forContext(context).plan(TaiFunction.APP_CATEGORIES));
+    }
+
+    /** Everything the chooser shows, read together off the main thread by {@link #preview}. */
+    static final class Preview {
+        @NonNull final List<LauncherCategorySortPrompt.AppEntry> apps;
+        @NonNull final LauncherCategorySortPlan plan;
+        /** The installed spec of a local plan's model; null for a remote plan or a missing model. */
+        @Nullable final TaiModelSpec model;
+        /** Why the on-device row is disabled, or null when it can run. */
+        @Nullable final String unavailable;
+
+        Preview(@NonNull List<LauncherCategorySortPrompt.AppEntry> apps, @NonNull LauncherCategorySortPlan plan,
+                @Nullable TaiModelSpec model, @Nullable String unavailable) {
+            this.apps = apps;
+            this.plan = plan;
+            this.model = model;
+            this.unavailable = unavailable;
+        }
+    }
+
+    /** The apps, the plan and whether it can run here. Blocking: the package manager, the model store, the device. */
+    @NonNull
+    static Preview preview(@NonNull Context context) {
+        LauncherCategorySortPlan plan = resolvePlan(context);
+        return new Preview(loadApps(context), plan, specFor(context, plan), unavailableReason(context, plan));
+    }
+
+    /** The installed spec for a local plan's model, or null (and always null for a remote plan). */
     @Nullable
-    static TaiModelSpec resolveModel(@NonNull Context context) {
-        Map<String, TaiModelSpec> installed = new TaiModelStore(context).getDownloadedReadableModels();
-        TaiModelSpec preferred = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
-        if (preferred != null) return preferred;
-        return installed.get(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
+    private static TaiModelSpec specFor(@NonNull Context context, @NonNull LauncherCategorySortPlan plan) {
+        if (plan.model == null || plan.remote) return null;
+        TaiModelStore store = new TaiModelStore(context);
+        TaiModelSpec spec = store.getDownloadedReadableModels().get(plan.model);
+        return spec != null ? spec : store.getInstalledUserModels().get(plan.model);
     }
 
     /**
@@ -93,7 +124,9 @@ final class CategorySortDialogs {
      *     what to install or why their device cannot do it.
      */
     @Nullable
-    static String unavailableReason(@NonNull Context context, @Nullable TaiModelSpec model) {
+    static String unavailableReason(@NonNull Context context, @NonNull LauncherCategorySortPlan plan) {
+        if (plan.remote) return null; // the remote provider runs it: nothing to download or fit
+        TaiModelSpec model = specFor(context, plan);
         if (model == null)
             return context.getString(R.string.settings_app_drawer_category_sort_unavailable_model);
         TaiDeviceCapabilities.ModelCapabilityCheck check =
@@ -132,15 +165,20 @@ final class CategorySortDialogs {
      *
      * @param onDeviceChosen run when the on-device row is picked; the caller owns starting the
      *     service, because only it can keep polling for progress afterwards.
+     * @param onChangeModel run when the Model row is picked: the caller opens the function picker
+     *     sheet for APP_CATEGORIES. Null hides the row.
      * @param onPasteApplied run after a pasted reply has been written, so the caller can refresh.
      */
     static void showChooser(@NonNull Context context,
-                            @NonNull List<LauncherCategorySortPrompt.AppEntry> apps,
+                            @NonNull Preview preview,
                             @NonNull Runnable onDeviceChosen,
+                            @Nullable Runnable onChangeModel,
                             @Nullable Runnable onPasteApplied) {
-        TaiModelSpec model = resolveModel(context);
-        String unavailable = unavailableReason(context, model);
-        boolean onDeviceEnabled = unavailable == null && model != null;
+        List<LauncherCategorySortPrompt.AppEntry> apps = preview.apps;
+        LauncherCategorySortPlan plan = preview.plan;
+        TaiModelSpec model = preview.model;
+        String unavailable = preview.unavailable;
+        boolean onDeviceEnabled = unavailable == null && plan.hasModel();
 
         float density = context.getResources().getDisplayMetrics().density;
         LinearLayout container = new LinearLayout(context);
@@ -156,14 +194,35 @@ final class CategorySortDialogs {
             .setNegativeButton(android.R.string.cancel, null)
             .create();
 
-        String onDeviceSummary = onDeviceEnabled && model != null
-            ? context.getString(R.string.settings_app_drawer_category_sort_on_device_summary,
-                model.displayName)
+        String modelName = plan.remote ? plan.displayId() : model != null ? model.displayName : "";
+        String onDeviceSummary = onDeviceEnabled
+            ? context.getString(plan.remote
+                ? R.string.tai_callers_category_remote_summary
+                : R.string.settings_app_drawer_category_sort_on_device_summary, modelName)
             : unavailable;
-        String onDeviceNote = onDeviceEnabled && model != null
+        // What the sort will really load with: the plan's accelerator, the one the load is told.
+        String onDeviceNote = onDeviceEnabled
             ? context.getString(R.string.settings_app_drawer_category_sort_on_device_warning,
-                estimatedMinutes(model, apps.size()))
+                plan.estimatedMinutes(apps.size()))
             : null;
+        // A large model may make Android close cached background apps (tai-device-tiers spec section 4.4).
+        if (onDeviceNote != null && plan.warnBackground) {
+            onDeviceNote += "\n" + context.getString(R.string.tai_warn_background_apps);
+        }
+        // The row's one way forward, when it has one: the Model centre when there is no model to
+        // run. A device that cannot run the model gets none.
+        boolean missingModel = !plan.remote && model == null;
+        String suggestion = null;
+        String link = null;
+        Runnable onSuggestion = null;
+        if (missingModel) {
+            link = context.getString(R.string.tai_model_centre_title);
+            suggestion = context.getString(R.string.settings_app_drawer_category_sort_get_model_hint, link);
+            onSuggestion = () -> {
+                dialog.dismiss();
+                TaiModelCentreFragment.open(activityOf(context), TaiModelCentreFragment.SEGMENT_GET);
+            };
+        }
         container.addView(buildRow(context,
             R.drawable.ic_symbol_smart_toy,
             context.getString(R.string.settings_app_drawer_category_sort_on_device),
@@ -173,7 +232,21 @@ final class CategorySortDialogs {
             () -> {
                 dialog.dismiss();
                 onDeviceChosen.run();
-            }));
+            },
+            suggestion, link, onSuggestion));
+
+        if (onChangeModel != null) {
+            container.addView(buildRow(context,
+                R.drawable.ic_symbol_smart_toy,
+                context.getString(R.string.tai_callers_category_model_row),
+                plan.hasModel() ? modelName : context.getString(R.string.cleanup_model_automatic_title),
+                null,
+                true,
+                () -> {
+                    dialog.dismiss();
+                    onChangeModel.run();
+                }));
+        }
 
         container.addView(buildRow(context,
             R.drawable.ic_symbol_content_copy,
@@ -202,36 +275,44 @@ final class CategorySortDialogs {
                                  @Nullable String note,
                                  boolean enabled,
                                  @NonNull Runnable onClick) {
+        return buildRow(context, iconRes, title, summary, note, enabled, onClick, null, null, null);
+    }
+
+    /**
+     * As above, plus an optional suggestion line under the note: {@code suggestion} with {@code link}
+     * underlined inside it, the whole line a tap target of its own that runs {@code onSuggestion}
+     * instead of the card's click. It wraps, so a large font scale never clips it.
+     */
+    @NonNull
+    private static View buildRow(@NonNull Context context,
+                                 @DrawableRes int iconRes,
+                                 @NonNull String title,
+                                 @Nullable String summary,
+                                 @Nullable String note,
+                                 boolean enabled,
+                                 @NonNull Runnable onClick,
+                                 @Nullable String suggestion,
+                                 @Nullable String link,
+                                 @Nullable Runnable onSuggestion) {
         float density = context.getResources().getDisplayMetrics().density;
-        int titleColor = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOnSurface, 0xFFECEFF4);
-        int summaryColor = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFF9AA3B2);
-        int surfaceColor = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-            MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel, 0xFF20242C));
-        int accent = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorPrimary, 0xFF8AB4F8);
+        int titleColor = enabled ? M3.onSurface(context) : M3.onSurfaceVariant(context);
+        int summaryColor = M3.onSurfaceVariant(context);
+        int accent = M3.primary(context);
+
+        // A clickable filled card: the ripple, shape and container colour are the card's own. A
+        // disabled card keeps its text, because the summary is the reason it is disabled.
+        MaterialCardView card = M3.clickableCard(context, false);
+        card.setEnabled(enabled);
+        card.setClickable(enabled);
+        card.setFocusable(enabled);
+        if (enabled) card.setOnClickListener(v -> onClick.run());
 
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         int padding = Math.round(16 * density);
         row.setPadding(padding, padding, padding, padding);
-
-        GradientDrawable card = new GradientDrawable();
-        card.setColor(surfaceColor);
-        card.setCornerRadius(20 * density);
-        if (enabled) {
-            row.setBackground(new RippleDrawable(
-                ColorStateList.valueOf(MaterialColors.compositeARGBWithAlpha(accent, 48)), card, null));
-            row.setClickable(true);
-            row.setFocusable(true);
-            row.setOnClickListener(v -> onClick.run());
-        } else {
-            row.setBackground(card);
-            row.setAlpha(0.5f);
-        }
+        card.addView(row);
 
         ImageView icon = new ImageView(context);
         icon.setImageResource(iconRes);
@@ -246,17 +327,15 @@ final class CategorySortDialogs {
 
         TextView titleView = new TextView(context);
         titleView.setText(title);
+        M3.textAppearance(titleView, com.google.android.material.R.attr.textAppearanceTitleMedium);
         titleView.setTextColor(titleColor);
-        titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);
-        titleView.setTypeface(Typeface.DEFAULT_BOLD);
         texts.addView(titleView);
 
         if (summary != null && !summary.isEmpty()) {
             TextView summaryView = new TextView(context);
             summaryView.setText(summary);
+            M3.textAppearance(summaryView, com.google.android.material.R.attr.textAppearanceBodyMedium);
             summaryView.setTextColor(summaryColor);
-            summaryView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-            summaryView.setLineSpacing(Math.round(2 * density), 1f);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             params.topMargin = Math.round(2 * density);
@@ -266,13 +345,29 @@ final class CategorySortDialogs {
         if (note != null && !note.isEmpty()) {
             TextView noteView = new TextView(context);
             noteView.setText(note);
-            noteView.setTextColor(MaterialColors.compositeARGBWithAlpha(summaryColor, 200));
-            noteView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-            noteView.setLineSpacing(Math.round(2 * density), 1f);
+            M3.textAppearance(noteView, com.google.android.material.R.attr.textAppearanceBodySmall);
+            noteView.setTextColor(summaryColor);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             params.topMargin = Math.round(6 * density);
             texts.addView(noteView, params);
+        }
+
+        if (suggestion != null && !suggestion.isEmpty() && onSuggestion != null) {
+            SpannableString text = new SpannableString(suggestion);
+            int at = link == null ? -1 : suggestion.indexOf(link);
+            if (at >= 0) text.setSpan(new UnderlineSpan(), at, at + link.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            TextView suggestionView = new TextView(context);
+            suggestionView.setText(text);
+            M3.textAppearance(suggestionView, com.google.android.material.R.attr.textAppearanceBodySmall);
+            suggestionView.setTextColor(accent);
+            suggestionView.setMinHeight(Math.round(48 * density));
+            suggestionView.setGravity(Gravity.CENTER_VERTICAL);
+            suggestionView.setClickable(true);
+            suggestionView.setOnClickListener(v -> onSuggestion.run());
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            texts.addView(suggestionView, params);
         }
 
         row.addView(texts, new LinearLayout.LayoutParams(
@@ -282,8 +377,8 @@ final class CategorySortDialogs {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         rowParams.topMargin = Math.round(6 * density);
         rowParams.bottomMargin = Math.round(6 * density);
-        row.setLayoutParams(rowParams);
-        return row;
+        card.setLayoutParams(rowParams);
+        return card;
     }
 
     /**
@@ -317,19 +412,23 @@ final class CategorySortDialogs {
                               @NonNull List<LauncherCategorySortPrompt.AppEntry> apps,
                               @Nullable Runnable onApplied) {
         float density = context.getResources().getDisplayMetrics().density;
-        EditText input = new EditText(context);
+        TextInputLayout inputLayout = new TextInputLayout(context);
+        inputLayout.setHint(context.getString(
+            R.string.settings_app_drawer_category_sort_paste_input_hint));
+        TextInputEditText input = new TextInputEditText(inputLayout.getContext());
+        inputLayout.addView(input, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         input.setSingleLine(false);
         input.setMinLines(6);
         input.setMaxLines(12);
-        input.setHint(R.string.settings_app_drawer_category_sort_paste_input_hint);
         input.setGravity(Gravity.TOP | Gravity.START);
 
         LinearLayout layout = new LinearLayout(context);
         layout.setOrientation(LinearLayout.VERTICAL);
         int padH = Math.round(24 * density);
         layout.setPadding(padH, Math.round(8 * density), padH, 0);
-        layout.addView(input, new LinearLayout.LayoutParams(
+        layout.addView(inputLayout, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // Neutral button rather than a view button: the dialog must not close when the prompt is
@@ -384,6 +483,17 @@ final class CategorySortDialogs {
         });
     }
 
+    /** The Activity under a (possibly wrapped) context, or null. */
+    @Nullable
+    private static Activity activityOf(@NonNull Context context) {
+        Context current = context;
+        while (current instanceof ContextWrapper) {
+            if (current instanceof Activity) return (Activity) current;
+            current = ((ContextWrapper) current).getBaseContext();
+        }
+        return null;
+    }
+
     /**
      * @return false once the hosting activity is gone, so a write that finishes after the user left
      *     the screen reports into nothing instead of touching a dead window.
@@ -406,10 +516,4 @@ final class CategorySortDialogs {
             R.string.settings_app_drawer_category_sort_ignored_lines, ignored);
     }
 
-    /** Rounded up and never zero: "about 0 minutes" would read as instant. */
-    private static int estimatedMinutes(@NonNull TaiModelSpec model, int appCount) {
-        int secondsPerApp = TaiModelRegistry.MODEL_GEMMA_4_E2B_IT.equals(model.id)
-            ? SECONDS_PER_APP_E2B : SECONDS_PER_APP_E4B;
-        return Math.max(1, (int) Math.ceil(appCount * secondsPerApp / 60.0));
-    }
 }

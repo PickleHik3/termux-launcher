@@ -152,24 +152,19 @@ public class WallpaperBlurCacheTest {
     }
 
     @Test
-    public void aFullFrameRequestIsAnsweredWithTheSharedFrameRatherThanACopy() {
-        Bitmap full = cache.obtain(8, wallpaperFrame);
+    public void theFrameRectDescribesTheScreenWhateverSizeTheFrameIsHeldAt() {
+        // The renderer hands back the frame at the size it blurred it at; the rect the cache
+        // records is still the screen rect it was captured for, which is what every surface aims
+        // its shader from.
+        source.blurScale = 4;
+        Bitmap frame = cache.obtain(8, wallpaperFrame);
         Rect frameRect = new Rect();
         cache.copyFrameRect(frameRect);
 
-        assertSame("a full-screen crop must not allocate a second full-screen bitmap",
-            full, cache.crop(8, frameRect, wallpaperFrame));
-    }
-
-    @Test
-    public void aSmallerTargetIsCutFromTheSharedFrame() {
-        cache.obtain(8, wallpaperFrame);
-
-        Bitmap crop = cache.crop(8, new Rect(0, 150, 100, 200), wallpaperFrame);
-
-        assertEquals(100, crop.getWidth());
-        assertEquals(50, crop.getHeight());
-        assertEquals("cropping must not re-capture the wallpaper", 1, source.captureCount);
+        assertEquals(25, frame.getWidth());
+        assertEquals(50, frame.getHeight());
+        assertEquals(new Rect(0, 0, 100, 200), frameRect);
+        assertSame(frame, cache.obtain(8, wallpaperFrame));
     }
 
     @Test
@@ -186,5 +181,77 @@ public class WallpaperBlurCacheTest {
         // And the next request captures again rather than trusting the emptied identity.
         cache.obtain(8, wallpaperFrame);
         assertEquals(2, source.captureCount);
+    }
+
+    // ------------------------------------------------------------- crossfade tagging
+
+    @Test
+    public void aPlainClearNeverTagsAnyRadiusForCrossfade() {
+        cache.obtain(8, wallpaperFrame);
+        cache.obtain(12, wallpaperFrame);
+
+        cache.clear();
+        cache.obtain(8, wallpaperFrame);
+
+        assertFalse("a rotation or a radius change swaps outright, never fades",
+            cache.isCrossfadedRadius(8));
+    }
+
+    @Test
+    public void aWallpaperChangeClearTagsEveryRadiusItDisplaced() {
+        cache.obtain(8, wallpaperFrame);
+        cache.obtain(12, wallpaperFrame);
+
+        cache.clearForWallpaperChange();
+        assertFalse("nothing has refilled yet", cache.isCrossfadedRadius(8));
+
+        cache.obtain(8, wallpaperFrame);
+        assertTrue("the first surface to refill a displaced radius crossfades into it",
+            cache.isCrossfadedRadius(8));
+        // The other displaced radius is untouched until something asks for it too.
+        assertFalse(cache.isCrossfadedRadius(12));
+        cache.obtain(12, wallpaperFrame);
+        assertTrue(cache.isCrossfadedRadius(12));
+    }
+
+    @Test
+    public void aRadiusNeverResidentBeforeIsNeverTaggedForCrossfade() {
+        cache.obtain(8, wallpaperFrame);
+
+        cache.clearForWallpaperChange();
+        // 12 was never resident, so a wallpaper change never promised it a crossfade — a radius the
+        // editor happens to settle on right after is a plain new key, not a fade.
+        cache.obtain(12, wallpaperFrame);
+
+        assertFalse(cache.isCrossfadedRadius(12));
+    }
+
+    @Test
+    public void aSecondWallpaperChangeBeforeARadiusRefillsStillCrossfadesIt() {
+        cache.obtain(8, wallpaperFrame);
+
+        cache.clearForWallpaperChange();
+        // A second wallpaper change lands before 8 was ever refilled. The surface is still showing
+        // its last good frame, so the frame that finally lands fades in over it all the same.
+        cache.clearForWallpaperChange();
+        cache.obtain(8, wallpaperFrame);
+
+        assertTrue("the later clear still tags it, from its own moment on",
+            cache.isCrossfadedRadius(8));
+    }
+
+    @Test
+    public void refillingForAnUnrelatedReasonDropsTheCrossfadeTag() {
+        cache.obtain(8, wallpaperFrame);
+        cache.clearForWallpaperChange();
+        cache.obtain(8, wallpaperFrame);
+        assertTrue(cache.isCrossfadedRadius(8));
+
+        // A later plain clear (a rotation, a radius change) and refill is not a wallpaper change;
+        // the stale tag from the earlier crossfade must not leak into it.
+        cache.clear();
+        cache.obtain(8, wallpaperFrame);
+
+        assertFalse(cache.isCrossfadedRadius(8));
     }
 }

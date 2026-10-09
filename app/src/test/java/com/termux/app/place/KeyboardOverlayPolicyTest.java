@@ -50,7 +50,7 @@ public class KeyboardOverlayPolicyTest {
 
     private boolean overlays(PlaceLayoutStore store, PaneWallPage place,
                              PlaceOrientation orientation) {
-        return KeyboardOverlayPolicy.overlays(place, store.resolve(place, orientation));
+        return KeyboardOverlayPolicy.overlays(place, store.resolve(orientation));
     }
 
     private static PlaceLayout layout(KeyboardMode mode) {
@@ -83,7 +83,7 @@ public class KeyboardOverlayPolicyTest {
     public void theHomePlaceFloatsTheKeyboardWhateverIsStored() {
         PlaceLayoutStore store = store();
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
-            store.setKeyboardMode(PaneWallPage.WIDGETS, orientation, KeyboardMode.RESIZE);
+            store.setKeyboardMode(orientation, KeyboardMode.RESIZE);
             assertTrue(String.valueOf(orientation),
                 overlays(store, PaneWallPage.WIDGETS, orientation));
         }
@@ -94,9 +94,9 @@ public class KeyboardOverlayPolicyTest {
     @Test
     public void theDisplayTakesTheStoredModeInEitherOrientation() {
         PlaceLayoutStore store = store();
-        store.setKeyboardMode(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT,
+        store.setKeyboardMode(PlaceOrientation.PORTRAIT,
             KeyboardMode.OVERLAY);
-        store.setKeyboardMode(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE,
+        store.setKeyboardMode(PlaceOrientation.LANDSCAPE,
             KeyboardMode.RESIZE);
         assertTrue(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT));
         assertFalse(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
@@ -108,7 +108,7 @@ public class KeyboardOverlayPolicyTest {
         for (PaneWallPage place : PaneWallPage.values()) {
             if (place == PaneWallPage.DISPLAY || place == PaneWallPage.WIDGETS) continue;
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                store.setKeyboardMode(place, orientation, KeyboardMode.OVERLAY);
+                store.setKeyboardMode(orientation, KeyboardMode.OVERLAY);
                 assertFalse(place + " " + orientation, overlays(store, place, orientation));
             }
         }
@@ -129,7 +129,7 @@ public class KeyboardOverlayPolicyTest {
         PlaceLayoutStore store = store();
         for (PaneWallPage place : PaneWallPage.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                store.setKeyboardForm(place, orientation, KeyboardForm.FLOATING);
+                store.setKeyboardForm(orientation, KeyboardForm.FLOATING);
                 assertTrue(place + " " + orientation, overlays(store, place, orientation));
             }
         }
@@ -209,6 +209,27 @@ public class KeyboardOverlayPolicyTest {
     public void theContentNeverGoesNegative() {
         assertEquals(0, KeyboardOverlayPolicy.contentHeightPx(100, 400));
         assertEquals(0, KeyboardOverlayPolicy.contentReservationPx(100, 0, 400));
+    }
+
+    @Test
+    public void twoPlacesRestReservationsDifferByExactlyWhatDiffersBetweenThem() {
+        // The terminal with its keyboard up: the Floating dock's gap is the stack's margin, the
+        // same as with the keyboard down, so the keyboard coming and going never moves the dock's
+        // landing (ChromePolicy.bottomEdgeGapPx).
+        int terminalUp = KeyboardOverlayPolicy.restReservationPx(120, 0, true, false, 300, 16);
+        assertEquals(436, terminalUp);
+        // Home: the keyboard is down and the dock keeps that one gap under it.
+        int home = KeyboardOverlayPolicy.restReservationPx(120, 0, false, true, 300, 16);
+        assertEquals(136, home);
+        // Leaving the terminal for Home gives exactly the keyboard's room back.
+        assertEquals(300, terminalUp - home);
+        // The display with the keyboard floating over it: the keyboard's room is handed back.
+        int displayOverlay = KeyboardOverlayPolicy.restReservationPx(120, 0, true, true, 300, 16);
+        assertEquals(136, displayOverlay);
+        // The terminal with the keyboard down pads the dock down to a whole row.
+        int terminalDown = KeyboardOverlayPolicy.restReservationPx(120, 9, false, false, 300, 16);
+        assertEquals(145, terminalDown);
+        assertEquals(9, terminalDown - home);
     }
 
     private static int contentHeight(boolean overlays, boolean keyboardShown, int keyboardPx,

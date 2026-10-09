@@ -50,7 +50,8 @@ public final class LauncherConfigRepository {
     private final PreferencesStore preferences;
     private final List<Listener> listeners = new ArrayList<>();
     private long revision;
-    @Nullable private LauncherConfigSnapshot cached;
+    /** Volatile so {@link #loadAppIconOverride} can read it without taking the lock. */
+    @Nullable private volatile LauncherConfigSnapshot cached;
 
     public LauncherConfigRepository(@NonNull TermuxAppSharedPreferences preferences) {
         this(new PreferencesStore() {
@@ -247,17 +248,52 @@ public final class LauncherConfigRepository {
             ? MutationResult.APPLIED : MutationResult.NO_OP;
     }
 
-    /** Returns the app-wide icon override for this exact app/profile, if one was selected. */
+    /**
+     * Returns the app-wide icon override for this exact app/profile, if one was selected.
+     *
+     * <p>Called once per app during a catalogue build, on the provider's thread, while the main
+     * thread may want this repository too. With a snapshot loaded it is a lookup in the
+     * snapshot's parsed map and takes no lock; only before the first load does it parse the
+     * stored JSON, under the lock as before.
+     */
     @Nullable
-    public synchronized PinnedIconOverride loadAppIconOverride(@NonNull AppRef ref) {
-        JSONArray overrides = currentOverrides();
-        String targetId = ref.stableId();
-        for (int i = 0; i < overrides.length(); i++) {
-            JSONObject item = overrides.optJSONObject(i);
-            if (item != null && targetId.equals(appRefFromJson(item).stableId()))
-                return parseIconOverride(item.optJSONObject("iconOverride"));
+    public PinnedIconOverride loadAppIconOverride(@NonNull AppRef ref) {
+        LauncherConfigSnapshot snapshot = cached;
+        if (snapshot != null) return snapshot.appIconOverrides.get(ref.stableId());
+        synchronized (this) {
+            JSONArray overrides = currentOverrides();
+            String targetId = ref.stableId();
+            for (int i = 0; i < overrides.length(); i++) {
+                JSONObject item = overrides.optJSONObject(i);
+                if (item != null && targetId.equals(appRefFromJson(item).stableId()))
+                    return parseIconOverride(item.optJSONObject("iconOverride"));
+            }
+            return null;
         }
-        return null;
+    }
+
+    /**
+     * The stored app-wide overrides by {@code AppRef.stableId()}, the way
+     * {@link #loadAppIconOverride} reads them: the first entry for an app wins, and an unusable
+     * override maps to null. Malformed JSON reads as no overrides.
+     */
+    @NonNull
+    static Map<String, PinnedIconOverride> parseAppIconOverrides(@Nullable String json) {
+        Map<String, PinnedIconOverride> result = new java.util.HashMap<>();
+        if (json == null || json.trim().isEmpty()) return java.util.Collections.emptyMap();
+        try {
+            JSONArray overrides = new JSONArray(json);
+            for (int i = 0; i < overrides.length(); i++) {
+                JSONObject item = overrides.optJSONObject(i);
+                if (item == null) continue;
+                String id = appRefFromJson(item).stableId();
+                if (result.containsKey(id)) continue;
+                result.put(id, parseIconOverride(item.optJSONObject("iconOverride")));
+            }
+        } catch (JSONException ignored) {
+            return java.util.Collections.emptyMap();
+        }
+        return java.util.Collections.unmodifiableMap(result);
     }
 
     public synchronized void saveAppIconOverride(@NonNull AppRef ref,
@@ -503,8 +539,14 @@ public final class LauncherConfigRepository {
 
     @NonNull
     private LauncherConfigSnapshot snapshot(@NonNull Parsed parsed, @Nullable JSONArray overrides) {
-        return new LauncherConfigSnapshot(++revision, parsed.dockItems, parsed.folders,
-            overrides == null ? "[]" : overrides.toString());
+        String json = overrides == null ? "[]" : overrides.toString();
+        // A dock or folder edit leaves the overrides as they were: keep their parse.
+        LauncherConfigSnapshot previous = cached;
+        if (previous != null && previous.appIconOverridesJson.equals(json)) {
+            return new LauncherConfigSnapshot(++revision, parsed.dockItems, parsed.folders, json,
+                previous.appIconOverrides);
+        }
+        return new LauncherConfigSnapshot(++revision, parsed.dockItems, parsed.folders, json);
     }
 
     @NonNull

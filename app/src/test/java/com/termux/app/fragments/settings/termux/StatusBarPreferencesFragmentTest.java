@@ -9,13 +9,11 @@ import android.content.Intent;
 import android.os.Build;
 
 import androidx.fragment.app.Fragment;
-import androidx.preference.ListPreference;
 import androidx.preference.PreferenceScreen;
 import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
-import com.termux.app.fragments.settings.SegmentedPillPreference;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -55,15 +53,18 @@ public class StatusBarPreferencesFragmentTest {
         StatusBarPreferencesFragment fragment = launch();
         PreferenceScreen screen = fragment.getPreferenceScreen();
 
-        assertTrue(screen.findPreference("top_pane_clock_style") instanceof ListPreference);
-        assertTrue(screen.findPreference("top_pane_clock_alignment") instanceof SegmentedPillPreference);
+        // The Appearance editor owns the clock face and position.
+        assertNull(screen.findPreference("top_pane_clock_style"));
+        assertNull(screen.findPreference("top_pane_clock_alignment"));
         assertTrue(screen.findPreference("top_pane_clock_am_pm") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("status_widget_cpu") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("status_widget_ram") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("status_widget_weather") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("status_widget_weather_fahrenheit") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("top_pane_notification_access") != null);
-        assertTrue(screen.findPreference("essential_notification_rules_manage") != null);
+        // Moved to the Notifications page; a link row points there instead.
+        assertNull(screen.findPreference("top_pane_notification_access"));
+        assertNull(screen.findPreference("essential_notification_rules_manage"));
+        assertTrue(screen.findPreference("status_bar_notifications_link") != null);
 
         // Moved to the Terminal page: not reachable here any more.
         assertNull(screen.findPreference("split_pane_controls"));
@@ -76,17 +77,17 @@ public class StatusBarPreferencesFragmentTest {
     }
 
     @Test
-    public void clockStyleAndCpuUsagePersistThroughTheSharedTerminalIoStore() {
+    public void twelveHourAndCpuUsagePersistThroughTheSharedTerminalIoStore() {
         StatusBarPreferencesFragment fragment = launch();
-        ListPreference clockStyle = fragment.findPreference("top_pane_clock_style");
+        SwitchPreferenceCompat amPm = fragment.findPreference("top_pane_clock_am_pm");
         SwitchPreferenceCompat cpu = fragment.findPreference("status_widget_cpu");
 
-        clockStyle.setValue("led");
+        amPm.setChecked(true);
         cpu.setChecked(true);
 
         Application app = RuntimeEnvironment.getApplication();
         TerminalIOPreferencesDataStore io = TerminalIOPreferencesDataStore.getInstance(app);
-        assertEquals("led", io.getString("top_pane_clock_style", "slab"));
+        assertTrue(io.getBoolean("top_pane_clock_am_pm", false));
         assertTrue(io.getBoolean("status_widget_cpu", false));
     }
 }

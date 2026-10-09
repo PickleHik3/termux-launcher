@@ -27,6 +27,11 @@ public enum TourAction {
     /** A practice hint's way out without doing it. */
     END_PRACTICE(R.string.tour_end_practice),
 
+    /** The usage card's three answers, worded as the settings row words them. */
+    USE_TERMINAL(R.string.settings_use_as_terminal),
+    USE_HOME(R.string.settings_use_as_home),
+    USE_DISPLAY(R.string.settings_use_as_display),
+
     /** The home-screen card, when the launcher is not the home app yet. */
     USE_AS_HOME(R.string.tour_use_as_home),
     /** The same card's other answer. */

@@ -26,7 +26,11 @@ import java.util.zip.ZipFile;
 
 public final class TaiDeviceCapabilities {
     private static final long BYTES_PER_GIB = 1024L * 1024L * 1024L;
-    public static final int MNN_SDK_MINIMUM = 24;
+    /**
+     * The bundled MNN bridge is built at API level 30 and imports a symbol that exists only from
+     * API 28, so it cannot load below 30 (the minimum was 24 before the bridge was checked).
+     */
+    public static final int MNN_SDK_MINIMUM = 30;
     public static final int MNN_MEMORY_ESTIMATE_MB = 2048;
 
     public final String model;
@@ -34,8 +38,23 @@ public final class TaiDeviceCapabilities {
     public final String socModel;
     public final int sdkInt;
     public final List<String> supportedAbis;
+    /**
+     * The RAM the phone is sold with, from what the kernel reports (see
+     * {@link TaiLoadBudget#ramClassBytes}); what model recommendations and the context tier compare
+     * against. Not advertisedMem, which counts swap sold as RAM.
+     */
     public final long memoryBytes;
+    /** RAM as the kernel reports it; the budget's reserve is a share of this. */
+    public final long physicalMemoryBytes;
+    /** Android's advertisedMem, reported for diagnosis only; {@code 0} when unavailable. */
+    public final long advertisedMemoryBytes;
     public final long availableMemoryBytes;
+    /**
+     * Android's own low-memory line, {@code MemoryInfo.threshold}: the free memory at which the
+     * system starts killing cached apps (315 MB on pong). Reported for diagnostics; the load budget
+     * does not use it. {@code 0} when unavailable.
+     */
+    public final long memoryThresholdBytes;
     public final boolean lowMemory;
     public final String memorySource;
     public final boolean pixel10;
@@ -58,7 +77,10 @@ public final class TaiDeviceCapabilities {
         int sdkInt,
         @NonNull List<String> supportedAbis,
         long memoryBytes,
+        long physicalMemoryBytes,
+        long advertisedMemoryBytes,
         long availableMemoryBytes,
+        long memoryThresholdBytes,
         boolean lowMemory,
         @NonNull String memorySource,
         boolean pixel10,
@@ -77,7 +99,10 @@ public final class TaiDeviceCapabilities {
         this.sdkInt = sdkInt;
         this.supportedAbis = Collections.unmodifiableList(new ArrayList<>(supportedAbis));
         this.memoryBytes = memoryBytes;
+        this.physicalMemoryBytes = physicalMemoryBytes;
+        this.advertisedMemoryBytes = advertisedMemoryBytes;
         this.availableMemoryBytes = availableMemoryBytes;
+        this.memoryThresholdBytes = memoryThresholdBytes;
         this.lowMemory = lowMemory;
         this.memorySource = memorySource;
         this.pixel10 = pixel10;
@@ -93,23 +118,26 @@ public final class TaiDeviceCapabilities {
 
     @NonNull
     public static TaiDeviceCapabilities detect(@NonNull Context context) {
-        long memoryBytes = 0L;
+        long physicalMemoryBytes = 0L;
+        long advertisedMemoryBytes = 0L;
         long availableMemoryBytes = 0L;
+        long memoryThresholdBytes = 0L;
         boolean lowMemory = false;
         String memorySource = "unavailable";
         ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
         if (activityManager != null) {
             ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
             activityManager.getMemoryInfo(memoryInfo);
-            memoryBytes = memoryInfo.totalMem;
+            physicalMemoryBytes = memoryInfo.totalMem;
             availableMemoryBytes = memoryInfo.availMem;
+            memoryThresholdBytes = Math.max(0L, memoryInfo.threshold);
             lowMemory = memoryInfo.lowMemory;
-            memorySource = "totalMem";
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && memoryInfo.advertisedMem > 0L) {
-                memoryBytes = memoryInfo.advertisedMem;
-                memorySource = "advertisedMem";
+            memorySource = "totalMem rounded to its RAM class";
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                advertisedMemoryBytes = Math.max(0L, memoryInfo.advertisedMem);
             }
         }
+        long memoryBytes = TaiLoadBudget.ramClassBytes(physicalMemoryBytes);
         String model = Build.MODEL == null ? "" : Build.MODEL;
         String soc = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && Build.SOC_MODEL != null ? Build.SOC_MODEL : "";
         List<String> abis = Arrays.asList(Build.SUPPORTED_ABIS);
@@ -127,7 +155,10 @@ public final class TaiDeviceCapabilities {
             Build.VERSION.SDK_INT,
             abis,
             memoryBytes,
+            physicalMemoryBytes,
+            advertisedMemoryBytes,
             availableMemoryBytes,
+            memoryThresholdBytes,
             lowMemory,
             memorySource,
             model.toLowerCase(Locale.ROOT).contains("pixel 10"),
@@ -165,7 +196,10 @@ public final class TaiDeviceCapabilities {
             sdkInt,
             supportedAbis,
             memoryBytes,
+            memoryBytes,
+            0L,
             memoryBytes > 0L ? memoryBytes / 2L : 0L,
+            0L,
             false,
             memorySource,
             pixel10,
@@ -246,11 +280,21 @@ public final class TaiDeviceCapabilities {
         json.put("supportedAbis", abis);
         json.put("memoryBytes", memoryBytes);
         json.put("memoryGiB", memoryBytes > 0L ? memoryBytes / (double) BYTES_PER_GIB : JSONObject.NULL);
+        json.put("physicalMemoryBytes", physicalMemoryBytes);
+        json.put("advertisedMemoryBytes", advertisedMemoryBytes);
         json.put("availableMemoryBytes", availableMemoryBytes);
         json.put("availableMemoryGiB", availableMemoryBytes > 0L ? availableMemoryBytes / (double) BYTES_PER_GIB : JSONObject.NULL);
+        json.put("memoryThresholdBytes", memoryThresholdBytes);
         json.put("lowMemory", lowMemory);
         json.put("memorySource", memorySource);
         json.put("pixel10", pixel10);
+        json.put("tier", TaiDeviceTier.effectiveCached(memoryBytes).number());
+        TaiPlatformCaps gpu = TaiPlatformCaps.cached();
+        json.put("gpuPath", gpu.gpuPath.name());
+        json.put("gpuFamily", gpu.gpuFamily.name());
+        json.put("gpuReason", gpu.gpuReason);
+        json.put("gpuName", gpu.gpuName);
+        json.put("gpuDriver", gpu.gpuDriver);
         json.put("liteRtLmAbiSupported", liteRtLmAbiSupported);
         json.put("liteRtLmNativeLibrariesAvailable", liteRtLmNativeLibrariesAvailable);
         json.put("mnnSupported", mnnSupported);
@@ -269,7 +313,7 @@ public final class TaiDeviceCapabilities {
         json.put("phase1Accelerators", accelerators);
         json.put("gpuPolicy", pixel10
             ? "disabled to match Google AI Edge Gallery's Pixel 10 compatibility rule"
-            : "manual opt-in until a successful model/device GPU load is recorded");
+            : "tried first on automatic loads, after a recorded GPU failure tried after the CPU");
         return json;
     }
 

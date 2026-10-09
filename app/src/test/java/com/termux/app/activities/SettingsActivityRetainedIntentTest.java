@@ -6,12 +6,15 @@ import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 
 import androidx.fragment.app.Fragment;
 
 import com.termux.R;
+import com.termux.app.fragments.settings.BenignPreferencesFragment;
 import com.termux.app.fragments.settings.ThrowingPreferencesFragment;
+import com.termux.shared.termux.TermuxConstants;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -19,6 +22,8 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
+
+import java.util.Collections;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -102,6 +107,139 @@ public class SettingsActivityRetainedIntentTest {
         assertTrue(SettingsActivity.isAllowedInitialFragment(ThrowingPreferencesFragment.class));
         assertFalse(SettingsActivity.isAllowedInitialFragment(ThrowingFragment.class));
         assertFalse(SettingsActivity.isAllowedInitialFragment(Fragment.class));
+    }
+
+    /**
+     * openSettingsHome in TermuxActivity sends a bare Intent(context, SettingsActivity.class);
+     * everything else (a deep-linked fragment, the QA TAI shortcut, or per-place arguments) is a
+     * request for a specific screen, not a plain re-entry that should resume the live stack.
+     */
+    @Test
+    public void isPlainEntryIntentClassifiesPlainVsDeepLinkIntents() {
+        assertTrue(SettingsActivity.isPlainEntryIntent(
+            new Intent(ApplicationProviderHolder.context(), SettingsActivity.class)));
+
+        assertFalse(SettingsActivity.isPlainEntryIntent(
+            SettingsActivity.createFragmentIntent(ApplicationProviderHolder.context(),
+                ThrowingPreferencesFragment.class, R.string.title_activity_termux_settings)));
+
+        assertFalse(SettingsActivity.isPlainEntryIntent(
+            new Intent(ApplicationProviderHolder.context(), SettingsActivity.class)
+                .putExtra(SettingsActivity.EXTRA_OPEN_TAI_SETTINGS, true)));
+
+        assertFalse(SettingsActivity.isPlainEntryIntent(
+            SettingsActivity.createFragmentIntent(ApplicationProviderHolder.context(),
+                ThrowingPreferencesFragment.class, R.string.title_activity_termux_settings,
+                "widgets", "row_key")));
+    }
+
+    /** Seeds the same SharedPreferences file SettingsActivity persists its stack under. */
+    private static SharedPreferences settingsBackStackPreferences() {
+        return ApplicationProviderHolder.context().getSharedPreferences(
+            TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+            android.content.Context.MODE_PRIVATE);
+    }
+
+    private static void seedSavedBackStack(long stoppedAtEpochMs, SettingsBackStackState.Entry entry) {
+        SettingsBackStackState state =
+            new SettingsBackStackState(Collections.singletonList(entry), stoppedAtEpochMs);
+        settingsBackStackPreferences().edit()
+            .putString(SettingsActivity.PREFS_KEY_BACK_STACK_STATE, state.serialize()).apply();
+    }
+
+    @Test
+    public void plainReentryWithinRetainWindowRestoresTheSavedScreenAndTitle() {
+        seedSavedBackStack(System.currentTimeMillis(), new SettingsBackStackState.Entry(
+            BenignPreferencesFragment.class.getName(),
+            R.string.termux_ai_preferences_title, null, null, null));
+
+        Intent plainIntent = new Intent(ApplicationProviderHolder.context(), SettingsActivity.class);
+        try (ActivityController<SettingsActivity> controller =
+                 Robolectric.buildActivity(SettingsActivity.class, plainIntent).create()) {
+            SettingsActivity activity = controller.get();
+            activity.getSupportFragmentManager().executePendingTransactions();
+
+            Fragment fragment = activity.getSupportFragmentManager().findFragmentById(R.id.settings);
+            assertTrue(fragment instanceof BenignPreferencesFragment);
+            assertEquals(activity.getString(R.string.termux_ai_preferences_title),
+                activity.getTitle().toString());
+        }
+    }
+
+    @Test
+    public void plainReentryPastTheRetainWindowFallsBackToRoot() {
+        long staleStoppedAt = System.currentTimeMillis() - SettingsBackStackState.RETAIN_WINDOW_MS - 1000;
+        seedSavedBackStack(staleStoppedAt, new SettingsBackStackState.Entry(
+            BenignPreferencesFragment.class.getName(),
+            R.string.termux_ai_preferences_title, null, null, null));
+
+        Intent plainIntent = new Intent(ApplicationProviderHolder.context(), SettingsActivity.class);
+        try (ActivityController<SettingsActivity> controller =
+                 Robolectric.buildActivity(SettingsActivity.class, plainIntent).create()) {
+            SettingsActivity activity = controller.get();
+            activity.getSupportFragmentManager().executePendingTransactions();
+            assertRootFragment(activity);
+        }
+    }
+
+    @Test
+    public void plainReentryWithAnInvalidSavedClassFallsBackToRoot() {
+        seedSavedBackStack(System.currentTimeMillis(), new SettingsBackStackState.Entry(
+            "com.termux.removed.SomeOldFragment", R.string.termux_ai_preferences_title,
+            null, null, null));
+
+        Intent plainIntent = new Intent(ApplicationProviderHolder.context(), SettingsActivity.class);
+        try (ActivityController<SettingsActivity> controller =
+                 Robolectric.buildActivity(SettingsActivity.class, plainIntent).create()) {
+            SettingsActivity activity = controller.get();
+            activity.getSupportFragmentManager().executePendingTransactions();
+            assertRootFragment(activity);
+        }
+    }
+
+    private static final String PAGES = "com.termux.app.fragments.settings.termux.";
+
+    @Test
+    public void legacyPageWithAMovedKeyOpensTheSubpageThatHoldsIt() {
+        assertEquals(PAGES + "KeyboardVoicePreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "KeyboardPreferencesFragment", "keyboard_voice_engine"));
+        assertEquals(PAGES + "X11DisplayStartupPreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "X11DisplayPreferencesFragment", "x11_display_autostart"));
+        assertEquals(PAGES + "LauncherLockPreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "LauncherPreferencesFragment", "app_launcher_az_lock_method"));
+        assertEquals(PAGES + "TaiRuntimePreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "TaiPreferencesFragment", "tai_runtime_unload"));
+        assertEquals(PAGES + "TaiApiPreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "TaiPreferencesFragment", "tai_lan_enabled"));
+        assertEquals(PAGES + "TaiAdvancedPreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "TaiPreferencesFragment", "tai_memory_limits"));
+        assertEquals("the remote model row stays on the overview", PAGES + "TaiPreferencesFragment",
+            SettingsActivity.redirectLegacyPage(PAGES + "TaiPreferencesFragment", "tai_remote_provider"));
+    }
+
+    @Test
+    public void legacyPageWithoutAKeyOrWithAnOverviewKeyStaysTheOverview() {
+        for (String page : new String[] {"KeyboardPreferencesFragment", "LauncherPreferencesFragment",
+            "X11DisplayPreferencesFragment"}) {
+            assertEquals(PAGES + page, SettingsActivity.redirectLegacyPage(PAGES + page, null));
+            assertEquals(PAGES + page, SettingsActivity.redirectLegacyPage(PAGES + page, "keyboard_input_method"));
+        }
+        assertEquals("other classes are never redirected", PAGES + "TerminalPreferencesFragment",
+            SettingsActivity.redirectLegacyPage(PAGES + "TerminalPreferencesFragment", "keyboard_voice_engine"));
+    }
+
+    @Test
+    public void anIntentForTheOldKeyboardPageAndAVoiceKeyOpensTheVoicePage() {
+        Intent intent = new Intent(ApplicationProviderHolder.context(), SettingsActivity.class)
+            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, PAGES + "KeyboardPreferencesFragment")
+            .putExtra(SettingsActivity.EXTRA_SCROLL_TO_KEY, "keyboard_voice_engine");
+        try (ActivityController<SettingsActivity> controller =
+                 Robolectric.buildActivity(SettingsActivity.class, intent).create()) {
+            SettingsActivity activity = controller.get();
+            activity.getSupportFragmentManager().executePendingTransactions();
+            Fragment fragment = activity.getSupportFragmentManager().findFragmentById(R.id.settings);
+            assertEquals(PAGES + "KeyboardVoicePreferencesFragment", fragment.getClass().getName());
+        }
     }
 
     private static void assertRootFragment(SettingsActivity activity) {

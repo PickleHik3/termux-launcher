@@ -17,6 +17,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.wall.PaneControlsView;
 import com.termux.terminal.TerminalSession;
@@ -25,6 +26,7 @@ import com.termux.view.TerminalView;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.Shadows;
@@ -65,50 +67,174 @@ public class TerminalPaneCornerTabTapTest {
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
         @Override public void openLayoutEditor() { log.add("layout"); }
+        @Override public void openWallpaperPicker() { log.add("wallpaper"); }
         @Override public void openSettings() { log.add("settings"); }
+        @Override public void onAutoTilingChanged(boolean enabled) {
+            log.add(enabled ? "tiling on" : "tiling off");
+        }
+        /** Minimal mode, as the launcher keeps it for the terminal place. */
+        boolean minimal;
+        /** What the launcher does with the toggle: it re-lays the place out around the panes. */
+        @Nullable Runnable afterToggle;
+        @Override public boolean isMinimalMode() { return minimal; }
+        @Override public void toggleMinimalMode() {
+            minimal = !minimal;
+            log.add(minimal ? "minimal on" : "minimal off");
+            if (afterToggle != null) afterToggle.run();
+        }
     }
 
     // ---------------------------------------------------------------- the four actions
 
     /**
-     * A pane on its own has nothing to move, maximise or close: it offers the two editor doors —
-     * Appearance and Layout — and help.
+     * A pane on its own has nothing to move, maximise or close: it offers "Wallpaper & style" — the
+     * one door to the wallpaper picker and the editors behind it — minimal mode, the tiling switch,
+     * settings and help.
      */
     @Test
-    public void aLonePanesTabOffersBothEditorsAndHelp() {
+    public void aLonePanesTabOffersWallpaperAndStyleAndHelp() {
         Fixture fixture = fixture();
         fixture.showTab();
-        assertEquals("four buttons on a lone pane", 4, fixture.slots().length);
+        assertEquals("five buttons on a lone pane", 5, fixture.slots().length);
 
         fixture.tapSlot(0);
-        assertEquals(Arrays.asList("appearance"), fixture.host.log);
+        assertEquals(Arrays.asList("wallpaper"), fixture.host.log);
 
+        // Minimal mode re-lays the whole place out around the pane, so the tab goes with the tap;
+        // opened again, the same slot is the way back.
         fixture.showTab();
         fixture.tapSlot(1);
-        assertEquals(Arrays.asList("appearance", "layout"), fixture.host.log);
+        fixture.showTab();
+        fixture.tapSlot(1);
+        assertEquals(Arrays.asList("wallpaper", "minimal on", "minimal off"), fixture.host.log);
 
+        // The tiling button flips the setting and leaves the tab up for a second tap.
+        fixture.host.log.clear();
         fixture.showTab();
         fixture.tapSlot(2);
-        assertEquals(Arrays.asList("appearance", "layout", "settings"), fixture.host.log);
+        fixture.tapSlot(2);
+        assertEquals(Arrays.asList("tiling on", "tiling off"), fixture.host.log);
 
+        fixture.host.log.clear();
         fixture.showTab();
         fixture.tapSlot(3);
-        assertEquals(Arrays.asList("appearance", "layout", "settings", "help"), fixture.host.log);
+        assertEquals(Arrays.asList("settings"), fixture.host.log);
+
+        fixture.showTab();
+        fixture.tapSlot(4);
+        assertEquals(Arrays.asList("settings", "help"), fixture.host.log);
     }
 
     /**
-     * Split, the same corner carries the move grip, maximise, close, the settings cog and
-     * help, in that order, and each slot hands its own action over.
+     * Split, the same corner carries close, move and maximise and nothing else: no editor doors,
+     * no minimal glyph, tiling switch, settings or help. Each slot hands its own action over.
      */
     @Test
-    public void aSplitPanesTabCarriesMoveMaximiseCloseAndHelp() {
+    public void aSplitPanesTabCarriesCloseMoveAndMaximiseOnly() {
         Fixture fixture = fixture();
         assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
         fixture.layout();
         fixture.showTab();
 
-        assertEquals("five buttons in a split", 5, fixture.slots().length);
-        assertEquals(Arrays.asList(0, 1, 2, 6, 4), fixture.idsAtEverySlot());
+        assertEquals("three buttons in a split", 3, fixture.slots().length);
+        assertEquals(Arrays.asList(2, 0, 1), fixture.actionsAtEverySlot());
+    }
+
+    /** The three buttons, and what each is called, as the policy asks for them. */
+    @Test
+    public void theSplitTabPolicyIsCloseMoveMaximiseAndDropsWhatCannotApply() {
+        // Tiled: all three, close first.
+        assertEquals(Arrays.asList(2, 0, 1), ids(TerminalPaneController.splitTabActions(false)));
+        // Maximised: no neighbour to move onto.
+        assertEquals(Arrays.asList(2, 1), ids(TerminalPaneController.splitTabActions(true)));
+        for (boolean maximised : new boolean[] {false, true}) {
+            for (int id : TerminalPaneController.splitTabActions(maximised)) {
+                assertTrue("never an editor door: " + id, id != 3 && id != 5 && id != 8);
+                assertTrue("never the minimal glyph: " + id, id != 9);
+            }
+        }
+    }
+
+    @NonNull
+    private static List<Integer> ids(@NonNull int[] actions) {
+        List<Integer> out = new ArrayList<>();
+        for (int id : actions) out.add(id);
+        return out;
+    }
+
+    /**
+     * Minimal mode is a saved layout, not a pane state: a split made in it shows both panes, as
+     * in the normal layout, and the split's tab is the usual close, move and maximise.
+     */
+    @Test
+    public void aSplitInMinimalModeShowsBothPanes() {
+        Fixture fixture = fixture();
+        fixture.host.minimal = true;
+        assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
+        fixture.layout();
+
+        assertEquals("nothing is maximised", null,
+            ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
+        assertEquals(2, fixture.controller.tiledPaneCount());
+        fixture.showTab();
+        assertEquals(Arrays.asList(2, 0, 1), fixture.actionsAtEverySlot());
+    }
+
+    /**
+     * The minimal glyph puts the tab away and re-lays the place out in the same tap. A retract cut
+     * short by that used to leave the tab fully drawn and marked retracting — out for the whole of
+     * minimal mode and after it, with nothing able to put it away and every button still
+     * answering. On a window, because a view never attached is never told it has been detached.
+     */
+    @Test
+    public void theMinimalGlyphLeavesNoTabBehindWhenThePlaceReLaysOut() {
+        Fixture fixture = fixtureOnAWindow();
+        fixture.host.afterToggle = fixture::layout;
+        fixture.showTab();
+        RectF minimalSlot = new RectF(fixture.slots()[1]);
+
+        fixture.tapSlot(1);
+        assertEquals(Arrays.asList("minimal on"), fixture.host.log);
+        assertFalse("the tab went with the tap", fixture.controls.isControlsShown());
+        assertEquals("and none of its buttons answers", PaneControlsView.ACTION_NONE,
+            fixture.controls.actionAt(minimalSlot.centerX(), minimalSlot.centerY()));
+
+        // A tap on the terminal finds nothing to put away, and the corner still answers a hold.
+        fixture.tap(WIDTH / 2f, HEIGHT / 2f);
+        assertFalse(fixture.controls.isControlsShown());
+        fixture.showTab();
+        fixture.tapSlot(1);
+        assertEquals(Arrays.asList("minimal on", "minimal off"), fixture.host.log);
+        assertFalse("and goes again on the way out", fixture.controls.isControlsShown());
+    }
+
+    /**
+     * The sibling a maximised render took off the host keeps its frame inside the detached split
+     * container, and a view off the window answers its location with the screen's origin. Read as
+     * a pane, that put a rect the sibling's size at the host's top-left: a corner square for the
+     * finger to find and a frame for the tab to hang off, both belonging to a pane not on screen.
+     * A hold at that phantom corner — the right edge, halfway down — opens nothing.
+     */
+    @Test
+    public void aSiblingOffTheWallOffersNoCorner() {
+        Fixture fixture = fixture();
+        assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
+        fixture.layout();
+        fixture.showTab();
+        fixture.tapSlot(2);
+        fixture.layout();
+        assertEquals(1, fixture.controller.tiledPaneCount());
+        // A maximised pane keeps its tab out, on its own corner.
+        assertTrue(fixture.controls.isControlsShown());
+        List<RectF> before = new ArrayList<>();
+        for (RectF slot : fixture.slots()) before.add(new RectF(slot));
+
+        // The top pane is the one shown maximised; the bottom pane's frame was last laid out
+        // over the lower half, and its phantom rect's bottom-right corner is here.
+        fixture.hold(WIDTH - 2f, HEIGHT / 2f - 2f);
+        List<RectF> after = new ArrayList<>();
+        for (RectF slot : fixture.slots()) after.add(new RectF(slot));
+        assertEquals("no tab moved onto a pane that is not on screen", before, after);
     }
 
     /** Maximised there is no neighbour to move onto, so that slot goes and the rest shuffle up. */
@@ -119,13 +245,13 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         fixture.showTab();
 
-        // Slot 1 is maximise: the pane takes the whole wall, and its tab is re-asserted on it.
-        fixture.tapSlot(1);
+        // Slot 2 is maximise: the pane takes the whole wall, and its tab is re-asserted on it.
+        fixture.tapSlot(2);
         fixture.layout();
         assertNotNull("the pane is maximized",
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
-        assertEquals("four buttons maximized", 4, fixture.slots().length);
-        assertEquals(Arrays.asList(1, 2, 6, 4), fixture.idsAtEverySlot());
+        assertEquals("two buttons maximized", 2, fixture.slots().length);
+        assertEquals(Arrays.asList(2, 1), fixture.actionsAtEverySlot());
     }
 
     // ---------------------------------------------------------------- a fifth button
@@ -141,8 +267,7 @@ public class TerminalPaneCornerTabTapTest {
         assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
         fixture.layout();
         fixture.showTab();
-        // Four actions are the baseline the fifth is measured against; the split's own tab already
-        // carries five since the settings cog joined it.
+        // Four actions are the baseline the fifth is measured against.
         fixture.controls.setActions(
             PaneControlsView.Action.glyph(10, ""),
             PaneControlsView.Action.glyph(11, ""),
@@ -221,7 +346,7 @@ public class TerminalPaneCornerTabTapTest {
         TerminalSession bottom = ((TerminalPaneController.Leaf) root.b).session;
         fixture.showTab();
 
-        RectF grip = fixture.slots()[0];
+        RectF grip = fixture.slots()[1];
         fixture.touch(MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         fixture.touch(MotionEvent.ACTION_MOVE, WIDTH / 2f, HEIGHT * 0.8f);
         fixture.touch(MotionEvent.ACTION_UP, WIDTH / 2f, HEIGHT * 0.8f);
@@ -335,6 +460,27 @@ public class TerminalPaneCornerTabTapTest {
         return fixture(WIDTH, HEIGHT);
     }
 
+    /**
+     * A fixture whose host stands on a window, for what only a detach can show: a view that was
+     * never attached is never told it has been detached, so a render's remove-and-add of the tab
+     * is invisible to the tab off a window.
+     */
+    private static Fixture fixtureOnAWindow() {
+        Calls host = new Calls();
+        android.app.Activity activity =
+            Robolectric.buildActivity(android.app.Activity.class).setup().get();
+        FrameLayout hostView = new FrameLayout(activity);
+        activity.setContentView(hostView, new android.view.ViewGroup.LayoutParams(WIDTH, HEIGHT));
+        TerminalPaneController controller =
+            new TerminalPaneController(host, hostView, LayoutInflater.from(activity));
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        Fixture fixture = new Fixture(host, hostView, controller, window, WIDTH, HEIGHT);
+        fixture.layout();
+        fixture.idle();
+        return fixture;
+    }
+
     private static Fixture fixture(int width, int height) {
         Calls host = new Calls();
         FrameLayout hostView = new FrameLayout(RuntimeEnvironment.getApplication());
@@ -444,6 +590,18 @@ public class TerminalPaneCornerTabTapTest {
         void tapSlot(int slot) {
             RectF button = slots()[slot];
             tap(button.centerX(), button.centerY());
+        }
+
+        /**
+         * The action each slot belongs to, read off the tab without tapping: a close button
+         * puts the tab away, so a list that starts with one cannot be read by running it.
+         */
+        @NonNull
+        List<Integer> actionsAtEverySlot() {
+            List<Integer> ids = new ArrayList<>();
+            for (RectF button : slots())
+                ids.add(controls.actionAt(button.centerX(), button.centerY()));
+            return ids;
         }
 
         /**

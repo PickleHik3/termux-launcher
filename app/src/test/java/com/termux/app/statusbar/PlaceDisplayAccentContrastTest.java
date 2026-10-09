@@ -136,7 +136,10 @@ public class PlaceDisplayAccentContrastTest {
     @Test
     @Config(qualifiers = "night")
     public void theNightValueIsThePeachThePlaceAlwaysWore() {
-        assertEquals(0xFFF0B48A, accent());
+        // The Display accent is the theme's secondary role now; the resource is kept as the
+        // pinned peach so a scheme that wants the old warm accent has its value.
+        assertEquals(0xFFF0B48A, ContextCompat.getColor(RuntimeEnvironment.getApplication(),
+            R.color.termux_place_display));
     }
 
     private static int nightColor() {

@@ -67,12 +67,6 @@
     <string name="termux_plugin_error_notifications_enabled_title">إشعارات خطأ الإضافة</string>
     <string name="termux_crash_report_notifications_enabled_title">إشعارات تقارير الأعطال</string>
     <string name="termux_crash_report_notifications_enabled_off">تعطيل الإشعارات لتقارير الأعطال.</string>
-    <string name="termux_keyboard_header">لوحة المفاتيح</string>
-    <string name="termux_soft_keyboard_enabled_on">سيتم تمكين لوحة المفاتيح الناعمة. (الافتراضي)</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_off">سيتم تعطيل ضبط هوامش الترمنل.</string>
-    <string name="termux_terminal_view_activity_remove_title">إزالة المهمة لنشاط عرض الترمنل</string>
-    <string name="termux_terminal_view_activity_remove_off">بمجرد إغلاق جلسات الطرفية جميعها، سيتم إغلاق &TERMUX_APP_NAME; وسيظل مرئيًا في التطبيقات الأخيرة.</string>
-    <string name="termux_terminal_view_activity_remove_on">سيُغلق &TERMUX_APP_NAME; وسيُزال من التطبيقات الأخيرة إذا لم تكن هناك جلسات ترمنل نشطة. (الافتراضي)</string>
     <string name="termux_style_preferences_title">مظهر &TERMUX_APP_NAME;</string>
     <string name="bootstrap_error_installed_on_portable_sd">&TERMUX_APP_NAME; لا يمكن تثبيته على بطاقة SD المحمولة/الخارجية/القابلة للإزالة على جهازك. تم تجميع الملفات التنفيذية للتهيئة الخاصة بـ &TERMUX_APP_NAME; بمسار $PREFIX مدمج ولا يمكن تثبيتها تحت أي مسار آخر غير: %1$s.</string>
     <string name="error_termux_service_execution_command_shell_name_unset">اسم الطرفية غير مضبوط ولكن وضع إنشاء الطرفية `%1$s` تم تمريره</string>
@@ -85,12 +79,4 @@
     <string name="termux_plugin_error_notifications_enabled_off">تعطيل الوميض والإشعارات لأخطاء الإضافات.</string>
     <string name="termux_crash_report_notifications_enabled_on">إظهار الإشعارات لتقارير الأعطال. (الافتراضي)</string>
     <string name="termux_plugin_error_notifications_enabled_on">إظهار الوميض والإشعارات لأخطاء الإضافات. (الافتراضي)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">لوحة المفاتيح الناعمة فقط إذا لم يكن هناك أجهزة</string>
-    <string name="termux_soft_keyboard_enabled_title">تم تمكين لوحة المفاتيح الناعمة</string>
-    <string name="termux_soft_keyboard_enabled_off">سيتم تعطيل لوحة المفاتيح الناعمة.</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">سيتم تمكين لوحة المفاتيح الناعمة حتى إذا كانت لوحة المفاتيح الأجهزة متصلة. (الافتراضي)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">سيتم تمكين لوحة المفاتيح الناعمة فقط إذا لم يكن هناك لوحة مفاتيح أجهزة متصلة.</string>
-    <string name="termux_terminal_view_view_header">عرض</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_title">ضبط هوامش الترمنل</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_on">‎سيتم تمكين ضبط هوامش الترمنل. يجب تمكينه لمحاولة إصلاح المشكلة التي تؤدي إلى تغطية لوحة المفاتيح الناعمة لجزء من المفاتيح الإضافية/عرض الترمنل. إذا تسبب في وميض الشاشة على أجهزتكم، فعليكم بتعطيله. (الافتراضي)</string>
 </resources>

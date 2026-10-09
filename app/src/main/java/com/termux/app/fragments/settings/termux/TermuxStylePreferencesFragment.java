@@ -5,22 +5,18 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Typeface;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import androidx.preference.ListPreference;
 import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
+import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
@@ -29,8 +25,6 @@ import com.termux.app.TermuxActivity;
 import com.termux.app.chrome.WallpaperBackdropPolicy;
 import com.termux.app.chrome.WallpaperPictureReader;
 import com.termux.app.notice.AppNotice;
-import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
-import com.termux.launcherctl.LauncherCtlNotificationStore;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.theme.LauncherSchemeTheme;
@@ -42,10 +36,6 @@ import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -56,12 +46,6 @@ import java.util.Set;
 @Keep
 public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
 
-    private static final String KEY_FONT = "in_app_keyboard_font";
-    private static final String FONT_DIR_NAME = "inapp-keyboard";
-    private static final String FONT_FILE_NAME = "label-font.ttf";
-
-    private ActivityResultLauncher<String[]> mFontPickerLauncher;
-
     /** The shipped templates by id, for the summary line and the setup a tool still needs. */
     private final Map<String, ThemeTemplate> mThemeTemplates = new LinkedHashMap<>();
 
@@ -69,11 +53,14 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
     @Nullable
     private AlertDialog mThemeTemplateSetupDialog;
 
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        mFontPickerLauncher = registerForActivityResult(
-            new ActivityResultContracts.OpenDocument(), this::onFontPicked);
+    /**
+     * The launcher's preference store, for a screen outside this package that writes one of its
+     * keys: the root page's usage mode row. The store class stays package-private beside the
+     * pages that own it.
+     */
+    @NonNull
+    public static PreferenceDataStore dataStore(@NonNull Context context) {
+        return TermuxStylePreferencesDataStore.getInstance(context);
     }
 
     @Override
@@ -86,37 +73,18 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(R.xml.termux_style_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         LauncherIconPackPreferenceController.configure(this, context);
-        Preference surfaceEditor = findPreference("live_surface_editor");
-        if (surfaceEditor != null) {
-            surfaceEditor.setOnPreferenceClickListener(preference -> {
-                Intent intent = new Intent(context, TermuxActivity.class);
-                intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                startActivity(intent);
-                return true;
-            });
-        }
         Preference customizeKeyboardSurface = findPreference("customize_keyboard_surface");
         if (customizeKeyboardSurface != null) customizeKeyboardSurface.setOnPreferenceClickListener(preference -> {
             Intent intent = new Intent(context, TermuxActivity.class);
+            // The one Appearance editor; nothing is preselected (SPEC §3.1).
             intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR_SECTION, "keyboard");
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);
             return true;
         });
-        Preference fontPreference = findPreference(KEY_FONT);
-        if (fontPreference != null) {
-            updateFontPreferenceSummary(fontPreference);
-            fontPreference.setOnPreferenceClickListener(preference -> {
-                onFontPreferenceClicked();
-                return true;
-            });
-        }
         configureTerminalContrastPreference();
         configureThemeTemplatesPreference();
         configureDynamicColorsHint();
-        refreshThemeEntries();
         updateKeyboardLookEnabled(context);
         configureWallpaperAlignment(context);
     }
@@ -134,7 +102,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureTerminalContrastPreference();
         configureThemeTemplatesPreference();
         configureDynamicColorsHint();
-        refreshThemeEntries();
         if (context != null) updateKeyboardLookEnabled(context);
         if (context != null) updateWallpaperAlignmentVisibility(context);
     }
@@ -184,139 +151,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
                 WallpaperPictureReader.read(context, preferences), true)));
     }
 
-    private void refreshThemeEntries() {
-        Context context = getContext();
-        ListPreference preference = findPreference("in_app_keyboard_theme");
-        if (context == null || preference == null) return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        if (preferences == null) return;
-        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
-            preferences.getInAppKeyboardColorScheme());
-        String importedId = scheme.getImportedThemeId();
-        if (importedId.isEmpty()) {
-            preference.setEntries(R.array.termux_in_app_keyboard_theme_entries);
-            preference.setEntryValues(R.array.termux_in_app_keyboard_theme_values);
-            if ("custom".equals(preferences.getInAppKeyboardTheme()))
-                preferences.setInAppKeyboardTheme("system");
-        } else {
-            preference.setEntries(new CharSequence[] {
-                getString(R.string.termux_in_app_keyboard_theme_system),
-                getString(R.string.termux_in_app_keyboard_theme_light),
-                getString(R.string.termux_in_app_keyboard_theme_dark),
-                getString(R.string.termux_in_app_keyboard_theme_imported, importedId)
-            });
-            preference.setEntryValues(new CharSequence[] {"system", "light", "dark", "custom"});
-        }
-        preference.setValue(preferences.getInAppKeyboardTheme());
-    }
-
-    private void onFontPreferenceClicked() {
-        Context context = getContext();
-        if (context == null)
-            return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        if (preferences == null)
-            return;
-        if (preferences.getInAppKeyboardFontPath().isEmpty()) {
-            launchFontPicker();
-            return;
-        }
-        new MaterialAlertDialogBuilder(requireActivity())
-            .setTitle(R.string.termux_in_app_keyboard_font_title)
-            .setItems(new CharSequence[]{
-                getString(R.string.termux_in_app_keyboard_font_pick),
-                getString(R.string.termux_in_app_keyboard_font_reset)
-            }, (dialog, which) -> {
-                if (which == 0) {
-                    launchFontPicker();
-                } else {
-                    clearCustomFont();
-                }
-            })
-            .show();
-    }
-
-    private void launchFontPicker() {
-        // SAF mime coverage for ttf/otf across providers; octet-stream catches
-        // file managers that don't map font extensions.
-        mFontPickerLauncher.launch(new String[]{
-            "font/ttf", "font/otf", "font/*",
-            "application/x-font-ttf", "application/x-font-otf",
-            "application/octet-stream"
-        });
-    }
-
-    private void onFontPicked(@Nullable Uri uri) {
-        Context context = getContext();
-        if (uri == null || context == null)
-            return;
-        File fontDir = new File(context.getFilesDir(), FONT_DIR_NAME);
-        File fontFile = new File(fontDir, FONT_FILE_NAME);
-        File stagedFile = new File(fontDir, FONT_FILE_NAME + ".tmp");
-        try {
-            if (!fontDir.isDirectory() && !fontDir.mkdirs())
-                throw new java.io.IOException("Cannot create " + fontDir);
-            try (InputStream in = context.getContentResolver().openInputStream(uri);
-                 OutputStream out = new FileOutputStream(stagedFile)) {
-                if (in == null)
-                    throw new java.io.IOException("Cannot open " + uri);
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = in.read(buffer)) != -1)
-                    out.write(buffer, 0, read);
-            }
-            // createFromFile returns DEFAULT (or throws) when the bytes are not a usable font.
-            Typeface typeface = Typeface.createFromFile(stagedFile);
-            if (typeface == null || Typeface.DEFAULT.equals(typeface))
-                throw new java.io.IOException("Unreadable font " + uri);
-            if (!stagedFile.renameTo(fontFile))
-                throw new java.io.IOException("Cannot replace " + fontFile);
-            TermuxAppSharedPreferences preferences =
-                TermuxAppSharedPreferences.build(context, true);
-            if (preferences != null)
-                preferences.setInAppKeyboardFontPath(fontFile.getAbsolutePath());
-        } catch (Exception e) {
-            //noinspection ResultOfMethodCallIgnored
-            stagedFile.delete();
-            AppNotice.show(context, R.string.termux_in_app_keyboard_font_error, false);
-        }
-        Preference fontPreference = findPreference(KEY_FONT);
-        if (fontPreference != null)
-            updateFontPreferenceSummary(fontPreference);
-    }
-
-    private void clearCustomFont() {
-        Context context = getContext();
-        if (context == null)
-            return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        if (preferences != null) {
-            String path = preferences.getInAppKeyboardFontPath();
-            preferences.setInAppKeyboardFontPath("");
-            if (!path.isEmpty()) {
-                //noinspection ResultOfMethodCallIgnored
-                new File(path).delete();
-            }
-        }
-        Preference fontPreference = findPreference(KEY_FONT);
-        if (fontPreference != null)
-            updateFontPreferenceSummary(fontPreference);
-    }
-
-    private void updateFontPreferenceSummary(@NonNull Preference fontPreference) {
-        Context context = getContext();
-        if (context == null)
-            return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        String path = preferences == null ? "" : preferences.getInAppKeyboardFontPath();
-        if (path.isEmpty() || !new File(path).isFile()) {
-            fontPreference.setSummary(R.string.termux_in_app_keyboard_font_summary_default);
-        } else {
-            fontPreference.setSummary(getString(
-                R.string.termux_in_app_keyboard_font_summary_custom, new File(path).getName()));
-        }
-    }
-
     /**
      * What the wallpaper-colours switch is really choosing, said under it.
      *
@@ -333,7 +167,8 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void configureTerminalContrastPreference() {
-        androidx.preference.ListPreference contrast = findPreference("terminal_contrast_level");
+        com.termux.app.fragments.settings.SegmentedPillPreference contrast =
+            findPreference("terminal_contrast_level");
         androidx.preference.SwitchPreferenceCompat dynamic =
             findPreference("terminal_dynamic_colors_enabled");
         if (contrast == null || dynamic == null) return;
@@ -341,7 +176,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         contrast.setEnabled(enabled);
         updateTerminalContrastSummary(contrast, enabled);
         contrast.setOnPreferenceChangeListener((preference, value) -> {
-            contrast.setValue(String.valueOf(value));
             updateTerminalContrastSummary(contrast, true);
             return true;
         });
@@ -488,14 +322,15 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             names.get(names.size() - 1)));
     }
 
-    private void updateTerminalContrastSummary(@NonNull androidx.preference.ListPreference contrast,
-                                               boolean enabled) {
-        if (!enabled) {
-            contrast.setSummary(R.string.settings_terminal_contrast_disabled);
-            return;
-        }
-        String label = contrast.getEntry() == null ? "Default" : contrast.getEntry().toString();
-        contrast.setSummary(getString(R.string.settings_terminal_contrast_summary, label));
+    /**
+     * The pill itself now shows the chosen level, so the summary only has one thing left to say:
+     * that the row is inert while dynamic colours are off.
+     */
+    private void updateTerminalContrastSummary(
+            @NonNull com.termux.app.fragments.settings.SegmentedPillPreference contrast,
+            boolean enabled) {
+        if (enabled) contrast.setSummary(null);
+        else contrast.setSummary(getString(R.string.settings_terminal_contrast_disabled));
     }
 
 }
@@ -546,15 +381,30 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         MAIN_HANDLER.postDelayed(mDrawerSyncRunnable, STYLE_SYNC_DEBOUNCE_MS);
     }
 
+    /** Lazy mode and Fancier Glass sit on this page but are stored by the terminal I/O store. */
+    private static boolean isTerminalIoToggle(String key) {
+        return "lazy_mode".equals(key) || "fancier_glass".equals(key);
+    }
+
     @Override
     public void putBoolean(String key, boolean value) {
         if (mPreferences == null)
             return;
         if (key == null)
             return;
+        if (isTerminalIoToggle(key)) {
+            TerminalIOPreferencesDataStore.getInstance(mContext).putBoolean(key, value);
+            return;
+        }
         switch(key) {
             case "use_system_wallpaper":
                 TermuxActivity.setWallpaperModeEnabled(mContext, value);
+                break;
+            case "wallpaper_parallax":
+                // The captured frame changes width with this, so the styling reload re-captures
+                // and every surface re-cuts; no recreate needed.
+                mPreferences.setWallpaperParallaxEnabled(value);
+                scheduleTermuxActivityStylingSync(false);
                 break;
             case "terminal_dynamic_colors_enabled":
                 // This switch is the whole palette decision: on, the terminal and the chrome both
@@ -580,11 +430,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherNotificationDotsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "app_launcher_notification_history":
-                mPreferences.setAppLauncherNotificationHistoryEnabled(value);
-                // Turning it off means the captured message bodies go too, not just future ones.
-                if (!value) LauncherCtlNotificationStore.getInstance().clearAll();
-                break;
             case "app_launcher_most_used_page":
                 mPreferences.setAppLauncherMostUsedPageEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -607,16 +452,14 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 scheduleTermuxActivityStylingSync(true);
                 break;
             case "x11_display_enabled":
-                mPreferences.setX11DisplayEnabled(value);
-                // The commands go into the prefix with the feature and come back out with it;
-                // a running server is left alone either way.
-                if (!value) com.termux.app.x11.X11CliInstaller.uninstallAsync(mContext);
-                if (value) com.termux.app.x11.X11Defaults.applyOnce(mContext);
-                // The drawer lists Linux apps only while the display is on.
-                com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext).refreshAsync(null, null);
-                // The page and the prefix commands are set up once per activity, so turning the
-                // display on or off has to come back through a recreate.
-                scheduleTermuxActivityStylingSync(true);
+                // The Display page's own store routes here too, so this is the one path. The
+                // launcher attaches or tears the page down itself when it comes back to the
+                // front — and asks before a running server is stopped — so no recreate.
+                if (com.termux.app.x11.X11DisplaySwitch.write(mContext, mPreferences, value))
+                    scheduleTermuxActivityStylingSync(false);
+                break;
+            case "app_haptics_enabled":
+                mPreferences.setAppHapticsEnabled(value);
                 break;
             case "app_launcher_row_haptics":
                 mPreferences.setAppLauncherRowHapticsEnabled(value);
@@ -634,9 +477,13 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     public boolean getBoolean(String key, boolean defValue) {
         if (mPreferences == null)
             return defValue;
+        if (isTerminalIoToggle(key))
+            return TerminalIOPreferencesDataStore.getInstance(mContext).getBoolean(key, defValue);
         switch(key) {
             case "use_system_wallpaper":
                 return mPreferences.isUseSystemWallpaperEnabled();
+            case "wallpaper_parallax":
+                return mPreferences.isWallpaperParallaxEnabled();
             case "terminal_dynamic_colors_enabled":
                 return mPreferences.isTerminalDynamicColorsEnabled();
             case "app_launcher_bw_icons":
@@ -647,8 +494,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherDisplayAppNamesEnabled();
             case "app_launcher_notification_dots":
                 return mPreferences.isAppLauncherNotificationDotsEnabled();
-            case "app_launcher_notification_history":
-                return mPreferences.isAppLauncherNotificationHistoryEnabled();
             case "app_launcher_most_used_page":
                 return mPreferences.isAppLauncherMostUsedPageEnabled();
             case "app_launcher_drawer_enabled":
@@ -661,6 +506,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherWidgetPaneEnabled();
             case "x11_display_enabled":
                 return mPreferences.isX11DisplayEnabled();
+            case "app_haptics_enabled":
+                return mPreferences.isAppHapticsEnabled();
             case "app_launcher_row_haptics":
                 return mPreferences.isAppLauncherRowHapticsEnabled();
             case "app_launcher_az_double_tap_lock":
@@ -695,9 +542,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return;
         switch (key) {
-            case "in_app_keyboard_bottom_padding":
-                mKeyboardLook.putInt(key, value);
-                break;
             case "wallpaper_render_zoom":
                 mPreferences.setWallpaperRenderZoom(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -714,8 +558,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return defValue;
         switch (key) {
-            case "in_app_keyboard_bottom_padding":
-                return mKeyboardLook.getInt(key, defValue);
             case "wallpaper_render_zoom":
                 return mPreferences.getWallpaperRenderZoom();
             default:
@@ -747,14 +589,15 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherAzLockMethod(value);
                 break;
             case "app_launcher_use_case_mode":
-                com.termux.app.launcher.LauncherUseCaseMode.applyMode(mPreferences, value);
-                // Flips the drawer, both dock rows and the widget pane at once: recreate so every
-                // surface is rebuilt against the new state instead of restyled in place.
-                scheduleTermuxActivityStylingSync(true);
+                applyUseCaseMode(value);
                 break;
             case "app_launcher_drawer_view_type":
                 mPreferences.setAppLauncherDrawerViewType(value);
                 scheduleAppDrawerSync();
+                break;
+            case "app_launcher_builtin_widget_style":
+                mPreferences.setAppLauncherBuiltinWidgetStyle(value);
+                scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_launcher_default_buttons":
                 mPreferences.setAppLauncherDefaultButtons(value);
@@ -803,6 +646,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
+            case "app_launcher_builtin_widget_style":
+                return mPreferences.getAppLauncherBuiltinWidgetStyle();
             case "app_launcher_default_buttons":
                 return mPreferences.getAppLauncherDefaultButtons();
             case "app_launcher_icon_pack_package":
@@ -812,6 +657,27 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             default:
                 return defValue;
         }
+    }
+
+    /**
+     * The usage mode preset. It flips the drawer, both dock rows, the widget pane and the display
+     * at once, so every surface is rebuilt against the new state by a recreate rather than
+     * restyled in place; the display's own follow-ups run here because the preset wrote its
+     * switch directly, and a terminal-only install lets go of the app catalogue it no longer
+     * draws from.
+     */
+    private void applyUseCaseMode(String mode) {
+        boolean displayBefore = mPreferences.isX11DisplayEnabled();
+        if (!com.termux.app.launcher.LauncherUseCaseMode.applyMode(mPreferences, mode)) return;
+        boolean displayAfter = mPreferences.isX11DisplayEnabled();
+        if (displayBefore != displayAfter) {
+            com.termux.app.x11.X11DisplaySwitch.onWritten(mContext, mPreferences, displayAfter);
+        }
+        if (com.termux.app.launcher.LauncherUseCaseMode.MODE_TERMINAL.equals(mode)) {
+            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext)
+                .invalidateIconArtwork();
+        }
+        scheduleTermuxActivityStylingSync(true);
     }
 
     private void writeTermuxPropertyToProperties(@NonNull String propertyKey, @NonNull String propertyValue) {

@@ -3,70 +3,240 @@ package com.termux.ai;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Routes the one loaded assistant between the LiteRT-LM and MNN backends and serves embeddings,
+ * speech-to-text and speech output from their own runtimes.
+ *
+ * <p>Locking. {@link #loadLock} serializes what changes the loaded model — load, keep-warm and unload,
+ * including the backend switch — and is the only router lock held across native initialization or
+ * close. Which backend is active is a volatile pointer, so {@link #getState()}, {@link #isModelLoaded},
+ * {@link #cancel()} and the generation entry points take no router lock at all: a status poll or a
+ * cancel that arrives mid-load reaches the backend's own short monitor instead of queuing behind the
+ * load. Each backend keeps its monitor off its native load and generation paths, and each embedding
+ * runtime — the STT runtime too — serializes its work and close on its own monitor, so nothing
+ * here is held for the duration of native work.
+ *
+ * <p>Residency. The router owns the one {@link TaiResidency} table and hands it to every runtime
+ * (chat, embedding, speech-to-text, speech output), which register and deregister at their own
+ * load and close points — the backends close engines on idle timers and after cancelled
+ * generations without passing through here, so the router itself never writes the table.
+ * {@link #residency()} is read without any lock.
+ */
 public class MultiBackendTaiRuntime implements TaiRuntime {
-    private final LiteRtTaiRuntime liteRt;
-    private final MnnTaiRuntime mnn;
+    private final TaiRuntime liteRt;
+    private final TaiRuntime mnn;
     private final LiteRtEmbeddingRuntime embeddings;
+    /** EmbeddingGemma 2 {@code .litertlm} files through LiteRT-LM's EmbeddingEngine; see {@link #liteRtEmbedderFor}. */
+    private final LiteRtLmEmbeddingRuntime litertLmEmbeddings;
     private final MnnEmbeddingRuntime mnnEmbeddings;
-    private TaiRuntime activeAssistant;
+    /** The speech engines, one per model family; at most one holds a graph at a time, see {@link #sttFor}. */
+    private final WhisperSttRuntime whisperStt;
+    private final ParakeetSttRuntime parakeetStt;
+    /** Speech output; serialises its own synthesis and close, like the STT engines. */
+    private final KittenTtsRuntime tts;
+    /** Text-to-image; serialises its own generation and close, and never takes the router lock. */
+    private final MnnDiffusionRuntime image;
+    private final TaiResidency residency;
+    /** Held across load, keep-warm and unload; never by a read, a cancel or a generation. */
+    private final Object loadLock = new Object();
+    /** The backend that owns the loaded model. Written under {@link #loadLock}, read without it. */
+    private volatile TaiRuntime activeAssistant;
+    /** The one router the runtime process runs; see {@link #processInstance()}. */
+    @Nullable private static volatile MultiBackendTaiRuntime processInstance;
 
     public MultiBackendTaiRuntime(@NonNull Context context) {
-        liteRt = new LiteRtTaiRuntime(context);
-        mnn = new MnnTaiRuntime(context);
-        embeddings = new LiteRtEmbeddingRuntime();
-        mnnEmbeddings = new MnnEmbeddingRuntime();
+        this(context, new TaiResidency());
+        processInstance = this;
+    }
+
+    /**
+     * The router {@link TaiManager} built for this process, for the service's memory watch, which
+     * evicts through {@link #evict} and reads {@link #residency()} but reaches the runtime only
+     * through the manager's request API otherwise. {@code null} until the manager has built it,
+     * and always in a process that is not {@code :tai_runtime}; the test-seam constructor never
+     * sets it.
+     */
+    @Nullable
+    static MultiBackendTaiRuntime processInstance() {
+        return processInstance;
+    }
+
+    private MultiBackendTaiRuntime(@NonNull Context context, @NonNull TaiResidency residency) {
+        this(new LiteRtTaiRuntime(context, residency), new MnnTaiRuntime(context, residency), residency, context);
+    }
+
+    /** Test seam: the backends stand in for the native runtimes; embedding loads are not metered. */
+    MultiBackendTaiRuntime(@NonNull TaiRuntime liteRt, @NonNull TaiRuntime mnn) {
+        this(liteRt, mnn, new TaiResidency(), null);
+    }
+
+    private MultiBackendTaiRuntime(@NonNull TaiRuntime liteRt, @NonNull TaiRuntime mnn, @NonNull TaiResidency residency,
+                                   @Nullable Context context) {
+        this.liteRt = liteRt;
+        this.mnn = mnn;
+        this.residency = residency;
+        embeddings = new LiteRtEmbeddingRuntime(residency, context);
+        litertLmEmbeddings = new LiteRtLmEmbeddingRuntime(residency, context);
+        mnnEmbeddings = new MnnEmbeddingRuntime(residency, context);
+        whisperStt = new WhisperSttRuntime(residency, context);
+        parakeetStt = new ParakeetSttRuntime(residency, context);
+        tts = new KittenTtsRuntime(residency, context);
+        image = new MnnDiffusionRuntime(residency, context);
         activeAssistant = liteRt;
     }
 
-    @NonNull @Override public synchronized TaiRuntimeState getState() {
+    /** Every resident model in this process. Lock-free; see {@link TaiResidency}. */
+    @NonNull
+    public TaiResidency residency() {
+        return residency;
+    }
+
+    @NonNull @Override public TaiRuntimeState getState() {
         return activeAssistant.getState();
     }
 
-    @Override public synchronized boolean isModelLoaded(@NonNull String modelId) {
+    @Override public boolean isModelLoaded(@NonNull String modelId) {
         return runtimeForId(modelId).isModelLoaded(modelId);
     }
 
-    @NonNull @Override public synchronized JSONObject load(@NonNull TaiModelSpec model, @NonNull TaiRuntimeOptions options) throws JSONException {
-        TaiRuntime target = runtimeForModel(model);
-        if (target != activeAssistant) {
-            TaiRuntimeState current = activeAssistant.getState();
-            if (current.activeGeneration) return error("generation_active", "Cancel active generation before switching AI backends.");
-            activeAssistant.unload();
-            activeAssistant = target;
+    @NonNull @Override public JSONObject load(@NonNull TaiModelSpec model, @NonNull TaiRuntimeOptions options) throws JSONException {
+        synchronized (loadLock) {
+            TaiRuntime target = runtimeForModel(model);
+            JSONObject conflict = activateLocked(target);
+            if (conflict != null) return conflict;
+            return target.load(model, options);
         }
-        return target.load(model, options);
     }
 
-    @NonNull @Override public synchronized JSONObject unload() throws JSONException {
-        JSONObject result = activeAssistant.unload();
-        embeddings.close();
-        mnnEmbeddings.close();
-        return result;
-    }
-
-    @NonNull @Override public synchronized JSONObject keepWarm(@NonNull TaiModelSpec model, @NonNull TaiRuntimeOptions options, int minutes) throws JSONException {
-        TaiRuntime target = runtimeForModel(model);
-        if (target != activeAssistant) {
-            TaiRuntimeState current = activeAssistant.getState();
-            if (current.activeGeneration) return error("generation_active", "Cancel active generation before switching AI backends.");
-            activeAssistant.unload();
-            activeAssistant = target;
+    @NonNull @Override public JSONObject unload() throws JSONException {
+        // A load in progress holds loadLock. Asking the loading backend to cancel first lets LiteRT
+        // discard its engine as soon as native initialization returns, instead of finishing a load
+        // that this unload would throw away a moment later.
+        TaiRuntime loading = activeAssistant;
+        if ("loading".equals(loading.getState().state)) loading.cancel();
+        synchronized (loadLock) {
+            JSONObject result = activeAssistant.unload();
+            embeddings.close();
+            litertLmEmbeddings.close();
+            mnnEmbeddings.close();
+            whisperStt.close();
+            parakeetStt.close();
+            tts.interrupt();
+            tts.close();
+            // A generation in flight is not interrupted by an unload (the engine cannot be stopped
+            // mid-run); a resident image model of an idle runtime is closed with the rest.
+            if (!image.isActive()) image.close();
+            return result;
         }
-        return target.keepWarm(model, options, minutes);
     }
 
-    @NonNull @Override public synchronized JSONObject cancel() throws JSONException {
+    /**
+     * The chat model alone, and only while it is {@code modelId}: for a caller that loaded a model for
+     * itself and hands back nothing else (the app sort). Embeddings, speech and an image model stay;
+     * the backend's own unload deregisters the chat entry, as it does for {@link #unload()}.
+     *
+     * <p>Unlike {@link #unload()} this never cancels a load: by the time a backend loads it has
+     * closed what it held, so the model in progress is another caller's. A generation in flight is
+     * likewise someone's request and is left to finish, as {@link #evict} leaves a busy chat model.
+     */
+    @NonNull @Override public JSONObject unloadChatModel(@NonNull String modelId) throws JSONException {
+        // Read before loadLock, which a load in progress holds for as long as it runs.
+        if ("loading".equals(activeAssistant.getState().state)) return TaiRuntime.keptChatModel(this, modelId);
+        synchronized (loadLock) {
+            TaiRuntime holder = chatHolder(modelId);
+            if (holder == null || holder.getState().activeGeneration) return TaiRuntime.keptChatModel(this, modelId);
+            return holder.unload();
+        }
+    }
+
+    @NonNull @Override public JSONObject keepWarm(@NonNull TaiModelSpec model, @NonNull TaiRuntimeOptions options, int minutes) throws JSONException {
+        synchronized (loadLock) {
+            TaiRuntime target = runtimeForModel(model);
+            JSONObject conflict = activateLocked(target);
+            if (conflict != null) return conflict;
+            return target.keepWarm(model, options, minutes);
+        }
+    }
+
+    /**
+     * Closes the idle residents the budget chose to make room for a load, through the runtime that
+     * holds each — an embedding runtime's {@code close()}, a chat backend's {@code unload()} — so
+     * the registry deregisters them at the same points it always does. A resident that has become
+     * busy or has gone since the plan was made is skipped, never interrupted. Returns the ids
+     * actually evicted, for the load response's {@code evicted} list.
+     */
+    @NonNull
+    public List<String> evict(@NonNull List<TaiResidency.Entry> victims) throws JSONException {
+        ArrayList<String> evicted = new ArrayList<>();
+        synchronized (loadLock) {
+            for (TaiResidency.Entry victim : victims) {
+                // Re-read the entry: the budget's plan or the pressure watch chose it lock-free,
+                // and an embedding batch may have started on it since.
+                TaiResidency.Entry current = residency.find(victim.kind, victim.modelId);
+                if (current == null || current.busy) continue;
+                switch (victim.kind) {
+                    case EMBEDDING:
+                        // Both LiteRT runtimes register under the litert-lm backend; the one that
+                        // holds the victim is the one that says so.
+                        if (TaiModelSpec.BACKEND_MNN_LLM.equals(victim.backend)) mnnEmbeddings.close();
+                        else if (victim.modelId.equals(litertLmEmbeddings.loadedModelId())) litertLmEmbeddings.close();
+                        else embeddings.close();
+                        break;
+                    case STT:
+                        // Waits on the STT monitor for a transcription that started since the plan.
+                        if (parakeetStt.isLoaded(victim.modelId)) parakeetStt.close();
+                        else whisperStt.close();
+                        break;
+                    case TTS:
+                        // Waits on the TTS monitor for a sentence that started since the plan.
+                        tts.close();
+                        break;
+                    case IMAGE:
+                        // A generation that started since the plan holds the image monitor; skip it.
+                        if (image.isActive()) continue;
+                        image.close();
+                        break;
+                    case CHAT: {
+                        TaiRuntime holder = chatHolder(victim.modelId);
+                        if (holder == null || holder.getState().activeGeneration) continue;
+                        holder.unload();
+                        break;
+                    }
+                    default:
+                        continue;
+                }
+                if (!residency.isResident(victim.kind, victim.modelId)) evicted.add(victim.modelId);
+            }
+        }
+        return evicted;
+    }
+
+    /** The backend holding chat model {@code modelId}, or {@code null} when neither does. */
+    @Nullable
+    private TaiRuntime chatHolder(@NonNull String modelId) {
+        for (TaiRuntime candidate : new TaiRuntime[] {liteRt, mnn}) {
+            TaiRuntimeState state = candidate.getState();
+            if (state.loaded && modelId.equals(state.loadedModelId)) return candidate;
+        }
+        return null;
+    }
+
+    // Never waits on loadLock: a load-cancel is only worth anything while the load is still running.
+    @NonNull @Override public JSONObject cancel() throws JSONException {
         return activeAssistant.cancel();
     }
 
-    // Native generation is long-running. Do not hold this router monitor while it runs, otherwise
+    // Native generation is long-running. Do not hold any router lock while it runs, otherwise
     // cancel/unload cannot reach the active backend until generation has already finished.
     @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull String system, @NonNull String user, @NonNull TaiRuntimeOptions options) throws JSONException { return runtimeForId(id).chat(id, system, user, options); }
     @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull String system, @NonNull String user, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).chat(id, system, user, options, callback); }
@@ -76,7 +246,7 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     @NonNull @Override public JSONObject complete(@NonNull String id, @NonNull String prompt, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).complete(id, prompt, options, callback); }
 
     @NonNull
-    public synchronized JSONObject embed(@NonNull String modelId, @NonNull String input) throws JSONException {
+    public JSONObject embed(@NonNull String modelId, @NonNull String input) throws JSONException {
         JSONObject error = new JSONObject();
         error.put("message", "Embeddings are not available for the active LiteRT/MNN backends.");
         error.put("type", "invalid_request_error");
@@ -87,10 +257,52 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         return response;
     }
 
+    /** One image generation; see {@link MnnDiffusionRuntime#generate}. No router lock: a cancel never queues behind it. */
     @NonNull
-    public synchronized JSONObject embed(@NonNull TaiModelSpec model, @NonNull List<String> inputs, int dimensions) throws JSONException {
-        if (isLiteRtEmbeddingFlatbuffer(model)) return embeddings.embed(model, inputs, dimensions);
-        if (isMnnEmbeddingModel(model)) return mnnEmbeddings.embed(model, inputs, dimensions);
+    public JSONObject generateImage(@NonNull MnnDiffusionRuntime.Params params, @NonNull MnnDiffusionRuntime.Progress progress)
+            throws JSONException {
+        return image.generate(params, progress);
+    }
+
+    /** Discards the image generation in flight (the engine cannot stop mid-run); false when none is running. */
+    public boolean cancelImage() {
+        return image.requestCancel();
+    }
+
+    public boolean isImageActive() {
+        return image.isActive();
+    }
+
+    // Each embedding runtime serializes embed() and close() on its own monitor, so a running batch
+    // finishes before unload() can close it. No router lock here: status and cancel never queue
+    // behind an embedding batch.
+    @NonNull
+    public JSONObject embed(@NonNull TaiModelSpec model, @NonNull List<String> inputs, int dimensions) throws JSONException {
+        return embed(model, inputs, dimensions, LiteRtEmbeddingRuntime.INPUT_TYPE_DOCUMENT, null);
+    }
+
+    /**
+     * @param inputType {@code "query"} or {@code "document"}; the task prefix EmbeddingGemma expects
+     *                  (dawn embedding brief item 1). Other embedding families ignore it.
+     * @param title     an optional document heading; ignored for {@code input_type: "query"}.
+     *
+     * <p>Whether a chat generation is active right now is read off {@link #activeAssistant} without
+     * the router lock — a status poll, so it is fine to be a moment stale — and passed to the
+     * embedding runtime so it runs at reduced threads/priority instead of contending with a live
+     * reply for the CPU (dawn brief item 5).
+     */
+    @NonNull
+    public JSONObject embed(@NonNull TaiModelSpec model, @NonNull List<String> inputs, int dimensions,
+                             @NonNull String inputType, @Nullable String title) throws JSONException {
+        boolean throttled = activeAssistant.getState().activeGeneration;
+        if (isLiteRtLmEmbeddingModel(model)) {
+            return liteRtEmbedderFor(litertLmEmbeddings).embed(model, inputs, dimensions, inputType, title, throttled);
+        }
+        if (isLiteRtEmbeddingFlatbuffer(model)) {
+            liteRtEmbedderFor(embeddings);
+            return embeddings.embed(model, inputs, dimensions, inputType, title, throttled);
+        }
+        if (isMnnEmbeddingModel(model)) return mnnEmbeddings.embed(model, inputs, dimensions, inputType, title, throttled);
         if (inputs.size() == 1 && dimensions <= 0) return embed(model.id, inputs.get(0));
         JSONObject error = new JSONObject();
         error.put("message", "Embeddings are not available for model '" + model.id + "'.");
@@ -103,7 +315,161 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         return response;
     }
 
-    private synchronized TaiRuntime runtimeForId(String id) {
+    /**
+     * {@code /v1/tokenize} (dawn brief, "nice to have"): the LiteRT embedding tokenizer's raw token
+     * count for {@code text}, no task prefix and no BOS/EOS framing. Only the LiteRT/EmbeddingGemma
+     * path exposes a standalone tokenizer today.
+     */
+    @NonNull
+    public JSONObject tokenize(@NonNull TaiModelSpec model, @NonNull String text) throws JSONException {
+        JSONObject response = new JSONObject();
+        if (!isLiteRtEmbeddingFlatbuffer(model)) {
+            JSONObject error = new JSONObject();
+            error.put("message", isLiteRtLmEmbeddingModel(model)
+                ? "Tokenize is only available for .tflite embedding models; .litertlm models expose no tokenizer."
+                : "Tokenize is only available for the installed LiteRT embedding model today.");
+            error.put("type", "invalid_request_error");
+            error.put("param", "model");
+            error.put("code", "capability_not_supported");
+            response.put("error", error);
+            response.put("_statusCode", 501);
+            return response;
+        }
+        try {
+            int tokens = embeddings.tokenCount(model, text);
+            response.put("tokens", tokens);
+            response.put("model", model.id);
+            return response;
+        } catch (Exception e) {
+            JSONObject error = new JSONObject();
+            error.put("message", "Tokenize failed: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+            error.put("type", "server_error");
+            error.put("code", "tokenize_failed");
+            response.put("error", error);
+            response.put("_statusCode", 500);
+            return response;
+        }
+    }
+
+    /**
+     * Speech-to-text for a {@code speech_to_text} model. Like {@link #embed}, no router lock: the
+     * STT runtime serializes transcribe/warm/close on its own monitor, and this is the path that
+     * must stay open while a chat generation runs (dictating to an agent as it answers).
+     */
+    @NonNull
+    public JSONObject transcribe(@NonNull TaiModelSpec model, @NonNull File audio,
+                                 @Nullable String language, @Nullable String biasPrompt) throws JSONException {
+        if (!isSpeechToTextModel(model)) return notSpeechToText(model);
+        return sttFor(model).transcribe(model, audio, language, biasPrompt);
+    }
+
+    /** Loads a {@code speech_to_text} model ahead of its first request; see {@link SttRuntime#warm}. */
+    @NonNull
+    public JSONObject sttWarm(@NonNull TaiModelSpec model) throws JSONException {
+        if (!isSpeechToTextModel(model)) return notSpeechToText(model);
+        return sttFor(model).warm(model);
+    }
+
+    /**
+     * Speech output for a {@code text_to_speech} model, sentence by sentence into {@code sink}. No
+     * router lock, like {@link #transcribe}: the TTS runtime serialises on its own monitor, and
+     * reading aloud must not wait for a chat generation to finish.
+     */
+    @NonNull
+    public JSONObject synthesizeSpeech(@NonNull TaiModelSpec model, @NonNull String text, @NonNull String voice, float speed,
+                                       @NonNull TtsRuntime.Sink sink, @NonNull TtsRuntime.Cancellation cancellation)
+            throws JSONException {
+        if (!isTextToSpeechModel(model)) return notTextToSpeech(model);
+        return tts.synthesize(model, text, voice, speed, sink, cancellation);
+    }
+
+    /** Loads a {@code text_to_speech} model ahead of its first sentence. */
+    @NonNull
+    public JSONObject ttsWarm(@NonNull TaiModelSpec model) throws JSONException {
+        if (!isTextToSpeechModel(model)) return notTextToSpeech(model);
+        return tts.warm(model);
+    }
+
+    /** Asks a running speech graph to stop; never blocks on the TTS monitor. */
+    public void interruptSpeech() {
+        tts.interrupt();
+    }
+
+    public int ttsSampleRate() {
+        return tts.sampleRate();
+    }
+
+    static boolean isTextToSpeechModel(@NonNull TaiModelSpec model) {
+        String path = model.localPath == null ? "" : model.localPath.toLowerCase(Locale.ROOT);
+        return model.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH) && path.endsWith(".tflite");
+    }
+
+    @NonNull
+    private JSONObject notTextToSpeech(@NonNull TaiModelSpec model) throws JSONException {
+        JSONObject error = new JSONObject();
+        error.put("message", "Speech output is not available for model '" + model.id + "'.");
+        error.put("type", "invalid_request_error");
+        error.put("param", "model");
+        error.put("code", "capability_not_supported");
+        JSONObject response = new JSONObject();
+        response.put("error", error);
+        response.put("_statusCode", 400);
+        return response;
+    }
+
+    private boolean isSpeechToTextModel(@NonNull TaiModelSpec model) {
+        String path = model.localPath == null ? "" : model.localPath.toLowerCase(Locale.ROOT);
+        return model.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT) && path.endsWith(".tflite");
+    }
+
+    /**
+     * The engine for a speech model, by family: Parakeet by the catalog's architecture (or a
+     * {@code parakeet} file name for an import), Whisper otherwise. The other engine is closed
+     * first, so one STT graph is resident at a time — what {@link TaiResidency#creditedAvailable}
+     * assumes when it credits an STT load every STT resident. Closing an idle engine is free.
+     */
+    @NonNull
+    private SttRuntime sttFor(@NonNull TaiModelSpec model) {
+        if (isParakeetModel(model)) {
+            whisperStt.close();
+            return parakeetStt;
+        }
+        parakeetStt.close();
+        return whisperStt;
+    }
+
+    static boolean isParakeetModel(@NonNull TaiModelSpec model) {
+        String architecture = model.architecture == null ? "" : model.architecture.toLowerCase(Locale.ROOT);
+        if (architecture.startsWith("parakeet")) return true;
+        String name = model.localPath == null ? "" : new File(model.localPath).getName().toLowerCase(Locale.ROOT);
+        return name.contains("parakeet");
+    }
+
+    @NonNull
+    private JSONObject notSpeechToText(@NonNull TaiModelSpec model) throws JSONException {
+        JSONObject error = new JSONObject();
+        error.put("message", "Speech-to-text is not available for model '" + model.id + "'.");
+        error.put("type", "invalid_request_error");
+        error.put("param", "model");
+        error.put("code", "capability_not_supported");
+        JSONObject response = new JSONObject();
+        response.put("error", error);
+        response.put("_statusCode", 400);
+        return response;
+    }
+
+    /** Makes {@code target} the active backend, unloading the previous one. Caller holds loadLock. */
+    @Nullable
+    private JSONObject activateLocked(@NonNull TaiRuntime target) throws JSONException {
+        TaiRuntime current = activeAssistant;
+        if (target == current) return null;
+        if (current.getState().activeGeneration) return error("generation_active", "Cancel active generation before switching AI backends.");
+        current.unload();
+        activeAssistant = target;
+        return null;
+    }
+
+    private TaiRuntime runtimeForId(String id) {
         TaiRuntimeState mnnState = mnn.getState();
         if (mnnState.loadedModelId != null && mnnState.loadedModelId.equals(id)) return mnn;
         TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(id);
@@ -121,6 +487,34 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         return TaiModelSpec.BACKEND_LITERT_LM.equals(model.backend)
             && model.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
             && path.endsWith(".tflite");
+    }
+
+    /**
+     * An EmbeddingGemma 2-style {@code .litertlm} embedder, served by {@link LiteRtLmEmbeddingRuntime}:
+     * a LiteRT-LM bundle whose endpoint capabilities include {@code text_embeddings}. A {@code .litertlm}
+     * imported without capabilities is a chat model and never reaches this check.
+     */
+    static boolean isLiteRtLmEmbeddingModel(@NonNull TaiModelSpec model) {
+        String path = model.localPath == null ? "" : model.localPath.toLowerCase(Locale.ROOT);
+        return TaiModelSpec.BACKEND_LITERT_LM.equals(model.backend)
+            && model.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
+            && path.endsWith(".litertlm");
+    }
+
+    /**
+     * Closes the other LiteRT embedding runtime before {@code target} is used, so at most one LiteRT
+     * embedder is resident: {@link TaiResidency} tells embedders apart only by backend, and both
+     * register under litert-lm, so two at once would be credited and evicted as one slot. Closing an
+     * idle runtime is free; one mid-batch is waited for on its own monitor.
+     */
+    @NonNull
+    private <T> T liteRtEmbedderFor(@NonNull T target) {
+        if (target == litertLmEmbeddings) {
+            if (embeddings.loadedModelId() != null) embeddings.close();
+        } else if (litertLmEmbeddings.loadedModelId() != null) {
+            litertLmEmbeddings.close();
+        }
+        return target;
     }
 
     private boolean isMnnEmbeddingModel(@NonNull TaiModelSpec model) {

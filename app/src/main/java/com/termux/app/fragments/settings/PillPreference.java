@@ -5,7 +5,6 @@ import android.content.res.ColorStateList;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.View;
-import android.widget.TextView;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -14,6 +13,7 @@ import androidx.core.graphics.ColorUtils;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
+import com.google.android.material.chip.Chip;
 import com.termux.R;
 
 /**
@@ -47,8 +47,9 @@ public class PillPreference extends Preference {
     @Override
     public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
-        TextView pill = (TextView) holder.findViewById(R.id.settings_pill);
-        if (pill == null) return;
+        View pillView = holder.findViewById(R.id.settings_pill);
+        if (!(pillView instanceof Chip)) return;
+        Chip pill = (Chip) pillView;
         if (mPillText.length() == 0) {
             pill.setVisibility(View.GONE);
             return;
@@ -57,7 +58,7 @@ public class PillPreference extends Preference {
         pill.setText(mPillText);
         int color = resolveToneColor();
         pill.setTextColor(color);
-        pill.setBackgroundTintList(ColorStateList.valueOf(ColorUtils.setAlphaComponent(color, 46)));
+        pill.setChipBackgroundColor(ColorStateList.valueOf(ColorUtils.setAlphaComponent(color, 46)));
     }
 
     private int resolveToneColor() {

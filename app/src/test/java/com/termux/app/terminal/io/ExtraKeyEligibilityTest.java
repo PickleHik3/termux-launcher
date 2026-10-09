@@ -83,6 +83,13 @@ public class ExtraKeyEligibilityTest {
     }
 
     @Test
+    public void theDictateKeyWorksOnEveryPlace() {
+        for (PaneWallPage place : PaneWallPage.values())
+            assertTrue(place.name(), ExtraKeyEligibility.isUsable(
+                key(LauncherToolRegistry.TOOL_VOICE_DICTATE), place));
+    }
+
+    @Test
     public void theDisplayKeepsEverythingButMultiplexingAndSessions() {
         assertFalse(ExtraKeyEligibility.isUsable(
             key(LauncherToolRegistry.TOOL_PANE_SPLIT), PaneWallPage.DISPLAY));
@@ -109,6 +116,7 @@ public class ExtraKeyEligibilityTest {
             LauncherToolRegistry.TOOL_APP_OPEN_SETTINGS,
             LauncherToolRegistry.TOOL_APP_COMMAND_PALETTE,
             LauncherToolRegistry.TOOL_APP_LAUNCH,
+            LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER,
             LauncherToolRegistry.TOOL_APPEARANCE_SET_WALLPAPER,
             LauncherToolRegistry.TOOL_APPEARANCE_SURFACE_EDITOR,
             LauncherToolRegistry.TOOL_KEYBOARD_CYCLE_FORM,
@@ -178,6 +186,30 @@ public class ExtraKeyEligibilityTest {
         assertNull(ExtraKeyEligibility.placeSwitchTarget(null));
     }
 
+    /** A switch towards a place the wall does not have is dead, wherever the wall stands. */
+    @Test
+    public void aPlaceSwitchIsUsableOnlyTowardsAPlaceTheWallHas() {
+        List<PaneWallPage> homeScreen = com.termux.app.wall.PaneWallPolicy.availablePages(false, true, false);
+        List<PaneWallPage> terminalOnly = com.termux.app.wall.PaneWallPolicy.availablePages(true, false, false);
+        String widgets = key(LauncherToolRegistry.TOOL_WALL_WIDGETS);
+        String display = key(LauncherToolRegistry.TOOL_WALL_DISPLAY);
+        String goDisplay = key(LauncherToolRegistry.TOOL_WALL_GO) + ":place=display";
+
+        assertTrue(ExtraKeyEligibility.isUsable(widgets, PaneWallPage.TERMINAL, homeScreen));
+        assertFalse(ExtraKeyEligibility.isUsable(display, PaneWallPage.TERMINAL, homeScreen));
+        assertFalse(ExtraKeyEligibility.isUsable(goDisplay, PaneWallPage.WIDGETS, homeScreen));
+        assertFalse(ExtraKeyEligibility.isUsable(widgets, PaneWallPage.TERMINAL, terminalOnly));
+        // The switch for the one place the wall has stays live: it is a row the user wrote.
+        assertTrue(ExtraKeyEligibility.isUsable(key(LauncherToolRegistry.TOOL_WALL_TERMINAL),
+            PaneWallPage.TERMINAL, terminalOnly));
+        // Nothing else reads the wall: keys that were usable stay usable, dead ones stay dead.
+        assertTrue(ExtraKeyEligibility.isUsable("ESC", PaneWallPage.TERMINAL, terminalOnly));
+        assertFalse(ExtraKeyEligibility.isUsable("ESC", PaneWallPage.WIDGETS, homeScreen));
+        assertTrue(ExtraKeyEligibility.isUsable(key(LauncherToolRegistry.TOOL_WALL_GO),
+            PaneWallPage.TERMINAL, terminalOnly));
+        assertTrue(ExtraKeyEligibility.isUsable(null, PaneWallPage.TERMINAL, terminalOnly));
+    }
+
     // ------------------------------------------------------------------------ the coverage gate
 
     /**
@@ -220,9 +252,9 @@ public class ExtraKeyEligibilityTest {
             Band band = ExtraKeyEligibility.bandOfTool(tool);
             counts.put(band, counts.get(band) + 1);
         }
-        assertEquals(90, declared);
+        assertEquals(94, declared);
         assertEquals(Integer.valueOf(0), counts.get(Band.TERMINAL_INPUT));
-        assertEquals(Integer.valueOf(25), counts.get(Band.LAUNCHER));
+        assertEquals(Integer.valueOf(29), counts.get(Band.LAUNCHER));
         assertEquals(Integer.valueOf(4), counts.get(Band.SESSION_OVERLAY));
         assertEquals(Integer.valueOf(41), counts.get(Band.MULTIPLEX));
         assertEquals(Integer.valueOf(20), counts.get(Band.TERMINAL_TOOL));

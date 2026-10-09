@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ImageView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="18dp"
-    android:layout_height="18dp"
+    android:layout_width="24dp"
+    android:layout_height="24dp"
     android:importantForAccessibility="no"
     android:src="@drawable/ic_settings_chevron_right"
-    android:tint="?attr/termuxColorOnSurface" />
+    android:tint="?attr/colorOnSurfaceVariant" />

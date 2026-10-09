@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:key="keyboard_typing" app:title="@string/settings_typing_header">
+        <SwitchPreferenceCompat
+            app:key="in_app_keyboard_tap_correction"
+            app:title="@string/settings_keyboard_tap_correction_title"
+            app:summary="@string/settings_keyboard_tap_correction_summary"
+            android:defaultValue="false" />
+        <Preference
+            app:key="in_app_keyboard_tap_correction_reset"
+            app:persistent="false"
+            app:title="@string/settings_keyboard_tap_correction_reset_title" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="keyboard_feedback" app:title="@string/settings_feedback_header">
+        <Preference
+            app:key="keyboard_typing_vibration_link"
+            app:persistent="false"
+            app:title="@string/settings_keyboard_vibration_link_title"
+            app:summary="@string/settings_keyboard_vibration_link_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.AppBehaviorPreferencesFragment" />
+        <SwitchPreferenceCompat
+            app:key="in_app_keyboard_key_sound_enabled"
+            app:summary="@string/termux_in_app_keyboard_key_sound_summary"
+            app:title="@string/settings_keypress_sound_title" />
+        <SwitchPreferenceCompat
+            app:key="in_app_keyboard_key_popup"
+            app:defaultValue="true"
+            app:summary="@string/termux_in_app_keyboard_key_popup_summary"
+            app:title="@string/settings_key_popup_title" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

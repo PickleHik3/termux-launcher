@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_pinned_apps_header">
+        <Preference
+            app:key="app_launcher_default_buttons"
+            app:title="@string/settings_edit_pinned_apps_title"
+            app:summary="@string/settings_edit_pinned_apps_summary" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_most_used_page"
+            app:title="@string/settings_most_used_page_title"
+            app:summary="@string/settings_most_used_page_summary"
+            android:defaultValue="false" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

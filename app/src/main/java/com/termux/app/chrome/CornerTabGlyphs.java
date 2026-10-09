@@ -35,8 +35,8 @@ public final class CornerTabGlyphs {
     public static final String POWER = "";
 
     /**
-     * nf-md-palette (U+F03D8, a surrogate pair like {@link #LAYOUT}): the Appearance editor. The
-     * same palette the editor itself wears on its floating pill and its shared-layer heading
+     * nf-md-palette (U+F03D8, a surrogate pair like {@link #LAYOUT}): the Appearance surface (Overview,
+     * Look, Layout and Icons), whatever place the tab is on. The same palette the editor itself wears on its floating pill and its shared-layer heading
      * ({@code ic_symbol_palette}), so the button and the thing it opens carry one mark. It used to
      * be nf-fa-sliders, which read as "settings" and told nobody a palette was behind it.
      */

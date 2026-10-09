@@ -20,7 +20,7 @@
             app:summary="@string/termux_fonts_nerd_icons_summary"
             app:defaultValue="true"
             app:iconSpaceReserved="false" />
-        <Preference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="fonts_ligatures"
             app:title="@string/termux_fonts_ligatures_title"
             app:persistent="false"

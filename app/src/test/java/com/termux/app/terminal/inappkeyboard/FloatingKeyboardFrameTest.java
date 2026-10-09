@@ -15,6 +15,7 @@ import android.widget.RelativeLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.GrabHandle;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
@@ -95,10 +96,10 @@ public class FloatingKeyboardFrameTest {
     // ------------------------------------------------------------------- the card
 
     @Test
-    public void theHandleRowIs18dpAndItsPillIs52By3Point2dp() {
+    public void theHandleRowIs12dpAndItsPillIs52By3Point2dp() {
         // Robolectric's default qualifiers are mdpi, so a dp is a pixel here.
         FloatingKeyboardFrame frame = newHostedFrame();
-        assertEquals(18, frame.grabHandle().getMeasuredHeight());
+        assertEquals(12, frame.grabHandle().getMeasuredHeight());
         assertEquals(52, frame.grabPill().getMeasuredWidth());
         assertEquals(3, frame.grabPill().getMeasuredHeight());
     }
@@ -107,18 +108,18 @@ public class FloatingKeyboardFrameTest {
     @Config(qualifiers = "xxhdpi")
     public void theHandleRowAndPillScaleWithTheDensity() {
         FloatingKeyboardFrame frame = newHostedFrame();
-        assertEquals(54, frame.grabHandle().getMeasuredHeight());
+        assertEquals(36, frame.grabHandle().getMeasuredHeight());
         assertEquals(156, frame.grabPill().getMeasuredWidth());
         assertEquals(10, frame.grabPill().getMeasuredHeight());
     }
 
     @Test
     public void thePillNeverThinsBelowTwoPixels() {
-        assertEquals(10, FloatingKeyboardFrame.pillHeightPx(3f));
-        assertEquals(3, FloatingKeyboardFrame.pillHeightPx(1f));
+        assertEquals(10, GrabHandle.pillHeightPx(3f));
+        assertEquals(3, GrabHandle.pillHeightPx(1f));
         // Under a density of 0.625 the rounded pill would be a hairline, so the floor takes over.
-        assertEquals(2, FloatingKeyboardFrame.pillHeightPx(0.625f));
-        assertEquals(2, FloatingKeyboardFrame.pillHeightPx(0.1f));
+        assertEquals(2, GrabHandle.pillHeightPx(0.625f));
+        assertEquals(2, GrabHandle.pillHeightPx(0.1f));
     }
 
     /** A frame with a keyboard inside it, measured and laid out once. */
@@ -167,7 +168,7 @@ public class FloatingKeyboardFrameTest {
         FloatingKeyboardFrame frame = new FloatingKeyboardFrame(context);
         // The card takes hold by its corners and its pill, so it has to have a width for them
         // to be anywhere.
-        frame.layout(0, 0, 600, 418);
+        frame.layout(0, 0, 600, 412);
         frame.setTravelPx(400, 1000);
         frame.setPositionPx(200, 1000);
         int[] last = new int[3];
@@ -255,11 +256,11 @@ public class FloatingKeyboardFrameTest {
         assertEquals("against the bottom", HOST_HEIGHT - frame.getHeight(), frame.positionYPx());
         // Nothing was written: an unmoved keyboard has no remembered place.
         assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardX(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), 0f);
+            store.floatingKeyboardX(PlaceOrientation.LANDSCAPE), 0f);
     }
 
     @Test
-    public void aDraggedPlaceIsRememberedForThatPlaceAndOrientationOnly() {
+    public void aDraggedPlaceIsRememberedForThatOrientationOnly() {
         floatAndLayout();
         FloatingKeyboardFrame frame = controller.frame();
         int travelY = HOST_HEIGHT - frame.getHeight();
@@ -268,15 +269,11 @@ public class FloatingKeyboardFrameTest {
         dispatch(frame, MotionEvent.ACTION_UP, 300, 9 - travelY);
 
         assertEquals(0, frame.positionYPx());
-        assertEquals(0f, store.floatingKeyboardY(PaneWallPage.TERMINAL,
-            PlaceOrientation.LANDSCAPE), 1e-6f);
-        assertEquals(0.5f, store.floatingKeyboardX(PaneWallPage.TERMINAL,
-            PlaceOrientation.LANDSCAPE), 1e-6f);
-        // The other orientation and the other places keep their own memory, which is none.
+        assertEquals(0f, store.floatingKeyboardY(PlaceOrientation.LANDSCAPE), 1e-6f);
+        assertEquals(0.5f, store.floatingKeyboardX(PlaceOrientation.LANDSCAPE), 1e-6f);
+        // The other orientation keeps its own memory, which is none.
         assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardY(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0f);
-        assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardY(PaneWallPage.WIDGETS, PlaceOrientation.LANDSCAPE), 0f);
+            store.floatingKeyboardY(PlaceOrientation.PORTRAIT), 0f);
         assertTrue("a moved frame needs its backdrop cropped again", fakeHost.frameMoves > 0);
     }
 
@@ -286,7 +283,7 @@ public class FloatingKeyboardFrameTest {
         FloatingKeyboardFrame frame = controller.frame();
 
         // Parked a quarter of the way across and a quarter of the way down.
-        store.setFloatingKeyboardPosition(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT,
+        store.setFloatingKeyboardPosition(PlaceOrientation.PORTRAIT,
             0.25f, 0.25f);
         fakeHost.landscape = false;
         fakeHost.widthScale = 0.9f;
@@ -318,13 +315,13 @@ public class FloatingKeyboardFrameTest {
         assertEquals(600, width);
 
         assertTrue("the leading corner", frame.isInMoveZone(0, 0));
-        assertTrue("its far side", frame.isInMoveZone(32, 17));
+        assertTrue("its far side", frame.isInMoveZone(32, 11));
         assertTrue("the trailing corner", frame.isInMoveZone(width, 2));
-        assertTrue("its far side", frame.isInMoveZone(width - 32, 17));
-        assertTrue("the pill", frame.isInMoveZone(width / 2f, 9));
+        assertTrue("its far side", frame.isInMoveZone(width - 32, 11));
+        assertTrue("the pill", frame.isInMoveZone(width / 2f, 6));
 
-        assertFalse("the gap between a corner and the pill", frame.isInMoveZone(150, 9));
-        assertFalse("and on the other side of it", frame.isInMoveZone(450, 9));
+        assertFalse("the gap between a corner and the pill", frame.isInMoveZone(150, 6));
+        assertFalse("and on the other side of it", frame.isInMoveZone(450, 6));
         assertFalse("below the handle row", frame.isInMoveZone(16, 40));
     }
 
@@ -344,10 +341,10 @@ public class FloatingKeyboardFrameTest {
 
     @Test
     public void theGripIsTheBottomLeftCornerAndNowhereElse() {
-        // mdpi, so a dp is a pixel: a 600 x 418 card with a 36dp grip and an 18dp handle row.
+        // mdpi, so a dp is a pixel: a 600 x 412 card with a 36dp grip and a 12dp handle row.
         FloatingKeyboardFrame frame = newHostedFrame();
         int height = frame.getHeight();
-        assertEquals(418, height);
+        assertEquals(412, height);
 
         assertTrue(frame.isInGripZone(0, height));
         assertTrue(frame.isInGripZone(18, height - 18));
@@ -371,10 +368,10 @@ public class FloatingKeyboardFrameTest {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         measure(frame, 600);
         frame.layout(0, 0, frame.getMeasuredWidth(), frame.getMeasuredHeight());
-        // 18 of handle and 6 of keyboard: the 36dp zone would swallow the pill, so it stops at it.
-        assertEquals(24, frame.getHeight());
-        assertTrue(frame.isInGripZone(4, 20));
-        assertFalse(frame.isInGripZone(4, 17));
+        // 12 of handle and 6 of keyboard: the 36dp zone would swallow the pill, so it stops at it.
+        assertEquals(18, frame.getHeight());
+        assertTrue(frame.isInGripZone(4, 14));
+        assertFalse(frame.isInGripZone(4, 11));
         // And a card with nothing in it has no corner to grip.
         assertFalse(new FloatingKeyboardFrame(context).isInGripZone(0, 0));
     }
@@ -417,8 +414,7 @@ public class FloatingKeyboardFrameTest {
         // The card kept the width it was dragged to once the store took over from the preview.
         layoutHost();
         assertEquals(700, frame.getWidth());
-        assertEquals(100f / 300f, store.floatingKeyboardX(PaneWallPage.TERMINAL,
-            PlaceOrientation.LANDSCAPE), 1e-6f);
+        assertEquals(100f / 300f, store.floatingKeyboardX(PlaceOrientation.LANDSCAPE), 1e-6f);
     }
 
     @Test
@@ -475,7 +471,7 @@ public class FloatingKeyboardFrameTest {
         FloatingKeyboardFrame frame = controller.frame();
         assertEquals("parked along the bottom", HOST_HEIGHT,
             frame.positionYPx() + frame.getHeight());
-        assertEquals(418, frame.getHeight());
+        assertEquals(412, frame.getHeight());
 
         // 100px up out of a 400px keyboard: a quarter taller, and the keyboard answers with the
         // height that asks for, the way the real one does a layout later.
@@ -483,16 +479,16 @@ public class FloatingKeyboardFrameTest {
         dispatchToFrame(frame, MotionEvent.ACTION_MOVE, 8, 310);
         assertEquals(1.25f, fakeHost.previewedHeightScale, 1e-6f);
         layoutHost();
-        assertEquals("the card grew upward", 518, frame.getHeight());
+        assertEquals("the card grew upward", 512, frame.getHeight());
         assertEquals("the bottom edge did not move", HOST_HEIGHT,
             frame.positionYPx() + frame.getHeight());
 
         dispatchToFrame(frame, MotionEvent.ACTION_UP, 8, 310);
         layoutHost();
-        assertEquals(518, frame.getHeight());
+        assertEquals(512, frame.getHeight());
         assertEquals(HOST_HEIGHT, frame.positionYPx() + frame.getHeight());
         assertEquals("and the place it came to rest is the one remembered", 1f,
-            store.floatingKeyboardY(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), 1e-6f);
+            store.floatingKeyboardY(PlaceOrientation.LANDSCAPE), 1e-6f);
     }
 
     @Test
@@ -508,7 +504,7 @@ public class FloatingKeyboardFrameTest {
         dispatchToFrame(frame, MotionEvent.ACTION_DOWN, 8, 410);
         dispatchToFrame(frame, MotionEvent.ACTION_MOVE, 8, 310);
         layoutHost();
-        assertEquals(518, frame.getHeight());
+        assertEquals(512, frame.getHeight());
         assertEquals("held at the top of the room", 0, frame.positionYPx());
     }
 
@@ -674,10 +670,6 @@ public class FloatingKeyboardFrameTest {
 
         @Nullable @Override public PlaceLayoutStore placeLayoutStore() {
             return store;
-        }
-
-        @NonNull @Override public PaneWallPage place() {
-            return PaneWallPage.TERMINAL;
         }
 
         @NonNull @Override public PlaceOrientation orientation() {

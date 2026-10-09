@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The feature callers of the per-function model picks (tai-device-tiers spec sections 4.4 and 4.5):
+  the background-app warning, the app-category dialog's model row and the keyboard's entries to the
+  picker sheet.
+-->
+<resources>
+    <!-- Under a function whose model file is a quarter of the RAM or more (Android may close cached apps). -->
+    <string name="tai_warn_background_apps">May close apps running in the background</string>
+    <!-- App-category dialog, on-device row when the pick is the remote provider's model. %1$s: the model id. -->
+    <string name="tai_callers_category_remote_summary">%1$s · sent to your remote server</string>
+    <!-- App-category dialog: the row that opens the model picker sheet. -->
+    <string name="tai_callers_category_model_row">Model</string>
+    <!-- Keyboard, Cleanup model row summary when the pick is "off". -->
+    <string name="tai_callers_cleanup_raw_text">Raw text</string>
+    <!-- Speech model screen: the row that opens the model picker sheet. -->
+    <string name="tai_callers_speech_pick_title">Speech model</string>
+</resources>

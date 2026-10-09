@@ -1,0 +1,643 @@
+# On-device AI Backends
+
+On-device AI supports two local LLM runners behind the same authenticated localhost API:
+
+- LiteRT-LM for Gemma 4 and MobileActions `.litertlm` packages.
+- MNN-LLM for downloaded MNN `config.json` packages.
+
+On-device AI does not include a GGUF/llama.cpp backend. GGUF, safetensors, PyTorch, ONNX, and
+other raw weight files are not listed by `/v1/models` and are rejected by import/load paths.
+
+Both runners are exposed through OpenAI-compatible endpoints so CLI tools can use the device as a
+local model backend:
+
+```sh
+export OPENAI_BASE_URL="$(cat ~/.launcherctl/endpoint)/v1"
+export OPENAI_API_KEY="$(cat ~/.launcherctl/token)"
+```
+
+Implemented OpenAI-style endpoints:
+
+```text
+GET  /v1/models
+POST /v1/chat/completions
+POST /v1/responses
+POST /v1/completions
+POST /v1/embeddings
+POST /v1/tokenize
+POST /v1/audio/transcriptions
+POST /v1/audio/speech
+POST /v1/ai/speak
+POST /v1/ai/images/generations
+```
+
+Native Ollama compatibility is exposed from the same authenticated base URL through
+`/api/version`, `/api/tags`, `/api/show`, `/api/chat`, `/api/generate`, `/api/ps`, and `/api/embed`.
+Ollama responses use NDJSON streaming while OpenAI responses use SSE. Both adapters route through
+the same `TaiChatRequest`, runtime options, capability checks, model load lifecycle, and
+cancellation path. See [LauncherCtl API](LauncherCtl_API.md) for the full route tables, request
+and response shapes, rate limits, and error codes; this page is the runtime and backend reference.
+
+## Capability matrix
+
+| | LiteRT-LM | MNN-LLM |
+| --- | --- | --- |
+| Model format | `.litertlm` / `.task` packages | Directory with `config.json` + sidecars |
+| Chat input | Yes | Yes |
+| Image input | Yes (`-vision` id) | No — `capability_not_supported` |
+| Audio input | Yes (`-audio` id) | No — `capability_not_supported` |
+| Tool calling | Native, through `tool_use` | Prompt-based (`_tool_mode: "prompt_fallback"`) |
+| Thinking / reasoning traces | Yes (`llm_thinking`) | No |
+| Embeddings | Yes (`.tflite` EmbeddingGemma, `.litertlm` EmbeddingGemma 2) | Yes, where the model advertises `text_embeddings` |
+| Speculative decoding | Runtime flag, own auto/on/off | EAGLE-3 draft head, off by default |
+| Runs on | CPU or GPU | CPU or GPU (OpenCL) |
+
+Speech (`/v1/audio/transcriptions`, `/v1/audio/speech`) runs outside these two runners. It
+transcribes with the speech model voice input uses (Whisper ACFT or Parakeet, both on LiteRT) and
+speaks with the voice model (KittenTTS nano 0.8). Both run on the CPU in the `:tai_runtime`
+process, load on demand beside the chat model, and are never queued behind a chat generation.
+Their request fields, the `tai transcribe` and `tai speak` commands and Read aloud are described in
+[Voice input](Voice_Input.md) and [Text to speech](Text_To_Speech.md).
+
+Image generation (`/v1/ai/images/generations`, `tai image`) is a third MNN use, see
+[MNN diffusion backend](#mnn-diffusion-backend-text-to-image).
+
+## Embeddings and tokenizer internals
+
+`/v1/embeddings` accepts a string or an array of strings (at most `_endpoint_max_batch`, currently
+64) and returns float (or, with `encoding_format:"base64"`, base64) vectors in OpenAI's `embedding`
+list shape, each carrying `truncated` and, where the runtime can count them, `tokens`. Use it only
+with models whose `/v1/models` `_capabilities` include `text_embeddings`. LiteRT EmbeddingGemma
+`.tflite` packages need `sentencepiece.model` beside the model file; new downloads fetch that
+sidecar automatically. Older installs missing the sidecar return `409 embedding_tokenizer_missing`.
+
+EmbeddingGemma 2 (the recommended Text+Vision 440M and the Text 270M) is one `.litertlm` bundle
+with its tokenizer inside, so there is no sidecar; it needs LiteRT-LM 0.18.0 or later, which is the
+version the app ships. It runs on
+the CPU through LiteRT-LM's embedding engine (`_runtime: "litertlm-embedding"`), one engine at a
+time, built with a 2048-token input cap that `/v1/models` reports as `_endpoint_context_window`.
+The engine has no tokenizer API, so its items carry no `tokens`, `usage` is zero, and
+`/v1/tokenize` answers `501 capability_not_supported` for it. Text input only for now. At most one
+LiteRT embedder is resident: using the `.tflite` one closes the `.litertlm` one and the other way
+round.
+
+`input_type: "query"` or `"document"` (default) selects EmbeddingGemma's trained task prefix,
+applied on the server and counted inside the model's window; an optional `title` folds into the
+document prefix. While a chat generation is running, embeddings run throttled (background thread
+priority) so they never slow the live reply, and a load that does not fit in memory returns `503`
+with `Retry-After` and `code: "embedding_memory"` rather than the chat path's `409`. `/v1/tokenize`
+(`{model, input}` → `{tokens: n}`) uses the `.tflite` model's tokenizer with no prefix, for
+splitting text on real token counts. It is the only model with a tokenizer: EmbeddingGemma 2
+`.litertlm`, MNN embedders and every other model answer `501 capability_not_supported` ("Tokenize
+is only available for .tflite embedding models; .litertlm models expose no tokenizer.").
+
+EmbeddingGemma installs a fixed-shape graph per context window (`seq256`/`seq512`/`seq1024`/
+`seq2048`), and a short input on a big window still pays that window's full inference cost. A
+download of `seq1024` or bigger also fetches the smaller `seq256`/`seq512` siblings, best effort,
+and TAI then routes each input to the smallest installed window it fits (prefix + body +
+BOS/EOS), falling back to the largest window (with truncation, as always) only when nothing fits.
+This is per input within one batch, transparent in the response shape; `/v1/models` reports every
+installed window ascending in `_endpoint_windows`, and the largest of them in
+`_endpoint_context_window`.
+
+## Model IDs
+
+Use the exact IDs returned by:
+
+```sh
+tai models
+```
+
+Catalog chat and embedding IDs (the speech and voice IDs are in
+[On-device AI models](On_Device_AI_Models.md#supported-model-names)):
+
+```text
+gemma-4-e2b-it-litert-lm
+gemma-4-e4b-it-litert-lm
+embeddinggemma-2-text-vision-440m
+embeddinggemma-2-text-270m
+embeddinggemma-300m
+```
+
+FunctionGemma (`functiongemma-270m-mobile-actions-litert-lm`) and MNN chat packages are no longer
+in the catalog; they still run when imported.
+
+The Gemma 4 E2B and E4B catalog entries are not gated; both are Apache-2.0 and download without a
+Hugging Face token.
+
+`GET /v1/models` includes On-device AI metadata on each OpenAI model item:
+
+```json
+{
+  "id": "gemma-4-e2b-it-litert-lm",
+  "object": "model",
+  "_backend": "litert-lm",
+  "_capabilities": ["text_chat", "image_input", "audio_input", "tool_use"],
+  "_endpoint_capabilities": ["text_chat", "image_input", "audio_input", "tool_use"],
+  "_source_capabilities": ["text_chat", "image_input", "audio_input", "tool_use", "llm_thinking"],
+  "_default_max_output_tokens": 4000,
+  "_endpoint_context_window": 4096,
+  "_source_context_window": 32768
+}
+```
+
+Endpoint truth wins: `_capabilities` always equals `_endpoint_capabilities`, meaning what this APK
+currently serves for that installed model. `_source_capabilities` and `_source_context_window` are
+informational upstream/package metadata and must not be used to decide whether to send media,
+embeddings, tools, or other requests.
+
+### Context Window Sizing
+
+`_endpoint_context_window` is sized per device, not fixed per model; the model's own limit is
+`_source_context_window`. Without a setting the window is 4096 tokens on phones with 8 GB of RAM or
+more and 2048 on 6 GB or less, on every backend and whatever window the catalog or an imported
+package states, and never above the model's own limit. The **Context window** setting (global
+under **Settings → On-device AI → Advanced → Parameters**, or per model in the model's own
+**Parameters**) goes above it, up to 4096 on 8 GB and under, 8192 on 10 to 12 GB and 16384 from
+16 GB. The same value sizes the LiteRT-LM engine budget and MNN's `max_all_tokens`, gates the
+automatic-tool compatibility rule, and is what `/v1/models` advertises, so a client can trust it.
+
+### Conversation Reuse
+
+OpenAI chat requests are stateless, but the LiteRT-LM runtime keeps the last conversation alive.
+When the next request's transcript is exactly the previous one plus the runtime's own reply plus
+one new message, that message is sent into the existing conversation and only it is prefilled. Any
+other transcript (edited, trimmed, a different system prompt, different tools or sampling options)
+starts a fresh conversation from the full history. Matching ignores tool-call ids, JSON key order
+and surrounding whitespace, so clients that echo the assistant message with extra fields still
+continue the conversation. MNN gets the same effect natively: `prompt_cache` is on, and MNN
+prefills only the suffix after the longest common rendered-prompt prefix.
+
+## Load Preflight And Isolation
+
+`tai preflight <model>` and `POST /v1/ai/runtime/preflight` check compatibility without touching
+native runtime code. The checks cover ABI, Android API level, bundled native libraries, model-file
+readability/format, sidecar files for MNN packages, recommended and available memory, accelerator
+support, known GPU exclusions, and prior backend failures recorded for this model/device.
+
+Actual native loading happens only in `:tai_runtime`. If LiteRT-LM GPU initialization or MNN native
+load crashes the runtime process, the launcher UI/API process remains alive and reports the last
+attempted model, backend, accelerator, and suggested fallback.
+
+## LiteRT-LM Backend
+
+LiteRT-LM runs inside the isolated Android `:tai_runtime` process and is used for Gemma 4 and
+MobileActions models.
+
+Supported surfaces:
+
+- text chat through `/v1/chat/completions`
+- legacy completions through `/v1/completions`
+- streaming chat/completion responses
+- OpenAI function tools for LiteRT models that advertise `tool_use`
+- image input for Gemma models that advertise `image_input`
+- audio input for Gemma models that advertise `audio_input`
+
+Not supported:
+
+- generated audio output
+- silently dropping unsupported image/audio content parts
+
+Unsupported content parts return explicit OpenAI-shaped errors, such as
+`unsupported_content_part` or `capability_not_supported`.
+
+### Gemma 4 Defaults
+
+Gemma 4 LiteRT defaults follow Google AI Edge Gallery defaults:
+
+| Model | Accelerator | Max output tokens | TopK | TopP | Temperature |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `gemma-4-e2b-it-litert-lm` | GPU, CPU fallback | 4000 | 64 | 0.95 | 1.0 |
+| `gemma-4-e4b-it-litert-lm` | GPU, CPU fallback | 4000 | 64 | 0.95 | 1.0 |
+
+Gemma 4 uses a multimodal LiteRT engine configuration:
+
+- main text backend: selected accelerator, usually GPU
+- vision backend: selected accelerator, usually GPU (only when an image-capable model id is
+  loaded)
+- audio backend: CPU (only when an audio-capable model id is loaded)
+
+This matches the LiteRT-LM Android pattern used by Google AI Edge Gallery: GPU can run text and
+vision while audio decoding uses CPU. If `accelerator` is omitted or set to `auto`, On-device AI
+tries the GPU first and uses the CPU after a GPU failure has been recorded for that model on this
+device.
+
+#### Per-modality model ids
+
+To keep each load's GPU/OpenCL footprint small enough to fit (mirroring Edge Gallery's per-task
+loading, which enables exactly one modality per screen), a multimodal model is advertised on
+`/v1/models` as **up to three ids that share one downloaded file**. By default (split exposure)
+the bare id is text-only, and only the modalities beyond that get a suffix:
+
+| Model id | Modality loaded | Encoders initialized |
+| --- | --- | --- |
+| `gemma-4-e4b-it-litert-lm` | text chat only | none |
+| `gemma-4-e4b-it-litert-lm-vision` | text + image | vision (GPU) |
+| `gemma-4-e4b-it-litert-lm-audio` | text + audio | audio (CPU) |
+
+The advanced **Endpoint exposure** setting (`TaiModelVariants.Exposure`) has three values:
+**Split** (the default, above), **Combined** (only the bare id, loading every enabled modality, no
+suffixed ids) and **Both** (the bare id is combined, plus `model-id-text`, `-vision` and `-audio`).
+
+Select the id from the shell exactly like any other model (`-m`/`"model"`). Switching ids reloads
+the runtime scoped to that modality, the same way switching Gallery sections does. There is no
+combined image+audio id, matching Gallery (every task enables a single modality). The same file is
+downloaded once; the variants only narrow the advertised capabilities.
+
+The isolated `:tai_runtime` process is bound with `BIND_IMPORTANT`, so while a model is loaded it
+inherits the launcher's foreground priority and Android's low-memory killer reaps other background
+apps before the runtime — preventing the GPU load from being SIGKILLed mid initialization.
+
+You can force GPU for validation:
+
+```sh
+tai load gemma-4-e2b-it-litert-lm --gpu
+```
+
+A successful GPU load reports:
+
+```text
+Backend: GPU
+```
+
+### Image Input
+
+Use OpenAI chat content parts with `image_url`. Data URLs, `file://` URLs, absolute paths, and
+HTTP(S) URLs are accepted. Image input requires the `-vision` model id (see
+[Per-modality model ids](#per-modality-model-ids)); the canonical id is text-only and rejects
+images with `capability_not_supported`.
+
+Example:
+
+```json
+{
+  "model": "gemma-4-e2b-it-litert-lm-vision",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "What color is this image?"},
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,..."
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+For large images, prefer `file://` or absolute local paths from the Android app's readable
+storage. The localhost server accepts larger JSON bodies for common base64 image payloads, but
+file paths avoid copying media through JSON.
+
+### Audio Input
+
+Use OpenAI-style `input_audio` content parts. Audio input requires the `-audio` model id (see
+[Per-modality model ids](#per-modality-model-ids)); the canonical id is text-only and rejects audio
+with `capability_not_supported`.
+
+```json
+{
+  "model": "gemma-4-e2b-it-litert-lm-audio",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Transcribe or describe this audio."},
+        {
+          "type": "input_audio",
+          "input_audio": {
+            "data": "...base64 wav...",
+            "format": "wav"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+The runner passes audio bytes to LiteRT-LM, and the model answers whatever the prompt asks about
+the audio. For plain speech to text, `/v1/audio/transcriptions` is faster and needs no chat model;
+see [Voice input](Voice_Input.md#the-api-v1audiotranscriptions).
+
+### MobileActions
+
+MobileActions uses the LiteRT-LM runner but has its own profile:
+
+| Model | Accelerator | Max output tokens | TopK | TopP | Temperature |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `functiongemma-270m-mobile-actions-litert-lm` | CPU only | 1024 | 64 | 0.95 | 0.0 |
+
+FunctionGemma is loaded like any other generation model. Loading it unloads the previous
+LiteRT-LM or MNN chat model; it is not kept in a companion slot.
+
+On-device AI does not execute Android actions or shell commands by itself. It returns tool calls
+for the client to handle.
+
+## MNN-LLM Backend
+
+MNN models are installed as a directory containing `config.json` and referenced sidecar files
+(current bundled MNN version 3.6.1). The load path must point to `config.json`. MNN has no
+image or audio input path.
+
+On-device AI validates these sidecars before loading:
+
+- `llm_model`
+- `llm_weight`
+- `tokenizer_file`
+
+If a referenced file is missing or unreadable, load fails with `model_file_not_readable` and the
+missing filename.
+
+### MNN Defaults
+
+For installed MNN configs, Auto means "use the model config." On-device AI preserves config
+fields unless a request explicitly overrides a supported value.
+
+The tested `qwen2.5-coder-1.5b-instruct-mnn` defaults are:
+
+| Field | Default |
+| --- | --- |
+| `backend_type` | `cpu` |
+| `thread_num` | `4` |
+| `precision` | `low` |
+| `memory` | `low` |
+| `max_context_len` | `8192` |
+| `max_new_tokens` | `1024` |
+| `temperature` | `0.8` |
+| `top_k` | `40` |
+| `top_p` | `0.9` |
+
+On-device AI also preserves upstream config fields such as tokenizer, sampler type, `min_p`,
+`typical`, penalties, `n_gram`, and Jinja chat templates.
+
+### MNN Request Overrides
+
+OpenAI request JSON can override supported runtime fields:
+
+```json
+{
+  "model": "qwen2.5-coder-1.5b-instruct-mnn",
+  "temperature": 0.2,
+  "top_p": 0.9,
+  "top_k": 40,
+  "max_tokens": 512,
+  "context_window": 4096,
+  "thread_count": 4,
+  "precision": "low",
+  "memory_mode": "low",
+  "messages": [{"role": "user", "content": "Reply exactly OK"}]
+}
+```
+
+If `accelerator` is `auto` or omitted, On-device AI uses CPU for safety before native load.
+Explicit `accelerator` can override `backend_type` for supported values such as CPU or
+OpenCL/GPU.
+
+### MNN speculative decoding (EAGLE-3)
+
+An MNN package built around an EAGLE-3 draft head (a `config.json` with `speculative_type` and its
+`eagle*.mnn` files) advertises `speculative_decoding` and shows a switch in its parameters screen.
+It is off by default: auto and explicit off both fall back to plain decoding, because on-device
+measurement showed EAGLE-3 slower than plain decoding on both CPU and GPU, with slightly different
+text. Turning the switch on tries it anyway on a package that ships a draft head; it has no effect
+on one that does not. `tai benchmark --eagle` benches the draft model on for MNN builds that ship
+one, as a separate leaderboard entry.
+
+### MNN Tools
+
+MNN models that advertise `tool_use` support OpenAI function tool requests through
+`/v1/chat/completions`.
+
+The bundled MNN native library has no structured-tool bridge, so On-device AI marks MNN tool mode
+as `_tool_mode: "prompt_fallback"`: the model sees its tools as prompt text and the server parses
+the text it emits back into OpenAI `tool_calls`. How the prompt is built depends on the package:
+
+- **Model template (preferred).** When the package's exported chat template (`llm_config.json`,
+  `jinja.chat_template`) has a `tools` branch — every Qwen2.5 and Qwen3 export does — the server
+  passes the OpenAI function definitions to the template as its `tools` variable, passes assistant
+  tool calls as structured messages and tool results as `role: "tool"` messages, and lets the
+  model's own template render its official tool prompt, `<tool_call>` format and
+  `<tool_response>` wrapping. A new model with a tools-aware template therefore works without any
+  code change.
+- **Prompt fallback.** Packages whose template has no `tools` branch get a Hermes-style `# Tools`
+  system prompt with the same `<tool_call>` format, and tool results wrapped in `<tool_response>`
+  by the server.
+
+In both cases the server parses valid `<tool_call>...</tool_call>` blocks and bare JSON
+function-call responses (including a single ```json fence). If a request with
+`tool_choice: "required"` or a named tool yields no parsable call, it fails closed with
+`mnn_required_tool_call_missing` (HTTP 422). It never synthesizes a call from the user's text.
+
+Example request:
+
+```json
+{
+  "model": "qwen2.5-coder-1.5b-instruct-mnn",
+  "tool_choice": "required",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Get weather for a city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {"type": "string"}
+          },
+          "required": ["city"]
+        }
+      }
+    }
+  ],
+  "messages": [
+    {"role": "user", "content": "Return only a tool call for get_weather with city Kuwait City."}
+  ]
+}
+```
+
+Expected response shape:
+
+```json
+{
+  "choices": [
+    {
+      "finish_reason": "tool_calls",
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"city\":\"Kuwait City\"}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+The client is still responsible for executing the tool and sending the result back as a
+`role:"tool"` message.
+
+### MNN mmap weight cache
+
+MNN keeps a converted-weights cache in the app's cache directory, which can grow as large as the
+model itself. It is rebuilt automatically after an app or runtime update, or after a load with
+different settings; `tai load MODEL_ID --fresh` throws it away and rebuilds it on demand, if a
+loaded MNN model ever starts giving degenerate replies.
+
+## MNN diffusion backend (text to image)
+
+Backend id `mnn-diffusion`, capability `image_generation`. It drives the MNN 3.6.1 Diffusion engine the way
+upstream MnnLlmChat does (same engine calls, OpenCL by default, the engine's own memory modes) through the
+TAI bridge `ci/mnn-patch/tai_diffusion_jni.cpp` (`TaiDiffusionSession`), which differs from upstream's in
+taking the model type and backend and in the fixes below.
+
+Supported models:
+
+| Family | Package files the engine opens | Size |
+| --- | --- | --- |
+| Stable Diffusion 1.5 | `text_encoder.mnn`, `unet.mnn`, `vae_decoder.mnn`, `tokenizer.mtok` (each optionally with a `.weight` sidecar) | 512x512 only |
+| Taiyi (Chinese SD 1.5) | the same files; only the tokenizer and its special tokens differ, so the type must be given | 512x512 only |
+| Sana | `connector.mnn`, `projector.mnn`, `transformer.mnn`, `vae_decoder.mnn`, `vae_encoder.mnn` (only for editing a picture) and `llm/` (`config.json`, `meta_queries.mnn`, the prompt LLM and its tokenizer) | multiples of 32, 256-2048 |
+
+Not supported yet: Wan video and Stable Diffusion 3.5 (the 3.6.1 build does not wire them into the model
+type the bridge uses).
+
+**Importing.** The Model centre imports an image package like any model: paste a Hugging Face repository link
+(for example `https://huggingface.co/taobao-mnn/stable-diffusion-v1-5-mnn-opencl` or
+`https://huggingface.co/taobao-mnn/MNN-Sana-Edit-V2`), or pick the package folder from the link bar's overflow
+menu, or run `tai import <folder or any file in it> [model-id]`. The importer recognises the package by its
+files before it tries the chat path (Sana's root `config.json` is a diffusion configuration, not an LLM one),
+downloads or copies every runnable file including Sana's `llm/` folder, leaves `.DS_Store`, `.gitattributes`
+and the model card behind, and keeps what the chat downloader keeps: a staging directory, progress, resume,
+complete files kept on a retry, cancel and a storage check. Small files come first, so a tokenizer the app
+cannot use is refused before the graphs are fetched. The model is registered with backend `mnn-diffusion` and
+its type (`sd15`, `taiyi` or `sana`) in `architecture`, so `tai image --model <id>` and
+`/v1/ai/images/generations {"model": "<id>"}` need no type hint. Taiyi shares Stable Diffusion's files, so it is
+told apart by the repository or folder name containing "taiyi". It appears under Installed, in its own
+Image generation group with a Delete menu; it is never offered for chat. A direct `.../resolve/...` file link is
+not accepted for an image package; use the repository link. `tai import` registers the folder where it is (it
+may write `tokenizer.mtok` into it, see below).
+
+**Tokenizer.** The published `taobao-mnn` Stable Diffusion packages ship `vocab.json` and `merges.txt` rather
+than `tokenizer.mtok`, which MNN 3.6.1 needs, and nothing can convert it on the phone. The app bundles one
+verified `tokenizer.mtok` (asset `tai-diffusion/clip-vit-l14.tokenizer.mtok`) for the standard CLIP ViT-L/14
+tokenizer. When an imported Stable Diffusion package has no `tokenizer.mtok` and its `vocab.json` and
+`merges.txt` have exactly the standard SHA-256 values, the importer installs the bundled one; otherwise the
+import is refused with a message that the package needs converting with MNN's tools. A package that already has
+its own `tokenizer.mtok` is left untouched. A package that is neither (no raw tokenizer files) fails the usual
+package check (`tokenizer_mtok_missing` or `missing_file`).
+
+Runtime behaviour:
+
+- **Memory modes** are the engine's: `1` keeps every module resident and is fastest, `2` balances, `0` saves
+  memory by loading modules as they are needed. Stable Diffusion/Taiyi stay loaded after a run only in mode 1
+  and are closed by the pressure watch after 3 minutes idle; every other combination frees the engine after each
+  run, as upstream does (Sana also frees its prompt LLM before loading the diffusion graphs).
+- **Admission** estimates the package's peak working set (every graph for Stable Diffusion; the larger of the
+  prompt LLM and the diffusion graphs for Sana) times 1.5 (mode 1), 1.1 (mode 2) or 0.8 (mode 0), or uses the
+  measured peak of an earlier run on this device. It picks the fastest mode that fits, closing idle embeddings,
+  speech output, speech-to-text and idle chat, in that order (the image model it replaces is credited, not closed), and answers
+  `409 insufficient_memory` when no mode fits. The factors are conservative guesses until a phone has measured them.
+- **OpenCL tuning cache.** The engine writes its tuning cache to a relative `.tempcache`, and an app's working
+  directory is `/`, so upstream never persists it and every load re-tunes. The bridge changes into
+  `cacheDir/tai-diffusion-cache/<model id>` before loading, so the first load on a phone is slow and later loads
+  reuse the cache.
+- **No mid-run cancel.** The engine ignores the progress callback's return value, and the bridge does not throw
+  through it. Cancelling sets a flag that is checked when the run returns; the result is discarded.
+- **Isolation.** Generation runs in `:tai_runtime` on its own single-thread lane, is refused while a benchmark
+  runs, and hands the PNG back through `cacheDir/tai-ipc`. A `libmnnllmapp.so` built before the bridge was added
+  answers `501 mnn_image_unavailable` instead of crashing.
+
+## Runtime and safety behavior
+
+Before loading a model, On-device AI checks:
+
+- Android and CPU compatibility
+- required native libraries
+- model package readability and format
+- available memory
+- requested CPU/GPU mode
+- previous failures for that model and device
+
+Unknown imported models default to CPU. Automatic GPU selection is conservative; you can
+explicitly test `tai load MODEL_ID --gpu` when the model profile supports it. A native runtime
+crash is isolated from the launcher, and On-device AI records fallback guidance for the next
+attempt.
+
+The active model normally unloads after 10 minutes without use. Change the idle timeout in
+On-device AI settings or use `tai keep-warm` when a client needs it available longer.
+
+## Endpoint Behavior For Unsupported Modalities
+
+On-device AI rejects unsupported media instead of dropping it.
+
+Examples:
+
+- MNN image input: `capability_not_supported`
+- MNN audio input: `capability_not_supported`
+- embeddings for models without `text_embeddings`: `capability_not_supported`
+- text-only LiteRT model image input: `capability_not_supported`
+- unknown content part type: `unsupported_content_part`
+- chat audio output through `modalities:["audio"]`: `unsupported_audio_output`, HTTP 501
+- `/v1/audio/speech` without a voice model installed: `tts_model_not_installed`, HTTP 400
+- `/v1/audio/transcriptions` without a speech model installed: `stt_model_not_configured`, HTTP 400
+
+This behavior is intentional for OpenAI-compatible CLI tools. Silent media dropping makes prompts
+misleading.
+
+## Validation Commands
+
+Check model metadata:
+
+```sh
+endpoint="$(cat ~/.launcherctl/endpoint)"
+token="$(cat ~/.launcherctl/token)"
+curl -sS -H "Authorization: Bearer $token" "$endpoint/v1/models" | jq .
+```
+
+Load Gemma 4 on GPU:
+
+```sh
+curl -sS -H "Authorization: Bearer $token" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gemma-4-e2b-it-litert-lm","accelerator":"gpu"}' \
+  "$endpoint/v1/ai/runtime/load" | jq .
+```
+
+Test text chat:
+
+```sh
+curl -sS -H "Authorization: Bearer $token" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gemma-4-e2b-it-litert-lm","messages":[{"role":"user","content":"Reply exactly OK"}]}' \
+  "$endpoint/v1/chat/completions" | jq .
+```
+
+Load MNN and inspect effective config:
+
+```sh
+curl -sS -H "Authorization: Bearer $token" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"qwen2.5-coder-1.5b-instruct-mnn"}' \
+  "$endpoint/v1/ai/runtime/load" | jq '.effectiveConfig'
+```
+
+## References
+
+- [On-device AI](On_Device_AI.md) — settings, model centre, `tai` CLI
+- [LauncherCtl API](LauncherCtl_API.md) — full HTTP route tables
+- [LiteRT-LM Android documentation](https://developers.google.com/edge/litert-lm/android)
+- [Google AI Edge Gallery](https://github.com/google-ai-edge/gallery)
+- [MNN upstream project](https://github.com/alibaba/MNN)

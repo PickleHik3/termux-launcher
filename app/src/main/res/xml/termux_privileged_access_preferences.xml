@@ -45,4 +45,24 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        app:key="privileged_lane"
+        app:title="@string/termux_privileged_lane_title">
+
+        <com.termux.app.fragments.settings.StatusCardPreference
+            app:key="priv_lane_status"
+            app:title="@string/termux_privileged_lane_status_title"
+            app:summary="@string/termux_privileged_lane_status_summary"
+            app:persistent="false"
+            app:selectable="false" />
+
+        <SwitchPreferenceCompat
+            app:key="priv_lane_enabled"
+            app:title="@string/termux_privileged_lane_enabled_title"
+            app:summaryOn="@string/termux_privileged_lane_enabled_on"
+            app:summaryOff="@string/termux_privileged_lane_enabled_off"
+            app:defaultValue="true" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

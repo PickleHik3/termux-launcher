@@ -1,15 +1,11 @@
 package com.termux.app.launcher.widget;
 
 import android.content.Context;
-import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
@@ -17,14 +13,13 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 
 import com.termux.R;
-import com.termux.app.chrome.ChromeShade;
-import com.termux.app.chrome.OnGlass;
+import com.termux.app.material.M3;
 
 import java.util.List;
 
 /**
  * Anchored long-press menu for the widgets pane, in the launcher's shared popup material:
- * rounded panel, hairline glass rim, non-focusable window that never touches the IME.
+ * the theme's menu surface, non-focusable window that never touches the IME.
  */
 final class WidgetPaneMenu {
     interface Listener { void onItemSelected(@NonNull WidgetPaneMenuPolicy.Item item); }
@@ -42,26 +37,15 @@ final class WidgetPaneMenu {
         LinearLayout shell = new LinearLayout(context);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setPadding(pad, pad, pad, pad);
-        GradientDrawable background = new GradientDrawable();
-        background.setCornerRadius(14f * density);
-        // The menu is a panel: it flips whole, and its rim and rows are read off the panel rather
-        // than off the chrome around it.
-        int plate = ChromeShade.plate(0xE6202124, 0xE6F8F9FA);
-        int surface = ChromeShade.plateSurface(plate, ChromeShade.nominalGlass());
-        int ink = ChromeShade.onPlate(plate, ChromeShade.nominalGlass(), OnGlass.TARGET_BODY_TEXT);
-        background.setColor(plate);
-        background.setStroke(Math.max(1, Math.round(1.25f * density)),
-            ChromeShade.inPlate(0x3DFFFFFF, surface, ChromeShade.TARGET_RIM));
-        shell.setBackground(background);
-        shell.setClipToOutline(true);
 
         final PopupWindow[] popupHolder = new PopupWindow[1];
         for (WidgetPaneMenuPolicy.Item item : items) {
             TextView row = new TextView(context);
             row.setText(titleFor(context, item));
             row.setContentDescription(row.getText());
-            row.setTextColor(ink);
-            row.setTextSize(14f);
+            row.setTextColor(M3.onSurface(context));
+            M3.textAppearance(row, com.google.android.material.R.attr.textAppearanceLabelLarge);
+            row.setTextColor(M3.onSurface(context));
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setMinHeight(Math.round(44f * density));
             row.setMinWidth(Math.round(180f * density));
@@ -83,15 +67,17 @@ final class WidgetPaneMenu {
         int width = shell.getMeasuredWidth();
         int height = shell.getMeasuredHeight();
 
-        PopupWindow popup = new PopupWindow(shell, width, height, false);
+        PopupWindow popup = new PopupWindow(context);
+        popup.setContentView(shell);
+        popup.setWidth(width);
+        popup.setHeight(height);
         popupHolder[0] = popup;
         popup.setFocusable(false);
         popup.setTouchable(true);
         popup.setOutsideTouchable(true);
         popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
         popup.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED);
-        popup.setBackgroundDrawable(new ColorDrawable(0x00000000));
-        popup.setElevation(8f * density);
+        M3.styleMenuPopup(context, popup);
 
         int[] paneOnScreen = new int[2];
         pane.getLocationOnScreen(paneOnScreen);
@@ -101,12 +87,8 @@ final class WidgetPaneMenu {
             Math.max(paneLeft, paneLeft + pane.getWidth() - width));
         int y = clamp(Math.round(rawY) - height / 2, paneTop,
             Math.max(paneTop, paneTop + pane.getHeight() - height));
-        popup.showAtLocation(pane, Gravity.NO_GRAVITY, x, y);
+        popup.showAtLocation(pane, Gravity.TOP | Gravity.LEFT, x, y);
 
-        shell.setAlpha(0f);
-        shell.setTranslationY(8f * density);
-        shell.animate().alpha(1f).translationY(0f).setDuration(150)
-            .setInterpolator(new DecelerateInterpolator()).start();
         return popup;
     }
 

@@ -2,7 +2,6 @@ package com.termux.app.launcher.drawer;
 
 import android.content.Context;
 import android.graphics.Color;
-import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -15,9 +14,17 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.SuggestionBarView;
+import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
-/** The single icon-and-label implementation shared by both drawer presentations. */
+/**
+ * The single icon-and-label implementation shared by both drawer presentations.
+ *
+ * <p>The icon binds through {@link SuggestionBarView#bindRenderedIcon}: a held icon is set at once,
+ * and a missing one shows a quiet tile until the worker has rendered it, then fades in. Binding
+ * never renders on the main thread, so a cold scroll costs a tile per cell, not three bitmaps and
+ * a blur.</p>
+ */
 public class AppDrawerAppCellView extends LinearLayout {
 
     /** Stream-level guard used because a nested close deliberately does not cancel its child. */
@@ -111,8 +118,12 @@ public class AppDrawerAppCellView extends LinearLayout {
                               @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
         int iconPx = iconSize > 0f ? Math.max(1, Math.round(iconSize)) : 0;
         applyGeometry(rowHeight, iconPx);
-        Drawable artwork = dock != null && iconPx > 0 ? dock.getRenderedIcon(entry, iconPx) : null;
-        icon.setImageDrawable(artwork != null ? artwork : entry.icon);
+        if (dock != null && iconPx > 0) {
+            dock.bindRenderedIcon(icon, entry, iconPx);
+        } else {
+            AsyncIconBinder.cancel(icon);
+            icon.setImageDrawable(entry.icon);
+        }
         if (dock != null) dock.applyIconColorFilter(icon);
         icon.setContentDescription(entry.label);
 
@@ -173,6 +184,8 @@ public class AppDrawerAppCellView extends LinearLayout {
         setOnLongClickListener(null);
         setOnTouchListener(null);
         setLongClickable(false);
+        // A render still on its way for the app this cell showed must not land on its next one.
+        AsyncIconBinder.cancel(icon);
         icon.setImageDrawable(null);
         icon.setContentDescription(null);
         label.setText(null);

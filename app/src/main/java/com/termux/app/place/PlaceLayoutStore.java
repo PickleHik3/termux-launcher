@@ -16,47 +16,90 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
 
 import java.util.EnumMap;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Where every place keeps its arrangement. Anything that decides what is on screen and where is a
- * property of a place — the widget grid, the terminal, the Linux display — and, for arrangement, of
- * the orientation as well.
+ * Where the launcher keeps its arrangement. Anything that decides what is on screen and where is a
+ * property of the orientation, and one arrangement per orientation is shared by every place — the
+ * widget grid, the terminal and the Linux display all stand in the same chrome (ADR 0003).
  *
- * <p>Keys are scoped: {@code place.<home|terminal|display>.<portrait|landscape>.<key>} for
- * arrangement, {@code place.<place>.<key>} for the things a place only remembers. A missing scoped
- * key falls back to the shared value the launcher used to keep globally, and then to the shipped
- * default, so nothing has to be written before a place reads the way it always looked.
+ * <p>Keys are {@code layout.<portrait|landscape>.<key>} for the arrangement,
+ * {@code place.<home|terminal|display>.<key>} for the one thing a place still remembers of its own
+ * — whether it was left with the keyboard up — and {@code place.minimal} for minimal mode, which
+ * is one mode for the whole launcher rather than a place's. A missing arrangement key falls back
+ * to the shared value the launcher used to keep globally, and then to the shipped default, so
+ * nothing has to be written before the chrome reads the way it always looked.
  *
- * <p>The pinned apps row and the extra keys used to have a global on/off switch on top of the scoped
- * placement; the Layout page replaced both with a per-place, per-orientation Hidden placement, so a
- * switched-off row from before the Layout page migrates to Hidden everywhere, once, and the scoped
- * placement is the only thing {@link #resolve} reads afterwards.
+ * <p>There are two arrangements, one per {@link LayoutVariant}: the normal one, and the one
+ * minimal mode stands in, under {@code layout.minimal.<portrait|landscape>.<key>}. A store made
+ * with the public constructor reads and writes the variant minimal mode selects; {@link
+ * #forVariant} pins it to one. The minimal layout is seeded from the normal one the first time it
+ * is used ({@link MinimalMode#apply}), and is the user's from then on.
+ *
+ * <p>The arrangement used to be kept per place as well as per orientation. Version 6 of the
+ * migration folds that into the shared keys, seeding each orientation from the place the value
+ * showed on — the terminal's for everything the terminal draws — and then drops every place's own
+ * copy. The same step folds the place-scoped look overrides into the shared look, since those were
+ * kept in this file's key scheme too. Version 7 folds the per-place minimal flags into the one
+ * launcher-wide flag. Version 8 drops the alphabets index's minimised flag: the pull tab is gone,
+ * and an index that was minimised reads as shown.
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
  * tested as one.
  */
 public final class PlaceLayoutStore {
 
-    /** Bumped when a new set of old keys has to be folded into the scoped ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 5;
+    /** Bumped when a new set of old keys has to be folded into the current ones. */
+    @VisibleForTesting static final int MIGRATION_VERSION = 8;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
     private static final String PREFIX = "place.";
+    private static final String LAYOUT_PREFIX = "layout.";
+
+    /** Where a place kept its own value for a shared look key, before the look was one look. */
+    private static final String LEGACY_LOOK_INFIX = ".look.";
 
     private static final String KEY_STATUS_BAR = Element.STATUS.storageKey();
     private static final String KEY_APPS_ROW = Element.APPS.storageKey();
     private static final String KEY_AZ_ROW = "az_row";
     private static final String KEY_AZ_BAR = Element.AZ.storageKey();
+    /**
+     * Whether a shown alphabets index stood as its pull tab, beside {@code az_row}. The tab was
+     * removed on 2026-09-30; version 8 of the migration deletes the key, and {@code az_row} alone
+     * says on or off, so an index that was minimised comes back as the band it folded from.
+     */
+    private static final String LEGACY_KEY_AZ_MINIMISED = "az_minimised";
     private static final String KEY_EXTRA_KEYS = Element.EXTRA_KEYS.storageKey();
 
     /**
      * An element's position in its edge's stack sits beside its placement:
-     * {@code place.<place>.<orientation>.<placement key>_order}. Absent means the stack the
-     * launcher has always drawn ({@link Element#defaultOrder}), so an updated install renders
-     * identically without anything being written for it.
+     * {@code layout.<orientation>.<placement key>_order}. Absent means the stack the launcher has
+     * always drawn ({@link Element#defaultOrder}), so an updated install renders identically
+     * without anything being written for it.
      */
     private static final String ORDER_SUFFIX = "_order";
+
+    /**
+     * Whether a bottom band stands under the keyboard rather than over it, beside its order:
+     * {@code layout.<orientation>.<placement key>_under_keyboard}. Absent is over it, which is
+     * where every band has always stood, so nothing is written for an install that predates it.
+     */
+    private static final String UNDER_KEYBOARD_SUFFIX = "_under_keyboard";
+
+    /**
+     * The edge a put-away bar comes back to, beside its placement:
+     * {@code layout.<orientation>.<placement key>_restore_edge}. The status bar, the pinned apps and
+     * the extra keys store {@code hidden} in their placement key, which leaves no room for the edge
+     * they went away from, so the Layout editor's tray could only ever bring them back to where
+     * each one started (spec §3.6). Written when a bar is put away and read only while it is;
+     * absent is the bar's own default edge — the top for the status bar, the bottom for the rows.
+     * The alphabets index needs none: its edge has always had a key of its own ({@code az_bar})
+     * beside the on/off switch.
+     */
+    private static final String RESTORE_EDGE_SUFFIX = "_restore_edge";
 
     /** A row placement that is not an edge at all. */
     private static final String VALUE_HIDDEN = "hidden";
@@ -77,26 +120,56 @@ public final class PlaceLayoutStore {
      */
     private static final boolean LANDSCAPE_RESTS_COMPACT = true;
 
-    private static final String KEY_KEYBOARD_ON_ENTER = "keyboard_on_enter";
     private static final String KEY_KEYBOARD_OPEN = "keyboard_open";
+    /**
+     * Minimal mode, one flag for the whole launcher: {@code place.minimal}. Before version 7 each
+     * place kept its own under {@code place.<p>.minimal}, which is the same unscoped key.
+     */
+    private static final String KEY_MINIMAL = "minimal";
     private static final String KEY_KEYBOARD_FLOAT_X = "keyboard_float_x";
     private static final String KEY_KEYBOARD_FLOAT_Y = "keyboard_float_y";
+    /** Where the dictation pill was dragged to, beside the floating keyboard's place. */
+    private static final String KEY_VOICE_PILL_X = "voice_pill_x";
+    private static final String KEY_VOICE_PILL_Y = "voice_pill_y";
+
+    /**
+     * The per-place choice of how the keyboard came back on entry. Gone with version 6: Home always
+     * comes back closed and the other two as they were left, so there is nothing left to choose.
+     */
+    private static final String LEGACY_KEY_KEYBOARD_ON_ENTER = "keyboard_on_enter";
 
     /** A floating keyboard that has never been moved has no remembered place to come back to. */
     public static final float FLOAT_POSITION_UNSET = -1f;
 
-    /** The launcher's status-bar hide switch for the display, dropped with the hidden state. */
+    /**
+     * The launcher's old status-bar hide switch for the display alone. Dropped by the first
+     * migration rather than folded: the shared layout starts with the bar shown, and hiding it is
+     * the Layout editor's tray now, for every place at once.
+     */
     private static final String LEGACY_KEY_X11_HIDE_STATUS_BAR = "x11_hide_status_bar";
 
     private static final String[] ARRANGEMENT_KEYS = {
-        KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_EXTRA_KEYS, KEY_KEYBOARD_MODE,
+        KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_EXTRA_KEYS,
+        KEY_KEYBOARD_MODE,
         KEY_KEYBOARD_FORM, KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS,
         KEY_DOCK_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN,
         // The stack positions ride with the placements they belong to, so the Layout editor's
-        // Discard and its per-place reset put a re-order back the same way they put a move back.
+        // Discard and its reset put a re-order back the same way they put a move back.
         orderKeyName(Element.STATUS), orderKeyName(Element.APPS), orderKeyName(Element.AZ),
-        orderKeyName(Element.EXTRA_KEYS)
+        orderKeyName(Element.EXTRA_KEYS),
+        underKeyboardKeyName(Element.APPS), underKeyboardKeyName(Element.AZ),
+        underKeyboardKeyName(Element.EXTRA_KEYS),
+        restoreEdgeKeyName(Element.STATUS), restoreEdgeKeyName(Element.APPS),
+        restoreEdgeKeyName(Element.EXTRA_KEYS)
     };
+
+    /**
+     * Everything version 6 folds out of the per-place keys, per orientation: the arrangement, and
+     * the two things remembered beside it per orientation — the bar's resting state and where a
+     * floating keyboard was parked.
+     */
+    private static final String[] FOLDED_KEYS = concat(ARRANGEMENT_KEYS,
+        KEY_STATUS_COMPACT, KEY_KEYBOARD_FLOAT_X, KEY_KEYBOARD_FLOAT_Y);
 
     /** The unscoped key one element's stack position is stored under. */
     @VisibleForTesting
@@ -105,24 +178,82 @@ public final class PlaceLayoutStore {
         return element.storageKey() + ORDER_SUFFIX;
     }
 
+    /** The unscoped key a put-away bar's edge is remembered under. */
+    @VisibleForTesting
+    @NonNull
+    static String restoreEdgeKeyName(@NonNull Element element) {
+        return element.storageKey() + RESTORE_EDGE_SUFFIX;
+    }
+
+    /** The unscoped key saying whether one element stands under the keyboard. */
+    @VisibleForTesting
+    @NonNull
+    static String underKeyboardKeyName(@NonNull Element element) {
+        return element.storageKey() + UNDER_KEYBOARD_SUFFIX;
+    }
+
     @NonNull private final TermuxAppSharedPreferences mPreferences;
     @Nullable private final SharedPreferences mStore;
 
-    private int mRevision;
+    /** Shared by every {@link #forVariant view} of one store, so any write retires every cache. */
+    @NonNull private final AtomicInteger mRevision;
 
     /**
-     * Any write to the launcher's preferences can change what a place resolves to — the scoped keys
-     * and the shared ones a missing key falls back to alike — so every one of them retires a
+     * The variant this store reads and writes, or null for the one the launcher is standing in
+     * ({@link #activeVariant}), which follows minimal mode.
+     */
+    @Nullable private final LayoutVariant mFixedVariant;
+
+    /** Per orientation, whether the minimal layout has been checked for its first seeding. */
+    @NonNull private final boolean[] mMinimalSeeded;
+
+    /**
+     * Any write to the launcher's preferences can change what the layout resolves to — the shared
+     * keys and the global ones a missing key falls back to alike — so every one of them retires a
      * cached layout.
      */
     private final SharedPreferences.OnSharedPreferenceChangeListener mChangeListener =
-        (preferences, key) -> mRevision++;
+        this::onPreferenceChanged;
+
+    private void onPreferenceChanged(@NonNull SharedPreferences preferences, @Nullable String key) {
+        mRevision.incrementAndGet();
+    }
 
     public PlaceLayoutStore(@NonNull TermuxAppSharedPreferences preferences) {
         mPreferences = preferences;
         mStore = preferences.getSharedPreferences();
+        mRevision = new AtomicInteger();
+        mFixedVariant = null;
+        mMinimalSeeded = new boolean[PlaceOrientation.values().length];
         migrateIfNeeded();
         if (mStore != null) mStore.registerOnSharedPreferenceChangeListener(mChangeListener);
+    }
+
+    private PlaceLayoutStore(@NonNull PlaceLayoutStore root, @NonNull LayoutVariant variant) {
+        mPreferences = root.mPreferences;
+        mStore = root.mStore;
+        mRevision = root.mRevision;
+        mFixedVariant = variant;
+        mMinimalSeeded = root.mMinimalSeeded;
+    }
+
+    /**
+     * The variant the launcher is standing in: the minimal layout while minimal mode is on, the
+     * normal one otherwise. What a store made with the public constructor reads and writes.
+     */
+    @NonNull
+    public LayoutVariant activeVariant() {
+        return mFixedVariant != null ? mFixedVariant : LayoutVariant.of(isMinimal());
+    }
+
+    /**
+     * This store pinned to one variant, whatever minimal mode is doing: the Layout editor opens
+     * on the variant the launcher was in and keeps editing it. Shares the revision and the
+     * preferences with this store, so nothing is copied.
+     */
+    @NonNull
+    public PlaceLayoutStore forVariant(@NonNull LayoutVariant variant) {
+        return mFixedVariant == variant ? this : new PlaceLayoutStore(this, variant);
     }
 
     /**
@@ -130,71 +261,107 @@ public final class PlaceLayoutStore {
      * {@link PlaceLayout} can keep it while this has not moved.
      */
     public int revision() {
-        return mRevision;
+        return mRevision.get();
     }
 
     // ---------------------------------------------------------------- arrangement
 
     /**
-     * The one immutable answer for a place in an orientation. The getters below say where a row is
-     * arranged to go; this is where the switches that can still turn a row off entirely are folded
-     * in, so a caller reads one effective layout and nothing else.
+     * The one immutable answer for an orientation, which every place stands in. The getters below
+     * say where a row is arranged to go; this is where the switches that can still turn a row off
+     * entirely are folded in, so a caller reads one effective layout and nothing else.
      */
     @NonNull
-    public PlaceLayout resolve(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
+    public PlaceLayout resolve(@NonNull PlaceOrientation orientation, @NonNull LayoutVariant variant) {
+        return forVariant(variant).resolve(orientation);
+    }
+
+    /** As {@link #resolve(PlaceOrientation, LayoutVariant)}, for the variant this store is on. */
+    @NonNull
+    public PlaceLayout resolve(@NonNull PlaceOrientation orientation) {
         EnumMap<Element, Slot> slots = new EnumMap<>(Element.class);
-        for (Element element : Element.values()) slots.put(element, slot(place, orientation, element));
+        for (Element element : Element.values()) slots.put(element, slot(orientation, element));
         // The terminal's own toolbar switch can still have put the extra keys away everywhere.
         if (!mPreferences.shouldShowTerminalToolbar()) {
             slots.put(Element.EXTRA_KEYS, slots.get(Element.EXTRA_KEYS).withHidden(true));
         }
         return new PlaceLayout(slots,
-            keyboardMode(place, orientation),
-            keyboardForm(place, orientation),
-            widgetColumns(place, orientation),
-            widgetRows(place, orientation));
+            keyboardMode(orientation),
+            keyboardForm(orientation),
+            isKeyboardShown(),
+            widgetColumns(orientation),
+            widgetRows(orientation));
+    }
+
+    /**
+     * Whether the keyboard is part of the arrangement: the Layout editor's Keyboard element,
+     * shown or hidden. It is the one switch the palette's Keyboard on/off flips
+     * ({@link TermuxAppSharedPreferences#isKeyboardTurnedOff}), read here inverted, so there is
+     * one answer to whether the keyboard may come up however the question is asked. One value
+     * for both orientations and every place, unlike the rest of the arrangement: the keyboard is
+     * switched off because a hardware keyboard is in use, not because the phone was turned, and
+     * that stance holds until it is switched on again.
+     */
+    public boolean isKeyboardShown() {
+        return !mPreferences.isKeyboardTurnedOff();
+    }
+
+    /**
+     * Shows or hides the keyboard element, which is the same as turning the keyboard on or off
+     * from the palette. Writes the preference only: the keyboard on screen follows on the next
+     * layout pass ({@code TermuxActivity}'s), which puts it down when hidden and leaves it to
+     * the next tap when shown again.
+     */
+    public void setKeyboardShown(boolean shown) {
+        if (mPreferences.isKeyboardTurnedOff() == !shown) return;
+        mPreferences.setKeyboardTurnedOff(!shown);
+        mRevision.incrementAndGet();
     }
 
     // ---------------------------------------------------------------- slots
 
     /**
-     * Where one element stands on a place in an orientation, as the store holds it: the placement
-     * key it has always had, and the sibling order key beside it. The toolbar switch is not folded
-     * in here — {@link #resolve} does that — so a slot read back is exactly what was written.
+     * Where one element stands in an orientation, as the store holds it: the placement key it has
+     * always had, and the sibling order key beside it. The toolbar switch is not folded in here —
+     * {@link #resolve} does that — so a slot read back is exactly what was written.
      */
     @NonNull
-    public Slot slot(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                     @NonNull Element element) {
-        int order = slotOrder(place, orientation, element);
+    public Slot slot(@NonNull PlaceOrientation orientation, @NonNull Element element) {
+        int order = slotOrder(orientation, element);
+        boolean under = slotUnderKeyboard(orientation, element);
         switch (element) {
             case STATUS:
-                // Never hidden: the wall's pager rides it, so it only ever moves.
-                return new Slot(false, statusBarEdge(place, orientation), order);
+                // Spelled the way the rows have always been: an edge, or "hidden".
+                return new Slot(VALUE_HIDDEN.equals(readString(orientation, KEY_STATUS_BAR)),
+                    elementEdge(orientation, element), order);
             case AZ:
-                return new Slot(!azRowShown(place, orientation), azBarEdge(place, orientation),
-                    order);
+                return new Slot(!azRowShown(orientation), azBarEdge(orientation), order, under);
             case APPS:
             case EXTRA_KEYS:
             default:
-                return new Slot(VALUE_HIDDEN.equals(readString(place, orientation,
+                return new Slot(VALUE_HIDDEN.equals(readString(orientation,
                     element == Element.APPS ? KEY_APPS_ROW : KEY_EXTRA_KEYS)),
-                    elementEdge(place, orientation, element), order);
+                    elementEdge(orientation, element), order, under);
         }
     }
 
     /** Moves one element: its edge, whether it is put away, and where it sits in the stack. */
-    public void setSlot(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                        @NonNull Element element, @NonNull Slot slot) {
+    public void setSlot(@NonNull PlaceOrientation orientation, @NonNull Element element,
+                        @NonNull Slot slot) {
+        // A bar put away keeps the edge it came from, so the tray brings it back there. The
+        // index's edge has a key of its own.
+        if (slot.hidden && element != Element.AZ)
+            writeString(orientation, restoreEdgeKeyName(element), slot.edge.storageValue());
         switch (element) {
             case STATUS:
-                setStatusBarEdge(place, orientation, slot.edge);
+                writeString(orientation, KEY_STATUS_BAR, rowValue(slot));
                 break;
             case AZ:
-                setAzRowShown(place, orientation, !slot.hidden);
-                setAzBarEdge(place, orientation, slot.edge);
+                setAzRowShown(orientation, !slot.hidden);
+                setAzBarEdge(orientation, slot.edge);
                 break;
             case APPS:
-                writeString(place, orientation, KEY_APPS_ROW, rowValue(slot));
+                writeString(orientation, KEY_APPS_ROW, rowValue(slot));
                 break;
             case EXTRA_KEYS:
             default:
@@ -203,10 +370,30 @@ public final class PlaceLayoutStore {
                 if (!slot.hidden && !mPreferences.shouldShowTerminalToolbar()) {
                     mPreferences.setShowTerminalToolbar(true);
                 }
-                writeString(place, orientation, KEY_EXTRA_KEYS, rowValue(slot));
+                writeString(orientation, KEY_EXTRA_KEYS, rowValue(slot));
                 break;
         }
-        setSlotOrder(place, orientation, element, slot.order);
+        setSlotOrder(orientation, element, slot.order);
+        // Written only once it is asked for or taken back, so a store that never had it keeps
+        // reading as it always did.
+        if (slot.underKeyboard || slotUnderKeyboard(orientation, element))
+            setSlotUnderKeyboard(orientation, element, slot.underKeyboard);
+    }
+
+    /**
+     * Whether an element stands under the keyboard on the bottom edge. False for an install that
+     * never put one there, and always for the status bar, which may not.
+     */
+    public boolean slotUnderKeyboard(@NonNull PlaceOrientation orientation,
+                                     @NonNull Element element) {
+        return element.underKeyboardAllowed() && mStore != null
+            && mStore.getBoolean(variantKey(orientation, underKeyboardKeyName(element)), false);
+    }
+
+    public void setSlotUnderKeyboard(@NonNull PlaceOrientation orientation,
+                                     @NonNull Element element, boolean under) {
+        if (!element.underKeyboardAllowed()) return;
+        writeBoolean(variantKey(orientation, underKeyboardKeyName(element)), under);
     }
 
     /**
@@ -214,40 +401,36 @@ public final class PlaceLayoutStore {
      * re-orders something: an absent key is the stack the launcher has always drawn, read against
      * the edge the element is actually on.
      */
-    public int slotOrder(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                         @NonNull Element element) {
-        String key = arrangementKey(place, orientation, orderKeyName(element));
-        int fallback = element.defaultOrder(elementEdge(place, orientation, element));
+    public int slotOrder(@NonNull PlaceOrientation orientation, @NonNull Element element) {
+        String key = variantKey(orientation, orderKeyName(element));
+        int fallback = element.defaultOrder(elementEdge(orientation, element));
         if (mStore == null || !mStore.contains(key)) return fallback;
         return Math.max(0, mStore.getInt(key, fallback));
     }
 
-    public void setSlotOrder(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                             @NonNull Element element, int order) {
-        writeInt(arrangementKey(place, orientation, orderKeyName(element)), Math.max(0, order));
+    public void setSlotOrder(@NonNull PlaceOrientation orientation, @NonNull Element element,
+                             int order) {
+        writeInt(variantKey(orientation, orderKeyName(element)), Math.max(0, order));
     }
 
     /**
-     * The edge an element's own placement key names, without reading its order. A row that is put
-     * away names none: the key holds nothing but {@code hidden}, so the edge it would come back to
-     * was never stored and the bottom — where both rows have always started — stands for it.
+     * The edge an element's own placement key names, without reading its order. A bar that is put
+     * away names none there — the key holds nothing but {@code hidden} — so it answers with the
+     * edge remembered when it went away ({@link #restoreEdgeKeyName}), and failing that the
+     * bar's own default edge: the top for the status bar, the bottom for the rows.
      */
     @NonNull
-    private Edge elementEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                             @NonNull Element element) {
-        switch (element) {
-            case STATUS: return statusBarEdge(place, orientation);
-            case AZ: return azBarEdge(place, orientation);
-            case APPS:
-            case EXTRA_KEYS:
-            default: {
-                String key = element == Element.APPS ? KEY_APPS_ROW : KEY_EXTRA_KEYS;
-                Edge fallback = element == Element.APPS && orientation == PlaceOrientation.LANDSCAPE
-                    ? Edge.LEFT : Edge.BOTTOM;
-                String raw = readString(place, orientation, key);
-                return VALUE_HIDDEN.equals(raw) ? Edge.BOTTOM : Edge.parse(raw, fallback);
-            }
-        }
+    private Edge elementEdge(@NonNull PlaceOrientation orientation, @NonNull Element element) {
+        if (element == Element.AZ) return azBarEdge(orientation);
+        String key = element == Element.STATUS ? KEY_STATUS_BAR
+            : element == Element.APPS ? KEY_APPS_ROW : KEY_EXTRA_KEYS;
+        Edge fallback = element == Element.STATUS ? Edge.TOP
+            : element == Element.APPS && orientation == PlaceOrientation.LANDSCAPE
+                ? Edge.LEFT : Edge.BOTTOM;
+        String raw = readString(orientation, key);
+        if (!VALUE_HIDDEN.equals(raw)) return Edge.parse(raw, fallback);
+        Edge hiddenFallback = element == Element.STATUS ? Edge.TOP : Edge.BOTTOM;
+        return Edge.parse(readString(orientation, restoreEdgeKeyName(element)), hiddenFallback);
     }
 
     /** A slot as the pinned apps and the extra keys have always spelled it. */
@@ -257,7 +440,9 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * Always an edge: the bar moves, it never goes away, so the wall's pager always has a grip.
+     * The edge the status bar stands on. A bar that is put away ({@link #slot}) names no edge —
+     * its key holds nothing but {@code hidden}, like the rows' — and reads as the top, where it
+     * has always started.
      *
      * <p>Every edge is offered in both orientations. A column down the side of a portrait screen
      * used to be refused here, because it takes width the terminal does not have; it is allowed
@@ -265,13 +450,13 @@ public final class PlaceLayoutStore {
      * longer overrules a choice the user can see the cost of.
      */
     @NonNull
-    public Edge statusBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        return Edge.parse(readString(place, orientation, KEY_STATUS_BAR), Edge.TOP);
+    public Edge statusBarEdge(@NonNull PlaceOrientation orientation) {
+        return Edge.parse(readString(orientation, KEY_STATUS_BAR), Edge.TOP);
     }
 
-    public void setStatusBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                                 @NonNull Edge edge) {
-        writeString(place, orientation, KEY_STATUS_BAR, edge.storageValue());
+    /** Stands the status bar on an edge, which also brings a hidden one back. */
+    public void setStatusBarEdge(@NonNull PlaceOrientation orientation, @NonNull Edge edge) {
+        writeString(orientation, KEY_STATUS_BAR, edge.storageValue());
     }
 
     /**
@@ -279,16 +464,16 @@ public final class PlaceLayoutStore {
      * landscape session has had — and portrait to the row along the bottom.
      */
     @NonNull
-    public RowPlacement appsRow(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        return placementOf(slot(place, orientation, Element.APPS));
+    public RowPlacement appsRow(@NonNull PlaceOrientation orientation) {
+        return placementOf(slot(orientation, Element.APPS));
     }
 
     /**
      * A slot as the three-way row placement the pinned apps and the extra keys were stored as. A
      * column down the side of a portrait screen used to be refused here; it is allowed in both
      * orientations now and the Layout editor warns about a narrow canvas instead. The old spelling
-     * has no top row, so a slot on the top edge reads as the bottom until the views that draw
-     * them learn the edge.
+     * has no top row, so a slot on the top edge reads as the bottom: anything that has to put a
+     * bar back where it was — the editor's snapshot above all — reads {@link #slot} instead.
      */
     @NonNull
     private static RowPlacement placementOf(@NonNull Slot slot) {
@@ -300,22 +485,22 @@ public final class PlaceLayoutStore {
         }
     }
 
-    public void setAppsRow(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
+    public void setAppsRow(@NonNull PlaceOrientation orientation,
                            @NonNull RowPlacement placement) {
-        writeString(place, orientation, KEY_APPS_ROW, placement.storageValue());
+        writeString(orientation, KEY_APPS_ROW, placement.storageValue());
     }
 
     /** The alphabets row is a switch, not a place: it rides on the apps row wherever that goes. */
-    public boolean azRowShown(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        String key = arrangementKey(place, orientation, KEY_AZ_ROW);
+    public boolean azRowShown(@NonNull PlaceOrientation orientation) {
+        String key = variantKey(orientation, KEY_AZ_ROW);
         if (mStore != null && mStore.contains(key)) return mStore.getBoolean(key, true);
         return mPreferences.isAppLauncherAzRowEnabled();
     }
 
-    public void setAzRowShown(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                              boolean shown) {
-        writeBoolean(arrangementKey(place, orientation, KEY_AZ_ROW), shown);
+    public void setAzRowShown(@NonNull PlaceOrientation orientation, boolean shown) {
+        writeBoolean(variantKey(orientation, KEY_AZ_ROW), shown);
     }
+
 
     /**
      * Where the alphabets bar stands while it rides on its own — with the apps row under it, it
@@ -326,20 +511,18 @@ public final class PlaceLayoutStore {
      * leaves gets narrow.
      */
     @NonNull
-    public Edge azBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        return Edge.parse(readString(place, orientation, KEY_AZ_BAR), Edge.BOTTOM);
+    public Edge azBarEdge(@NonNull PlaceOrientation orientation) {
+        return Edge.parse(readString(orientation, KEY_AZ_BAR), Edge.BOTTOM);
     }
 
-    public void setAzBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                             @NonNull Edge edge) {
-        writeString(place, orientation, KEY_AZ_BAR, edge.storageValue());
+    public void setAzBarEdge(@NonNull PlaceOrientation orientation, @NonNull Edge edge) {
+        writeString(orientation, KEY_AZ_BAR, edge.storageValue());
     }
 
     /** Where the extra keys stand when they are shown at all. */
     @NonNull
-    public RowPlacement extraKeys(@NonNull PaneWallPage place,
-                                  @NonNull PlaceOrientation orientation) {
-        return placementOf(slot(place, orientation, Element.EXTRA_KEYS));
+    public RowPlacement extraKeys(@NonNull PlaceOrientation orientation) {
+        return placementOf(slot(orientation, Element.EXTRA_KEYS));
     }
 
     /**
@@ -347,72 +530,67 @@ public final class PlaceLayoutStore {
      * toggle can have hidden them everywhere, and a placement that toggle still vetoes would read
      * back as hidden the moment it was written.
      */
-    public void setExtraKeys(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
+    public void setExtraKeys(@NonNull PlaceOrientation orientation,
                              @NonNull RowPlacement placement) {
         if (placement != RowPlacement.HIDDEN && !mPreferences.shouldShowTerminalToolbar()) {
             mPreferences.setShowTerminalToolbar(true);
         }
-        writeString(place, orientation, KEY_EXTRA_KEYS, placement.storageValue());
+        writeString(orientation, KEY_EXTRA_KEYS, placement.storageValue());
     }
 
     /**
-     * The display in landscape is the one place a keyboard should float over rather than squeeze:
-     * it has a fixed screen of its own and nothing to reflow.
+     * Whether an open keyboard floats over the Linux display or shrinks it. Only the display reads
+     * this ({@link KeyboardOverlayPolicy}): it has a fixed screen of its own and nothing to reflow,
+     * so in landscape it floats until the user asks otherwise. The terminal's text always takes the
+     * room, whatever is stored here.
      */
     @NonNull
-    public KeyboardMode keyboardMode(@NonNull PaneWallPage place,
-                                     @NonNull PlaceOrientation orientation) {
-        KeyboardMode fallback = place == PaneWallPage.DISPLAY
-            && orientation == PlaceOrientation.LANDSCAPE ? KeyboardMode.OVERLAY : KeyboardMode.RESIZE;
-        return KeyboardMode.parse(readString(place, orientation, KEY_KEYBOARD_MODE), fallback);
+    public KeyboardMode keyboardMode(@NonNull PlaceOrientation orientation) {
+        KeyboardMode fallback = orientation == PlaceOrientation.LANDSCAPE
+            ? KeyboardMode.OVERLAY : KeyboardMode.RESIZE;
+        return KeyboardMode.parse(readString(orientation, KEY_KEYBOARD_MODE), fallback);
     }
 
-    public void setKeyboardMode(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                                @NonNull KeyboardMode mode) {
-        writeString(place, orientation, KEY_KEYBOARD_MODE, mode.storageValue());
+    public void setKeyboardMode(@NonNull PlaceOrientation orientation, @NonNull KeyboardMode mode) {
+        writeString(orientation, KEY_KEYBOARD_MODE, mode.storageValue());
     }
 
     /**
-     * The shape the keyboard takes here. Docked everywhere until the user asks for something else:
-     * floating and split are choices, never a default, so nothing has to be written for a place to
-     * keep the keyboard it has always had.
+     * The shape the keyboard takes. Docked until the user asks for something else: floating and
+     * split are choices, never a default, so nothing has to be written for the launcher to keep
+     * the keyboard it has always had.
      */
     @NonNull
-    public KeyboardForm keyboardForm(@NonNull PaneWallPage place,
-                                     @NonNull PlaceOrientation orientation) {
-        return KeyboardForm.parse(readString(place, orientation, KEY_KEYBOARD_FORM),
-            KeyboardForm.DOCKED);
+    public KeyboardForm keyboardForm(@NonNull PlaceOrientation orientation) {
+        return KeyboardForm.parse(readString(orientation, KEY_KEYBOARD_FORM), KeyboardForm.DOCKED);
     }
 
-    public void setKeyboardForm(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                                @NonNull KeyboardForm form) {
-        writeString(place, orientation, KEY_KEYBOARD_FORM, form.storageValue());
+    public void setKeyboardForm(@NonNull PlaceOrientation orientation, @NonNull KeyboardForm form) {
+        writeString(orientation, KEY_KEYBOARD_FORM, form.storageValue());
     }
 
-    public int widgetColumns(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        return clamp(readInt(place, orientation, KEY_WIDGET_COLUMNS,
+    public int widgetColumns(@NonNull PlaceOrientation orientation) {
+        return clamp(readInt(orientation, KEY_WIDGET_COLUMNS,
                 mPreferences.getAppLauncherWidgetGridColumns()),
             TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
             TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS);
     }
 
-    public void setWidgetColumns(@NonNull PaneWallPage place,
-                                 @NonNull PlaceOrientation orientation, int columns) {
-        writeInt(arrangementKey(place, orientation, KEY_WIDGET_COLUMNS),
+    public void setWidgetColumns(@NonNull PlaceOrientation orientation, int columns) {
+        writeInt(variantKey(orientation, KEY_WIDGET_COLUMNS),
             clamp(columns, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
                 TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS));
     }
 
-    public int widgetRows(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        return clamp(readInt(place, orientation, KEY_WIDGET_ROWS,
+    public int widgetRows(@NonNull PlaceOrientation orientation) {
+        return clamp(readInt(orientation, KEY_WIDGET_ROWS,
                 mPreferences.getAppLauncherWidgetGridRows()),
             TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
             TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS);
     }
 
-    public void setWidgetRows(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                              int rows) {
-        writeInt(arrangementKey(place, orientation, KEY_WIDGET_ROWS),
+    public void setWidgetRows(@NonNull PlaceOrientation orientation, int rows) {
+        writeInt(variantKey(orientation, KEY_WIDGET_ROWS),
             clamp(rows, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
                 TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS));
     }
@@ -421,32 +599,30 @@ public final class PlaceLayoutStore {
 
     /*
      * How tall the dock, the keyboard and the air under its last key row stand. A size is layout,
-     * not look, so all three are the place's and the orientation's like every bar above — see
-     * docs/adr/0001-sizes-live-in-the-layout-store.md. They are not folded into PlaceLayout: that
-     * value is read on every chrome pass and these three move under a dragging finger, so they are
-     * asked for where they are used instead of retiring the cached arrangement per frame.
+     * not look, so all three are the orientation's like every bar above — see
+     * docs/adr/0001-sizes-live-in-the-layout-store.md, whose per-place scope ADR 0003 retired. They
+     * are not folded into PlaceLayout: that value is read on every chrome pass and these three move
+     * under a dragging finger, so they are asked for where they are used instead of retiring the
+     * cached arrangement per frame.
      */
 
     /** How tall the pinned apps row stands, as a multiple of its unscaled height. */
-    public float dockHeightScale(@NonNull PaneWallPage place,
-                                 @NonNull PlaceOrientation orientation) {
-        String key = arrangementKey(place, orientation, KEY_DOCK_HEIGHT);
+    public float dockHeightScale(@NonNull PlaceOrientation orientation) {
+        String key = variantKey(orientation, KEY_DOCK_HEIGHT);
         float value = mStore != null && mStore.contains(key)
             ? mStore.getFloat(key, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT)
-            : sharedDockHeightScale(place);
+            : mPreferences.getSharedAppLauncherBarHeightScale();
         return TermuxAppSharedPreferences.clampAppLauncherBarHeightScale(value);
     }
 
-    public void setDockHeightScale(@NonNull PaneWallPage place,
-                                   @NonNull PlaceOrientation orientation, float scale) {
-        writeFloat(arrangementKey(place, orientation, KEY_DOCK_HEIGHT),
+    public void setDockHeightScale(@NonNull PlaceOrientation orientation, float scale) {
+        writeFloat(variantKey(orientation, KEY_DOCK_HEIGHT),
             TermuxAppSharedPreferences.clampAppLauncherBarHeightScale(scale));
     }
 
     /** How tall the in-app keyboard stands, as a multiple of its unscaled height. */
-    public float keyboardHeightScale(@NonNull PaneWallPage place,
-                                     @NonNull PlaceOrientation orientation) {
-        String key = arrangementKey(place, orientation, KEY_KEYBOARD_HEIGHT);
+    public float keyboardHeightScale(@NonNull PlaceOrientation orientation) {
+        String key = variantKey(orientation, KEY_KEYBOARD_HEIGHT);
         float value = mStore != null && mStore.contains(key)
             ? mStore.getFloat(key, mPreferences.getDefaultInAppKeyboardHeightScale())
             : mPreferences.getSharedInAppKeyboardHeightScale(
@@ -454,127 +630,146 @@ public final class PlaceLayoutStore {
         return TermuxAppSharedPreferences.clampInAppKeyboardHeightScale(value);
     }
 
-    public void setKeyboardHeightScale(@NonNull PaneWallPage place,
-                                       @NonNull PlaceOrientation orientation, float scale) {
-        writeFloat(arrangementKey(place, orientation, KEY_KEYBOARD_HEIGHT),
+    public void setKeyboardHeightScale(@NonNull PlaceOrientation orientation, float scale) {
+        writeFloat(variantKey(orientation, KEY_KEYBOARD_HEIGHT),
             TermuxAppSharedPreferences.clampInAppKeyboardHeightScale(scale));
     }
 
     /** Extra air in dp under the last key row, inside the keyboard's own surface. */
-    public int keyboardChinDp(@NonNull PaneWallPage place,
-                              @NonNull PlaceOrientation orientation) {
-        String key = arrangementKey(place, orientation, KEY_KEYBOARD_CHIN);
+    public int keyboardChinDp(@NonNull PlaceOrientation orientation) {
+        String key = variantKey(orientation, KEY_KEYBOARD_CHIN);
         int value = mStore != null && mStore.contains(key)
             ? mStore.getInt(key, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING)
             : mPreferences.getSharedInAppKeyboardBottomPadding();
         return TermuxAppSharedPreferences.clampInAppKeyboardBottomPadding(value);
     }
 
-    public void setKeyboardChinDp(@NonNull PaneWallPage place,
-                                  @NonNull PlaceOrientation orientation, int dp) {
-        writeInt(arrangementKey(place, orientation, KEY_KEYBOARD_CHIN),
+    public void setKeyboardChinDp(@NonNull PlaceOrientation orientation, int dp) {
+        writeInt(variantKey(orientation, KEY_KEYBOARD_CHIN),
             TermuxAppSharedPreferences.clampInAppKeyboardBottomPadding(dp));
     }
 
     /**
-     * The dock height a place stood at before the size moved here: its own look override where it
-     * had taken one, and the shared value otherwise.
+     * Puts one orientation of the variant this store is on back to whatever the global values and
+     * defaults say. For the minimal layout that is its seed again - the normal layout with minimal
+     * mode taken off it - which the next read writes afresh.
      */
-    private float sharedDockHeightScale(@NonNull PaneWallPage place) {
-        String override = PlaceLookPreferences.lookKey(place,
-            TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT);
-        if (mStore != null && mStore.contains(override))
-            return mStore.getFloat(override, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
-        return mPreferences.getSharedAppLauncherBarHeightScale();
-    }
-
-    /** Puts one place's orientation back to whatever the shared values and defaults say. */
-    public void clear(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
+    public void clear(@NonNull PlaceOrientation orientation) {
         if (mStore == null) return;
+        LayoutVariant variant = activeVariant();
         SharedPreferences.Editor editor = mStore.edit();
-        for (String key : ARRANGEMENT_KEYS) editor.remove(arrangementKey(place, orientation, key));
+        for (String key : ARRANGEMENT_KEYS) editor.remove(layoutKey(variant, orientation, key));
         editor.apply();
-        mRevision++;
+        mMinimalSeeded[orientation.ordinal()] = false;
+        mRevision.incrementAndGet();
     }
 
     // ---------------------------------------------------------------- memory
 
     /**
-     * Whether the place was left with the status bar compact, in this orientation. Scoped like the
-     * sizes beside it rather than per place alone: the bar costs height off the short axis, and a
-     * screen turned on its side has a third of the height it had — expanding the bar where there is
-     * room for it is not a decision about the screen where there is not.
+     * Whether the status bar was left compact, in this orientation. Per orientation rather than
+     * once: the bar costs height off the short axis, and a screen turned on its side has a third of
+     * the height it had — expanding the bar where there is room for it is not a decision about the
+     * screen where there is not. Every place shares it, like the rest of the arrangement.
      *
-     * <p>A place and orientation nobody has ever rested the bar in answers with a default, and only
-     * with a default: landscape rests compact, portrait keeps the state the launcher's one bar
-     * always read. Nothing writes either of them — the store has no way to tell a pinned default
-     * from a choice afterwards, so a default that was written is a choice the user can never be
-     * given back.
+     * <p>An orientation nobody has ever rested the bar in answers with a default, and only with a
+     * default: landscape rests compact, portrait keeps the state the launcher's one bar always
+     * read. Nothing writes either of them — the store has no way to tell a pinned default from a
+     * choice afterwards, so a default that was written is a choice the user can never be given
+     * back.
      */
-    public boolean isStatusCompact(@NonNull PaneWallPage place,
-                                   @NonNull PlaceOrientation orientation) {
-        String key = arrangementKey(place, orientation, KEY_STATUS_COMPACT);
+    public boolean isStatusCompact(@NonNull PlaceOrientation orientation) {
+        String key = layoutKey(orientation, KEY_STATUS_COMPACT);
         if (mStore != null && mStore.contains(key)) return mStore.getBoolean(key, false);
         return orientation == PlaceOrientation.LANDSCAPE
             ? LANDSCAPE_RESTS_COMPACT : mPreferences.isTopPaneClockCollapsed();
     }
 
-    public void setStatusCompact(@NonNull PaneWallPage place,
-                                 @NonNull PlaceOrientation orientation, boolean compact) {
-        writeBoolean(arrangementKey(place, orientation, KEY_STATUS_COMPACT), compact);
+    public void setStatusCompact(@NonNull PlaceOrientation orientation, boolean compact) {
+        writeBoolean(layoutKey(orientation, KEY_STATUS_COMPACT), compact);
     }
 
     /**
-     * How the place wants its keyboard on the way in. The widget grid has nothing to type into, so
-     * it comes back closed; everywhere else comes back the way it was left.
+     * Whether the place was left with the keyboard up, which is what it comes back with. This is
+     * the one thing the places still keep apart: the widget grid has nothing to type into, so it
+     * always answers closed, while the terminal and the display each remember their own.
      */
-    @NonNull
-    public KeyboardOnEnter keyboardOnEnter(@NonNull PaneWallPage place) {
-        KeyboardOnEnter fallback = place == PaneWallPage.WIDGETS
-            ? KeyboardOnEnter.CLOSED : KeyboardOnEnter.AS_LEFT;
-        return KeyboardOnEnter.parse(readString(memoryKey(place, KEY_KEYBOARD_ON_ENTER)), fallback);
-    }
-
-    public void setKeyboardOnEnter(@NonNull PaneWallPage place, @NonNull KeyboardOnEnter onEnter) {
-        writeString(memoryKey(place, KEY_KEYBOARD_ON_ENTER), onEnter.storageValue());
-    }
-
-    /** Whether the place was left with the keyboard up. */
     public boolean wasKeyboardOpen(@NonNull PaneWallPage place) {
-        String key = memoryKey(place, KEY_KEYBOARD_OPEN);
-        return mStore != null && mStore.getBoolean(key, false);
+        if (place == PaneWallPage.WIDGETS) return false;
+        return mStore != null && mStore.getBoolean(memoryKey(place, KEY_KEYBOARD_OPEN), false);
     }
 
     public void setKeyboardOpen(@NonNull PaneWallPage place, boolean open) {
+        // Home has no memory to keep: it comes back closed whatever it was left with.
+        if (place == PaneWallPage.WIDGETS) return;
         writeBoolean(memoryKey(place, KEY_KEYBOARD_OPEN), open);
     }
 
     /**
-     * Where a floating keyboard was left on this place, as a fraction of the room it can be moved
-     * in — {@code 0} against the left or top edge, {@code 1} against the right or bottom one. A
-     * fraction rather than pixels, so the same memory survives a rotation, a font-scale change and
-     * a keyboard the user has since made taller; {@link #FLOAT_POSITION_UNSET} until it is dragged
-     * for the first time, which is the caller's cue to place it wherever it starts.
-     *
-     * <p>Remembered per place and orientation, like the arrangement it belongs to: a keyboard
-     * parked clear of the widget grid has no business moving the terminal's.
+     * Whether the launcher is in minimal mode (CONTEXT.md). One flag for every place, remembered
+     * until it is turned off: paging to another place never leaves the mode, since the mode is
+     * not any place's. It does not overwrite the keyboard memory: a place simply comes back with
+     * the keyboard down while the mode is on, and turning it off brings back what the place
+     * remembered.
      */
-    public float floatingKeyboardX(@NonNull PaneWallPage place,
-                                   @NonNull PlaceOrientation orientation) {
-        return readFraction(arrangementKey(place, orientation, KEY_KEYBOARD_FLOAT_X));
+    public boolean isMinimal() {
+        return mStore != null && mStore.getBoolean(minimalKey(), false);
     }
 
-    public float floatingKeyboardY(@NonNull PaneWallPage place,
-                                   @NonNull PlaceOrientation orientation) {
-        return readFraction(arrangementKey(place, orientation, KEY_KEYBOARD_FLOAT_Y));
+    public void setMinimal(boolean minimal) {
+        writeBoolean(minimalKey(), minimal);
+    }
+
+    /** {@code place.minimal}: the launcher's, not a place's. */
+    @VisibleForTesting
+    @NonNull
+    static String minimalKey() {
+        return PREFIX + KEY_MINIMAL;
+    }
+
+    /**
+     * Where a floating keyboard was left, as a fraction of the room it can be moved in — {@code 0}
+     * against the left or top edge, {@code 1} against the right or bottom one. A fraction rather
+     * than pixels, so the same memory survives a rotation, a font-scale change and a keyboard the
+     * user has since made taller; {@link #FLOAT_POSITION_UNSET} until it is dragged for the first
+     * time, which is the caller's cue to place it wherever it starts.
+     *
+     * <p>Remembered per orientation, like the arrangement it belongs to, and shared by every place
+     * for the same reason: the keyboard stands in the same chrome wherever the wall is.
+     */
+    public float floatingKeyboardX(@NonNull PlaceOrientation orientation) {
+        return readFraction(layoutKey(orientation, KEY_KEYBOARD_FLOAT_X));
+    }
+
+    public float floatingKeyboardY(@NonNull PlaceOrientation orientation) {
+        return readFraction(layoutKey(orientation, KEY_KEYBOARD_FLOAT_Y));
     }
 
     /** Remembers a dragged position; either fraction outside 0..1 forgets it instead. */
-    public void setFloatingKeyboardPosition(@NonNull PaneWallPage place,
-                                            @NonNull PlaceOrientation orientation,
+    public void setFloatingKeyboardPosition(@NonNull PlaceOrientation orientation,
                                             float x, float y) {
-        writeFraction(arrangementKey(place, orientation, KEY_KEYBOARD_FLOAT_X), x);
-        writeFraction(arrangementKey(place, orientation, KEY_KEYBOARD_FLOAT_Y), y);
+        writeFraction(layoutKey(orientation, KEY_KEYBOARD_FLOAT_X), x);
+        writeFraction(layoutKey(orientation, KEY_KEYBOARD_FLOAT_Y), y);
+    }
+
+    /**
+     * Where the dictation pill and its panel were dragged to by their handle, as the same kind of
+     * fractions of the room they move in as {@link #floatingKeyboardX}; {@link #FLOAT_POSITION_UNSET}
+     * until the first drag, and again after a double tap on the handle puts the pill back in its
+     * top right corner. Per orientation and shared by every place, for the same reasons.
+     */
+    public float voicePillX(@NonNull PlaceOrientation orientation) {
+        return readFraction(layoutKey(orientation, KEY_VOICE_PILL_X));
+    }
+
+    public float voicePillY(@NonNull PlaceOrientation orientation) {
+        return readFraction(layoutKey(orientation, KEY_VOICE_PILL_Y));
+    }
+
+    /** Remembers a dragged place; either fraction outside 0..1 forgets it instead. */
+    public void setVoicePillPosition(@NonNull PlaceOrientation orientation, float x, float y) {
+        writeFraction(layoutKey(orientation, KEY_VOICE_PILL_X), x);
+        writeFraction(layoutKey(orientation, KEY_VOICE_PILL_Y), y);
     }
 
     private float readFraction(@NonNull String key) {
@@ -591,7 +786,7 @@ public final class PlaceLayoutStore {
         } else {
             mStore.edit().putFloat(key, value).apply();
         }
-        mRevision++;
+        mRevision.incrementAndGet();
     }
 
     // ---------------------------------------------------------------- keys
@@ -604,10 +799,70 @@ public final class PlaceLayoutStore {
         return place == PaneWallPage.WIDGETS ? "home" : place.name().toLowerCase(Locale.ROOT);
     }
 
+    /** Where the normal arrangement keeps one value for one orientation. */
     @VisibleForTesting
     @NonNull
-    static String arrangementKey(@NonNull PaneWallPage place,
-                                 @NonNull PlaceOrientation orientation, @NonNull String key) {
+    static String layoutKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
+        return layoutKey(LayoutVariant.NORMAL, orientation, key);
+    }
+
+    /**
+     * Where one variant's arrangement keeps one value for one orientation:
+     * {@code layout.<o>.<key>} for the normal layout, exactly as it has always been written, and
+     * {@code layout.minimal.<o>.<key>} for the minimal one.
+     */
+    @VisibleForTesting
+    @NonNull
+    static String layoutKey(@NonNull LayoutVariant variant, @NonNull PlaceOrientation orientation,
+                            @NonNull String key) {
+        return LAYOUT_PREFIX + variant.keyScope() + orientation.storageValue() + "." + key;
+    }
+
+    /**
+     * Where this store keeps one arrangement value: the key of the variant it is on. The minimal
+     * layout is seeded before its first key is read, so no caller sees it empty.
+     */
+    @NonNull
+    private String variantKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
+        LayoutVariant variant = activeVariant();
+        if (variant == LayoutVariant.MINIMAL) seedMinimalIfNeeded(orientation);
+        return layoutKey(variant, orientation, key);
+    }
+
+    /**
+     * Gives the minimal layout of an orientation its starting point, the first time it is used and
+     * has stored nothing: the normal layout as it stands, with {@link MinimalMode#apply} taken
+     * off it, which is what minimal mode looked like before it had a layout of its own. Only what
+     * the normal layout has actually stored is copied, so a default that still moves - the dock's
+     * height with its style - keeps moving. Written once; from then on the user's edits are the
+     * layout, and {@link #clear} puts it back to this.
+     */
+    private void seedMinimalIfNeeded(@NonNull PlaceOrientation orientation) {
+        if (mStore == null || mMinimalSeeded[orientation.ordinal()]) return;
+        mMinimalSeeded[orientation.ordinal()] = true;
+        for (String key : ARRANGEMENT_KEYS) {
+            if (mStore.contains(layoutKey(LayoutVariant.MINIMAL, orientation, key))) return;
+        }
+        Map<String, ?> all = mStore.getAll();
+        SharedPreferences.Editor editor = mStore.edit();
+        for (String key : ARRANGEMENT_KEYS) {
+            Object value = all.get(layoutKey(LayoutVariant.NORMAL, orientation, key));
+            if (value != null) put(editor, layoutKey(LayoutVariant.MINIMAL, orientation, key), value);
+        }
+        editor.apply();
+        PlaceLayoutStore minimal = forVariant(LayoutVariant.MINIMAL);
+        PlaceLayout seeded = MinimalMode.apply(minimal.resolve(orientation));
+        for (Element element : Element.values()) {
+            if (seeded.slot(element).hidden) minimal.setSlot(orientation, element, seeded.slot(element));
+        }
+    }
+
+    /** Where a place kept its own copy of an arrangement value, before version 6 shared them. */
+    @VisibleForTesting
+    @NonNull
+    static String legacyArrangementKey(@NonNull PaneWallPage place,
+                                       @NonNull PlaceOrientation orientation,
+                                       @NonNull String key) {
         return PREFIX + placeKey(place) + "." + orientation.storageValue() + "." + key;
     }
 
@@ -617,20 +872,76 @@ public final class PlaceLayoutStore {
         return PREFIX + placeKey(place) + "." + key;
     }
 
+    /** Where a place kept its own value for a shared look key, before version 6 folded them. */
+    @VisibleForTesting
+    @NonNull
+    static String legacyLookKey(@NonNull PaneWallPage place, @NonNull String key) {
+        return PREFIX + placeKey(place) + LEGACY_LOOK_INFIX + key;
+    }
+
     // ---------------------------------------------------------------- migration
 
     /**
-     * Folds the launcher's old single-place keys into the scoped ones, once. Each step is gated on
-     * the version it was introduced at, so an install already migrated to an earlier version only
-     * runs the steps added since — re-running an earlier step would stomp scoped choices the user
-     * has made since migrating to it.
+     * Folds the launcher's old keys into the current ones, once. Each step is gated on the version
+     * it was introduced at, so an install already migrated to an earlier version only runs the
+     * steps added since — re-running an earlier step would stomp choices the user has made since
+     * migrating to it.
+     *
+     * <p>Steps 1 to 5 predate the shared layout and still write the per-place keys they always
+     * wrote; step 6 then folds those into the shared ones. They are applied first, on an editor of
+     * their own, because an editor's puts are invisible to reads until it is applied and step 6
+     * reads what they wrote.
      */
     private void migrateIfNeeded() {
         if (mStore == null) return;
         int fromVersion = mStore.getInt(KEY_MIGRATED, 0);
         if (fromVersion >= MIGRATION_VERSION) return;
+        if (fromVersion < 5) {
+            SharedPreferences.Editor editor = mStore.edit();
+            migrateBeforeSharedLayout(editor, fromVersion);
+            editor.apply();
+        }
         SharedPreferences.Editor editor = mStore.edit();
+        if (fromVersion < 6) migrateToSharedLayout(editor);
+        if (fromVersion < 7) migrateToOneMinimalMode(editor);
+        if (fromVersion < 8) migrateAwayFromAzTab(editor);
+        editor.putInt(KEY_MIGRATED, MIGRATION_VERSION);
+        editor.apply();
+        mRevision.incrementAndGet();
+    }
 
+    /**
+     * Version 7: one minimal mode for the whole launcher. The terminal's own flag decides, since
+     * the terminal is the place the mode was built for and the one a launch comes back to; a
+     * terminal that never stored one defers to the display's. Every place's own flag then goes.
+     */
+    private void migrateToOneMinimalMode(@NonNull SharedPreferences.Editor editor) {
+        String terminal = memoryKey(PaneWallPage.TERMINAL, KEY_MINIMAL);
+        String display = memoryKey(PaneWallPage.DISPLAY, KEY_MINIMAL);
+        Boolean minimal = null;
+        if (mStore.contains(terminal)) minimal = mStore.getBoolean(terminal, false);
+        else if (mStore.contains(display)) minimal = mStore.getBoolean(display, false);
+        if (minimal != null) editor.putBoolean(minimalKey(), minimal);
+        for (PaneWallPage place : PaneWallPage.values())
+            editor.remove(memoryKey(place, KEY_MINIMAL));
+    }
+
+    /**
+     * Version 8: the alphabets index's minimised pull tab is gone. Its flag is deleted from both
+     * layouts in both orientations and nothing else is written: {@code az_row} is still true for
+     * an index that was minimised, so it reads as shown, standing as a band on the edge the tab
+     * was on — the form it folded from.
+     */
+    private void migrateAwayFromAzTab(@NonNull SharedPreferences.Editor editor) {
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            for (PlaceOrientation orientation : PlaceOrientation.values())
+                editor.remove(layoutKey(variant, orientation, LEGACY_KEY_AZ_MINIMISED));
+        }
+    }
+
+    /** Versions 1 to 5, exactly as they ran when the arrangement was still kept per place. */
+    private void migrateBeforeSharedLayout(@NonNull SharedPreferences.Editor editor,
+                                           int fromVersion) {
         if (fromVersion < 1) {
             // The landscape rail's edge was the only place-and-orientation setting the launcher
             // had. It described every place, because there was only one rail.
@@ -640,24 +951,24 @@ public final class PlaceLayoutStore {
                     RowPlacement.LEFT);
                 if (!side.isOnSide()) side = RowPlacement.LEFT;
                 for (PaneWallPage place : PaneWallPage.values()) {
-                    editor.putString(arrangementKey(place, PlaceOrientation.LANDSCAPE, KEY_APPS_ROW),
-                        side.storageValue());
+                    editor.putString(legacyArrangementKey(place, PlaceOrientation.LANDSCAPE,
+                        KEY_APPS_ROW), side.storageValue());
                 }
             }
 
-            // The display's extra keys column, which is now every place's.
+            // The display's extra keys column, which then became every place's.
             if (mStore.contains(TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE)) {
                 RowPlacement side = RowPlacement.parse(
                     mStore.getString(TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE, null), RowPlacement.BOTTOM);
                 if (side == RowPlacement.HIDDEN) side = RowPlacement.BOTTOM;
                 for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                    editor.putString(arrangementKey(PaneWallPage.DISPLAY, orientation, KEY_EXTRA_KEYS),
-                        side.storageValue());
+                    editor.putString(legacyArrangementKey(PaneWallPage.DISPLAY, orientation,
+                        KEY_EXTRA_KEYS), side.storageValue());
                 }
             }
 
-            // There is no hidden status bar any more: the bar moves instead, so the wall's paging
-            // gesture survives every arrangement.
+            // The display's own hide switch is not carried over: the shared layout starts with
+            // the bar shown, and the Layout editor's tray is where it is put away now.
             editor.remove(LEGACY_KEY_X11_HIDE_STATUS_BAR);
 
             if (mStore.contains(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN)) {
@@ -674,8 +985,8 @@ public final class PlaceLayoutStore {
                 // behind, since every removal an editor carries is applied before every put.
                 for (PaneWallPage place : PaneWallPage.values()) {
                     for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                        editor.putBoolean(arrangementKey(place, orientation, KEY_STATUS_COMPACT),
-                            compact);
+                        editor.putBoolean(legacyArrangementKey(place, orientation,
+                            KEY_STATUS_COMPACT), compact);
                     }
                 }
             }
@@ -683,12 +994,12 @@ public final class PlaceLayoutStore {
 
         if (fromVersion < 2) {
             // The Layout page replaced the global apps-row and extra-keys switches with a Hidden
-            // placement every place and orientation can set on its own. A master that was off
-            // becomes Hidden everywhere, once; resolve() has no more use for the master afterwards.
+            // placement. A master that was off becomes Hidden everywhere, once; resolve() has no
+            // more use for the master afterwards.
             if (!mPreferences.isAppLauncherAppsRowEnabled()) {
                 for (PaneWallPage place : PaneWallPage.values()) {
                     for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                        editor.putString(arrangementKey(place, orientation, KEY_APPS_ROW),
+                        editor.putString(legacyArrangementKey(place, orientation, KEY_APPS_ROW),
                             RowPlacement.HIDDEN.storageValue());
                     }
                 }
@@ -696,7 +1007,7 @@ public final class PlaceLayoutStore {
             if (!mPreferences.isAppLauncherExtraKeysRowEnabled()) {
                 for (PaneWallPage place : PaneWallPage.values()) {
                     for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                        editor.putString(arrangementKey(place, orientation, KEY_EXTRA_KEYS),
+                        editor.putString(legacyArrangementKey(place, orientation, KEY_EXTRA_KEYS),
                             RowPlacement.HIDDEN.storageValue());
                     }
                 }
@@ -709,31 +1020,31 @@ public final class PlaceLayoutStore {
             // upgrade changes nothing on screen: the keyboard's height from the global for that
             // orientation, the chin from the one global there was, and the dock's height from the
             // place's own look override where it had taken one. A value nobody ever set is left
-            // unwritten — the read below still answers with the shipped default, and pinning it
-            // would freeze a default that still moves with the dock's style.
+            // unwritten — the read still answers with the shipped default, and pinning it would
+            // freeze a default that still moves with the dock's style.
             for (PaneWallPage place : PaneWallPage.values()) {
-                String dockOverride = PlaceLookPreferences.lookKey(place,
-                    TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT);
+                String dockOverride = legacyLookKey(place, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT);
                 Float dock = storedFloat(dockOverride);
                 if (dock == null) dock = storedFloat(TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT);
                 for (PlaceOrientation orientation : PlaceOrientation.values()) {
                     if (dock != null) {
-                        editor.putFloat(arrangementKey(place, orientation, KEY_DOCK_HEIGHT),
+                        editor.putFloat(legacyArrangementKey(place, orientation, KEY_DOCK_HEIGHT),
                             TermuxAppSharedPreferences.clampAppLauncherBarHeightScale(dock));
                     }
                     Float keyboard = storedKeyboardHeightScale(orientation);
                     if (keyboard != null) {
-                        editor.putFloat(arrangementKey(place, orientation, KEY_KEYBOARD_HEIGHT),
+                        editor.putFloat(legacyArrangementKey(place, orientation,
+                                KEY_KEYBOARD_HEIGHT),
                             TermuxAppSharedPreferences.clampInAppKeyboardHeightScale(keyboard));
                     }
                     if (mStore.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING)) {
-                        editor.putInt(arrangementKey(place, orientation, KEY_KEYBOARD_CHIN),
+                        editor.putInt(legacyArrangementKey(place, orientation, KEY_KEYBOARD_CHIN),
                             TermuxAppSharedPreferences.clampInAppKeyboardBottomPadding(
                                 mStore.getInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING,
                                     TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING)));
                     }
                 }
-                // Dock height has left the scopable look keys, so a place's old override has
+                // Dock height left the scopable look keys, so a place's old override has
                 // nothing left to answer and goes with them.
                 editor.remove(dockOverride);
             }
@@ -747,27 +1058,108 @@ public final class PlaceLayoutStore {
         if (fromVersion < 5) {
             // The status bar's resting state was remembered per place and nothing else, so the
             // state a portrait screen was left in decided how much of a landscape screen's height
-            // the bar took. It is per place and orientation now, beside the sizes version 3 moved.
+            // the bar took. It became per place and orientation, beside the sizes version 3 moved.
             //
             // BOTH orientations are seeded with the one value the place had, so nobody is asked
-            // again for a choice they have already made — a bar left expanded stays expanded
-            // everywhere it was. Only a place that never stored one is left unwritten, which is the
-            // one case the landscape default in isStatusCompact() is allowed to answer.
+            // again for a choice they have already made. Only a place that never stored one is
+            // left unwritten, which is the one case the landscape default is allowed to answer.
             for (PaneWallPage place : PaneWallPage.values()) {
                 String legacy = memoryKey(place, KEY_STATUS_COMPACT);
                 if (!mStore.contains(legacy)) continue;
                 boolean compact = mStore.getBoolean(legacy, false);
                 for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                    editor.putBoolean(arrangementKey(place, orientation, KEY_STATUS_COMPACT),
+                    editor.putBoolean(legacyArrangementKey(place, orientation, KEY_STATUS_COMPACT),
                         compact);
                 }
                 editor.remove(legacy);
             }
         }
+    }
 
-        editor.putInt(KEY_MIGRATED, MIGRATION_VERSION);
-        editor.apply();
-        mRevision++;
+    /**
+     * Version 6: one layout per orientation and one look, shared by every place (ADR 0003).
+     *
+     * <p>Each orientation is seeded from the place that value was actually showing on, so an
+     * upgrade never moves what the user sees on the terminal: the terminal's for everything the
+     * terminal draws, the home place's for the widget grid — the terminal has no grid and never
+     * offered one — and the display's for the keyboard mode, which nothing but the display ever
+     * read. A value the source place never stored is left unwritten, so the shared read answers
+     * with the same global or default the source place was answering with. Every place's own copy
+     * is then dropped, whether or not it was the source.
+     *
+     * <p>The look folds the same way: where the terminal had taken a value of its own, that value
+     * becomes the shared one; everywhere else the shared value it was already falling back to
+     * stands. Every place's own look key goes.
+     */
+    private void migrateToSharedLayout(@NonNull SharedPreferences.Editor editor) {
+        Map<String, ?> all = mStore.getAll();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : FOLDED_KEYS) {
+                Object seed = all.get(legacyArrangementKey(sourceOf(key), orientation, key));
+                if (seed != null) put(editor, layoutKey(orientation, key), seed);
+                for (PaneWallPage place : PaneWallPage.values())
+                    editor.remove(legacyArrangementKey(place, orientation, key));
+            }
+        }
+        for (PaneWallPage place : PaneWallPage.values())
+            editor.remove(memoryKey(place, LEGACY_KEY_KEYBOARD_ON_ENTER));
+        // Home comes back closed whatever it was left with, so its memory has nothing to answer.
+        editor.remove(memoryKey(PaneWallPage.WIDGETS, KEY_KEYBOARD_OPEN));
+
+        for (Map.Entry<String, ?> entry : all.entrySet()) {
+            PaneWallPage owner = ownerOfLegacyLookKey(entry.getKey());
+            if (owner == null) continue;
+            if (owner == PaneWallPage.TERMINAL && entry.getValue() != null) {
+                String shared = entry.getKey().substring(
+                    (PREFIX + placeKey(owner) + LEGACY_LOOK_INFIX).length());
+                put(editor, shared, entry.getValue());
+            }
+            editor.remove(entry.getKey());
+        }
+    }
+
+    /** The place whose copy of an arrangement value is the one every place shares from version 6. */
+    @NonNull
+    private static PaneWallPage sourceOf(@NonNull String key) {
+        switch (key) {
+            case KEY_WIDGET_COLUMNS:
+            case KEY_WIDGET_ROWS:
+                return PaneWallPage.WIDGETS;
+            case KEY_KEYBOARD_MODE:
+                return PaneWallPage.DISPLAY;
+            default:
+                return PaneWallPage.TERMINAL;
+        }
+    }
+
+    /** The place a stored per-place look key belonged to, or null for any other key. */
+    @Nullable
+    private static PaneWallPage ownerOfLegacyLookKey(@NonNull String key) {
+        if (!key.startsWith(PREFIX)) return null;
+        for (PaneWallPage place : PaneWallPage.values()) {
+            if (key.startsWith(PREFIX + placeKey(place) + LEGACY_LOOK_INFIX)) return place;
+        }
+        return null;
+    }
+
+    /** Writes a value read back from {@link SharedPreferences#getAll()} under a new key. */
+    @SuppressWarnings("unchecked")
+    private static void put(@NonNull SharedPreferences.Editor editor, @NonNull String key,
+                            @NonNull Object value) {
+        if (value instanceof Boolean) editor.putBoolean(key, (Boolean) value);
+        else if (value instanceof Integer) editor.putInt(key, (Integer) value);
+        else if (value instanceof Long) editor.putLong(key, (Long) value);
+        else if (value instanceof Float) editor.putFloat(key, (Float) value);
+        else if (value instanceof String) editor.putString(key, (String) value);
+        else if (value instanceof Set) editor.putStringSet(key, (Set<String>) value);
+    }
+
+    @NonNull
+    private static String[] concat(@NonNull String[] head, @NonNull String... tail) {
+        String[] out = new String[head.length + tail.length];
+        System.arraycopy(head, 0, out, 0, head.length);
+        System.arraycopy(tail, 0, out, head.length, tail.length);
+        return out;
     }
 
     /** The keyboard height stored for one orientation; landscape falls back to portrait's. */
@@ -791,49 +1183,38 @@ public final class PlaceLayoutStore {
     // ---------------------------------------------------------------- plumbing
 
     @Nullable
-    private String readString(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                              @NonNull String key) {
-        return readString(arrangementKey(place, orientation, key));
+    private String readString(@NonNull PlaceOrientation orientation, @NonNull String key) {
+        return mStore == null ? null : mStore.getString(variantKey(orientation, key), null);
     }
 
-    @Nullable
-    private String readString(@NonNull String key) {
-        return mStore == null ? null : mStore.getString(key, null);
+    private int readInt(@NonNull PlaceOrientation orientation, @NonNull String key, int fallback) {
+        String shared = variantKey(orientation, key);
+        return mStore != null && mStore.contains(shared) ? mStore.getInt(shared, fallback) : fallback;
     }
 
-    private int readInt(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                        @NonNull String key, int fallback) {
-        String scoped = arrangementKey(place, orientation, key);
-        return mStore != null && mStore.contains(scoped) ? mStore.getInt(scoped, fallback) : fallback;
-    }
-
-    private void writeString(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
-                             @NonNull String key, @NonNull String value) {
-        writeString(arrangementKey(place, orientation, key), value);
-    }
-
-    private void writeString(@NonNull String key, @NonNull String value) {
+    private void writeString(@NonNull PlaceOrientation orientation, @NonNull String key,
+                             @NonNull String value) {
         if (mStore == null) return;
-        mStore.edit().putString(key, value).apply();
-        mRevision++;
+        mStore.edit().putString(variantKey(orientation, key), value).apply();
+        mRevision.incrementAndGet();
     }
 
     private void writeBoolean(@NonNull String key, boolean value) {
         if (mStore == null) return;
         mStore.edit().putBoolean(key, value).apply();
-        mRevision++;
+        mRevision.incrementAndGet();
     }
 
     private void writeInt(@NonNull String key, int value) {
         if (mStore == null) return;
         mStore.edit().putInt(key, value).apply();
-        mRevision++;
+        mRevision.incrementAndGet();
     }
 
     private void writeFloat(@NonNull String key, float value) {
         if (mStore == null) return;
         mStore.edit().putFloat(key, value).apply();
-        mRevision++;
+        mRevision.incrementAndGet();
     }
 
     private static int clamp(int value, int min, int max) {

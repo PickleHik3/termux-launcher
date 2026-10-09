@@ -2,10 +2,13 @@ package com.termux.launcherctl;
 
 import org.junit.Test;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class LauncherCtlApiServerPaneRoutesTest {
 
@@ -38,12 +41,55 @@ public class LauncherCtlApiServerPaneRoutesTest {
     }
 
     @Test
+    public void signalRoutes_mapToTheirActions() {
+        assertEquals("shell.notify", LauncherCtlApiServer.signalToolFor("POST", "/v1/notify"));
+        assertEquals("shell.progress", LauncherCtlApiServer.signalToolFor("POST", "/v1/progress"));
+        assertEquals("clipboard.write", LauncherCtlApiServer.signalToolFor("POST", "/v1/clipboard"));
+        assertEquals("clipboard.read", LauncherCtlApiServer.signalToolFor("GET", "/v1/clipboard"));
+        assertNull(LauncherCtlApiServer.signalToolFor("GET", "/v1/notify"));
+        assertNull(LauncherCtlApiServer.signalToolFor("DELETE", "/v1/clipboard"));
+        assertNull(LauncherCtlApiServer.signalToolFor("POST", "/v1/notify/"));
+        assertNull(LauncherCtlApiServer.signalToolFor("POST", "/v1/panes"));
+    }
+
+    /** Each signal route has its own bucket, so a chatty progress loop cannot starve a notification. */
+    @Test
+    public void signalRoutes_haveTheirOwnRateLimiters() throws Exception {
+        LauncherCtlApiServer server = LauncherCtlApiServer.getInstance();
+        Method init = LauncherCtlApiServer.class.getDeclaredMethod("initializeRateLimiters");
+        init.setAccessible(true);
+        init.invoke(server);
+        Field field = LauncherCtlApiServer.class.getDeclaredField("rateLimiters");
+        field.setAccessible(true);
+        Map<?, ?> limiters = (Map<?, ?>) field.get(server);
+        for (String key : new String[]{"POST:/v1/notify", "POST:/v1/progress", "POST:/v1/clipboard", "GET:/v1/clipboard"}) {
+            assertTrue(key, limiters.containsKey(key));
+            assertEquals(key, key, LauncherCtlApiServer.rateLimitKey(key.substring(0, key.indexOf(':')), key.substring(key.indexOf(':') + 1)));
+        }
+    }
+
+    @Test
     public void rateLimitKey_sharesOneBucketPerPaneAction() {
         assertEquals("POST:/v1/panes/*/write", LauncherCtlApiServer.rateLimitKey("POST", "/v1/panes/abc/write"));
         assertEquals("GET:/v1/panes/*/text", LauncherCtlApiServer.rateLimitKey("GET", "/v1/panes/xyz/text"));
         assertEquals("POST:/v1/panes/*/agent", LauncherCtlApiServer.rateLimitKey("POST", "/v1/panes/abc/agent"));
         assertEquals("GET:/v1/panes", LauncherCtlApiServer.rateLimitKey("GET", "/v1/panes"));
         assertEquals("POST:/v1/apps/launch", LauncherCtlApiServer.rateLimitKey("POST", "/v1/apps/launch"));
+        assertEquals("POST:/v1/windows", LauncherCtlApiServer.rateLimitKey("POST", "/v1/windows"));
+    }
+
+    /** {@code POST /v1/windows} shares the rate-limiter machinery every other protected route does. */
+    @Test
+    public void windowsRoute_hasItsOwnRateLimiterRegistered() throws Exception {
+        LauncherCtlApiServer server = LauncherCtlApiServer.getInstance();
+        Method init = LauncherCtlApiServer.class.getDeclaredMethod("initializeRateLimiters");
+        init.setAccessible(true);
+        init.invoke(server);
+        Field field = LauncherCtlApiServer.class.getDeclaredField("rateLimiters");
+        field.setAccessible(true);
+        Map<?, ?> limiters = (Map<?, ?>) field.get(server);
+        assertTrue(limiters.containsKey("POST:/v1/windows"));
+        assertTrue(limiters.containsKey("POST:/v1/panes"));
     }
 
     @Test

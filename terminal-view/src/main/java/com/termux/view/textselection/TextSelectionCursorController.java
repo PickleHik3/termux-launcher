@@ -16,6 +16,7 @@ import com.termux.terminal.TerminalRow;
 import com.termux.terminal.WcWidth;
 import com.termux.view.R;
 import com.termux.view.TerminalView;
+import com.termux.view.TerminalViewClient;
 
 public class TextSelectionCursorController implements CursorController {
 
@@ -43,6 +44,8 @@ public class TextSelectionCursorController implements CursorController {
     public final int ACTION_PASTE = 2;
 
     public final int ACTION_MORE = 3;
+
+    public final int ACTION_READ_ALOUD = 4;
 
     public TextSelectionCursorController(TerminalView terminalView) {
         this.terminalView = terminalView;
@@ -204,6 +207,11 @@ public class TextSelectionCursorController implements CursorController {
                 // item, so without this Copy was silently pushed into the "More..." overflow.
                 menu.add(Menu.NONE, ACTION_COPY, Menu.NONE, R.string.copy_text).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS | MenuItem.SHOW_AS_ACTION_WITH_TEXT);
                 menu.add(Menu.NONE, ACTION_PASTE, Menu.NONE, R.string.paste_text).setEnabled(clipboard != null && clipboard.hasPrimaryClip()).setShowAsAction(show);
+                TerminalViewClient client = terminalView.mClient;
+                if (client != null && (client.isReadingAloud() || client.isReadAloudAvailable())) {
+                    menu.add(Menu.NONE, ACTION_READ_ALOUD, Menu.NONE, client.isReadingAloud()
+                        ? R.string.text_selection_stop_reading : R.string.text_selection_read_aloud).setShowAsAction(show);
+                }
                 menu.add(Menu.NONE, ACTION_MORE, Menu.NONE, R.string.text_selection_more);
                 return true;
             }
@@ -228,6 +236,12 @@ public class TextSelectionCursorController implements CursorController {
                     case ACTION_PASTE:
                         terminalView.stopTextSelectionMode();
                         terminalView.mTermSession.onPasteTextFromClipboard();
+                        break;
+                    case ACTION_READ_ALOUD:
+                        // Taken before the selection goes, like Copy; a second tap while reading stops it.
+                        String toRead = getSelectedText();
+                        terminalView.stopTextSelectionMode();
+                        if (terminalView.mClient != null) terminalView.mClient.onReadAloud(toRead);
                         break;
                     case ACTION_MORE:
                         // We first store the selected text in case TerminalViewClient needs the
@@ -286,14 +300,9 @@ public class TextSelectionCursorController implements CursorController {
                     x1 = x2;
                     x2 = tmp;
                 }
-                int terminalBottom = terminalView.getBottom();
-                int top = y1 + terminalView.mRenderer.getFontLineSpacingAndAscent();
-                int bottom = y2 + mHandleHeight;
-                if (top > terminalBottom)
-                    top = terminalBottom;
-                if (bottom > terminalBottom)
-                    bottom = terminalBottom;
-                outRect.set(x1, top, x2, bottom);
+                int[] span = clampToView(y1 + terminalView.mRenderer.getFontLineSpacingAndAscent(),
+                    y2 + mHandleHeight, terminalView.getHeight());
+                outRect.set(x1, span[0], x2, span[1]);
             }
         }, ActionMode.TYPE_FLOATING);
     }
@@ -474,5 +483,17 @@ public class TextSelectionCursorController implements CursorController {
      */
     public boolean isSelectionEndDragged() {
         return mEndHandle.isDragging();
+    }
+
+    /**
+     * The selection toolbar's content rect, top and bottom, kept inside the view. The rect is in
+     * the view's own coordinates, so the bound is the view's own height: {@code getBottom()} is
+     * the parent's, and a pane frame's top margin (or a pane shortened by a rising keyboard)
+     * would let the rect run off the view.
+     */
+    static int[] clampToView(int top, int bottom, int viewHeight) {
+        int clampedTop = Math.max(0, Math.min(top, viewHeight));
+        int clampedBottom = Math.max(clampedTop, Math.min(bottom, viewHeight));
+        return new int[] {clampedTop, clampedBottom};
     }
 }

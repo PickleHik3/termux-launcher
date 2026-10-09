@@ -144,6 +144,34 @@ public final class ProotDistro {
         }
 
         /**
+         * Where this one keeps its whole-desktop session files, most general first. A desktop
+         * environment does not put its entry beside the applications: it goes in {@code xsessions},
+         * the directory every display manager reads and nothing else does. Same two levels as
+         * {@link #applicationDirs()} — the system's and {@code local}'s — because
+         * {@code XDG_DATA_DIRS} is {@code /usr/local/share:/usr/share} and both are in SDDM's and
+         * GDM's own lists.
+         *
+         * <p>Wayland sessions are deliberately not here: none of them can run on the launcher's
+         * X11 display, so cataloguing them would only put tiles in the drawer that cannot work.
+         */
+        @NonNull
+        public List<File> sessionDirs() {
+            List<File> dirs = new ArrayList<>(2);
+            if (kind == Kind.NIX) {
+                if (profile != null) dirs.add(under(profile, "share/xsessions"));
+                return dirs;
+            }
+            if (isPrefix()) {
+                dirs.add(new File(root, "share/xsessions"));
+                dirs.add(new File(root, "local/share/xsessions"));
+                return dirs;
+            }
+            dirs.add(new File(root, "usr/share/xsessions"));
+            dirs.add(new File(root, "usr/local/share/xsessions"));
+            return dirs;
+        }
+
+        /**
          * The directory {@code share/icons} and {@code share/pixmaps} sit under. A container's
          * are inside its {@code /usr}; the prefix is already that directory; nix's are inside the
          * profile, reached through {@link #under} because any component of the way there can be a

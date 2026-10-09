@@ -15,7 +15,10 @@ import com.termux.app.place.PlaceLayout.Edge;
  */
 public enum Element {
 
-    /** The status bar. Never hidden — the wall's pager rides it — so it only ever moves. */
+    /**
+     * The status bar. It moves and it hides like the rest: the wall's paging used to ride its
+     * swipe, which is what kept it on screen, and paging is the border drag now.
+     */
     STATUS("status_bar"),
     /** The pinned apps: the row along an edge, or the rail standing in a column. */
     APPS("apps_row"),
@@ -36,8 +39,22 @@ public enum Element {
         return mStorageKey;
     }
 
-    /** Whether a user may put this element away entirely. Only the status bar may not. */
+    /**
+     * Whether a user may put this element away entirely. Every one of them: the status bar was
+     * the one exception while the wall's pager rode its swipe, and that gesture is the border
+     * drag now, so a layout with no status bar is a layout like any other.
+     */
     public boolean hideAllowed() {
+        return true;
+    }
+
+    /**
+     * Whether this element may stand under the keyboard, on the bottom edge's far side of it: the
+     * dock's own rows may — the pinned apps, the alphabets index, the extra keys. The status bar
+     * may not; along the bottom it is the band that touches the canvas or one of the dock's, never
+     * a bar the keyboard stands on.
+     */
+    public boolean underKeyboardAllowed() {
         return this != STATUS;
     }
 

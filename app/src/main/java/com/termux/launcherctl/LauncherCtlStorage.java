@@ -20,7 +20,8 @@ public final class LauncherCtlStorage {
     private static final String LAUNCHERCTL_DIR_NAME = ".launcherctl";
 
     public static final String DB_FILE_NAME = "launcher.db";
-    public static final String NOTIFICATIONS_JSONL_NAME = "notifications.jsonl";
+    /** Mirror of the old notification history; nothing writes it any more. */
+    static final String LEGACY_NOTIFICATIONS_JSONL_NAME = "notifications.jsonl";
 
     private static File sTestBaseDir = null;
 
@@ -73,8 +74,9 @@ public final class LauncherCtlStorage {
         return new File(ensureLauncherCtlDir(), DB_FILE_NAME);
     }
 
-    public static File getNotificationsJsonlFile() {
-        return new File(ensureLauncherCtlDir(), NOTIFICATIONS_JSONL_NAME);
+    /** Where earlier builds mirrored notifications; only the store's cleanup looks at it. */
+    static File getLegacyNotificationsJsonlFile() {
+        return new File(getLauncherCtlDir(), LEGACY_NOTIFICATIONS_JSONL_NAME);
     }
 
 }

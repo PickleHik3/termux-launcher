@@ -137,6 +137,9 @@ public final class AppNoticeHostView extends LinearLayout {
 
     public AppNoticeHostView(@NonNull Context context) {
         super(context);
+        // The band it sits in is placed by absolute geometry; the pill's glyph, text and count read
+        // in the locale's direction even though the content root above is pinned left to right.
+        setLayoutDirection(LAYOUT_DIRECTION_LOCALE);
         setOrientation(HORIZONTAL);
         setGravity(Gravity.CENTER_VERTICAL);
         setClickable(true);
@@ -153,9 +156,9 @@ public final class AppNoticeHostView extends LinearLayout {
             com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));
         mAccentInfo = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorPrimary, onSurface);
+            androidx.appcompat.R.attr.colorPrimary, onSurface);
         mAccentError = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorError, mAccentInfo);
+            androidx.appcompat.R.attr.colorError, mAccentInfo);
         mAccentAttention = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorTertiary,
             MaterialColors.getColor(context,
@@ -307,6 +310,15 @@ public final class AppNoticeHostView extends LinearLayout {
         leaveAndAdvance();
     }
 
+    /**
+     * Takes down a read-out whose subject has landed — the wall's slide, whose destination the
+     * pill was naming — ahead of its hold. A no-op when something else has the pill.
+     */
+    public void clearReadout() {
+        if (mActive == null || !mActive.fleeting) return;
+        leaveAndAdvance();
+    }
+
     /** Puts the pill back where it rests, cancelling whatever it was in the middle of. */
     private void settleAtRest() {
         animate().cancel();
@@ -424,7 +436,7 @@ public final class AppNoticeHostView extends LinearLayout {
         }
         int accent = mActive == null ? mAccentInfo : accentFor(mActive);
         GradientDrawable pill = new GradientDrawable();
-        pill.setCornerRadius(dp(7f));
+        pill.setCornerRadius(com.termux.app.chrome.ShapeTokens.cornerPxNearest(getContext(), 7f));
         pill.setColor(ColorUtils.setAlphaComponent(accent, 51));
         mCount.setBackground(pill);
         mCount.setTextColor(accent);

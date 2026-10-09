@@ -1,12 +1,14 @@
 package com.termux.ai;
 
 import android.content.Context;
+import android.os.SystemClock;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.ai.edge.litertlm.Backend;
 import com.google.ai.edge.litertlm.BenchmarkInfo;
-import com.google.ai.edge.litertlm.Capabilities;
+import com.google.ai.edge.litertlm.LlmCapability;
+import com.google.ai.edge.litertlm.ModelInfo;
 import com.google.ai.edge.litertlm.Channel;
 import com.google.ai.edge.litertlm.Content;
 import com.google.ai.edge.litertlm.Contents;
@@ -53,6 +55,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         "Auto selected CPU because the model's Edge Gallery compatibility profile requires CPU.";
 
     private final Context appContext;
+    /** Shared with the router's other runtimes; written wherever the engine is set or closed. */
+    private final TaiResidency residency;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "tai-runtime-idle");
         thread.setDaemon(true);
@@ -70,6 +74,12 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     @Nullable private List<String> conversationTranscript;
     /** Transcript of the request being generated, promoted to {@link #conversationTranscript} on success. */
     @Nullable private List<String> pendingTranscript;
+    /**
+     * The message {@link #generate} must actually send, when {@link #ensureConversationLocked}
+     * folded the system prompt into the first user turn instead of the request's own
+     * {@link TaiChatRequest#message}. {@code null} means send the request's message unchanged.
+     */
+    @Nullable private Message pendingSendMessage;
     private String loadedModelId;
     private String loadedModelPath;
     private String backendName = "none";
@@ -82,6 +92,13 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private ScheduledFuture<?> idleUnloadFuture;
     private boolean generating;
     private boolean unloadAfterGeneration;
+    /**
+     * A cancel or unload arrived during the current generation. Cancelling only stops the native
+     * process; the conversation is closed by {@link #generate}'s finally, once nothing can be
+     * sending on it (closing it earlier could delete the native conversation under a send that had
+     * read it but not yet called {@code sendMessageAsync}).
+     */
+    private boolean cancelRequested;
     private String activeGenerationId;
     private long activeGenerationStartedAtMs;
     private long loadedAtMs;
@@ -91,9 +108,24 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private boolean loading;
     private boolean loadCancellationRequested;
     private String loadingModelId;
+    /** MemAvailable drop of the last native init that returned; see {@link #createAndInitializeEngineWithCrashMarker}. */
+    private long lastLoadDropBytes = -1L;
+    /** What the last native init that returned did about speculative decoding; see {@link #speculativeRan}. Loading thread only. */
+    @Nullable private Boolean lastInitSpeculativeRan;
+    /** {@link #lastInitSpeculativeRan} of the engine that is loaded now; {@code null} with none. Guarded by {@code this}. */
+    @Nullable private Boolean loadedSpeculativeRan;
+    /** The meter of that init, still sampling for the first request's first token; loading thread only. */
+    @Nullable private TaiLoadMeter lastLoadMeter;
+    /** The loaded model's meter waiting for its first request; taken by the next generation. Guarded by {@code this}. */
+    @Nullable private TaiLoadMeter.Pending pendingPrefill;
 
     public LiteRtTaiRuntime(@NonNull Context context) {
+        this(context, new TaiResidency());
+    }
+
+    public LiteRtTaiRuntime(@NonNull Context context, @NonNull TaiResidency residency) {
         appContext = context.getApplicationContext();
+        this.residency = residency;
     }
 
     @NonNull
@@ -115,8 +147,26 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             keepWarmUntilMs,
             idleUnloadAtMs,
             loadedAtMs,
-            lastUsedAtMs
+            lastUsedAtMs,
+            loadedWindowJson()
         );
+    }
+
+    /**
+     * The window the loaded engine was sized with, as the memory budget settled it, and whether it
+     * runs speculative decoding ({@code speculativeRan}, left out when unknown).
+     */
+    @Nullable
+    private JSONObject loadedWindowJson() {
+        if (engine == null) return null;
+        try {
+            JSONObject json = new JSONObject();
+            if (loadedOptions != null && loadedOptions.contextWindow != null) json.put("contextWindow", loadedOptions.contextWindow);
+            if (loadedSpeculativeRan != null) json.put("speculativeRan", loadedSpeculativeRan.booleanValue());
+            return json.length() == 0 ? null : json;
+        } catch (JSONException e) {
+            return null;
+        }
     }
 
     @Override
@@ -157,6 +207,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     public synchronized JSONObject unload() throws JSONException {
         if (generating) {
             unloadAfterGeneration = true;
+            cancelRequested = true;
             runtimeState = "stopping";
             statusMessage = "Cancelling generation; LiteRT-LM will unload when generation stops.";
             try {
@@ -182,6 +233,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             return data;
         }
         String previous = loadedModelId;
+        if (previous != null) {
+            TaiEventLog.log(appContext, TaiEventLog.UNLOAD, previous, TaiModelSpec.BACKEND_LITERT_LM,
+                backendName, 0, 0L, 0L, null);
+        }
         closeEngineLocked("LiteRT-LM runtime is unloaded.", "unloaded");
         JSONObject data = new JSONObject();
         data.put("ok", true);
@@ -212,13 +267,14 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         }
         runtimeState = "stopping";
         statusMessage = "Cancelling active generation.";
+        // cancelProcess() does not roll back the conversation's KV state, so generate() closes the
+        // conversation (it sees cancelRequested) once the send is over; closing it here could race
+        // a send that has not started yet.
+        cancelRequested = true;
         try {
             conversation.cancelProcess();
         } catch (Exception e) {
             return error(500, "cancel_failed", "Failed to cancel active LiteRT-LM generation: " + e.getMessage());
-        } finally {
-            // cancelProcess() does not roll back the conversation's KV state. Never reuse it.
-            closeConversationLocked();
         }
         JSONObject data = stateEnvelopeLocked(true);
         data.put("cancelled", true);
@@ -296,8 +352,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         @Nullable TaiGenerationCallback callback
     ) throws JSONException {
         Conversation activeConversation;
+        Message sendMessage;
         String generationId;
         long startedAt;
+        TaiLoadMeter.Pending prefill;
         synchronized (this) {
             JSONObject availabilityError = ensureLoadedForGenerationLocked(modelId);
             if (availabilityError != null) return availabilityError;
@@ -305,8 +363,12 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 return error(409, "generation_active", "A LiteRT-LM generation is already running. Cancel it or wait for it to finish.");
             }
             activeConversation = ensureConversationLocked(mode, request, options);
+            sendMessage = pendingSendMessage != null ? pendingSendMessage : request.message;
+            pendingSendMessage = null;
             generationId = beginGenerationLocked();
             startedAt = activeGenerationStartedAtMs;
+            prefill = pendingPrefill;
+            pendingPrefill = null;
         }
 
         CountDownLatch done = new CountDownLatch(1);
@@ -330,9 +392,13 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             : loadedProfile.defaultMaxTokens;
         boolean unloadRequested;
         try {
-            activeConversation.sendMessageAsync(request.message, new MessageCallback() {
+            // A cancel that landed before the send started has nothing to stop yet: do not send.
+            if (isCancelRequested()) throw new CancellationException("Generation cancelled before it was sent.");
+            activeConversation.sendMessageAsync(sendMessage, new MessageCallback() {
                     @Override
                     public void onMessage(@NonNull Message message) {
+                        // The first token ends the first-prefill measurement of a fresh load.
+                        if (prefill != null) prefill.firstToken();
                         String text = textFromMessage(message);
                         String thinking = message.getChannels().get("thought");
                         synchronized (responseBuilder) {
@@ -401,6 +467,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                         done.countDown();
                     }
                 }, thinkingExtraContext(options, loadedProfile));
+            // A cancel between the check above and the send started cancelled nothing; repeat it.
+            if (isCancelRequested()) activeConversation.cancelProcess();
             done.await();
             try {
                 BenchmarkInfo benchmark = activeConversation.getBenchmarkInfo();
@@ -427,7 +495,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 // cancelProcess() leaves the KV cache dirty, so a length-limited conversation
                 // must never be reused even though its partial response is a normal completion.
                 // A failed generation leaves the KV state unknown, so it is not reused either.
-                if (lengthLimited.get() || callbackCancelled.get() || failure != null || !request.reusableConversation) {
+                if (lengthLimited.get() || callbackCancelled.get() || cancelRequested || failure != null
+                    || !request.reusableConversation) {
                     closeConversationLocked();
                 } else if (pendingTranscript != null && conversation == activeConversation) {
                     String reply;
@@ -443,6 +512,11 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 }
                 pendingTranscript = null;
             }
+        }
+
+        if (prefill != null) {
+            int promptTokens = lastPrefillTokens.get() > 0 ? lastPrefillTokens.get() : approximatePromptTokens(request);
+            prefill.finish(appContext, promptTokens, errorRef.get() == null);
         }
 
         Throwable throwable = errorRef.get();
@@ -534,7 +608,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         TaiModelProfile profile = TaiModelProfile.forModel(modelSpec);
         TaiDeviceCapabilities deviceCapabilities = TaiDeviceCapabilities.detect(appContext);
         if (!deviceCapabilities.liteRtLmAbiSupported) {
-            return error(501, "litert_lm_unsupported_abi", "LiteRT-LM 0.14.0 ships native libraries for arm64-v8a and x86_64 only.");
+            return error(501, "litert_lm_unsupported_abi", "LiteRT-LM 0.18.0 ships native libraries for arm64-v8a and x86_64 only.");
         }
         if (!deviceCapabilities.liteRtLmNativeLibrariesAvailable) {
             return error(501, "litert_lm_native_unavailable", "LiteRT-LM native libraries are not available in this APK.");
@@ -590,9 +664,16 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             statusMessage = "Loading " + modelSpec.id + ".";
         }
 
+        final long loadStartedMs = SystemClock.elapsedRealtime();
+        final int eventContext = options.contextWindow != null ? options.contextWindow : 0;
+        TaiEventLog.log(appContext, TaiEventLog.LOAD_START, modelSpec.id, TaiModelSpec.BACKEND_LITERT_LM,
+            requestedAccelerator == null ? "auto" : requestedAccelerator, eventContext, 0L, 0L, null);
         Engine initializedEngine = null;
         String initializedBackendName = "none";
         String initializedFallbackReason = "";
+        // The options the engine actually came up with: the caller's, unless the GPU->CPU fallback
+        // below had to shrink the window.
+        TaiRuntimeOptions effectiveOptions = options;
         try {
             if (requestedAccelerator == null) {
                 String selectedAccelerator = autoAccelerators.get(0);
@@ -606,14 +687,29 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                             profile, deviceCapabilities, backend, "gpu");
                     } catch (Exception gpuException) {
                         TaiRuntimeCrashMarker.clear(appContext);
+                        // A cancelled load says nothing about the GPU; do not record it or fall back.
+                        if (isCancellation(gpuException) || isLoadCancellationRequested()) throw gpuException;
                         TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
                             TaiModelSpec.BACKEND_LITERT_LM, "gpu", gpuException.getMessage() == null ? "GPU initialization failed." : gpuException.getMessage());
                         if (!autoAccelerators.contains("cpu")) throw gpuException;
                         throwIfLoadCancellationRequested();
+                        // The budget's rule for a fallback accelerator: the floor window only, and
+                        // it still has to fit what the GPU attempt left free. The plan sized the
+                        // window for the GPU; the CPU is not given it.
+                        TaiRuntimeOptions cpuOptions = cpuFallbackOptions(options);
+                        TaiLoadBudget.Plan cpuPlan = cpuFallbackPlan(modelSpec, cpuOptions);
+                        if (!cpuPlan.fits) {
+                            throw new BudgetRefusal("GPU initialization failed (" + gpuException.getMessage()
+                                + ") and the CPU fallback does not fit the memory budget: needs "
+                                + cpuPlan.neededFreeBytes() / (1024L * 1024L) + " MB free, "
+                                + cpuPlan.availableBytes / (1024L * 1024L) + " MB available.", gpuException);
+                        }
                         Backend backend = new Backend.CPU();
                         initializedBackendName = backend.getName();
-                        initializedFallbackReason = "Auto GPU initialization failed; selected the model's CPU fallback. GPU error: " + gpuException.getMessage();
-                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
+                        initializedFallbackReason = "Auto GPU initialization failed; selected the model's CPU fallback at a "
+                            + cpuOptions.contextWindow + "-token window. GPU error: " + gpuException.getMessage();
+                        effectiveOptions = cpuOptions;
+                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), cpuOptions,
                             profile, deviceCapabilities, backend, "cpu");
                     }
                 } else {
@@ -635,11 +731,21 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             }
         } catch (Exception e) {
             TaiRuntimeCrashMarker.clear(appContext);
-            TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
-                TaiModelSpec.BACKEND_LITERT_LM, acceleratorFromBackendName(initializedBackendName, requestedAccelerator),
+            TaiEventLog.log(appContext, TaiEventLog.LOAD_FAIL, modelSpec.id, TaiModelSpec.BACKEND_LITERT_LM,
+                acceleratorFromBackendName(initializedBackendName, requestedAccelerator), eventContext,
+                SystemClock.elapsedRealtime() - loadStartedMs, 0L,
                 e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
-            if (modelSpec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) {
-                TaiRuntimeHistory.recordAudioInputOutcome(appContext, modelSpec.id, deviceCapabilities, false);
+            // A cancelled load is not an accelerator or audio failure: recording it would lock the
+            // model out of the GPU (known_failed_accelerator) after a user's cancel. Nor is a
+            // budget refusal — free memory running short is a moment, not a verdict on the CPU.
+            boolean refused = e instanceof BudgetRefusal;
+            if (!isCancellation(e) && !isLoadCancellationRequested() && !refused) {
+                TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
+                    TaiModelSpec.BACKEND_LITERT_LM, acceleratorFromBackendName(initializedBackendName, requestedAccelerator),
+                    e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+                if (modelSpec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) {
+                    TaiRuntimeHistory.recordAudioInputOutcome(appContext, modelSpec.id, deviceCapabilities, false);
+                }
             }
             synchronized (this) {
                 boolean cancelled = loadCancellationRequested;
@@ -648,6 +754,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 statusMessage = cancelled
                     ? "Model load cancelled."
                     : "LiteRT-LM load failed: " + e.getMessage();
+                if (refused) return error(409, "insufficient_memory", statusMessage);
                 return error(cancelled ? 499 : 500,
                     cancelled ? "model_load_cancelled" : "litert_lm_load_failed", statusMessage);
             }
@@ -657,18 +764,44 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             if (!loadCancellationRequested) {
                 engine = initializedEngine;
                 backendName = initializedBackendName;
-                backendFallbackReason = initializedFallbackReason;
+                // The runtime's own reason (an in-load GPU-to-CPU fallback) wins; otherwise the plan's
+                // (a demoted or budget-chosen accelerator), so the status always says why.
+                backendFallbackReason = !initializedFallbackReason.isEmpty() ? initializedFallbackReason
+                    : TaiAcceleratorFallback.get(modelSpec.id);
                 loadedModelId = modelSpec.id;
                 loadedModelPath = modelFile.getAbsolutePath();
-                loadedOptions = options;
+                loadedOptions = effectiveOptions;
+                loadedSpeculativeRan = lastInitSpeculativeRan;
                 loadedProfile = profile;
                 loadedDeviceCapabilities = deviceCapabilities;
                 loadedAtMs = System.currentTimeMillis();
                 lastUsedAtMs = loadedAtMs;
                 keepWarmUntilMs = keepWarmMinutes > 0 ? loadedAtMs + TimeUnit.MINUTES.toMillis(keepWarmMinutes) : 0L;
                 TaiRuntimeCrashMarker.clear(appContext);
+                // Registered with the accelerator and window the engine actually came up on, so a
+                // GPU->CPU fallback is accounted at the CPU footprint rather than the plan's GPU
+                // one — and with the MemAvailable drop this init measured, which history keeps as
+                // the worst case for the next plan. Only here: a cancelled or failed init never
+                // reaches this block.
+                String loadedAccelerator = acceleratorFromBackendName(backendName, requestedAccelerator);
+                int loadedContext = effectiveOptions.contextWindow != null ? effectiveOptions.contextWindow : TaiLoadBudget.FLOOR_CONTEXT;
+                // The load phase is booked now; the first request's first-prefill drop is booked by
+                // generate() through the pending meter, which is where a CPU load's buffers arrive.
+                long measured = lastLoadDropBytes;
+                if (measured >= 0L) {
+                    TaiRuntimeHistory.recordMeasuredLoad(appContext, modelSpec, deviceCapabilities,
+                        TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator, loadedContext, measured);
+                }
+                if (pendingPrefill != null) pendingPrefill.abandon();
+                pendingPrefill = lastLoadMeter == null ? null : new TaiLoadMeter.Pending(lastLoadMeter, modelSpec,
+                    deviceCapabilities, TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator, loadedContext);
+                lastLoadMeter = null;
+                residency.register(TaiResidency.Entry.chat(modelSpec, TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator, loadedContext)
+                    .withMeasured(measured >= 0L ? measured : null));
                 TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
-                    TaiModelSpec.BACKEND_LITERT_LM, acceleratorFromBackendName(backendName, requestedAccelerator));
+                    TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator);
+                TaiEventLog.log(appContext, TaiEventLog.LOAD_OK, modelSpec.id, TaiModelSpec.BACKEND_LITERT_LM,
+                    loadedAccelerator, loadedContext, SystemClock.elapsedRealtime() - loadStartedMs, measured, null);
                 if (modelSpec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) {
                     TaiRuntimeHistory.recordAudioInputOutcome(appContext, modelSpec.id, deviceCapabilities, true);
                 }
@@ -682,8 +815,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 data.put("backend", backendName);
                 data.put("backendFallbackReason", backendFallbackReason.isEmpty() ? JSONObject.NULL : backendFallbackReason);
                 data.put("modelPath", loadedModelPath);
-                data.put("options", options.toJson());
-                data.put("effectiveOptions", effectiveOptionsJson(options, profile));
+                data.put("options", effectiveOptions.toJson());
+                data.put("effectiveOptions", effectiveOptionsJson(effectiveOptions, profile));
+                if (measured >= 0L) data.put("measuredLoadBytes", measured);
+                data.put("speculativeRan", loadedSpeculativeRan == null ? JSONObject.NULL : loadedSpeculativeRan);
                 data.put("modelProfile", profile.toJson());
                 data.put("device", deviceCapabilities.toJson());
                 JSONArray compatibilityWarnings = new JSONArray();
@@ -712,7 +847,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     @Nullable
     private JSONObject ensureLoadedForGenerationLocked(@NonNull String modelId) throws JSONException {
         if (engine == null || loadedModelId == null || !loadedModelId.equals(modelId)) {
-            return error(409, "model_not_loaded", "Load the downloaded model first with tai load " + modelId + " or from the TAI settings UI.");
+            return error(409, "model_not_loaded", "Load the downloaded model first with tai load " + modelId + " or from the On-device AI settings UI.");
         }
         return null;
     }
@@ -731,6 +866,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         List<String> requestTranscript = transcriptRequest
             ? TaiConversationTranscript.fingerprints(request.messagesJson) : null;
         pendingTranscript = requestTranscript;
+        pendingSendMessage = null;
         if (request.reusableConversation && conversation != null && conversation.isAlive() && key.equals(conversationKey)
             && (transcriptRequest
                 ? TaiConversationTranscript.continuesFrom(conversationTranscript, requestTranscript)
@@ -739,7 +875,41 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         }
         closeConversationLocked();
         conversationTranscript = requestTranscript == null ? null : Collections.unmodifiableList(requestTranscript);
-        Contents systemContents = contents(request.systemPrompt);
+        // A blank prompt must be null: LiteRT-LM adds a system turn for any non-null instruction.
+        String systemPrompt = thinkingSystemPrompt(request.systemPrompt, options, loadedProfile);
+        boolean systemPromptPresent = !systemPrompt.trim().isEmpty();
+        // Some chat templates (codegemma among them) reject a system-role message outright. Once
+        // that verdict is recorded for this model, skip straight to the folded form so the retry
+        // below is paid at most once per model.
+        if (systemPromptPresent && TaiRuntimeHistory.isSystemRoleKnownUnsupported(appContext, loadedModelId)) {
+            TaiChatRequest folded = TaiSystemPromptFolding.foldSystemIntoFirstUserTurn(request, systemPrompt);
+            conversation = createConversationLocked("", folded, options);
+            pendingSendMessage = folded.message;
+        } else {
+            try {
+                conversation = createConversationLocked(systemPrompt, request, options);
+            } catch (RuntimeException creationError) {
+                if (!systemPromptPresent || !TaiSystemPromptFolding.looksLikeSystemRoleRejection(creationError)) {
+                    throw creationError;
+                }
+                TaiRuntimeHistory.recordSystemRoleUnsupported(appContext, loadedModelId);
+                TaiChatRequest folded = TaiSystemPromptFolding.foldSystemIntoFirstUserTurn(request, systemPrompt);
+                conversation = createConversationLocked("", folded, options);
+                pendingSendMessage = folded.message;
+            }
+        }
+        conversationKey = request.reusableConversation ? key : "";
+        return conversation;
+    }
+
+    /** Builds and initializes the {@link Conversation} for a fresh (non-reused) turn. */
+    @NonNull
+    private Conversation createConversationLocked(
+        @NonNull String systemPrompt,
+        @NonNull TaiChatRequest request,
+        @NonNull TaiRuntimeOptions options
+    ) {
+        Contents systemContents = systemPrompt.trim().isEmpty() ? null : contents(systemPrompt);
         ConversationConfig conversationConfig = conversationConfig(systemContents, request, options);
         synchronized (EXPERIMENTAL_FLAGS_LOCK) {
             ExperimentalFlags.INSTANCE.setConvertCamelToSnakeCaseInToolDescription(false);
@@ -748,15 +918,13 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 ExperimentalFlags.INSTANCE.setEnableConversationConstrainedDecoding(true);
             }
             try {
-                conversation = engine.createConversation(conversationConfig);
+                return engine.createConversation(conversationConfig);
             } finally {
                 if (constrainedDecoding) {
                     ExperimentalFlags.INSTANCE.setEnableConversationConstrainedDecoding(false);
                 }
             }
         }
-        conversationKey = request.reusableConversation ? key : "";
-        return conversation;
     }
 
     @NonNull
@@ -764,12 +932,14 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         long now = System.currentTimeMillis();
         generating = true;
         unloadAfterGeneration = false;
+        cancelRequested = false;
         activeGenerationStartedAtMs = now;
         activeGenerationId = "tai-gen-" + now;
         lastUsedAtMs = now;
         runtimeState = "generating";
         statusMessage = "Generating.";
         cancelIdleUnloadLocked();
+        residency.setBusy(TaiResidency.Kind.CHAT, loadedModelId, true);
         return activeGenerationId;
     }
 
@@ -778,6 +948,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         activeGenerationId = null;
         activeGenerationStartedAtMs = 0L;
         lastUsedAtMs = System.currentTimeMillis();
+        residency.setBusy(TaiResidency.Kind.CHAT, loadedModelId, false);
         if (unloadAfterGeneration) {
             unloadAfterGeneration = false;
             closeEngineLocked("LiteRT-LM runtime is unloaded.", "unloaded");
@@ -821,19 +992,21 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             modelPath,
             backend,
             imageInput ? visionBackend(modelSpec, options, profile, deviceCapabilities) : null,
-            // LiteRT-LM 0.14 also supports GPU/NPU audio acceleration; keep CPU as the default.
+            // LiteRT-LM 0.18.0 also supports GPU/NPU audio acceleration; keep CPU as the default.
             audioInput ? new Backend.CPU() : null,
             engineMaxTokens,
             imageInput ? 8 : null,
             cacheDir
         );
         Boolean speculativeDecoding = speculativeDecodingFlag(options, modelPath);
+        lastInitSpeculativeRan = null;
         synchronized (EXPERIMENTAL_FLAGS_LOCK) {
             ExperimentalFlags.INSTANCE.setConvertCamelToSnakeCaseInToolDescription(false);
             Engine loadedEngine = new Engine(config);
             try {
                 ExperimentalFlags.INSTANCE.setEnableSpeculativeDecoding(speculativeDecoding);
                 loadedEngine.initialize();
+                lastInitSpeculativeRan = speculativeRan(options.speculativeDecodingEnabled, speculativeDecoding);
                 return loadedEngine;
             } catch (RuntimeException e) {
                 try {
@@ -847,6 +1020,11 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         }
     }
 
+    /**
+     * Initializes with the crash marker set and the load meter running: {@link #lastLoadDropBytes}
+     * holds the MemAvailable drop of the init that succeeded, {@code -1} when it could not be
+     * measured. Written and read on the loading thread only (loads are serialized by {@code loading}).
+     */
     private Engine createAndInitializeEngineWithCrashMarker(
         @NonNull TaiModelSpec modelSpec,
         @NonNull String modelPath,
@@ -857,7 +1035,66 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         @NonNull String accelerator
     ) {
         TaiRuntimeCrashMarker.markLoad(appContext, modelSpec, options.withAccelerator(accelerator), TaiModelSpec.BACKEND_LITERT_LM);
-        return createAndInitializeEngine(modelSpec, modelPath, options, profile, deviceCapabilities, backend);
+        lastLoadDropBytes = -1L;
+        if (lastLoadMeter != null) lastLoadMeter.stop();
+        lastLoadMeter = null;
+        TaiLoadMeter meter = TaiLoadMeter.start(appContext);
+        boolean initialized = false;
+        try {
+            Engine created = createAndInitializeEngine(modelSpec, modelPath, options, profile, deviceCapabilities, backend);
+            // The load phase ends here; the meter goes on until the first request's first token
+            // (see TaiLoadMeter), where a CPU load's KV cache and a vision load's encoder arrive.
+            lastLoadDropBytes = meter.endLoad();
+            lastLoadMeter = meter;
+            initialized = true;
+            return created;
+        } finally {
+            // A failed or cancelled init stops its sampler here and its figure is never read (the
+            // success block is not reached); a successful one is stopped by its first request,
+            // by an unload, or by the cap.
+            if (!initialized) meter.stop();
+        }
+    }
+
+    /** A GPU->CPU fallback the memory budget would not admit; never recorded as a CPU failure. */
+    static final class BudgetRefusal extends RuntimeException {
+        BudgetRefusal(@NonNull String message, @Nullable Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /**
+     * The options a CPU fallback runs with: the caller's, held to the budget's floor window. The
+     * plan sized the window for the GPU; a larger CPU window was the one configuration the
+     * calibration could not survive (see {@link TaiLoadBudget}).
+     */
+    @NonNull
+    static TaiRuntimeOptions cpuFallbackOptions(@NonNull TaiRuntimeOptions options) {
+        int window = options.contextWindow == null
+            ? TaiLoadBudget.FLOOR_CONTEXT : Math.min(options.contextWindow, TaiLoadBudget.FLOOR_CONTEXT);
+        return options.withContextWindow(window).withAccelerator("cpu");
+    }
+
+    /** Re-checks the budget for the CPU fallback against what is free now, the failed GPU attempt released. */
+    @NonNull
+    private TaiLoadBudget.Plan cpuFallbackPlan(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions cpuOptions) {
+        TaiDeviceCapabilities now = TaiDeviceCapabilities.detect(appContext);
+        boolean encoders = modelSpec.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
+            || modelSpec.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
+        int window = cpuOptions.contextWindow != null ? cpuOptions.contextWindow : TaiLoadBudget.FLOOR_CONTEXT;
+        List<TaiResidency.Entry> residents = residency.snapshot();
+        // The previous chat model was closed before this load began; the credit is what is left.
+        TaiMemInfo.Reading memory = TaiMemInfo.read(appContext);
+        long available = TaiResidency.creditedAvailable(memory.availBytes > 0L ? memory.availBytes : now.availableMemoryBytes,
+            residents, TaiResidency.Kind.CHAT, TaiModelSpec.BACKEND_LITERT_LM);
+        long fileBytes = TaiResidency.fileBytes(modelSpec);
+        long slope = TaiLoadBudget.seedSlopeBytes(TaiModelSpec.BACKEND_LITERT_LM, fileBytes, 0L);
+        TaiLoadBudget.History history = (accelerator, contextTokens) -> TaiRuntimeHistory.measuredLoadBytes(
+            appContext, modelSpec, now, TaiModelSpec.BACKEND_LITERT_LM, accelerator, contextTokens, slope, fileBytes / 10L);
+        return TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, fileBytes,
+            encoders, now.physicalMemoryBytes, available, Collections.singletonList("cpu"), window, null, 0,
+            true, history, Collections.<TaiResidency.Entry>emptyList())
+            .withConditions(TaiMemInfo.conditions(appContext)));
     }
 
     @NonNull
@@ -910,11 +1147,24 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         return fallback == null ? "auto" : fallback;
     }
 
+    /**
+     * Whether an engine that initialized runs speculative decoding, from what it was created with:
+     * LiteRT-LM reports nothing after the fact, but the engine flag is set only when the request asked
+     * and the file declares support ({@link LlmCapability#hasSpeculativeDecodingSupport}), and an engine
+     * that initialized with the flag on decodes with the drafter. Asked and not set (a file without
+     * support) is {@code false}; not asked is {@code null}, since the engine's own default is not known.
+     */
+    @Nullable
+    static Boolean speculativeRan(@Nullable Boolean asked, @Nullable Boolean flagSet) {
+        if (!Boolean.TRUE.equals(asked)) return null;
+        return Boolean.TRUE.equals(flagSet);
+    }
+
     @Nullable
     private Boolean speculativeDecodingFlag(@NonNull TaiRuntimeOptions options, @NonNull String modelPath) {
         if (!Boolean.TRUE.equals(options.speculativeDecodingEnabled)) return null;
-        try (Capabilities capabilities = new Capabilities(modelPath)) {
-            return capabilities.hasSpeculativeDecodingSupport() ? Boolean.TRUE : null;
+        try (ModelInfo info = ModelInfo.from(modelPath)) {
+            return info instanceof LlmCapability && ((LlmCapability) info).hasSpeculativeDecodingSupport() ? Boolean.TRUE : null;
         } catch (Exception ignored) {
             return null;
         }
@@ -922,7 +1172,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
 
     @NonNull
     private ConversationConfig conversationConfig(
-        @NonNull Contents systemPrompt,
+        @Nullable Contents systemPrompt,
         @NonNull TaiChatRequest request,
         @NonNull TaiRuntimeOptions options
     ) {
@@ -952,13 +1202,59 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         if (profile == null || TaiModelProfile.THINKING_NONE.equals(profile.thinkingMode)) {
             return Collections.emptyMap();
         }
+        boolean thinking = thinkingOn(options, profile);
         HashMap<String, Object> context = new HashMap<>();
-        if (TaiModelProfile.THINKING_ALWAYS.equals(profile.thinkingMode)) {
+        if (TaiModelProfile.THINKING_SWITCH_SYSTEM_FLAG.equals(profile.thinkingSwitch)) {
+            // The switch lives in the system prompt (thinkingSystemPrompt); the template has no key.
+            return context;
+        }
+        if (TaiModelProfile.THINKING_SWITCH_TEMPLATE_BOOLEAN.equals(profile.thinkingSwitch)) {
+            // A Boolean, not a String: LiteRT-LM's JsonConvertersKt.toJsonElement serialises it as a
+            // JSON true/false (checked in litertlm-android's JsonConvertersKt bytecode), so templates
+            // that test "enable_thinking is false" (MiniCPM5) really see false. Off is sent
+            // explicitly because MiniCPM5-2B's int4 template lets the model decide, and it thinks,
+            // when the key is missing.
+            context.put("enable_thinking", thinking ? Boolean.TRUE : Boolean.FALSE);
+            return context;
+        }
+        if (thinking) {
+            // Only ever "true": the value reaches the chat template as a string, and Jinja reads
+            // any non-empty string, "false" included, as true. Sending "false" switched thinking
+            // ON (measured on pong: 246 chars of thought and no answer, against a 0.37 s first
+            // token with the key left out), so "off" is expressed by leaving the key out.
             context.put("enable_thinking", "true");
-        } else if (options.thinkingEnabled != null) {
-            context.put("enable_thinking", options.thinkingEnabled.toString());
         }
         return context;
+    }
+
+    /**
+     * The system prompt a conversation starts with, carrying SmolLM3's {@code /no_think} when the
+     * profile switches thinking in the system prompt and thinking is off. Upstream's own example
+     * is a system message of exactly "/no_think"; the full-size LiteRT bundle strips the flag and
+     * renders "Reasoning Mode: /no_think" with an empty think block, and the q4 bundle passes the
+     * system message through to the model, which was trained on the flag. Thinking on changes
+     * nothing: both templates default to {@code /think}. A prompt that already carries either
+     * flag is the caller's choice and is left alone, as upstream lets the flag override the kwarg.
+     */
+    @NonNull
+    static String thinkingSystemPrompt(
+        @NonNull String systemPrompt,
+        @Nullable TaiRuntimeOptions options,
+        @Nullable TaiModelProfile profile
+    ) {
+        if (profile == null || TaiModelProfile.THINKING_NONE.equals(profile.thinkingMode)
+            || !TaiModelProfile.THINKING_SWITCH_SYSTEM_FLAG.equals(profile.thinkingSwitch)
+            || thinkingOn(options, profile)
+            || systemPrompt.contains("/no_think") || systemPrompt.contains("/think")) {
+            return systemPrompt;
+        }
+        String trimmed = systemPrompt.trim();
+        return trimmed.isEmpty() ? "/no_think" : trimmed + "\n\n/no_think";
+    }
+
+    private static boolean thinkingOn(@Nullable TaiRuntimeOptions options, @NonNull TaiModelProfile profile) {
+        return TaiModelProfile.THINKING_ALWAYS.equals(profile.thinkingMode)
+            || options != null && Boolean.TRUE.equals(options.thinkingEnabled);
     }
 
     @Nullable
@@ -1035,6 +1331,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 return;
             }
             if (target > 0L) {
+                TaiEventLog.log(appContext, TaiEventLog.UNLOAD, loadedModelId, TaiModelSpec.BACKEND_LITERT_LM,
+                    backendName, 0, 0L, 0L, "idle or keep-warm timeout");
                 closeEngineLocked("Model unloaded after idle or keep-warm timeout.", "unloaded");
             }
         }
@@ -1081,9 +1379,17 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private void closeEngineLocked(@NonNull String nextStatus, @NonNull String nextState) {
         cancelIdleUnloadLocked();
         closeEngineResourcesLocked();
+        // Every close funnels through here — unload, idle timer, keep-warm expiry, the close
+        // before a replacing load, and the pending unload after a cancelled generation.
+        if (loadedModelId != null) residency.deregister(TaiResidency.Kind.CHAT, loadedModelId);
+        if (pendingPrefill != null) {
+            pendingPrefill.abandon();
+            pendingPrefill = null;
+        }
         loadedModelId = null;
         loadedModelPath = null;
         loadedOptions = null;
+        loadedSpeculativeRan = null;
         loadedProfile = null;
         loadedDeviceCapabilities = null;
         backendName = "none";
@@ -1114,6 +1420,14 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         loading = false;
         loadCancellationRequested = false;
         loadingModelId = null;
+    }
+
+    private synchronized boolean isCancelRequested() {
+        return cancelRequested;
+    }
+
+    private synchronized boolean isLoadCancellationRequested() {
+        return loadCancellationRequested;
     }
 
     private synchronized void throwIfLoadCancellationRequested() {

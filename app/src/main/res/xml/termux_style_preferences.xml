@@ -2,15 +2,6 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_surfaces_header">
-        <Preference
-            app:key="live_surface_editor"
-            app:icon="@drawable/ic_symbol_palette"
-            app:persistent="false"
-            app:title="@string/termux_dock_tune_live_title"
-            app:summary="@string/termux_dock_tune_live_summary" />
-    </PreferenceCategory>
-
     <PreferenceCategory app:title="@string/settings_fonts_header">
         <Preference
             app:key="terminal_fonts"
@@ -22,12 +13,11 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_theme_header">
-        <ListPreference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="theme_mode"
             app:title="@string/settings_color_mode_title"
             app:entries="@array/termux_theme_mode_entries"
-            app:entryValues="@array/termux_theme_mode_values"
-            app:useSimpleSummaryProvider="true" />
+            app:entryValues="@array/termux_theme_mode_values" />
         <SwitchPreferenceCompat
             app:key="terminal_dynamic_colors_enabled"
             app:title="@string/settings_wallpaper_colors_title"
@@ -39,7 +29,7 @@
             app:persistent="false"
             app:selectable="false"
             app:iconSpaceReserved="false" />
-        <ListPreference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="terminal_contrast_level"
             app:title="@string/settings_terminal_contrast_title"
             app:entries="@array/terminal_contrast_entries"
@@ -54,7 +44,12 @@
             app:title="@string/settings_wallpaper_title"
             app:summary="@string/termux_use_system_wallpaper_summary"
             android:defaultValue="true" />
-        <SeekBarPreference
+        <SwitchPreferenceCompat
+            app:key="wallpaper_parallax"
+            app:title="@string/settings_wallpaper_parallax_title"
+            app:summary="@string/settings_wallpaper_parallax_summary"
+            android:defaultValue="true" />
+        <com.termux.app.fragments.settings.SliderPreference
             app:key="wallpaper_render_zoom"
             app:title="@string/settings_wallpaper_alignment_title"
             app:summary="@string/settings_wallpaper_alignment_summary"
@@ -87,30 +82,16 @@
             app:key="customize_keyboard_surface"
             app:icon="@drawable/ic_symbol_palette"
             app:persistent="false"
-            app:title="@string/settings_customize_keyboard_title"
-            app:summary="@string/settings_customize_keyboard_summary" />
-        <ListPreference
-            app:key="in_app_keyboard_theme"
-            app:entries="@array/termux_in_app_keyboard_theme_entries"
-            app:entryValues="@array/termux_in_app_keyboard_theme_values"
-            app:useSimpleSummaryProvider="true"
-            app:title="@string/termux_in_app_keyboard_theme_title" />
+            app:title="@string/settings_look_appearance_editor_title"
+            app:summary="@string/settings_look_appearance_editor_summary" />
         <Preference
             app:key="in_app_keyboard_color_scheme_editor"
             app:icon="@drawable/ic_symbol_palette"
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment"
-            app:summary="@string/settings_keyboard_colors_summary"
-            app:title="@string/settings_keyboard_colors_title" />
-        <Preference
-            app:key="in_app_keyboard_font"
-            app:title="@string/settings_typeface_title" />
-        <SeekBarPreference
-            app:key="in_app_keyboard_bottom_padding"
-            app:title="@string/settings_keyboard_bottom_padding_title"
-            app:summary="@string/settings_keyboard_bottom_padding_summary"
-            app:showSeekBarValue="true"
-            android:max="48"
-            android:defaultValue="0" />
+            app:summary="@string/keyboard_theme_summary"
+            app:title="@string/keyboard_theme_title" />
+        <!-- Bottom padding left for the Layout editor (spec §6): the keyboard's bottom handle on
+             the layout canvas writes the same chin, per orientation. -->
     </PreferenceCategory>
 
 </PreferenceScreen>

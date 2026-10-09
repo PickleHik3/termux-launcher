@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_picker_title">Add widget</string>
+    <string name="widget_picker_close">Close widget picker</string>
+    <string name="widget_picker_loading">Loading widgets…</string>
+    <string name="widget_picker_empty">No widgets available</string>
+    <string name="widget_picker_grid_full_title">Grid is full</string>
+    <string name="widget_picker_grid_full">No widget fits the grid.</string>
+    <string name="widget_picker_no_room_on_page">No room on this page. Hold the widget to place it on another page.</string>
+    <string name="widget_picker_card_span">%1$d × %2$d cells</string>
+    <string name="widget_picker_card_span_minimum">%1$d × %2$d cells · minimum %3$d × %4$d</string>
+    <string name="widget_picker_card_description">%1$s, %2$s, hold to place it on a page</string>
+    <string name="widget_picker_card_description_too_big">%1$s, %2$s, too big for this grid</string>
+    <string name="widget_picker_app_description">%1$s, %2$s, %3$s</string>
+</resources>

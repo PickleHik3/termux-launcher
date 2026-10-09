@@ -66,19 +66,10 @@
     <string name="termux_debugging_preferences_title">デバッグ</string>
     <string name="termux_log_level_title">ログレベルを変更</string>
     <string name="termux_plugin_error_notifications_enabled_on">プラグインのエラーに関する通知を有効化しています。(デフォルト)</string>
-    <string name="termux_keyboard_header">キーボード</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_title">ターミナルのマージンの自動調節</string>
     <string name="error_termux_service_start_failed_bg">バックグラウンドアプリ最適化機能の制限設定によって、TermuxServiceをバックグラウンドで開始できませんでした。</string>
     <string name="termux_debugging_preferences_summary">デバッグ機能の設定</string>
     <string name="termux_logging_header">ログ</string>
-    <string name="termux_soft_keyboard_enabled_title">ソフトウェアキーボードを有効化</string>
-    <string name="termux_soft_keyboard_enabled_off">ソフトウェアキーボードは無効化されています。</string>
-    <string name="termux_soft_keyboard_enabled_on">ソフトウェアキーボードは有効化されています。(デフォルト)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">ハードウェアキーボードがない場合のみソフトウェアキーボードを有効化する</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">ハードウェアキーボードが接続されている場合でもソフトウェアキーボードを有効化します。(デフォルト)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">ハードウェアキーボードが接続されていない場合のみソフトウェアキーボードを有効化します。</string>
     <string name="action_create_named_session_confirm">作成</string>
-    <string name="termux_terminal_view_view_header">外観</string>
     <string name="error_run_command_service_invalid_intent_action">RunCommandServiceに対する無効なアクション: `%1$s`</string>
     <string name="error_run_command_service_invalid_execution_command_runner">RunCommandServiceに対する無効なコマンド: `%1$s`</string>
     <string name="termux_plugin_error_notifications_enabled_title">プラグインのエラー通知</string>
@@ -86,6 +77,5 @@
     <string name="termux_crash_report_notifications_enabled_title">クラッシュリポート通知</string>
     <string name="termux_crash_report_notifications_enabled_off">クラッシュリポートに関する通知を無効化しています。</string>
     <string name="termux_crash_report_notifications_enabled_on">クラッシュリポートに関する通知の表示を有効化しています。(デフォルト)</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_off">ターミナルのマージンの自動調節を無効化しています。</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; の外観</string>
 </resources>

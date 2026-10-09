@@ -46,6 +46,36 @@ public class KeyboardMaterialPolicyTest {
     }
 
     @Test
+    public void aDockedKeyboardUpOnBothPlacesBlendsSolidAndGlassWithTheSlide() {
+        // Terminal (glass) toward Display (solid): the panel fades in with the wall.
+        assertEquals(0f, KeyboardMaterialPolicy.travelSolidness(KeyboardForm.DOCKED, false, true,
+            true, true, 0f), 0f);
+        assertEquals(0.25f, KeyboardMaterialPolicy.travelSolidness(KeyboardForm.DOCKED, false, true,
+            true, true, 0.25f), 0.0001f);
+        assertEquals(1f, KeyboardMaterialPolicy.travelSolidness(KeyboardForm.DOCKED, false, true,
+            true, true, 1f), 0f);
+        // And back the other way the panel thins out.
+        assertEquals(0.6f, KeyboardMaterialPolicy.travelSolidness(KeyboardForm.DOCKED, true, false,
+            true, true, 0.4f), 0.0001f);
+        // The ends are exactly the resting materials, so the settle repaints nothing visible.
+        assertEquals(1f, KeyboardMaterialPolicy.travelSolidness(KeyboardForm.DOCKED, true, false,
+            true, true, 0f), 0f);
+    }
+
+    @Test
+    public void nothingBlendsUnlessTwoDockedMaterialsDiffer() {
+        assertEquals(KeyboardMaterialPolicy.NO_TRAVEL, KeyboardMaterialPolicy.travelSolidness(
+            KeyboardForm.DOCKED, false, false, true, true, 0.5f), 0f);
+        assertEquals("a keyboard down on one side travels whole, in the other side's material",
+            KeyboardMaterialPolicy.NO_TRAVEL, KeyboardMaterialPolicy.travelSolidness(
+                KeyboardForm.DOCKED, false, true, true, false, 0.5f), 0f);
+        assertEquals(KeyboardMaterialPolicy.NO_TRAVEL, KeyboardMaterialPolicy.travelSolidness(
+            KeyboardForm.SPLIT, false, true, true, true, 0.5f), 0f);
+        assertEquals(KeyboardMaterialPolicy.NO_TRAVEL, KeyboardMaterialPolicy.travelSolidness(
+            KeyboardForm.FLOATING, false, true, true, true, 0.5f), 0f);
+    }
+
+    @Test
     public void theSolidFillFollowsTheSurfaceShapeAndNothingElseTakesOne() {
         assertTrue(KeyboardMaterialPolicy.solidFillIsRounded(KeyboardForm.DOCKED, true, true));
         assertFalse(KeyboardMaterialPolicy.solidFillIsRounded(KeyboardForm.DOCKED, true, false));

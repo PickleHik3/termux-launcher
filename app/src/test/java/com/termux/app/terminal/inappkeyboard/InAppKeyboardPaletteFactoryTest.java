@@ -164,4 +164,40 @@ public class InAppKeyboardPaletteFactoryTest {
         assertEquals(InAppKeyboardPaletteFactory.signature(context),
             InAppKeyboardPaletteFactory.signature(context));
     }
+
+    @Test
+    public void aSchemeLookLeavesTheGlassPaletteAsItWas() {
+        for (String variant : new String[] {"system", "light", "dark"}) {
+            Theme.Palette before = InAppKeyboardPaletteFactory.createGlass(context, variant);
+            Theme.Palette after = InAppKeyboardPaletteFactory.createGlass(context, variant,
+                com.termux.app.chrome.GlassLook.SCHEME);
+
+            assertEquals(variant, before.keyBackground, after.keyBackground);
+            assertEquals(variant, before.functionKeyBackground, after.functionKeyBackground);
+            assertEquals(variant, before.labelColor, after.labelColor);
+        }
+    }
+
+    @Test
+    @Config(sdk = 28, qualifiers = "night", application = Application.class)
+    public void anObsidianLookDerivesChipsAndLegendsFromTheCapsuleColour() {
+        com.termux.app.chrome.GlassLook mist = new com.termux.app.chrome.GlassLook(true, true);
+        int obsidian = mist.flatTint(0xFF000000 | com.termux.app.chrome.GlassLook.OBSIDIAN_DARK);
+
+        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(context, "system", mist);
+
+        // The chip is the capsule's own colour moved toward its ink, at the glass alpha: its hue
+        // is the obsidian navy's (blue leads), never the theme's neutral.
+        int chip = palette.keyBackground;
+        assertTrue("blue leads red in a navy chip",
+            Color.blue(chip) > Color.red(chip));
+        assertTrue("chip is lifted off the capsule",
+            ColorUtils.calculateLuminance(chip | 0xFF000000)
+                > ColorUtils.calculateLuminance(obsidian));
+        int chipOnCapsule = ColorUtils.compositeColors(chip, obsidian | 0xFF000000);
+        assertTrue(ColorUtils.calculateContrast(palette.labelColor, chipOnCapsule) >= 4.5d);
+        assertTrue(ColorUtils.calculateContrast(palette.functionLabelColor,
+            ColorUtils.compositeColors(palette.functionKeyBackground, obsidian | 0xFF000000))
+            >= 4.5d);
+    }
 }

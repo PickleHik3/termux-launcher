@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -49,6 +50,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         NO_SPACE,
         REMOVED,
         REMOVE_FAILED,
+        /** The host had forgotten every widget on the wall, so the wall was emptied. */
+        WALL_RESET,
         IGNORED
     }
 
@@ -71,6 +74,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         void stopListening();
         @NonNull AppWidgetHostView createView(int appWidgetId, @NonNull AppWidgetProviderInfo info);
         void updateOptions(int appWidgetId, @NonNull Bundle options);
+        /** The options the provider process actually has right now, not our own stored copy. */
+        @Nullable Bundle getOptions(int appWidgetId);
         long profileSerial(@NonNull UserHandle profile);
         boolean configureActivityAvailable(@NonNull ComponentName configure,
                                            @Nullable UserHandle profile);
@@ -170,7 +175,17 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
      */
     @NonNull
     public AddResult removeWidget(int appWidgetId) {
-        if (repository.get(appWidgetId) == null) return AddResult.IGNORED;
+        LauncherWidgetRecord record = repository.get(appWidgetId);
+        if (record == null) return AddResult.IGNORED;
+        if (record.isBuiltin()) {
+            // No platform ID to give back: the record is the whole of it.
+            if (!repository.removeRecord(appWidgetId)) {
+                notifyChanged(AddResult.REMOVE_FAILED);
+                return AddResult.REMOVE_FAILED;
+            }
+            notifyChanged(AddResult.REMOVED);
+            return AddResult.REMOVED;
+        }
         if (!repository.beginRecordDeletion(appWidgetId)) {
             notifyChanged(AddResult.REMOVE_FAILED);
             return AddResult.REMOVE_FAILED;
@@ -298,6 +313,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     public boolean canReconfigure(int appWidgetId) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return false;
+        // A built-in widget's settings are the launcher's own sheet; the pane opens it itself.
+        if (record.isBuiltin()) return false;
         try {
             AppWidgetProviderInfo info = platform.getInfo(appWidgetId);
             if (info == null || !providerMatches(record, info)) return false;
@@ -465,10 +482,36 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         }
     }
 
+    /**
+     * Places one of the launcher's own widgets. There is nothing to allocate, bind or configure,
+     * so this is a single durable write: the widget is {@link AddResult#READY} the moment it
+     * returns, or {@link AddResult#NO_SPACE} / {@link AddResult#STORAGE_FAILURE} and nothing has
+     * changed. {@code config} is the widget's own settings, kept in the record's options bundle.
+     */
+    @NonNull
+    public AddResult addBuiltin(@NonNull String kind, @NonNull WidgetCellRect cell, int page,
+                                long expectedRevision, @Nullable Bundle config) {
+        if (!repository.canReserve(expectedRevision, cell, page)) return AddResult.NO_SPACE;
+        LauncherWidgetRecord record = LauncherWidgetRecord.builtin(
+            repository.allocateBuiltinId(), kind, cell, page, config);
+        if (!repository.putRecord(record)) return AddResult.STORAGE_FAILURE;
+        notifyChanged(AddResult.READY);
+        return AddResult.READY;
+    }
+
+    /** Replaces a built-in widget's own settings; a no-op for anything else. */
+    public boolean updateBuiltinConfig(int appWidgetId, @NonNull Bundle config) {
+        LauncherWidgetRecord record = repository.get(appWidgetId);
+        if (record == null || !record.isBuiltin()) return false;
+        return repository.putRecord(record.withSizeOptions(config));
+    }
+
     @Nullable
     private AppWidgetHostView doCreateHostView(int appWidgetId) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return null;
+        // A built-in widget is the grid's own view, never a host view.
+        if (record.isBuiltin()) return null;
         // Every host view is asked for through here, so this is the one place a stale one can be
         // caught whatever brought the render about.
         discardHostViewsBuiltInAnotherMode();
@@ -488,12 +531,25 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     public boolean onHostSizeCommitted(int appWidgetId, int widthPx, int heightPx, int orientation) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return false;
+        // A built-in widget reads its own size; its options bundle is its settings, not a
+        // size report, and there is no provider process to wake.
+        if (record.isBuiltin()) return false;
         WidgetSizeOptionsPolicy.Result result = WidgetSizeOptionsPolicy.calculate(record.sizeOptions(),
             widthPx, heightPx, activity.getResources().getDisplayMetrics().density,
             orientation, Build.VERSION.SDK_INT);
-        if (!result.valid || !result.changed) return false;
-        LauncherWidgetRecord changed = record.withSizeOptions(result.options);
-        if (!repository.putRecord(changed)) return false;
+        if (!result.valid) return false;
+        if (result.changed) {
+            LauncherWidgetRecord changed = record.withSizeOptions(result.options);
+            if (!repository.putRecord(changed)) return false;
+        }
+        // The record's own stored bundle can say nothing changed while the provider process
+        // itself has a different one (a reinstall, an update that reset its options) - a live
+        // read here is what actually decides whether the write, which wakes the provider process,
+        // is skippable. Two reads beat one needless write.
+        if (WidgetSizeOptionsPolicy.effectivelyEqual(safeGetOptions(appWidgetId), result.options,
+            Build.VERSION.SDK_INT)) {
+            return result.changed;
+        }
         try {
             platform.updateOptions(appWidgetId, result.options);
             return true;
@@ -503,7 +559,25 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         }
     }
 
+    @Nullable
+    private Bundle safeGetOptions(int appWidgetId) {
+        try {
+            return platform.getOptions(appWidgetId);
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
     public void reconcileProviders() { reconcileProviders(-1); }
+
+    /** The records that are bound to another app's provider: every one but the built-ins. */
+    @NonNull private List<LauncherWidgetRecord> appWidgetRecords() {
+        List<LauncherWidgetRecord> out = new ArrayList<>();
+        for (LauncherWidgetRecord record : repository.records()) {
+            if (!record.isBuiltin()) out.add(record);
+        }
+        return out;
+    }
 
     private void reconcileProviders(int changedId) {
         if (capability == Capability.UNSUPPORTED) return;
@@ -514,7 +588,13 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
             // Without the host allocation snapshot, absence cannot safely mean uninstall.
             return;
         }
+        if (WidgetProviderReconcilePolicy.isWallLost(appWidgetRecords(), owned,
+            repository.pending() != null) && clearLostWall()) {
+            return;
+        }
         for (LauncherWidgetRecord record : repository.records()) {
+            // Built-in widgets have no provider to lose and no host ID to reconcile.
+            if (record.isBuiltin()) continue;
             AppWidgetProviderInfo info;
             try {
                 info = platform.getInfo(record.appWidgetId);
@@ -627,6 +707,23 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         }
     }
 
+    /**
+     * The whole wall's IDs are unknown to the host: it was restored onto another device, or the
+     * host's own data went. Nothing here can be reconnected — the IDs are gone, and the cells they
+     * were arranged into mean nothing without them — so the wall goes in one piece, both
+     * orientations with it, instead of becoming a page of placeholders the user has to clear by
+     * hand. Said once, here, rather than once per widget.
+     *
+     * @return true when the wall was emptied; false leaves this reconciliation to carry on as
+     *     before, so a failed write is retried rather than half-applied.
+     */
+    private boolean clearLostWall() {
+        if (!repository.resetToEmptyWall()) return false;
+        hostViews.clear();
+        notifyChanged(AddResult.WALL_RESET);
+        return true;
+    }
+
     private boolean providerMatches(WidgetAddTransaction expected, @Nullable AppWidgetProviderInfo info) {
         return info != null && expected.provider.equals(info.provider)
             && expected.profileSerial == platform.profileSerial(info.getProfile());
@@ -698,6 +795,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         @Override public void updateOptions(int id, Bundle options) {
             manager.updateAppWidgetOptions(id, options);
         }
+        @Override public Bundle getOptions(int id) { return manager.getAppWidgetOptions(id); }
         @Override public long profileSerial(UserHandle profile) {
             return users == null || profile == null ? 0L : users.getSerialNumberForUser(profile);
         }

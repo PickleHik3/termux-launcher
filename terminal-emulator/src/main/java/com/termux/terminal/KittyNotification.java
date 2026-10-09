@@ -90,6 +90,22 @@ public final class KittyNotification {
     }
 
     /**
+     * One whole message built outside the escape parser — the launcher's local API sends these
+     * on behalf of a process that has no terminal to write an escape into. It is cleaned and
+     * bounded exactly as a parsed {@code OSC 99} request is, so nothing downstream can tell the
+     * two apart. {@code urgency} outside the known range reads as unset.
+     */
+    @NonNull
+    public static KittyNotification plain(@Nullable String id, @Nullable String title,
+                                          @Nullable String body, int urgency) {
+        if (urgency < URGENCY_LOW || urgency > URGENCY_CRITICAL) urgency = URGENCY_UNSET;
+        List<String> none = Collections.emptyList();
+        return new KittyNotification(KittyNotifications.clampId(id),
+            KittyNotifications.clean(title, false), KittyNotifications.clean(body, true), urgency,
+            OCCASION_ALWAYS, true, false, false, TIMEOUT_DEFAULT, null, none, none, null, none);
+    }
+
+    /**
      * The name the program gave this notification, empty when it gave none. It is the handle for
      * replacing, closing and reporting on it.
      */
@@ -166,7 +182,11 @@ public final class KittyNotification {
         return mSound;
     }
 
-    /** Button labels the program offered. The terminal is free to ignore them. */
+    /**
+     * Button labels the program offered, in the order it sent them. The position (1-based) is the
+     * button's number when a press is reported, so a label may be empty: it is left unshown but
+     * keeps its number.
+     */
     @NonNull
     public List<String> getButtons() {
         return mButtons;

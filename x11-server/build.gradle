@@ -47,6 +47,9 @@ dependencies {
     implementation "androidx.preference:preference:1.2.1"
     // The hidden framework classes CmdEntryPoint reaches for outside an app process.
     compileOnly project(':x11-server:stub')
+
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.robolectric:robolectric:4.13"
 }
 
 // Upstream generates its Prefs class from preferences.xml so the store and the settings screen

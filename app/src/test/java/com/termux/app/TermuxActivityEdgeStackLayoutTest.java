@@ -256,11 +256,13 @@ public class TermuxActivityEdgeStackLayoutTest {
         // One sheet of glass, under both bars.
         assertNotNull(activity.findViewById(R.id.place_off_dock_plank_glass));
         assertNotNull(activity.findViewById(R.id.place_off_dock_plank_blur));
+        assertNotNull("frosted from the shared frame, the live blur only its fallback",
+            activity.findViewById(R.id.place_off_dock_plank_frost));
         assertNotNull(activity.findViewById(R.id.place_off_dock_plank_surface));
     }
 
     @Test
-    public void thePlankIsGlazedAtTheDocksOwnCornerRadius() {
+    public void thePlankIsClippedToTheShapeModelsRadius() {
         TermuxActivity activity = inflate();
         PlaceLayout layout = layoutWith(Element.APPS, Element.AZ, Edge.TOP);
         activity.applyEdgeStacks(layout);
@@ -270,19 +272,27 @@ public class TermuxActivityEdgeStackLayoutTest {
         assertEquals(View.VISIBLE, plank.getVisibility());
         View glass = activity.findViewById(R.id.place_off_dock_plank_glass);
         assertTrue(glass.getOutlineProvider()
-            instanceof com.termux.app.statusbar.StatusBarSurfaceOutlineProvider);
-        com.termux.app.statusbar.StatusBarSurfaceOutlineProvider outline =
-            (com.termux.app.statusbar.StatusBarSurfaceOutlineProvider) glass.getOutlineProvider();
+            instanceof com.termux.app.chrome.ChromeShapeOutlineProvider);
+        com.termux.app.chrome.ChromeShapeOutlineProvider outline =
+            (com.termux.app.chrome.ChromeShapeOutlineProvider) glass.getOutlineProvider();
 
         int glassHeightPx = activity.offDockPlankGlassHeightPx();
         assertTrue("both bands are on the sheet", glassHeightPx > 0);
-        assertEquals("the Appearance editor's dock radius, clamped to the whole plank",
-            activity.resolveDockCapsuleCornerRadiusPx(glassHeightPx), outline.radiusPx(), 0.01f);
-        // The defect: clamped to the index's own 19dp band the plank could never be rounder than
-        // half of it, whatever the slider said.
-        assertTrue("rounder than a half-capsule of one bar",
-            outline.radiusPx() > activity.resolveDockCapsuleCornerRadiusPx(
-                Math.round(activity.getResources().getDisplayMetrics().density * 19f)));
+        float density = activity.getResources().getDisplayMetrics().density;
+        if (activity.isRoundedDockStyle()) {
+            assertEquals("Floating: the plank is a card at Corners, clamped to the whole plank",
+                activity.resolveDockCapsuleCornerRadiusPx(glassHeightPx), outline.radiusPx(), 0.01f);
+            assertTrue("rounder than a half-capsule of one bar",
+                outline.radiusPx() > activity.resolveDockCapsuleCornerRadiusPx(
+                    Math.round(density * 19f)));
+        } else {
+            // Docked: the top edge card rounds its inner (bottom) corners at Corners, and nothing
+            // at the screen's radius, which the screen rounds itself.
+            assertTrue("a square top and Corners at the bottom, never the screen's radius",
+                Math.abs(outline.radiusPx()
+                    - com.termux.app.chrome.LiveChromeShape.FALLBACK_SCREEN_RADIUS_DP * density)
+                    > 0.01f);
+        }
     }
 
     @Test
@@ -464,14 +474,13 @@ public class TermuxActivityEdgeStackLayoutTest {
         laidOutColumn(activity, 1080, 1370);
 
         float density = activity.getResources().getDisplayMetrics().density;
-        // Updated for Q9 with a reason: a lone row keeps its 4dp sliver on the side without ticks
-        // and the strip's own band — nothing added to it — on the side with them. It is asymmetric
-        // where a shared row is not, because the plank should be as short as it can be.
+        // Updated with a reason: a lone row that carries ticks matches their band on the other
+        // side too. The 4dp sliver there set the icons against the rim and read bottom-heavy.
         int airPx = DockLayoutPolicy.rowAirPx(true, true, density);
         int stripPx = PageTickStrip.bandPx(density);
-        assertEquals(DockLayoutPolicy.loneRowAirPx(density), airPx);
+        assertEquals(stripPx, airPx);
         assertEquals(stripPx, DockLayoutPolicy.rowTickSideAirPx(true, true, density));
-        assertTrue(stripPx > airPx);
+        assertTrue(airPx > DockLayoutPolicy.loneRowAirPx(density));
         View plank = activity.findViewById(R.id.place_off_dock_plank_host);
         View scroll = activity.findViewById(R.id.place_apps_bar_scroll);
         View ticks = activity.findViewById(R.id.place_apps_bar_indicator);
@@ -479,14 +488,14 @@ public class TermuxActivityEdgeStackLayoutTest {
         assertEquals("the air is inside the sheet now, not around it", 0, plank.getPaddingTop());
         assertEquals(0, plank.getPaddingBottom());
         // The row is the band next to the canvas up here, so the ticks take the canvas side, which
-        // on the top edge is under the icons. The row keeps its sliver over them and nothing here.
+        // on the top edge is under the icons. The row keeps the strip's band over them and nothing here.
         assertEquals(airPx, scroll.getPaddingTop());
         assertEquals(0, scroll.getPaddingBottom());
         assertEquals("the ticks claim their band", stripPx, ticks.getHeight());
 
         int iconPx = scroll.getHeight() - airPx;
         assertTrue("there is an icon in there: " + iconPx, iconPx > 0);
-        assertEquals("the plank is the icon, its sliver and the ticks' band",
+        assertEquals("the plank is the icon, the air over it and the ticks' band",
             iconPx + airPx + stripPx, plank.getHeight());
     }
 
@@ -523,21 +532,19 @@ public class TermuxActivityEdgeStackLayoutTest {
     // ------------------------------------------------------------------ the seams on the plank
 
     @Test
-    public void thePlankSeparatesTwoBarsAndNeverOne() {
+    public void joinedBarsDrawNoLineBetweenThem() {
         TermuxActivity activity = inflate();
         EdgeStackView plankBars = activity.findViewById(R.id.place_off_dock_plank_bars);
 
         activity.applyEdgeStacks(layoutWith(Element.APPS, Element.AZ, Edge.TOP));
-        assertEquals("one gap between the two bars on the sheet", 1,
+        assertEquals("two bars on one sheet, and no hairline between them", 0,
             plankBars.getSeparatorCount());
 
         activity.applyEdgeStacks(layoutWith(Element.APPS, Edge.TOP));
-        assertEquals("a lone bar has nothing to be separated from", 0,
-            plankBars.getSeparatorCount());
+        assertEquals(0, plankBars.getSeparatorCount());
 
-        // Every band in a screen edge's stack carries its own glass, so none of those are seamed.
-        // The bottom edge's stack is the dock's own sheet and is covered by the dock-stack test.
-        for (int id : new int[] {R.id.place_edge_stack_top,
+        for (int id : new int[] {R.id.place_edge_stack_top, R.id.accessory_row_stack,
+            R.id.accessory_under_keyboard_stack,
             R.id.place_edge_stack_left, R.id.place_edge_stack_right}) {
             assertEquals(0, ((EdgeStackView) activity.findViewById(id)).getSeparatorCount());
         }

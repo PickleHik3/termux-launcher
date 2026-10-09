@@ -103,7 +103,10 @@ public final class KeyboardGeometryChoreographer {
         /** Requests a coalesced accessory re-render. */
         void requestAccessoryRenderSync();
 
-        /** Re-measures and re-lays out the accessory stack around the keyboard, for {@code reason}. */
+        /**
+         * Re-lays out the accessory stack around the keyboard, for {@code reason}, before the next
+         * traversal: the reveal gate applies the chrome against that traversal's layout.
+         */
         void applyAccessoryGeometry(@NonNull String reason);
 
         // ---- readiness the reveal gate waits on
@@ -295,19 +298,18 @@ public final class KeyboardGeometryChoreographer {
             keyboardContainer.forceLayout();
     }
 
-    /** Re-measures the keyboard and re-lays out the accessory stack around its new height. */
+    /**
+     * Re-measures the keyboard and re-lays out the accessory stack around its new height, once.
+     * The height is measured independently of the stack ({@link #measureHeightPx}), so the pass
+     * has the answer the container's own layout will reach; a laid-out height that still disagrees
+     * is caught by the container's layout listener, which asks for its own pass.
+     */
     public void requestGeometrySync() {
         View keyboardContainer = mSurface.findView(R.id.inapp_keyboard_container);
         discardMeasuredHeight();
         if (keyboardContainer != null)
             keyboardContainer.requestLayout();
         mSurface.applyAccessoryGeometry("inapp-keyboard");
-        if (keyboardContainer != null) {
-            keyboardContainer.post(() -> {
-                if (mSurface.isActivityAlive())
-                    mSurface.applyAccessoryGeometry("inapp-keyboard:layout");
-            });
-        }
     }
 
     /**

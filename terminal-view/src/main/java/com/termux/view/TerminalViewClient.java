@@ -4,6 +4,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import com.termux.terminal.TerminalLinks;
 import com.termux.terminal.TerminalSession;
 
 /**
@@ -25,11 +26,29 @@ public interface TerminalViewClient {
      */
     void onSingleTapUp(MotionEvent e);
 
+    /**
+     * A finger tap that went to a mouse-tracking program as a click. {@link #onSingleTapUp} is
+     * never called for it, so this is where a tap still gets to raise an on-screen keyboard.
+     */
+    default void onMouseTrackingTap(MotionEvent e) {}
+
+    /**
+     * A tap on a cell that carries a link: an OSC 8 hyperlink, or an address in the text when the
+     * view detects them. {@link #onSingleTapUp} is not called for it. With a mouse-tracking
+     * program the tap has also gone to the program as its click, unless Shift held it back.
+     */
+    default void onLinkTap(TerminalLinks.Link link, MotionEvent e) {}
+
     boolean shouldBackButtonBeMappedToEscape();
 
     boolean shouldEnforceCharBasedInput();
 
     boolean shouldUseCtrlSpaceWorkaround();
+
+    /** Whether hardware Ctrl+Space is left to Android instead of being sent to the terminal. */
+    default boolean shouldPassCtrlSpaceToAndroid() {
+        return false;
+    }
 
     boolean isTerminalViewSelected();
 
@@ -52,6 +71,23 @@ public interface TerminalViewClient {
 
     default boolean onShowContextMenu(TerminalView view) {
         return false;
+    }
+
+    /**
+     * Whether the selection toolbar offers "Read aloud". The view knows nothing about speech; the
+     * host says yes when it has a voice to read with.
+     */
+    default boolean isReadAloudAvailable() {
+        return false;
+    }
+
+    /** Whether the host is reading aloud now, so the toolbar offers "Stop reading" in its place. */
+    default boolean isReadingAloud() {
+        return false;
+    }
+
+    /** "Read aloud" was tapped on a selection: read {@code text}, or stop if already reading. */
+    default void onReadAloud(String text) {
     }
 
     boolean readControlKey();

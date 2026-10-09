@@ -235,13 +235,21 @@ public final class X11CliInstaller {
     }
 
     /**
-     * On nix, write {@code $PREFIX/bin/termux-x11-wm}: the whole {@code login} line for the
-     * configured window manager, baked into a file the server can be handed by its short path.
+     * Write {@code $PREFIX/bin/termux-x11-wm}: the wrapper the server is handed as its
+     * {@code -xstartup}, on every edition.
      *
-     * <p>Two facts make the wrapper the only way. The server execs {@code -xstartup} from
-     * Android's side, where a nix binary and the profile's {@code PATH} do not exist, so it has to
-     * go through {@code login}; and the server refuses any single argument past about 128
-     * characters, which that login line — with a configuration file path in it — is well beyond.
+     * <p>It exists for two unrelated reasons, and both want the same file. The first is nix's: the
+     * server execs {@code -xstartup} from Android's side, where a nix binary and the profile's
+     * {@code PATH} do not exist, so it has to go through {@code login}; and the server refuses any
+     * single argument past about 128 characters, which that login line — with a configuration file
+     * path in it — is well beyond.
+     *
+     * <p>The second is every edition's, and it is the reason this is no longer written only on
+     * nix: the server waits on its {@code -xstartup} child and shuts the display down as soon as
+     * that child exits <em>or is signalled</em>. A desktop session has to be able to stop the
+     * window manager (D1), so the manager must not be that child. The wrapper starts it beside
+     * itself and then stays asleep for as long as the display lives, so stopping the manager
+     * leaves the server's child untouched.
      *
      * <p>Rewritten on every pass rather than once behind the version marker, because the window
      * manager is a setting: the file has to say what the user last chose. When nothing is
@@ -253,8 +261,8 @@ public final class X11CliInstaller {
     @VisibleForTesting
     boolean writeWindowManagerScript() {
         File prefixDir = binDir.getParentFile();
-        if (prefixDir == null || !NixProfile.isNix(prefixDir)) return false;
-        String command = X11WindowManager.command(windowManager, prefixDir);
+        if (prefixDir == null) return false;
+        String command = X11WindowManager.startCommand(windowManager, prefixDir);
         File script = wmScript();
         if (command == null) {
             if (script.exists()) {
@@ -274,12 +282,75 @@ public final class X11CliInstaller {
         }
     }
 
-    /** The wrapper's text: a login into the nix environment, and the window manager inside it. */
+    /**
+     * How long the wrapper sleeps between one look at the server and the next.
+     *
+     * <p>This costs nothing in the ordinary life of a display, because the loop it paces is not
+     * reached then: {@code wait} blocks for as long as the window manager runs, with no timer at
+     * all. The loop only runs once the manager has gone — which today means only after a desktop
+     * session stopped it (D1) — so the interval is really "how long a wrapper may outlive the
+     * display that was stopped while a desktop had the manager down". An hour was measured doing
+     * exactly that on Waydroid (2026-09-22) and left the wrapper sitting there long after the
+     * display was gone; a minute bounds it to something nobody will see, and one wakeup a minute
+     * for the rest of a display's life is still nothing beside an X server.
+     */
+    private static final String IDLE_SECONDS = "60";
+
+    /**
+     * The wrapper's text: start the window manager beside this shell, write down its pid so the
+     * launcher can stop that one process and no other, wait for it, and then stay asleep for as
+     * long as the display lives.
+     *
+     * <p>Staying is the whole point. This shell is the server's {@code -xstartup} child and the
+     * server ends the display the moment that child exits or is signalled, so it has to outlive
+     * the manager it started — otherwise stopping the manager for a desktop (D1) would stop the
+     * display with it.
+     *
+     * <p>It leaves when the server does. The server never kills this child — it is normally the
+     * other way round — so a wrapper that only slept would be left behind, once per display, for
+     * the rest of the boot. Instead it looks at its own parent, which <em>is</em> the server
+     * ({@code fork} in upstream's {@code ddxReadyThread}, with no {@code setsid} between), once an
+     * hour: no busy-wait, and nothing left sleeping after the display is gone.
+     *
+     * <p>The look is the loop's own condition and there is no other branch, which is what makes
+     * the ordinary case right. Turning the display off kills the server first; the manager then
+     * loses its X connection and exits, {@code wait} returns, and the parent is already gone —
+     * {@code $PPID} is fixed at this shell's startup and is not rewritten by reparenting, so it
+     * still names the server, {@code kill -0} fails, the loop body never runs and the wrapper
+     * leaves at once. An earlier version treated an unseeable parent as a reason to sleep forever
+     * instead, which leaked exactly one sleeper per display stop — the commonest path of all. The
+     * fear behind it was real but misplaced: the server and the launcher are the same uid, so a
+     * {@code kill -0} that fails means a process that is gone, not one we may not signal.
+     *
+     * <p>The pid file is taken away again the moment the manager it names is gone, so a stop never
+     * has a dead pid to aim at.
+     */
     @NonNull
     static String windowManagerScript(@NonNull File prefixDir, @NonNull String command) {
+        String pidFile = ProotDistro.singleQuote(X11WindowManager.WM_PID_PATH);
+        String sleep = sleepCommand(prefixDir);
         return "#!" + NixProfile.hostShell(prefixDir).getPath() + "\n"
             + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
-            + "exec " + new File(prefixDir, "bin/login").getPath() + " " + command + "\n";
+            + command + " &\n"
+            + "echo $! > " + pidFile + "\n"
+            + "wait\n"
+            + "rm -f " + pidFile + "\n"
+            + "server=$PPID\n"
+            + "while kill -0 \"$server\" 2>/dev/null; do\n"
+            + sleep + " " + IDLE_SECONDS + "\n"
+            + "done\n";
+    }
+
+    /**
+     * Something that blocks forever and costs nothing: the prefix's own {@code sleep} when it is
+     * there, and Android's otherwise — which is the nix edition's case, since its prefix holds no
+     * such program and its {@code PATH} would not find one. Resolved to a path here, while the
+     * file is being written, rather than left to a {@code PATH} the server's child does not have.
+     */
+    @NonNull
+    private static String sleepCommand(@NonNull File prefixDir) {
+        File sleep = new File(prefixDir, "bin/sleep");
+        return sleep.canExecute() ? sleep.getPath() : "/system/bin/sleep";
     }
 
     /** True once this launcher's own commands are in place. */

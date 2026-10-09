@@ -78,6 +78,77 @@ public class TerminalFontConfigKittyTest {
 
         assertEquals(result.errors.toString(), 1, result.errors.size());
         assertEquals("line 1: unknown directive 'map'", result.errors.get(0));
+        assertEquals(3L, result.cursorTrailDelayMs);
+    }
+
+    /** The cursor trail tunables: every directive, and 0 keeping the app's own default delay. */
+    @Test
+    public void cursorTrailDirectivesAreParsedAsTunables() throws Exception {
+        kittyConf("cursor_trail 25\n"
+            + "cursor_trail_decay 0.2 0.6\n"
+            + "cursor_trail_start_threshold 1 3\n"
+            + "cursor_trail_color #ff0000\n");
+
+        TerminalFontConfig.Result result = load();
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(25L, result.cursorTrailDelayMs);
+        assertEquals(0.2f, result.cursorTrailDecayFast, 1e-6f);
+        assertEquals(0.6f, result.cursorTrailDecaySlow, 1e-6f);
+        assertEquals(1, (int) result.cursorTrailThresholdX);
+        assertEquals(3, (int) result.cursorTrailThresholdY);
+        assertEquals(0xFFFF0000, (int) result.cursorTrailColor);
+    }
+
+    /** {@code cursor_trail 0} is kitty's own "off", which is not this app's switch: no override. */
+    @Test
+    public void cursorTrailZeroKeepsTheAppDefaultDelay() throws Exception {
+        kittyConf("cursor_trail 0\n");
+
+        TerminalFontConfig.Result result = load();
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(0L, result.cursorTrailDelayMs);
+    }
+
+    @Test
+    public void customShadersMapsOneCursorTrailName() throws Exception {
+        kittyConf("custom_shaders cursor-trail-railgun\n");
+        TerminalFontConfig.Result result = load();
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals("railgun", result.cursorTrailStyleId);
+    }
+
+    @Test
+    public void customShadersWithAnUnmappedNameLeavesTheStyleNull() throws Exception {
+        kittyConf("custom_shaders something-else.glsl\n");
+        TerminalFontConfig.Result result = load();
+        assertNull(result.cursorTrailStyleId);
+    }
+
+    @Test
+    public void customShadersTakesTheFirstMappedNameOfSeveral() throws Exception {
+        kittyConf("custom_shaders foo.glsl cursor-trail-torpedo cursor-trail-pixiedust\n");
+        TerminalFontConfig.Result result = load();
+        assertEquals("torpedo", result.cursorTrailStyleId);
+    }
+
+    @Test
+    public void noCustomShadersMeansNoStyle() throws Exception {
+        kittyConf("cursor_trail 3\n");
+        TerminalFontConfig.Result result = load();
+        assertNull(result.cursorTrailStyleId);
+    }
+
+    @Test
+    public void cursorTrailColorNoneClearsAnEarlierValue() throws Exception {
+        kittyConf("cursor_trail_color #00ff00\n");
+        fontsConf("cursor_trail_color none\n");
+
+        TerminalFontConfig.Result result = load();
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertNull(result.cursorTrailColor);
     }
 
     /** A font directive is reported wherever it is written, with the file that carries it. */

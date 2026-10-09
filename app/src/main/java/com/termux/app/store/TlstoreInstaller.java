@@ -1,6 +1,7 @@
 package com.termux.app.store;
 
 import android.content.Context;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -43,6 +44,14 @@ import java.util.function.Consumer;
  * (recorded in {@code .motd-sha256} beside the marker); a file that has drifted from that — the
  * user edited or replaced it — is left alone for good.
  *
+ * <p>It also ships {@code tlstore-ui}, the full-screen store UI, the same way: one asset per ABI
+ * ({@code tlstore/tlstore-ui-<abi>}, plain assets rather than a {@code jniLibs} entry, since this
+ * is a regular program a shell execs, not a library the app dlopens). The
+ * device's first supported ABI with a matching asset wins; a device with none bundled gets nothing
+ * written and keeps whatever was there before, so {@code tlstore} falls back to printing the list.
+ * A binary already in place that this class did not write (no matching {@code .tlstore-ui-sha256}
+ * record) is left alone, the same as a foreign {@code tlstore}/{@code tl}/{@code tls}.
+ *
  * <p>All of it is disk I/O; {@link #installAsync} keeps it off the main thread.
  */
 public final class TlstoreInstaller {
@@ -56,11 +65,29 @@ public final class TlstoreInstaller {
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
     private static final String LIBEXEC_DIR = PREFIX + "/libexec/termux-launcher/tlstore";
     private static final String DATA_HOME_DIR = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH;
+    /** The engine's {@code DATA_DIR}: where a refreshed catalog and the installed state live. */
+    private static final String USER_DATA_DIR = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.local/share/tlstore";
+
+    /** The catalog this class writes from the APK: the engine's {@code BASE_CATALOG}. */
+    @NonNull
+    public static File shippedCatalogFile() {
+        return new File(LIBEXEC_DIR, "catalog.tsv");
+    }
+
+    /** The catalog {@code tlstore refresh} downloads: the engine's {@code USER_CATALOG}, which wins when newer. */
+    @NonNull
+    public static File refreshedCatalogFile() {
+        return new File(USER_DATA_DIR, "catalog.tsv");
+    }
 
     private static final String TLSTORE_ASSET = "tlstore/tlstore";
     private static final String CATALOG_ASSET = "tlstore/catalog.tsv";
     private static final String TRUSTED_KEY_ASSET = "tlstore/trusted.pub";
-    private static final String MOTD_ASSET = "tlstore/motd.sh";
+    /** {@code motd.sh} ships at the assets root, not under {@code tlstore/}: it is the launcher's
+     *  own welcome text, not part of the pinned tlstore release (see {@code app/tlstore.lock}). */
+    private static final String MOTD_ASSET = "motd.sh";
+    /** {@code tlstore/tlstore-ui-<abi>}, e.g. {@code tlstore/tlstore-ui-arm64-v8a}. */
+    private static final String TLSTORE_UI_ASSET_PREFIX = "tlstore/tlstore-ui-";
 
     /** The name every alias points at; also the {@code #!}-less command itself. */
     private static final String TLSTORE_NAME = "tlstore";
@@ -125,17 +152,27 @@ public final class TlstoreInstaller {
     /** The app's versionName: every release rewrites the files, so a changed asset ships. */
     @NonNull private final String release;
     @NonNull private final AssetSource assets;
+    /** ABIs to try for {@code tlstore-ui}, most preferred first; {@link Build#SUPPORTED_ABIS}. */
+    @NonNull private final String[] abis;
 
     @VisibleForTesting
     TlstoreInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull File dataHomeDir,
                      @NonNull String applicationId, @NonNull String release,
                      @NonNull AssetSource assets) {
+        this(binDir, libexecDir, dataHomeDir, applicationId, release, assets, Build.SUPPORTED_ABIS);
+    }
+
+    @VisibleForTesting
+    TlstoreInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull File dataHomeDir,
+                     @NonNull String applicationId, @NonNull String release,
+                     @NonNull AssetSource assets, @NonNull String[] abis) {
         this.binDir = binDir;
         this.libexecDir = libexecDir;
         this.dataHomeDir = dataHomeDir;
         this.applicationId = applicationId;
         this.release = release;
         this.assets = assets;
+        this.abis = abis;
     }
 
     /** The installer for this launcher's own prefix. */
@@ -183,12 +220,30 @@ public final class TlstoreInstaller {
     @NonNull File markerFile() { return new File(libexecDir, ".installed"); }
     @NonNull File motdFile() { return new File(dataHomeDir, "motd.sh"); }
     @NonNull File motdShaFile() { return new File(libexecDir, ".motd-sha256"); }
+    @NonNull File tlstoreUiFile() { return new File(libexecDir, "tlstore-ui"); }
+    @NonNull File tlstoreUiShaFile() { return new File(libexecDir, ".tlstore-ui-sha256"); }
 
     @NonNull
     Result install() {
         if (!binDir.isDirectory()) return Result.NO_PREFIX;
         String marker = MARKER_PREAMBLE + " v" + VERSION + " " + applicationId + " " + release + "\n";
-        if (marker.equals(read(markerFile()))) return Result.UP_TO_DATE;
+        if (marker.equals(read(markerFile()))) {
+            // The CLI, its aliases, the catalog and the key are already this release's; nothing
+            // there can have changed without the marker changing too. tlstore-ui is different:
+            // two builds can share the same applicationId/versionName (a debug rebuild during
+            // development, or a reinstall Android does not consider an update) while shipping a
+            // different binary, and installTlstoreUi() already tells "unchanged" from "changed"
+            // from "foreign" by the bundled asset's own bytes, not by this marker. So it always
+            // runs here too — cheap (a sha256 of one small file) when nothing changed.
+            if (libexecDir.isDirectory()) {
+                try {
+                    installTlstoreUi();
+                } catch (Exception e) {
+                    Logger.logErrorExtended(LOG_TAG, "Failed to refresh tlstore-ui: " + e.getMessage());
+                }
+            }
+            return Result.UP_TO_DATE;
+        }
         String foreign = foreignCommandName();
         if (foreign != null) {
             Logger.logInfo(LOG_TAG, "Leaving a " + foreign + " we did not write alone");
@@ -198,8 +253,21 @@ public final class TlstoreInstaller {
             if (!libexecDir.isDirectory() && !libexecDir.mkdirs()) {
                 throw new IOException("Failed to create " + libexecDir);
             }
+            byte[] bundled;
             try (InputStream in = assets.open(TLSTORE_ASSET)) {
-                writeAtomically(tlstoreScript(), in, true, true);
+                bundled = readAll(in);
+            }
+            // tlstore updates itself from its own releases, independently of this APK. A copy
+            // already newer than the one bundled here is kept, and tlstore-ui with it, since the
+            // two are updated as a pair; putting the older script back under a newer UI is what
+            // broke the store once.
+            String installedVersion = tlstoreVersion(readHead(tlstoreScript(), 4096));
+            String bundledVersion = tlstoreVersion(new String(bundled, 0, Math.min(bundled.length, 4096), StandardCharsets.UTF_8));
+            boolean keepInstalled = isNewerVersion(installedVersion, bundledVersion);
+            if (keepInstalled) {
+                Logger.logInfo(LOG_TAG, "Keeping tlstore " + installedVersion + ", newer than the bundled " + bundledVersion);
+            } else {
+                writeAtomically(tlstoreScript(), new java.io.ByteArrayInputStream(bundled), true, true);
             }
             writeSymlinkAtomically(tlAlias(), TLSTORE_NAME);
             writeSymlinkAtomically(tlsAlias(), TLSTORE_NAME);
@@ -213,6 +281,7 @@ public final class TlstoreInstaller {
                 Logger.logInfo(LOG_TAG, "No trusted.pub asset yet; installing tlstore without it");
             }
             installMotd();
+            if (!keepInstalled) installTlstoreUi();
             writeAtomically(markerFile(), bytes(marker), true, false);
             return Result.INSTALLED;
         } catch (Exception e) {
@@ -292,6 +361,75 @@ public final class TlstoreInstaller {
         } catch (IOException e) {
             Logger.logErrorExtended(LOG_TAG, "Failed to install motd.sh: " + e.getMessage());
         }
+    }
+
+    // ---- The store UI binary ------------------------------------------------------------------
+
+    /**
+     * Write {@code tlstore-ui} for this device's ABI, if the APK carries one. Rewritten whenever
+     * the bundled asset's bytes change (a release ships a newer build). Unlike everything else
+     * this class writes, that check runs on <em>every</em> {@link #install()} call, including one
+     * the outer marker already calls {@link Result.Kind#UP_TO_DATE} — this method's own sha256
+     * comparison is what decides freshness here, since two builds can share the same
+     * applicationId/versionName while shipping a different binary (a debug rebuild, or a
+     * reinstall Android does not treat as an update). Left alone — the way an edited
+     * {@code motd.sh} is — once a file is there whose sha256 does not match
+     * {@code .tlstore-ui-sha256}, meaning either a foreign file sits there or the on-disk copy has
+     * already drifted from what was written; either way it is not this class's to overwrite. A
+     * symlink at the destination counts as foreign too, the same rule {@link #writeAtomically}
+     * enforces for every other file here.
+     */
+    private void installTlstoreUi() {
+        byte[] asset;
+        try {
+            asset = findTlstoreUiAsset();
+        } catch (IOException e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to read a bundled tlstore-ui: " + e.getMessage());
+            return;
+        }
+        if (asset == null) {
+            Logger.logDebug(LOG_TAG, "No tlstore-ui bundled for this device's ABI; "
+                + "tlstore falls back to printing the list");
+            return;
+        }
+        try {
+            File binary = tlstoreUiFile();
+            if (Files.isSymbolicLink(binary.toPath())) {
+                Logger.logInfo(LOG_TAG, "Leaving tlstore-ui alone; a symlink is there");
+                return;
+            }
+            String assetSha = sha256Hex(asset);
+            if (binary.isFile()) {
+                String currentSha = sha256Hex(Files.readAllBytes(binary.toPath()));
+                if (currentSha.equals(assetSha)) return; // already the current build
+                String previousSha = read(tlstoreUiShaFile());
+                if (previousSha == null || !previousSha.equals(currentSha)) {
+                    Logger.logDebug(LOG_TAG, "Leaving " + binary + " alone; its content does not "
+                        + "match what this launcher last wrote there");
+                    return;
+                }
+            }
+            writeAtomically(binary, new java.io.ByteArrayInputStream(asset), true, true);
+            writeAtomically(tlstoreUiShaFile(), bytes(assetSha), true, false);
+        } catch (IOException e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to install tlstore-ui: " + e.getMessage());
+        }
+    }
+
+    /**
+     * The bundled {@code tlstore-ui} bytes for the first ABI in {@link #abis} the APK carries one
+     * for, or {@code null} when none of them do.
+     */
+    @Nullable
+    private byte[] findTlstoreUiAsset() throws IOException {
+        for (String abi : abis) {
+            try (InputStream in = assets.open(TLSTORE_UI_ASSET_PREFIX + abi)) {
+                return readAll(in);
+            } catch (java.io.FileNotFoundException e) {
+                // Not bundled for this ABI; try the next.
+            }
+        }
+        return null;
     }
 
     @NonNull
@@ -377,6 +515,28 @@ public final class TlstoreInstaller {
     @NonNull
     private static InputStream bytes(@NonNull String content) {
         return new java.io.ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** The {@code TLSTORE_VERSION=} a script declares in its opening lines, or null. */
+    @Nullable
+    @VisibleForTesting
+    static String tlstoreVersion(@Nullable String head) {
+        if (head == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?m)^TLSTORE_VERSION=([0-9][0-9.]*)$").matcher(head);
+        return m.find() ? m.group(1) : null;
+    }
+
+    /** True when dotted version {@code a} is newer than {@code b}; false when either is unknown. */
+    @VisibleForTesting
+    static boolean isNewerVersion(@Nullable String a, @Nullable String b) {
+        if (a == null || b == null) return false;
+        String[] x = a.split("\\."), y = b.split("\\.");
+        for (int i = 0; i < Math.max(x.length, y.length); i++) {
+            long p = i < x.length && !x[i].isEmpty() ? Long.parseLong(x[i]) : 0;
+            long q = i < y.length && !y[i].isEmpty() ? Long.parseLong(y[i]) : 0;
+            if (p != q) return p > q;
+        }
+        return false;
     }
 
     /** The first {@code limit} bytes as text: the marker sits in a script's opening lines. */

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icon pack: the Android robot head (Material Symbols "android") inside a round outline, so the segment reads as an app icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="960" android:viewportHeight="960">
+    <group android:translateY="960">
+        <path android:fillColor="?attr/termuxColorPrimary" android:fillType="evenOdd" android:pathData="M480,-880a400,400 0 1,0 0,800a400,400 0 1,0 0,-800Z M480,-816a336,336 0 1,1 0,672a336,336 0 1,1 0,-672Z" />
+        <group android:pivotX="480" android:pivotY="-480" android:scaleX="0.62" android:scaleY="0.62">
+            <path android:fillColor="?attr/termuxColorPrimary" android:fillType="evenOdd" android:pathData="M40,-240q9,-107 65.5,-197T256,-580l-74,-128q-6,-9 -3,-19t13,-15q8,-5 18,-2t16,12l74,128q86,-36 180,-36t180,36l74,-128q6,-9 16,-12t18,2q10,5 13,15t-3,19l-74,128q94,53 150.5,143T920,-240H40Zm240,-110q21,0 35.5,-14.5T330,-400q0,-21 -14.5,-35.5T280,-450q-21,0 -35.5,14.5T230,-400q0,21 14.5,35.5T280,-350Zm400,0q21,0 35.5,-14.5T730,-400q0,-21 -14.5,-35.5T680,-450q-21,0 -35.5,14.5T630,-400q0,21 14.5,35.5T680,-350Z" />
+        </group>
+    </group>
+</vector>
