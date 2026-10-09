@@ -43,7 +43,8 @@ import java.util.function.UnaryOperator;
 /**
  * Categorizes installed apps with the on-device model and writes the assignments into
  * {@code app-categories.conf}. Runs in the foreground because a full catalogue is many inferences
- * and the user leaves Settings while it works. The on-device model is asked one app at a time; the
+ * and the user leaves Settings while it works. The on-device model is asked a few apps at a time
+ * ({@link LauncherCategoryLocalSort}), so the category list is not re-read for every app; the
  * remote model is asked in blocks ({@link LauncherCategoryRemoteSort}), because free plans count
  * requests.
  *
@@ -264,7 +265,12 @@ public final class LauncherCategorySortService extends Service {
                 new RemoteRequests(manager, modelId, labelByPackage, assignments));
             stopError = result.error;
         } else {
-            sortOnDevice(manager, modelId, pending, labelByPackage, assignments);
+            List<LauncherCategorySortPrompt.AppEntry> apps = new ArrayList<>();
+            for (String packageName : pending) {
+                String label = labelByPackage.get(packageName);
+                apps.add(new LauncherCategorySortPrompt.AppEntry(packageName, label == null ? packageName : label));
+            }
+            LauncherCategoryLocalSort.run(apps, new LocalRequests(manager, modelId, assignments));
         }
         int assigned = assignments.assigned;
 
@@ -305,21 +311,6 @@ public final class LauncherCategorySortService extends Service {
         int unanswered = pending.size() - assignments.assigned - assignments.answeredOther.size();
         sortState.recordRun(System.currentTimeMillis(), appCount - Math.max(0, unanswered),
             LauncherCategorySortState.modelSource(modelId), modelId);
-    }
-
-    /** The on-device sort: one app per request. */
-    private void sortOnDevice(@NonNull TaiManager manager, @Nullable String modelId, @NonNull List<String> pending,
-                              @NonNull Map<String, String> labelByPackage, @NonNull Assignments assignments) {
-        for (String packageName : pending) {
-            if (state.cancelRequested) break;
-            String label = labelByPackage.get(packageName);
-            String slug = classify(manager, modelId, label == null ? packageName : label, packageName);
-            update(s -> s.withProcessed(s.processed + 1));
-            updateProgressNotification(false);
-            // An unparseable reply leaves the app out of the file entirely so the drawer's built-in
-            // classifier keeps handling it; it is a skip, never a fallback category.
-            if (slug != null) assignments.accept(packageName, slug);
-        }
     }
 
     /**
@@ -397,25 +388,93 @@ public final class LauncherCategorySortService extends Service {
         }
     }
 
-    @Nullable
-    private String classify(@NonNull TaiManager manager, @Nullable String modelId,
-                            @NonNull String label, @NonNull String packageName) {
-        try {
-            // Thinking off, no user system prompt, and the feature named: see categoryBody.
-            JSONObject request = TaiCallerRequests.categoryBody(modelId,
-                LauncherCategorySortPrompt.singleAppPrompt(label, packageName), LauncherCategorySortPrompt.MAX_TOKENS);
+    /**
+     * The on-device sort's requests: a batch, or one app the batch's reply missed. The bodies are
+     * {@link TaiCallerRequests#categoryBody}'s: thinking off, temperature 0, no user system prompt,
+     * and the feature named so TAI loads by app sorting's plan. An unparseable reply leaves the app
+     * out of the file so the drawer's built-in classifier keeps it; a request that brought back no
+     * reply at all, or an empty one, is a failed request.
+     */
+    private final class LocalRequests implements LauncherCategoryLocalSort.Requests {
+        private final TaiManager manager;
+        @Nullable private final String modelId;
+        private final Assignments assignments;
 
-            JSONObject response = manager.openAiChatCompletions(request.toString());
-            JSONArray choices = response.optJSONArray("choices");
-            if (choices == null || choices.length() == 0) return null;
-            JSONObject choice = choices.optJSONObject(0);
-            if (choice == null) return null;
-            JSONObject reply = choice.optJSONObject("message");
-            if (reply == null) return null;
-            return LauncherCategorySortPrompt.parseCategory(reply.optString("content", ""));
-        } catch (Exception ignored) {
-            return null;
+        LocalRequests(@NonNull TaiManager manager, @Nullable String modelId, @NonNull Assignments assignments) {
+            this.manager = manager;
+            this.modelId = modelId;
+            this.assignments = assignments;
         }
+
+        @Override
+        public boolean cancelled() {
+            return state.cancelRequested;
+        }
+
+        @NonNull
+        @Override
+        public LauncherCategoryRemoteSort.Answer batch(@NonNull List<LauncherCategorySortPrompt.AppEntry> apps) {
+            return ask(manager, modelId, LauncherCategorySortPrompt.batchPrompt(apps),
+                LauncherCategorySortPrompt.batchMaxTokens(apps), 0L, true,
+                content -> LauncherCategorySortPrompt.parseBatchReply(content, apps));
+        }
+
+        @NonNull
+        @Override
+        public LauncherCategoryRemoteSort.Answer single(@NonNull LauncherCategorySortPrompt.AppEntry app) {
+            return ask(manager, modelId, LauncherCategorySortPrompt.singleAppPrompt(app.label, app.packageName),
+                LauncherCategorySortPrompt.MAX_TOKENS, 0L, true, content -> {
+                    String slug = LauncherCategorySortPrompt.parseCategory(content);
+                    return slug == null ? Collections.emptyMap() : Collections.singletonMap(app.packageName, slug);
+                });
+        }
+
+        @Override
+        public void settled(@NonNull Map<String, String> answered, int settled) {
+            for (Map.Entry<String, String> entry : answered.entrySet())
+                assignments.accept(entry.getKey(), entry.getValue());
+            update(s -> s.withProcessed(s.processed + settled));
+            updateProgressNotification(false);
+        }
+    }
+
+    /**
+     * One category request: the reply's content goes to {@code parse}; no reply at all is a failed
+     * request, and so is an empty one when {@code emptyFails}. A {@code timeoutMs} of 0 is TAI's own
+     * default.
+     */
+    @NonNull
+    private LauncherCategoryRemoteSort.Answer ask(@NonNull TaiManager manager, @Nullable String modelId,
+                                                  @NonNull String prompt, int maxTokens, long timeoutMs,
+                                                  boolean emptyFails,
+                                                  @NonNull Function<String, Map<String, String>> parse) {
+        try {
+            String body = TaiCallerRequests.categoryBody(modelId, prompt, maxTokens).toString();
+            JSONObject response = timeoutMs > 0 ? manager.openAiChatCompletions(body, timeoutMs)
+                : manager.openAiChatCompletions(body);
+            JSONArray choices = response.optJSONArray("choices");
+            JSONObject choice = choices == null ? null : choices.optJSONObject(0);
+            if (choice == null) return LauncherCategoryRemoteSort.Answer.failed(errorText(response));
+            JSONObject reply = choice.optJSONObject("message");
+            String content = reply == null ? "" : reply.optString("content", "");
+            if (emptyFails && content.trim().isEmpty())
+                return LauncherCategoryRemoteSort.Answer.failed(getString(R.string.settings_app_drawer_category_sort_remote_failed));
+            return LauncherCategoryRemoteSort.Answer.of(parse.apply(content));
+        } catch (Exception e) {
+            String message = e.getMessage();
+            return LauncherCategoryRemoteSort.Answer.failed(message == null || message.trim().isEmpty()
+                ? getString(R.string.settings_app_drawer_category_sort_remote_failed) : message);
+        }
+    }
+
+    @NonNull
+    private String errorText(@NonNull JSONObject response) {
+        String message = response.optString("message", "").trim();
+        if (message.isEmpty()) {
+            JSONObject error = response.optJSONObject("error");
+            if (error != null) message = error.optString("message", "").trim();
+        }
+        return message.isEmpty() ? getString(R.string.settings_app_drawer_category_sort_remote_failed) : message;
     }
 
     /**
@@ -447,16 +506,16 @@ public final class LauncherCategorySortService extends Service {
         public LauncherCategoryRemoteSort.Answer batch(@NonNull List<String> packages) {
             List<LauncherCategorySortPrompt.AppEntry> apps = new ArrayList<>();
             for (String packageName : packages) apps.add(new LauncherCategorySortPrompt.AppEntry(packageName, label(packageName)));
-            return ask(LauncherCategorySortPrompt.pasteablePrompt(apps),
-                LauncherCategoryRemoteSort.maxTokens(packages.size()), REMOTE_BLOCK_TIMEOUT_MS,
+            return ask(manager, modelId, LauncherCategorySortPrompt.pasteablePrompt(apps),
+                LauncherCategoryRemoteSort.maxTokens(packages.size()), REMOTE_BLOCK_TIMEOUT_MS, false,
                 content -> LauncherCategorySortPrompt.parsePastedReply(content, new HashSet<>(packages)));
         }
 
         @NonNull
         @Override
         public LauncherCategoryRemoteSort.Answer single(@NonNull String packageName) {
-            return ask(LauncherCategorySortPrompt.singleAppPrompt(label(packageName), packageName),
-                LauncherCategorySortPrompt.MAX_TOKENS, 0L, content -> {
+            return ask(manager, modelId, LauncherCategorySortPrompt.singleAppPrompt(label(packageName), packageName),
+                LauncherCategorySortPrompt.MAX_TOKENS, 0L, false, content -> {
                     String slug = LauncherCategorySortPrompt.parseCategory(content);
                     return slug == null ? Collections.emptyMap() : Collections.singletonMap(packageName, slug);
                 });
@@ -474,39 +533,6 @@ public final class LauncherCategorySortService extends Service {
         private String label(@NonNull String packageName) {
             String label = labelByPackage.get(packageName);
             return label == null ? packageName : label;
-        }
-
-        /**
-         * A reply's content goes to {@code parse}; no reply at all is a failed request. A
-         * {@code timeoutMs} of 0 is TAI's own default.
-         */
-        @NonNull
-        private LauncherCategoryRemoteSort.Answer ask(@NonNull String prompt, int maxTokens, long timeoutMs,
-                                                      @NonNull Function<String, Map<String, String>> parse) {
-            try {
-                String body = TaiCallerRequests.categoryBody(modelId, prompt, maxTokens).toString();
-                JSONObject response = timeoutMs > 0 ? manager.openAiChatCompletions(body, timeoutMs)
-                    : manager.openAiChatCompletions(body);
-                JSONArray choices = response.optJSONArray("choices");
-                JSONObject choice = choices == null ? null : choices.optJSONObject(0);
-                if (choice == null) return LauncherCategoryRemoteSort.Answer.failed(errorText(response));
-                JSONObject reply = choice.optJSONObject("message");
-                return LauncherCategoryRemoteSort.Answer.of(parse.apply(reply == null ? "" : reply.optString("content", "")));
-            } catch (Exception e) {
-                String message = e.getMessage();
-                return LauncherCategoryRemoteSort.Answer.failed(message == null || message.trim().isEmpty()
-                    ? getString(R.string.settings_app_drawer_category_sort_remote_failed) : message);
-            }
-        }
-
-        @NonNull
-        private String errorText(@NonNull JSONObject response) {
-            String message = response.optString("message", "").trim();
-            if (message.isEmpty()) {
-                JSONObject error = response.optJSONObject("error");
-                if (error != null) message = error.optString("message", "").trim();
-            }
-            return message.isEmpty() ? getString(R.string.settings_app_drawer_category_sort_remote_failed) : message;
         }
     }
 

@@ -3,6 +3,7 @@ package com.termux.app.launcher.data;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.TaiFeaturePlan;
 import com.termux.app.launcher.drawer.AppDrawerCategory;
 
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -146,6 +148,156 @@ public final class LauncherCategorySortPrompt {
             }
         }
         return best;
+    }
+
+    // ------------------------------------------------------------------ on-device batches
+
+    /** Apps per on-device request: the category list, most of a prompt, goes once for all of them. */
+    public static final int BATCH_SIZE = 8;
+    /** Labels are cut to this many characters: a label only hints, and a long one only spends the window. */
+    static final int LABEL_MAX_CHARS = 32;
+    /** Window left free of prompt and reply: the chat template's turn markers and the estimate's error. */
+    static final int WINDOW_MARGIN_TOKENS = 64;
+    /** Reply room beyond the answer lines, for a model that opens with a line of its own. */
+    static final int REPLY_HEADROOM_TOKENS = 16;
+
+    /**
+     * Prompt for the on-device model, several apps per inference: {@link #singleAppPrompt}'s category
+     * block once, then one line per app, answered one {@code package: category} line per app.
+     */
+    @NonNull
+    public static String batchPrompt(@NonNull List<AppEntry> apps) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("Assign each Android app below to exactly one category.\n")
+            .append("\n")
+            .append("Categories:\n")
+            .append(categoryLines())
+            .append("\n")
+            .append("Apps (package name, then the app name in brackets):\n");
+        for (AppEntry app : apps) {
+            builder.append("- ").append(app.packageName).append(" (").append(shortLabel(app.label)).append(")\n");
+        }
+        builder.append("\n")
+            .append("Answer with one line per app, in the same order, in the form package.name: category_id\n")
+            .append("Use only the category ids above. Nothing else.");
+        return builder.toString();
+    }
+
+    /**
+     * A deliberately pessimistic token count for the window arithmetic, since no tokenizer runs on
+     * this side: printable ASCII at 2.5 characters a token (package names are the worst English-ish
+     * text, near 3), anything else at 2 tokens a character (CJK, emoji).
+     */
+    static int estimateTokens(@NonNull String text) {
+        int ascii = 0;
+        int other = 0;
+        for (int i = 0; i < text.length(); ) {
+            int codePoint = text.codePointAt(i);
+            if (codePoint < 0x80) ascii++;
+            else other++;
+            i += Character.charCount(codePoint);
+        }
+        return (ascii * 2 + 4) / 5 + 2 * other;
+    }
+
+    /** The reply cap of a batch: every app's {@code package: longest_category_id} line, plus headroom. */
+    public static int batchMaxTokens(@NonNull List<AppEntry> apps) {
+        String longest = "";
+        for (String slug : categorySlugs()) if (slug.length() > longest.length()) longest = slug;
+        int tokens = REPLY_HEADROOM_TOKENS;
+        for (AppEntry app : apps) tokens += estimateTokens(app.packageName + ": " + longest + "\n");
+        return tokens;
+    }
+
+    /** True when the batch's prompt and its reply cap fit app sorting's window with the margin to spare. */
+    public static boolean fitsWindow(@NonNull List<AppEntry> apps) {
+        return estimateTokens(batchPrompt(apps)) + batchMaxTokens(apps)
+            <= TaiFeaturePlan.SORTING_WINDOW - WINDOW_MARGIN_TOKENS;
+    }
+
+    /** The label as a prompt line shows it: one line, at most {@link #LABEL_MAX_CHARS} characters. */
+    @NonNull
+    static String shortLabel(@NonNull String label) {
+        String line = label.replaceAll("[\\p{Cntrl}\\s]+", " ").trim();
+        if (line.codePointCount(0, line.length()) <= LABEL_MAX_CHARS) return line;
+        return line.substring(0, line.offsetByCodePoints(0, LABEL_MAX_CHARS)).trim();
+    }
+
+    /**
+     * Reads a batch reply back into package → category slug, as tolerant as a small model needs:
+     * bullets, numbering, markdown, case and stray prose are ignored; a line is matched to an asked
+     * app by its package (or, failing that, by its label as the prompt showed it), and its category
+     * is the first known id after the package, brackets skipped. An app the reply misses, names
+     * twice (the first answer stands) or files under an unknown id is simply absent, and a package
+     * nobody asked about is never returned.
+     */
+    @NonNull
+    public static Map<String, String> parseBatchReply(@Nullable String reply, @NonNull List<AppEntry> asked) {
+        Map<String, String> slugByPackage = new LinkedHashMap<>();
+        if (reply == null) return slugByPackage;
+        Map<String, String> packageByLabel = new HashMap<>();
+        Set<String> repeatedLabels = new HashSet<>();
+        for (AppEntry app : asked) {
+            String label = shortLabel(app.label).toLowerCase(Locale.US);
+            if (packageByLabel.put(label, app.packageName) != null) repeatedLabels.add(label);
+        }
+        for (String label : repeatedLabels) packageByLabel.remove(label);
+
+        for (String rawLine : reply.split("\n")) {
+            String line = rawLine.replace("`", "").replace("*", "").trim()
+                .replaceFirst("^(?:[-+•>]+|\\d+[.)])\\s*", "");
+            if (line.isEmpty()) continue;
+            String lower = line.toLowerCase(Locale.US);
+            String packageName = null;
+            int answerFrom = -1;
+            for (AppEntry app : asked) {
+                int end = tokenEnd(lower, app.packageName.toLowerCase(Locale.US));
+                if (end < 0) continue;
+                // The longest package that matches wins: "com.foo" never claims a "com.foo.bar" line.
+                if (packageName == null || app.packageName.length() > packageName.length()) {
+                    packageName = app.packageName;
+                    answerFrom = end;
+                }
+            }
+            String answer;
+            if (packageName != null) {
+                answer = lower.substring(answerFrom);
+            } else {
+                int colon = line.lastIndexOf(':');
+                if (colon < 0) continue;
+                String key = line.substring(0, colon).replaceAll("\\([^)]*\\)", " ").replace("\"", "").trim();
+                packageName = packageByLabel.get(key.toLowerCase(Locale.US));
+                if (packageName == null) continue;
+                answer = line.substring(colon + 1);
+            }
+            if (slugByPackage.containsKey(packageName)) continue;
+            // A label echoed in brackets ("(Games Hub)") must not answer for the app.
+            String slug = parseCategory(answer.replaceAll("\\([^)]*\\)", " "));
+            if (slug != null) slugByPackage.put(packageName, slug);
+        }
+        return slugByPackage;
+    }
+
+    /** The end of {@code needle}'s first whole-token occurrence in {@code text}, or -1. */
+    private static int tokenEnd(@NonNull String text, @NonNull String needle) {
+        if (needle.isEmpty()) return -1;
+        for (int at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1)) {
+            int end = at + needle.length();
+            if ((at == 0 || !packageChar(text.charAt(at - 1)))
+                && (end == text.length() || !packageChar(text.charAt(end)) || endsSentence(text, end))) {
+                return end;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean packageChar(char c) {
+        return Character.isLetterOrDigit(c) || c == '_' || c == '.';
+    }
+
+    /** A full stop after a package that no package character follows ends the sentence, not the name. */
+    private static boolean endsSentence(@NonNull String text, int at) {
+        return text.charAt(at) == '.' && (at + 1 == text.length() || !packageChar(text.charAt(at + 1)));
     }
 
     /**
