@@ -219,7 +219,7 @@ public final class LauncherCategorySortService extends Service {
                 R.string.settings_app_drawer_category_sort_nothing_pending, labelByPackage.size());
             update(s -> s.withOutcome(nothingPending));
             new LauncherCategorySortState(this).recordRun(System.currentTimeMillis(),
-                labelByPackage.size(), LauncherCategorySortState.SOURCE_ON_DEVICE_MODEL, modelId);
+                labelByPackage.size(), LauncherCategorySortState.modelSource(modelId), modelId);
             return;
         }
 
@@ -276,7 +276,7 @@ public final class LauncherCategorySortService extends Service {
         new LauncherCategorySortState(this).recordRun(
             System.currentTimeMillis(),
             written.size(),
-            LauncherCategorySortState.SOURCE_ON_DEVICE_MODEL,
+            LauncherCategorySortState.modelSource(modelId),
             modelId
         );
         String done = state.cancelRequested

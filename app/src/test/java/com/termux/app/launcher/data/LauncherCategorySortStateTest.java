@@ -57,6 +57,15 @@ public class LauncherCategorySortStateTest {
         assertEquals("gemma-3n-e2b", reloaded.getModelId());
     }
 
+    @Test public void aModelSortRecordsWhereTheModelRan() {
+        assertEquals(LauncherCategorySortState.SOURCE_REMOTE_MODEL,
+            LauncherCategorySortState.modelSource("remote/some-model"));
+        assertEquals(LauncherCategorySortState.SOURCE_ON_DEVICE_MODEL,
+            LauncherCategorySortState.modelSource("gemma-3n-e2b"));
+        assertEquals(LauncherCategorySortState.SOURCE_ON_DEVICE_MODEL,
+            LauncherCategorySortState.modelSource(null));
+    }
+
     @Test public void recordRunKeepsNullModelId() {
         new LauncherCategorySortState(context).recordRun(42L, 7,
             LauncherCategorySortState.SOURCE_PASTED, null);

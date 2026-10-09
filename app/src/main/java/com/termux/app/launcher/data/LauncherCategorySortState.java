@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.TaiCallerRequests;
 import com.termux.shared.termux.TermuxConstants;
 
 import org.json.JSONException;
@@ -29,6 +30,8 @@ public final class LauncherCategorySortState {
 
     /** Assignment produced by the on-device model; {@link #getModelId()} names which one. */
     public static final String SOURCE_ON_DEVICE_MODEL = "on_device_model";
+    /** Assignment produced by the remote provider's model; {@link #getModelId()} is {@code remote/<id>}. */
+    public static final String SOURCE_REMOTE_MODEL = "remote_model";
     /** Assignment pasted in by the user from an external tool. */
     public static final String SOURCE_PASTED = "pasted";
     /** Assignment the user made by hand, one app at a time. */
@@ -47,6 +50,12 @@ public final class LauncherCategorySortState {
             TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
             Context.MODE_PRIVATE
         );
+    }
+
+    /** The {@code SOURCE_*} id of a model sort with {@code modelId}: remote or on this device. */
+    @NonNull
+    public static String modelSource(@Nullable String modelId) {
+        return TaiCallerRequests.isRemoteModel(modelId) ? SOURCE_REMOTE_MODEL : SOURCE_ON_DEVICE_MODEL;
     }
 
     /** Replaces any previously recorded run. */
