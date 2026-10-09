@@ -64,7 +64,7 @@ public class WidgetPaneFrameTapTest {
         final List<String> log = new ArrayList<>();
         int columns = 4;
         int rows = 5;
-        @Override public void editWidgets() { log.add("edit"); }
+        @Override public boolean editWidgets() { log.add("edit"); return true; }
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
         @Override public void openLayoutEditor() { log.add("layout"); }
@@ -530,9 +530,10 @@ public class WidgetPaneFrameTapTest {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls() {
-            @Override public void editWidgets() {
+            @Override public boolean editWidgets() {
                 super.editWidgets();
                 page.applyWidgetEditing(true);
+                return true;
             }
         };
         page.setHost(calls);
@@ -548,6 +549,25 @@ public class WidgetPaneFrameTapTest {
         // And the pencil's own spot is not what is on it: it runs nothing now, the grid's size does.
         tap(page, pencilX(activity), tabCentreY(activity));
         assertEquals(Collections.singletonList("edit"), calls.log);
+    }
+
+    @Test
+    public void onAnEmptyPageThePencilOpensTheGridSize() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        Calls calls = new Calls() {
+            @Override public boolean editWidgets() {
+                super.editWidgets();
+                return false;
+            }
+        };
+        page.setHost(calls);
+
+        holdCorner(page);
+        tap(page, pencilX(activity), tabCentreY(activity));
+        assertEquals(Collections.singletonList("edit"), calls.log);
+        assertTrue("no widget to edit, so the rows and columns come out instead",
+            page.isGridSizePopupShown());
     }
 
     @Test

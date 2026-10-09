@@ -312,12 +312,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * The Widgets page's edit pencil: the same entry the long-press menu's Edit widgets takes,
      * with the same gestures and the same ways out.
      */
-    public void editWidgets() {
-        menuEditWidgets();
+    public boolean editWidgets() {
+        return menuEditWidgets();
     }
 
-    /** Enters the edit chrome on the current page's first widget, without a live drag. */
-    void menuEditWidgets() {
+    /**
+     * Enters the edit chrome on the current page's first widget, without a live drag; false when
+     * the page has no widget to start on.
+     */
+    boolean menuEditWidgets() {
         List<LauncherWidgetRecord> pageRecords = widgets.repository().recordsOnPage(currentPage);
         LauncherWidgetRecord first = null;
         for (LauncherWidgetRecord record : pageRecords) {
@@ -326,8 +329,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 first = record;
             }
         }
-        if (first == null) return;
-        beginEditSession(first.appWidgetId);
+        return first != null && beginEditSession(first.appWidgetId);
     }
 
     /**

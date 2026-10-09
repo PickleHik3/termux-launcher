@@ -19483,8 +19483,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void toggleMinimalMode() {
                 setMinimalMode(!TermuxActivity.this.isMinimalMode());
             }
-            @Override public void editWidgets() {
-                if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();
+            @Override public boolean editWidgets() {
+                return mWidgetPaneController != null && mWidgetPaneController.editWidgets();
             }
             @Override public int widgetGridColumns() {
                 return widgetGridCaps().clampColumns(
