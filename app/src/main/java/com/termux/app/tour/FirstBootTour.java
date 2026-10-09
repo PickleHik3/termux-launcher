@@ -10,22 +10,35 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.terminal.io.ExtraKeysDefaultOffer;
+import com.termux.ai.TaiDownloadHub;
+import com.termux.app.firstrun.TaiWelcomeCard;
+import com.termux.app.firstrun.TaiWelcomeDownloads;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
- * The run, assembled: the state machine, the overlay, the targets and every signal, held in one
- * place so the activity owns a field and a handful of one-line calls rather than a tour.
+ * The run, assembled: the state machine, the setup sheet's hand-off, the overlay, the targets and
+ * every signal, held in one place so the activity owns a field and a handful of one-line calls
+ * rather than a tour.
  *
  * <p>Everything the launcher has to tell it arrives through the {@code on...} calls below, every
- * one of them made from the single place in the chrome that already decides the thing — a Host
- * interface's new default method, or a funnel every path through the feature already takes. The
- * states among them are edge-triggered in {@link TourSignalRelay}, because the chrome re-applies
- * them constantly and a card cleared by a state the user never put it in is the failure mode the
- * whole run is built against.
+ * one of them made from the single place in the chrome that already decides the thing. The states
+ * among them are edge-triggered in {@link TourSignalRelay}, because the chrome re-applies them
+ * constantly and a card cleared by a state the user never put it in is the failure mode the whole
+ * run is built against.
+ *
+ * <p>Between lessons the home screen is put back the way every lesson starts — {@link
+ * HomeHost#resetHome()} — through the launcher's own calls rather than by replaying gestures.
  */
 public final class FirstBootTour implements TourController.Listener, TourOverlayView.Callbacks,
     TourSignals.Listener, TourViewTargets.ViewFinder {
+
+    /** How long a cleared lesson's card says "Got it" before the run moves on. */
+    static final long GOT_IT_MS = 1100L;
+    /** The closing card's downloads line is refreshed no faster than this. */
+    static final long MODELS_REFRESH_MS = 1000L;
 
     /**
      * The controls the tour points at that the chrome measures for itself: a key of the in-app
@@ -38,10 +51,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     /**
      * What else is in front of the user right now.
      *
-     * <p>Asked rather than told, because these four surfaces open and close along a dozen paths
-     * each and a card left drawing over one of them is exactly what a missed path looks like. It
-     * is read on every layout pass — every one of them lays the window out — and again whenever
-     * the chrome says something moved.
+     * <p>Asked rather than told, because these surfaces open and close along a dozen paths each and
+     * a card left drawing over one of them is exactly what a missed path looks like.
      */
     public interface ChromeProbe {
         boolean isAppDrawerUp();
@@ -55,19 +66,12 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         /** Whether the help overlay is up, which every card waits behind. */
         boolean isHelpUp();
 
-        /**
-         * The ? of the corner tab that is up, in screen coordinates, or false when none is. The
-         * tab draws its buttons, so the chrome is the only thing that can measure this one.
-         */
+        /** The ? of the corner tab that is up, in screen coordinates, or false when none is. */
         default boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
             return false;
         }
 
-        /**
-         * The command palette's glass, in screen coordinates, or false when it is shut. The
-         * palette paints an animated rect inside a host that fills the window, so its view's
-         * bounds say nothing about where it is.
-         */
+        /** The command palette's glass, in screen coordinates, or false when it is shut. */
         default boolean commandPaletteRectOnScreen(@NonNull android.graphics.Rect out) {
             return false;
         }
@@ -79,67 +83,37 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         }
     }
 
-    /**
-     * The wall, for the one thing the run does to it: a run that begins — first launch, Replay, a
-     * resume after a process death — begins on the terminal, because that is where every card but
-     * the first two is taught. Mid-run the run never moves the wall itself; a card whose control
-     * is on another place asks the user back instead.
-     */
-    public interface WallHost {
-        void returnToTerminal();
-    }
-
-    /**
-     * The two things about the phone the run cannot work out for itself: whether this launcher is
-     * the home app — which changes what the second lesson says and whether the last question is
-     * asked at all — and the way to the system's own home-app chooser.
-     */
+    /** The home screen, for the two things the run asks of it. */
     public interface HomeHost {
-        boolean isLauncherHomeApp();
+        /**
+         * Back to how every lesson starts: the terminal place, the keyboard up, and the drawer,
+         * the palette, the status shade, help and the corner menu closed. Each through the
+         * launcher's own call for it, animated as the launcher animates it.
+         */
+        void resetHome();
 
-        void openHomeAppChooser();
+        /** Whether the wall has one place only, so there is nowhere to drag the border to. */
+        boolean hasOnePlace();
+    }
+
+    /** The setup sheet the run is offered on. The activity owns it: it asks for permissions. */
+    public interface SetupHost {
+        /** Raise the sheet, or keep the one that is up. */
+        void showSetup(@NonNull SetupCallbacks callbacks);
+
+        /** Take the sheet down if it is up. */
+        void dismissSetup();
     }
 
     /**
-     * The usage mode: whether this build offers the display at all, whether the install is the
-     * terminal alone right now — which takes the home-screen question out of the run — and the
-     * one thing only the launcher can do with an answer, which is to apply it.
+     * The sheet's two ways on. What it left downloading is in {@link
+     * TaiWelcomeDownloads#queued}, where the closing card reads it even after a process death.
      */
-    public interface UsageModeHost {
-        boolean isDisplayOffered();
+    public interface SetupCallbacks {
+        void onShowMeAround();
 
-        boolean isTerminalOnly();
-
-        /** Apply a {@code LauncherUseCaseMode} value; the launcher rebuilds itself around it. */
-        void applyUsageMode(@NonNull String mode);
+        void onSkipTheTour();
     }
-
-    /**
-     * The one thing about the user's keys the run cannot work out for itself: the row they have
-     * now, whether they have already been asked about this release's row, and the two answers.
-     */
-    public interface KeyRowHost {
-        /** The user's own {@code extra-keys} value, or null when their file sets none. */
-        @Nullable String ownKeyRow();
-
-        /** Whether the key-row question has been put to this user already. */
-        boolean keyRowAnswered();
-
-        /** Take this release's row, keeping theirs so the editor can offer it back. */
-        void switchToDefaultKeyRow();
-
-        /** Keep the row they have, and do not ask again. */
-        void keepOwnKeyRow();
-    }
-
-    /**
-     * The card an older run that stopped somewhere unmapped is met with. Not part of the run: it
-     * is the question asked before one starts, and it is answered with a button.
-     */
-    private static final TourStep RESUME_OR_RESTART_CARD = new TourStep("resume_or_restart",
-        TourStep.Kind.CHOICE, new int[] {R.string.tour_card_resume_or_restart},
-        new String[] {TourTargets.NONE}, new String[] {}, new TourGesture[] {TourGesture.NONE},
-        false, false, new TourAction[] {TourAction.RESUME, TourAction.RESTART});
 
     /** The place the run is taught on: the wall's own home page. */
     public static final String HOME_PLACE = com.termux.app.wall.PaneWallPolicy.homePage().name();
@@ -149,27 +123,31 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @NonNull private final TourSignalRelay mSignals = new TourSignalRelay();
     @Nullable private final KeyProbe mKeyProbe;
     @Nullable private ChromeProbe mChromeProbe;
-    @Nullable private WallHost mWallHost;
     @Nullable private HomeHost mHomeHost;
-    @Nullable private KeyRowHost mKeyRowHost;
-    @Nullable private UsageModeHost mUsageModeHost;
+    @Nullable private SetupHost mSetupHost;
     /** A run that was asked for while help was up, held until help goes away. */
     @Nullable private Runnable mStartWaitingForHelp;
-    /** Told when the real run ends, closing card or End tour: the welcome card follows it. */
+    /** Told when the real run ends: the models card follows it when the sheet did not ask. */
     @Nullable private Runnable mAfterRunListener;
     /** Whether the run that is going is a help practice, which writes and ends nothing real. */
     private boolean mPracticeRun;
     /** Whether the pinned-apps sheet is in front of the user, which only it can say. */
     private boolean mPinEditorUp;
-    /** What the in-app keyboard has latched, for the chord cards' walking glow. */
-    private boolean mCtrlLatched;
-    private boolean mAltLatched;
-    private boolean mShiftLatched;
+    /** What the sheet left downloading, read when the closing card comes up. */
+    @NonNull private TaiWelcomeDownloads.Queued mQueuedModels =
+        new TaiWelcomeDownloads.Queued(Collections.emptyList(), TaiWelcomeDownloads.Start.NOTHING);
+    /** The "Got it" in progress, waiting to move the run on. */
+    @Nullable private Runnable mCompletion;
 
     @Nullable private TourOverlayView mOverlay;
     @Nullable private ViewGroup mOverlayHost;
     @Nullable private ViewTreeObserver.OnGlobalLayoutListener mLayoutListener;
     private int mPresentation = TourCardVisibility.NORMAL;
+
+    @Nullable private TaiDownloadHub.Listener mModelsListener;
+    @Nullable private List<TaiDownloadHub.Snapshot> mModelsLatest;
+    @Nullable private Runnable mModelsRefresh;
+    private long mModelsRefreshedAt;
 
     /** The removed footage onboarding's own once-per-install preferences file and key. */
     private static final String LEGACY_ONBOARDING_PREFS_NAME = "termux_first_launch";
@@ -183,9 +161,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mActivity = activity;
         mKeyProbe = keyProbe;
         migrateLegacyOnboardingCompletionIfNeeded(activity, preferences);
-        // The two facts the run varies on are read from the phone when the run is wired up; until
-        // then the run is built for a launcher that is not the home app with the keyboard down.
-        mController = new TourController(TourRun.steps(new TourRun.RunContext(false, false)),
+        mController = new TourController(TourRun.steps(
+            new TourRun.RunContext(com.termux.app.place.PlaceLayout.Edge.BOTTOM)),
             new TourPreferences(preferences), SystemClock::uptimeMillis);
         mController.setListener(this);
         mSignals.setTourSignalListener(this);
@@ -193,16 +170,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     /**
-     * Treats a completed run of the removed footage onboarding (`FirstLaunchOnboarding`, dropped
-     * when this overlay tour replaced it) as a completed run of this tour, so an install that
-     * already sat through the old one is never shown this run too. Runs once, ever, guarded by
-     * its own flag rather than by {@link TermuxAppSharedPreferences#getFirstBootTourCompletedVersion()}
-     * — Replay legitimately zeroes that version, and reading it back after that would look
-     * exactly like "never migrated" and clobber the replay to "seen".
-     *
-     * <p>What it records is the version before the welcome card rather than the current one: the
-     * old introduction is a run they sat through, so it is not replayed, but they have never been
-     * offered this one, so the welcome card is put to them once.
+     * Treats a completed run of the removed footage onboarding as a completed run of this tour, so
+     * an install that already sat through the old one is never shown this run too. Runs once, ever,
+     * guarded by its own flag.
      */
     private static void migrateLegacyOnboardingCompletionIfNeeded(
             @NonNull Activity activity, @NonNull TermuxAppSharedPreferences preferences) {
@@ -215,13 +185,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
                 preferences.getFirstBootTourCompletedVersion())) {
             preferences.setFirstBootTourCompletedVersion(
                 TourController.VERSION_BEFORE_THE_WELCOME_CARD);
-            // The footage tour ran the permission chain once already; an upgrade stays silent.
-            preferences.setFirstRunChainDone(true);
         }
         preferences.setFirstBootTourLegacyOnboardingMigrated(true);
     }
 
-    /** Called once each time the real run ends; the launcher raises the welcome card from it. */
+    /** Called once each time the real run ends. */
     public void setAfterRunListener(@Nullable Runnable listener) {
         mAfterRunListener = listener;
     }
@@ -232,36 +200,21 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         onChromeChanged();
     }
 
-    /** The wall, for bringing the run home when it begins. */
-    public void setWallHost(@Nullable WallHost host) {
-        mWallHost = host;
-    }
-
-    /** The phone's home-app setting, which the run reads and the last card can change. */
+    /** The home screen, which the run puts back between lessons. */
     public void setHomeHost(@Nullable HomeHost host) {
         mHomeHost = host;
     }
 
-    /** The user's own row of keys, which the key-row card reads and answers. */
-    public void setKeyRowHost(@Nullable KeyRowHost host) {
-        mKeyRowHost = host;
+    /** The setup sheet the run is offered on. */
+    public void setSetupHost(@Nullable SetupHost host) {
+        mSetupHost = host;
     }
 
-    /** The usage mode, which the usage card offers and answers. */
-    public void setUsageModeHost(@Nullable UsageModeHost host) {
-        mUsageModeHost = host;
-    }
-
-    /**
-     * Offers the run to someone who has just finished first launch, and to anyone whose last run
-     * was of an older version of it: an update brings cards they have never been shown, so the
-     * welcome card asks once and their answer is remembered.
-     */
+    /** Offers the run to someone who has never been through one. */
     public void startIfNeeded() {
         if (!mController.isOffered() || mController.isRunning()) return;
         if (waitForHelpToClose(this::startIfNeeded)) return;
         rebuildRunForThisPhone();
-        bringTheWallHome();
         mController.startIfNeeded();
     }
 
@@ -273,27 +226,21 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         return mController.isOffered() || mController.isRunning();
     }
 
-    /** Starts the run from card one, whatever came before: what Replay will ask for. */
+    /** Starts the run from the setup sheet, whatever came before: what Replay asks for. */
     public void restart() {
         if (waitForHelpToClose(this::restart)) return;
+        cancelCompletion();
+        removeOverlay();
         rebuildRunForThisPhone();
-        bringTheWallHome();
         mController.start();
     }
 
-    /**
-     * Whether help may offer "Try it" at all. A run that is partway through a lesson cannot take
-     * one: the practice card would replace the card the run is waiting on, and the practice's own
-     * signals would clear it.
-     */
+    /** Whether help may offer "Try it" at all: not while a real run is up. */
     public boolean canStartPractice() {
         return !mController.isRunning() || mController.isPracticing();
     }
 
-    /**
-     * One lesson on its own, for help's "Try it". Writes nothing through: practising a lesson can
-     * never finish, restart or skip the real run.
-     */
+    /** One lesson on its own, for help's "Try it". Writes nothing through. */
     public boolean startPractice(@Nullable String lessonId) {
         if (lessonId == null) return false;
         if (!canStartPractice()) {
@@ -301,7 +248,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             return false;
         }
         if (waitForHelpToClose(() -> startPractice(lessonId))) return true;
+        cancelCompletion();
         rebuildRunForThisPhone();
+        resetHome();
         boolean started = mController.startPractice(lessonId);
         mPracticeRun = started;
         return started;
@@ -309,8 +258,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
 
     /**
      * Whether the run has to wait: a card drawn over help is in the way of the page of answers the
-     * first lesson spent itself teaching the user to reach, so anything that would put one up
-     * while help is open is held until help closes.
+     * run teaches the user to reach, so anything that would put one up while help is open is held
+     * until help closes.
      */
     private boolean waitForHelpToClose(@NonNull Runnable start) {
         if (!isHelpUp()) return false;
@@ -325,29 +274,14 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     /**
-     * The run, built for the phone it is about to run on. Some of its sentences depend on what the
-     * phone is set to right now — the way back from an app, and which way round the keyboard and
-     * the status bar lessons go — and all were read from a launcher that had not been asked yet
-     * when the tour was first wired up.
+     * The run, built for the phone it is about to run on: the apps row's edge decides the drawer
+     * lesson's sentence, and a wall with one place has no border to drag across.
      */
     private void rebuildRunForThisPhone() {
-        String ownRow = mKeyRowHost == null ? null : mKeyRowHost.ownKeyRow();
-        boolean hasOwnRow = ExtraKeysDefaultOffer.isCustomRow(ownRow);
-        boolean answered = mKeyRowHost != null && mKeyRowHost.keyRowAnswered();
         mController.setSteps(TourRun.steps(new TourRun.RunContext(
-            mHomeHost != null && mHomeHost.isLauncherHomeApp(), mSignals.isKeyboardShown(),
-            hasOwnRow && !answered,
-            mUsageModeHost == null || mUsageModeHost.isDisplayOffered(),
-            mSignals.isStatusBarExpanded(),
             mChromeProbe == null ? com.termux.app.place.PlaceLayout.Edge.BOTTOM
                 : mChromeProbe.appsEdge())));
-        // A terminal-only install has one place, so there is nothing to drag the border towards,
-        // and no home screen to be the phone's; both are back the moment the usage card is
-        // answered with a Home.
-        if (mUsageModeHost != null && mUsageModeHost.isTerminalOnly()) {
-            mController.dropStep(TourRun.BORDER_DRAG);
-            mController.dropStep(TourRun.HOME_CHOICE);
-        }
+        if (mHomeHost != null && mHomeHost.hasOnePlace()) mController.dropStep(TourRun.BORDER_DRAG);
     }
 
     /**
@@ -356,43 +290,28 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
      * @return true when a run was actually resumed.
      */
     public boolean resumeIfInProgress() {
+        if (mController.isRunning()) return false;
         if (waitForHelpToClose(this::resumeIfInProgress)) return false;
         rebuildRunForThisPhone();
         boolean resumed = mController.resumeIfInProgress();
-        if (resumed) bringTheWallHome();
+        // The lesson starts over from its first half, on a home screen put back the way every
+        // lesson starts. Nothing the reset settles is what a first half waits for.
+        if (resumed) resetHome();
         return resumed;
     }
 
-    /**
-     * A run begins on the terminal. Settings hands the launcher back on whatever place it was
-     * left on, and a process death restores the wall to the place it last rested on; a card
-     * asking for the + or the keyboard from the display place asks for a control that is not
-     * there. The wall settles and reports the place through {@link #onPlaceSettled}, so the card
-     * that is up is re-decided the moment it lands.
-     */
-    private void bringTheWallHome() {
-        if (mSignals.isOnHomePlace()) return;
-        // Except for the card that is asking the user to swipe back themselves: a resume on the
-        // first card's second half is not helped by having the swipe made for it.
-        TourStep step = mController.currentStep();
-        if (step != null
-                && TourSignals.PLACE_RETURNED.equals(step.signalAt(mController.currentStage())))
-            return;
-        TourLog.d("the run begins on the " + HOME_PLACE.toLowerCase(java.util.Locale.ROOT)
-            + " place; bringing the wall back to it");
-        if (mWallHost != null) mWallHost.returnToTerminal();
-    }
-
-    /** Whether a card is up right now — for suppressing dialogs that would draw over it. */
+    /** Whether a card or the sheet is up right now — for suppressing dialogs that would draw over it. */
     public boolean isShowing() {
         return mController.isRunning();
     }
 
-    /**
-     * The place the wall has settled on. Besides the first card's own signals this decides
-     * whether the card that is up can be taught here at all: the wall moved, so the card is
-     * re-decided on the spot rather than on the next layout pass.
-     */
+    private void resetHome() {
+        if (mHomeHost != null) mHomeHost.resetHome();
+    }
+
+    // ---- what the launcher reports -------------------------------------------------------------
+
+    /** The place the wall has settled on. */
     public void onPlaceSettled(@Nullable String placeId) {
         mSignals.onPlaceSettled(placeId);
         refreshCardVisibility();
@@ -416,19 +335,14 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     /**
      * The app drawer's resting state, once it has settled.
      *
-     * @param userDriven false when the launcher closed the plane itself (HOME, a rotation, a
-     *     preference reload), which the run must not read as the user's swipe
+     * @param userDriven false when the launcher closed the plane itself, which the run must not
+     *     read as the user's swipe
      */
     public void onDrawerOpenSettled(boolean open, boolean userDriven) {
         mSignals.onDrawerOpenSettled(open, userDriven);
     }
 
-    /**
-     * The sessions the launcher holds, each time the sessions list has been rebuilt.
-     *
-     * @param count how many there are, or -1 when there is nothing to count yet
-     * @param currentSessionId the one that is current, or null when there is none
-     */
+    /** The sessions the launcher holds, each time the sessions list has been rebuilt. */
     public void onSessionsSettled(int count, @Nullable String currentSessionId) {
         mSignals.onSessionsSettled(count, currentSessionId);
     }
@@ -436,25 +350,6 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     /** The window the launcher is showing, each time the active pane has settled on it. */
     public void onActiveWindowSettled(@Nullable String windowId) {
         mSignals.onActiveWindowSettled(windowId);
-    }
-
-    /**
-     * What the in-app keyboard has latched. The chord cards glow the key they are still waiting
-     * for, so the glow walks Ctrl, then Alt, then the key itself as the user taps each one.
-     */
-    public void onKeyboardModifiersChanged(boolean ctrl, boolean alt, boolean shift) {
-        if (mCtrlLatched == ctrl && mAltLatched == alt && mShiftLatched == shift) return;
-        mCtrlLatched = ctrl;
-        mAltLatched = alt;
-        mShiftLatched = shift;
-        applyChordGlow();
-    }
-
-    private void applyChordGlow() {
-        TourOverlayView overlay = mOverlay;
-        if (overlay == null) return;
-        overlay.setChordGlowIndex(TourChordGlow.indexFor(mController.currentStep(),
-            mCtrlLatched, mAltLatched, mShiftLatched));
     }
 
     /** A split was asked for. */
@@ -488,9 +383,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     /**
-     * Whether help is up, once it has settled either way. Both the signal the first lesson is
-     * cleared by and the chrome every card waits behind, so a run held back while help was open
-     * is let go here.
+     * Whether help is up, once it has settled either way. A run held back while help was open is
+     * let go here.
      */
     public void onHelpShownSettled(boolean shown) {
         mSignals.onHelpShownSettled(shown);
@@ -507,23 +401,14 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mSignals.onKeyboardShownSettled(shown);
     }
 
-    /**
-     * The pinned-apps editor came up. The sheet is in front of the user before the signal is
-     * emitted, so the card the signal moves the run on to is placed knowing it is behind a sheet.
-     */
+    /** The pinned-apps editor came up: a window of its own, which every card waits behind. */
     public void onPinEditorOpened() {
         mPinEditorUp = true;
         mSignals.onPinEditorOpened();
         refreshCardVisibility();
     }
 
-    /**
-     * The pinned-apps editor went away. Only a close that left something pinned clears the card;
-     * either way the sheet is gone, so the card comes back to where it belongs.
-     *
-     * @param saved whether the editor wrote the pinned list while it was open
-     * @param pinnedCount how many pins it left in the dock
-     */
+    /** The pinned-apps editor went away. */
     public void onPinEditorClosed(boolean saved, int pinnedCount) {
         mPinEditorUp = false;
         mSignals.onPinEditorClosed(saved, pinnedCount);
@@ -540,10 +425,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mSignals.onLauncherResumed();
     }
 
-    /**
-     * Something that covers the home screen whole opened or closed. Cheap, and safe to call on
-     * anything that might have moved one of them.
-     */
+    /** Something that covers the home screen whole opened or closed. */
     public void onChromeChanged() {
         refreshCardVisibility();
     }
@@ -555,13 +437,10 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     private void refreshCardVisibility() {
         TourOverlayView overlay = mOverlay;
         if (overlay == null) return;
-        // The resume-or-restart question is a card with no run behind it yet: without this the
-        // policy would read "no card is up" and take the question off the screen.
-        TourStep step = mController.isAwaitingResumeChoice()
-            ? RESUME_OR_RESTART_CARD : mController.currentStep();
+        TourStep step = mController.currentStep();
         java.util.EnumSet<TourChrome> chrome = chromeUp();
-        int presentation = TourCardVisibility.decide(step, mController.currentStage(), chrome,
-            mSignals.isOnHomePlace());
+        int presentation = TourCardVisibility.decide(step, chrome, mSignals.isOnHomePlace(),
+            mController.isCompleting());
         if (presentation != mPresentation) {
             mPresentation = presentation;
             TourLog.d("card " + (step == null ? "none" : step.id + ":" + mController.currentStage())
@@ -574,7 +453,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     private java.util.EnumSet<TourChrome> chromeUp() {
         java.util.EnumSet<TourChrome> up = java.util.EnumSet.noneOf(TourChrome.class);
         // The pin editor is a window of its own rather than a plane of this one, so it is told
-        // rather than asked: nothing in the activity's view tree can be looked at to find it.
+        // rather than asked.
         if (mPinEditorUp) up.add(TourChrome.PIN_EDITOR);
         ChromeProbe probe = mChromeProbe;
         if (probe == null) return up;
@@ -589,23 +468,58 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @NonNull
     private static String describePresentation(int presentation) {
         if (presentation == TourCardVisibility.HIDDEN) return "hidden";
-        if (presentation == TourCardVisibility.COMPACT_TOP) return "at the top of the screen";
         if (presentation == TourCardVisibility.AWAY) return "asking for the way back to the terminal";
+        if (presentation == TourCardVisibility.COMPLETED) return "saying it is done";
         return "against its control";
     }
 
-    // TourController.Listener
+    // ---- TourController.Listener ---------------------------------------------------------------
 
     @Override
-    public void onTourStepShown(TourStep step, int stage) {
+    public void onTourSetupShown() {
+        TourLog.d("setup sheet shown");
+        removeOverlay();
+        SetupHost host = mSetupHost;
+        if (host == null) {
+            // Nowhere to raise the sheet: the run goes straight to its first lesson.
+            onSheetLeft(true);
+            return;
+        }
+        host.showSetup(new SetupCallbacks() {
+            @Override public void onShowMeAround() {
+                onSheetLeft(true);
+            }
+
+            @Override public void onSkipTheTour() {
+                onSheetLeft(false);
+            }
+        });
+    }
+
+    private void onSheetLeft(boolean showMeAround) {
+        if (!mController.isShowingSetup()) return;
+        TourLog.d("setup sheet left: " + (showMeAround ? "show me around" : "skip the tour"));
+        if (showMeAround) {
+            rebuildRunForThisPhone();
+            resetHome();
+            mController.showMeAround();
+        } else {
+            mController.skipTheTour();
+        }
+    }
+
+    @Override
+    public void onTourStepShown(@NonNull TourStep step, int stage) {
         TourOverlayView overlay = obtainOverlay();
         if (overlay == null) {
             TourLog.d("card " + step.id + ":" + stage + " has nowhere to show: no content view");
             return;
         }
-        overlay.showStep(step, stage, mController.currentActions());
-        applyChordGlow();
+        overlay.setTranslationZ(0f);
+        overlay.showStep(step, stage, mController.currentProgress(), mController.isPracticing());
         refreshCardVisibility();
+        if (step.isClosingCard()) startModelsLine();
+        else stopModelsLine();
         if (TourLog.enabled()) {
             android.graphics.Rect rect = overlay.currentTargetRect();
             TourLog.d("card " + step.id + ":" + stage + " shown, target \""
@@ -615,134 +529,82 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         }
     }
 
+    /**
+     * The lesson is cleared. The card says so where it stands — over whatever the gesture opened,
+     * help included, which stands higher than everything else — and the run moves on once it has,
+     * putting the home screen back on the way.
+     */
+    @Override
+    public void onTourStepCompleted(@NonNull TourStep step) {
+        TourLog.d("card " + step.id + " cleared");
+        TourOverlayView overlay = mOverlay;
+        if (overlay == null) {
+            finishCompletion();
+            return;
+        }
+        overlay.showCompleted(mController.currentProgress());
+        refreshCardVisibility();
+        overlay.setTranslationZ(com.termux.app.help.HelpOverlayView.stackHeightPx(mActivity));
+        overlay.bringToFront();
+        cancelCompletion();
+        Runnable completion = this::finishCompletion;
+        mCompletion = completion;
+        overlay.postDelayed(completion, GOT_IT_MS);
+    }
+
+    private void finishCompletion() {
+        mCompletion = null;
+        if (mOverlay != null) mOverlay.setTranslationZ(0f);
+        if (!mController.isPracticing()) resetHome();
+        mController.continueAfterCompletion();
+    }
+
+    private void cancelCompletion() {
+        Runnable completion = mCompletion;
+        mCompletion = null;
+        if (completion != null && mOverlay != null) mOverlay.removeCallbacks(completion);
+    }
+
     @Override
     public void onTourFinished(boolean skipped) {
         TourLog.d("run finished, skipped=" + skipped);
+        cancelCompletion();
+        stopModelsLine();
         removeOverlay();
         boolean practice = mPracticeRun;
         mPracticeRun = false;
-        // The step after the closing card (and after End tour): the device-tiers welcome card.
-        // Practice from help is not the run, so it never raises it.
+        if (practice) return;
+        TaiWelcomeDownloads.forgetQueued(mActivity);
         Runnable after = mAfterRunListener;
-        if (!practice && after != null) after.run();
+        if (after != null) after.run();
+    }
+
+    // ---- TourOverlayView.Callbacks -------------------------------------------------------------
+
+    @Override
+    public void onTourCloseTapped() {
+        TourLog.d("close tapped on card " + describeCurrent());
+        cancelCompletion();
+        if (!mController.isPracticing()) resetHome();
+        mController.endTour();
     }
 
     @Override
-    public void onTourHomeChoice(TourController.Choice choice) {
-        TourLog.d("home-screen card answered " + choice);
-        if (choice == TourController.Choice.USE_AS_HOME && mHomeHost != null)
-            mHomeHost.openHomeAppChooser();
-    }
-
-    /**
-     * The usage card's answer: applied by the launcher, which rebuilds its chrome around it and
-     * picks the run back up on its stored card. The terminal alone takes the border drag and the
-     * home-screen question out of the rest of the run; either other answer puts them back.
-     */
-    @Override
-    public void onTourUsageModeChoice(TourController.Choice choice) {
-        TourLog.d("usage card answered " + choice);
-        String mode;
-        switch (choice) {
-            case USE_TERMINAL: mode = com.termux.app.launcher.LauncherUseCaseMode.MODE_TERMINAL; break;
-            case USE_HOME: mode = com.termux.app.launcher.LauncherUseCaseMode.MODE_HOME; break;
-            case USE_DISPLAY: mode = com.termux.app.launcher.LauncherUseCaseMode.MODE_DISPLAY; break;
-            default: return;
-        }
-        if (choice == TourController.Choice.USE_TERMINAL) {
-            mController.dropStep(TourRun.BORDER_DRAG);
-            mController.dropStep(TourRun.HOME_CHOICE);
-        } else {
-            mController.keepStep(TourRun.BORDER_DRAG);
-            mController.keepStep(TourRun.HOME_CHOICE);
-        }
-        if (mUsageModeHost != null) mUsageModeHost.applyUsageMode(mode);
-    }
-
-    /**
-     * A run from the older tour stopped somewhere this one has no equivalent for. The card says so
-     * and offers the two ways on; both begin at the first lesson, and the difference is only what
-     * the user was told.
-     */
-    @Override
-    public void onTourKeyRowChoice(TourController.Choice choice) {
-        TourLog.d("key-row card answered " + choice);
-        if (mKeyRowHost == null) return;
-        if (choice == TourController.Choice.SWITCH_KEY_ROW) {
-            mKeyRowHost.switchToDefaultKeyRow();
-            return;
-        }
-        if (choice != TourController.Choice.KEEP_KEY_ROW) return;
-        mKeyRowHost.keepOwnKeyRow();
+    public void onTourSkipTapped() {
+        TourLog.d("skip tapped on card " + describeCurrent());
+        if (mController.isCompleting()) return;
+        resetHome();
+        mController.skip();
     }
 
     @Override
-    public void onTourResumeOrRestart() {
-        TourOverlayView overlay = obtainOverlay();
-        if (overlay == null) return;
-        overlay.showStep(RESUME_OR_RESTART_CARD, 0, RESUME_OR_RESTART_CARD.actions());
-        refreshCardVisibility();
-    }
-
-    // TourOverlayView.Callbacks
-
-    @Override
-    public void onTourActionTapped(@NonNull TourAction action) {
-        TourStep step = mController.currentStep();
-        TourLog.d(action + " tapped on card " + (step == null ? "none" : step.id)
-            + ":" + mController.currentStage());
-        switch (action) {
-            case BACK: mController.back(); break;
-            case SKIP_STEP: mController.skip(); break;
-            case END_TOUR: mController.endTour(); break;
-            // Done is a practice hint's way out, and a shown stage's way on; the run knows which
-            // of the two the card that is up is.
-            case DONE: mController.done(); break;
-            case END_PRACTICE: mController.endPractice(); break;
-            case USE_TERMINAL: mController.choose(TourController.Choice.USE_TERMINAL); break;
-            case USE_HOME: mController.choose(TourController.Choice.USE_HOME); break;
-            case USE_DISPLAY: mController.choose(TourController.Choice.USE_DISPLAY); break;
-            case USE_AS_HOME: mController.choose(TourController.Choice.USE_AS_HOME); break;
-            case KEEP_TRYING: mController.choose(TourController.Choice.KEEP_TRYING); break;
-            case CONTINUE: mController.choose(TourController.Choice.CONTINUE); break;
-            case SWITCH_KEY_ROW:
-                mController.choose(TourController.Choice.SWITCH_KEY_ROW); break;
-            case KEEP_KEY_ROW:
-                mController.choose(TourController.Choice.KEEP_KEY_ROW); break;
-            case TAKE_THE_TOUR:
-                // The two sentences that read the phone are read again here: the user has had the
-                // welcome card in front of them, and the keyboard may have gone since it appeared.
-                rebuildRunForThisPhone();
-                mController.takeTheTour();
-                break;
-            case NOT_NOW: mController.notNow(); break;
-            case START_USING: mController.finish(); break;
-            case RESUME: mController.resumeChosen(); break;
-            case RESTART: mController.restartChosen(); break;
-        }
-    }
-
-    /** What the card that is up is waiting for, for the log. */
-    @NonNull
-    private static String describeWait(@NonNull TourStep step, int stage) {
-        String signal = step.signalAt(stage);
-        return signal == null ? "its own button" : signal;
+    public void onTourStartTapped() {
+        TourLog.d("start tapped");
+        mController.finish();
     }
 
     @Override
-    public void onTourCopyCommandTapped(int commandRes) {
-        android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
-            mActivity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
-        if (clipboard == null) return;
-        if (commandRes == 0) return;
-        String text = mActivity.getString(commandRes);
-        if (text.isEmpty()) return;
-        clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
-            mActivity.getString(R.string.tour_copy_commands), text));
-    }
-
-    @Override
-    public void onTourDocsTapped() {
+    public void onTourGuideTapped() {
         String url = mActivity.getString(R.string.tour_docs_url);
         try {
             mActivity.startActivity(new android.content.Intent(
@@ -753,7 +615,93 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         }
     }
 
-    // TourSignals.Listener
+    @NonNull
+    private String describeCurrent() {
+        TourStep step = mController.currentStep();
+        return step == null ? "none" : step.id + ":" + mController.currentStage();
+    }
+
+    /** What the card that is up is waiting for, for the log. */
+    @NonNull
+    private static String describeWait(@NonNull TourStep step, int stage) {
+        String signal = step.signalAt(stage);
+        return signal == null ? "its own button" : signal;
+    }
+
+    // ---- the closing card's downloads ----------------------------------------------------------
+
+    /**
+     * The downloads line, while the closing card is up and only when the sheet queued models:
+     * real progress from the download layer, refreshed no faster than once a second.
+     */
+    private void startModelsLine() {
+        TourOverlayView overlay = mOverlay;
+        if (overlay == null) return;
+        TaiWelcomeDownloads.Queued models = TaiWelcomeDownloads.queued(mActivity);
+        mQueuedModels = models;
+        if (models.start == TaiWelcomeDownloads.Start.NEEDS_WIFI) {
+            overlay.setModelsLine(mActivity.getString(R.string.tour_models_need_wifi), -1f);
+            return;
+        }
+        if (models.start != TaiWelcomeDownloads.Start.STARTED || models.modelIds.isEmpty()) {
+            overlay.setModelsLine(null, -1f);
+            return;
+        }
+        if (mModelsListener != null) return;
+        TaiDownloadHub.Listener listener = downloads -> {
+            mModelsLatest = downloads;
+            scheduleModelsRefresh();
+        };
+        mModelsListener = listener;
+        TaiDownloadHub.get(mActivity).addListener(listener);
+        // Until the hub's first snapshot lands, the line reads what is known: nothing done yet.
+        applyModelsLine();
+    }
+
+    private void scheduleModelsRefresh() {
+        TourOverlayView overlay = mOverlay;
+        if (overlay == null || mModelsRefresh != null) return;
+        long wait = Math.max(0L,
+            MODELS_REFRESH_MS - (SystemClock.uptimeMillis() - mModelsRefreshedAt));
+        Runnable refresh = () -> {
+            mModelsRefresh = null;
+            applyModelsLine();
+        };
+        mModelsRefresh = refresh;
+        overlay.postDelayed(refresh, wait);
+    }
+
+    private void applyModelsLine() {
+        TourOverlayView overlay = mOverlay;
+        if (overlay == null || mModelsListener == null) return;
+        mModelsRefreshedAt = SystemClock.uptimeMillis();
+        List<TaiDownloadHub.Snapshot> latest = mModelsLatest;
+        TaiWelcomeDownloads.Progress progress = TaiWelcomeDownloads.progress(
+            mQueuedModels.modelIds, TaiWelcomeDownloads.catalogSizes(), modelId -> {
+                if (latest == null) return null;
+                TaiDownloadHub.Snapshot newest = null;
+                for (TaiDownloadHub.Snapshot snapshot : latest)
+                    if (modelId.equals(snapshot.modelId)) newest = snapshot;
+                return newest == null ? null : new TaiWelcomeDownloads.ModelState(
+                    newest.status, newest.bytesRead, newest.totalBytes);
+            });
+        overlay.setModelsLine(mActivity.getString(R.string.tour_models_progress,
+            TaiWelcomeCard.formatSize(progress.doneBytes),
+            TaiWelcomeCard.formatSize(progress.totalBytes)), progress.fraction());
+    }
+
+    private void stopModelsLine() {
+        TaiDownloadHub.Listener listener = mModelsListener;
+        mModelsListener = null;
+        mModelsLatest = null;
+        if (listener != null) TaiDownloadHub.get(mActivity).removeListener(listener);
+        Runnable refresh = mModelsRefresh;
+        mModelsRefresh = null;
+        if (refresh != null && mOverlay != null) mOverlay.removeCallbacks(refresh);
+        if (mOverlay != null) mOverlay.setModelsLine(null, -1f);
+    }
+
+    // ---- TourSignals.Listener ------------------------------------------------------------------
 
     @Override
     public void onTourSignal(String signalId) {
@@ -763,20 +711,16 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         }
         // Snapshotted around the call, because "did that clear the card" is the one question a
         // device pass has to be able to answer and nothing downstream records it.
-        TourStep before = mController.currentStep();
-        int stageBefore = mController.currentStage();
+        String before = describeCurrent();
+        boolean completingBefore = mController.isCompleting();
         mController.onSignal(signalId);
-        TourStep after = mController.currentStep();
-        int stageAfter = mController.currentStage();
-        boolean moved = before != after || stageBefore != stageAfter;
-        TourLog.d("signal " + signalId + " while card "
-            + (before == null ? "none" : before.id + ":" + stageBefore)
-            + (moved ? " — cleared it, now " + (after == null ? "the run is over"
-                : after.id + ":" + stageAfter)
-            : " — ignored"));
+        String after = describeCurrent();
+        boolean moved = !before.equals(after) || completingBefore != mController.isCompleting();
+        TourLog.d("signal " + signalId + " while card " + before
+            + (moved ? " — cleared it, now " + after : " — ignored"));
     }
 
-    // TourViewTargets.ViewFinder
+    // ---- TourViewTargets.ViewFinder ------------------------------------------------------------
 
     @Override
     @Nullable
@@ -800,6 +744,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         return mChromeProbe != null && mChromeProbe.commandPaletteRectOnScreen(outOnScreen);
     }
 
+    // ---- the overlay ---------------------------------------------------------------------------
+
     @Nullable
     private TourOverlayView obtainOverlay() {
         if (mOverlay != null) return mOverlay;
@@ -811,8 +757,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         content.addView(overlay, TourOverlayView.buildLayoutParams());
         mOverlay = overlay;
         mOverlayHost = content;
+        mPresentation = TourCardVisibility.NORMAL;
         // Every layout pass, because that is what the keyboard, a rotation, a dock style and a
-        // font scale all come through as; a cached rect is a glow around where a control used to
+        // font scale all come through as; a cached rect is a zone around where a control used to
         // be.
         mLayoutListener = () -> {
             refreshCardVisibility();
@@ -844,6 +791,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
 
     private void removeOverlay() {
         if (mOverlay == null) return;
+        cancelCompletion();
+        stopModelsLine();
         View overlay = mOverlay;
         mOverlay.dismiss();
         mOverlay = null;

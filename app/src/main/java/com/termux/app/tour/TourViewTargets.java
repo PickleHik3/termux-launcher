@@ -156,10 +156,16 @@ public final class TourViewTargets implements TourTargets {
                 return rectInOverlay(azRowView(), "the A-Z index is put away or not on screen");
             case PAGE_BORDER:
                 return pageBorderRect();
+            // A layout that draws no pill still takes the swipe off its border, so the card stands
+            // against the border itself: the bottom one for the keyboard, the bar for the status.
             case KEYBOARD_GRABBER:
-                return grabberRect(false);
+                Rect keyboardPill = grabberRect(false);
+                return keyboardPill != null ? keyboardPill : pageBorderRect();
             case STATUS_GRABBER:
-                return grabberRect(true);
+                Rect statusPill = grabberRect(true);
+                return statusPill != null ? statusPill
+                    : rectInOverlay(mFinder.findTourView(R.id.terminal_window_bar_host),
+                        "the status bar is not on screen");
             case NONE:
                 return miss("this card points at nothing");
             default:

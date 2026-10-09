@@ -1,23 +1,30 @@
 package com.termux.app.tour;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
- * The run's state machine: which card is up, how far through it the user is, and whether the run
- * is over. Pure — it holds no views, reads no resources and knows the clock only through
- * {@link Clock}, so every transition below is a unit test rather than a phone.
+ * The run's state machine: whether the setup sheet is up, which card is up, how far through it the
+ * user is, and whether the run is over. Pure — it holds no views, reads no resources and knows the
+ * clock only through {@link Clock}, so every transition below is a unit test rather than a phone.
  *
  * <p>Every move is written through to {@link Prefs} as it happens. The launcher is the home
- * screen: the process is killed and restarted under the user constantly, and a tour that restarted
- * from card one each time would be worse than no tour. {@link #resumeIfInProgress()} picks the run
+ * screen: the process is killed and restarted under the user constantly, and a run that restarted
+ * from the sheet each time would be worse than no run. {@link #resumeIfInProgress()} picks the run
  * back up on the card it was on.
  *
+ * <p>A lesson's last gesture does not move the run on by itself. The card says "Got it" first —
+ * {@link Listener#onTourStepCompleted} — and the host calls {@link #continueAfterCompletion()}
+ * once it has; the stored card has already moved on, so a process death in between resumes on the
+ * next lesson rather than repeating this one.
+ *
  * <p>The same machine runs a single lesson on its own — {@link #startPractice(String)} — for the
- * "Try it" in help. Practice writes nothing at all: a user who practises the keyboard lesson a
- * year later has not restarted, skipped or finished the first run, and must not be told they have.
+ * "Try it" in help. Practice writes nothing at all.
  *
  * <p>Signals are ignored for {@link #ARM_DELAY_MS} after a card appears. The gesture that cleared
  * the previous card often lands its settle callback a frame or two later, and an un-armed card
@@ -25,101 +32,20 @@ import java.util.List;
  */
 public final class TourController {
 
-    /** Bumped when the run changes enough that a run in progress has to be mapped onto the new one. */
-    public static final int RUN_VERSION = 6;
+    /** Bumped when the run changes enough that a run in progress has to be restarted on this one. */
+    public static final int RUN_VERSION = 7;
 
     /**
-     * The run before the border lessons and before the usage question moved to the front. Every
-     * card of it is a card of this one under the same id, but the usage question, the keyboard
-     * lesson and the three after it all moved, so a run in progress from it is mapped by name; its
-     * keyboard card (the tap on the keyboard key) is this run's keyboard swipe.
-     */
-    public static final int VERSION_BEFORE_THE_BORDER_LESSONS = 5;
-
-    /**
-     * The run before the usage card. Every card of it is a card of this one under the same id;
-     * the usage card went in before the home-screen question, so the two cards after it moved
-     * by one and a run in progress from it is mapped by name.
-     */
-    public static final int VERSION_BEFORE_THE_USAGE_CARD = 4;
-
-    /**
-     * The run before the welcome card. Its lessons are this run's lessons, under the same numbers
-     * — the welcome card is offered before the run rather than counted inside it — so a run in
-     * progress from it is picked up exactly where it stopped.
-     *
-     * <p>It is also what the legacy migration records, so an install that only ever sat through
-     * an older introduction is offered the welcome card once.
+     * The run before the welcome card. It is what the legacy migration records, so an install
+     * that only ever sat through an older introduction counts as having finished one.
      */
     public static final int VERSION_BEFORE_THE_WELCOME_CARD = 3;
-
-    /**
-     * The run before the pin lesson was put second. Its card numbers mean different lessons than
-     * this run's, so a run in progress from it is re-indexed by {@link #versionTwoCardFor} rather
-     * than read at face value.
-     */
-    private static final int VERSION_BEFORE_THE_PIN_LESSON = 2;
-
-    /** The six cards of that run, in the order it showed them. */
-    private static final List<String> VERSION_TWO_CARDS = Collections.unmodifiableList(
-        Arrays.asList(TourRun.FIND_HELP, TourRun.FIND_APPS, TourRun.KEYBOARD,
-            TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING));
-
-    /** The seven cards of the run before the welcome card, in the order it showed them. */
-    private static final List<String> VERSION_THREE_CARDS = Collections.unmodifiableList(
-        Arrays.asList(TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEYBOARD,
-            TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING));
-
-    /** The nine cards of the run before the border lessons, in the order it showed them. */
-    private static final List<String> VERSION_FIVE_CARDS = Collections.unmodifiableList(
-        Arrays.asList(TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEY_ROW,
-            TourRun.KEYBOARD, TourRun.FIND_ACTION, TourRun.USAGE_MODE, TourRun.HOME_CHOICE,
-            TourRun.CLOSING));
-
-    /** The eight cards of the run before the usage card, in the order it showed them. */
-    private static final List<String> VERSION_FOUR_CARDS = Collections.unmodifiableList(
-        Arrays.asList(TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEY_ROW,
-            TourRun.KEYBOARD, TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING));
 
     /** How long a freshly shown card ignores signals. */
     public static final long ARM_DELAY_MS = 400L;
 
     /** Nothing is running and no card has ever been shown. */
     private static final int STEP_NONE = -1;
-
-    /** The buttons a practice hint offers instead of a lesson's Skip step and End tour. */
-    private static final List<TourAction> PRACTICE_ACTIONS = Collections.unmodifiableList(
-        Arrays.asList(TourAction.DONE, TourAction.END_PRACTICE));
-
-    /**
-     * The buttons a stage that is only shown offers: the same three every other stage offers. The
-     * card the run is not waiting on used to say Done instead, and a middle button that changes
-     * its word halfway through a lesson reads as a different button doing a different thing. It
-     * is the same way on, so it is the same word; moving past a card that asked for nothing is
-     * not counted as a lesson skipped.
-     */
-    private static final List<TourAction> SHOWN_STAGE_ACTIONS = Collections.unmodifiableList(
-        Arrays.asList(TourAction.BACK, TourAction.SKIP_STEP, TourAction.END_TOUR));
-
-    /** What the user answered on a card that is a question. */
-    public enum Choice {
-        /** Make the launcher the phone's home app. */
-        USE_AS_HOME,
-        /** Leave the home app as it is for now. */
-        KEEP_TRYING,
-        /** Nothing to decide: the card had one way on. */
-        CONTINUE,
-        /** Take this release's row of keys. */
-        SWITCH_KEY_ROW,
-        /** Keep the row of keys the user already has. */
-        KEEP_KEY_ROW,
-        /** The usage card: the terminal alone. */
-        USE_TERMINAL,
-        /** The usage card: the terminal with the home screen. */
-        USE_HOME,
-        /** The usage card: the terminal, the home screen and the Linux display. */
-        USE_DISPLAY
-    }
 
     /**
      * Whether a completed run of some earlier once-per-install introduction should count as a
@@ -137,74 +63,14 @@ public final class TourController {
     }
 
     /**
-     * The lesson that covers what card {@code versionOneStepIndex} of the thirteen-card run was
-     * teaching, or null when nothing in this run covers it.
+     * Whether the run is offered on its own: only to someone who has never finished or skipped any
+     * version of it. A new version of the run is not a reason to stop someone who already said
+     * yes or no to the last one; Settings › Replay tour is how they see it.
      *
-     * <p>The pane corner card became the first half of "find help"; the drawer and the A–Z scrub
-     * both became "find Android apps"; the whole keyboard chapter became "control the keyboard";
-     * the palette card became "find an action". The two status-bar cards and the old closing card
-     * have no equivalent at all — the run does not teach page swipes any more — and the user is
-     * asked whether to pick the tour up or start it over instead of being dropped somewhere
-     * arbitrary.
+     * @param completedVersion the version the user last finished or skipped, or 0
      */
-    public static String migratedLessonFor(int versionOneStepIndex) {
-        switch (versionOneStepIndex) {
-            case 3: case 4: case 5: case 6: case 7:
-                return TourRun.KEYBOARD;
-            case 8:
-                return TourRun.FIND_HELP;
-            case 9: case 10:
-                return TourRun.FIND_APPS;
-            case 11:
-                return TourRun.FIND_ACTION;
-            default:
-                return null;
-        }
-    }
-
-    /**
-     * The card {@code stepIndex} meant in the run before the border lessons, or null when that run
-     * had no such card. Mapped by name: the usage question moved to the front and the lessons
-     * after the first one were rearranged around the three new ones.
-     */
-    public static String versionFiveCardFor(int stepIndex) {
-        return stepIndex >= 0 && stepIndex < VERSION_FIVE_CARDS.size()
-            ? VERSION_FIVE_CARDS.get(stepIndex) : null;
-    }
-
-    /**
-     * The card {@code stepIndex} meant in the run before the usage card, or null when that run
-     * had no such card. Mapped by name, since the two cards after the new one moved.
-     */
-    public static String versionFourCardFor(int stepIndex) {
-        return stepIndex >= 0 && stepIndex < VERSION_FOUR_CARDS.size()
-            ? VERSION_FOUR_CARDS.get(stepIndex) : null;
-    }
-
-    /**
-     * The card {@code stepIndex} meant in the run before the welcome card, or null when that run
-     * had no such card.
-     *
-     * <p>Every number means what it always meant: the welcome card is offered before the run and
-     * is not one of its steps, so nothing after it moved.
-     */
-    public static String versionThreeCardFor(int stepIndex) {
-        return stepIndex >= 0 && stepIndex < VERSION_THREE_CARDS.size()
-            ? VERSION_THREE_CARDS.get(stepIndex) : null;
-    }
-
-    /**
-     * The card {@code stepIndex} meant in the run before the pin lesson, or null when that run had
-     * no such card.
-     *
-     * <p>Every card of that run is still in this one, under the same id, so nothing is lost and
-     * nothing is asked twice: the number moved because a lesson was inserted second, and the id is
-     * what the stored place really meant. The stage is kept with it — the cards themselves did not
-     * change — so a user halfway through Find help comes back exactly where they were.
-     */
-    public static String versionTwoCardFor(int stepIndex) {
-        return stepIndex >= 0 && stepIndex < VERSION_TWO_CARDS.size()
-            ? VERSION_TWO_CARDS.get(stepIndex) : null;
+    public static boolean isOfferedTo(int completedVersion) {
+        return completedVersion <= 0;
     }
 
     /** The clock, injected so tests can step it. */
@@ -214,15 +80,15 @@ public final class TourController {
 
     /** The five things the run has to remember across a process death. */
     public interface Prefs {
-        /** The {@link #RUN_VERSION} the user has finished, or 0. */
+        /** The {@link #RUN_VERSION} the user has finished or skipped, or 0. */
         int getTourCompletedVersion();
 
         void setTourCompletedVersion(int version);
 
         /**
          * The {@link #RUN_VERSION} the run in progress belongs to, or 0 for a run started before
-         * the version was recorded. Without it a stored card number says nothing: card 3 of the
-         * old run and card 3 of this one are different lessons.
+         * the version was recorded. Without it a stored card number says nothing: card 3 of an
+         * older run and card 3 of this one are different lessons.
          */
         int getTourRunVersion();
 
@@ -233,7 +99,7 @@ public final class TourController {
 
         void setTourStepIndex(int index);
 
-        /** How many of the current card's signals have landed. */
+        /** How many of the current card's stages have been cleared. */
         int getTourStepStage();
 
         void setTourStepStage(int stage);
@@ -244,117 +110,76 @@ public final class TourController {
         void setTourSkipped(boolean skipped);
     }
 
-    /** What the overlay is told; every call is made after the prefs are written. */
+    /** What the host is told; every call is made after the prefs are written. */
     public interface Listener {
+        /** The setup sheet is the thing in front of the user now. */
+        void onTourSetupShown();
+
         /** Show this card at this stage. */
-        void onTourStepShown(TourStep step, int stage);
+        void onTourStepShown(@NonNull TourStep step, int stage);
+
+        /**
+         * The lesson that is up has just been cleared. Say so, then call
+         * {@link #continueAfterCompletion()}.
+         */
+        void onTourStepCompleted(@NonNull TourStep step);
 
         /** The run is over; take the overlay down. */
         void onTourFinished(boolean skipped);
-
-        /**
-         * The user answered the home-screen card. The run moves on either way; this is the part
-         * only the launcher can do.
-         */
-        default void onTourHomeChoice(Choice choice) {}
-
-        /**
-         * The user answered the key-row card. The run moves on either way; writing the row, and
-         * remembering that the question has been put, is the part only the launcher can do.
-         */
-        default void onTourKeyRowChoice(Choice choice) {}
-
-        /**
-         * The user answered the usage card. The run moves on either way; applying the mode is
-         * the launcher's, and so is taking the home-screen question out of the run when the
-         * answer was the terminal alone ({@link #dropStep}).
-         */
-        default void onTourUsageModeChoice(Choice choice) {}
-
-        /**
-         * A run from an older version of the tour was interrupted somewhere this run has no
-         * equivalent for. Ask the user, then call {@link #resumeChosen()} or
-         * {@link #restartChosen()}: both begin at the first lesson, and the difference is only
-         * what the card says.
-         */
-        default void onTourResumeOrRestart() {}
     }
 
     private final List<TourStep> mSteps;
     /** Cards this run walks past because the phone has nothing for them to point at. */
-    private final java.util.Set<String> mDropped = new java.util.HashSet<>();
+    private final Set<String> mDropped = new HashSet<>();
     private final Prefs mPrefs;
     private final Clock mClock;
 
-    private Listener mListener;
+    @Nullable private Listener mListener;
     private int mStepIndex = STEP_NONE;
     private int mStage;
     private long mArmedAt;
     private boolean mRunning;
     /** Whether this is one lesson on its own, which writes nothing through to the prefs. */
     private boolean mPracticing;
-    /** Whether the user has been asked to resume or restart and has not answered yet. */
-    private boolean mAwaitingResumeChoice;
-    /** Whether the card up is the welcome card, which is offered before the run and not in it. */
-    private boolean mShowingWelcome;
+    /** Whether the setup sheet is up: the run is offered, and has not begun. */
+    private boolean mShowingSetup;
+    /** Whether the card is saying "Got it" and waiting for the host to move on. */
+    private boolean mCompleting;
 
-    /**
-     * The card the run is offered on. Held apart from {@link #mSteps} on purpose: it is not a
-     * lesson, it is never stored, and keeping it out of the list is what leaves every lesson's
-     * stored number meaning what it meant before this card existed.
-     */
-    private final TourStep mWelcome = TourRun.welcome();
-
-    public TourController(List<TourStep> steps, Prefs prefs, Clock clock) {
+    public TourController(@NonNull List<TourStep> steps, @NonNull Prefs prefs,
+                          @NonNull Clock clock) {
         mSteps = new ArrayList<>(steps);
         mPrefs = prefs;
         mClock = clock;
     }
 
-    public void setListener(Listener listener) {
+    public void setListener(@Nullable Listener listener) {
         mListener = listener;
     }
 
     /**
-     * Re-reads the run for the phone it is about to run on. The two sentences that depend on a
-     * system setting — the way back from an app, and which way round the keyboard lesson goes —
-     * are only right if they are built from what the phone says when the run starts, so the host
-     * hands the run back in before every start, replay, resume and practice. Ignored while a card
-     * of the run is up: changing the run under a running one would move the card the user is
-     * reading. The welcome card is not one of them — it is offered before the run — so the run can
-     * still be rebuilt under it, which is what makes the keyboard lesson right for the keyboard
-     * the user actually has when they take the tour.
+     * Re-reads the run for the phone it is about to run on. Ignored while a card of the run is up:
+     * changing the run under a running one would move the card the user is reading. The sheet is
+     * not a card of the run, so the run can still be rebuilt under it.
      */
-    public void setSteps(List<TourStep> steps) {
-        if ((mRunning && !mShowingWelcome) || steps == null || steps.isEmpty()) return;
+    public void setSteps(@Nullable List<TourStep> steps) {
+        if ((mRunning && !mShowingSetup) || steps == null || steps.isEmpty()) return;
         mSteps.clear();
         mSteps.addAll(steps);
         mDropped.clear();
     }
 
-    /**
-     * Whether the user has already been through a run of some version. This is the "a run ever
-     * completed" question — what {@link #resumeIfInProgress()} asks before looking for a run to
-     * pick back up — and not the question of whether to offer this one, which is
-     * {@link #isOffered()}.
-     */
+    /** Whether the user has finished or skipped a run of any version. */
     public boolean isFinished() {
         return mPrefs.getTourCompletedVersion() >= 1;
     }
 
-    /**
-     * Whether this run should be offered at all: the user has never finished this version of it.
-     *
-     * <p>Someone who sat through an older run is offered this one once, on the welcome card,
-     * because the launcher they finished that run on is not the one they have now. Their answer —
-     * the tour taken to its end, or "Not now" — records this version, so they are asked once and
-     * not again until the run changes.
-     */
+    /** Whether the run should be offered on its own: see {@link #isOfferedTo(int)}. */
     public boolean isOffered() {
-        return mPrefs.getTourCompletedVersion() < RUN_VERSION;
+        return isOfferedTo(mPrefs.getTourCompletedVersion());
     }
 
-    /** Whether a card is up right now. */
+    /** Whether the sheet or a card is up right now. */
     public boolean isRunning() {
         return mRunning;
     }
@@ -364,37 +189,32 @@ public final class TourController {
         return mPracticing;
     }
 
-    /** Whether the user is being asked to resume an older run or start this one over. */
-    public boolean isAwaitingResumeChoice() {
-        return mAwaitingResumeChoice;
+    /** Whether the setup sheet is up. */
+    public boolean isShowingSetup() {
+        return mShowingSetup;
     }
 
-    /** Whether the card up is the one the run is offered on. */
-    public boolean isShowingWelcome() {
-        return mShowingWelcome;
+    /** Whether the card is saying "Got it". */
+    public boolean isCompleting() {
+        return mCompleting;
     }
 
-    /** The card that is up, or null. */
+    /** The card that is up, or null — the sheet is not a card. */
+    @Nullable
     public TourStep currentStep() {
-        if (mShowingWelcome) return mWelcome;
-        return mRunning && mStepIndex >= 0 && mStepIndex < mSteps.size()
-            ? mSteps.get(mStepIndex) : null;
+        if (!mRunning || mShowingSetup) return null;
+        return mStepIndex >= 0 && mStepIndex < mSteps.size() ? mSteps.get(mStepIndex) : null;
     }
 
-    /** How many of the current card's signals have landed. */
+    /** How many of the current card's stages have been cleared. */
     public int currentStage() {
         return mRunning ? mStage : 0;
     }
 
-    /**
-     * The buttons the card that is up offers. A lesson offers its own three; the same lesson
-     * practised from help offers the two that leave practice without touching the run.
-     */
-    public List<TourAction> currentActions() {
-        TourStep step = currentStep();
-        if (step == null) return Collections.emptyList();
-        if (mPracticing) return PRACTICE_ACTIONS;
-        return step.isShownOnlyStage(mStage) ? SHOWN_STAGE_ACTIONS : step.actions();
+    /** The progress the card that is up shows. */
+    @NonNull
+    public TourProgress currentProgress() {
+        return TourProgress.of(mSteps, mDropped, mStepIndex, mCompleting);
     }
 
     /** Whether the run that is up, or the one that just ended, had a card skipped. */
@@ -403,56 +223,59 @@ public final class TourController {
     }
 
     /**
-     * Offers the run on the welcome card, discarding any earlier one. This is what a first launch
-     * and Replay both do; the lessons begin on the user's own {@link #takeTheTour()}.
+     * Offers the run on the setup sheet, discarding any earlier one. This is what a first launch
+     * and Replay both do; the lessons begin on the user's own {@link #showMeAround()}.
      */
     public boolean start() {
         if (mSteps.isEmpty()) return false;
         mPrefs.setTourSkipped(false);
         mPracticing = false;
-        mAwaitingResumeChoice = false;
-        mShowingWelcome = true;
+        mCompleting = false;
+        mShowingSetup = true;
         mRunning = true;
         mStepIndex = STEP_NONE;
         mStage = 0;
-        mArmedAt = mClock.nowMillis();
-        notifyStep();
+        if (mListener != null) mListener.onTourSetupShown();
         return true;
     }
 
-    /** The welcome card's yes: the run begins at its first lesson. */
-    public boolean takeTheTour() {
-        if (!mShowingWelcome) return false;
-        mShowingWelcome = false;
-        return !mSteps.isEmpty() && startAt(mSteps.get(0).id);
+    /** The sheet's Show me around: the run begins at its first lesson. */
+    public boolean showMeAround() {
+        if (!mShowingSetup) return false;
+        mShowingSetup = false;
+        int first = shownFrom(0);
+        return first < mSteps.size() && startAtIndex(first);
     }
 
     /**
-     * The welcome card's other answer. The run ends where it stands and records this version, so
-     * the offer is not made again until the run itself changes; it counts as skipped, which is
-     * what it is.
+     * The sheet's Skip the tour. The lessons are passed over and the run counts as skipped, but it
+     * still ends on the closing card: the tips and the downloads are what an experienced user came
+     * for.
      */
-    public boolean notNow() {
-        if (!mShowingWelcome) return false;
-        mShowingWelcome = false;
+    public boolean skipTheTour() {
+        if (!mShowingSetup) return false;
+        mShowingSetup = false;
         mPrefs.setTourSkipped(true);
-        end();
-        return true;
+        int closing = closingIndex();
+        if (closing < 0) {
+            end();
+            return true;
+        }
+        return startAtIndex(closing);
     }
 
-    /**
-     * Starts a normal run at a named card, which is where it stays: everything after it follows in
-     * order. Used by the version migration, and by anything that wants the run to begin at a
-     * lesson other than the first.
-     */
-    public boolean startAt(String stepId) {
+    /** Starts a normal run at a named card; everything after it follows in order. */
+    public boolean startAt(@Nullable String stepId) {
         int index = indexOf(stepId);
         if (index < 0) return false;
         index = shownFrom(index);
-        if (index >= mSteps.size()) return false;
+        return index < mSteps.size() && startAtIndex(index);
+    }
+
+    private boolean startAtIndex(int index) {
         mPracticing = false;
-        mAwaitingResumeChoice = false;
-        mShowingWelcome = false;
+        mShowingSetup = false;
+        mCompleting = false;
         mRunning = true;
         mPrefs.setTourCompletedVersion(0);
         mPrefs.setTourRunVersion(RUN_VERSION);
@@ -461,20 +284,20 @@ public final class TourController {
     }
 
     /**
-     * Shows one lesson on its own: help's "Try it". It clears on that lesson's own signals and
-     * ends there, and writes nothing — not the completed version, not the card, not the stage and
-     * not the skip flag — so practising a lesson can never finish, restart or skip the real run.
+     * Shows one lesson on its own: help's "Try it". It ends when that lesson is cleared and writes
+     * nothing — not the completed version, not the card, not the stage and not the skip flag.
      *
      * <p>Refused outright while a real run is up: replacing the card the run is waiting on loses
      * the run's place, and the signals the practice clears on are the ones the run wanted.
      */
-    public boolean startPractice(String stepId) {
+    public boolean startPractice(@Nullable String stepId) {
         if (mRunning && !mPracticing) return false;
         int index = indexOf(stepId);
-        if (index < 0 || mDropped.contains(stepId)) return false;
+        if (index < 0 || mDropped.contains(stepId) || mSteps.get(index).isClosingCard())
+            return false;
         mPracticing = true;
-        mAwaitingResumeChoice = false;
-        mShowingWelcome = false;
+        mShowingSetup = false;
+        mCompleting = false;
         mRunning = true;
         mStepIndex = index;
         mStage = 0;
@@ -483,242 +306,134 @@ public final class TourController {
         return true;
     }
 
-    /** Offers the run unless this user has already been through this version of it. */
+    /** Offers the run unless this user has already been through a run of it. */
     public boolean startIfNeeded() {
-        return isOffered() && !mRunning && !mAwaitingResumeChoice && start();
+        return isOffered() && !mRunning && start();
     }
 
     /**
-     * Picks an unfinished run back up on its own card, mapping a run left over from an older
-     * version of the tour onto the lesson that covers the same control.
+     * Picks an unfinished run back up on its own card. A run left over from an older version of
+     * the tour starts this one at its first lesson: the cards it was on are not this run's, and the
+     * sheet before it has been answered already.
      *
-     * @return false when there is nothing to resume — no run was ever started, or the last one
-     *     finished — in which case nothing is shown and nothing is written. True also covers the
-     *     older run whose card has no equivalent here: the listener is asked to put the resume or
-     *     restart question to the user.
+     * <p>A lesson is picked up from its first half. The home screen is put back the way every
+     * lesson starts before it is shown, and the second half of the keyboard lesson — bring it back
+     * — means nothing over a keyboard that is already up.
+     *
+     * @return false when there is nothing to resume, in which case nothing is shown or written
      */
     public boolean resumeIfInProgress() {
-        if (mRunning || mAwaitingResumeChoice || isFinished()) return false;
+        if (mRunning || isFinished()) return false;
         int stored = mPrefs.getTourStepIndex();
         if (stored < 0) return false;
-        if (mPrefs.getTourRunVersion() < RUN_VERSION) return resumeOlderRun(stored);
+        if (mPrefs.getTourRunVersion() < RUN_VERSION) {
+            int first = shownFrom(0);
+            return first < mSteps.size() && startAtIndex(first);
+        }
         if (stored >= mSteps.size()) return false;
-        return resumeAt(stored, mPrefs.getTourStepStage());
-    }
-
-    private boolean resumeOlderRun(int storedStepIndex) {
-        if (mPrefs.getTourRunVersion() >= VERSION_BEFORE_THE_BORDER_LESSONS) {
-            // The run the border lessons were added to: every card is still here under its name,
-            // though the numbers moved, and its keyboard card is this run's keyboard swipe.
-            int index = indexOf(versionFiveCardFor(storedStepIndex));
-            return index >= 0 && resumeAt(index, mPrefs.getTourStepStage());
-        }
-        if (mPrefs.getTourRunVersion() >= VERSION_BEFORE_THE_USAGE_CARD) {
-            // The run the usage card was added to: every card is still here under its name, and
-            // the two after the new one are one number along.
-            int index = indexOf(versionFourCardFor(storedStepIndex));
-            return index >= 0 && resumeAt(index, mPrefs.getTourStepStage());
-        }
-        if (mPrefs.getTourRunVersion() >= VERSION_BEFORE_THE_WELCOME_CARD) {
-            // The run the welcome card was added to: same lessons, same numbers, so the card the
-            // user stopped on is picked back up and the welcome card is not put in their way.
-            int index = indexOf(versionThreeCardFor(storedStepIndex));
-            return index >= 0 && resumeAt(index, mPrefs.getTourStepStage());
-        }
-        if (mPrefs.getTourRunVersion() >= VERSION_BEFORE_THE_PIN_LESSON) {
-            int index = indexOf(versionTwoCardFor(storedStepIndex));
-            // Nothing to ask about: every card of that run is a card of this one, so the only way
-            // here is a stored number that run never had, and there is nothing to resume from it.
-            return index >= 0 && resumeAt(index, mPrefs.getTourStepStage());
-        }
-        String lesson = migratedLessonFor(storedStepIndex);
-        if (lesson != null) return startAt(lesson);
-        mAwaitingResumeChoice = true;
-        if (mListener != null) mListener.onTourResumeOrRestart();
-        return true;
-    }
-
-    /** Picks the run up on {@code index}, at the furthest stage of that card {@code stage} can be. */
-    private boolean resumeAt(int index, int stage) {
-        // The phone may have been made this launcher's home screen since the run was stored, in
-        // which case the card it stopped on is one this run no longer shows: it is walked past,
-        // and the card after it starts where every card starts.
-        int shown = shownFrom(index);
+        int shown = shownFrom(stored);
         if (shown >= mSteps.size()) return false;
-        if (shown != index) stage = 0;
-        index = shown;
         mPracticing = false;
-        mAwaitingResumeChoice = false;
-        mShowingWelcome = false;
+        mShowingSetup = false;
+        mCompleting = false;
         mRunning = true;
-        mStepIndex = index;
-        mStage = clampStage(mSteps.get(index), stage);
+        mStepIndex = shown;
+        mStage = 0;
         mArmedAt = mClock.nowMillis();
         mPrefs.setTourRunVersion(RUN_VERSION);
-        mPrefs.setTourStepIndex(index);
-        mPrefs.setTourStepStage(mStage);
+        mPrefs.setTourStepIndex(shown);
+        mPrefs.setTourStepStage(0);
         notifyStep();
         return true;
     }
 
-    /** The user chose to pick the older run up: this run begins at its first lesson. */
-    public boolean resumeChosen() {
-        return answerResumeChoice();
-    }
-
-    /** The user chose to start over: the same first lesson, said differently. */
-    public boolean restartChosen() {
-        return answerResumeChoice();
-    }
-
-    private boolean answerResumeChoice() {
-        if (!mAwaitingResumeChoice) return false;
-        mAwaitingResumeChoice = false;
-        return !mSteps.isEmpty() && startAt(mSteps.get(0).id);
-    }
-
-    /** Whether a button that moves the run is being pressed on a card that is not part of it. */
-    private boolean offTheRun() {
-        return !mRunning || mPracticing || mShowingWelcome;
-    }
-
     /**
-     * A gesture the launcher observed. Advances the card when it is the one being waited on, and
-     * is otherwise ignored — including a signal that arrives while the card is still arming.
+     * A gesture the launcher observed. Moves the card on when it is the one being waited on, and is
+     * otherwise ignored — including a signal that arrives while the card is still arming, or while
+     * it is saying "Got it".
      */
-    public void onSignal(String signalId) {
+    public void onSignal(@Nullable String signalId) {
         TourStep step = currentStep();
-        if (step == null || signalId == null || mShowingWelcome) return;
+        if (step == null || signalId == null || mCompleting) return;
         if (mClock.nowMillis() - mArmedAt < ARM_DELAY_MS) return;
         if (!signalId.equals(step.signalAt(mStage))) return;
         mStage++;
-        if (mStage >= step.stageCount()) {
-            advance();
-        } else {
+        if (mStage < step.stageCount()) {
+            // The second half of the same lesson: the card swaps without celebrating the first.
             if (!mPracticing) mPrefs.setTourStepStage(mStage);
             mArmedAt = mClock.nowMillis();
             notifyStep();
+            return;
         }
+        mCompleting = true;
+        if (!mPracticing) {
+            int next = shownFrom(mStepIndex + 1);
+            mPrefs.setTourStepIndex(next < mSteps.size() ? next : STEP_NONE);
+            mPrefs.setTourStepStage(0);
+        }
+        if (mListener != null) mListener.onTourStepCompleted(step);
     }
 
-    /** The user answered a question card. The run moves on whichever answer they gave. */
-    public void choose(Choice choice) {
-        TourStep step = currentStep();
-        if (step == null || !step.isChoiceCard() || choice == null) return;
-        if (mListener != null) {
-            if (TourRun.KEY_ROW.equals(step.id)) mListener.onTourKeyRowChoice(choice);
-            else if (TourRun.USAGE_MODE.equals(step.id)) mListener.onTourUsageModeChoice(choice);
-            else mListener.onTourHomeChoice(choice);
-        }
+    /** The "Got it" has been said: on to the next card, or out of practice. */
+    public void continueAfterCompletion() {
+        if (!mCompleting) return;
+        mCompleting = false;
         advance();
     }
 
     /**
-     * Puts a card dropped by {@link #dropStep} back into the rest of this run: the home-screen
-     * question comes back when the usage card is answered with a home screen after all.
+     * Takes a card out of the rest of this run, wherever the run stands: a lesson whose control
+     * this phone does not have. A fresh run — {@link #setSteps} — brings it back.
      */
-    public void keepStep(String stepId) {
-        if (stepId != null) mDropped.remove(stepId);
-    }
-
-    /**
-     * Takes a card out of the rest of this run, wherever the run stands. For the one card whose
-     * control may not exist on this phone at all: the keyboard lesson points at a key of the
-     * shipped row, and a user who has just answered the key-row card with "Keep mine" may have no
-     * such key. The card is passed over in both directions from then on, exactly as a question
-     * with nothing to ask is, and a fresh run — {@link #setSteps} — brings it back.
-     */
-    public void dropStep(String stepId) {
+    public void dropStep(@Nullable String stepId) {
         if (stepId != null) mDropped.add(stepId);
     }
 
-    /** Back to the first stage of the lesson before this one; nothing to do on the first. */
-    public void back() {
-        if (offTheRun() || mStepIndex <= 0) return;
-        int previous = shownBackFrom(mStepIndex - 1);
-        if (previous < 0) return;
-        moveTo(previous);
-    }
-
-    /**
-     * The Skip step button: this lesson is not for this user, move on. On the one stage the run
-     * only shows it is the way on rather than a skip — there is no gesture to pass over — so the
-     * run is not marked as skipped for it.
-     */
+    /** The card's Skip: this lesson is not for this user, move on. */
     public void skip() {
-        if (offTheRun()) return;
-        if (continueShownStage()) return;
+        if (!mRunning || mPracticing || mShowingSetup || mCompleting) return;
+        TourStep step = currentStep();
+        if (step == null || step.isClosingCard()) return;
         mPrefs.setTourSkipped(true);
         advance();
     }
 
     /**
-     * The End tour button: the lessons are not wanted and the run counts as skipped, but the way
-     * out still passes the questions that are left ahead — the key-row question and the
-     * home-screen one — and the closing card, so leaving early never costs the cards an
-     * experienced user came for. The usage question is asked first, so it is behind every lesson
-     * by then. A run with neither left ahead ends.
+     * The card's ✕. The lessons that are left are passed over and the run counts as skipped, but it
+     * still ends on the closing card. In practice it is the way out.
      */
     public void endTour() {
-        if (!mRunning || mShowingWelcome) return;
-        if (mPracticing) {
-            endPractice();
-            return;
-        }
-        mPrefs.setTourSkipped(true);
-        int target = shownFrom(mStepIndex + 1);
-        while (target < mSteps.size() && !mSteps.get(target).isChoiceCard()
-                && !mSteps.get(target).isClosingCard())
-            target = shownFrom(target + 1);
-        if (target < mSteps.size()) {
-            moveTo(target);
-            return;
-        }
-        end();
-    }
-
-    /**
-     * The Done button, wherever it appears. On a practice hint it is the way out; on a stage the
-     * run only shows, it is the way on, because there is no gesture for the launcher to report.
-     */
-    public void done() {
-        if (mShowingWelcome) return;
+        if (!mRunning || mShowingSetup) return;
         if (mPracticing) {
             finishPractice();
             return;
         }
-        continueShownStage();
-    }
-
-    /**
-     * Past a stage that is only shown. Ignored on any other stage, so a Done tapped on a card the
-     * run has since replaced cannot skip a gesture the run is still waiting to see.
-     */
-    public boolean continueShownStage() {
         TourStep step = currentStep();
-        if (step == null || offTheRun() || !step.isShownOnlyStage(mStage)) return false;
-        // The shown stage is the last of its card, so there is nothing after it but the next card.
-        advance();
-        return true;
+        if (step == null || step.isClosingCard()) return;
+        mCompleting = false;
+        mPrefs.setTourSkipped(true);
+        int closing = closingIndex();
+        if (closing < 0) end();
+        else moveTo(closing);
     }
 
-    /** The End practice button: it leaves without writing anything. */
-    public void endPractice() {
-        if (!mRunning || !mPracticing) return;
-        finishPractice();
-    }
-
-    /** The closing card's action, and anything else that ends the run deliberately. */
+    /** The closing card's Start, and anything else that ends the run deliberately. */
     public void finish() {
-        if (!mRunning || mShowingWelcome) return;
+        if (!mRunning || mShowingSetup) return;
         if (mPracticing) finishPractice();
         else end();
     }
 
-    private int indexOf(String stepId) {
+    private int indexOf(@Nullable String stepId) {
         if (stepId == null) return -1;
         for (int i = 0; i < mSteps.size(); i++)
             if (stepId.equals(mSteps.get(i).id)) return i;
+        return -1;
+    }
+
+    private int closingIndex() {
+        for (int i = 0; i < mSteps.size(); i++)
+            if (mSteps.get(i).isClosingCard()) return i;
         return -1;
     }
 
@@ -732,31 +447,10 @@ public final class TourController {
         else moveTo(next);
     }
 
-    /**
-     * Whether this card is passed over rather than shown. The home-screen question on a phone the
-     * launcher is already the home app of has nothing to ask and nothing to answer, so the run
-     * walks past it in both directions instead of stopping the user on a card with one button.
-     *
-     * <p>The card stays in the run either way: every stored card number, and every number the
-     * older runs are mapped onto, means the card it has always meant.
-     */
-    private boolean isPassedOver(TourStep step) {
-        if (mDropped.contains(step.id)) return true;
-        return step.isChoiceCard() && step.actions().size() == 1
-            && step.actions().get(0) == TourAction.CONTINUE;
-    }
-
     /** The first card at or after {@code index} that is shown, or the run's size when none is. */
     private int shownFrom(int index) {
         int at = Math.max(0, index);
-        while (at < mSteps.size() && isPassedOver(mSteps.get(at))) at++;
-        return at;
-    }
-
-    /** The last card at or before {@code index} that is shown, or -1 when none is. */
-    private int shownBackFrom(int index) {
-        int at = Math.min(index, mSteps.size() - 1);
-        while (at >= 0 && isPassedOver(mSteps.get(at))) at--;
+        while (at < mSteps.size() && mDropped.contains(mSteps.get(at).id)) at++;
         return at;
     }
 
@@ -774,7 +468,8 @@ public final class TourController {
     private void end() {
         mRunning = false;
         mPracticing = false;
-        mShowingWelcome = false;
+        mShowingSetup = false;
+        mCompleting = false;
         mStepIndex = STEP_NONE;
         mStage = 0;
         mPrefs.setTourStepIndex(STEP_NONE);
@@ -784,11 +479,12 @@ public final class TourController {
         if (mListener != null) mListener.onTourFinished(mPrefs.getTourSkipped());
     }
 
-    /** The way out of practice: the overlay comes down and the stored run is left exactly as it was. */
+    /** The way out of practice: the overlay comes down and the stored run is left as it was. */
     private void finishPractice() {
         mRunning = false;
         mPracticing = false;
-        mShowingWelcome = false;
+        mShowingSetup = false;
+        mCompleting = false;
         mStepIndex = STEP_NONE;
         mStage = 0;
         if (mListener != null) mListener.onTourFinished(false);
@@ -797,10 +493,5 @@ public final class TourController {
     private void notifyStep() {
         TourStep step = currentStep();
         if (step != null && mListener != null) mListener.onTourStepShown(step, mStage);
-    }
-
-    private static int clampStage(TourStep step, int stage) {
-        if (stage <= 0) return 0;
-        return Math.min(stage, Math.max(0, step.stageCount() - 1));
     }
 }
