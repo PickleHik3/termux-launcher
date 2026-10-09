@@ -324,6 +324,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     private boolean mFrameScheduled;
     private long mLastFrameTimeNanos;
+    /** True while {@link #doFrame} runs: a kick from inside it continues the loop and keeps its clock. */
+    private boolean mInFrame;
 
     public AppDrawerController(@NonNull Host host) {
         mHost = host;
@@ -667,7 +669,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private void kick() {
         if (mFrameScheduled) return;
         mFrameScheduled = true;
-        mLastFrameTimeNanos = 0L;
+        // A loop starting from rest has no previous frame to measure against; a re-post from inside
+        // doFrame keeps its clock, or every frame would advance the spring by the minimum step
+        // whatever the frame took — on a slow frame the settle then crawls (a plane springing shut
+        // with the keyboard still pushed off screen), and its own writes keep the frames slow.
+        if (!mInFrame) mLastFrameTimeNanos = 0L;
         Choreographer.getInstance().postFrameCallback(this);
     }
 
@@ -686,6 +692,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     @Override
     public void doFrame(long frameTimeNanos) {
+        mInFrame = true;
+        try {
+            doFrameInner(frameTimeNanos);
+        } finally {
+            mInFrame = false;
+        }
+    }
+
+    private void doFrameInner(long frameTimeNanos) {
         mFrameScheduled = false;
         float dt = mLastFrameTimeNanos == 0L
             ? Spring.MIN_DT
