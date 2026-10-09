@@ -5,7 +5,7 @@
 >
 > It's been exactly almost a year since I asked GPT-5 Codex (god bless its soul) to add sixel image drawing to [TEL](https://github.com/t-e-l/tel). A few too many “just one more feature”s later, the launcher I'd always pictured in my head is finally here for you all.
 >
-> [Get the release](https://github.com/PickleHik3/termux-launcher/releases/tag/v1.0.0) · [Read the full story](project-docs/release-notes-v1.0.0.md#the-long-read)
+> [Get the release](https://github.com/PickleHik3/termux-launcher/releases/tag/v1.0.0) · [Read the full story](project-docs/release-notes.md#v100)
 
 > [!NOTE]
 > **This project is entirely vibe-coded.**

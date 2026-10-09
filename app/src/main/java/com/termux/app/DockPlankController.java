@@ -79,6 +79,8 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     // from the bottom toward the finger, instead of the capsule's free-floating centre tilt+dip.
     private boolean mHingeMode = false;
     private long mLastFrameTimeNanos;
+    /** True while {@link #doFrame} runs: a kick from inside it continues the loop and keeps its clock. */
+    private boolean mInFrame;
 
     // Spring channels: tilt about X/Y, press dip, rim glow, and the specular's position. Every
     // damping constant is 2*sqrt(stiffness) — the integrator is a = k*(target - x) - c*v at unit
@@ -356,13 +358,26 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     private void kick() {
         if (!mFrameScheduled) {
             mFrameScheduled = true;
-            mLastFrameTimeNanos = 0L;
+            // A loop starting from rest has no previous frame to measure against; a re-post from
+            // inside doFrame keeps its clock, or every frame would advance the springs by the
+            // minimum step whatever the frame took — on a slow frame the settle then crawls while
+            // its own per-frame writes keep the frames slow, and the loop never ends.
+            if (!mInFrame) mLastFrameTimeNanos = 0L;
             Choreographer.getInstance().postFrameCallback(this);
         }
     }
 
     @Override
     public void doFrame(long frameTimeNanos) {
+        mInFrame = true;
+        try {
+            doFrameInner(frameTimeNanos);
+        } finally {
+            mInFrame = false;
+        }
+    }
+
+    private void doFrameInner(long frameTimeNanos) {
         mFrameScheduled = false;
         // First frame has no prior timestamp; use the minimum stable timestep.
         float dt = mLastFrameTimeNanos == 0L

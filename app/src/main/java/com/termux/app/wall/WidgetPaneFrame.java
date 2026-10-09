@@ -52,8 +52,11 @@ public final class WidgetPaneFrame extends PaneContentFrame {
 
     /** What the page needs from the launcher. */
     public interface Host {
-        /** The pencil: start editing the widgets, exactly as the long-press menu does. */
-        void editWidgets();
+        /**
+         * The pencil: start editing the widgets, exactly as the long-press menu does. False when
+         * there is no widget to edit, and the pencil offers the grid's size on its own.
+         */
+        boolean editWidgets();
         default void showHelpOverlay() {}
         /** The sliders: open the Appearance editor on this place, as every corner tab does. */
         default void openSurfaceEditor() {}
@@ -327,7 +330,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
         else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
         else if (id == ACTION_MINIMAL) { dismissControls(); mHost.toggleMinimalMode(); }
-        else if (id == ACTION_EDIT) mHost.editWidgets();
+        // An empty page has no widget to edit, but its grid can still be sized for what comes.
+        else if (id == ACTION_EDIT && !mHost.editWidgets()) openGridSizePopup();
     }
 
     /** The wheels, hanging off the tab that opened them. */
@@ -342,6 +346,11 @@ public final class WidgetPaneFrame extends PaneContentFrame {
                 if (mHost != null) mHost.setWidgetGrid(columns, rows);
                 refreshGridSizeAction();
             });
+    }
+
+    @androidx.annotation.VisibleForTesting
+    boolean isGridSizePopupShown() {
+        return mGridSizePopup != null && mGridSizePopup.isShowing();
     }
 
     private void dismissGridSizePopup() {

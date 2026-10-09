@@ -375,25 +375,36 @@ public class SurfaceInheritanceTest {
     }
 
     @Test
-    public void freshInstall_wearsTheShippedDockedLook() {
+    public void freshInstall_wearsTheClearLookWithAnEightDpMargin() {
         preferences.migrateSurfaceInheritance();
 
-        assertEquals("the shared layer", TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
-            preferences.getStatusBarOpacity());
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP,
-            preferences.getDockHorizontalInset());
-        assertEquals("the dock alone sits denser, which is a detached row by definition",
-            TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY, preferences.getAppBarOpacity());
-        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
-        assertEquals(1, preferences.surfaceOverrideCount(SurfaceSlot.DOCK));
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            if (slot == SurfaceSlot.DOCK) continue;
+        assertEquals("the shared layer", 10, preferences.getStatusBarOpacity());
+        assertEquals("the dock follows it", 10, preferences.getAppBarOpacity());
+        assertEquals(8, preferences.getDockHorizontalInset());
+        assertEquals(8, preferences.getTerminalPaneGap());
+        for (SurfaceSlot slot : SurfaceSlot.values())
             assertEquals(slot.toString(), 0, preferences.surfaceOverrideCount(slot));
-        }
         assertTrue(preferences.isTerminalBorderEnabled());
         assertEquals(TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS,
             preferences.getTerminalCornerRadius());
-        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP, preferences.getTerminalPaneGap());
+        // The editor sees exactly the Clear look, so its ring sits on Clear rather than Custom.
+        com.termux.app.surfaces.SurfacePresets.Preset clear = null;
+        for (com.termux.app.surfaces.SurfacePresets.Preset preset
+                : com.termux.app.surfaces.SurfacePresets.presets())
+            if ("minimal".equals(preset.id)) clear = preset;
+        assertTrue(clear != null
+            && com.termux.app.surfaces.SurfacePresets.matches(preferences, clear));
+    }
+
+    @Test
+    public void freshInstall_applyingAWallpaperKeepsTheClearLook() {
+        preferences.migrateSurfaceInheritance();
+        com.termux.app.chrome.ChromePolicy.applyWallpaperModePreferences(preferences, true);
+
+        assertEquals(10, preferences.getStatusBarOpacity());
+        assertEquals(10, preferences.getAppBarOpacity());
+        for (SurfaceSlot slot : SurfaceSlot.values())
+            assertEquals(slot.toString(), 0, preferences.surfaceOverrideCount(slot));
     }
 
     @Test
@@ -425,7 +436,7 @@ public class SurfaceInheritanceTest {
         assertEquals(sideGap, preferences.getDockHorizontalInset());
         assertEquals(terminalRadius, preferences.getTerminalCornerRadius());
         assertEquals(paneGap, preferences.getTerminalPaneGap());
-        assertFalse("the dock keeps the one detach the shipped look asks for",
+        assertTrue("the dock still follows Base, as the Clear look has it",
             preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
     }
 

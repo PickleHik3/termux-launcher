@@ -729,22 +729,6 @@
     <string name="msg_wallpaper_read_permission">The status bar, dock and keyboard blur your wallpaper. Allow storage access to turn the blur on.</string>
     <string name="action_wallpaper_read_permission_allow">Allow</string>
     <string name="action_wallpaper_read_permission_dismiss">Not now</string>
-    <!-- The one card a fresh install opens on, in place of the three dialogs it used to chain. -->
-    <string name="first_run_permissions_title">Before you start</string>
-    <string name="first_run_permissions_intro">Turn on what you want. You can change any of this later in Settings.</string>
-    <string name="first_run_permissions_wallpaper_title">Wallpaper</string>
-    <string name="first_run_permissions_wallpaper_copy">Lets the launcher colour itself after your wallpaper.</string>
-    <string name="first_run_permissions_weather_title">Weather</string>
-    <string name="first_run_permissions_weather_copy">Shows the weather for a place you pick, or for where you are.</string>
-    <string name="first_run_permissions_display_title">Linux display</string>
-    <string name="first_run_permissions_display_copy">Runs graphical Linux apps beside the terminal.</string>
-    <string name="first_run_permissions_allow">Allow</string>
-    <string name="first_run_permissions_allowed">Allowed</string>
-    <string name="first_run_permissions_denied">Not allowed</string>
-    <string name="first_run_permissions_continue">Continue</string>
-    <string name="first_run_permissions_use_location">Use my location</string>
-    <!-- Credit for the place search on the first-run card, which Open-Meteo answers. -->
-    <string name="first_run_permissions_weather_search_credit">Search by Open-Meteo.</string>
     <string name="status_widget_needs_shizuku_title">Shizuku isn\'t connected</string>
     <string name="status_widget_needs_shizuku_message">%1$s reads far better with the privileged backend: per-core CPU, detailed memory and the top-process list all come from it. Without it the CPU figure is a best-effort /proc estimate that some ROMs refuse outright, and the widget can end up blank. Set Shizuku up, or turn the widget on anyway and take the unprivileged reading.</string>
     <string name="status_widget_needs_shizuku_guide">Read the guide</string>
@@ -2525,78 +2509,75 @@
     <string name="weather_card_unavailable_location">Weather needs a location fix</string>
     <string name="weather_card_unavailable_place">Can\'t find %1$s. Check Settings → Status bar.</string>
 
-    <!-- First-boot tour: one card per gesture, shown over the real home screen -->
+    <!-- First-boot tour: six gestures in three chapters, taught on the real home screen -->
     <string name="tour_skip">Skip</string>
-    <string name="tour_done">Done</string>
-    <string name="tour_back">Back</string>
-    <string name="tour_skip_step">Skip step</string>
-    <string name="tour_end_tour">End tour</string>
     <string name="tour_end_practice">End practice</string>
-    <string name="tour_use_as_home">Use as home screen</string>
-    <string name="tour_keep_trying">Keep trying</string>
-    <string name="tour_continue">Continue</string>
-    <string name="tour_start_using">Start using Termux</string>
-    <string name="tour_take_the_tour">Take the tour</string>
-    <string name="tour_not_now">Not now</string>
-    <string name="tour_resume">Pick up where I left off</string>
-    <string name="tour_restart">Start over</string>
+    <string name="tour_close_description">End the tour</string>
+    <string name="tour_got_it">Got it</string>
     <string name="tour_card_kicker">Termux Launcher</string>
-    <string name="tour_card_welcome_title">Welcome</string>
-    <string name="tour_card_welcome">A terminal, your apps and widgets, and a Linux display if you want one, all in one launcher. A two-minute tour shows you the gestures.</string>
-    <string name="tour_card_find_help_corner">Hold a corner of the page.</string>
-    <string name="tour_card_find_help_open">Tap ? to see what everything does.</string>
-    <string name="tour_card_find_help_close">Close help to continue.</string>
-    <string name="tour_card_pin_apps_hold">Hold an empty spot in the apps row to choose your apps.</string>
-    <string name="tour_card_pin_apps_choose">Pick an app to pin, then tap Done.</string>
-    <string name="tour_card_find_apps_dock">Swipe down on the apps row to open the app drawer.</string>
-    <string name="tour_card_find_apps_left_rail">Swipe right on the apps rail to open the app drawer.</string>
-    <string name="tour_card_find_apps_right_rail">Swipe left on the apps rail to open the app drawer.</string>
-    <string name="tour_card_find_apps_open">Tap an app to open it.</string>
-    <string name="tour_card_find_apps_back_home">Press Home to come back.</string>
-    <string name="tour_card_find_apps_back_switch">Switch back to Termux to continue.</string>
-    <string name="tour_card_border_hold">Hold the page\'s border until it sinks, then drag sideways to the next place.</string>
-    <string name="tour_card_border_back">Now drag back to the terminal.</string>
-    <string name="tour_card_kswipe_open">Swipe up from the bottom border to open the keyboard.</string>
-    <string name="tour_card_kswipe_close_again">Now swipe down from the same border to put it away.</string>
-    <string name="tour_card_kswipe_close">Swipe down from the bottom border to put the keyboard away.</string>
-    <string name="tour_card_kswipe_open_again">Now swipe up from the same border to bring it back.</string>
-    <string name="tour_card_status_open">Swipe down from the top border to open the status bar.</string>
-    <string name="tour_card_status_fold_again">Now swipe up to fold it.</string>
-    <string name="tour_card_status_fold">Swipe up from the top border to fold the status bar.</string>
-    <string name="tour_card_status_open_again">Now swipe down to open it again.</string>
-    <string name="tour_card_find_action_palette">Swipe up on the space bar to open the command palette.</string>
-    <string name="tour_card_find_action_close">Search for anything, launch Android apps and reach Termux Launcher features. Tap outside the palette to close it.</string>
-    <string name="tour_card_key_row">This update brings a new row of keys under the terminal. Take it now, or keep the row you have. Either way the other row is in Settings, under Terminal extra keys.</string>
-    <string name="tour_card_usage_mode">How will you use Termux Launcher? Terminal: just the terminal. Terminal + Home: apps, widgets and the app drawer. Terminal + Home + Display: run Linux desktop apps too.</string>
-    <string name="tour_card_usage_mode_no_display">How will you use Termux Launcher? Terminal: just the terminal. Terminal + Home: apps, widgets and the app drawer.</string>
-    <string name="tour_card_home_choice">Use Termux as your home screen?</string>
-    <string name="tour_card_home_choice_already">Termux is your home screen.</string>
-    <string name="tour_card_resume_or_restart">Termux has a new, shorter introduction.</string>
-    <string name="tour_card_closing_title">That is the tour</string>
-    <string name="tour_card_closing">Here is what is worth knowing on the way out.</string>
+    <!-- The chapter label, shown in capitals: "1 of 3 · Getting around". -->
+    <string name="tour_chapter_label">%1$d of %2$d · %3$s</string>
+    <string name="tour_chapter_getting_around">Getting around</string>
+    <string name="tour_chapter_status_and_apps">Status bar and apps</string>
+    <string name="tour_chapter_commands_and_help">Commands and help</string>
+    <string name="tour_title_places">Slide between places</string>
+    <string name="tour_body_places">Hold the bottom edge of the page, then drag sideways to reach the next place.</string>
+    <string name="tour_title_keyboard_away">Put the keyboard away</string>
+    <string name="tour_body_keyboard_away">Swipe down from the bottom edge of the page.</string>
+    <string name="tour_title_keyboard_back">Bring it back</string>
+    <string name="tour_body_keyboard_back">Swipe up from the same edge.</string>
+    <string name="tour_title_status">Pull down the status bar</string>
+    <string name="tour_body_status">Swipe down from the top edge for the clock, weather and notifications.</string>
+    <string name="tour_title_status_compact">Make it compact again</string>
+    <string name="tour_body_status_compact">Swipe up from the same edge.</string>
+    <string name="tour_title_apps">Open your apps</string>
+    <string name="tour_body_apps">Swipe down on the apps row to open the drawer.</string>
+    <string name="tour_body_apps_left_rail">Swipe right on the apps rail to open the drawer.</string>
+    <string name="tour_body_apps_right_rail">Swipe left on the apps rail to open the drawer.</string>
+    <string name="tour_title_palette">Run anything</string>
+    <string name="tour_body_palette">Swipe up on the space bar to search apps, settings and commands.</string>
+    <string name="tour_title_corner">Hold a corner</string>
+    <string name="tour_body_corner">Every pane keeps a menu in its corners. Press and hold the top-left one.</string>
+    <string name="tour_title_help">Tap ?</string>
+    <string name="tour_body_help">Help mode explains whatever you touch next. It lives in every corner menu.</string>
     <string name="tour_card_return_to_terminal">Hold the page\'s border and drag back to the terminal to continue.</string>
-    <string name="tour_copy">Copy</string>
-    <string name="tour_copied_commands">Copied</string>
-    <string name="tour_copy_commands">Commands</string>
-    <string name="tour_read_the_docs">Read the docs</string>
-    <string name="tour_closing_hold_heading">Holding on the terminal</string>
-    <string name="tour_closing_hold_copy">Hold on the text to select and copy it; in a full-screen program such as htop or nvim, the same hold makes your finger the mouse.</string>
-    <string name="tour_closing_shortcuts_heading">Shortcuts</string>
-    <string name="tour_closing_shortcuts_copy">Tap Ctrl, then Alt. While both are latched, a strip in the top-right corner shows what every other key does.</string>
-    <string name="tour_closing_customize_heading">Make it yours</string>
-    <string name="tour_closing_customize_copy">Hold a page\'s corner: Appearance picks a picture, a Look and where the bars sit, and ? opens help. A split pane\'s corner holds Close, Move and Maximise.</string>
-    <string name="tour_closing_minimal_heading">Minimal mode</string>
-    <string name="tour_closing_minimal_copy">The four-corners button on a corner tab gives every place the whole screen.</string>
-    <string name="tour_closing_voice_heading">Speak instead of typing</string>
-    <string name="tour_closing_voice_copy">Swipe up on Enter to dictate. Nothing is typed until you tap the tick.</string>
-    <string name="tour_closing_extras_heading">Launcher extras</string>
-    <string name="tour_closing_extras_copy">Use tlstore to install terminal goodies such as fastfetch with GIF support, the sigye clock, Claude Code and kitten, kitty\'s companion tool.</string>
-    <string name="tour_closing_extras_copy_nix">Extra tools come from nixpkgs too: add fastfetch, sigye or kitten to home.nix.</string>
-    <string name="tour_closing_gui_apps_heading">GUI apps</string>
-    <string name="tour_closing_gui_apps_copy">Settings \u2192 Display \u2192 Setup GUI Apps sets up graphical Linux apps that open from the app drawer.</string>
-    <string name="tour_closing_gui_apps_copy_nix">Add an app to home.nix and run nix-on-droid switch — it appears in the app drawer.</string>
-    <!-- Shell commands: never translated. -->
-    <string name="tour_closing_extras_command" translatable="false">tlstore install fastfetch sigye claude-code kitten</string>
+    <string name="tour_closing_title">You\'re set</string>
+    <string name="tour_tip_help">Hold any corner and tap ? to learn what something does.</string>
+    <string name="tour_tip_wallpaper">Set your wallpaper: hold any corner and tap Appearance.</string>
+    <string name="tour_tip_shortcuts">Tap Ctrl, then Alt, to see every shortcut.</string>
+    <string name="tour_tip_replay">Replay this tour from Settings \u203A About &amp; help.</string>
+    <!-- How far the offline models have downloaded: "Offline models · 1.2 GB of 3.1 GB". -->
+    <string name="tour_models_progress">Offline models · %1$s of %2$s</string>
+    <!-- The closing card's offer: "Offline voice & AI · 3.1 GB". -->
+    <string name="tour_models_offer">Offline voice &amp; AI · %1$s</string>
+    <string name="tour_download_models">Download models</string>
+    <string name="tour_models_mobile_title">Download on mobile data?</string>
+    <!-- %1$s is the size of the models, such as "3.1 GB". -->
+    <string name="tour_models_mobile_message">The offline models are %1$s. You can wait for Wi-Fi and get them from Settings instead.</string>
+    <string name="tour_models_mobile_download">Download</string>
+    <string name="tour_read_the_guide">Read the guide</string>
+    <string name="tour_start">Start</string>
+
+    <!-- The setup sheet the first-boot tour is offered on -->
+    <string name="welcome_sheet_title">Welcome</string>
+    <string name="welcome_sheet_intro">Pick what you want. All of it can be changed later in Settings.</string>
+    <string name="welcome_row_wallpaper_title">Wallpaper colours</string>
+    <string name="welcome_row_wallpaper_copy">Tint the launcher to match your wallpaper.</string>
+    <string name="welcome_row_weather_title">Weather</string>
+    <string name="welcome_row_weather_copy">Shown in the status bar, for a city you pick or where you are.</string>
+    <string name="welcome_row_display_title">Linux display</string>
+    <string name="welcome_row_display_copy">Run desktop Linux apps in a window.</string>
+    <string name="welcome_row_ai_title">Offline voice and AI</string>
+    <!-- %1$s is the size of the ticked models, such as "3.1 GB". -->
+    <string name="welcome_row_ai_copy">Voice typing, read aloud and more. %1$s, ready to download when the tour ends.</string>
+    <string name="welcome_row_ai_copy_installed">Voice typing, read aloud and more. Already on this phone.</string>
+    <string name="welcome_choose_models">Choose models</string>
+    <string name="welcome_hide_models">Hide models</string>
+    <!-- Credit for the city search, which Open-Meteo answers. -->
+    <string name="welcome_weather_credit">Search by Open-Meteo</string>
+    <string name="welcome_weather_use_location">Use my location</string>
+    <string name="welcome_sheet_show_me_around">Show me around</string>
+    <string name="welcome_sheet_skip_tour">Skip the tour</string>
     <string name="tour_docs_url" translatable="false">https://picklehik3.github.io/termux-launcher-site/docs/#wiki</string>
 
     <!-- Settings: replay the first-boot tour -->
@@ -3056,17 +3037,15 @@
     <string name="help_lesson_find_help_title">Find help</string>
     <string name="help_lesson_find_help_summary">Open help from a page\'s corner tab.</string>
     <string name="help_lesson_border_drag_title">Change place</string>
-    <string name="help_lesson_border_drag_summary">Hold the page\'s border, drag to the next place and back.</string>
+    <string name="help_lesson_border_drag_summary">Hold the page\'s border and drag to the next place.</string>
     <string name="help_lesson_status_swipe_title">Open the status bar</string>
-    <string name="help_lesson_status_swipe_summary">Swipe down from the top border to open the status bar, and up to fold it.</string>
-    <string name="help_lesson_pin_apps_title">Pin your apps</string>
-    <string name="help_lesson_pin_apps_summary">Choose the apps that sit in the dock.</string>
-    <string name="help_lesson_find_apps_title">Open an app</string>
-    <string name="help_lesson_find_apps_summary">Open an app from the dock and come back.</string>
+    <string name="help_lesson_status_swipe_summary">Swipe down from the top border to open the status bar.</string>
+    <string name="help_lesson_find_apps_title">Open your apps</string>
+    <string name="help_lesson_find_apps_summary">Swipe down on the apps row to open the drawer.</string>
     <string name="help_lesson_keyboard_title">Use the keyboard swipe</string>
-    <string name="help_lesson_keyboard_summary">Swipe up from the bottom border to open the keyboard, and down to put it away.</string>
+    <string name="help_lesson_keyboard_summary">Swipe down from the bottom border to put the keyboard away, and up to bring it back.</string>
     <string name="help_lesson_find_action_title">Find an action</string>
-    <string name="help_lesson_find_action_summary">Open the command palette and pick an action.</string>
+    <string name="help_lesson_find_action_summary">Swipe up on the space bar to search apps, settings and commands.</string>
     <!-- Explore this screen (phase C). -->
     <string name="help_explore_title">Explore this screen</string>
     <string name="help_explore_back">Back to help</string>

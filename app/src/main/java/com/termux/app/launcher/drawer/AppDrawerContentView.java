@@ -211,6 +211,8 @@ public final class AppDrawerContentView extends FrameLayout
     private float mFlingVelocityY;
     private boolean mFrameScheduled;
     private long mLastFrameTimeNanos;
+    /** True while {@link #doFrame} runs: a kick from inside it continues the loop and keeps its clock. */
+    private boolean mInFrame;
     /** The letter the highlight is keyed to. Outlives the finger, for the length of the fade. */
     private char mScrubLetter = '\0';
     /**
@@ -2066,12 +2068,22 @@ public final class AppDrawerContentView extends FrameLayout
     private void kick() {
         if (mFrameScheduled) return;
         mFrameScheduled = true;
-        mLastFrameTimeNanos = 0L;
+        // A re-post from inside doFrame keeps the frame clock (see DockPlankController.kick).
+        if (!mInFrame) mLastFrameTimeNanos = 0L;
         Choreographer.getInstance().postFrameCallback(this);
     }
 
     @Override
     public void doFrame(long frameTimeNanos) {
+        mInFrame = true;
+        try {
+            doFrameInner(frameTimeNanos);
+        } finally {
+            mInFrame = false;
+        }
+    }
+
+    private void doFrameInner(long frameTimeNanos) {
         mFrameScheduled = false;
         float dt = mLastFrameTimeNanos == 0L
             ? Spring.MIN_DT

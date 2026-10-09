@@ -60,22 +60,20 @@ public final class HelpTopics {
 
     /** Hold a corner, then tap ? — the lesson that teaches where help lives. */
     public static final String LESSON_FIND_HELP = "find_help";
-    /** Hold the page's border and drag sideways to the next place, then back. */
+    /** Hold the page's border and drag sideways to the next place. */
     public static final String LESSON_BORDER_DRAG = "border_drag";
-    /** Hold an empty spot of the apps row, then pin an app in the editor it raises. */
-    public static final String LESSON_PIN_APPS = "pin_apps";
-    /** Pull the apps row away from its edge, open an app, come back. */
+    /** Pull the apps row away from its edge to open the drawer. */
     public static final String LESSON_FIND_APPS = "find_apps";
-    /** Open and put away the keyboard with a swipe off the bottom border. */
+    /** Put the keyboard away with a swipe off the bottom border, and bring it back. */
     public static final String LESSON_KEYBOARD = "keyboard";
-    /** Open and fold the status bar with a swipe off the top border. */
+    /** Pull the status bar down with a swipe off the top border. */
     public static final String LESSON_STATUS_SWIPE = "status_swipe";
-    /** Open the command palette and pick an action. */
+    /** Open the command palette off the space bar. */
     public static final String LESSON_FIND_ACTION = "find_action";
-    /** The only lessons a topic may hand practice to. */
+    /** The only lessons a topic may hand practice to: the run's own, under the run's ids. */
     public static final List<String> LESSON_IDS = Collections.unmodifiableList(Arrays.asList(
         LESSON_FIND_HELP, LESSON_BORDER_DRAG, LESSON_KEYBOARD, LESSON_STATUS_SWIPE,
-        LESSON_PIN_APPS, LESSON_FIND_APPS, LESSON_FIND_ACTION));
+        LESSON_FIND_APPS, LESSON_FIND_ACTION));
 
     /** One topic, and everything help knows to say about it. */
     public static final class Entry {
@@ -299,7 +297,6 @@ public final class HelpTopics {
         b.add(topic("organize_apps", Group.APPS, R.string.help_topic_organize_title,
                 R.string.help_topic_organize_summary, R.string.help_topic_organize_action)
             .steps(R.string.help_topic_organize_step1, R.string.help_topic_organize_step2)
-            .lesson(LESSON_PIN_APPS)
             .related("dock", "az").terms("dock")
             .aliases(R.string.help_topic_organize_aliases)
             .doc("Home_Screen_And_Apps.md#pinned-apps"));

@@ -248,16 +248,17 @@ public class HelpTopicsTest {
             assertTrue(entry.id, HelpTopics.LESSON_IDS.contains(entry.lessonId));
             used.add(entry.lessonId);
         }
-        assertEquals("every lesson is reachable from a topic", 7, used.size());
+        assertEquals("every lesson is reachable from a topic", 6, used.size());
     }
 
-    @Test public void theSevenLessonsAreReachedFromTheTopicsThatTeachThem() {
+    @Test public void theSixLessonsAreReachedFromTheTopicsThatTeachThem() {
         assertEquals(HelpTopics.LESSON_FIND_HELP, HelpTopics.entry("corners").lessonId);
         assertEquals(HelpTopics.LESSON_BORDER_DRAG, HelpTopics.entry("places").lessonId);
         assertEquals(HelpTopics.LESSON_KEYBOARD, HelpTopics.entry("keyboard_swipe").lessonId);
         assertEquals(HelpTopics.LESSON_STATUS_SWIPE, HelpTopics.entry("status").lessonId);
         assertEquals(HelpTopics.LESSON_FIND_APPS, HelpTopics.entry("dock").lessonId);
-        assertEquals(HelpTopics.LESSON_PIN_APPS, HelpTopics.entry("organize_apps").lessonId);
+        // Pinning apps is not a lesson any more: the topic explains it and has nothing to practise.
+        assertNull(HelpTopics.entry("organize_apps").lessonId);
         assertEquals(HelpTopics.LESSON_FIND_ACTION, HelpTopics.entry("palette").lessonId);
         // The keyboard key is a second path; the lesson is the swipe.
         assertNull(HelpTopics.entry("keyboard").lessonId);
