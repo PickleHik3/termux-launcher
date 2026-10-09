@@ -23349,6 +23349,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (getPreferences() == null) return;
             getPreferences().setDwindleDefaultLayoutEnabled(enabled);
             getPreferences().setFocusedPaneGrowsEnabled(enabled);
+            // The corner button only flips its icon; the notice says what the switch means.
+            AppNotice.show(TermuxActivity.this, AppNoticeItem.Kind.INFO, "\uDB81\uDD70",
+                getString(enabled ? R.string.pane_controls_auto_tiling_on_title
+                    : R.string.pane_controls_auto_tiling_off_title),
+                getString(enabled ? R.string.pane_controls_auto_tiling_on_sub
+                    : R.string.pane_controls_auto_tiling_off_sub), false);
         }
 
         @Override @Nullable public TerminalSession createNamedShell(@NonNull String name,

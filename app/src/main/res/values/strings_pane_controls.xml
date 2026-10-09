@@ -10,6 +10,10 @@
     <string name="pane_controls_leave_minimal_mode">Leave minimal mode</string>
     <string name="pane_controls_turn_on_auto_tiling">Turn on automatic tiling</string>
     <string name="pane_controls_turn_off_auto_tiling">Turn off automatic tiling</string>
+    <string name="pane_controls_auto_tiling_on_title">Automatic tiling on</string>
+    <string name="pane_controls_auto_tiling_on_sub">New panes arrange themselves</string>
+    <string name="pane_controls_auto_tiling_off_title">Automatic tiling off</string>
+    <string name="pane_controls_auto_tiling_off_sub">Split and size panes yourself</string>
     <string name="pane_controls_open_settings">Open settings</string>
     <string name="pane_controls_restore_pane">Restore pane</string>
     <string name="pane_controls_turn_display_on">Turn display on</string>
