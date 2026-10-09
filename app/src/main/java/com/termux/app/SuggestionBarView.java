@@ -3439,12 +3439,14 @@ public final class SuggestionBarView extends GridLayout
             mPinnedHintShimmer = null;
         }
         if (!shouldAnimatePinnedHint()) return;
-        // The pulse is the view's alpha, never the text colour. A text colour that changes every
-        // frame gives the renderer's glyph cache a new blob key per frame for the same text, and
-        // after a few minutes of an empty dock every text draw in the window walks that pile: the
-        // frame rate collapses and a drawer pull or a keyboard swipe freezes mid-transition. View
-        // alpha is applied by the render node and leaves the cached glyphs alone.
+        // The pulse is the view's alpha on a hardware layer, never the text colour. A text colour
+        // that changes every frame gives the renderer's glyph cache a new blob key per frame for
+        // the same text, and after a few minutes of an empty dock every text draw in the window
+        // walks that pile: the frame rate collapses and a drawer pull or a keyboard swipe freezes
+        // mid-transition. A plain TextView applies alpha to its paint, which is the same new key;
+        // the layer composites the alpha and leaves the cached glyphs alone.
         hintView.setTextColor(resolvePinnedHintBaseColor());
+        hintView.setLayerType(LAYER_TYPE_HARDWARE, null);
         ValueAnimator shimmer = ValueAnimator.ofFloat(PINNED_HINT_ALPHA, PINNED_HINT_PULSE_ALPHA,
             PINNED_HINT_ALPHA);
         shimmer.setDuration(3200L);
@@ -3460,6 +3462,7 @@ public final class SuggestionBarView extends GridLayout
             @Override
             public void onViewDetachedFromWindow(View v) {
                 shimmer.cancel();
+                v.setLayerType(LAYER_TYPE_NONE, null);
                 if (mPinnedHintShimmer == shimmer) mPinnedHintShimmer = null;
             }
         });
