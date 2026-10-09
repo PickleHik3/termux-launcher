@@ -51,7 +51,9 @@ android {
         }
 
         ndk {
-            abiFilters 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+            // The io.vaj.tl bootstrap exists for aarch64 only, and the ABI split below ships just
+            // arm64-v8a; the native filter must name the same set or Gradle refuses the configuration.
+            abiFilters 'arm64-v8a'
         }
 
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
