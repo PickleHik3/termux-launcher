@@ -269,18 +269,91 @@ tasks.register("verifyReleaseHardening") {
     }
 }
 
-// Native code reaches the model runtimes' Java members by name, so anything R8 strips from them
-// is a JNI abort at the first local chat, not a build error. R8's usage.txt lists what it removed:
-// a class line (members follow indented) for these packages means the keep rules have a hole.
-tasks.matching { it.name ==~ /minify\w*ReleaseWithR8/ }.configureEach { minify ->
-    minify.doLast {
-        def usage = fileTree(layout.buildDirectory.dir("outputs/mapping")).matching { include "**/usage.txt" }
-        def stripped = usage.files.collectMany { it.readLines() }.findAll {
-            it ==~ /^(com\.google\.ai\.edge\.litertlm|com\.alibaba\.mnnllm)\..*/ && !it.contains('$$InternalSynthetic')
+// Native code reaches Java members by name, so anything R8 strips from a library that carries .so
+// files is a JNI abort at runtime, not a build error: 1.0.0 shipped LiteRT-LM without the
+// SamplerConfig getters only its native code calls, and every local chat aborted. A library that
+// ships consumer keep rules has said what its native code needs; one that ships none has not. So
+// after R8 runs, every class of such a library (and of the app's own JNI code outside com.termux)
+// that appears in the variant's usage.txt — removed whole, or a "Class:" header with members
+// under it — fails the build. Fix it with a -keep in proguard-rules.pro, or, once the stripped
+// code is checked and nothing native reaches it, a waiver below.
+def r8NativeWaivers = [:] // "group:artifact": "why what R8 strips from it is safe"
+def r8NativeAppPackages = ["com.alibaba.mnnllm"] // the MNN bridge: app source, its own JNI
+["release", "staging"].each { variantName ->
+    tasks.matching { it.name == "minify${variantName.capitalize()}WithR8" }.configureEach { minify ->
+        minify.doLast {
+            def usage = layout.buildDirectory.file("outputs/mapping/${variantName}/usage.txt").get().asFile
+            if (!usage.isFile()) {
+                throw new GradleException("R8 wrote no ${usage}; the native-code guard has nothing to check.")
+            }
+            def owners = [:] // class name -> the library coordinate it came from
+            configurations.getByName("${variantName}RuntimeClasspath").incoming.artifactView {
+                lenient true
+                attributes { attribute(Attribute.of("artifactType", String), "aar") }
+            }.artifacts.each { artifact ->
+                def id = artifact.id.componentIdentifier
+                if (!(id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier)) return
+                if (r8NativeWaivers.containsKey("${id.group}:${id.module}".toString())) return
+                nativeClassesWithoutKeepRules(artifact.file).each { owners[it] = id.displayName }
+            }
+            def ownerOf = { String cls ->
+                owners[cls] ?: r8NativeAppPackages.find { cls.startsWith(it + ".") }
+            }
+
+            def stripped = [:].withDefault { [] } // owner -> what R8 removed from it
+            String header = null
+            usage.eachLine { line ->
+                if (line.isEmpty()) return
+                if (!Character.isWhitespace(line.charAt(0))) {
+                    header = null
+                    if (line.contains('$$InternalSynthetic')) return
+                    def cls = line.endsWith(":") ? line[0..-2] : line
+                    if (line.endsWith(":")) header = cls
+                    else if (ownerOf(cls)) stripped[ownerOf(cls)] << "${cls} (whole class)"
+                } else if (header && ownerOf(header) && !line.contains('$$InternalSynthetic')) {
+                    stripped[ownerOf(header)] << "${header}: ${line.trim()}"
+                }
+            }
+            if (!stripped.isEmpty()) {
+                def report = stripped.collect { owner, lines -> "  ${owner}\n" + lines.collect { "    ${it}" }.join("\n") }
+                throw new GradleException("R8 removed code from libraries that carry native code and ship no keep " +
+                    "rules (${variantName}). Native code reaches Java by name, so this crashes at runtime, not here:\n" +
+                    report.join("\n") + "\nAdd a -keep for it in app/proguard-rules.pro, or, once nothing native " +
+                    "reaches it, a waiver in r8NativeWaivers (app/build.gradle).")
+            }
         }
-        if (!stripped.isEmpty()) {
-            throw new GradleException("R8 stripped model-runtime code that native code calls; extend proguard-rules.pro:\n  " + stripped.join("\n  "))
+    }
+}
+
+// The classes of an AAR that carries native libraries and ships no consumer keep rules (none in
+// proguard.txt, none under META-INF/proguard or META-INF/com.android.tools in its jars); empty
+// for every other AAR.
+def nativeClassesWithoutKeepRules(File aar) {
+    def hasRule = { String text -> text.readLines().any { def t = it.trim(); t && !t.startsWith("#") } }
+    def zip = new java.util.zip.ZipFile(aar)
+    try {
+        def entries = zip.entries().toList()
+        if (!entries.any { it.name ==~ /jni\/.+\.so/ }) return []
+        def rules = entries.find { it.name == "proguard.txt" }
+        if (rules && hasRule(zip.getInputStream(rules).getText("UTF-8"))) return []
+        def classes = []
+        for (def jar : entries.findAll { it.name == "classes.jar" || it.name ==~ /libs\/[^\/]+\.jar/ }) {
+            def input = new java.util.zip.ZipInputStream(zip.getInputStream(jar))
+            def entry
+            while ((entry = input.nextEntry) != null) {
+                def name = entry.name
+                if (entry.directory) continue
+                if (name.startsWith("META-INF/proguard/") || name.startsWith("META-INF/com.android.tools/")) {
+                    // readAllBytes stops at the end of this entry; the stream moves on to the next.
+                    if (hasRule(new String(input.readAllBytes(), "UTF-8"))) return []
+                } else if (name.endsWith(".class") && !name.endsWith("module-info.class")) {
+                    classes << name[0..-7].replace("/", ".")
+                }
+            }
         }
+        return classes
+    } finally {
+        zip.close()
     }
 }
 
