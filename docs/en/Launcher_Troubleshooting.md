@@ -156,7 +156,7 @@ Open **Settings → Appearance** and test against the real home screen.
 - Live wallpapers can limit or disable dock blur.
 - GPU blur requires Android 12 or later; older Android versions use a simpler surface.
 - Without **Wallpaper access** (Settings → Permissions & services) the glass bars render flat.
-- **Wallpaper colors**, on the **Theme & fonts** page, changes the generated palette, while the
+- **Wallpaper colors**, in **Settings → Appearance**, changes the generated palette, while the
   opacity controls decide how much wallpaper remains visible.
 - Full-screen TUIs may need a resize after font or surface geometry changes.
 
@@ -170,8 +170,8 @@ The terminal resolves font configuration in this order:
 2. `~/.termux/fonts.d/*.conf`, including the picker-managed `10-launcher.conf`; and
 3. `~/.termux/font.ttf`, Termux:Styling, or Android monospace.
 
-A higher item can override the picker. Open **Terminal fonts** (on the **Theme & fonts** page; search
-Settings for "fonts", or run **Terminal fonts** from the command palette) to see the managed state.
+A higher item can override the picker. Open **Terminal fonts** (**Settings → Appearance → Terminal
+fonts**, or run **Terminal fonts** from the command palette) to see the managed state.
 **Use font.ttf / Termux:Styling** removes only `10-launcher.conf`.
 
 After manual changes, run:
