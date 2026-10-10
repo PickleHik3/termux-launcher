@@ -778,7 +778,9 @@ public final class PaneWallLayout extends ViewGroup {
      * A finger landed. It arms the border drag when the wall has another place to go, and the
      * keyboard swipe when the listener wants it — on a wall of one place too, since the keyboard
      * has to be reachable from every place in every mode — and the status bar's swipe on the same
-     * terms, below the phone's own strip at the top of the screen ({@link #topGestureLimit}).
+     * terms, below the phone's own strip at the top of the screen ({@link #topGestureLimit}). The
+     * bottom band reaches a hold only just inside the line and runs out to the wall's foot
+     * ({@link BorderDrag#BOTTOM_HOLD_REACH_DP}).
      */
     private void armBorderDrag(@NonNull MotionEvent event) {
         releaseBorderDrag();
@@ -792,19 +794,29 @@ public final class PaneWallLayout extends ViewGroup {
         if (!canPage && keyboardReach <= 0f && statusReach <= 0f) return;
         View page = mPageViews.get(mCurrent);
         if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
+        // The line is the opening's: the wall's edges less the listener's insets. The page itself
+        // is already laid out inside its frame margins (onLayout), so insetting the page again
+        // put the line a whole margin inside the drawn one under Floating, over the last rows.
         int[] in = mListener != null ? mListener.borderInsetsPx() : null;
         boolean inset = in != null && in.length == 4;
-        float left = page.getLeft() + page.getTranslationX() + (inset ? Math.max(0, in[0]) : 0);
-        float top = page.getTop() + (inset ? Math.max(0, in[1]) : 0);
-        float right = page.getLeft() + page.getTranslationX() + page.getWidth()
-            - (inset ? Math.max(0, in[2]) : 0);
-        float bottom = page.getTop() + page.getHeight() - (inset ? Math.max(0, in[3]) : 0);
+        float slide = page.getTranslationX();
+        float left = inset ? getPaddingLeft() + slide + Math.max(0, in[0])
+            : page.getLeft() + slide;
+        float top = inset ? getPaddingTop() + Math.max(0, in[1]) : page.getTop();
+        float right = inset ? getWidth() - getPaddingRight() + slide - Math.max(0, in[2])
+            : page.getLeft() + slide + page.getWidth();
+        float bottom = inset ? getHeight() - getPaddingBottom() - Math.max(0, in[3])
+            : page.getTop() + page.getHeight();
+        float band = BorderDrag.BAND_DP * density;
+        // The wall stops where whatever stands below the page begins, so the air between the
+        // frame and the wall's own foot is all the bottom band's.
+        float below = Math.max(band, getHeight() - bottom);
         boolean armed = mBorderDrag.down(event.getX(), event.getY(),
-            left, top, right, bottom,
-            BorderDrag.BAND_DP * density,
+            left, top, right, bottom, band,
             CornerZones.clampSize(CornerZones.paneSizePx(density), page.getWidth(), page.getHeight()),
             ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardReach,
-            statusReach, statusReach > 0f ? topGestureLimit() : Float.NEGATIVE_INFINITY);
+            statusReach, statusReach > 0f ? topGestureLimit() : Float.NEGATIVE_INFINITY,
+            BorderDrag.BOTTOM_HOLD_REACH_DP * density, below);
         if (!armed) return;
         mBorderDownX = event.getX();
         mBorderDownY = event.getY();

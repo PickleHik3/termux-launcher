@@ -146,30 +146,29 @@ fails when the catalogue has gone stale.
   [C, C+G] is clear on every row and letter keys keep one width throughout. A
   cut key's two pieces both type its centre value; the west swipes stay left,
   the east ones go right, north/south and the circle go to the wider piece. The
-  view is told the same gap: it then keeps no view background and paints one
-  slab per half, and refuses (`onTouch` returns false) a press that starts in
-  the band, so the press reaches whatever the keyboard is over. Both are inert
-  at gap zero, which is the docked keyboard.
+  view is told the same gap, and only its keys part: the view background still
+  fills it, and a press in the parting is the keyboard's and lands on no key,
+  as upstream treats any press between keys. `getSplitGapBounds` reports the
+  strip between the two key runs (the band, cell edge to cell edge, the view's
+  full height); `getSplitGapKeyBounds` reports where a key standing in that
+  strip would be drawn (inset by half a key margin, so it keeps a whole margin
+  from the caps beside it, and spanning the first row's cap top to the last
+  row's cap bottom). Both are false at gap zero, which is the docked keyboard.
 - Parting asked for in pixels (local addition):
   `SplitLayout.gapUnitsForPx` with `MAX_GAP_FRACTION`, the
   `LayoutModifier.gapUnitsForPx` delegate, and
-  `Keyboard2View.getKeyContentWidthPx`/`splitSlabRadiusPx`. The launcher stands
+  `Keyboard2View.getKeyContentWidthPx`/`getKeyCapRadiusPx`/`getKeyCapColor`.
+  The launcher stands
   its mouse-mode touchpad in the parting and needs a floor on it in dp, but the
   parting is stored in key-width units and parting widens the keyboard, so the
   units that buy a pixel shrink as the gap grows; `gapUnitsForPx` inverts that.
-  The band is the whole parting on every row, so no correction is needed. The
-  ask is capped at half the width so both halves keep their keys.
-  `getKeyContentWidthPx` is the width the keys are laid out across, which is what
-  the conversion is measured against; `splitSlabRadiusPx` is the corner radius
-  `drawSplitBackground` gives the slabs, so a host panel standing in the
-  parting takes the same shape.
-- Split slab colour (local addition): `Keyboard2View.setSplitBackgroundColor`
-  and `getSplitBackgroundColor`. The slabs are the panel a parted keyboard lies
-  on rather than a fill inside one of the host's surfaces, so the host picks
-  their colour — the launcher hands in its own overlay surface role, which no
-  module-side theme attribute could name. Null, the default, paints them in the
-  keyboard's own background exactly as before, so nothing changes for a host
-  that says nothing.
+  The band is the same on every row, so no per-row correction is needed, and
+  the floor is the strip `getSplitGapBounds` reports. The ask is capped at half
+  the width so both halves keep their keys. `getKeyContentWidthPx` is the width
+  the keys are laid out across, which is what the conversion is measured
+  against; `getKeyCapRadiusPx` (the caps' fill radius out to the stroke's outer
+  edge) and `getKeyCapColor` (a letter cap's plain fill) let a host panel
+  seated at `getSplitGapKeyBounds` read as one more key.
 - Stateful suggestion labels have no global provider and render empty.
 - Key rect probe (local addition): `Keyboard2View.getKeyRectOnScreen` and its
   `getSpaceBarRectOnScreen` alias. The host has to be able to point at a key —

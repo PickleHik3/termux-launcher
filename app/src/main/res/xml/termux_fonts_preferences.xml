@@ -14,6 +14,11 @@
     <PreferenceCategory
         app:key="fonts_tuning_category"
         app:title="@string/termux_fonts_tuning_title">
+        <Preference
+            app:key="fonts_size"
+            app:title="@string/termux_fonts_size_title"
+            app:persistent="false"
+            app:iconSpaceReserved="false" />
         <SwitchPreferenceCompat
             app:key="nerd_icons"
             app:title="@string/termux_fonts_nerd_icons_title"

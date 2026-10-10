@@ -3546,6 +3546,12 @@ public class TerminalPaneController {
         mHost.configureAttachedPaneView(attachedView, session, pinnedFontSizeOf(session));
     }
 
+    /** Re-stamps every attached pane, so panes that follow the default pick up a changed one. */
+    public void refreshAttachedPaneFontSizes() {
+        for (TerminalSession session : new java.util.ArrayList<>(mPaneViews.keySet()))
+            refreshAttachedPaneView(session);
+    }
+
     /** The pane's pinned font size, or 0 while it follows the app-wide default. */
     private int pinnedFontSizeOf(TerminalSession session) {
         Window owner = windowOf(session);

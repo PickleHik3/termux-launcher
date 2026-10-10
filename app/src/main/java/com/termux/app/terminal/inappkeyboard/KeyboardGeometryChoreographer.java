@@ -87,6 +87,17 @@ public final class KeyboardGeometryChoreographer {
 
         @NonNull DisplayMetrics displayMetrics();
 
+        /**
+         * Dresses the keyboard's host in the margins and padding its card or frame slice wears for
+         * the form, style and chin in force now. Run before every measure, so the height the stack
+         * reserves includes them however the form or the chrome changed since the last render.
+         *
+         * @return true when anything changed, which makes a memoized height stale
+         */
+        default boolean dressKeyboardHost() {
+            return false;
+        }
+
         /** The keyboard view currently attached to the host, or null while detached. */
         @Nullable View attachedKeyboardView();
 
@@ -176,6 +187,11 @@ public final class KeyboardGeometryChoreographer {
     private int mHeightCapReferencePx;
     /** Last {@code keyboardShown} the accessory stack was actually laid out for. */
     private boolean mAppliedKeyboardShown;
+    /** The keyboard height the accessory stack was last sized to hold; 0 while it holds none. */
+    private int mReservedHeightPx;
+    /** The reservation and laid-out height of the last miss a correction was booked for. */
+    private int mMissedReservationPx = -1;
+    private int mMissedLaidOutPx = -1;
 
     // ---- system-IME gate
 
@@ -208,6 +224,10 @@ public final class KeyboardGeometryChoreographer {
         View keyboardContainer = mSurface.findView(R.id.inapp_keyboard_container);
         if (keyboardContainer == null)
             return 0;
+        // The host's margins and padding are part of the height; measured undressed, the stack
+        // reserves a keyboard shorter than the one it lays out and the dock rows are squeezed.
+        if (mSurface.dressKeyboardHost())
+            mHeightDirty = true;
         HostReference floating = mSurface.floatingKeyboardReference();
         View availableRoot = mSurface.findView(R.id.activity_termux_root_relative_layout);
         int width = floating != null ? floating.widthPx
@@ -259,8 +279,8 @@ public final class KeyboardGeometryChoreographer {
 
     /**
      * Marks the cached height stale while keeping the last measured value readable. The surface
-     * painters use this: a margin or padding change makes the height wrong but the previously
-     * measured value is still the one the laid-out container is being compared against.
+     * painters use this: a margin or padding change makes the height wrong, but readers that only
+     * want the last answer (the shape model before the host has laid out) keep one.
      */
     public void markHeightDirty() {
         mHeightDirty = true;
@@ -302,7 +322,8 @@ public final class KeyboardGeometryChoreographer {
      * Re-measures the keyboard and re-lays out the accessory stack around its new height, once.
      * The height is measured independently of the stack ({@link #measureHeightPx}), so the pass
      * has the answer the container's own layout will reach; a laid-out height that still disagrees
-     * is caught by the container's layout listener, which asks for its own pass.
+     * with what the stack reserved ({@link #reservationMissedBy}) is caught by the container's
+     * layout listener, which asks for its own pass.
      */
     public void requestGeometrySync() {
         View keyboardContainer = mSurface.findView(R.id.inapp_keyboard_container);
@@ -334,6 +355,36 @@ public final class KeyboardGeometryChoreographer {
         boolean changed = keyboardShown != mAppliedKeyboardShown;
         mAppliedKeyboardShown = keyboardShown;
         return changed;
+    }
+
+    /** Records the keyboard height the accessory stack was just sized to hold; 0 for none. */
+    public void noteReservedHeightPx(int reservedHeightPx) {
+        mReservedHeightPx = Math.max(0, reservedHeightPx);
+    }
+
+    /** The keyboard height the accessory stack was last sized to hold. */
+    public int reservedHeightPx() {
+        return mReservedHeightPx;
+    }
+
+    /**
+     * Whether the docked keyboard just laid out at a height the stack did not reserve for it, and
+     * no correction has been booked for this miss yet. Asked on every layout of the container,
+     * resized or not: a keyboard that keeps its height across a form switch while the reservation
+     * changed under it is still a miss. A miss answers true once, so a reservation that cannot
+     * be met costs one geometry pass, not one per layout; meeting it re-arms the check.
+     */
+    public boolean reservationMissedBy(int laidOutHeightPx) {
+        if (mReservedHeightPx <= 0 || laidOutHeightPx == mReservedHeightPx) {
+            mMissedReservationPx = -1;
+            mMissedLaidOutPx = -1;
+            return false;
+        }
+        if (mMissedReservationPx == mReservedHeightPx && mMissedLaidOutPx == laidOutHeightPx)
+            return false;
+        mMissedReservationPx = mReservedHeightPx;
+        mMissedLaidOutPx = laidOutHeightPx;
+        return true;
     }
 
     // ------------------------------------------------------------ reveal protocol

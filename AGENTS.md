@@ -337,7 +337,7 @@ run. Do not ask which editions to release; releasing one is the thing that needs
 `+hotfixN`, no `-a`. The edition is a separate fact: it is derived from the package name and shown
 as an `Edition` line in the About screen and every report, and it is part of the tag and the APK
 name. `versionCode` stays **1020** for upstream parity — never change it. The current release is
-**1.0.1**.
+**1.0.2**.
 
 - **Tags** carry the edition as a prefix: `vX.Y.Z` (Termux edition, `main`), `nix-vX.Y.Z`
   (`nix-edition`), `vaj-vX.Y.Z` (`io-vaj-package`). CI (`attach_debug_apks_to_release.yml`) strips

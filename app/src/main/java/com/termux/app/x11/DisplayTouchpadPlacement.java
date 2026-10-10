@@ -11,11 +11,11 @@ import androidx.annotation.Nullable;
 /**
  * Where the touchpad stands inside the keyboard frame it borrows in mouse mode.
  *
- * <p>It takes the whole frame, as it always has, except over a split keyboard: there the parting
- * between the two halves is the touchpad and both halves keep typing. A parting too narrow to
- * point in is no use, so under {@link #MIN_GAP_DP} the pad takes the whole frame again — which
- * a keyboard wide enough to part never reaches, because it is asked for
- * {@link #minimumGapPx} while the pad is up.
+ * <p>It takes the whole frame, as it always has, except over a split keyboard: there it stands in
+ * the parting between the two key runs as one more key — the seat a key standing there would
+ * take — and both runs keep typing. A parting too narrow to point in is no use, so under
+ * {@link #MIN_GAP_DP} the pad takes the whole frame again — which a keyboard wide enough to part
+ * never reaches, because it is asked for {@link #minimumGapPx} while the pad is up.
  */
 public final class DisplayTouchpadPlacement {
 
@@ -38,22 +38,30 @@ public final class DisplayTouchpadPlacement {
         return gapPx != null && minimum > 0 && gapPx.width() >= minimum;
     }
 
+    /** Whether the pad stands in the parting: it fits there, and the keyboard has a seat in it. */
+    public static boolean standsInGap(@Nullable Rect gapPx, @Nullable Rect seatPx, float density) {
+        return fitsGap(gapPx, density) && seatPx != null && !seatPx.isEmpty();
+    }
+
     /**
-     * The pad's layout inside the keyboard's host: the parting when it fits, the whole frame
-     * otherwise. A frame of no measured height leaves the pad wrapping its content, which is
-     * what it did before the keyboard had been laid out once.
+     * The pad's layout inside the keyboard's host: the seat in the parting when it fits, the
+     * whole frame otherwise. [gapPx] is the strip between the key runs, which decides whether the
+     * pad fits; [seatPx] is where a key standing in it would be drawn, which is where the pad
+     * goes. A frame of no measured height leaves the pad wrapping its content, which is what it
+     * did before the keyboard had been laid out once.
      */
     @NonNull
-    public static FrameLayout.LayoutParams padParams(@Nullable Rect gapPx, int frameHeightPx,
-                                                     float density) {
-        int height = frameHeightPx > 0 ? frameHeightPx : ViewGroup.LayoutParams.WRAP_CONTENT;
-        if (!fitsGap(gapPx, density)) {
+    public static FrameLayout.LayoutParams padParams(@Nullable Rect gapPx, @Nullable Rect seatPx,
+                                                     int frameHeightPx, float density) {
+        if (!standsInGap(gapPx, seatPx, density)) {
+            int height = frameHeightPx > 0 ? frameHeightPx : ViewGroup.LayoutParams.WRAP_CONTENT;
             return new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height,
                 Gravity.TOP);
         }
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(gapPx.width(), height,
-            Gravity.TOP | Gravity.START);
-        params.leftMargin = gapPx.left;
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(seatPx.width(),
+            seatPx.height(), Gravity.TOP | Gravity.START);
+        params.leftMargin = seatPx.left;
+        params.topMargin = seatPx.top;
         return params;
     }
 
@@ -65,6 +73,7 @@ public final class DisplayTouchpadPlacement {
         }
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) current;
         return params.width == wanted.width && params.height == wanted.height
-            && params.leftMargin == wanted.leftMargin && params.gravity == wanted.gravity;
+            && params.leftMargin == wanted.leftMargin && params.topMargin == wanted.topMargin
+            && params.gravity == wanted.gravity;
     }
 }
