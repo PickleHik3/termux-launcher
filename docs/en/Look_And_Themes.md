@@ -88,8 +88,12 @@ The **Theme & fonts** page has no row in Settings. Reach it by searching Setting
 - **App theme**: **System**, **Light** or **Dark**.
 - **Wallpaper colors**: "Match the launcher and terminal to the wallpaper." On by default. It
   overrides manual terminal colours; turn it off, or apply a Termux:Styling scheme, to use your own.
-- **Terminal contrast**: **Softer · pastel**, **Default · system** or **Harder · punchy**. It
-  shapes the wallpaper palette, and reads "Available when wallpaper colors are on" otherwise.
+- **Terminal contrast**: **Softer · pastel**, **Default · system** or **Harder · punchy**. It sets
+  how strongly the terminal's text stands out: Harder gives brighter text, a deeper background and
+  richer colours, Softer the gentlest. It changes the terminal's colours only, never the glass
+  behind them. On a see-through terminal it is judged against the wallpaper you can actually see;
+  over a wallpaper too bright for light text, the terminal switches to dark text and tells your
+  programs it is in light mode. It reads "Available when wallpaper colors are on" otherwise.
 - **Tools that follow the terminal colours** (below).
 - **Wallpaper**: show the system wallpaper behind launcher surfaces.
 - **Wallpaper parallax**: the wallpaper pans a little as the places slide. Needs a wallpaper set
