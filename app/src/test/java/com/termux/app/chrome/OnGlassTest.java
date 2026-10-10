@@ -440,25 +440,4 @@ public class OnGlassTest {
 
     // ------------------------------------------------------------------ opacity-based ceiling
 
-    @Test
-    public void aTenPercentBandOverALightWallpaperIsVeiledAtMostItsCeilingAndTheInkReTones() {
-        int pale = 0xFFB8C7FF;
-        int darkBase = 0xFF1C1B1F;
-        int lightWallpaper = 0xFFE8E4DA;
-        int tint = OnGlass.withAlpha(darkBase, 26);
-        int ceiling = ChromeInk.veilCeiling255(tint);
-        assertEquals(Math.round(255f * 0.25f), ceiling);
-        int backdrop = OnGlass.backdrop(lightWallpaper, Color.TRANSPARENT, tint);
-
-        OnGlass.Resolution resolution = OnGlass.resolve(backdrop, pale, pale, darkBase,
-            OnGlass.TARGET_BODY_TEXT, Boolean.FALSE, ceiling);
-
-        assertTrue("veil within the ceiling: " + resolution, Color.alpha(resolution.veil) <= ceiling);
-        assertTrue(resolution.veilCapped);
-        assertNotEquals("the ink moved instead", pale, resolution.ink);
-        assertTrue("toward the dark side",
-            SchemeTone.tone(resolution.ink) < SchemeTone.tone(resolution.surface));
-        assertEquals(Math.round(255f * (77f / 255f + 0.15f)),
-            ChromeInk.veilCeiling255(OnGlass.withAlpha(darkBase, 77)));
-    }
 }

@@ -18,21 +18,21 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 public enum LegibilityLevel {
 
     /** Softer: body text at 3.0, the WCAG large-text floor. The wallpaper shows most. */
-    SOFTER(TerminalContrastLevel.SOFTER, 3.0d),
+    SOFTER(TerminalContrastLevel.SOFTER),
     /** Default: body text at 4.5, WCAG AA — exactly the targets {@link OnGlass} was written with. */
-    DEFAULT(TerminalContrastLevel.DEFAULT, OnGlass.TARGET_BODY_TEXT),
+    DEFAULT(TerminalContrastLevel.DEFAULT),
     /** Harder: body text at 7.0, WCAG AAA. The most veil, the most legible. */
-    HARDER(TerminalContrastLevel.HARDER, 7.0d);
+    HARDER(TerminalContrastLevel.HARDER);
 
     /** The terminal palette contrast this same choice sets; what the palette reads. */
     @NonNull public final TerminalContrastLevel terminalContrast;
 
-    /** The body-text target every band is held to at this level. */
+    /** The body-text target every band is held to at this level; the palette level's own. */
     public final double bodyText;
 
-    LegibilityLevel(@NonNull TerminalContrastLevel terminalContrast, double bodyText) {
+    LegibilityLevel(@NonNull TerminalContrastLevel terminalContrast) {
         this.terminalContrast = terminalContrast;
-        this.bodyText = bodyText;
+        this.bodyText = terminalContrast.bodyTarget;
     }
 
     /** The level the palette's own contrast choice means; null reads as {@link #DEFAULT}. */

@@ -180,14 +180,6 @@
             </intent-filter>
         </activity-alias>
 
-        <activity
-            android:name="com.termux.app.activities.HelpActivity"
-            android:exported="false"
-            android:label="@string/application_name"
-            android:parentActivityName="com.termux.app.TermuxActivity"
-            android:resizeableActivity="true"
-            tools:targetApi="o" />
-
         <!-- The help centre: the whole guide, read on a screen of its own. -->
         <activity
             android:name=".app.help.HelpActivity"

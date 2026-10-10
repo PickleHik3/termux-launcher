@@ -48,7 +48,8 @@ At **Custom**, vertical sliders appear:
   - **Status bar**: the four glass sliders, plus a **Clock** button for the face and alignment
     (see [Status bar](Status_Bar.md#clock)).
   - **Terminal**: the glass sliders and **Contrast**, plus **Cursor trail** and **Terminal effect**.
-  - **Dock**: the glass sliders, **Size** and **Icons** (how many app buttons show).
+  - **Dock**: the glass sliders, **Icon size** (the dock grows to fit it) and **Icons** (how many
+    app buttons show).
   - **Keyboard**: the glass sliders, **Radius** and **Spacing**, plus a **Keyboard theme** button
     for its theme, colours and font (see [Keyboard](Keyboard.md)).
 - Tap bare wallpaper to go back to the global sliders. **Undo** steps back.
@@ -87,8 +88,12 @@ The **Theme & fonts** page has no row in Settings. Reach it by searching Setting
 - **App theme**: **System**, **Light** or **Dark**.
 - **Wallpaper colors**: "Match the launcher and terminal to the wallpaper." On by default. It
   overrides manual terminal colours; turn it off, or apply a Termux:Styling scheme, to use your own.
-- **Terminal contrast**: **Softer · pastel**, **Default · system** or **Harder · punchy**. It
-  shapes the wallpaper palette, and reads "Available when wallpaper colors are on" otherwise.
+- **Terminal contrast**: **Softer · pastel**, **Default · system** or **Harder · punchy**. It sets
+  how strongly the terminal's text stands out: Harder gives brighter text, a deeper background and
+  richer colours, Softer the gentlest. It changes the terminal's colours only, never the glass
+  behind them. On a see-through terminal it is judged against the wallpaper you can actually see;
+  over a wallpaper too bright for light text, the terminal switches to dark text and tells your
+  programs it is in light mode. It reads "Available when wallpaper colors are on" otherwise.
 - **Tools that follow the terminal colours** (below).
 - **Wallpaper**: show the system wallpaper behind launcher surfaces.
 - **Wallpaper parallax**: the wallpaper pans a little as the places slide. Needs a wallpaper set
@@ -101,7 +106,7 @@ The **Theme & fonts** page has no row in Settings. Reach it by searching Setting
 
 Pick tools in this list and the launcher writes their theme file whenever the palette changes, then
 wires it into the tool's own config. Turning one off puts its config back. Built in: Starship,
-Helix, tmux, bat, Yazi, fzf, lazygit, Oh My Posh, Neovim, fish and herdr.
+Helix, tmux, bat, Yazi, fzf, lazygit, Neovim and herdr.
 
 To add your own, make a folder `~/.termux/theme-templates/<id>/` holding a `template.properties`
 manifest, the file to render and its hooks:

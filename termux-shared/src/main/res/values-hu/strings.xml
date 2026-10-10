@@ -51,13 +51,6 @@
     <string name="action_save_to_file">Mentés fájlba</string>
     <string name="error_termux_prefix_dir_path_not_accessible">&TERMUX_APP_NAME; alkalmazás $PREFIX könyvtára nem érhető el a következő alkalmazás számára: %1$s. Ennek az lehet az oka, hogy, nem telepítette és állította be a &TERMUX_APP_NAME; alkalmazást, vagy a &TERMUX_APP_NAME; és az %1$s alkalmazások eltérő APK-aláírásokkal rendelkeznek, mivel a két alkalmazást különböző forrásból telepítette. Az is lehet, hogy a &TERMUX_APP_NAME; $PREFIX könyvtár „&TERMUX_PREFIX_DIR_PATH;” nem létezik, vagy nincsen olvasási, írási és végrehajtási jogosultságai.</string>
     <string name="action_cancel">Mégsem</string>
-    <string name="msg_report_issue">Ha be szeretné jelenteni ezt a problémát, akkor másolja ki a szövegét a beállítások menüből (3 pont a jobb felső sarokban), és jelentse be a problémát a következő hivatkozások egyikén.
-\n
-\nHa &TERMUX_APP_NAME; alkalmazás összeomlási jelentést tesz közzé, kérjük, adja meg, hogy mit csinált, ami az összeomlást okozta, és ha lehetséges, hogyan lehet reprodukálni.
-\n
-\nHa problémát tesz közzé a GitHub-on, azon a repository-n nyisson egy issue-t, amelyhez a jelentés tartozik. Azok a megnyitott issue-k vagy email-ek, amelyekben **(részleges) képernyőképeket** tett közzé a teljes jelentés helyett, **automatikusan be lesznek zárva/ki lesznek törölve**. Opcionálisan eltávolíthat minden olyan eszközspecifikus információt, amelyet privátnak tekint, vagy nem szeretne megosztani, vagy amely nem releváns a probléma szempontjából.
-\n
-\nNem nyújtunk támogatást a hackeléssel kapcsolatos eszközökhöz/szkriptekhez. Ha ezekről kérdez minket email-en, GitHub-on, vagy más hivatalos &TERMUX_APP_NAME; közösségi fórumokon, akkor valószínű, hogy **automatikusan bezárjuk/töröljük** ezeket, és akár **ideiglenes vagy végleges** kitiltást is kap érte. Részletekért tekintse meg a következőt: %1$s/wiki/Hacking.</string>
     <string name="msg_storage_permission_granted_on_request">A felhasználó kérésre megadta a tárolási engedély</string>
     <string name="msg_storage_permission_not_granted_on_request">A felhasználó kérésre nem adta meg a tárolási engedély</string>
     <string name="action_disable_launcher_icon">Indító ikon letiltása</string>

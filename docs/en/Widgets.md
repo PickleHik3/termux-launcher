@@ -52,6 +52,8 @@ wallpaper colours and glass:
   the scratchpad to open the file in your editor.
 - The clocks, Tasks and Scratchpad take settings from a cog that appears while you edit the page:
   the extra time zones, or the file path (the scratchpad can switch between several files).
+- The Calendar's month view has arrows to step to the previous or next month; tap the month's name
+  to come back to this one.
 - Agenda and Calendar ask for calendar access on the card itself. Notifications and Media ask for
   notification access the same way.
 

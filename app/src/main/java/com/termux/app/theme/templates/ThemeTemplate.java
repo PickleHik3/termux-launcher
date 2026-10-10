@@ -21,6 +21,8 @@ public final class ThemeTemplate {
     public static final String KEY_POST_HOOK = "post_hook";
     public static final String KEY_UNDO_HOOK = "undo_hook";
     public static final String KEY_SETUP_HOOK = "setup_hook";
+    /** A built-in no longer offered, kept only so it can be undone (see ThemeTemplateLoader). */
+    public static final String KEY_RETIRED = "retired";
 
     public final String id;
     public final String name;

@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.surfaces.AppearanceLooks.Control;
 import com.termux.app.surfaces.AppearanceLooks.Door;
 import com.termux.app.surfaces.AppearanceLooks.Target;
@@ -22,7 +23,7 @@ import java.util.List;
 /**
  * The Appearance editor's rules (appearance-layout-editor SPEC §3.3–3.4), held as arithmetic:
  * which Look each slider stop is, the Custom row's slider and button sets, and what Key corners,
- * Key spacing, Dock size, Soft wallpaper's arithmetic and Layout's Corners and Margin write.
+ * Key spacing, Icon size, Soft wallpaper's arithmetic and Layout's Corners and Margin write.
  */
 public class AppearanceLooksTest {
 
@@ -87,7 +88,7 @@ public class AppearanceLooksTest {
         assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
             Control.KEY_RADIUS, Control.KEY_SPACING), AppearanceLooks.controls(Target.KEYBOARD));
         assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
-            Control.DOCK_SIZE, Control.APP_ICONS), AppearanceLooks.controls(Target.DOCK));
+            Control.ICON_SIZE, Control.APP_ICONS), AppearanceLooks.controls(Target.DOCK));
         assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
             Control.CONTRAST), AppearanceLooks.controls(Target.TERMINAL));
         assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT),
@@ -146,19 +147,56 @@ public class AppearanceLooksTest {
                 AppearanceLooks.keySpacingScaleFor(tenths)));
     }
 
-    /** Dock size is the dock height scale (0.4 to 3.0) in percent, five at a time. */
+    /**
+     * Icon size is the pinned icon in dp, stored as the dock height scale that draws it. Its ends
+     * are the smallest and largest icon the dock gives under each Style, so no stretch of the
+     * slider is dead, and every value comes back as itself.
+     */
     @Test
-    public void dockSizeIsTheHeightScaleInFivePercentSteps() {
-        assertEquals(TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT,
-            AppearanceLooks.dockScaleFor(Control.DOCK_SIZE.min), 1e-6f);
-        assertEquals(TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT,
-            AppearanceLooks.dockScaleFor(Control.DOCK_SIZE.max), 1e-6f);
-        assertEquals(1.0f, AppearanceLooks.dockScaleFor(100), 1e-6f);
-        assertEquals(100, AppearanceLooks.dockSizeValueFor(1.0f));
-        assertEquals(40, AppearanceLooks.dockSizeValueFor(0.1f));
-        assertEquals(300, AppearanceLooks.dockSizeValueFor(9f));
-        for (int value = Control.DOCK_SIZE.min; value <= Control.DOCK_SIZE.max; value += 5)
-            assertEquals(value, AppearanceLooks.dockSizeValueFor(AppearanceLooks.dockScaleFor(value)));
+    public void iconSizeIsTheIconTheDockDrawsUnderEachStyle() {
+        for (boolean floating : new boolean[] {false, true}) {
+            for (float density : new float[] {2f, 2.625f, 2.75f, 3f, 3.5f}) {
+                String at = (floating ? "Floating" : "Docked") + " at " + density;
+                int[] range = AppearanceLooks.iconSizeRangeDp(floating, density);
+                assertTrue(at, range[0] < range[1]);
+                assertTrue(at, range[0] >= Control.ICON_SIZE.min
+                    && range[1] <= Control.ICON_SIZE.max);
+                // The ends are the stretch's ends, and anything stored past them reads as them.
+                assertEquals(at, range[0], AppearanceLooks.iconSizeValueFor(floating,
+                    DockLayoutPolicy.minUsefulScale(), density));
+                assertEquals(at, range[1], AppearanceLooks.iconSizeValueFor(floating,
+                    DockLayoutPolicy.maxUsefulScale(floating), density));
+                assertEquals(at, range[0], AppearanceLooks.iconSizeValueFor(floating,
+                    TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT, density));
+                assertEquals(at, range[1], AppearanceLooks.iconSizeValueFor(floating,
+                    TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT, density));
+                for (int dp = range[0]; dp <= range[1]; dp++) {
+                    float scale = AppearanceLooks.dockScaleForIconSize(floating, dp, density);
+                    assertTrue(at + " " + dp + " dp writes inside the stretch",
+                        scale >= DockLayoutPolicy.minUsefulScale()
+                            && scale <= DockLayoutPolicy.maxUsefulScale(floating));
+                    assertEquals(at + " " + dp + " dp", dp,
+                        AppearanceLooks.iconSizeValueFor(floating, scale, density));
+                }
+                // Out of range values are held to the ends.
+                assertEquals(at, range[0], AppearanceLooks.iconSizeValueFor(floating,
+                    AppearanceLooks.dockScaleForIconSize(floating, 1, density), density));
+            }
+        }
+    }
+
+    /** The shipped default stays the shipped default: its icon writes 2.18 back, both Styles. */
+    @Test
+    public void theDefaultsIconWritesTheDefault() {
+        float preset = TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
+        for (boolean floating : new boolean[] {false, true}) {
+            int dp = AppearanceLooks.iconSizeValueFor(floating, preset, 2.75f);
+            assertEquals(preset, AppearanceLooks.dockScaleForIconSize(floating, dp, 2.75f), 0f);
+        }
+    }
+
+    @Test
+    public void appIconsIsACountHeldInItsRange() {
         assertEquals(7, AppearanceLooks.appIconsValueFor(7));
         assertEquals(3, AppearanceLooks.appIconsValueFor(1));
         assertEquals(10, AppearanceLooks.appIconsValueFor(20));

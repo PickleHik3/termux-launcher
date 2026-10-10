@@ -257,4 +257,76 @@ public final class CalendarWidgetFormats {
     public static boolean isWeekend(@NonNull DayOfWeek day) {
         return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
     }
+
+    // ----- the stepped month ----------------------------------------------------------------
+
+    /** The first moment of {@code month} in {@code zone}; the next month's is where it ends. */
+    public static long monthStart(@NonNull YearMonth month, @NonNull ZoneId zone) {
+        return startOfDay(month.atDay(1), zone);
+    }
+
+    /** The month the grid shows: the one it was stepped to, or today's when {@code anchor} is null. */
+    @NonNull public static YearMonth shownMonth(@Nullable YearMonth anchor, @NonNull LocalDate today) {
+        return anchor != null ? anchor : YearMonth.from(today);
+    }
+
+    /**
+     * The anchor after stepping {@code step} months from what is shown: null again when the step
+     * lands on today's month, so the grid goes back to following the day.
+     */
+    @Nullable public static YearMonth stepMonth(@Nullable YearMonth anchor, @NonNull LocalDate today,
+                                                int step) {
+        YearMonth next = shownMonth(anchor, today).plusMonths(step);
+        return next.equals(YearMonth.from(today)) ? null : next;
+    }
+
+    // ----- the month heading ----------------------------------------------------------------
+
+    /** How the month heading fits its row: whether the year shows, the steppers' gap, the name's room. */
+    public static final class HeadingFit {
+        public final boolean showYear;
+        public final int stepperGap;
+        /** The name's width; less than it asked for only when even the tightest gap is short. */
+        public final int nameWidth;
+
+        HeadingFit(boolean showYear, int stepperGap, int nameWidth) {
+            this.showYear = showYear; this.stepperGap = stepperGap; this.nameWidth = nameWidth;
+        }
+    }
+
+    /**
+     * Fits "October 2026 ‹ ›" into {@code room}: the name, {@code yearGap}, the year, {@code
+     * textGap}, two {@code disc}s {@code gap} apart. When short, the year goes first, whole; then
+     * the gap between the discs closes towards {@code minGap}; only past that is the name cut.
+     */
+    @NonNull public static HeadingFit fitHeading(int room, int name, int year, int yearGap,
+                                                 int textGap, int disc, int gap, int minGap) {
+        int steppers = textGap + 2 * disc;
+        if (name + yearGap + year + steppers + gap <= room) return new HeadingFit(true, gap, name);
+        if (name + steppers + gap <= room) return new HeadingFit(false, gap, name);
+        int tight = Math.max(minGap, room - name - steppers);
+        return new HeadingFit(false, tight, Math.max(0, Math.min(name, room - steppers - tight)));
+    }
+
+    /** The narrowest row {@link #fitHeading} keeps a {@code name} of this width whole in. */
+    public static int headingNeed(int name, int textGap, int disc, int minGap) {
+        return name + textGap + 2 * disc + minGap;
+    }
+
+    /**
+     * Where two side-by-side steppers answer touches along their row, as {@code {aStart, aEnd,
+     * bStart, bEnd}} for discs {@code disc} wide starting at {@code a} and, later, {@code b}:
+     * each disc grown by {@code grow}, the two met at the middle of the gap between them, and
+     * clear of the text that ends at {@code textEdge} before {@code a} ({@code textBefore}) or
+     * starts there after {@code b}.
+     */
+    @NonNull public static int[] stepperSpans(int a, int b, int disc, int grow, int textEdge,
+                                              boolean textBefore) {
+        int middle = (a + disc + b) / 2;
+        int aStart = a - grow, aEnd = Math.min(a + disc + grow, middle);
+        int bStart = Math.max(b - grow, middle), bEnd = b + disc + grow;
+        if (textBefore) aStart = Math.min(a, Math.max(aStart, textEdge));
+        else bEnd = Math.max(b + disc, Math.min(bEnd, textEdge));
+        return new int[] {aStart, aEnd, bStart, bEnd};
+    }
 }

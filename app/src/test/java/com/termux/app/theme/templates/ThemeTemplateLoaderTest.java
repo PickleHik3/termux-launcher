@@ -85,6 +85,23 @@ public class ThemeTemplateLoaderTest {
     }
 
     @Test
+    public void aRetiredBuiltInIsNeitherListedNorRenderedButCanStillBeUndone() throws IOException {
+        ThemeTemplateFixtures.template(mBuiltInRoot, "starship", "~/.config/starship.toml");
+        File directory = ThemeTemplateFixtures.template(mBuiltInRoot, "fish", "~/.config/x.theme");
+        ThemeTemplateFixtures.write(new File(directory, ThemeTemplate.MANIFEST_NAME),
+            "name=fish\ninput=input.txt\noutput=~/.config/x.theme\nundo_hook=undo.sh\nretired=true\n");
+        assertEquals(1, loader().builtInTemplates().size());
+        assertEquals("starship", loader().builtInTemplates().get(0).id);
+        List<String> active = new java.util.ArrayList<>();
+        for (ThemeTemplate template : loader().active(java.util.Arrays.asList("starship", "fish")))
+            active.add(template.id);
+        assertEquals(java.util.Collections.singletonList("starship"), active);
+        ThemeTemplate retired = loader().find("fish");
+        assertNotNull("the undo still finds it", retired);
+        assertTrue(retired.hasUndoHook());
+    }
+
+    @Test
     public void aTemplateWithoutAnInputOrOutputIsSkipped() throws IOException {
         File directory = new File(mBuiltInRoot, "broken");
         ThemeTemplateFixtures.write(new File(directory, ThemeTemplate.MANIFEST_NAME), "name=Broken\n");

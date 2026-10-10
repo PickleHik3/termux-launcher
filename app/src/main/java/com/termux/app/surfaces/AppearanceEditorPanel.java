@@ -99,19 +99,34 @@ final class AppearanceEditorPanel {
         void onRetroEffect(@NonNull String id);
     }
 
-    /** What one of the Custom row's sliders shows: its control, value and legend. */
+    /**
+     * What one of the Custom row's sliders shows: its control, value, legend and range. The range
+     * is the control's own unless the caller narrows it, as Icon size does to what the dock gives
+     * under the Style.
+     */
     static final class SliderState {
         @NonNull final Control control;
         final int value;
         final boolean enabled;
         @NonNull final com.google.android.material.slider.LabelFormatter legend;
+        final int from;
+        final int to;
 
         SliderState(@NonNull Control control, int value, boolean enabled,
                     @NonNull com.google.android.material.slider.LabelFormatter legend) {
+            this(control, value, enabled, legend, control.min, control.max);
+        }
+
+        SliderState(@NonNull Control control, int value, boolean enabled,
+                    @NonNull com.google.android.material.slider.LabelFormatter legend,
+                    int from, int to) {
             this.control = control;
             this.value = value;
             this.enabled = enabled;
             this.legend = legend;
+            // Inside the control's own bounds, and never empty: a Slider throws for from >= to.
+            this.from = control.clamp(Math.min(from, to));
+            this.to = Math.max(this.from + control.step, control.clamp(Math.max(from, to)));
         }
     }
 
@@ -152,6 +167,9 @@ final class AppearanceEditorPanel {
     private final LegendSlider[] mSliders = new LegendSlider[AppearanceLooks.MAX_CONTROLS];
     /** The control each slider column stands for now; null for a hidden column. */
     private final Control[] mSliderControls = new Control[AppearanceLooks.MAX_CONTROLS];
+    /** Each column's range now, which a control can narrow below its own (SliderState). */
+    private final int[] mSliderFrom = new int[AppearanceLooks.MAX_CONTROLS];
+    private final int[] mSliderTo = new int[AppearanceLooks.MAX_CONTROLS];
     private final boolean[] mSliderDragging = new boolean[AppearanceLooks.MAX_CONTROLS];
     /** Whether each column may be moved (Contrast is not while the palette is a scheme file). */
     private final boolean[] mSliderEnabled = new boolean[AppearanceLooks.MAX_CONTROLS];
@@ -1091,7 +1109,9 @@ final class AppearanceEditorPanel {
             slider.setLegend(state.legend);
             slider.setContentDescription(AppearanceLooks.legendName(
                 state.legend.getFormattedValue(state.value)));
-            restateSlider(slider, state.control, state.value);
+            mSliderFrom[i] = state.from;
+            mSliderTo[i] = state.to;
+            restateSlider(slider, state.control, state.from, state.to, state.value);
             // Remembered across applyRow2, which re-enables the shown row.
             mSliderEnabled[i] = state.enabled;
             slider.setEnabled(mRow2Shown && state.enabled);
@@ -1132,9 +1152,10 @@ final class AppearanceEditorPanel {
 
     /** Restates one control's value after a write that moved it elsewhere (not by the user). */
     void setSliderValue(@NonNull Control control, int value) {
-        LegendSlider slider = sliderFor(control);
-        if (slider != null)
-            restateSlider(slider, control, value);
+        for (int i = 0; i < mSliders.length; i++) {
+            if (mSliderControls[i] == control && mSliders[i].getVisibility() == View.VISIBLE)
+                restateSlider(mSliders[i], control, mSliderFrom[i], mSliderTo[i], value);
+        }
     }
 
     /**
@@ -1244,15 +1265,16 @@ final class AppearanceEditorPanel {
         mRestating = false;
     }
 
-    /** A Custom row slider at a control's range, step and value. */
-    private void restateSlider(@NonNull LegendSlider slider, @NonNull Control control, int value) {
+    /** A Custom row slider at a range, the control's step and a value. */
+    private void restateSlider(@NonNull LegendSlider slider, @NonNull Control control, int from,
+                               int to, int value) {
         mRestating = true;
         // The range and step first, the value last: a Slider checks them together when it lays
         // out, never between these calls.
-        slider.setValueFrom(control.min);
-        slider.setValueTo(control.max);
+        slider.setValueFrom(from);
+        slider.setValueTo(to);
         slider.setStepSize(control.step);
-        slider.setValue(control.clamp(value));
+        slider.setValue(AppearanceLooks.clamp(value, from, to));
         mRestating = false;
     }
 

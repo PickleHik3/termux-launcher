@@ -205,6 +205,13 @@ public final class ChromeInk {
         new java.util.LinkedHashMap<>(MAX_PANE_ANSWERS, 0.75f, true);
 
     @Nullable private Polarity mPolarity;
+    /**
+     * The pane band's mean flat glass as last measured; survives {@link #invalidate} so a
+     * re-sample replaces it instead of leaving a gap. Transparent until a pane is measured.
+     */
+    @ColorInt private int mPaneGround = Color.TRANSPARENT;
+    /** Told when {@link #mPaneGround} moves; see {@link #setOnTerminalPaneGroundChanged}. */
+    @Nullable private Runnable mOnPaneGroundChanged;
     /** The user's legibility control as last read; every target is scaled by it. */
     @NonNull private LegibilityLevel mLevel = LegibilityLevel.DEFAULT;
     @ColorInt private int mBaseColor;
@@ -379,8 +386,51 @@ public final class ChromeInk {
         answer.dimInk = dimInk;
         answer.target = target;
         answer.flat = flat;
-        vote(GlassBackdropCache.Band.TERMINAL_PANE, meanPaneVote());
+        int ground = meanPaneVote();
+        vote(GlassBackdropCache.Band.TERMINAL_PANE, ground);
+        if (ground != mPaneGround) {
+            mPaneGround = ground;
+            if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
+        }
         return resolution;
+    }
+
+    /**
+     * What the terminal's text stands on across the pane band: the mean of the panes' flat glass —
+     * wallpaper, the launcher's dim, each pane's tint — opaque. Read only, never samples: before
+     * any pane has been measured it is the ground {@link #seedPaneGround} carried over from the
+     * last run, and failing that the mode's nominal glass under {@code tint}, the same guess every
+     * band starts from. Independent of the palette, so a palette built on it cannot feed
+     * back into it.
+     *
+     * @param tint the pane's tint as drawn, alpha included, for the nominal answer
+     */
+    @ColorInt
+    public int terminalPaneGround(@ColorInt int tint) {
+        readMode();
+        if (Color.alpha(mPaneGround) != 0) return mPaneGround;
+        return OnGlass.backdrop(mCache.fallbackWallpaper(), mDimColor, tint);
+    }
+
+    /**
+     * The ground a previous run measured, answered by {@link #terminalPaneGround} until a pane is
+     * measured in this one, so a launch does not start from the nominal glass. Ignored once a pane
+     * has been measured, and for a transparent {@code ground}. Tells no listener: nothing was
+     * measured.
+     */
+    public void seedPaneGround(@ColorInt int ground) {
+        if (Color.alpha(mPaneGround) != 0 || Color.alpha(ground) == 0) return;
+        mPaneGround = OnGlass.opaque(ground);
+    }
+
+    /**
+     * Runs {@code listener} each time {@link #terminalPaneGround} moves — only when a pane is
+     * measured anew (a wallpaper, dim, tint or rect change), never for a memoised answer. It runs
+     * inside whatever pass asked about the pane, a draw included, so it must only post. Null
+     * removes it.
+     */
+    public void setOnTerminalPaneGroundChanged(@Nullable Runnable listener) {
+        mOnPaneGroundChanged = listener;
     }
 
     /** Terminal panes remembered right now, for tests. */
@@ -446,12 +496,13 @@ public final class ChromeInk {
      * alone.</p>
      */
     /**
-     * The most veil a surface whose glass tint is {@code tint} may buy: its own opacity plus 15
-     * points, held to 20%..55%. A surface the user made thin stays glass; the ink moves instead.
+     * The most veil a surface may buy: none (2026-10-10). Every surface, the terminal included, is
+     * exactly the glass its Look and sliders say, so the terminal never stands darker than the
+     * keyboard; legibility is the ink's job (its polarity here, the terminal palette's Contrast
+     * level for the panes), and a user who wants a darker ground raises Darkness.
      */
     static int veilCeiling255(@ColorInt int tint) {
-        float opacityFraction = Color.alpha(tint) / 255f;
-        return Math.round(255f * Math.max(0.20f, Math.min(0.55f, opacityFraction + 0.15f)));
+        return 0;
     }
 
     @NonNull

@@ -69,7 +69,7 @@ and both orientations. A swipe up from the bottom border also turns it back on.
 Tap something on the canvas to select it; anything with a size gets a handle. Each size is set per
 orientation, and a readout shows it while you hold the handle.
 
-- **Dock height**: drag the dock's inner edge ("Dock N dp").
+- **Dock height**: drag the dock's inner edge ("Dock N dp"). The icons grow and shrink with it.
 - **Keyboard height**: drag the keyboard's top edge ("Keyboard N dp").
 - **Bottom padding**: drag the bottom of the keys up for space under the last row ("Bottom padding
   N dp").
