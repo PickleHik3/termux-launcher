@@ -55,7 +55,7 @@ android {
 
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
         // One plain X.Y.Z for every edition; nightlies get +dev.<sha> from CI (see AGENTS.md). Keep the line bare: CI greps it.
-        versionName "1.0.1"
+        versionName "1.0.2"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
