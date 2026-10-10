@@ -1803,6 +1803,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         List<AppearanceEditorPanel.SliderState> states = new ArrayList<>();
         for (Control control : AppearanceLooks.controls(mTarget)) {
             boolean enabled = control != Control.CONTRAST || palette;
+            if (control == Control.ICON_SIZE) {
+                // The icons the dock can give under this Style on this screen, end to end.
+                int[] range = AppearanceLooks.iconSizeRangeDp(mHost.isFloatingDock(), density());
+                states.add(new AppearanceEditorPanel.SliderState(control, valueOf(control, prefs),
+                    enabled, legendFor(control, enabled), range[0], range[1]));
+                continue;
+            }
             states.add(new AppearanceEditorPanel.SliderState(control, valueOf(control, prefs),
                 enabled, legendFor(control, enabled)));
         }
@@ -1846,12 +1853,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     prefs.getInAppKeyboardKeyCornerRadiusDp());
             case KEY_SPACING:
                 return AppearanceLooks.keySpacingValueFor(prefs.getInAppKeyboardKeyMarginScale());
-            case DOCK_SIZE: {
-                LayoutEditorController layout = mHost.layoutEditor();
-                float scale = layout == null ? -1f : layout.dockHeightScale();
-                return AppearanceLooks.dockSizeValueFor(
-                    scale > 0f ? scale : prefs.getAppLauncherBarHeightScale());
-            }
+            case ICON_SIZE:
+                return AppearanceLooks.iconSizeValueFor(mHost.isFloatingDock(),
+                    dockHeightScale(prefs), density());
             case APP_ICONS:
                 return AppearanceLooks.appIconsValueFor(prefs.getAppLauncherButtonCount());
             case CONTRAST:
@@ -1882,7 +1886,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case KEY_SPACING:
                 return getString(R.string.appearance_editor_key_spacing,
                     String.format(Locale.getDefault(), "%.1f", value / 10f));
-            case DOCK_SIZE: return getString(R.string.appearance_editor_dock_size, value);
+            case ICON_SIZE: return getString(R.string.appearance_editor_icon_size, value);
             case APP_ICONS: return getString(R.string.appearance_editor_app_icons, value);
             case CONTRAST:
             default:
@@ -1992,6 +1996,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // Corners and Margin show under both Styles and read the same keys.
             if (mPanel != null)
                 mPanel.setFloating(floating);
+            // Icon size does not: each Style gives its own range of icons, so its slider is
+            // restated for the new one.
+            if (mPanel != null && mPanel.isRow2Shown() && mTarget == Target.DOCK)
+                showCustomRow();
             syncLayoutControls();
             // The canvas is told the new Style and morphs from the shape it stood in to the new
             // one (or jumps, with reduced motion).
@@ -2061,7 +2069,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case CORNER_RADIUS: writeCorners(value); break;
             case KEY_RADIUS: writeKeyCorners(value); break;
             case KEY_SPACING: writeKeySpacing(value); break;
-            case DOCK_SIZE: writeDockSize(value); break;
+            case ICON_SIZE: writeIconSize(value); break;
             case APP_ICONS: writeAppIcons(value); break;
             case CONTRAST: writeLegibility(value); break;
             default: break;
@@ -2313,13 +2321,28 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
     }
 
+    /** The dock height scale in force: the layout session's, or the stored one without it. */
+    private float dockHeightScale(@NonNull TermuxAppSharedPreferences prefs) {
+        LayoutEditorController layout = mHost.layoutEditor();
+        float scale = layout == null ? -1f : layout.dockHeightScale();
+        return scale > 0f ? scale : prefs.getAppLauncherBarHeightScale();
+    }
+
     /**
-     * Dock size: the dock height scale Layout mode's dock handle writes, through the layout
+     * Icon size: the icon in dp, stored as the dock height scale that draws it, so the dock grows
+     * around the icon. That is the scale Layout mode's dock handle writes, through the layout
      * session, so its Undo and dirty state cover it. Mid-drag the dock follows on the geometry
-     * preview and the place is re-laid (and the terminal resized) once, on the release.
+     * preview and the place is re-laid (and the terminal resized) once, on the release. A value
+     * the stored scale already draws writes nothing, which keeps a preset a preset while the
+     * thumb rests on its icon.
      */
-    private void writeDockSize(int percent) {
-        float scale = AppearanceLooks.dockScaleFor(percent);
+    private void writeIconSize(int iconDp) {
+        TermuxAppSharedPreferences prefs = prefs();
+        boolean floating = mHost.isFloatingDock();
+        if (prefs != null && AppearanceLooks.iconSizeValueFor(floating, dockHeightScale(prefs),
+                density()) == iconDp)
+            return;
+        float scale = AppearanceLooks.dockScaleForIconSize(floating, iconDp, density());
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null && mSliderDragActive) {
             layout.holdDockHeightScale(scale);
@@ -3412,7 +3435,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private boolean mDragTouchedKeyboard;
     /** A Corners or Margin drag moved the shape; the release resizes the terminal once. */
     private boolean mDragTouchedGeometry;
-    /** A Dock size drag wrote through the layout session; the release re-lays the place once. */
+    /** An Icon size drag wrote through the layout session; the release re-lays the place once. */
     private boolean mDockSizeHeld;
     private boolean mDirtyDeferred;
 

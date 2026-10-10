@@ -3,6 +3,7 @@ package com.termux.app.surfaces;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
@@ -118,8 +119,10 @@ public final class AppearanceLooks {
 
     /**
      * A vertical slider of the Custom row, with the integer range its stored value maps onto.
-     * Dock size is the dock's height scale in percent of its unscaled height; Key spacing is the
-     * key margin scale in tenths; the others are their own units (dp, percent, a count, a stop).
+     * Icon size is the pinned icon in dp, and its slider runs over the range the dock gives under
+     * the Style ({@link #iconSizeRangeDp}); the bounds here are only the ones no dock passes, the
+     * icon's floor and the deepest row. Key spacing is the key margin scale in tenths; the others
+     * are their own units (dp, percent, a count, a stop).
      */
     public enum Control {
         BLUR(0, BLUR_MAX_DP, 1),
@@ -130,7 +133,8 @@ public final class AppearanceLooks {
         CORNER_RADIUS(0, CORNERS_MAX_DP, 1),
         KEY_RADIUS(0, KEY_CORNERS_MAX_DP, 1),
         KEY_SPACING(0, KEY_SPACING_MAX_TENTHS, 1),
-        DOCK_SIZE(DOCK_SIZE_MIN_PERCENT, DOCK_SIZE_MAX_PERCENT, DOCK_SIZE_STEP_PERCENT),
+        ICON_SIZE(Math.round(DockLayoutPolicy.MIN_DOCK_ICON_DP),
+            DockLayoutPolicy.maxRowBandPx(1f), 1),
         APP_ICONS(APP_ICONS_MIN, APP_ICONS_MAX, 1),
         CONTRAST(0, 2, 1);
 
@@ -164,11 +168,6 @@ public final class AppearanceLooks {
     /** Key spacing is the key margin scale, 0.0 to 8.0, in tenths. */
     public static final int KEY_SPACING_MAX_TENTHS = 80;
 
-    /** Dock size is the dock height scale (0.4 to 3.0) in percent, five at a time. */
-    public static final int DOCK_SIZE_MIN_PERCENT = 40;
-    public static final int DOCK_SIZE_MAX_PERCENT = 300;
-    public static final int DOCK_SIZE_STEP_PERCENT = 5;
-
     /** The dock's visible app buttons. */
     public static final int APP_ICONS_MIN = 3;
     public static final int APP_ICONS_MAX = 10;
@@ -189,7 +188,7 @@ public final class AppearanceLooks {
                     Control.TINT, Control.KEY_RADIUS, Control.KEY_SPACING);
             case DOCK:
                 return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
-                    Control.TINT, Control.DOCK_SIZE, Control.APP_ICONS);
+                    Control.TINT, Control.ICON_SIZE, Control.APP_ICONS);
             case TERMINAL:
                 return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
                     Control.TINT, Control.CONTRAST);
@@ -229,15 +228,55 @@ public final class AppearanceLooks {
         return cut > 0 ? text.substring(0, cut) : text;
     }
 
-    /** The dock height scale a Dock size value (percent) writes. */
-    public static float dockScaleFor(int percent) {
-        return Control.DOCK_SIZE.clamp(percent) / 100f;
+    /**
+     * The Icon size slider's ends, {@code {min, max}} in dp: the smallest and largest pinned icon
+     * the dock draws under the Style on a screen of this density. The stored dock height scale
+     * moves the icon only between {@link DockLayoutPolicy#minUsefulScale} and
+     * {@link DockLayoutPolicy#maxUsefulScale}, so a slider over these ends moves it everywhere.
+     */
+    @NonNull
+    public static int[] iconSizeRangeDp(boolean floating, float density) {
+        float d = safeDensity(density);
+        return new int[] {
+            iconDp(DockLayoutPolicy.iconPxForScale(floating,
+                DockLayoutPolicy.minUsefulScale(), d), d),
+            iconDp(DockLayoutPolicy.iconPxForScale(floating,
+                DockLayoutPolicy.maxUsefulScale(floating), d), d)};
     }
 
-    /** Where the Dock size slider stands for a stored dock height scale. */
-    public static int dockSizeValueFor(float scale) {
-        return Control.DOCK_SIZE.clamp(Math.round(scale * 100f / DOCK_SIZE_STEP_PERCENT)
-            * DOCK_SIZE_STEP_PERCENT);
+    /** Where the Icon size slider stands for a stored dock height scale: the icon it draws. */
+    public static int iconSizeValueFor(boolean floating, float scale, float density) {
+        float d = safeDensity(density);
+        int[] range = iconSizeRangeDp(floating, d);
+        return clamp(iconDp(DockLayoutPolicy.iconPxForScale(floating,
+            DockLayoutPolicy.clampToUsefulScale(floating, scale), d), d), range[0], range[1]);
+    }
+
+    /**
+     * The dock height scale an Icon size value (dp) writes: the one that draws that icon. A
+     * shipped preset that reads as this value is preferred, so the slider brought back to the
+     * default's reading stores the default rather than a scale a pixel away from it.
+     */
+    public static float dockScaleForIconSize(boolean floating, int iconDp, float density) {
+        float d = safeDensity(density);
+        int[] range = iconSizeRangeDp(floating, d);
+        int dp = clamp(iconDp, range[0], range[1]);
+        for (int i = 0; i < DockLayoutPolicy.sizePresetCount(); i++) {
+            float preset = DockLayoutPolicy.sizePreset(i);
+            if (preset >= DockLayoutPolicy.minUsefulScale()
+                && preset <= DockLayoutPolicy.maxUsefulScale(floating)
+                && iconSizeValueFor(floating, preset, d) == dp)
+                return preset;
+        }
+        return DockLayoutPolicy.scaleForIconPx(floating, Math.round(dp * d), d);
+    }
+
+    private static int iconDp(int px, float density) {
+        return Math.round(px / density);
+    }
+
+    private static float safeDensity(float density) {
+        return density > 0f ? density : 1f;
     }
 
     /** The key margin scale a Key spacing value (tenths) writes. */
