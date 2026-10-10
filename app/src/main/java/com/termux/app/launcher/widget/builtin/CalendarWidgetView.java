@@ -318,7 +318,8 @@ public class CalendarWidgetView extends BuiltinWidgetView {
         TextView month = ui.text(CalendarWidgetFormats.monthName(shown.getMonth(), day.locale),
             12f, ui.style.sansBold, ui.style.onSurface);
         TextView year = ui.mono(Integer.toString(shown.getYear()), 11f);
-        MonthHeading heading = new MonthHeading(ui, month, year,
+        MonthHeading heading = new MonthHeading(ui, month,
+            CalendarWidgetFormats.monthShort(shown.getMonth(), day.locale), year,
             monthStepper(ui, GLYPH_PREV_MONTH, R.string.bw_calendar_previous_month, -1),
             monthStepper(ui, GLYPH_NEXT_MONTH, R.string.bw_calendar_next_month, 1));
         if (isPreview()) return heading;
@@ -383,11 +384,13 @@ public class CalendarWidgetView extends BuiltinWidgetView {
     /**
      * The month heading: the name at the start, the year on its baseline just before the
      * steppers, the two discs at the end. It fits by {@link CalendarWidgetFormats#fitHeading}:
-     * the year goes first, then the discs close up. A year left out is laid out empty rather
-     * than hidden, so fitting never asks for another layout.
+     * the year goes first, then the discs close up, then the name shortens ("Sep"). A year left
+     * out is laid out empty rather than hidden, so fitting never asks for another layout.
      */
     private static final class MonthHeading extends ViewGroup {
         @NonNull private final TextView name;
+        @NonNull private final String fullName;
+        @NonNull private final String shortName;
         @NonNull private final TextView year;
         @NonNull private final View prev;
         @NonNull private final View next;
@@ -400,10 +403,12 @@ public class CalendarWidgetView extends BuiltinWidgetView {
         private final int hitGrow;
         @NonNull private CalendarWidgetFormats.HeadingFit fit;
 
-        MonthHeading(@NonNull BuiltinWidgetUi ui, @NonNull TextView name, @NonNull TextView year,
-                     @NonNull View prev, @NonNull View next) {
+        MonthHeading(@NonNull BuiltinWidgetUi ui, @NonNull TextView name, @NonNull String shortName,
+                     @NonNull TextView year, @NonNull View prev, @NonNull View next) {
             super(ui.context);
             this.name = name; this.year = year; this.prev = prev; this.next = next;
+            this.fullName = name.getText().toString();
+            this.shortName = shortName;
             side = ui.dp(HEADING_SIDE_DP);
             textGap = ui.dp(HEADING_GAP_DP);
             disc = ui.dp(STEPPER_DP);
@@ -429,6 +434,13 @@ public class CalendarWidgetView extends BuiltinWidgetView {
         }
 
         @Override protected void onMeasure(int widthSpec, int heightSpec) {
+            // A row too narrow for the whole name beside the steppers shows the short one.
+            if (MeasureSpec.getMode(widthSpec) != MeasureSpec.UNSPECIFIED) {
+                int room = MeasureSpec.getSize(widthSpec) - 2 * side
+                    - CalendarWidgetFormats.headingNeed(0, textGap, disc, minGap);
+                String label = name.getPaint().measureText(fullName) <= room ? fullName : shortName;
+                if (!label.contentEquals(name.getText())) name.setText(label);
+            }
             int any = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
             name.measure(any, any);
             year.measure(any, any);
