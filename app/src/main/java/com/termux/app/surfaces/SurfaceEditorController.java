@@ -2389,8 +2389,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * Legibility: the terminal palette's contrast, rebuilt and repainted at once so the panes'
-     * colours change on the tap. It is also the one global multiplier every chrome band's veil is
-     * bought against (SPEC §2), which the surfaces pass picks up.
+     * colours change on the tap. It is the terminal text's legibility control; the surfaces under
+     * it carry no veil of their own.
      */
     private void writeLegibility(int index) {
         TermuxAppSharedPreferences prefs = prefs();

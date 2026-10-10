@@ -446,12 +446,13 @@ public final class ChromeInk {
      * alone.</p>
      */
     /**
-     * The most veil a surface whose glass tint is {@code tint} may buy: its own opacity plus 15
-     * points, held to 20%..55%. A surface the user made thin stays glass; the ink moves instead.
+     * The most veil a surface may buy: none (2026-10-10). Every surface, the terminal included, is
+     * exactly the glass its Look and sliders say, so the terminal never stands darker than the
+     * keyboard; legibility is the ink's job (its polarity here, the terminal palette's Contrast
+     * level for the panes), and a user who wants a darker ground raises Darkness.
      */
     static int veilCeiling255(@ColorInt int tint) {
-        float opacityFraction = Color.alpha(tint) / 255f;
-        return Math.round(255f * Math.max(0.20f, Math.min(0.55f, opacityFraction + 0.15f)));
+        return 0;
     }
 
     @NonNull

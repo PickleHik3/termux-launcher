@@ -254,41 +254,6 @@ public class ChromeInkTest {
     // ------------------------------------------------------------------ the veil, as drawn
 
     /**
-     * The promise the whole round rests on: whatever veil was resolved, the surface the band is
-     * actually <em>drawn</em> as — base layer, light model with its dark foot, veil — still clears
-     * the target at the worst row of the band. Composed here out of the real drawable's own layers.
-     */
-    @Test
-    public void theComposedSurfaceKeepsTheVeilFloorAtTheWorstRow() {
-        // A mid-light wallpaper: the light-mode ink is the right one and it cannot read bare.
-        wallpaper.status = 0xFF9A9A9A;
-        wallpaper.other = 0xFF9A9A9A;
-        GlassSurfaceFactory glass = new GlassSurfaceFactory(surfaces, ink);
-        float opacity = 0.5f;
-
-        // Frame one: the surface is built, which is what tells the ink what glass this band is.
-        glass.surface(opacity, 0f, 1f, true, 0, 0f, false, GlassBackdropCache.Band.STATUS_BAR);
-        OnGlass.Resolution resolved = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT,
-            LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
-        assertEquals(ChromeInk.Polarity.DARK_INK, ink.polarity());
-        assertFalse("this band cannot read bare, so it must have bought a veil", resolved.isBare());
-        assertEquals("the veil is the band's own base colour, never white",
-            LIGHT_BASE & 0x00FFFFFF, resolved.veil & 0x00FFFFFF);
-
-        // Frame two: the veil the ink asked for is now a layer of the drawn surface.
-        LayerDrawable drawn = (LayerDrawable) glass.surface(opacity, 0f, 1f, true, 0, 0f, false,
-            GlassBackdropCache.Band.STATUS_BAR);
-        assertEquals("base, light model, veil", 3, drawn.getNumberOfLayers());
-        assertEquals(resolved.veil,
-            ((GradientDrawable) drawn.getDrawable(2)).getColor().getDefaultColor());
-
-        int composed = composeDrawnBand(drawn, wallpaper.status, opacity, 0f, 1f, resolved.ink);
-        assertTrue("the drawn band must keep the promise the measurement made: "
-                + OnGlass.ratio(resolved.ink, composed),
-            OnGlass.ratio(resolved.ink, composed) >= OnGlass.TARGET_BODY_TEXT);
-    }
-
-    /**
      * A band that needs nothing gets nothing: no veil layer, and the wallpaper untouched. This is
      * the reporting device's own status bar — the measurement was taken of the glass as drawn, so
      * the band is modelled here at the opacity that reproduces it.
@@ -305,24 +270,6 @@ public class ChromeInkTest {
         LayerDrawable drawn = (LayerDrawable) glass.surface(0f, 0f, 1f, true, 0, 0f, false,
             GlassBackdropCache.Band.STATUS_BAR);
         assertEquals("base and light model only", 2, drawn.getNumberOfLayers());
-    }
-
-    /** A veil that appears asks for the pass that draws it, and a settled one asks for nothing. */
-    @Test
-    public void aChangedVeilAsksForTheRenderThatDrawsIt() {
-        wallpaper.status = 0xFF9A9A9A;
-        new GlassSurfaceFactory(surfaces, ink)
-            .surface(0.5f, 0f, 1f, true, 0, 0f, false, GlassBackdropCache.Band.STATUS_BAR);
-        veilChangeNotices = 0;
-
-        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT, LIGHT_INK, NIGHT_INK,
-            OnGlass.TARGET_BODY_TEXT);
-        assertEquals(1, veilChangeNotices);
-
-        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT, LIGHT_INK, NIGHT_INK,
-            OnGlass.TARGET_BODY_TEXT);
-        assertEquals("a settled band repaints without asking for another pass",
-            1, veilChangeNotices);
     }
 
     // ------------------------------------------------------ the mid backdrop, both modes
@@ -374,35 +321,6 @@ public class ChromeInkTest {
                     band.ratio >= OnGlass.TARGET_BODY_TEXT);
             }
         }
-    }
-
-    /**
-     * The seam the bug lived in. The surface builder and the bar's content run in an order neither
-     * of them chooses, and the builder used to draw whatever the last resolve had left behind — so
-     * on the first pass of a mid band it drew nothing. The veil is derived on demand now, from the
-     * band's standing question, so both sides get the same answer whichever runs first.
-     */
-    @Test
-    public void theSurfaceBuilderDerivesTheVeilRatherThanInheritingIt() {
-        surfaces.glassBase = NIGHT_BASE;
-        surfaces.accent = WARM_ACCENT;
-        wallpaper.status = MID_WARM_GLASS;
-        GlassSurfaceFactory glass = new GlassSurfaceFactory(surfaces, ink);
-        glass.surface(MID_OPACITY, 0f, 1f, true, 0, 0f, false, GlassBackdropCache.Band.STATUS_BAR);
-        OnGlass.Resolution band = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT,
-            WARM_INK_NIGHT, WARM_INK_NIGHT, OnGlass.TARGET_BODY_TEXT);
-        assertFalse("a mid band in dark mode has to buy a veil", band.isBare());
-
-        // A fresh sample of the same wallpaper — a rotation, a blur frame landing — clears what the
-        // last resolve left behind. The very next surface build must still veil, with no resolve in
-        // between: on the device, that rebuild is the only one that ever ran.
-        ink.invalidate();
-        LayerDrawable drawn = (LayerDrawable) glass.surface(MID_OPACITY, 0f, 1f, true, 0, 0f, false,
-            GlassBackdropCache.Band.STATUS_BAR);
-
-        assertEquals("base, light model, veil", 3, drawn.getNumberOfLayers());
-        assertEquals(band.veil,
-            ((GradientDrawable) drawn.getDrawable(2)).getColor().getDefaultColor());
     }
 
     /** A band nobody has asked an ink for has nothing to veil for, and stays plain glass. */
@@ -675,83 +593,6 @@ public class ChromeInkTest {
         Rect again = new Rect();
         assertTrue(ink.bandRect(GlassBackdropCache.Band.STATUS_BAR, again));
         assertEquals(window, again);
-    }
-
-    /**
-     * The white strip the user reported. The pane wears the veil its content bought; the strip that
-     * continues the pane's glass under the system status bar draws the same tint, frost and light
-     * model and no veil, so it stays the wallpaper the user chose instead of a whitish wash with a
-     * hard edge where the pane begins.
-     */
-    @Test
-    public void theInsetStripDrawsThePanesGlassWithNoVeilOfItsOwn() {
-        wallpaper.other = 0xFF9A9A9A;      // mid-light: the light-mode ink cannot read this bare
-        GlassSurfaceFactory glass = new GlassSurfaceFactory(surfaces, ink);
-        glass.surface(0.5f, 0.3f, 1f, true, 0, 0f, false, GlassBackdropCache.Band.WINDOW_BAR);
-        OnGlass.Resolution pane = ink.onGlass(GlassBackdropCache.Band.WINDOW_BAR, WINDOW_RECT,
-            LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
-        assertFalse("this pane cannot read bare, so it must have bought a veil", pane.isBare());
-
-        LayerDrawable paneDrawn = (LayerDrawable) glass.surface(0.5f, 0.3f, 1f, true, 0, 0f, false,
-            GlassBackdropCache.Band.WINDOW_BAR);
-        assertTrue("the pane draws what its content asked for", hasLayer(paneDrawn, pane.veil));
-
-        LayerDrawable bare = (LayerDrawable) glass.statusBarExtensionSurface(0.5f, 0f, 0.3f, null);
-        assertFalse("the strip carries no content, so it carries no veil",
-            hasLayer(bare, pane.veil));
-        assertEquals("and it is still the same glass: tint and light model",
-            surfaces.glassBaseColor() & 0x00FFFFFF,
-            ((GradientDrawable) bare.getDrawable(0)).getColor().getDefaultColor() & 0x00FFFFFF);
-
-        // Option B is one constant away: the strip named as continuing the pane repeats its veil.
-        LayerDrawable seamless = (LayerDrawable) glass.statusBarExtensionSurface(0.5f, 0f, 0.3f,
-            GlassBackdropCache.Band.WINDOW_BAR);
-        assertTrue(hasLayer(seamless, pane.veil));
-        assertEquals("which is the bare strip plus exactly one layer",
-            bare.getNumberOfLayers() + 1, seamless.getNumberOfLayers());
-    }
-
-    /**
-     * Two bands, one sheet of glass. The strip's content asks in the stats' hues at body contrast
-     * and the window chips ask in their neutrals; the pane can only wear one veil, so it wears the
-     * stronger demand and both bands are answered on that.
-     */
-    @Test
-    public void onePaneWearsTheStrongerOfTheTwoDemands() {
-        surfaces.glassBase = NIGHT_BASE;
-        surfaces.accent = WARM_ACCENT;
-        wallpaper.other = MID_WARM_GLASS;
-        GlassSurfaceFactory glass = new GlassSurfaceFactory(surfaces, ink);
-        glass.surface(MID_OPACITY, 0.3f, 1f, true, 0, 0f, false,
-            GlassBackdropCache.Band.WINDOW_BAR);
-
-        int chipInk = 0xFFE6E1E5;          // the chips' pale neutral
-        OnGlass.Resolution status = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, WINDOW_RECT,
-            WARM_INK_NIGHT, WARM_INK_NIGHT, OnGlass.TARGET_BODY_TEXT);
-        OnGlass.Resolution chips = ink.onGlass(GlassBackdropCache.Band.WINDOW_BAR, WINDOW_RECT,
-            chipInk, chipInk, OnGlass.TARGET_BODY_TEXT);
-        // The strip's own question is asked again after the chips', as the render order does.
-        status = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, WINDOW_RECT, WARM_INK_NIGHT,
-            WARM_INK_NIGHT, OnGlass.TARGET_BODY_TEXT);
-
-        int soloStatus = Color.alpha(soloVeil(GlassBackdropCache.Band.STATUS_BAR, WARM_INK_NIGHT));
-        int soloChips = Color.alpha(soloVeil(GlassBackdropCache.Band.WINDOW_BAR, chipInk));
-        assertTrue("the two demands differ, or this fixture proves nothing",
-            soloStatus != soloChips);
-
-        assertEquals("one pane, one veil", status.veil, chips.veil);
-        assertEquals("and it is the stronger demand", Math.max(soloStatus, soloChips),
-            Color.alpha(status.veil));
-
-        // Both bands are toned on the veil that is drawn, not on the one they asked for alone.
-        LayerDrawable drawn = (LayerDrawable) glass.surface(MID_OPACITY, 0.3f, 1f, true, 0, 0f,
-            false, GlassBackdropCache.Band.WINDOW_BAR);
-        assertTrue("the pane draws the settled veil", hasLayer(drawn, status.veil));
-        for (OnGlass.Resolution band : new OnGlass.Resolution[] {status, chips}) {
-            int composed = composeDrawnBand(drawn, MID_WARM_GLASS, MID_OPACITY, 0.3f, 1f, band.ink);
-            assertTrue("as drawn, " + band + " reads " + OnGlass.ratio(band.ink, composed),
-                OnGlass.ratio(band.ink, composed) >= OnGlass.TARGET_BODY_TEXT);
-        }
     }
 
     // ------------------------------------------------------------------ helpers
