@@ -20601,7 +20601,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Rect gap = splitKeyboardTouchpadGap(keyboardView);
         // In the parting the pad is flush with the halves either side of it, not a card over them.
         pad.setInSplitGap(com.termux.app.x11.DisplayTouchpadPlacement.fitsGap(gap, density),
-            Keyboard2View.splitSlabRadiusPx());
+            splitKeyboardSlabRadius(keyboardView));
         host.addView(pad, com.termux.app.x11.DisplayTouchpadPlacement.padParams(gap,
             keyboardView == null ? 0 : keyboardView.getHeight(), density));
         if (keyboardView != null) {
@@ -20676,7 +20676,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (pad instanceof com.termux.app.x11.DisplayTouchpadView) {
             ((com.termux.app.x11.DisplayTouchpadView) pad).setInSplitGap(
                 com.termux.app.x11.DisplayTouchpadPlacement.fitsGap(gap, density),
-                Keyboard2View.splitSlabRadiusPx());
+                splitKeyboardSlabRadius(keyboardView));
         }
         if (!com.termux.app.x11.DisplayTouchpadPlacement.describes(pad.getLayoutParams(), params)) {
             pad.setLayoutParams(params);
@@ -20747,6 +20747,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         Rect gap = new Rect();
         return ((Keyboard2View) keyboardView).getSplitGapBounds(gap) ? gap : null;
+    }
+
+    /** The corner radius of a split keyboard's halves where they face the parting; 0 without. */
+    private static float splitKeyboardSlabRadius(@Nullable View keyboardView) {
+        return keyboardView instanceof Keyboard2View
+            ? ((Keyboard2View) keyboardView).getSplitSlabRadiusPx() : 0f;
     }
 
     private void createWidgetPaneController() {

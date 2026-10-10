@@ -1665,7 +1665,9 @@ public final class TermuxInAppKeyboard {
     /**
      * The parting [data] asks for, in key-width units; zero for any type but split. Never
      * narrower than {@link #setMinimumSplitGapPx}'s floor once the view has been measured: the
-     * floor is pixels, and the units that buy them depend on how wide the keys are drawn.
+     * floor is pixels, and the units that buy them depend on how wide the keys are drawn. The
+     * floor is the strip left clear between the halves' slabs, which reach into the parting
+     * past the keys, so the keys part that much wider.
      */
     private float splitGapUnits(@Nullable KeyboardData data) {
         if (data == null || mForm != PlaceLayout.KeyboardForm.SPLIT)
@@ -1675,14 +1677,16 @@ public final class TermuxInAppKeyboard {
         if (mMinSplitGapPx <= 0 || mKeyboardView == null)
             return units;
         return Math.max(units, LayoutModifier.gapUnitsForPx(data,
-            mKeyboardView.getKeyContentWidthPx(), mMinSplitGapPx));
+            mKeyboardView.getKeyContentWidthPx(),
+            mMinSplitGapPx + mKeyboardView.getSplitSlabReachPx()));
     }
 
     /**
-     * Asks the split keyboard to part at least [px] wide, so a host can stand something in the
-     * gap; zero gives the user's own parting back. Idempotent, and re-read on every call: the
-     * floor is in pixels, so the same floor asks for different units once the view has been
-     * measured. Returns whether the halves moved, which is a relayout the caller can wait for.
+     * Asks the split keyboard to leave a strip at least [px] wide clear between its halves, so
+     * a host can stand something in the gap; zero gives the user's own parting back.
+     * Idempotent, and re-read on every call: the floor is in pixels, so the same floor asks for
+     * different units once the view has been measured. Returns whether the halves moved, which
+     * is a relayout the caller can wait for.
      */
     public boolean setMinimumSplitGapPx(int px) {
         mMinSplitGapPx = Math.max(0, px);

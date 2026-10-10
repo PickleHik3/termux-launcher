@@ -5,9 +5,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.view.MotionEvent;
@@ -20,10 +20,12 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.annotation.GraphicsMode;
 
 /** What the split keyboard type changes in the view: its background and the gap's touches. */
 @RunWith(RobolectricTestRunner.class)
 @org.robolectric.annotation.Config(sdk = 28)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class Keyboard2ViewSplitTest
 {
   /** Four unit keys parted by one, measured 500px wide: keys of 100px and a gap of 200..300. */
@@ -47,11 +49,17 @@ public class Keyboard2ViewSplitTest
   @Before
   public void setUp()
   {
+    view = newView(0f);
+  }
+
+  /** A view whose keys start [sideMarginPx] in from either edge. */
+  private Keyboard2View newView(float sideMarginPx)
+  {
     Context context = RuntimeEnvironment.getApplication();
     Config.Builder builder = new Config.Builder(context.getResources(), handler);
     builder.rowHeightPx = 50f;
     builder.maxKeyboardHeightFraction = 1f;
-    builder.horizontalMarginPx = 0f;
+    builder.horizontalMarginPx = sideMarginPx;
     builder.bottomMarginPx = 0f;
     builder.marginTopPx = 0f;
     builder.hapticEnabled = false;
@@ -60,7 +68,7 @@ public class Keyboard2ViewSplitTest
         keyboardColor, Color.DKGRAY, Color.DKGRAY, Color.DKGRAY,
         Color.GRAY, Color.WHITE, Color.LTGRAY, Color.CYAN, Color.WHITE,
         Color.GREEN, Color.GRAY, false, 0f, 0f, 1f);
-    view = new Keyboard2View(context, builder.build(), palette);
+    return new Keyboard2View(context, builder.build(), palette);
   }
 
   @Test
@@ -156,9 +164,79 @@ public class Keyboard2ViewSplitTest
   }
 
   @Test
-  public void theSlabRadiusIsTheShapeAPanelInThePartingTakes()
+  public void theSlabRadiusIsTheShapeAPanelInThePartingTakes() throws Exception
   {
-    assertEquals(0f, Keyboard2View.splitSlabRadiusPx(), 1e-4f);
+    dock();
+    assertEquals("nothing is parted", 0f, view.getSplitSlabRadiusPx(), 1e-4f);
+
+    split(1f);
+
+    // Square caps half a key margin (2% of a 100px key) in from the slab's edge: a corner
+    // concentric with them is that half margin round.
+    assertEquals(1f, view.getSplitSlabRadiusPx(), 1e-4f);
+  }
+
+  @Test
+  public void theHalvesWrapTheirKeysWithInnerCornersConcentricWithTheCaps() throws Exception
+  {
+    view = newView(10f);
+    view.setKeyCornerRadiusOverride(6f);
+    split(1f);
+
+    Rect a = keyRect("a");
+    Rect b = keyRect("b");
+    Rect c = keyRect("c");
+    Rect d = keyRect("d");
+    Rect gap = new Rect();
+    assertTrue(view.getSplitGapBounds(gap));
+    // Each slab's gap-side edge stands as far from its keys as its outer edge does.
+    int leftOuter = a.left;
+    int rightOuter = view.getWidth() - d.right;
+    assertEquals(leftOuter, gap.left - b.right, 1);
+    assertEquals(rightOuter, c.left - gap.right, 1);
+    // 480px of keys between 10px margins: five 96px cells, each cap half a 1.92px margin in.
+    float inset = 10f + 0.02f * 96f / 2f;
+    assertEquals(inset, leftOuter, 1f);
+    assertEquals("concentric with the 6px caps", 6f + inset, view.getSplitSlabRadiusPx(), 1e-3f);
+
+    Bitmap drawn = drawSlabs(Color.MAGENTA);
+    int bottom = view.getHeight() - 1;
+    assertEquals("outer corners stay square", Color.MAGENTA, drawn.getPixel(0, 0));
+    assertEquals(Color.MAGENTA, drawn.getPixel(view.getWidth() - 1, bottom));
+    assertEquals("the left slab reaches its inner edge", Color.MAGENTA,
+        drawn.getPixel(gap.left - 1, view.getHeight() / 2));
+    assertEquals("and stops there", 0, Color.alpha(drawn.getPixel(gap.left + 1,
+        view.getHeight() / 2)));
+    assertEquals(Color.MAGENTA, drawn.getPixel(gap.right, view.getHeight() / 2));
+    assertEquals("inner corners are rounded", 0, Color.alpha(drawn.getPixel(gap.left - 1, 0)));
+    assertEquals(0, Color.alpha(drawn.getPixel(gap.left - 1, bottom)));
+    assertEquals(0, Color.alpha(drawn.getPixel(gap.right, 0)));
+    assertEquals(0, Color.alpha(drawn.getPixel(gap.right, bottom)));
+  }
+
+  @Test
+  public void aHostsAskIsTheStripLeftClearBetweenTheSlabs() throws Exception
+  {
+    view = newView(10f);
+    dock();
+    int ask = 120;
+    float units = LayoutModifier.gapUnitsForPx(KeyboardData.load_string_exn(ROW),
+        view.getKeyContentWidthPx(), ask + view.getSplitSlabReachPx());
+    split(units);
+
+    Rect gap = new Rect();
+    assertTrue(view.getSplitGapBounds(gap));
+    assertTrue("the clear strip measures the ask: " + gap.width(), gap.width() >= ask);
+    Rect b = keyRect("b");
+    Rect c = keyRect("c");
+    assertTrue("the strip is clear of the left slab's reach", gap.left > b.right + 1);
+    assertTrue("and of the right one's", gap.right < c.left - 1);
+    float middle = view.getHeight() / 2f;
+    assertFalse("the strip is not the keyboard's", touch(MotionEvent.ACTION_DOWN,
+        gap.exactCenterX(), middle));
+    assertTrue("the slab's reach beside b still is", touch(MotionEvent.ACTION_DOWN,
+        (b.right + gap.left) / 2f, middle));
+    touch(MotionEvent.ACTION_UP, (b.right + gap.left) / 2f, middle);
   }
 
   @Test
@@ -228,18 +306,18 @@ public class Keyboard2ViewSplitTest
   }
 
   @Test
-  public void theSlabsAreTwoRectanglesEitherSideOfTheBand() throws Exception
+  public void theSlabsLieEitherSideOfTheBand() throws Exception
   {
     split(STAGGERED, 1f);
-    view.setSplitBackgroundColor(Color.MAGENTA);
 
-    SlabCanvas canvas = new SlabCanvas(Color.MAGENTA);
-    view.drawSplitBackground(canvas);
-
-    int height = view.getHeight();
-    assertEquals(Arrays.asList(
-        Arrays.asList(0f, 0f, 200f, (float)height),
-        Arrays.asList(300f, 0f, 500f, (float)height)), canvas.slabs);
+    Bitmap drawn = drawSlabs(Color.MAGENTA);
+    int middle = view.getHeight() / 2;
+    assertEquals(Color.MAGENTA, drawn.getPixel(0, 0));
+    assertEquals(Color.MAGENTA, drawn.getPixel(199, middle));
+    assertEquals(0, Color.alpha(drawn.getPixel(200, middle)));
+    assertEquals(0, Color.alpha(drawn.getPixel(299, middle)));
+    assertEquals(Color.MAGENTA, drawn.getPixel(300, middle));
+    assertEquals(Color.MAGENTA, drawn.getPixel(499, view.getHeight() - 1));
   }
 
   private void dock() throws Exception
@@ -261,24 +339,21 @@ public class Keyboard2ViewSplitTest
     measure();
   }
 
-  /** A canvas that keeps the rectangles drawn in the slab colour and draws nothing. */
-  private static final class SlabCanvas extends Canvas
+  /** The split background alone, drawn in [color] onto a clear bitmap the view's size. */
+  private Bitmap drawSlabs(int color)
   {
-    final int color;
-    final List<List<Float>> slabs = new ArrayList<List<Float>>();
+    view.setSplitBackgroundColor(color);
+    Bitmap bitmap = Bitmap.createBitmap(view.getWidth(), view.getHeight(),
+        Bitmap.Config.ARGB_8888);
+    view.drawSplitBackground(new Canvas(bitmap));
+    return bitmap;
+  }
 
-    SlabCanvas(int color_)
-    {
-      color = color_;
-    }
-
-    @Override
-    public void drawRoundRect(float left, float top, float right, float bottom, float rx,
-        float ry, Paint paint)
-    {
-      if (paint.getColor() == color)
-        slabs.add(Arrays.asList(left, top, right, bottom));
-    }
+  private Rect keyRect(String name)
+  {
+    Rect out = new Rect();
+    assertTrue(name, view.getKeyRectOnScreen(name, out));
+    return out;
   }
 
   private void measure()

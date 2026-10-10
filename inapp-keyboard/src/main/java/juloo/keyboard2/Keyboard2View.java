@@ -10,6 +10,7 @@ import android.view.KeyEvent;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.SweepGradient;
@@ -73,6 +74,23 @@ public class Keyboard2View extends View
   private Theme _theme;
   private Theme.Computed _tc;
   private final Paint _splitBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  /**
+   * The split slabs as {@link #splitSlabs} last built them: both halves in one path, the clear
+   * strip between them and their inner corner radius. Rebuilt only when the measure, the layout,
+   * the gap or the view's size they were built from changes.
+   */
+  private final Path _splitSlabPath = new Path();
+  private final RectF _splitSlabRect = new RectF();
+  private final float[] _splitSlabRadii = new float[8];
+  private Theme.Computed _splitSlabsTc;
+  private KeyboardData _splitSlabsKeyboard;
+  private float _splitSlabsGapUnits = -1f;
+  private int _splitSlabsWidth = -1;
+  private int _splitSlabsHeight = -1;
+  private boolean _splitSlabsParted;
+  private float _splitClearLeft;
+  private float _splitClearRight;
+  private float _splitSlabRadius;
   /**
    * Host-set colour for the split slabs, or null to paint them in the keyboard's own background.
    * The host owns this because a parted keyboard lies over the content rather than inside a
@@ -767,18 +785,17 @@ public class Keyboard2View extends View
   }
 
   /**
-   * The band the parting leaves empty on every row, in view pixels, for a host that wants to
-   * stand something in the gap: the same strip {@link #drawSplitBackground} leaves between the
-   * two slabs. False, leaving [out] alone, when the keyboard is not split or has not been
-   * measured.
+   * The strip the parting leaves clear between the two slabs, in view pixels, for a host that
+   * wants to stand something in the gap: the slabs' gap-side edges, not the keys'. False,
+   * leaving [out] alone, when the keyboard is not split, has not been measured, or its slabs
+   * meet. The width is rounded as a whole, so a strip asked for in whole pixels measures them.
    */
   public boolean getSplitGapBounds(Rect out)
   {
-    float[] band = splitGapPx();
-    if (band == null)
+    if (!splitSlabs())
       return false;
-    int left = Math.round(band[0]);
-    int right = Math.round(band[1]);
+    int left = Math.round(_splitClearLeft);
+    int right = left + Math.round(_splitClearRight - _splitClearLeft);
     int height = getHeight() > 0 ? getHeight() : getMeasuredHeight();
     if (right <= left || height <= 0)
       return false;
@@ -787,17 +804,14 @@ public class Keyboard2View extends View
   }
 
   /**
-   * The parting as {left, right} in view pixels, or null when the keyboard is not split or has
-   * not been measured. One band for every row: {@link SplitLayout} parts the rows so.
+   * How far the two slabs reach past the keys' band into the parting together, in px: each
+   * slab's gap-side edge stands as far from its keys as its outer edge does from the view's.
+   * A host that wants a clear strip of a given width parts the keys this much wider. Zero
+   * until the view has been measured once, like {@link #getKeyContentWidthPx}.
    */
-  private float[] splitGapPx()
+  public float getSplitSlabReachPx()
   {
-    if (_splitGapUnits <= 0f || _keyboard == null || _tc == null || _keyWidth <= 0f)
-      return null;
-    float[] band = SplitLayout.gapBand(_keyboard, _splitGapUnits);
-    if (band == null)
-      return null;
-    return new float[]{ _marginLeft + band[0] * _keyWidth, _marginLeft + band[1] * _keyWidth };
+    return _keyWidth > 0f ? _marginLeft + _marginRight : 0f;
   }
 
   /**
@@ -811,14 +825,13 @@ public class Keyboard2View extends View
   }
 
   /**
-   * The corner radius of the slabs {@link #drawSplitBackground} paints under the key runs, in
-   * px. Square: the slabs reach the view's edges and meet each other vertically, so a radius
-   * would only round the parting's inner edges. A host standing a panel in the parting reads
-   * it from here, so the three surfaces stay one shape.
+   * The radius of the slabs' gap-side corners, in px; zero when the keyboard is not parted. A
+   * host standing a panel in the parting reads it from here, so the three surfaces take one
+   * shape. Where the two halves differ (uneven side padding) it is the smaller of the two.
    */
-  public static float splitSlabRadiusPx()
+  public float getSplitSlabRadiusPx()
   {
-    return SPLIT_SLAB_RADIUS_PX;
+    return splitSlabs() ? _splitSlabRadius : 0f;
   }
 
   /** Scales both horizontal and vertical gaps without replacing immutable Config. */
@@ -1852,38 +1865,102 @@ public class Keyboard2View extends View
     Vertical.BOTTOM
   };
 
-  /** The radius the run slabs are drawn with; {@link #splitSlabRadiusPx} is how a host reads it. */
-  private static final float SPLIT_SLAB_RADIUS_PX = 0f;
+  /**
+   * Brings the split slabs up to date and says whether the keyboard is parted: false when it is
+   * not split, has not been measured, or was handed its layout whole. Each slab is the full
+   * height of the view and reaches its own edge; its gap-side edge stands as far from its keys
+   * as the outer edge does ({@link #getSplitSlabReachPx}), and the two corners there are
+   * concentric with the key caps, clamped to what the slab can hold. The outer corners stay
+   * square: the screen edge or the keyboard's host owns them. A gap too thin for both reaches
+   * shares it between them, and the slabs meet.
+   */
+  private boolean splitSlabs()
+  {
+    if (_splitGapUnits <= 0f || _keyboard == null || _tc == null || _keyWidth <= 0f)
+      return false;
+    int width = getWidth() > 0 ? getWidth() : getMeasuredWidth();
+    int height = getHeight() > 0 ? getHeight() : getMeasuredHeight();
+    if (_splitSlabsTc == _tc && _splitSlabsKeyboard == _keyboard
+        && Float.compare(_splitSlabsGapUnits, _splitGapUnits) == 0
+        && _splitSlabsWidth == width && _splitSlabsHeight == height)
+      return _splitSlabsParted;
+    _splitSlabsTc = _tc;
+    _splitSlabsKeyboard = _keyboard;
+    _splitSlabsGapUnits = _splitGapUnits;
+    _splitSlabsWidth = width;
+    _splitSlabsHeight = height;
+    _splitSlabPath.rewind();
+    float[] band = SplitLayout.gapBand(_keyboard, _splitGapUnits);
+    _splitSlabsParted = band != null;
+    if (band == null)
+      return false;
+    float bandLeft = _marginLeft + band[0] * _keyWidth;
+    float bandRight = _marginLeft + band[1] * _keyWidth;
+    float reachLeft = _marginLeft;
+    float reachRight = _marginRight;
+    float reach = reachLeft + reachRight;
+    if (reach > bandRight - bandLeft)
+    {
+      float share = (bandRight - bandLeft) / reach;
+      reachLeft *= share;
+      reachRight *= share;
+    }
+    _splitClearLeft = bandLeft + reachLeft;
+    _splitClearRight = bandRight - reachRight;
+    // A cap's outline is its fill's radius out to the outer edge of its stroke; the slab corner
+    // shares its centre, so it is that radius plus the inset from the cap to the slab's edge.
+    Theme.Computed.Key cap = _tc.key;
+    float capRadius = cap.border_radius + cap.border_width / 2f;
+    float leftRadius = slabCornerRadius(capRadius + _marginLeft + _tc.margin_left,
+        _splitClearLeft, height);
+    float rightRadius = slabCornerRadius(capRadius + _marginRight + _tc.margin_left,
+        width - _splitClearRight, height);
+    _splitSlabRadius = Math.min(leftRadius, rightRadius);
+    _splitSlabRect.set(0f, 0f, _splitClearLeft, height);
+    setSlabRadii(0f, leftRadius, leftRadius, 0f);
+    _splitSlabPath.addRoundRect(_splitSlabRect, _splitSlabRadii, Path.Direction.CW);
+    _splitSlabRect.set(_splitClearRight, 0f, width, height);
+    setSlabRadii(rightRadius, 0f, 0f, rightRadius);
+    _splitSlabPath.addRoundRect(_splitSlabRect, _splitSlabRadii, Path.Direction.CW);
+    return true;
+  }
+
+  /** [radius] clamped to what a slab [width] by [height] can hold, and never negative. */
+  private static float slabCornerRadius(float radius, float width, float height)
+  {
+    return Math.max(0f, Math.min(radius, Math.min(width, height) / 2f));
+  }
+
+  /** Fills {@link #_splitSlabRadii} with circular corners, clockwise from the top left. */
+  private void setSlabRadii(float topLeft, float topRight, float bottomRight, float bottomLeft)
+  {
+    float[] r = _splitSlabRadii;
+    r[0] = r[1] = topLeft;
+    r[2] = r[3] = topRight;
+    r[4] = r[5] = bottomRight;
+    r[6] = r[7] = bottomLeft;
+  }
 
   /**
-   * The keyboard background of a split keyboard: two slabs, one per half, each the full height
-   * of the view and reaching its own edge, with the parting between them left clear. The halves
-   * are rectangles by construction ({@link SplitLayout}), so the slabs are too: the docked
-   * background with one straight band taken out of it. A layout handed in whole, with no band
-   * to leave, gets the docked background back as a single slab. Package-private for its test.
+   * The keyboard background of a split keyboard: the two slabs {@link #splitSlabs} built, with
+   * the parting between them left clear. A layout handed in whole, with no band to leave, gets
+   * the docked background back as a single slab. Package-private for its test.
    */
   void drawSplitBackground(Canvas canvas)
   {
     _splitBackgroundPaint.setColor(getSplitBackgroundColor());
-    float bottom = getHeight();
-    float[] band = splitGapPx();
-    if (band == null)
+    if (!splitSlabs())
     {
-      canvas.drawRoundRect(0f, 0f, getWidth(), bottom,
-          SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
+      canvas.drawRect(0f, 0f, getWidth(), getHeight(), _splitBackgroundPaint);
       return;
     }
-    canvas.drawRoundRect(0f, 0f, band[0], bottom,
-        SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
-    canvas.drawRoundRect(band[1], 0f, getWidth(), bottom,
-        SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
+    canvas.drawPath(_splitSlabPath, _splitBackgroundPaint);
   }
 
-  /** Whether [x], in view pixels, falls in the parting of a split keyboard. */
+  /** Whether [x], in view pixels, falls in the strip the parting of a split keyboard leaves. */
   private boolean inSplitGap(float x)
   {
-    float[] band = splitGapPx();
-    return band == null || (x >= band[0] && x < band[1]);
+    return !splitSlabs() || (x >= _splitClearLeft && x < _splitClearRight);
   }
 
   @Override
