@@ -71,6 +71,7 @@ public final class PaneRim {
     private boolean mGlass;
     private boolean mGradientRim;
     private boolean mDocked;
+    private boolean mOpeningLine;
     private float mRadiusPx;
     private ValueAnimator mAnimator;
     /** The alpha the kind asks for, before the wall's travel takes its share. */
@@ -111,10 +112,12 @@ public final class PaneRim {
         boolean gradientRim = style != null && style.paneGlassRimWanted();
         boolean pulses = animationsEnabled() && (style == null || style.paneAttentionPulses());
         boolean docked = style != null && style.paneDocked();
+        boolean openingLine = style != null && style.paneOpeningLine();
 
         boolean reusable = mDrawable != null && frame.getForeground() == mDrawable
             && mKind == decision.kind && mColour == decision.colour && mGlass == glass
-            && mRadiusPx == radius && mGradientRim == gradientRim && mDocked == docked;
+            && mRadiusPx == radius && mGradientRim == gradientRim && mDocked == docked
+            && mOpeningLine == openingLine;
         if (reusable) {
             if (mDrawable instanceof PaneAttentionGlow)
                 ((PaneAttentionGlow) mDrawable).setPulsing(pulses);
@@ -129,6 +132,7 @@ public final class PaneRim {
         mGlass = glass;
         mGradientRim = gradientRim;
         mDocked = docked;
+        mOpeningLine = openingLine;
         mRadiusPx = radius;
         float density = frame.getResources().getDisplayMetrics().density;
         switch (decision.kind) {
@@ -150,9 +154,12 @@ public final class PaneRim {
                     : stroke(radius, decision.colour, density);
                 break;
             default:
+                // The Docked insert wears the opening's line rather than the glass's rim: a
+                // SharedRim with no style to build from is that line.
                 mDrawable = docked
                     ? new PaneDividerEdges(frame, lineColour(frame.getContext()), density)
-                    : new SharedRim(frame.getContext(), style, radius, density);
+                    : new SharedRim(frame.getContext(), openingLine ? null : style, radius,
+                        density);
                 break;
         }
         frame.setForeground(mDrawable);
@@ -161,8 +168,22 @@ public final class PaneRim {
         return true;
     }
 
-    /** The plain line's colour: the outline role at the shared rim's hairline strength. */
-    private static int lineColour(@NonNull Context context) {
+    /**
+     * The Docked opening's line at {@code radiusPx}: the plain line, {@link #STOCK_STROKE_DP} in
+     * {@link #lineColour}, round the insert's own corners. What the lone pane's host draws when
+     * the pane itself wears no border; a pane's own frame gets it through {@link #apply}.
+     */
+    @NonNull
+    public static Drawable openingLine(@NonNull Context context, float radiusPx) {
+        return stroke(Math.max(0f, radiusPx), lineColour(context),
+            context.getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * The plain line's colour: the theme's outline role (so light, dark, black and the scheme's
+     * chrome each resolve their own) at the divider's strength. Also the Docked opening's line.
+     */
+    static int lineColour(@NonNull Context context) {
         return ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOutline,
             ContextCompat.getColor(context, R.color.termux_outline_variant)), 150);
@@ -235,8 +256,8 @@ public final class PaneRim {
 
     /**
      * The rim every other surface wears, cut at this pane's radius capped for its live bounds.
-     * The style builds it (hairline or gradient, per preset); a bare style falls back to the
-     * outline-colour hairline.
+     * The style builds it (hairline or gradient, per preset); with no style it is the
+     * outline-colour hairline, which is also the Docked opening's line ({@link #openingLine}).
      */
     private static final class SharedRim extends Drawable {
         private final PaneSurfaceStyle mStyle;

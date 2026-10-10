@@ -17,28 +17,40 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.RejectedExecutionException;
 
 /**
  * The calendar events the agenda and calendar widgets share: today and the next two weeks, read
- * from the calendar provider on the widgets' background thread.
+ * from the calendar provider on the widgets' background thread, and, on demand, whole months
+ * for the month grid ({@link #month}), the last {@link #MONTHS_KEPT} of them kept.
  *
  * <p>One source per {@link BuiltinWidgetServices}. It runs only while a widget is subscribed:
  * the first subscriber registers a provider observer (debounced to one reload), the minute tick
  * (to reload when the day turns) and the permission listener; the last one to leave unregisters
- * all three. The last result is kept across that gap so a widget coming back draws at once.
+ * all three, and every reload reads the kept months again too. The last result is kept across
+ * that gap so a widget coming back draws at once.
  * While unsubscribed the source holds no reference to the services, so the weak map can let
  * both go with the page.</p>
  */
 final class CalendarEventsSource {
     /** Told on the main thread whenever a new snapshot replaces the last. */
-    interface Listener { void onCalendarEvents(@NonNull Snapshot snapshot); }
+    interface Listener {
+        void onCalendarEvents(@NonNull Snapshot snapshot);
+
+        /** A month asked for through {@link #month} has been read, or read again. */
+        default void onCalendarMonth(@NonNull YearMonth month) { }
+    }
 
     /** What the provider said at one moment. */
     static final class Snapshot {
@@ -56,8 +68,36 @@ final class CalendarEventsSource {
         }
     }
 
+    /** One month's events, read for the month grid. */
+    static final class MonthEvents {
+        /** The zone the month's bounds were taken in. */
+        @NonNull final ZoneId zone;
+        /** In {@link CalendarEvent#ORDER}. */
+        @NonNull final List<CalendarEvent> events;
+
+        MonthEvents(@NonNull ZoneId zone, @NonNull List<CalendarEvent> events) {
+            this.zone = zone; this.events = events;
+        }
+    }
+
+    /** Least recently used first out, never more than {@code capacity} entries. */
+    static final class MonthCache<V> extends LinkedHashMap<YearMonth, V> {
+        private final int capacity;
+
+        MonthCache(int capacity) {
+            super(capacity + 1, 1f, true);
+            this.capacity = capacity;
+        }
+
+        @Override protected boolean removeEldestEntry(Map.Entry<YearMonth, V> eldest) {
+            return size() > capacity;
+        }
+    }
+
     /** Today plus this many days are read. */
     static final int WINDOW_DAYS = 14;
+    /** Months kept for the month grid: the one shown and the steps either side of it. */
+    static final int MONTHS_KEPT = 3;
     private static final long DAY_MS = 24L * 60 * 60 * 1000;
     private static final long DEBOUNCE_MS = 300L;
     /** A bound on what one read keeps, whatever the calendar holds. */
@@ -107,6 +147,9 @@ final class CalendarEventsSource {
     @Nullable private LocalDate lastDay;
     @Nullable private ZoneId lastZone;
     @Nullable private ContentObserver observer;
+    private final MonthCache<MonthEvents> months = new MonthCache<>(MONTHS_KEPT);
+    /** Months being read; a reload reads them again, under its own generation. */
+    private final Set<YearMonth> monthsAsked = new HashSet<>();
 
     private final Runnable reloadTask = this::reload;
     private final BuiltinWidgetServices.TickListener tick = this::onTick;
@@ -118,6 +161,19 @@ final class CalendarEventsSource {
 
     /** The last result; {@link Snapshot#NONE} before the first. */
     @NonNull Snapshot snapshot() { return snapshot; }
+
+    /**
+     * {@code month}'s events for the month grid, or null until they are read; listeners then hear
+     * {@link Listener#onCalendarMonth}. Asks the provider only while a widget is subscribed and
+     * calendar access is granted. Main thread only.
+     */
+    @Nullable MonthEvents month(@NonNull YearMonth month) {
+        ZoneId zone = ZoneId.systemDefault();
+        MonthEvents kept = months.get(month);
+        if (kept != null && kept.zone.equals(zone)) return kept;
+        readMonth(month, zone);
+        return null;
+    }
 
     void subscribe(@NonNull BuiltinWidgetServices services, @NonNull Listener listener) {
         if (listeners.contains(listener)) return;
@@ -140,6 +196,7 @@ final class CalendarEventsSource {
         }
         main.removeCallbacks(reloadTask);
         generation++;
+        monthsAsked.clear();
         unregisterObserver();
     }
 
@@ -166,10 +223,16 @@ final class CalendarEventsSource {
         lastZone = zone;
         if (!hasPermission(context)) {
             unregisterObserver();
+            months.clear();
+            monthsAsked.clear();
             publish(new Snapshot(true, false, Collections.emptyList()));
             return;
         }
         registerObserver();
+        Set<YearMonth> again = new LinkedHashSet<>(months.keySet());
+        again.addAll(monthsAsked);
+        monthsAsked.clear();
+        for (YearMonth month : again) readMonth(month, zone);
         long from = CalendarWidgetFormats.startOfDay(today, zone);
         long until = CalendarWidgetFormats.startOfDay(today.plusDays(WINDOW_DAYS + 1), zone);
         try {
@@ -190,6 +253,37 @@ final class CalendarEventsSource {
             });
         } catch (RejectedExecutionException ignored) {
             // The page is being torn down; nobody is left to draw the answer.
+        }
+    }
+
+    /** Reads {@code month} unless it is already being read; the answer is kept when it lands. */
+    private void readMonth(@NonNull YearMonth month, @NonNull ZoneId zone) {
+        BuiltinWidgetServices services = active;
+        if (services == null || !hasPermission(context) || !monthsAsked.add(month)) return;
+        int ticket = generation;
+        long from = CalendarWidgetFormats.monthStart(month, zone);
+        long until = CalendarWidgetFormats.monthStart(month.plusMonths(1), zone);
+        try {
+            services.io().execute(() -> {
+                List<CalendarEvent> events;
+                try {
+                    events = query(from, until, zone);
+                } catch (SecurityException denied) {
+                    // Access went away mid-read: the permission listener reloads and says so.
+                    events = null;
+                }
+                List<CalendarEvent> read = events;
+                main.post(() -> {
+                    // A reload since has asked again under its own ticket.
+                    if (ticket != generation) return;
+                    monthsAsked.remove(month);
+                    if (read == null || listeners.isEmpty()) return;
+                    months.put(month, new MonthEvents(zone, read));
+                    for (Listener listener : new ArrayList<>(listeners)) listener.onCalendarMonth(month);
+                });
+            });
+        } catch (RejectedExecutionException ignored) {
+            monthsAsked.remove(month);
         }
     }
 

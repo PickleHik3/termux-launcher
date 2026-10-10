@@ -80,7 +80,7 @@ jobs:
             *) EDITION="termux" ;;
           esac
 
-          APK_DIR_PATH="./app/build/outputs/apk/debug"
+          APK_DIR_PATH="./app/build/outputs/apk/staging"
           # termux-app_v<versionName>_<edition>_<variant>_<abi>.apk, versionName verbatim (with the +)
           APK_VERSION_TAG="v${NIGHTLY_VERSION_NAME}_${EDITION}_${{ env.PACKAGE_VARIANT }}"
           APK_BASENAME_PREFIX="termux-app_$APK_VERSION_TAG"
@@ -94,7 +94,7 @@ jobs:
           export TERMUX_APP_VERSION_NAME="$NIGHTLY_VERSION_NAME" # Used by app/build.gradle
           export TERMUX_APK_VERSION_TAG="$APK_VERSION_TAG" # Used by app/build.gradle
           export TERMUX_PACKAGE_VARIANT="${{ env.PACKAGE_VARIANT }}" # Used by app/build.gradle
-          ./.github/scripts/gradle_retry.sh ./gradlew --no-daemon assembleDebug || \
+          ./.github/scripts/gradle_retry.sh ./gradlew --no-daemon assembleStaging || \
             exit_on_error "Build failed for '$APK_VERSION_TAG' build."
 
           echo "Validating APKs"

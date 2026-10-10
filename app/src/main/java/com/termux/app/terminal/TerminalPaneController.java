@@ -3261,6 +3261,7 @@ public class TerminalPaneController {
     private boolean mDressedGlassActive;
     private float mDressedGlassRadiusPx = Float.NaN;
     private int mDressedGlassPaneCount = -1;
+    private boolean mDressedOpeningLine;
 
     /**
      * The wall moved the terminal page, or the wallpaper panned under it: every slab re-aims at
@@ -3315,8 +3316,12 @@ public class TerminalPaneController {
         // apply, and a new wallpaper frame (the usual reason it runs) re-paints the slabs without
         // moving one corner. Everything else that pass reads — focus, the float set, a maximized
         // pane — reaches it from render() and the focus paths, which call it themselves.
+        // A Style flip at the same Corners moves no corner but changes which line the panes wear.
+        boolean openingLine = mSurfaceStyle != null && mSurfaceStyle.paneOpeningLine();
         boolean shapeMoved = active != mDressedGlassActive || radiusPx != mDressedGlassRadiusPx
-            || mPaneFrames.size() != mDressedGlassPaneCount;
+            || mPaneFrames.size() != mDressedGlassPaneCount
+            || openingLine != mDressedOpeningLine;
+        mDressedOpeningLine = openingLine;
         mDressedGlassActive = active;
         mDressedGlassRadiusPx = radiusPx;
         mDressedGlassPaneCount = mPaneFrames.size();

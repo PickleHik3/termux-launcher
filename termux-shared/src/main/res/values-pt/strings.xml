@@ -55,13 +55,6 @@
     <string name="error_exception_received_while_executing_termux_session_command">Exceção obtida ao executar o comando de sessão &TERMUX_APP_NAME; \"%1$s\". \nExceção: %2$s</string>
     <string name="error_exception_received_while_executing_app_shell_command">Exeção obtida ao executar o comando de linha de comando de aplicação \"%1$s\". \nExceção: %2$s</string>
     <!-- TermuxUtils -->
-    <string name="msg_report_issue">Se deseja reportar este problema, então copie o seu texto do menu (Três pontos no canto superior direito) e publique um problema em um dos links a seguir.
-\n
-\nSe publica um relatório de falha, por favor forneça detalhes sobre o que fez que causou a falha e como reproduzí-la, se possível.
-\n
-\nSe publica um problema no GitHub, por favor faça-o no repositório a qual o relatório pertence. Problemas abertos ou emails enviados com **capturas de tela (parciais)** ao invés do texto copiado ou um ficheiro deste relatório **serão automaticamente fechados/apagados**. Pode opcionalmente remover qualquer informação do seu dispositivo que considere privada/sensitiva ou não deseja partilhar por não ser relevante ao problema.
-\n
-\nNão fornecemos ajuda relacionada a qualquer tipo de ferramenta/script de Hackeamento. Quaisquer perguntas sobre no email, GitHub ou qualquer outra comunidade e fórum oficial do &TERMUX_APP_NAME; **serão automaticamente fechadas/apagadas** e podem ocasionar em banimento **temporário ou permanente**. Veja %1$s/wiki/Hacking para mais detalhes.</string>
     <string name="msg_termux_app_required_by_app">O &TERMUX_APP_NAME; é requisitado pelo app %1$s para executar comandos do &TERMUX_APP_NAME;.</string>
     <string name="error_termux_app_package_context_not_accessible">A aplicação (contexto do pacote) &TERMUX_APP_NAME; não é acessível.</string>
     <string name="error_termux_prefix_dir_path_not_accessible">A aplicação &TERMUX_APP_NAME; e o diretório $PREFIX não são acessíveis pelo app %1$s.

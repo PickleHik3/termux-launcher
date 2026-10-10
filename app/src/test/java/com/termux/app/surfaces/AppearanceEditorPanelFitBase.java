@@ -522,7 +522,7 @@ public abstract class AppearanceEditorPanelFitBase {
             case CORNER_RADIUS: return context.getString(R.string.appearance_editor_corners, 40);
             case KEY_RADIUS: return context.getString(R.string.appearance_editor_key_corners, 24);
             case KEY_SPACING: return context.getString(R.string.appearance_editor_key_spacing, "8.0");
-            case DOCK_SIZE: return context.getString(R.string.appearance_editor_dock_size, 300);
+            case ICON_SIZE: return context.getString(R.string.appearance_editor_icon_size, 48);
             case APP_ICONS: return context.getString(R.string.appearance_editor_app_icons, 10);
             default: return context.getString(R.string.appearance_editor_legibility_unavailable);
         }

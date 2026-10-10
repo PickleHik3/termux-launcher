@@ -414,4 +414,57 @@ public class AsyncIconBinderTest {
         assertTrue(worker.queue.isEmpty());
         assertEquals(Arrays.asList(entry("a").appRef.stableId()), renderer.rendered);
     }
+
+    // ------------------------------------------------------------------ a resize's rebind
+
+    /**
+     * A size drag rebinds every slot on every frame. A miss must keep the icon the slot already
+     * shows until the new size lands — a tile per frame would blink the whole row — and the new
+     * one then replaces it outright, with no tile to fade over.
+     */
+    @Test
+    public void aRebindMiss_keepsTheIconItHasUntilTheNewSizeLands() {
+        ImageView view = attachedView();
+        Drawable old = icon();
+        view.setImageDrawable(old);
+        LauncherAppEntry app = entry("a");
+        Drawable resized = icon();
+        renderer.renders.put(app.appRef.stableId(), resized);
+
+        assertFalse("on its way, not bound now", binder.rebind(view, app, SIZE + 4, null));
+        assertSame("the old icon stands in, no tile", old, view.getDrawable());
+        assertFalse(AsyncIconBinder.isPending(view));
+
+        runWorkerThenMain();
+        assertSame(resized, view.getDrawable());
+    }
+
+    /** Frames that outrun the icon thread render only the size the drag ended on. */
+    @Test
+    public void aRebindSupersededByTheNextFrame_isNeverRendered() {
+        ImageView view = attachedView();
+        view.setImageDrawable(icon());
+        LauncherAppEntry app = entry("a");
+        Drawable resized = icon();
+        renderer.renders.put(app.appRef.stableId(), resized);
+
+        binder.rebind(view, app, SIZE + 2, null);
+        binder.rebind(view, app, SIZE + 4, null);
+        runWorkerThenMain();
+
+        assertEquals("one render, for the last frame",
+            Arrays.asList(app.appRef.stableId()), renderer.rendered);
+        assertSame(resized, view.getDrawable());
+    }
+
+    /** A slot with nothing settled to keep is bound the ordinary way, tile and all. */
+    @Test
+    public void aRebindOfAnEmptyView_isAnOrdinaryBind() {
+        ImageView view = attachedView();
+        LauncherAppEntry app = entry("a");
+        renderer.renders.put(app.appRef.stableId(), icon());
+
+        assertFalse(binder.rebind(view, app, SIZE, null));
+        assertTrue("the ordinary tile", AsyncIconBinder.isPending(view));
+    }
 }

@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
-# Dev-loop installer: strips the bundled bootstrap zips from the debug APK to
+# Dev-loop installer: strips the bundled bootstrap zips from the staging APK to
 # cut adb transfer from ~189MB to ~50MB, re-signs with the repo debug key, and
 # installs. Only for upgrades on devices that already have the Termux prefix
 # extracted — a fresh install from this APK would have no bootstrap.
+#
+# Staging (./gradlew :app:assembleStaging) is the release build's R8 shrinking,
+# still debuggable: what goes on a phone. BUILD_TYPE=debug installs the
+# unshrunk debug APK instead.
 set -euo pipefail
 
 DEVICE="${DEVICE:-127.0.0.1:5555}"
+BUILD_TYPE="${BUILD_TYPE:-staging}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-APK="$REPO/app/build/outputs/apk/debug/termux-app_apt-android-7-debug_arm64-v8a.apk"
+APK="$REPO/app/build/outputs/apk/$BUILD_TYPE/termux-app_apt-android-7-${BUILD_TYPE}_arm64-v8a.apk"
 BT="$(ls -d "${ANDROID_HOME:-$HOME/android-sdk}"/build-tools/* | sort -V | tail -1)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

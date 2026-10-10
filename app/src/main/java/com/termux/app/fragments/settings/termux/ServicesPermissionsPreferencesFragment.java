@@ -97,7 +97,7 @@ public final class ServicesPermissionsPreferencesFragment extends MaterialPrefer
             row.setFragment(null);
             row.setSummary(R.string.settings_termux_api_install_summary);
             row.setOnPreferenceClickListener(preference -> {
-                ShareUtils.openUrl(context, TermuxConstants.TERMUX_API_FDROID_PACKAGE_URL);
+                ShareUtils.openUrl(context, TermuxConstants.TERMUX_API_GITHUB_RELEASES_URL);
                 return true;
             });
         }

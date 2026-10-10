@@ -81,15 +81,11 @@
     <!-- TermuxUtils -->
     <string name="msg_report_issue">If you want to report this issue, then copy its text from the options menu (3-dots on top right) and post
         an issue on one of the following links.
-        \n\nIf you are posting a &TERMUX_APP_NAME; app crash report, then please provide details on what you were doing that
+        \n\nIf you are posting a crash report, then please provide details on what you were doing that
         caused the crash and how to reproduce it, if possible.
-        \n\nIf you are posting an issue on GitHub, then post it in the repository at which the report belongs at.
-        Issues opened or emails sent with **(partial) screenshots** instead of copied text or a file of this report
-        **will likely be automatically closed/deleted**. You may optionally remove any device specific info that
-        you consider private or don\'t want to share or that is not relevant to the issue.
-        \n\nWe do not provide support for any hacking related tools/scripts. Any questions asked about them over email,
-        on GitHub or other official &TERMUX_APP_NAME; community forums **will likely be automatically closed/deleted** and may
-        even result in **temporary or permanent** ban. Check %1$s/wiki/Hacking for details.
+        \n\nPost it in the repository the report belongs to. Issues opened with **(partial) screenshots** instead of
+        copied text or a file of this report **will likely be closed**. You may optionally remove any device specific
+        info that you consider private or don\'t want to share or that is not relevant to the issue.
         \n\nReport issues with this app in its own repository, github.com/PickleHik3/termux-launcher, and not in the
         upstream Termux repositories: this is an unofficial fork and upstream cannot help with it.</string>
 
