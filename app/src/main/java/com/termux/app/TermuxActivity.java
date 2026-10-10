@@ -24062,6 +24062,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.ink().setOnTerminalPaneGroundChanged(listener);
         }
 
+        @Override public void seedTerminalTextGround(int ground) {
+            mChrome.ink().seedPaneGround(ground);
+        }
+
         @Override public boolean toggleCursorTrail() {
             return TermuxActivity.this.toggleCursorTrail();
         }

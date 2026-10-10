@@ -270,7 +270,14 @@ public final class MaterialTerminalColorScheme {
         return tone < 50d ? ChromeInk.Polarity.PALE_INK : ChromeInk.Polarity.DARK_INK;
     }
 
-    /** What the terminal last built against, for a rebuild with no activity to measure it. */
+    /**
+     * What the terminal last built against, kept in memory for a rebuild with no activity to
+     * measure it, and in a small preferences file of its own so a cold start builds on it too: the
+     * first palette after a launch is built before any pane has been sampled, and building it on
+     * the nominal glass flipped it one way and then the other, which a program following the
+     * mode (2031) saw as two theme switches. A file of its own, not the app's preferences, so the
+     * fresh-install test that reads those is not disturbed by it.
+     */
     private static final class LastGround {
         @ColorInt final int ground;
         @Nullable final ChromeInk.Polarity polarity;
@@ -281,17 +288,86 @@ public final class MaterialTerminalColorScheme {
         }
     }
 
-    @NonNull private static volatile LastGround sLastGround =
-        new LastGround(Color.TRANSPARENT, null);
+    private static final String GROUND_PREFS = "terminal_ground";
+    private static final String GROUND_KEY = "ground";
+    private static final String GROUND_POLARITY_KEY = "polarity";
+
+    /** Null until read from the file or first recorded. */
+    @Nullable private static volatile LastGround sLastGround;
 
     /**
-     * Records the ground the live palette was built against and the ink it chose. The day/night
-     * flip rebuilds the export from the application, where no pane can be measured; it builds on
-     * this rather than on the palette's own background.
+     * Records the ground the live palette was built against and the ink it chose, in memory and
+     * — when it moved — on disk. The day/night flip rebuilds the export from the application,
+     * where no pane can be measured, and a cold start builds before one is; both build on this
+     * rather than on the palette's own background or the nominal glass.
      */
-    public static void rememberGround(@ColorInt int ground,
+    public static void rememberGround(@NonNull Context context, @ColorInt int ground,
                                       @Nullable ChromeInk.Polarity polarity) {
+        LastGround previous = lastGround(context);
+        if (previous.ground == ground && previous.polarity == polarity) return;
         sLastGround = new LastGround(ground, polarity);
+        try {
+            groundPrefs(context).edit()
+                .putInt(GROUND_KEY, ground)
+                .putString(GROUND_POLARITY_KEY, polarity == null ? null : polarity.name())
+                .apply();
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Cannot store the terminal ground", e);
+        }
+    }
+
+    /** The ground last recorded, before or since a restart; transparent when none ever was. */
+    @ColorInt
+    public static int lastGroundColor(@NonNull Context context) {
+        return lastGround(context).ground;
+    }
+
+    /** The ink last recorded with {@link #lastGroundColor}; null when none ever was. */
+    @Nullable
+    public static ChromeInk.Polarity lastGroundPolarity(@NonNull Context context) {
+        return lastGround(context).polarity;
+    }
+
+    @NonNull
+    private static LastGround lastGround(@NonNull Context context) {
+        LastGround last = sLastGround;
+        if (last != null) return last;
+        last = loadGround(context);
+        sLastGround = last;
+        return last;
+    }
+
+    @NonNull
+    private static LastGround loadGround(@NonNull Context context) {
+        try {
+            android.content.SharedPreferences prefs = groundPrefs(context);
+            ChromeInk.Polarity polarity = null;
+            String name = prefs.getString(GROUND_POLARITY_KEY, null);
+            if (name != null) {
+                try {
+                    polarity = ChromeInk.Polarity.valueOf(name);
+                } catch (IllegalArgumentException ignored) {
+                    // A name from a build that called it something else: no ink to keep.
+                }
+            }
+            return new LastGround(prefs.getInt(GROUND_KEY, Color.TRANSPARENT), polarity);
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Cannot read the terminal ground", e);
+            return new LastGround(Color.TRANSPARENT, null);
+        }
+    }
+
+    @NonNull
+    private static android.content.SharedPreferences groundPrefs(@NonNull Context context) {
+        Context app = context.getApplicationContext();
+        return (app != null ? app : context).getSharedPreferences(GROUND_PREFS,
+            Context.MODE_PRIVATE);
+    }
+
+    /** Drops the in-memory copy so the next read comes from the file, as after a restart. */
+    @VisibleForTesting
+    static void forgetGroundInMemory() {
+        sLastGround = null;
     }
 
     /**
@@ -301,7 +377,7 @@ public final class MaterialTerminalColorScheme {
     @NonNull
     public static PaletteSet createPaletteSetOnLastGround(@NonNull Context context,
                                                           @NonNull TerminalContrastLevel level) {
-        LastGround last = sLastGround;
+        LastGround last = lastGround(context);
         return createPaletteSet(context, level,
             create(context, level, last.ground, last.polarity));
     }

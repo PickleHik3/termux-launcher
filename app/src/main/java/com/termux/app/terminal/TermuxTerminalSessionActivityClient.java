@@ -149,6 +149,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             mUiHandler.removeCallbacks(mGroundSettledRunnable);
             mUiHandler.postDelayed(mGroundSettledRunnable, GROUND_SETTLE_MS);
         });
+        // Until a pane is sampled, the text stands on the ground the last run measured, and keeps
+        // the ink it wore there: the first palette of a launch is then the one the first sample
+        // confirms, not one it flips.
+        if (mTerminalInkPolarity == null)
+            mTerminalInkPolarity = MaterialTerminalColorScheme.lastGroundPolarity(mContext);
+        mHost.seedTerminalTextGround(MaterialTerminalColorScheme.lastGroundColor(mContext));
         // Set terminal fonts and colors
         checkForFontAndColors();
     }
@@ -916,7 +922,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 props = MaterialTerminalColorScheme.create(mContext, level, ground,
                     mTerminalInkPolarity);
                 mTerminalInkPolarity = MaterialTerminalColorScheme.polarityOf(props);
-                MaterialTerminalColorScheme.rememberGround(ground, mTerminalInkPolarity);
+                MaterialTerminalColorScheme.rememberGround(mContext, ground, mTerminalInkPolarity);
                 mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(
                     mContext, level, ground, mTerminalInkPolarity);
                 mLastColorsFileStamp = Long.MIN_VALUE;

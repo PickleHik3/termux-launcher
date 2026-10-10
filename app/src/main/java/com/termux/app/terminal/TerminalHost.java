@@ -506,6 +506,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      */
     default void setTerminalTextGroundListener(@Nullable Runnable listener) {}
 
+    /**
+     * The ground a previous run measured, for {@link #terminalTextGround()} to answer until a pane
+     * is measured in this one; transparent when none ever was, and the nominal glass stands in.
+     */
+    default void seedTerminalTextGround(int ground) {}
+
     boolean toggleCursorTrail();
 
     boolean isCursorTrailEnabled();

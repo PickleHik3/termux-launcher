@@ -398,8 +398,9 @@ public final class ChromeInk {
     /**
      * What the terminal's text stands on across the pane band: the mean of the panes' flat glass —
      * wallpaper, the launcher's dim, each pane's tint — opaque. Read only, never samples: before
-     * any pane has been measured it is the mode's nominal glass under {@code tint}, the same guess
-     * every band starts from. Independent of the palette, so a palette built on it cannot feed
+     * any pane has been measured it is the ground {@link #seedPaneGround} carried over from the
+     * last run, and failing that the mode's nominal glass under {@code tint}, the same guess every
+     * band starts from. Independent of the palette, so a palette built on it cannot feed
      * back into it.
      *
      * @param tint the pane's tint as drawn, alpha included, for the nominal answer
@@ -409,6 +410,17 @@ public final class ChromeInk {
         readMode();
         if (Color.alpha(mPaneGround) != 0) return mPaneGround;
         return OnGlass.backdrop(mCache.fallbackWallpaper(), mDimColor, tint);
+    }
+
+    /**
+     * The ground a previous run measured, answered by {@link #terminalPaneGround} until a pane is
+     * measured in this one, so a launch does not start from the nominal glass. Ignored once a pane
+     * has been measured, and for a transparent {@code ground}. Tells no listener: nothing was
+     * measured.
+     */
+    public void seedPaneGround(@ColorInt int ground) {
+        if (Color.alpha(mPaneGround) != 0 || Color.alpha(ground) == 0) return;
+        mPaneGround = OnGlass.opaque(ground);
     }
 
     /**

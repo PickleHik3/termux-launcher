@@ -950,6 +950,40 @@ public class MaterialTerminalColorSchemeTest {
         }
     }
 
+    /**
+     * The ground and its ink outlive the process, so a cold start builds its first palette on
+     * what the last run measured rather than on the nominal glass, and the night-flip export
+     * builds on it too. Nothing stored reads as transparent: the nominal glass then stands in.
+     */
+    @Test
+    public void theLastGroundSurvivesARestart() {
+        Context context = ApplicationProvider.getApplicationContext();
+        context.getSharedPreferences("terminal_ground", Context.MODE_PRIVATE).edit().clear().commit();
+        MaterialTerminalColorScheme.forgetGroundInMemory();
+        try {
+            assertEquals(Color.TRANSPARENT, MaterialTerminalColorScheme.lastGroundColor(context));
+            assertNull(MaterialTerminalColorScheme.lastGroundPolarity(context));
+
+            MaterialTerminalColorScheme.rememberGround(context, SKY,
+                com.termux.app.chrome.ChromeInk.Polarity.DARK_INK);
+            MaterialTerminalColorScheme.forgetGroundInMemory();
+            assertEquals(SKY, MaterialTerminalColorScheme.lastGroundColor(context));
+            assertSame(com.termux.app.chrome.ChromeInk.Polarity.DARK_INK,
+                MaterialTerminalColorScheme.lastGroundPolarity(context));
+
+            // The export with no activity builds on it: the sky's flip, light roles and all.
+            RuntimeEnvironment.setQualifiers("+night");
+            PaletteSet palettes = MaterialTerminalColorScheme.createPaletteSetOnLastGround(
+                themedContext(), TerminalContrastLevel.DEFAULT);
+            assertEquals("light", palettes.active().getProperty("mode"));
+        } finally {
+            RuntimeEnvironment.setQualifiers("+notnight");
+            context.getSharedPreferences("terminal_ground", Context.MODE_PRIVATE).edit().clear()
+                .commit();
+            MaterialTerminalColorScheme.forgetGroundInMemory();
+        }
+    }
+
     /** An opaque terminal never flips, whatever ink it was last told it wore. */
     @Test
     public void anOpaqueTerminalKeepsTheThemesPolarity() {
