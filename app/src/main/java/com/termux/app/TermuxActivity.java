@@ -11065,8 +11065,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTermuxTerminalViewClient.setInAppKeyboardController(mInAppKeyboard);
         mInAppKeyboard.onCreate(savedInstanceState);
         // A cold start on a place whose type is Floating has to be hosted before the first
-        // geometry pass, or the stack reserves a keyboard that is not in it.
-        mFloatingKeyboard.onKeyboardFormResolved(currentPlaceLayout().keyboardForm);
+        // geometry pass, or the stack reserves a keyboard that is not in it. The keyboard hears
+        // the type here too: the place pass that normally tells it ran before it existed, so a
+        // stored split came up docked until the next arrangement change.
+        PlaceLayout.KeyboardForm form = currentPlaceLayout().keyboardForm;
+        mFloatingKeyboard.onKeyboardFormResolved(form);
+        mInAppKeyboard.onKeyboardFormChanged(form);
         syncWallKeyboardForRestoredPlace();
     }
 
