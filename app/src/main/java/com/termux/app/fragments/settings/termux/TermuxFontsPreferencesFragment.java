@@ -194,7 +194,7 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
     }
 
     private void refreshTuning(@NonNull Context context, @Nullable FontCatalog.Family active,
-                                   boolean managed) {
+                               boolean managed) {
         updateFontSizeSummary(context);
         boolean tunable = managed && active != null;
         SwitchPreferenceCompat icons = findPreference("nerd_icons");

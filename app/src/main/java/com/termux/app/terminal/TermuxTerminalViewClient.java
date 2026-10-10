@@ -1024,17 +1024,21 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     /**
      * A size set in Settings reaches an open pane here: the settings screen
      * runs in its own activity, so this resume is the first moment the change
-     * can land, the way the other re-read policies do. A pane that zoomed
-     * keeps its pinned size, and the scratchpad keeps its own.
+     * can land, the way the other re-read policies do. Every pane on screen
+     * is re-stamped, not just the focused one: a pane that zoomed keeps its
+     * pinned size, the scratchpad keeps its own, and the rest follow the new
+     * default.
      */
-    private void applyGlobalFontSize() {
-        if (mHost.activePaneFontSize() > 0) return;
-        TerminalSession current = mHost.currentSession();
-        if (current != null && TerminalPaneController.isScratchpadShellName(current.mSessionName))
-            return;
-        TerminalView view = mHost.focusedView();
-        if (view == null) return;
-        view.setTextSize(mHost.preferences().getFontSize());
+    void applyGlobalFontSize() {
+        if (!mHost.refreshPaneFontSizes()) {
+            // No pane controller (compatibility mode): the single view follows the default.
+            TerminalSession current = mHost.currentSession();
+            if (current != null && TerminalPaneController.isScratchpadShellName(current.mSessionName))
+                return;
+            TerminalView view = mHost.focusedView();
+            if (view == null) return;
+            view.setTextSize(mHost.preferences().getFontSize());
+        }
         mHost.requestFlushDockGeometryUpdate();
     }
 

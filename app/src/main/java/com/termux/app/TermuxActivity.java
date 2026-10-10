@@ -23537,6 +23537,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.setActivePaneFontSize(size);
         }
 
+        @Override public boolean refreshPaneFontSizes() {
+            if (mPaneController == null) return false;
+            mPaneController.refreshAttachedPaneFontSizes();
+            return true;
+        }
+
         @Override public void onSystemImeRequested() {
             TermuxActivity.this.onSystemImeRequested();
         }

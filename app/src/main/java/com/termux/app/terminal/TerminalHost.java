@@ -98,6 +98,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Pins a size on the focused pane; false when there is no pane controller to pin it on. */
     boolean setActivePaneFontSize(int size);
 
+    /**
+     * Re-stamps every attached pane's size — its pinned zoom, the scratchpad's own, or else the
+     * app-wide default; false when there is no pane controller to do it.
+     */
+    boolean refreshPaneFontSizes();
+
     // --- Soft keyboard ---
 
     /** The client is about to ask for the system IME, so inset handling may allow it. */
