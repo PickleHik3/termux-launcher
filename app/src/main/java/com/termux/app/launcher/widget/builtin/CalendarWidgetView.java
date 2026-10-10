@@ -16,6 +16,7 @@ import com.termux.R;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.Map;
 
 /**
@@ -29,11 +30,17 @@ public class CalendarWidgetView extends BuiltinWidgetView {
     private static final int MONTH_MIN_DP = 112;
     /** The narrowest the 4×2 events column is shown at: a time and a title that still reads. */
     private static final int EVENTS_MIN_DP = 72;
+    private static final String GLYPH_PREV_MONTH = "\uf053";
+    private static final String GLYPH_NEXT_MONTH = "\uf054";
+    /** The month steppers' disc: a touch target beside the 12sp month name. */
+    private static final int STEPPER_DP = 22;
 
     @Nullable private FrameLayout frame;
     @Nullable private BuiltinWidgetUi ui;
     @Nullable private CalendarEventsSource.Snapshot shown;
     @NonNull private String shownSignature = "";
+    /** Months the month grid is stepped away from today's, negative for past. */
+    private int monthOffset;
 
     private final CalendarEventsSource.Listener sourceListener = snapshot -> {
         if (isStarted()) populate();
@@ -78,7 +85,15 @@ public class CalendarWidgetView extends BuiltinWidgetView {
             services.host().requestCalendarPermission();
             return;
         }
-        CalendarWidgetSupport.openCalendarAt(getContext(), System.currentTimeMillis());
+        CalendarWidgetSupport.openCalendarAt(getContext(), openAtMillis());
+    }
+
+    /** Now, or the month being shown once the grid has been stepped off today's. */
+    private long openAtMillis() {
+        if (monthOffset == 0) return System.currentTimeMillis();
+        ZoneId zone = ZoneId.systemDefault();
+        LocalDate mid = LocalDate.now(zone).plusMonths(monthOffset).withDayOfMonth(15);
+        return CalendarWidgetFormats.startOfDay(mid, zone) + 12 * 60 * 60_000L;
     }
 
     // ----- drawing --------------------------------------------------------------------------
@@ -121,7 +136,9 @@ public class CalendarWidgetView extends BuiltinWidgetView {
 
     @NonNull private String describe(@NonNull CalendarWidgetSupport.Day day) {
         Context context = getContext();
-        String heading = context.getString(R.string.bw_calendar_cd_agenda, day.date("yMMMM"),
+        LocalDate shown = shownMonth(day);
+        String heading = context.getString(R.string.bw_calendar_cd_agenda,
+            CalendarWidgetSupport.date(shown, "yMMMM", day.locale, day.zone),
             day.date("EEEEdMMMM"));
         String state = !day.permitted ? context.getString(R.string.bw_calendar_cd_access)
             : day.loaded ? day.countText(context) : "";
@@ -246,19 +263,46 @@ public class CalendarWidgetView extends BuiltinWidgetView {
 
     // ----- pieces ---------------------------------------------------------------------------
 
-    /** "October" on the left, "2026" on the right. */
+    /**
+     * "October" on the left, "2026" and the month steppers on the right. The
+     * steppers walk the grid by one month and back; the grid is today's month
+     * until one of them is pressed.
+     */
     @NonNull private View monthHeading(@NonNull BuiltinWidgetUi ui, @NonNull CalendarWidgetSupport.Day day) {
-        TextView month = ui.text(CalendarWidgetFormats.monthName(day.today.getMonth(), day.locale),
+        LocalDate shown = shownMonth(day);
+        TextView month = ui.text(CalendarWidgetFormats.monthName(shown.getMonth(), day.locale),
             12f, ui.style.sansBold, ui.style.onSurface);
-        TextView year = ui.mono(Integer.toString(day.today.getYear()), 11f);
-        LinearLayout row = CalendarWidgetSupport.baselineRow(ui, 8, BuiltinWidgetUi.flex(month), year);
+        TextView year = ui.mono(Integer.toString(shown.getYear()), 11f);
+        LinearLayout text = CalendarWidgetSupport.baselineRow(ui, 8,
+            BuiltinWidgetUi.flex(month), year);
+        LinearLayout row = ui.row(8, BuiltinWidgetUi.flex(text),
+            monthStepper(ui, GLYPH_PREV_MONTH, R.string.bw_calendar_previous_month, -1),
+            monthStepper(ui, GLYPH_NEXT_MONTH, R.string.bw_calendar_next_month, 1));
         row.setPadding(ui.dp(4), 0, ui.dp(4), 0);
         return row;
     }
 
+    /** A round chevron that steps the shown month by {@code step}. */
+    @NonNull private TextView monthStepper(@NonNull BuiltinWidgetUi ui, @NonNull String glyph,
+                                              int label, int step) {
+        TextView button = ui.roundButton(glyph, STEPPER_DP, 10.5f, ui.style.primaryContainer,
+            ui.style.onPrimaryContainer, getContext().getString(label));
+        button.setOnClickListener(v -> stepMonth(step));
+        return button;
+    }
+
+    private void stepMonth(int step) {
+        monthOffset += step;
+        populate();
+    }
+
+    @NonNull private LocalDate shownMonth(@NonNull CalendarWidgetSupport.Day day) {
+        return day.today.plusMonths(monthOffset);
+    }
+
     @NonNull private View monthGrid(@NonNull BuiltinWidgetUi ui, @NonNull CalendarWidgetSupport.Day day,
                                     int lettersGapDp) {
-        YearMonth month = YearMonth.from(day.today);
+        YearMonth month = YearMonth.from(shownMonth(day));
         Map<LocalDate, Integer> marks = CalendarWidgetFormats.dayColors(day.events, month.atDay(1),
             month.atEndOfMonth().plusDays(1), day.zone, ui.style.primary);
         CalendarMonthGridView grid = new CalendarMonthGridView(getContext(), ui.style, lettersGapDp);
