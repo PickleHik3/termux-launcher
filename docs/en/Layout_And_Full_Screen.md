@@ -8,7 +8,7 @@ All of it is arranged in the **Layout** tab of **Appearance**.
 Open **Appearance** in any of these ways, then tap **Layout** in the pill at the top
 (**Wallpaper | Look | Layout | Icon pack**):
 
-- **Settings → Appearance** ("Wallpaper, theme and layout").
+- **Settings → Appearance → Wallpaper, look and layout**.
 - Hold a corner of a page and tap **Appearance**.
 - Long-press the terminal and choose **Appearance**.
 
