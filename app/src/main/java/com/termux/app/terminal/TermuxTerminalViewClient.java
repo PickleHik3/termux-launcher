@@ -230,6 +230,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         applyCursorTrailPolicy(mHost.focusedView());
         applyUrlUnderlinePolicy(mHost.focusedView());
         applyPaddingFillPolicy(mHost.focusedView());
+        applyGlobalFontSize();
         mTerminalCursorBlinkerStateAlreadySet = false;
         if (mHost.focusedView().mEmulator != null) {
             // Start terminal cursor blinking if enabled
@@ -1018,6 +1019,23 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             if (codePoint != null)
                 mSessionShortcuts.add(new KeyboardShortcut(codePoint, entry.getValue()));
         }
+    }
+
+    /**
+     * A size set in Settings reaches an open pane here: the settings screen
+     * runs in its own activity, so this resume is the first moment the change
+     * can land, the way the other re-read policies do. A pane that zoomed
+     * keeps its pinned size, and the scratchpad keeps its own.
+     */
+    private void applyGlobalFontSize() {
+        if (mHost.activePaneFontSize() > 0) return;
+        TerminalSession current = mHost.currentSession();
+        if (current != null && TerminalPaneController.isScratchpadShellName(current.mSessionName))
+            return;
+        TerminalView view = mHost.focusedView();
+        if (view == null) return;
+        view.setTextSize(mHost.preferences().getFontSize());
+        mHost.requestFlushDockGeometryUpdate();
     }
 
     public void changeFontSize(boolean increase) {

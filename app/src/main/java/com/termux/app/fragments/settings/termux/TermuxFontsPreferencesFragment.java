@@ -29,6 +29,7 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusCardPreference;
 import com.termux.shared.termux.font.FileTypefaces;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.File;
 import java.util.HashMap;
@@ -62,6 +63,9 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
      */
     private final Map<String, Typeface> mPreviewTypefaces = new HashMap<>();
 
+    /** The app's own preferences, where the terminal's font size lives. */
+    @Nullable private TermuxAppSharedPreferences mPreferences;
+
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         Context context = getContext();
@@ -69,6 +73,7 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setSharedPreferencesName(FontSettings.PREFS_NAME);
         setPreferencesFromResource(R.xml.termux_fonts_preferences, rootKey);
+        mPreferences = TermuxAppSharedPreferences.build(context);
         SettingsLayoutUtils.applyScreenLayout(this);
         configureStaticRows(context);
         refresh(context);
@@ -132,6 +137,13 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
                 return true;
             });
         }
+        Preference size = findPreference("fonts_size");
+        if (size != null) {
+            size.setOnPreferenceClickListener(preference -> {
+                showFontSizeDialog(context);
+                return true;
+            });
+        }
         SwitchPreferenceCompat icons = findPreference("nerd_icons");
         if (icons != null) {
             // The switch persists itself into the fonts prefs; the listener only has to push the
@@ -182,7 +194,8 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
     }
 
     private void refreshTuning(@NonNull Context context, @Nullable FontCatalog.Family active,
-                               boolean managed) {
+                                   boolean managed) {
+        updateFontSizeSummary(context);
         boolean tunable = managed && active != null;
         SwitchPreferenceCompat icons = findPreference("nerd_icons");
         if (icons != null) icons.setEnabled(tunable);
@@ -468,6 +481,69 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
                 reapply(context, active, options(context, active).withWeight(picked[0])))
             .setNeutralButton(R.string.termux_fonts_weight_reset, (dialog, which) ->
                 reapply(context, active, options(context, active).withWeight(0)))
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    /**
+     * The terminal's font size in dp, the unit every other size in the
+     * launcher speaks. The stored value is the default's own unit — pixels
+     * at this device's density, so a 12 dp default is 36 px at 3× — and a
+     * dp picked here is converted back to pixels on apply.
+     */
+    private int fontSizeDp(@NonNull Context context) {
+        TermuxAppSharedPreferences preferences = mPreferences;
+        if (preferences == null) return 0;
+        return Math.round(preferences.getFontSize()
+            / context.getResources().getDisplayMetrics().density);
+    }
+
+    private void updateFontSizeSummary(@NonNull Context context) {
+        Preference size = findPreference("fonts_size");
+        if (size != null) {
+            size.setSummary(getString(R.string.termux_fonts_size_summary, fontSizeDp(context)));
+        }
+    }
+
+    private void showFontSizeDialog(@NonNull Context context) {
+        TermuxAppSharedPreferences preferences = mPreferences;
+        if (preferences == null) return;
+        int[] bounds = TermuxAppSharedPreferences.getDefaultFontSizes(context);
+        float density = context.getResources().getDisplayMetrics().density;
+        int min = Math.max(1, Math.round(bounds[1] / density));
+        int max = Math.max(min, Math.round(bounds[2] / density));
+        int current = Math.max(min, Math.min(max, fontSizeDp(context)));
+
+        int padding = Math.round(16 * density);
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(padding, padding / 2, padding, 0);
+        TextView value = new TextView(context);
+        value.setText(getString(R.string.termux_fonts_size_summary, current));
+        Slider slider = new Slider(context);
+        slider.setValueFrom(min);
+        slider.setValueTo(max);
+        slider.setStepSize(1f);
+        slider.setValue(current);
+        final int[] picked = {current};
+        slider.addOnChangeListener((changed, number, fromUser) -> {
+            picked[0] = Math.round(number);
+            value.setText(getString(R.string.termux_fonts_size_summary, picked[0]));
+        });
+        layout.addView(value);
+        layout.addView(slider);
+
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(getString(R.string.termux_fonts_size_dialog_title, min, max))
+            .setView(layout)
+            .setPositiveButton(R.string.termux_fonts_weight_apply, (dialog, which) -> {
+                preferences.setFontSize(Math.round(picked[0] * density));
+                updateFontSizeSummary(context);
+            })
+            .setNeutralButton(R.string.termux_fonts_size_reset, (dialog, which) -> {
+                preferences.setFontSize(bounds[0]);
+                updateFontSizeSummary(context);
+            })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
     }
