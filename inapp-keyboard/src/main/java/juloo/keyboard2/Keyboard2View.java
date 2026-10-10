@@ -10,7 +10,6 @@ import android.view.KeyEvent;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.SweepGradient;
@@ -73,31 +72,6 @@ public class Keyboard2View extends View
 
   private Theme _theme;
   private Theme.Computed _tc;
-  private final Paint _splitBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-  /**
-   * The split slabs as {@link #splitSlabs} last built them: both halves in one path, the clear
-   * strip between them and their inner corner radius. Rebuilt only when the measure, the layout,
-   * the gap or the view's size they were built from changes.
-   */
-  private final Path _splitSlabPath = new Path();
-  private final RectF _splitSlabRect = new RectF();
-  private final float[] _splitSlabRadii = new float[8];
-  private Theme.Computed _splitSlabsTc;
-  private KeyboardData _splitSlabsKeyboard;
-  private float _splitSlabsGapUnits = -1f;
-  private int _splitSlabsWidth = -1;
-  private int _splitSlabsHeight = -1;
-  private boolean _splitSlabsParted;
-  private float _splitClearLeft;
-  private float _splitClearRight;
-  private float _splitSlabRadius;
-  /**
-   * Host-set colour for the split slabs, or null to paint them in the keyboard's own background.
-   * The host owns this because a parted keyboard lies over the content rather than inside a
-   * surface of the host's, so the slabs are the panel and only the host knows which role that
-   * is. Local addition, see UPSTREAM.md.
-   */
-  private Integer _splitBackgroundColor;
   private final Paint _overrideBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _overrideBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private SparseArray<KeyColorOverride> _keyColorOverrides = new SparseArray<>();
@@ -220,18 +194,7 @@ public class Keyboard2View extends View
     _fxFillPaint.setColor(_theme.pressedColor);
     _fxStrokePaint.setColor(_theme.pressedColor);
     _fxHaloPaint.setColor(_theme.pressedColor);
-    applyKeyboardBackground();
-  }
-
-  /**
-   * The keyboard's own background. Docked it is the view's, filling it; split, the view keeps
-   * none and {@link #drawSplitBackground} paints it under the key runs alone, so the parting
-   * shows whatever lies beneath the keyboard.
-   */
-  private void applyKeyboardBackground()
-  {
-    setBackgroundColor(_splitGapUnits > 0f ? Color.TRANSPARENT
-        : withOpacity(_theme.colorKeyboard, _theme.opacity));
+    setBackgroundColor(withOpacity(_theme.colorKeyboard, _theme.opacity));
   }
 
   /** Brief host-triggered wave that subtly modulates each key as the dock front reaches it. */
@@ -715,26 +678,6 @@ public class Keyboard2View extends View
     return withOpacity(_theme.colorKeyboard, _theme.opacity);
   }
 
-  /**
-   * The colour the split slabs are painted in. Null restores the keyboard's own background, so
-   * a host that says nothing gets what upstream draws. Local addition, see UPSTREAM.md.
-   */
-  public void setSplitBackgroundColor(Integer color)
-  {
-    requireMainThread();
-    if (Objects.equals(_splitBackgroundColor, color))
-      return;
-    _splitBackgroundColor = color;
-    invalidate();
-  }
-
-  /** The resolved slab colour: the host's when it set one, the keyboard's background otherwise. */
-  public int getSplitBackgroundColor()
-  {
-    return _splitBackgroundColor != null ? _splitBackgroundColor
-        : withOpacity(_theme.colorKeyboard, _theme.opacity);
-  }
-
   /** Label color used by transient host controls drawn against the keyboard palette. */
   public int getKeyboardLabelColor()
   {
@@ -761,10 +704,10 @@ public class Keyboard2View extends View
 
   /**
    * Parts the keyboard for the split type: the layout the host hands in is already parted, and
-   * this is the gap it was parted by, in key-width units. The view then paints its background
-   * under the key runs alone and lets a press that starts in the parting fall through to what is
-   * beneath it. Zero — the default — is the docked keyboard, which is untouched. Local addition,
-   * see UPSTREAM.md.
+   * this is the gap it was parted by, in key-width units. Only the keys part: the background
+   * still fills the view, and a press in the parting is the keyboard's, doing nothing, like any
+   * press that misses a key. Zero — the default — is the docked keyboard. Local addition, see
+   * UPSTREAM.md.
    */
   public void setSplitGapUnits(float gapUnits)
   {
@@ -774,7 +717,6 @@ public class Keyboard2View extends View
     if (Float.compare(_splitGapUnits, units) == 0)
       return;
     _splitGapUnits = units;
-    applyKeyboardBackground();
     requestLayout();
     invalidate();
   }
@@ -785,17 +727,19 @@ public class Keyboard2View extends View
   }
 
   /**
-   * The strip the parting leaves clear between the two slabs, in view pixels, for a host that
-   * wants to stand something in the gap: the slabs' gap-side edges, not the keys'. False,
-   * leaving [out] alone, when the keyboard is not split, has not been measured, or its slabs
-   * meet. The width is rounded as a whole, so a strip asked for in whole pixels measures them.
+   * The strip between the two key runs, in view pixels and the view's full height, for a host
+   * that wants to stand something in the parting: the band no row has a key in, from the cell
+   * edge of the left run to that of the right. False, leaving [out] alone, when the keyboard is
+   * not split or has not been measured. The width is rounded as a whole, so a strip asked for in
+   * whole pixels measures them.
    */
   public boolean getSplitGapBounds(Rect out)
   {
-    if (!splitSlabs())
+    float[] band = splitBandPx();
+    if (band == null)
       return false;
-    int left = Math.round(_splitClearLeft);
-    int right = left + Math.round(_splitClearRight - _splitClearLeft);
+    int left = Math.round(band[0]);
+    int right = left + Math.round(band[1] - band[0]);
     int height = getHeight() > 0 ? getHeight() : getMeasuredHeight();
     if (right <= left || height <= 0)
       return false;
@@ -804,14 +748,75 @@ public class Keyboard2View extends View
   }
 
   /**
-   * How far the two slabs reach past the keys' band into the parting together, in px: each
-   * slab's gap-side edge stands as far from its keys as its outer edge does from the view's.
-   * A host that wants a clear strip of a given width parts the keys this much wider. Zero
-   * until the view has been measured once, like {@link #getKeyContentWidthPx}.
+   * Where a key standing in the parting would be drawn, in view pixels: the strip
+   * {@link #getSplitGapBounds} reports, inset by the spacing keys keep from each other, from the
+   * top of the first row's caps to the bottom of the last row's. A host panel laid out there
+   * with {@link #getKeyCapRadiusPx} reads as one more key. False, leaving [out] alone, when there
+   * is no parting or it is too thin to hold one.
    */
-  public float getSplitSlabReachPx()
+  public boolean getSplitGapKeyBounds(Rect out)
   {
-    return _keyWidth > 0f ? _marginLeft + _marginRight : 0f;
+    float[] band = splitBandPx();
+    if (band == null)
+      return false;
+    float top = 0f;
+    float bottom = 0f;
+    boolean first = true;
+    float y = getPaddingTop() + _tc.margin_top;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      y += row.shift * _tc.row_height;
+      if (first)
+        top = y;
+      first = false;
+      bottom = y + row.height * _tc.row_height - _tc.vertical_margin;
+      y += row.height * _tc.row_height;
+    }
+    // A cap stands half a key margin in from its cell, so the strip's edge, a cell edge, is
+    // half a margin from the caps beside it; half a margin more is a whole one.
+    int left = Math.round(band[0] + _tc.margin_left);
+    int right = Math.round(band[1] - _tc.margin_left);
+    if (right <= left || bottom <= top)
+      return false;
+    out.set(left, Math.round(top), right, Math.round(bottom));
+    return true;
+  }
+
+  /**
+   * The parting's band in view pixels, {left, right}; null when the keyboard is not parted or has
+   * not been measured.
+   */
+  private float[] splitBandPx()
+  {
+    if (_splitGapUnits <= 0f || _keyboard == null || _tc == null || _keyWidth <= 0f)
+      return null;
+    float[] band = SplitLayout.gapBand(_keyboard, _splitGapUnits);
+    if (band == null)
+      return null;
+    band[0] = _marginLeft + band[0] * _keyWidth;
+    band[1] = _marginLeft + band[1] * _keyWidth;
+    return band;
+  }
+
+  /**
+   * The radius of the key caps' outline, in px: their fill's corner out to the outer edge of
+   * their stroke. Zero until the view has been measured once.
+   */
+  public float getKeyCapRadiusPx()
+  {
+    if (_tc == null)
+      return 0f;
+    Theme.Computed.Key cap = _tc.key;
+    return cap.border_radius + cap.border_width / 2f;
+  }
+
+  /**
+   * A letter key's cap fill, its opacity included, for a host panel standing among the keys.
+   * Transparent until the view has been measured once.
+   */
+  public int getKeyCapColor()
+  {
+    return _tc == null ? Color.TRANSPARENT : _tc.key.bg_paint.getColor();
   }
 
   /**
@@ -822,16 +827,6 @@ public class Keyboard2View extends View
   public float getKeyContentWidthPx()
   {
     return _keyContentWidth;
-  }
-
-  /**
-   * The radius of the slabs' gap-side corners, in px; zero when the keyboard is not parted. A
-   * host standing a panel in the parting reads it from here, so the three surfaces take one
-   * shape. Where the two halves differ (uneven side padding) it is the smaller of the two.
-   */
-  public float getSplitSlabRadiusPx()
-  {
-    return splitSlabs() ? _splitSlabRadius : 0f;
   }
 
   /** Scales both horizontal and vertical gaps without replacing immutable Config. */
@@ -1550,14 +1545,9 @@ public class Keyboard2View extends View
         p = event.getActionIndex();
         float tx = event.getX(p);
         float ty = event.getY(p);
-        KeyboardData.Key rawKey = getKeyAtPosition(tx, ty);
-        // The parting of a split keyboard is not the keyboard's: refusing the press hands the
-        // whole stream to whatever is under the gap. A press on a half's slab beside its keys
-        // is still the keyboard's, as it is docked.
-        if (rawKey == null && _splitGapUnits > 0f && inSplitGap(tx))
-          return false;
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN)
           requestDisallowIntercept(true);
+        KeyboardData.Key rawKey = getKeyAtPosition(tx, ty);
         KeyboardData.Key key = resolveTap(rawKey, tx, ty);
         if (key != null)
         {
@@ -1865,104 +1855,6 @@ public class Keyboard2View extends View
     Vertical.BOTTOM
   };
 
-  /**
-   * Brings the split slabs up to date and says whether the keyboard is parted: false when it is
-   * not split, has not been measured, or was handed its layout whole. Each slab is the full
-   * height of the view and reaches its own edge; its gap-side edge stands as far from its keys
-   * as the outer edge does ({@link #getSplitSlabReachPx}), and the two corners there are
-   * concentric with the key caps, clamped to what the slab can hold. The outer corners stay
-   * square: the screen edge or the keyboard's host owns them. A gap too thin for both reaches
-   * shares it between them, and the slabs meet.
-   */
-  private boolean splitSlabs()
-  {
-    if (_splitGapUnits <= 0f || _keyboard == null || _tc == null || _keyWidth <= 0f)
-      return false;
-    int width = getWidth() > 0 ? getWidth() : getMeasuredWidth();
-    int height = getHeight() > 0 ? getHeight() : getMeasuredHeight();
-    if (_splitSlabsTc == _tc && _splitSlabsKeyboard == _keyboard
-        && Float.compare(_splitSlabsGapUnits, _splitGapUnits) == 0
-        && _splitSlabsWidth == width && _splitSlabsHeight == height)
-      return _splitSlabsParted;
-    _splitSlabsTc = _tc;
-    _splitSlabsKeyboard = _keyboard;
-    _splitSlabsGapUnits = _splitGapUnits;
-    _splitSlabsWidth = width;
-    _splitSlabsHeight = height;
-    _splitSlabPath.rewind();
-    float[] band = SplitLayout.gapBand(_keyboard, _splitGapUnits);
-    _splitSlabsParted = band != null;
-    if (band == null)
-      return false;
-    float bandLeft = _marginLeft + band[0] * _keyWidth;
-    float bandRight = _marginLeft + band[1] * _keyWidth;
-    float reachLeft = _marginLeft;
-    float reachRight = _marginRight;
-    float reach = reachLeft + reachRight;
-    if (reach > bandRight - bandLeft)
-    {
-      float share = (bandRight - bandLeft) / reach;
-      reachLeft *= share;
-      reachRight *= share;
-    }
-    _splitClearLeft = bandLeft + reachLeft;
-    _splitClearRight = bandRight - reachRight;
-    // A cap's outline is its fill's radius out to the outer edge of its stroke; the slab corner
-    // shares its centre, so it is that radius plus the inset from the cap to the slab's edge.
-    Theme.Computed.Key cap = _tc.key;
-    float capRadius = cap.border_radius + cap.border_width / 2f;
-    float leftRadius = slabCornerRadius(capRadius + _marginLeft + _tc.margin_left,
-        _splitClearLeft, height);
-    float rightRadius = slabCornerRadius(capRadius + _marginRight + _tc.margin_left,
-        width - _splitClearRight, height);
-    _splitSlabRadius = Math.min(leftRadius, rightRadius);
-    _splitSlabRect.set(0f, 0f, _splitClearLeft, height);
-    setSlabRadii(0f, leftRadius, leftRadius, 0f);
-    _splitSlabPath.addRoundRect(_splitSlabRect, _splitSlabRadii, Path.Direction.CW);
-    _splitSlabRect.set(_splitClearRight, 0f, width, height);
-    setSlabRadii(rightRadius, 0f, 0f, rightRadius);
-    _splitSlabPath.addRoundRect(_splitSlabRect, _splitSlabRadii, Path.Direction.CW);
-    return true;
-  }
-
-  /** [radius] clamped to what a slab [width] by [height] can hold, and never negative. */
-  private static float slabCornerRadius(float radius, float width, float height)
-  {
-    return Math.max(0f, Math.min(radius, Math.min(width, height) / 2f));
-  }
-
-  /** Fills {@link #_splitSlabRadii} with circular corners, clockwise from the top left. */
-  private void setSlabRadii(float topLeft, float topRight, float bottomRight, float bottomLeft)
-  {
-    float[] r = _splitSlabRadii;
-    r[0] = r[1] = topLeft;
-    r[2] = r[3] = topRight;
-    r[4] = r[5] = bottomRight;
-    r[6] = r[7] = bottomLeft;
-  }
-
-  /**
-   * The keyboard background of a split keyboard: the two slabs {@link #splitSlabs} built, with
-   * the parting between them left clear. A layout handed in whole, with no band to leave, gets
-   * the docked background back as a single slab. Package-private for its test.
-   */
-  void drawSplitBackground(Canvas canvas)
-  {
-    _splitBackgroundPaint.setColor(getSplitBackgroundColor());
-    if (!splitSlabs())
-    {
-      canvas.drawRect(0f, 0f, getWidth(), getHeight(), _splitBackgroundPaint);
-      return;
-    }
-    canvas.drawPath(_splitSlabPath, _splitBackgroundPaint);
-  }
-
-  /** Whether [x], in view pixels, falls in the strip the parting of a split keyboard leaves. */
-  private boolean inSplitGap(float x)
-  {
-    return !splitSlabs() || (x >= _splitClearLeft && x < _splitClearRight);
-  }
-
   @Override
   protected void onDraw(Canvas canvas)
   {
@@ -1973,8 +1865,6 @@ public class Keyboard2View extends View
     _launchWaveDensity = getResources().getDisplayMetrics().density;
     boolean animateNextFrame = false;
     int hintTraceIndex = 0;
-    if (_splitGapUnits > 0f)
-      drawSplitBackground(canvas);
     float y = getPaddingTop() + _tc.margin_top;
     for (int rowIndex = 0; rowIndex < _keyboard.rows.size(); rowIndex++)
     {

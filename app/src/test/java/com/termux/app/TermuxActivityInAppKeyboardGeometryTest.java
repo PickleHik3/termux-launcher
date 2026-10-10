@@ -16,6 +16,10 @@ import android.widget.RelativeLayout;
 import com.termux.R;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.TermuxTerminalViewClient;
+import com.termux.app.place.PlaceLayout;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
+import com.termux.app.terminal.inappkeyboard.FloatingKeyboardController;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallController;
@@ -32,6 +36,7 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
 
@@ -424,6 +429,81 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void switchingTheKeyboardFormWithTheKeyboardUpReservesTheKeyboardAsItIsDressed() {
+        TermuxAppSharedPreferences preferences = prepareActivity(true);
+        preferences.setLayoutStyle(TermuxAppSharedPreferences.LayoutStyle.FLOATING);
+        preferences.setShowTerminalToolbar(true);
+        preferences.setAppLauncherExtraKeysRowEnabled(true);
+        preferences.setAppLauncherAppsRowEnabled(true);
+        preferences.setAppLauncherAzRowEnabled(false);
+        hostKeyboard(null);
+        ReflectionHelpers.callInstanceMethod(mActivity, "addAccessoryLayoutChangeListeners");
+        settleLayout();
+
+        View accessoryContainer = mActivity.findViewById(R.id.accessory_stack_container);
+        View keyboardColumn = mActivity.findViewById(R.id.accessory_keyboard_column);
+        View keyboardContainer = mActivity.findViewById(R.id.inapp_keyboard_container);
+        View toolbarPager = mActivity.findViewById(R.id.terminal_toolbar_view_pager);
+        // Floating to docked dresses the host in the docked card's gaps and rim; docked to split
+        // keeps the dock-side dressing. Either way the pass the switch runs, before any render,
+        // has to reserve the keyboard as it is about to lay out.
+        for (PlaceLayout.KeyboardForm form : new PlaceLayout.KeyboardForm[] {
+            PlaceLayout.KeyboardForm.FLOATING, PlaceLayout.KeyboardForm.DOCKED,
+            PlaceLayout.KeyboardForm.SPLIT}) {
+            switchKeyboardForm(form);
+            if (form == PlaceLayout.KeyboardForm.FLOATING) {
+                settleLayout();
+                continue;
+            }
+            layoutActivityRoot();
+            assertTrue(form + ": the keyboard is up", keyboardContainer.getHeight() > 0);
+            assertEquals(form + ": the switch's own pass reserves the dressed keyboard",
+                keyboardContainer.getHeight(), choreographer().reservedHeightPx());
+
+            settleLayout();
+            int rowsPx = ReflectionHelpers.getField(mActivity, "mAppliedDockContentHeightPx");
+            assertEquals(form + ": the stack is the rows plus the keyboard column",
+                rowsPx + keyboardColumn.getHeight(), accessoryContainer.getHeight());
+            assertEquals(form + ": the extra keys row keeps its height",
+                toolbarPager.getLayoutParams().height, toolbarPager.getHeight());
+        }
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void aKeyboardLaidOutAtAHeightTheStackDidNotReserveBooksOneCorrection() {
+        TermuxAppSharedPreferences preferences = prepareActivity(true);
+        preferences.setShowTerminalToolbar(true);
+        preferences.setAppLauncherExtraKeysRowEnabled(true);
+        preferences.setAppLauncherAppsRowEnabled(true);
+        preferences.setAppLauncherAzRowEnabled(false);
+        hostKeyboard(null);
+        ReflectionHelpers.callInstanceMethod(mActivity, "addAccessoryLayoutChangeListeners");
+        settleLayout();
+        View accessoryContainer = mActivity.findViewById(R.id.accessory_stack_container);
+        View keyboardContainer = mActivity.findViewById(R.id.inapp_keyboard_container);
+        int keyboardPx = keyboardContainer.getHeight();
+        assertTrue(keyboardPx > 0);
+
+        // A memo measured against an older host: the stack reserves less than the keyboard takes,
+        // and the keyboard lays out at the very height it had before.
+        KeyboardGeometryChoreographer choreographer = choreographer();
+        ReflectionHelpers.setField(choreographer, "mDesiredHeightPx", keyboardPx - 43);
+        ReflectionHelpers.setField(choreographer, "mHeightDirty", false);
+        ReflectionHelpers.callInstanceMethod(mActivity, "setTerminalToolbarHeight",
+            ReflectionHelpers.ClassParameter.from(boolean.class, true));
+        assertEquals(keyboardPx - 43, choreographer.reservedHeightPx());
+        layoutActivityRoot();
+        assertEquals(keyboardPx, keyboardContainer.getHeight());
+
+        settleLayout();
+        assertEquals(keyboardPx, choreographer.reservedHeightPx());
+        int rowsPx = ReflectionHelpers.getField(mActivity, "mAppliedDockContentHeightPx");
+        assertEquals(rowsPx + keyboardPx, accessoryContainer.getHeight());
+    }
+
+    @Test
     public void savedHiddenStateRestoresThroughActivityHost() {
         createActivityHostedController(null);
         mController.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
@@ -629,6 +709,30 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
     private KeyboardGeometryChoreographer choreographer() {
         return ReflectionHelpers.getField(mActivity, "mKeyboardGeometry");
+    }
+
+    /**
+     * The keyboard's share of the arrangement pass (doSyncPlaceLayout): the store takes the form,
+     * the floating frame hosts or releases the keyboard, and the keyboard hears its new form, which
+     * runs the geometry pass synchronously.
+     */
+    private void switchKeyboardForm(PlaceLayout.KeyboardForm form) {
+        PlaceLayoutStore store = ReflectionHelpers.callInstanceMethod(mActivity, "placeLayoutStore");
+        PlaceOrientation orientation = ReflectionHelpers.callInstanceMethod(mActivity,
+            "currentPlaceOrientation");
+        store.setKeyboardForm(orientation, form);
+        FloatingKeyboardController floating = ReflectionHelpers.getField(mActivity,
+            "mFloatingKeyboard");
+        floating.onKeyboardFormResolved(form);
+        mController.onKeyboardFormChanged(form);
+    }
+
+    /** Runs what the last change booked, laying out after each round, until nothing is left. */
+    private void settleLayout() {
+        for (int i = 0; i < 3; i++) {
+            ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+            layoutActivityRoot();
+        }
     }
 
     private void layoutActivityRoot() {

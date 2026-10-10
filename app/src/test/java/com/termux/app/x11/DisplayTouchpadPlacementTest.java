@@ -14,7 +14,10 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
-/** Where the touchpad stands in the keyboard frame: the whole of it, or a split keyboard's gap. */
+/**
+ * Where the touchpad stands in the keyboard frame: the whole of it, or the seat a key would take
+ * in a split keyboard's parting.
+ */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28)
 public class DisplayTouchpadPlacementTest {
@@ -22,17 +25,24 @@ public class DisplayTouchpadPlacementTest {
     /** 160dp at 2x. */
     private static final int MIN_GAP_PX = 320;
 
-    @Test
-    public void aGapWideEnoughToPointInBecomesTheTouchpad() {
-        Rect gap = new Rect(400, 0, 400 + MIN_GAP_PX, 500);
+    /** A key's seat in [gap]: inset by a key margin at the sides, the caps' rows top to bottom. */
+    private static Rect seatIn(Rect gap) {
+        return new Rect(gap.left + 8, gap.top + 6, gap.right - 8, gap.bottom - 10);
+    }
 
-        FrameLayout.LayoutParams params =
-            DisplayTouchpadPlacement.padParams(gap, 500, 2f);
+    @Test
+    public void aGapWideEnoughToPointInSeatsThePadAsOneMoreKey() {
+        Rect gap = new Rect(400, 0, 400 + MIN_GAP_PX, 500);
+        Rect seat = seatIn(gap);
+
+        FrameLayout.LayoutParams params = DisplayTouchpadPlacement.padParams(gap, seat, 500, 2f);
 
         assertTrue(DisplayTouchpadPlacement.fitsGap(gap, 2f));
-        assertEquals(MIN_GAP_PX, params.width);
-        assertEquals(500, params.height);
-        assertEquals(400, params.leftMargin);
+        assertTrue(DisplayTouchpadPlacement.standsInGap(gap, seat, 2f));
+        assertEquals(seat.width(), params.width);
+        assertEquals(seat.height(), params.height);
+        assertEquals(seat.left, params.leftMargin);
+        assertEquals(seat.top, params.topMargin);
         assertEquals(Gravity.TOP | Gravity.START, params.gravity);
     }
 
@@ -41,12 +51,13 @@ public class DisplayTouchpadPlacementTest {
         Rect gap = new Rect(400, 0, 400 + MIN_GAP_PX - 1, 500);
 
         FrameLayout.LayoutParams params =
-            DisplayTouchpadPlacement.padParams(gap, 500, 2f);
+            DisplayTouchpadPlacement.padParams(gap, seatIn(gap), 500, 2f);
 
         assertFalse(DisplayTouchpadPlacement.fitsGap(gap, 2f));
         assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, params.width);
         assertEquals(500, params.height);
         assertEquals(0, params.leftMargin);
+        assertEquals(0, params.topMargin);
         assertEquals(Gravity.TOP, params.gravity);
     }
 
@@ -56,12 +67,13 @@ public class DisplayTouchpadPlacementTest {
 
         // 319px is 212dp at 1.5x, well past the minimum.
         assertTrue(DisplayTouchpadPlacement.fitsGap(gap, 1.5f));
-        assertEquals(319, DisplayTouchpadPlacement.padParams(gap, 500, 1.5f).width);
+        assertEquals(seatIn(gap).width(),
+            DisplayTouchpadPlacement.padParams(gap, seatIn(gap), 500, 1.5f).width);
     }
 
     @Test
     public void noGapAtAllIsTheWholeFrame() {
-        FrameLayout.LayoutParams params = DisplayTouchpadPlacement.padParams(null, 500, 2f);
+        FrameLayout.LayoutParams params = DisplayTouchpadPlacement.padParams(null, null, 500, 2f);
 
         assertFalse(DisplayTouchpadPlacement.fitsGap(null, 2f));
         assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, params.width);
@@ -69,11 +81,22 @@ public class DisplayTouchpadPlacementTest {
     }
 
     @Test
+    public void aGapWithNoSeatInItIsTheWholeFrame() {
+        Rect gap = new Rect(400, 0, 400 + MIN_GAP_PX, 500);
+
+        assertFalse(DisplayTouchpadPlacement.standsInGap(gap, null, 2f));
+        assertFalse(DisplayTouchpadPlacement.standsInGap(gap, new Rect(), 2f));
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT,
+            DisplayTouchpadPlacement.padParams(gap, null, 500, 2f).width);
+    }
+
+    @Test
     public void aFrameThatHasNotBeenMeasuredLeavesThePadWrappingItsContent() {
         assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT,
-            DisplayTouchpadPlacement.padParams(null, 0, 2f).height);
+            DisplayTouchpadPlacement.padParams(null, null, 0, 2f).height);
         assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT,
-            DisplayTouchpadPlacement.padParams(new Rect(0, 0, MIN_GAP_PX, 0), -1, 2f).height);
+            DisplayTouchpadPlacement.padParams(new Rect(0, 0, MIN_GAP_PX, 0), null, -1, 2f)
+                .height);
     }
 
     @Test
@@ -85,16 +108,18 @@ public class DisplayTouchpadPlacementTest {
     }
 
     @Test
-    public void aPartingWidenedToTheMinimumIsExactlyThePadsFrame() {
+    public void aPartingWidenedToTheMinimumFitsAndSeatsThePadInsideIt() {
         int minimum = DisplayTouchpadPlacement.minimumGapPx(3f);
         Rect widened = new Rect(300, 0, 300 + minimum, 700);
+        Rect seat = seatIn(widened);
 
         FrameLayout.LayoutParams params =
-            DisplayTouchpadPlacement.padParams(widened, 700, 3f);
+            DisplayTouchpadPlacement.padParams(widened, seat, 700, 3f);
 
+        // The ask is the strip between the key runs; the pad keeps a key's spacing inside it.
         assertTrue(DisplayTouchpadPlacement.fitsGap(widened, 3f));
-        assertEquals(minimum, params.width);
-        assertEquals(300, params.leftMargin);
+        assertEquals(seat.width(), params.width);
+        assertEquals(seat.left, params.leftMargin);
         assertEquals(Gravity.TOP | Gravity.START, params.gravity);
     }
 
@@ -105,20 +130,24 @@ public class DisplayTouchpadPlacementTest {
 
     @Test
     public void layoutIsOnlyReappliedWhenSomethingMoved() {
-        FrameLayout.LayoutParams gapParams = DisplayTouchpadPlacement.padParams(
-            new Rect(400, 0, 400 + MIN_GAP_PX, 500), 500, 2f);
+        Rect gap = new Rect(400, 0, 400 + MIN_GAP_PX, 500);
+        FrameLayout.LayoutParams gapParams =
+            DisplayTouchpadPlacement.padParams(gap, seatIn(gap), 500, 2f);
 
         assertTrue(DisplayTouchpadPlacement.describes(
-            DisplayTouchpadPlacement.padParams(new Rect(400, 0, 400 + MIN_GAP_PX, 500), 500, 2f),
-            gapParams));
+            DisplayTouchpadPlacement.padParams(gap, seatIn(gap), 500, 2f), gapParams));
+        Rect wider = new Rect(390, 0, 410 + MIN_GAP_PX, 500);
         assertFalse("a wider gap is a move", DisplayTouchpadPlacement.describes(
-            DisplayTouchpadPlacement.padParams(new Rect(390, 0, 410 + MIN_GAP_PX, 500), 500, 2f),
-            gapParams));
+            DisplayTouchpadPlacement.padParams(wider, seatIn(wider), 500, 2f), gapParams));
+        Rect taller = new Rect(400, 0, 400 + MIN_GAP_PX, 600);
         assertFalse("a taller keyboard is a move", DisplayTouchpadPlacement.describes(
-            DisplayTouchpadPlacement.padParams(new Rect(400, 0, 400 + MIN_GAP_PX, 600), 600, 2f),
-            gapParams));
+            DisplayTouchpadPlacement.padParams(taller, seatIn(taller), 600, 2f), gapParams));
+        Rect lower = seatIn(gap);
+        lower.offset(0, 4);
+        assertFalse("a seat that moved down is a move", DisplayTouchpadPlacement.describes(
+            DisplayTouchpadPlacement.padParams(gap, lower, 500, 2f), gapParams));
         assertFalse("the whole frame is a move", DisplayTouchpadPlacement.describes(
-            DisplayTouchpadPlacement.padParams(null, 500, 2f), gapParams));
+            DisplayTouchpadPlacement.padParams(null, null, 500, 2f), gapParams));
         assertFalse(DisplayTouchpadPlacement.describes(null, gapParams));
         assertFalse(DisplayTouchpadPlacement.describes(
             new ViewGroup.LayoutParams(MIN_GAP_PX, 500), gapParams));
