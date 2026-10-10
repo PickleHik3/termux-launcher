@@ -102,7 +102,7 @@ The **Theme & fonts** page has no row in Settings. Reach it by searching Setting
 
 Pick tools in this list and the launcher writes their theme file whenever the palette changes, then
 wires it into the tool's own config. Turning one off puts its config back. Built in: Starship,
-Helix, tmux, bat, Yazi, fzf, lazygit, Oh My Posh, Neovim, fish and herdr.
+Helix, tmux, bat, Yazi, fzf, lazygit, Neovim and herdr.
 
 To add your own, make a folder `~/.termux/theme-templates/<id>/` holding a `template.properties`
 manifest, the file to render and its hooks:

@@ -34,10 +34,11 @@ public final class ThemeTemplateLoader {
         mLog = log == null ? ThemeTemplateLog.NONE : log;
     }
 
-    /** Every built-in, readable or not, for the settings list. */
+    /** Every built-in still offered, for the settings list. */
     public List<ThemeTemplate> builtInTemplates() {
         List<ThemeTemplate> templates = new ArrayList<>();
         for (String id : mBuiltIns.ids()) {
+            if (retired(id)) continue;
             ThemeTemplate template = read(id, mBuiltIns);
             if (template != null) templates.add(template);
         }
@@ -57,7 +58,7 @@ public final class ThemeTemplateLoader {
         }
         if (enabledIds != null) {
             for (String id : mBuiltIns.ids()) {
-                if (!enabledIds.contains(id) || seen.contains(id)) continue;
+                if (!enabledIds.contains(id) || seen.contains(id) || retired(id)) continue;
                 ThemeTemplate template = read(id, mBuiltIns);
                 if (template != null && seen.add(id)) templates.add(template);
             }
@@ -71,6 +72,19 @@ public final class ThemeTemplateLoader {
         if (mUserTemplates.has(id)) return read(id, mUserTemplates);
         if (mBuiltIns.has(id)) return read(id, mBuiltIns);
         return null;
+    }
+
+    /**
+     * A built-in that is no longer offered ({@code retired=true} in its manifest). It stays in the
+     * APK only so {@link #find} can hand its undo hook to anyone who still has it applied: it is
+     * never listed and never rendered, so the next pass undoes it like one switched off.
+     */
+    private boolean retired(String id) {
+        try {
+            return "true".equals(value(mBuiltIns.manifest(id), ThemeTemplate.KEY_RETIRED));
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private ThemeTemplate read(String id, ThemeTemplateSource source) {
