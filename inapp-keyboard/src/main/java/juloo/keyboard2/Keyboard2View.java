@@ -1949,8 +1949,12 @@ public class Keyboard2View extends View
               slots.border = hintBreathe(slots.border, keyIdValue);
           }
         }
+        // On a theme that draws no key borders only a colour-scheme border shows; the hint
+        // lighting's border stays a tint of an existing stroke, not a new outline.
+        boolean drawsBorder = slots.hasBorder && (tc_key.border_width > 0.f
+            || (schemeOverride != null && schemeOverride.borderColor != null));
         drawKeyFrame(canvas, x, y, keyW, keyH, tc_key, slots.hasBackground, slots.background,
-            slots.hasBorder, slots.border);
+            drawsBorder, slots.border);
         // The latched Ctrl/Alt/Shift caps are the hint popup's prefix indicator; trace them
         // while the hint lighting is up. Latched modifiers render as key-down.
         if (_hintColorOverrides.size() > 0 && _hintBreathAnimator != null && isKeyDown
@@ -2160,6 +2164,9 @@ public class Keyboard2View extends View
   {
     float r = tc.border_radius;
     float w = tc.border_width;
+    // A colour-scheme border on a theme that draws none still shows: 1dp in the chosen colour.
+    if (w <= 0.f && hasBorderOverride)
+      w = _launchWaveDensity;
     float padding = w / 2.f;
     _tmpRect.set(x + padding, y + padding, x + keyW - padding, y + keyH - padding);
     tc.positionGradient(y, keyH);

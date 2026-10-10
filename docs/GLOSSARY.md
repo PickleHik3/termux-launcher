@@ -148,9 +148,10 @@ and the pane shows the wallpaper. The pane is a rounded **insert** over that gla
 radius and Margin the gutter of frame glass around it, so both sliders mean the same in either
 Style (wallpaper shows in Floating's gaps, and in Docked's when no bar stands at a side; glass in
 Docked's gutter otherwise). The insert keeps the pane's own glass,
-Darkness and Legibility veil, and always stands at least one tone step darker than the frame glass
-around it. Pieces that join draw no line between them, and in Docked only the insert's own edge
-carries rim light and refraction. Fullscreen under Docked keeps a thin frame of glass, the gutter,
+Darkness and Legibility veil: it is the frame's glass unless Darkness is raised, and reads as a
+window by the line round it, the theme's outline at the divider's strength. Pieces that join draw
+no line between them, and in Docked only the insert's own edge carries that line, rim light and
+refraction. Fullscreen under Docked keeps a thin frame of glass, the gutter,
 and with only the keyboard left it is a bottom card with rounded top corners and the pane still the
 rounded insert above it. One Style holds for both
 orientations and for the minimal layout. Style never changes the keyboard's form: a floating or split

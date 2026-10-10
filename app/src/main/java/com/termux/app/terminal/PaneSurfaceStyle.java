@@ -68,6 +68,13 @@ public interface PaneSurfaceStyle {
      * tests.
      */
     default boolean paneDocked() { return false; }
+    /**
+     * Whether the pane is the Docked insert, whose edge is the opening's line (SPEC 3.7, amended
+     * 2026-10-10): the outline role at the divider's strength, 1dp, round the insert's corners,
+     * where the glass's gradient rim was near invisible over a bright wallpaper. False under
+     * Floating, whose cards keep the rim every other surface wears.
+     */
+    default boolean paneOpeningLine() { return false; }
 
     /** Whether an attention border may pulse: false under Lazy mode and reduced motion (a static glow). */
     default boolean paneAttentionPulses() { return true; }

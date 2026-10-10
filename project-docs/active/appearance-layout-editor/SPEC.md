@@ -321,6 +321,29 @@ keyboard. Docked only; Floating is unchanged.
 - **Fullscreen (F3):** with every bar away the thin glass frame stays, square outer corners; with
   only the keyboard left it is a bottom card with rounded top corners and the insert above it.
 
+#### Amended 2026-10-10: the insert is the frame's glass; the opening wears the line
+
+Supersedes **Tone floor** and the Docked half of **Rim** in the rounded-insert amendment above.
+Issue #46 ("the borders don't exist"): the insert was told apart from the frame by tone alone, and
+its rim, the glass's white gradient, vanished on a bright wallpaper.
+
+- **No tone floor.** The insert is the frame's glass unless the user raises the terminal's
+  Darkness: it wears the tint Darkness gives it and nothing more, under both Styles. The
+  Legibility veil (§2) stays; it is for the text, not for the window.
+- **The opening wears the line.** In Docked the insert's edge, all the way round and following
+  its rounded corners (capped for small panes, as every pane radius is), is the plain line: the
+  theme's outline role at the divider's strength, 1dp (`PaneRim.openingLine`). It resolves per
+  theme (light, dark, black) and follows the scheme's chrome, since it is a Material role. Every
+  split pane is its own insert and wears the same line, so the panes and the opening read as one
+  line system. The focused pane of a split still wears the active colour, and attention its glow.
+- **Where it is drawn.** On the insert, not on the bars: so whichever bar faces the opening
+  (keyboard up or down, dock, status bar, side bars, or none), the line is the same. Margin keeps
+  it off the screen's edge; at Margin 0 it runs along the screen where no bar stands, the same as a
+  Floating card would. The frame's own outer screen edges stay plain, and an edge card's inner
+  edge keeps its glass rim. Home's widget grid and the Display's picture wear it too.
+- Floating is unchanged: its cards keep the glass rim. Not a setting: the border switch still
+  turns the line off with every other pane border.
+
 ## 4. Looks
 
 Names chosen by the developer: **Clear · Mist · Tint · Solid**. Mist is kept as rebuilt on

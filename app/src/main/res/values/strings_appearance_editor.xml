@@ -45,7 +45,7 @@
     <!-- The status bar's button: opens the clock face and position popup. -->
     <string name="appearance_editor_clock">Clock</string>
     <!-- The Custom row's own legends; the number is the slider's read-out. -->
-    <string name="appearance_editor_dock_size">Size · %1$d%%</string>
+    <string name="appearance_editor_icon_size">Icon size · %1$d dp</string>
     <string name="appearance_editor_app_icons">Icons · %1$d</string>
     <string name="appearance_editor_key_spacing">Spacing · %1$s</string>
     <string name="appearance_editor_trail_description">Cursor trail, %1$s</string>

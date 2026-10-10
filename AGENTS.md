@@ -180,19 +180,23 @@ on the abstract socket `@<packageName>.priv` and accepts only the app's own uid;
 Run from the repository root with the checked-in wrapper. Builds need an Android SDK and a JDK
 compatible with AGP 8.13.2; the code targets Java 11.
 
-- `./gradlew assembleDebug` — debug APKs for all configured ABIs.
-- `./gradlew :app:assembleDebug` — application module only.
+- `./gradlew :app:assembleStaging` — what goes on a phone and into nightlies: the release build's
+  R8 shrinking and keep rules, but debuggable (`run-as` works) and signed with the published test
+  key. Debug builds skip R8, so a hole in the keep rules only ever shows up in a shrunk build;
+  1.0.0 shipped one.
+- `./gradlew assembleDebug` / `:app:assembleDebug` — unshrunk debug APKs, for fast local iteration.
 - `./gradlew testDebugUnitTest` — JVM unit tests across modules, matching CI.
 - `./gradlew :app:connectedDebugAndroidTest` — instrumentation on a connected emulator or device.
 - `./gradlew lintDebug` — Android lint.
 - `./gradlew :app:verifyReleaseHardening` — release build safety settings.
-- `scripts/dev-install.sh` — strips the bootstraps from the arm64 debug APK and installs it as an
-  upgrade over an existing install (a fresh install from it has no bootstrap). Target the device
-  with `DEVICE=<serial>`.
-- `adb -s <serial> shell run-as <pkg> …` reads and edits the app's files on a debug build.
+- `scripts/dev-install.sh` — strips the bootstraps from the arm64 staging APK and installs it as
+  an upgrade over an existing install (a fresh install from it has no bootstrap). Target the device
+  with `DEVICE=<serial>`; `BUILD_TYPE=debug` installs the debug APK instead.
+- `adb -s <serial> shell run-as <pkg> …` reads and edits the app's files on a debug or staging
+  build.
 
 **When the machine is busy, let CI build.** A push to `dev` runs "Build nightly"
-(`.github/workflows/debug_build.yml`: `testDebugUnitTest`, then `assembleDebug`). Read it with
+(`.github/workflows/debug_build.yml`: `testDebugUnitTest`, then `assembleStaging`). Read it with
 `gh run list --repo PickleHik3/termux-launcher --branch dev` and
 `gh run view <id> --repo PickleHik3/termux-launcher --log-failed`.
 
@@ -333,7 +337,7 @@ run. Do not ask which editions to release; releasing one is the thing that needs
 `+hotfixN`, no `-a`. The edition is a separate fact: it is derived from the package name and shown
 as an `Edition` line in the About screen and every report, and it is part of the tag and the APK
 name. `versionCode` stays **1020** for upstream parity — never change it. The current release is
-**1.0.0**.
+**1.0.1**.
 
 - **Tags** carry the edition as a prefix: `vX.Y.Z` (Termux edition, `main`), `nix-vX.Y.Z`
   (`nix-edition`), `vaj-vX.Y.Z` (`io-vaj-package`). CI (`attach_debug_apks_to_release.yml`) strips

@@ -1,8 +1,12 @@
 package com.termux.app.launcher.widget.builtin;
 
 import android.content.Context;
+import android.graphics.Rect;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.TouchDelegate;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -15,7 +19,11 @@ import com.termux.R;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.Month;
 import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -29,14 +37,41 @@ public class CalendarWidgetView extends BuiltinWidgetView {
     private static final int MONTH_MIN_DP = 112;
     /** The narrowest the 4×2 events column is shown at: a time and a title that still reads. */
     private static final int EVENTS_MIN_DP = 72;
+    private static final String GLYPH_PREV_MONTH = "\uf053";
+    private static final String GLYPH_NEXT_MONTH = "\uf054";
+    /** The month steppers' disc, beside the 12sp month name. */
+    private static final int STEPPER_DP = 22;
+    /** The square a stepper answers touches in, so a near miss does not open the calendar app. */
+    private static final int STEPPER_HIT_DP = 36;
+    /** The steppers' gap, and the least it closes to before the month name would be cut. */
+    private static final int STEPPER_GAP_DP = 8;
+    private static final int STEPPER_GAP_MIN_DP = 4;
+    /** The month heading's side padding, and the gap between its name, year and steppers. */
+    private static final int HEADING_SIDE_DP = 4;
+    private static final int HEADING_GAP_DP = 8;
+    /** Extra air under the month heading, taken from the grid's rows, so the steppers' touch areas
+     *  end before the weekday letters. */
+    private static final int HEADING_GRID_GAP_DP = 4;
 
     @Nullable private FrameLayout frame;
     @Nullable private BuiltinWidgetUi ui;
     @Nullable private CalendarEventsSource.Snapshot shown;
     @NonNull private String shownSignature = "";
+    /** The month the grid was stepped to, or null to follow today's. */
+    @Nullable private YearMonth anchor;
+    /** The month the grid was last drawn for (null: no grid), and its read (null: the window's). */
+    @Nullable private YearMonth drawnMonth;
+    @Nullable private CalendarEventsSource.MonthEvents drawnMonthEvents;
 
-    private final CalendarEventsSource.Listener sourceListener = snapshot -> {
-        if (isStarted()) populate();
+    private final CalendarEventsSource.Listener sourceListener = new CalendarEventsSource.Listener() {
+        @Override public void onCalendarEvents(@NonNull CalendarEventsSource.Snapshot snapshot) {
+            if (isStarted()) populate();
+        }
+
+        @Override public void onCalendarMonth(@NonNull YearMonth month) {
+            // The grid draws from the kept read from now on, so this repopulates once per read.
+            if (isStarted() && month.equals(drawnMonth)) populate();
+        }
     };
     // Only the 4×2 lists events that end during the day; the other spans move with the day,
     // which the source already reports.
@@ -63,12 +98,25 @@ public class CalendarWidgetView extends BuiltinWidgetView {
         CalendarEventsSource source = CalendarEventsSource.of(services);
         source.subscribe(services, sourceListener);
         if (span() == BuiltinWidgetSpan.FOUR_BY_TWO) services.addTickListener(tick);
-        if (source.snapshot() != shown) populate();
+        if (source.snapshot() != shown || monthStale(source)) populate();
     }
 
     @Override protected void onStop() {
         CalendarEventsSource.of(services).unsubscribe(sourceListener);
         services.removeTickListener(tick);
+        // Back on today's month next time; the grid is redrawn when the widget starts again.
+        anchor = null;
+    }
+
+    /**
+     * Whether the grid shows another month than it should (stepped off, or the month turned
+     * while stopped), or drew without a month read that is there now. Asks for the read.
+     */
+    private boolean monthStale(@NonNull CalendarEventsSource source) {
+        YearMonth drawn = drawnMonth;
+        if (drawn == null) return false;
+        YearMonth due = CalendarWidgetFormats.shownMonth(anchor, LocalDate.now(ZoneId.systemDefault()));
+        return !drawn.equals(due) || source.month(drawn) != drawnMonthEvents;
     }
 
     @Override protected void onTap() {
@@ -78,7 +126,15 @@ public class CalendarWidgetView extends BuiltinWidgetView {
             services.host().requestCalendarPermission();
             return;
         }
-        CalendarWidgetSupport.openCalendarAt(getContext(), System.currentTimeMillis());
+        CalendarWidgetSupport.openCalendarAt(getContext(), openAtMillis());
+    }
+
+    /** Now, or the month being shown once the grid has been stepped off today's. */
+    private long openAtMillis() {
+        YearMonth month = anchor;
+        if (month == null) return System.currentTimeMillis();
+        ZoneId zone = ZoneId.systemDefault();
+        return CalendarWidgetFormats.startOfDay(month.atDay(15), zone) + 12 * 60 * 60_000L;
     }
 
     // ----- drawing --------------------------------------------------------------------------
@@ -89,6 +145,9 @@ public class CalendarWidgetView extends BuiltinWidgetView {
         if (frame == null || ui == null) return;
         CalendarWidgetSupport.Day day = CalendarWidgetSupport.dayFor(this, services);
         frame.removeAllViews();
+        frame.setTouchDelegate(null);
+        drawnMonth = null;
+        drawnMonthEvents = null;
         View root;
         switch (span()) {
             case TWO_BY_ONE: root = twoByOne(ui, day); break;
@@ -121,7 +180,8 @@ public class CalendarWidgetView extends BuiltinWidgetView {
 
     @NonNull private String describe(@NonNull CalendarWidgetSupport.Day day) {
         Context context = getContext();
-        String heading = context.getString(R.string.bw_calendar_cd_agenda, day.date("yMMMM"),
+        String heading = context.getString(R.string.bw_calendar_cd_agenda,
+            CalendarWidgetSupport.date(shownMonth(day).atDay(1), "yMMMM", day.locale, day.zone),
             day.date("EEEEdMMMM"));
         String state = !day.permitted ? context.getString(R.string.bw_calendar_cd_access)
             : day.loaded ? day.countText(context) : "";
@@ -171,7 +231,8 @@ public class CalendarWidgetView extends BuiltinWidgetView {
     }
 
     @NonNull private View twoByTwo(@NonNull BuiltinWidgetUi ui, @NonNull CalendarWidgetSupport.Day day) {
-        LinearLayout root = ui.column(6, CalendarWidgetSupport.wide(monthHeading(ui, day)),
+        LinearLayout root = ui.column(HEADING_GRID_GAP_DP + 6,
+            CalendarWidgetSupport.wide(monthHeading(ui, day)),
             BuiltinWidgetUi.flexTall(monthGrid(ui, day, 6)));
         inset(root, 10, 12, 10, 12, ui);
         return root;
@@ -201,9 +262,14 @@ public class CalendarWidgetView extends BuiltinWidgetView {
 
     @NonNull private View fourByTwo(@NonNull BuiltinWidgetUi ui, @NonNull CalendarWidgetSupport.Day day) {
         Context context = getContext();
-        LinearLayout month = ui.column(5, CalendarWidgetSupport.wide(monthHeading(ui, day)),
+        MonthHeading monthHeading = monthHeading(ui, day);
+        LinearLayout month = ui.column(HEADING_GRID_GAP_DP + 5, CalendarWidgetSupport.wide(monthHeading),
             BuiltinWidgetUi.flexTall(monthGrid(ui, day, 5)));
-        BuiltinWidgetUi.size(month, ui.dp(184), ViewGroup.LayoutParams.MATCH_PARENT);
+        // The month goes no narrower than 16dp a day column, nor than keeps the longest month's
+        // name whole beside the steppers, measured in the face and font scale it is drawn in.
+        int monthMin = Math.max(ui.dp(MONTH_MIN_DP), monthHeading.narrowest(day.locale));
+        int monthWidth = Math.max(ui.dp(184), monthMin);
+        BuiltinWidgetUi.size(month, monthWidth, ViewGroup.LayoutParams.MATCH_PARENT);
 
         View divider = ui.divider(true);
         LinearLayout.LayoutParams dividerParams = (LinearLayout.LayoutParams) divider.getLayoutParams();
@@ -237,7 +303,7 @@ public class CalendarWidgetView extends BuiltinWidgetView {
         // get less than a column of titles that still reads.
         int gap = ui.dp(14);
         FitStack root = FitStack.row(context)
-            .addShrink(month, FitStack.ESSENTIAL, 0, ui.dp(184), ui.dp(MONTH_MIN_DP))
+            .addShrink(month, FitStack.ESSENTIAL, 0, monthWidth, monthMin)
             .add(divider, 5, gap)
             .addFlex(events, 5, gap, ui.dp(EVENTS_MIN_DP));
         inset(root, 10, 12, 14, 12, ui);
@@ -246,23 +312,251 @@ public class CalendarWidgetView extends BuiltinWidgetView {
 
     // ----- pieces ---------------------------------------------------------------------------
 
-    /** "October" on the left, "2026" on the right. */
-    @NonNull private View monthHeading(@NonNull BuiltinWidgetUi ui, @NonNull CalendarWidgetSupport.Day day) {
-        TextView month = ui.text(CalendarWidgetFormats.monthName(day.today.getMonth(), day.locale),
+    /**
+     * "October" on the left, "2026" and the month steppers on the right. The steppers walk the
+     * grid by a month; once stepped off, the month's name brings it to today's again.
+     */
+    @NonNull private MonthHeading monthHeading(@NonNull BuiltinWidgetUi ui,
+                                               @NonNull CalendarWidgetSupport.Day day) {
+        YearMonth shown = shownMonth(day);
+        TextView month = ui.text(CalendarWidgetFormats.monthName(shown.getMonth(), day.locale),
             12f, ui.style.sansBold, ui.style.onSurface);
-        TextView year = ui.mono(Integer.toString(day.today.getYear()), 11f);
-        LinearLayout row = CalendarWidgetSupport.baselineRow(ui, 8, BuiltinWidgetUi.flex(month), year);
-        row.setPadding(ui.dp(4), 0, ui.dp(4), 0);
-        return row;
+        TextView year = ui.mono(Integer.toString(shown.getYear()), 11f);
+        MonthHeading heading = new MonthHeading(ui, month,
+            CalendarWidgetFormats.monthShort(shown.getMonth(), day.locale), year,
+            monthStepper(ui, GLYPH_PREV_MONTH, R.string.bw_calendar_previous_month, -1),
+            monthStepper(ui, GLYPH_NEXT_MONTH, R.string.bw_calendar_next_month, 1));
+        if (isPreview()) return heading;
+        if (anchor != null) {
+            OnClickListener toToday = v -> {
+                anchor = null;
+                populate();
+            };
+            month.setOnClickListener(toToday);
+            month.setContentDescription(getContext().getString(R.string.bw_calendar_this_month));
+            CalendarWidgetSupport.pressable(month);
+            year.setOnClickListener(toToday);
+            year.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        }
+        FrameLayout frame = this.frame;
+        if (frame != null) frame.setTouchDelegate(new StepperTouch(frame, heading));
+        return heading;
+    }
+
+    /** A round chevron that steps the shown month by {@code step}; inert on the picker's card. */
+    @NonNull private TextView monthStepper(@NonNull BuiltinWidgetUi ui, @NonNull String glyph,
+                                           int label, int step) {
+        TextView button = ui.roundButton(glyph, STEPPER_DP, 10.5f, ui.style.primaryContainer,
+            ui.style.onPrimaryContainer, getContext().getString(label));
+        if (isPreview()) {
+            button.setClickable(false);
+            button.setFocusable(false);
+        } else {
+            button.setOnClickListener(v -> stepMonth(step));
+        }
+        return button;
+    }
+
+    private void stepMonth(int step) {
+        anchor = CalendarWidgetFormats.stepMonth(anchor, LocalDate.now(ZoneId.systemDefault()), step);
+        populate();
+    }
+
+    @NonNull private YearMonth shownMonth(@NonNull CalendarWidgetSupport.Day day) {
+        return CalendarWidgetFormats.shownMonth(anchor, day.today);
     }
 
     @NonNull private View monthGrid(@NonNull BuiltinWidgetUi ui, @NonNull CalendarWidgetSupport.Day day,
                                     int lettersGapDp) {
-        YearMonth month = YearMonth.from(day.today);
-        Map<LocalDate, Integer> marks = CalendarWidgetFormats.dayColors(day.events, month.atDay(1),
+        YearMonth month = shownMonth(day);
+        // The whole month's read once it lands; until then the rolling window, so today's month
+        // never draws bare while it is read.
+        CalendarEventsSource.MonthEvents read = isPreview() || !day.permitted ? null
+            : CalendarEventsSource.of(services).month(month);
+        List<CalendarEvent> events = read != null ? read.events : day.events;
+        drawnMonth = month;
+        drawnMonthEvents = read;
+        Map<LocalDate, Integer> marks = CalendarWidgetFormats.dayColors(events, month.atDay(1),
             month.atEndOfMonth().plusDays(1), day.zone, ui.style.primary);
         CalendarMonthGridView grid = new CalendarMonthGridView(getContext(), ui.style, lettersGapDp);
         grid.set(month, day.today, firstDayOfWeek(), marks, day.locale);
         return grid;
+    }
+
+    // ----- the month heading's row ----------------------------------------------------------
+
+    /**
+     * The month heading: the name at the start, the year on its baseline just before the
+     * steppers, the two discs at the end. It fits by {@link CalendarWidgetFormats#fitHeading}:
+     * the year goes first, then the discs close up, then the name shortens ("Sep"). A year left
+     * out is laid out empty rather than hidden, so fitting never asks for another layout.
+     */
+    private static final class MonthHeading extends ViewGroup {
+        @NonNull private final TextView name;
+        @NonNull private final String fullName;
+        @NonNull private final String shortName;
+        @NonNull private final TextView year;
+        @NonNull private final View prev;
+        @NonNull private final View next;
+        private final int side;
+        private final int textGap;
+        private final int disc;
+        private final int gap;
+        private final int minGap;
+        /** How far a stepper's touch area reaches past its disc on every side. */
+        private final int hitGrow;
+        @NonNull private CalendarWidgetFormats.HeadingFit fit;
+
+        MonthHeading(@NonNull BuiltinWidgetUi ui, @NonNull TextView name, @NonNull String shortName,
+                     @NonNull TextView year, @NonNull View prev, @NonNull View next) {
+            super(ui.context);
+            this.name = name; this.year = year; this.prev = prev; this.next = next;
+            this.fullName = name.getText().toString();
+            this.shortName = shortName;
+            side = ui.dp(HEADING_SIDE_DP);
+            textGap = ui.dp(HEADING_GAP_DP);
+            disc = ui.dp(STEPPER_DP);
+            gap = ui.dp(STEPPER_GAP_DP);
+            minGap = ui.dp(STEPPER_GAP_MIN_DP);
+            hitGrow = Math.max(0, (ui.dp(STEPPER_HIT_DP) - disc) / 2);
+            fit = new CalendarWidgetFormats.HeadingFit(true, gap, 0);
+            addView(name);
+            addView(year);
+            addView(prev);
+            addView(next);
+        }
+
+        /** The narrowest this row keeps the longest of the twelve month names whole in. */
+        int narrowest(@NonNull Locale locale) {
+            float longest = 0f;
+            for (Month month : Month.values()) {
+                longest = Math.max(longest,
+                    name.getPaint().measureText(CalendarWidgetFormats.monthName(month, locale)));
+            }
+            return 2 * side + CalendarWidgetFormats.headingNeed((int) Math.ceil(longest), textGap,
+                disc, minGap);
+        }
+
+        @Override protected void onMeasure(int widthSpec, int heightSpec) {
+            // A row too narrow for the whole name beside the steppers shows the short one.
+            if (MeasureSpec.getMode(widthSpec) != MeasureSpec.UNSPECIFIED) {
+                int room = MeasureSpec.getSize(widthSpec) - 2 * side
+                    - CalendarWidgetFormats.headingNeed(0, textGap, disc, minGap);
+                String label = name.getPaint().measureText(fullName) <= room ? fullName : shortName;
+                if (!label.contentEquals(name.getText())) name.setText(label);
+            }
+            int any = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+            name.measure(any, any);
+            year.measure(any, any);
+            int discSpec = MeasureSpec.makeMeasureSpec(disc, MeasureSpec.EXACTLY);
+            prev.measure(discSpec, discSpec);
+            next.measure(discSpec, discSpec);
+            int nameWidth = name.getMeasuredWidth();
+            int yearWidth = year.getMeasuredWidth();
+            int want = 2 * side + nameWidth + textGap + yearWidth + textGap + 2 * disc + gap;
+            int width = resolveSize(want, widthSpec);
+            fit = CalendarWidgetFormats.fitHeading(width - 2 * side, nameWidth, yearWidth, textGap,
+                textGap, disc, gap, minGap);
+            if (fit.nameWidth < nameWidth) {
+                name.measure(MeasureSpec.makeMeasureSpec(fit.nameWidth, MeasureSpec.EXACTLY), any);
+            }
+            int height = Math.max(disc, Math.max(name.getMeasuredHeight(), year.getMeasuredHeight()));
+            setMeasuredDimension(width, resolveSize(height, heightSpec));
+        }
+
+        @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
+            int width = r - l;
+            int height = b - t;
+            int nextStart = width - side - disc;
+            int prevStart = nextStart - fit.stepperGap - disc;
+            int discTop = (height - disc) / 2;
+            place(next, nextStart, discTop, width);
+            place(prev, prevStart, discTop, width);
+            int nameTop = (height - name.getMeasuredHeight()) / 2;
+            place(name, side, nameTop, width);
+            if (fit.showYear) {
+                int baseline = nameTop + name.getBaseline();
+                place(year, prevStart - textGap - year.getMeasuredWidth(),
+                    baseline - year.getBaseline(), width);
+            } else {
+                year.layout(0, 0, 0, 0);
+            }
+        }
+
+        /** Lays {@code child} out at its measured size {@code start} in from the leading edge. */
+        private void place(@NonNull View child, int start, int top, int width) {
+            int childWidth = child.getMeasuredWidth();
+            int left = isRtl() ? width - start - childWidth : start;
+            child.layout(left, top, left + childWidth, top + child.getMeasuredHeight());
+        }
+
+        private boolean isRtl() { return getLayoutDirection() == LAYOUT_DIRECTION_RTL; }
+
+        /**
+         * The stepper whose touch area in {@code host} holds ({@code x}, {@code y}), with that
+         * area in {@code out}; null for neither. The areas are the discs grown by {@link #hitGrow},
+         * met halfway between the discs and kept off the text, within {@code host}.
+         */
+        @Nullable View stepperAt(@NonNull ViewGroup host, int x, int y, @NonNull Rect out) {
+            if (getParent() == null || prev.getWidth() == 0) return null;
+            boolean rtl = isRtl();
+            View first = rtl ? next : prev;
+            View second = rtl ? prev : next;
+            View text = fit.showYear ? year : name;
+            int[] spans = CalendarWidgetFormats.stepperSpans(first.getLeft(), second.getLeft(), disc,
+                hitGrow, rtl ? text.getLeft() : text.getRight(), !rtl);
+            for (int i = 0; i < 2; i++) {
+                View stepper = i == 0 ? first : second;
+                out.set(spans[2 * i], stepper.getTop() - hitGrow, spans[2 * i + 1],
+                    stepper.getBottom() + hitGrow);
+                try {
+                    host.offsetDescendantRectToMyCoords(this, out);
+                } catch (IllegalArgumentException notInHost) {
+                    return null;
+                }
+                if (out.intersect(0, 0, host.getWidth(), host.getHeight()) && out.contains(x, y)) {
+                    return stepper;
+                }
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Hands a touch near a month stepper to the stepper, so a near miss steps the month instead
+     * of opening the calendar app. The areas are read from the laid-out heading at each touch,
+     * so they follow it without being kept up to date.
+     */
+    private static final class StepperTouch extends TouchDelegate {
+        @NonNull private final ViewGroup host;
+        @NonNull private final MonthHeading heading;
+        private final Rect area = new Rect();
+        private final Rect slack = new Rect();
+        private final int slop;
+        @Nullable private View target;
+
+        StepperTouch(@NonNull ViewGroup host, @NonNull MonthHeading heading) {
+            super(new Rect(), heading);
+            this.host = host;
+            this.heading = heading;
+            slop = ViewConfiguration.get(host.getContext()).getScaledTouchSlop();
+        }
+
+        @Override public boolean onTouchEvent(@NonNull MotionEvent event) {
+            int x = (int) event.getX();
+            int y = (int) event.getY();
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) target = heading.stepperAt(host, x, y, area);
+            View stepper = target;
+            if (stepper == null) return false;
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) target = null;
+            // As the platform's delegate does: inside the area the stepper is touched at its
+            // centre; a finger that slides off is moved outside it, so the press lets go.
+            slack.set(area);
+            slack.inset(-slop, -slop);
+            if (slack.contains(x, y)) event.setLocation(stepper.getWidth() / 2f, stepper.getHeight() / 2f);
+            else event.setLocation(-2f * slop, -2f * slop);
+            return stepper.dispatchTouchEvent(event);
+        }
     }
 }

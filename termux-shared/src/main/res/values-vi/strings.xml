@@ -65,13 +65,6 @@
     <string name="msg_requires_dump_and_package_usage_stats_permissions">Yêu cầu quyền `DUMP` và `PACKAGE_USAGE_STATS`</string>
     <string name="error_display_over_other_apps_permission_not_granted">%1$s yêu cầu quyền \"Hiển thị trên các ứng dụng khác\" để bắt đầu các hoạt động và dịch vụ từ nền trên Android &gt;= 10. Cấp quyền này từ Cài đặt Android -&gt; Ứng dụng -&gt; %1$s -&gt; Nâng cao -&gt; Vẽ qua các ứng dụng khác. Tên quyền có thể khác nhau trên các thiết bị khác nhau, như trên Xiaomi, được gọi là \"Hiển thị cửa sổ bật lên khi chạy ở chế độ nền\", hãy kiểm tra https://dontkillmyapp.com để biết các sự cố cụ thể của thiết bị.</string>
     <string name="error_executable_unset">Có thể thực thi không được đặt \"%1$s\" cho lệnh shell</string>
-    <string name="msg_report_issue">Nếu bạn muốn báo cáo vấn đề này, hãy sao chép văn bản của nó từ menu tùy chọn (3 dấu chấm ở trên cùng bên phải) và đăng vấn đề lên một trong các liên kết sau.
-\n
-\nNếu bạn đang đăng &amp;TERMUX_APP_NAME; báo cáo sự cố ứng dụng, thì vui lòng cung cấp chi tiết về những gì bạn đang làm đã gây ra sự cố và cách tái tạo sự cố đó, nếu có thể.
-\n
-\nNếu bạn đăng một vấn đề trên GitHub, hãy đăng vấn đề đó lên kho chứa báo cáo. Các vấn đề đã mở hoặc email được gửi kèm theo **ảnh chụp màn hình (một phần)** thay vì văn bản được sao chép hoặc tệp của báo cáo này **có thể sẽ tự động bị đóng/xóa**. Bạn có thể tùy ý xóa mọi thông tin cụ thể về thiết bị mà bạn cho là riêng tư hoặc không muốn chia sẻ hoặc không liên quan đến vấn đề.
-\n
-\nChúng tôi không cung cấp hỗ trợ cho bất kỳ công cụ/tập lệnh nào liên quan đến hack. Mọi câu hỏi được hỏi về họ qua email, trên GitHub hoặc &amp;TERMUX_APP_NAME chính thức khác; các diễn đàn cộng đồng **có thể sẽ tự động bị đóng/xóa** và thậm chí có thể dẫn đến **lệnh cấm tạm thời hoặc vĩnh viễn**. Kiểm tra %1$s/wiki/Hacking để biết chi tiết.</string>
     <string name="error_termux_app_package_context_not_accessible">Không thể truy cập ứng dụng &TERMUX_APP_NAME; (bối cảnh gói).</string>
     <string name="msg_storage_permission_granted_on_request">Quyền lưu trữ do người dùng cấp theo yêu cầu</string>
     <string name="action_disable_launcher_icon">Tắt biểu tượng Trình khởi chạy</string>

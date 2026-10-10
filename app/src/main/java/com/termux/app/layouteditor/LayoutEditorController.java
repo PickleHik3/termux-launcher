@@ -362,7 +362,7 @@ public final class LayoutEditorController {
     }
 
     /**
-     * The dock's height, as the Look editor's Dock size slider writes it: the same write the
+     * The dock's height, as the Look editor's Icon size slider writes it: the same write the
      * dock handle makes in Layout mode, so the session's Undo and dirty state cover it.
      */
     public void setDockHeightScale(float scale) {

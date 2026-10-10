@@ -93,33 +93,6 @@ public class ChromeInkBandsTest {
 
     // ------------------------------------------------------------------ the terminal pane
 
-    /**
-     * A light-topped wallpaper under a thin dark terminal: the palette's pale foreground cannot
-     * read on it bare, so the pane buys a veil of its own background, and the foreground itself
-     * does not move.
-     */
-    @Test
-    public void aTerminalPaneOverALightWallpaperIsVeiledUpToItsCeiling() {
-        OnGlass.Resolution top = pane(PANE_TOP);
-
-        int bare = OnGlass.backdrop(LIGHT_WALLPAPER, Color.TRANSPARENT, TERMINAL_TINT_30);
-        assertTrue("bare, the dim foreground misses: "
-                + OnGlass.ratio(PaneGlass.dimTerminalInk(TERMINAL_FG), bare),
-            OnGlass.ratio(PaneGlass.dimTerminalInk(TERMINAL_FG), bare) < OnGlass.TARGET_BODY_TEXT);
-        assertTrue("so the pane is veiled", Color.alpha(top.veil) > 0);
-        assertEquals("toward the terminal's own background", NIGHT_BASE,
-            OnGlass.opaque(top.veil));
-        // The veil's ceiling follows the user's opacity: a 30% tint may be veiled to 45%
-        // (opacity + 0.15, within 0.20..0.55), never to the opaque slab the old search reached.
-        int ceiling = Math.round(255f * (77f / 255f + 0.15f));
-        assertTrue("veil " + Color.alpha(top.veil) + " within the ceiling " + ceiling,
-            Color.alpha(top.veil) <= ceiling);
-        assertTrue("the ceiling binds on a light wallpaper", top.veilCapped);
-        assertTrue("the veil is spent to the ceiling", Math.abs(Color.alpha(top.veil) - ceiling) <= 1);
-        assertTrue("the ink is the palette's, never a re-tone",
-            top.ink == TERMINAL_FG || top.ink == PaneGlass.dimTerminalInk(TERMINAL_FG));
-    }
-
     /** A dark wallpaper under the same pane needs nothing: the veil follows the wallpaper. */
     @Test
     public void aTerminalPaneOverADarkWallpaperStaysBare() {
@@ -142,8 +115,14 @@ public class ChromeInkBandsTest {
             assertEquals(bottom.veil, pane(PANE_BOTTOM).veil);
         }
         assertEquals("no pane re-sampled the other's wallpaper", reads, wallpaper.asked.size());
-        assertNotEquals("and each pane has its own answer", top.veil, bottom.veil);
         assertEquals(2, ink.paneAnswerCountForTests());
+    }
+
+    /** No surface buys a veil: a pane over a light wallpaper is the bare glass, its ink moves. */
+    @Test
+    public void aTerminalPaneOverALightWallpaperIsNeverVeiled() {
+        assertEquals(0, android.graphics.Color.alpha(pane(PANE_TOP).veil));
+        assertEquals(0, android.graphics.Color.alpha(pane(PANE_BOTTOM).veil));
     }
 
     /** A pane that moves re-samples; an invalidate (new wallpaper, palette, mode) drops them all. */

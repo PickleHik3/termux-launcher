@@ -51,13 +51,6 @@
     <string name="error_exception_received_while_executing_app_shell_command">执行 \"%1$s\" 应用 shell 命令时收到异常。
 \n异常: %2$s</string>
     <!-- TermuxUtils -->
-    <string name="msg_report_issue">如果您想报告此问题，请从选项菜单（右上角的 3 点）复制其文本，并在以下链接之一发布您的问题。
-\n
-\n如果您要发布 &TERMUX_APP_NAME; 应用程序崩溃报告，请提供有关您正在执行的操作的详细信息（即是什么导致了崩溃）以及如何重现它，如果可能的话。
-\n
-\n如果您在 GitHub 上发布 issue，请将其发布到报告所属的存储库中。如果发布 issue 或发送电子邮件时仅带有**（部分）屏幕截图**，而没有复制的文本或此报告文件，您提交的报告**可能会被自动关闭或删除**。 您可以选择删除任何与设备本身相关的信息，如果：您认为它们属于隐私/不想分享/设备信息与问题无关。
-\n
-\n我们不为任何与黑客行为相关的工具/脚本提供支持。 经由电子邮件、在 GitHub 或其他官方 &TERMUX_APP_NAME; 社区论坛提出的问题**可能会被自动关闭或删除**甚至可能导致您被**临时或永久**封禁。 查看 %1$s/wiki/Hacking 了解详情。</string>
     <string name="msg_termux_app_required_by_app">为了运行 &TERMUX_APP_NAME; 命令，您需要 &TERMUX_APP_NAME; %1$s 应用。</string>
     <string name="error_termux_app_package_context_not_accessible">&TERMUX_APP_NAME; 应用（包上下文）不可访问。</string>
     <string name="error_termux_prefix_dir_path_not_accessible">%1$s 应用无法访问 &TERMUX_APP_NAME; 的 $PREFIX 目录。 这可能是因为您没有安装或配置好 &TERMUX_APP_NAME; 或 &TERMUX_APP_NAME; 应用与 %1$s 应用的 APK 签名不同，因为您从不同的来源安装了这两个应用程序。 也可能是因为 &TERMUX_APP_NAME; 的 $PREFIX 目录\"&TERMUX_PREFIX_DIR_PATH;\" 不存在或没有读取， 写入和执行权限。</string>

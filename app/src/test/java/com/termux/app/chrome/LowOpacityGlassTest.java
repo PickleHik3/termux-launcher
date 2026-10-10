@@ -48,18 +48,6 @@ public class LowOpacityGlassTest {
     }
 
     @Test
-    public void theInsertStepFollowsKeepAndIsGoneUnderClear() {
-        int frame = 0xFF405060;
-        assertEquals("a clear Look leaves the insert's tint as it is",
-            0x00000000, InsertTone.floorTint(0x00000000, frame, 0f));
-        assertEquals("keep 1 is the old floor", InsertTone.floorTint(0x00000000, frame),
-            InsertTone.floorTint(0x00000000, frame, 1f));
-        int half = InsertTone.floorTint(0x00000000, frame, 0.5f) >>> 24;
-        int full = InsertTone.floorTint(0x00000000, frame, 1f) >>> 24;
-        assertTrue(half > 0 && half < full);
-    }
-
-    @Test
     public void theFrostFilterTakesNothingOffUnderClearAndKeepsItsOffsetOtherwise() {
         assertSame("the ordinary filter is the one that was", GlassFilters.frost(),
             GlassFilters.frost(34));
