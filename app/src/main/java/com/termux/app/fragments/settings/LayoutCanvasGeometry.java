@@ -52,8 +52,8 @@ final class LayoutCanvasGeometry {
             + 2f * DockLayoutPolicy.LONE_ROW_AIR_DP));
     }
 
-    /** The shipped height of one extra-keys row, in dp. */
-    static final float BASE_TOOLBAR_DP = 37.5f;
+    /** The shipped height of one extra-keys row, in dp: the unit the dock's curve is sized in. */
+    static final float BASE_TOOLBAR_DP = DockLayoutPolicy.BASE_TOOLBAR_HEIGHT_DP;
 
     /** The extra keys' band, in dp: one row at the shipped height factor. */
     static int toolbarHeightDp() {

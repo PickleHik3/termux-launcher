@@ -48,7 +48,8 @@ At **Custom**, vertical sliders appear:
   - **Status bar**: the four glass sliders, plus a **Clock** button for the face and alignment
     (see [Status bar](Status_Bar.md#clock)).
   - **Terminal**: the glass sliders and **Contrast**, plus **Cursor trail** and **Terminal effect**.
-  - **Dock**: the glass sliders, **Size** and **Icons** (how many app buttons show).
+  - **Dock**: the glass sliders, **Icon size** (the dock grows to fit it) and **Icons** (how many
+    app buttons show).
   - **Keyboard**: the glass sliders, **Radius** and **Spacing**, plus a **Keyboard theme** button
     for its theme, colours and font (see [Keyboard](Keyboard.md)).
 - Tap bare wallpaper to go back to the global sliders. **Undo** steps back.
