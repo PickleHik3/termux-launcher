@@ -2039,6 +2039,10 @@
     <string name="palette_confirm_run">Run</string>
     <string name="palette_action_failed">Could not run %1$s</string>
     <string name="palette_no_match">NO MATCH — ⏎ RUNS \"%1$s\" IN THE SHELL</string>
+    <string name="palette_contacts_notice">Contacts join the results once contact access is granted</string>
+    <string name="palette_category_contacts">Contacts</string>
+    <string name="palette_contact_open_failed">Couldn\'t open this contact</string>
+    <string name="palette_contact_call_failed">Couldn\'t dial this number</string>
     <string name="palette_argument_notice">TYPE A VALUE FOR %1$s, ⏎ TO APPLY</string>
     <string name="palette_meta_awaiting_value">value</string>
     <string name="palette_meta_idle">↓ browse</string>
