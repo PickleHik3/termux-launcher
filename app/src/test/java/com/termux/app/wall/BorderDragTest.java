@@ -556,4 +556,111 @@ public class BorderDragTest {
         claimed.reset();
         assertFalse(claimed.isStatusEligible());
     }
+
+    // ---- The bottom band: the line and the air below, not the last rows ---------------------
+
+    private static final float HOLD_REACH = 9f;  // BOTTOM_HOLD_REACH_DP at 3x
+    /** The air between the frame's bottom line and the dock below it. */
+    private static final float AIR_BELOW = 300f;
+
+    private static BorderDrag bottomArmed(float x, float y, boolean canPage, float keyboardReach) {
+        BorderDrag drag = new BorderDrag();
+        drag.down(x, y, LEFT, TOP, RIGHT, BOTTOM, BAND, CORNER, SLOP, canPage, keyboardReach,
+            STATUS_REACH, NO_LIMIT, HOLD_REACH, AIR_BELOW);
+        return drag;
+    }
+
+    private static BorderDrag.Border bottomAt(float x, float y) {
+        return BorderDrag.borderAt(x, y, LEFT, TOP, RIGHT, BOTTOM, BAND, CORNER, HOLD_REACH,
+            AIR_BELOW);
+    }
+
+    @Test
+    public void theShippedHoldReachIsWhatTheseTestsAssume() {
+        assertEquals(HOLD_REACH, BorderDrag.BOTTOM_HOLD_REACH_DP * DENSITY, 0.01f);
+        assertTrue("a hold reaches less far in than the keyboard swipe",
+            BorderDrag.BOTTOM_HOLD_REACH_DP < BorderDrag.KEYBOARD_REACH_DP);
+    }
+
+    @Test
+    public void aHoldOnTheLastTextRowIsNotABorder() {
+        // The middle of the last row, well inside the old band but past the hold's reach.
+        float lastRow = BOTTOM - 30f;
+        assertEquals(BorderDrag.Border.NONE, bottomAt(550f, lastRow));
+        BorderDrag paging = bottomArmed(550f, lastRow, true, 0f);
+        assertFalse("without the keyboard swipe nothing arms there", paging.isArmed());
+        assertFalse(paging.holdElapsed());
+
+        // With the keyboard swipe on, the row arms for the swipe, but a still finger stays the
+        // content's long press.
+        BorderDrag held = bottomArmed(550f, lastRow, true, REACH);
+        assertTrue(held.isArmed());
+        assertFalse("the long press is the content's", held.holdElapsed());
+        assertEquals(BorderDrag.Claim.ABANDONED, held.claim());
+        assertFalse(held.isPaging());
+
+        // Just past the hold's reach is still the row; at it, the border.
+        assertFalse(bottomArmed(550f, BOTTOM - HOLD_REACH - 1f, true, REACH).holdElapsed());
+        assertTrue(bottomArmed(550f, BOTTOM - HOLD_REACH, true, REACH).holdElapsed());
+        assertTrue("on the line itself", bottomArmed(550f, BOTTOM, true, 0f).holdElapsed());
+    }
+
+    @Test
+    public void aPressInTheAirBelowTheFrameIsTheBottomBorderAllTheWayDown() {
+        float deep = BOTTOM + BAND + 100f;
+        assertEquals("further out than the old band", BorderDrag.Border.BOTTOM,
+            bottomAt(550f, deep));
+        assertEquals(BorderDrag.Border.BOTTOM, bottomAt(550f, BOTTOM + AIR_BELOW));
+        assertEquals("past the air is the next surface's", BorderDrag.Border.NONE,
+            bottomAt(550f, BOTTOM + AIR_BELOW + 1f));
+        BorderDrag drag = bottomArmed(550f, deep, true, REACH);
+        assertTrue(drag.holdElapsed());
+        assertTrue(drag.isPaging());
+        assertEquals(-300f, drag.travel(250f), 0.01f);
+        // The keyboard swipe takes the same air.
+        BorderDrag swipe = bottomArmed(550f, deep, true, REACH);
+        assertEquals(BorderDrag.Claim.KEYBOARD, swipe.move(550f, deep - 200f));
+        // Less air than the band still leaves the band.
+        BorderDrag.Border thin = BorderDrag.borderAt(550f, BOTTOM + BAND - 1f, LEFT, TOP, RIGHT,
+            BOTTOM, BAND, CORNER, HOLD_REACH, BAND);
+        assertEquals(BorderDrag.Border.BOTTOM, thin);
+    }
+
+    @Test
+    public void theBottomCornerSquaresStayTheCornerTabsAllTheWayDown() {
+        assertEquals(BorderDrag.Border.NONE, bottomAt(LEFT + 10f, BOTTOM + AIR_BELOW - 1f));
+        assertEquals(BorderDrag.Border.NONE, bottomAt(RIGHT - 10f, BOTTOM + BAND + 50f));
+        assertEquals(BorderDrag.Border.BOTTOM, bottomAt(LEFT + CORNER + 1f, BOTTOM + 200f));
+    }
+
+    @Test
+    public void theKeyboardSwipesReachInsideTheLineIsUnchanged() {
+        BorderDrag atReach = bottomArmed(550f, BOTTOM - REACH, true, REACH);
+        assertTrue(atReach.isKeyboardEligible());
+        assertEquals(BorderDrag.Claim.KEYBOARD, atReach.move(550f, BOTTOM - REACH - 200f));
+        BorderDrag above = bottomArmed(550f, BOTTOM - REACH - 1f, true, REACH);
+        assertFalse(above.isKeyboardEligible());
+        assertFalse("above the reach a still finger and a swipe are both the content's",
+            above.isArmed());
+        assertEquals(BorderDrag.Claim.NONE, above.move(550f, BOTTOM - REACH - 200f));
+    }
+
+    @Test
+    public void theOtherThreeBordersKeepTheirBand() {
+        float[][] presses = {
+            {550f, TOP + BAND - 1f}, {550f, TOP - BAND + 1f}, {550f, TOP + BAND + 1f},
+            {550f, TOP - BAND - 1f},
+            {LEFT + BAND - 1f, 1000f}, {LEFT - BAND + 1f, 1000f}, {LEFT + BAND + 1f, 1000f},
+            {LEFT - BAND - 1f, 1000f},
+            {RIGHT - BAND + 1f, 1000f}, {RIGHT + BAND - 1f, 1000f}, {RIGHT - BAND - 1f, 1000f},
+            {RIGHT + BAND + 1f, 1000f},
+        };
+        for (float[] press : presses) {
+            assertEquals(at(press[0], press[1]), bottomAt(press[0], press[1]));
+        }
+        // And a hold on each still pages.
+        assertTrue(bottomArmed(550f, TOP + BAND - 1f, true, REACH).holdElapsed());
+        assertTrue(bottomArmed(LEFT + BAND - 1f, 1000f, true, REACH).holdElapsed());
+        assertTrue(bottomArmed(RIGHT - BAND + 1f, 1000f, true, REACH).holdElapsed());
+    }
 }

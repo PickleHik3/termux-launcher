@@ -137,6 +137,16 @@ public class TermuxTerminalViewClientTest {
     }
 
     @Test
+    public void aSizeSetInSettingsReachesEveryPaneNotJustTheFocusedOne() throws IOException {
+        FakeTerminalHost host = host();
+
+        client(host).applyGlobalFontSize();
+
+        assertTrue(host.called("refreshPaneFontSizes"));
+        assertEquals(1, host.flushDockRequests);
+    }
+
+    @Test
     public void pinchesInsideTheDeadZoneAreLeftToTheView() throws IOException {
         FakeTerminalHost host = host();
         TermuxTerminalViewClient client = client(host);
