@@ -75,6 +75,17 @@ android {
     buildTypes.release.proguardFiles 'proguard-rules.pro'
     buildTypes.release.buildConfigField "int", "SIGNATURE",
         String.valueOf(signatureHashOf(appSigningFor('release')))
+    // The launcher's staging type (release shrinking, debug key) needs its own loader.
+    buildTypes {
+        staging {
+            signingConfig null
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles 'proguard-rules.pro'
+            buildConfigField "int", "SIGNATURE", String.valueOf(signatureHashOf(appSigningFor('staging')))
+            matchingFallbacks = ['release']
+        }
+    }
 
     buildFeatures.buildConfig true
     compileOptions {

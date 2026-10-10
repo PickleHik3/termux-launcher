@@ -8,6 +8,18 @@ release build on Waydroid (API 33 x86_64) reached the terminal, completed the to
 border drag, ran `tlstore`, and survived a restart; `pkgFlags` had no DEBUGGABLE and the signer
 was `b6da0148…`. The phone checklist below is still owed before the tag.
 
+**Staging (after 1.0.1).** 1.0.0 shipped an R8 hole (LiteRT-LM's `SamplerConfig` getters, called
+only from native code) that no test caught, because every build anyone tested was the unshrunk
+debug type. Nightlies and phone installs now use the `staging` build type: `initWith release`
+(same R8 shrinking, resource shrinking and keep rules), but debuggable so `run-as` keeps working,
+and signed with `testkey_untrusted.jks` so it installs over a release and pairs with the
+companions. `./gradlew :app:assembleStaging` writes
+`app/build/outputs/apk/staging/termux-app_apt-android-7-staging_<abi>.apk`; `scripts/dev-install.sh`
+installs the arm64 one by default. AGP runs R8 in debug mode for a debuggable type, so staging
+tree-shakes like release but skips R8's optimizations; the release build is still the one that
+ships. Both R8 tasks run a guard (`app/build.gradle`) that fails the build when R8 removed anything
+from a library that carries native code and ships no consumer keep rules.
+
 ## What we ship today
 
 - `.github/workflows/attach_debug_apks_to_release.yml` runs `:app:verifyReleaseHardening` and
@@ -106,6 +118,6 @@ Install the release-type APK over the current debug build (same key, so `adb ins
   `app/build/outputs/apk/release`, keep the `termux-app_v<versionName>_<edition>_<variant>_<abi>.apk`
   names. The workflow file lives on each edition branch, so it reaches `main`, `nix-edition` and
   `io-vaj-package` at the next cut, with the identity rules in AGENTS.md.
-- Keep nightlies (`debug_build.yml`) and dev installs on the debug type: agents and the developer
-  rely on `run-as` on test devices.
+- Nightlies (`debug_build.yml`) and dev installs use the staging type (above): shrunk like release,
+  but debuggable, because agents and the developer rely on `run-as` on test devices.
 - Mention it in the release notes only as a user-visible effect ("starts faster"); no mechanism.
