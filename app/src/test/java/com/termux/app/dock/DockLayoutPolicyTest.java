@@ -245,6 +245,22 @@ public class DockLayoutPolicyTest {
         }
     }
 
+    /**
+     * The Icon size control reads and writes the icon through {@code iconPxForScale}, so it must
+     * be the very icon the dock draws, preset for preset — and the inverse lands back on the
+     * preset itself wherever the preset is inside the stretch the icon follows.
+     */
+    @Test
+    public void theSizeControlsIconIsTheDocksIcon() {
+        assertEquals(expectedIconPx,
+            DockLayoutPolicy.iconPxForScale(capsule, preset, BASE_TOOLBAR_PX, DENSITY));
+        assertEquals(expectedIconPx, DockLayoutPolicy.iconPxForScale(capsule, preset, DENSITY));
+        if (preset <= DockLayoutPolicy.maxUsefulScale(capsule)) {
+            assertEquals(preset,
+                DockLayoutPolicy.scaleForIconPx(capsule, expectedIconPx, DENSITY), 0f);
+        }
+    }
+
     @Test
     public void iconScaleAndProgress_followTheStyleCurve() {
         DockLayout l = compute();
