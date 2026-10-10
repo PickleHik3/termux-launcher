@@ -72,7 +72,8 @@ android {
 
         splits {
             abi {
-                enable ((gradle.startParameter.taskNames.any { it.contains("Debug") } && splitAPKsForDebugBuilds == "1") ||
+                // Staging splits like debug: both are the APKs that go on a test phone.
+                enable ((gradle.startParameter.taskNames.any { it.contains("Debug") || it.contains("Staging") } && splitAPKsForDebugBuilds == "1") ||
                     (gradle.startParameter.taskNames.any { it.contains("Release") } && splitAPKsForReleaseBuilds == "1"))
                 reset()
                 include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
@@ -122,6 +123,18 @@ android {
                 TERMUX_APP_FULL_BACKUP_CONTENT: "true",
                 TERMUX_APP_USES_CLEARTEXT_TRAFFIC: "true"
             ]
+        }
+
+        // What goes on a test phone and into nightlies: the release build's R8 shrinking and keep
+        // rules, so a hole in them shows up before a tag (1.0.0 shipped one that no debug build
+        // could show), but debuggable for `run-as`, and signed with the published test key so it
+        // installs over a release and pairs with the companion apps.
+        staging {
+            initWith release
+            debuggable true
+            signingConfig signingConfigs.debug
+            // The library modules have only debug and release.
+            matchingFallbacks = ['release']
         }
     }
 
