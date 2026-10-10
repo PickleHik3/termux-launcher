@@ -888,6 +888,50 @@ public class MaterialTerminalColorSchemeTest {
             PONG, TerminalContrastLevel.DEFAULT, CROSSOVER, dark)));
     }
 
+    /**
+     * A palette the sky flipped to light reports light and hands tools light roles to go with it:
+     * the active roles are the light mode's, around the active terminal keys. They used to stay the
+     * dark theme's, so a template pairing {@code on_surface} with {@code terminal_background} drew
+     * pale text on a light terminal.
+     */
+    @Test
+    public void aFlippedPaletteExportsTheOtherModesRoles() throws Exception {
+        try {
+            RuntimeEnvironment.setQualifiers("+night");
+            Context themed = themedContext();
+            TerminalContrastLevel level = TerminalContrastLevel.DEFAULT;
+            Properties flipped = MaterialTerminalColorScheme.create(themed, level, SKY, null);
+            assertSame(com.termux.app.chrome.ChromeInk.Polarity.DARK_INK,
+                MaterialTerminalColorScheme.polarityOf(flipped));
+            PaletteSet[] sets = {
+                MaterialTerminalColorScheme.createPaletteSet(themed, level, flipped),
+                MaterialTerminalColorScheme.paletteSetSource(themed, level, flipped).call(),
+            };
+            for (PaletteSet palettes : sets) {
+                Properties active = palettes.active();
+                assertEquals("light", active.getProperty("mode"));
+                assertEquals(palettes.light().getProperty("on_surface"),
+                    active.getProperty("on_surface"));
+                assertEquals(palettes.light().getProperty("surface"), active.getProperty("surface"));
+                assertNotEquals(palettes.dark().getProperty("on_surface"),
+                    active.getProperty("on_surface"));
+                assertTrue("on_surface is a dark role", tone(active, "on_surface") < 50d);
+                assertEquals(flipped.getProperty("foreground"),
+                    active.getProperty("terminal_foreground"));
+                assertEquals(flipped.getProperty("background"),
+                    active.getProperty("terminal_background"));
+            }
+            // A palette that keeps the theme's polarity keeps the theme's roles.
+            PaletteSet own = MaterialTerminalColorScheme.createPaletteSet(themed, level,
+                MaterialTerminalColorScheme.create(themed, level, DUSK, null));
+            assertEquals("dark", own.active().getProperty("mode"));
+            assertEquals(own.dark().getProperty("on_surface"),
+                own.active().getProperty("on_surface"));
+        } finally {
+            RuntimeEnvironment.setQualifiers("+notnight");
+        }
+    }
+
     /** An opaque terminal never flips, whatever ink it was last told it wore. */
     @Test
     public void anOpaqueTerminalKeepsTheThemesPolarity() {

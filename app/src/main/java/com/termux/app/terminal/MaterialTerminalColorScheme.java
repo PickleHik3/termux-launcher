@@ -459,6 +459,11 @@ public final class MaterialTerminalColorScheme {
      * says what that mode's palette is, so it never takes the polarity a translucent pane's ground
      * gave the active one.
      *
+     * <p>The active roles are the caller's theme's, unless the ground flipped the palette to the
+     * other polarity: then they are the other mode's roles, from the same forced-mode context, so
+     * a file that says {@code mode=light} also hands a tool light roles to pair with the light
+     * terminal colours, rather than the dark theme's.
+     *
      * <p>Must run on a thread that may resolve theme attributes and resources — in practice the main
      * thread, like every other {@link #create} call.
      */
@@ -479,7 +484,9 @@ public final class MaterialTerminalColorScheme {
                                               @NonNull Properties activeTerminalProps) {
         Properties active = createMaterialRoleProperties(context, activeTerminalProps, level);
         Configuration base = context.getResources().getConfiguration();
-        return PaletteSet.of(active,
+        int flippedMode = flippedNightMode(context, activeTerminalProps);
+        return PaletteSet.of(
+            activeRoles(context, base, level, activeTerminalProps, flippedMode, active),
             paletteForNightMode(context, base, level, Configuration.UI_MODE_NIGHT_YES),
             paletteForNightMode(context, base, level, Configuration.UI_MODE_NIGHT_NO));
     }
@@ -492,6 +499,10 @@ public final class MaterialTerminalColorScheme {
      * theme that the source creates and only that thread ever touches, the way the application's
      * night-flip export already builds all three, from a snapshot of the caller's configuration
      * taken here — so the files say exactly what the single-thread build would have said.
+     *
+     * <p>A flipped palette's active roles come from a forced-mode context too, so they are built
+     * on the export thread with the halves; the theme's own roles are still built here, as the
+     * answer if that mode cannot be derived.
      */
     @NonNull
     public static java.util.concurrent.Callable<PaletteSet> paletteSetSource(
@@ -500,9 +511,58 @@ public final class MaterialTerminalColorScheme {
         Properties active = createMaterialRoleProperties(context, activeTerminalProps, level);
         Configuration base = new Configuration(context.getResources().getConfiguration());
         Context application = context.getApplicationContext();
-        return () -> PaletteSet.of(active,
+        int flippedMode = flippedNightMode(context, activeTerminalProps);
+        Properties terminal = new Properties();
+        terminal.putAll(activeTerminalProps);
+        return () -> PaletteSet.of(
+            activeRoles(application, base, level, terminal, flippedMode, active),
             paletteForNightMode(application, base, level, Configuration.UI_MODE_NIGHT_YES),
             paletteForNightMode(application, base, level, Configuration.UI_MODE_NIGHT_NO));
+    }
+
+    /**
+     * The {@code UI_MODE_NIGHT_*} whose roles describe {@code terminal}, or 0 when it wears the
+     * polarity of {@code context}'s theme. Reads the caller's theme, so it runs where the caller
+     * does.
+     */
+    private static int flippedNightMode(@NonNull Context context, @NonNull Properties terminal) {
+        ChromeInk.Polarity worn = polarityOf(terminal);
+        ChromeInk.Polarity natural = naturalPolarity(materialColor(context,
+            com.google.android.material.R.attr.colorSurface, R.color.termux_surface_base));
+        if (worn == natural) return 0;
+        return worn == ChromeInk.Polarity.PALE_INK
+            ? Configuration.UI_MODE_NIGHT_YES : Configuration.UI_MODE_NIGHT_NO;
+    }
+
+    /**
+     * The active role set: {@code ownRoles}, the caller's theme around {@code terminal}, unless the
+     * palette flipped ({@code flippedMode} non-zero) — then that mode's roles around the same
+     * terminal keys, or {@code ownRoles} again if that mode cannot be derived.
+     */
+    @NonNull
+    private static Properties activeRoles(@NonNull Context context, @NonNull Configuration base,
+                                          @NonNull TerminalContrastLevel level,
+                                          @NonNull Properties terminal, int flippedMode,
+                                          @NonNull Properties ownRoles) {
+        if (flippedMode == 0) return ownRoles;
+        try {
+            return createMaterialRoleProperties(forcedModeContext(context, base, flippedMode),
+                terminal, level);
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG,
+                "Cannot derive the roles for uiMode night " + flippedMode, e);
+            return ownRoles;
+        }
+    }
+
+    /** {@code context} with {@code nightMode} forced onto {@code base}, in the activity's theme. */
+    @NonNull
+    private static Context forcedModeContext(@NonNull Context context,
+                                             @NonNull Configuration base, int nightMode) {
+        Configuration configuration = new Configuration(base);
+        configuration.uiMode = (configuration.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | nightMode;
+        return new ContextThemeWrapper(context.createConfigurationContext(configuration),
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
     }
 
     /**
@@ -515,11 +575,7 @@ public final class MaterialTerminalColorScheme {
                                                   @NonNull TerminalContrastLevel level,
                                                   int nightMode) {
         try {
-            Configuration configuration = new Configuration(base);
-            configuration.uiMode = (configuration.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | nightMode;
-            Context themed = new ContextThemeWrapper(
-                context.createConfigurationContext(configuration),
-                R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+            Context themed = forcedModeContext(context, base, nightMode);
             return createMaterialRoleProperties(themed, create(themed, level), level);
         } catch (RuntimeException e) {
             // A palette for the mode the user is not in is worth having, never worth failing the
