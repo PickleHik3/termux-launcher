@@ -110,6 +110,30 @@ public final class MaterialTerminalColorScheme {
     private static final double GROUND_TONE_STEP = 5d;
 
     /**
+     * The tones the contrast search may move each kind of colour within ({@link #contrastTone}).
+     * Accents stop where HCT still holds most of their chroma, so a green stays green; text — the
+     * foreground — stops short of pure black and white; dim text (slot 8) keeps clear of both ends
+     * so it never passes for ordinary text or for the ground.
+     */
+    private static final double ACCENT_TONE_MIN = 20d;
+    private static final double ACCENT_TONE_MAX = 90d;
+    private static final double TEXT_TONE_MIN = 5d;
+    private static final double TEXT_TONE_MAX = 97d;
+    private static final double DIM_TONE_MIN = 10d;
+    /**
+     * The share of its own chroma an accent must keep at a tone for the search to take it. HCT's
+     * gamut narrows toward both ends and unevenly by hue — red at tone 90 holds about 15 — so a
+     * fixed tone band alone still let red fade to a pink grey.
+     */
+    private static final double ACCENT_CHROMA_KEPT = 0.6d;
+    /**
+     * How far the cursor may move from the theme's primary to stay findable, and how deep it may
+     * go: a cursor is a solid block, not a glyph, so a deep navy still reads as the accent.
+     */
+    private static final double CURSOR_TONE_REACH = 30d;
+    private static final double CURSOR_TONE_MIN = 10d;
+
+    /**
      * Build a palette for an explicit level on the terminal's own background; public so ratio and
      * signature tests are deterministic.
      *
@@ -210,11 +234,15 @@ public final class MaterialTerminalColorScheme {
         int foreground = Hct.from(warmNeutralHue(surfaceHct.getHue()),
             warmNeutralChroma(Hct.fromInt(seeds.onSurface).getChroma()),
             dark ? level.fgToneDark : level.fgToneLight).toInt();
-        foreground = contrastTone(foreground, measuredOn, level.bodyTarget);
+        foreground = contrastTone(foreground, measuredOn, level.bodyTarget, level.toneReach,
+            TEXT_TONE_MIN, TEXT_TONE_MAX, 0d);
         int cursor = ink == natural ? seeds.primary
             : Hct.from(primaryHct.getHue(), primaryHct.getChroma(),
                 dark ? PRIMARY_TONE_DARK : PRIMARY_TONE_LIGHT).toInt();
-        cursor = contrastTone(cursor, measuredOn, level.cursorRatio);
+        // The cursor is where the user is, at every level: it takes its own reach, not the
+        // level's, so Softer can soften the text without losing the cursor on a bright wallpaper.
+        cursor = contrastTone(cursor, measuredOn, level.cursorRatio, CURSOR_TONE_REACH,
+            CURSOR_TONE_MIN, ACCENT_TONE_MAX, ACCENT_CHROMA_KEPT);
 
         props.setProperty("background", hex(background));
         props.setProperty("foreground", hex(foreground));
@@ -408,8 +436,11 @@ public final class MaterialTerminalColorScheme {
             double floor = ansiFloor(slot, level);
             if (floor <= 0d) continue;
             String key = "color" + slot;
-            props.setProperty(key,
-                hex(contrastTone(Color.parseColor(props.getProperty(key)), background, floor)));
+            boolean dimText = slot == 8;
+            props.setProperty(key, hex(contrastTone(Color.parseColor(props.getProperty(key)),
+                background, floor, level.toneReach,
+                dimText ? DIM_TONE_MIN : ACCENT_TONE_MIN, ACCENT_TONE_MAX,
+                dimText ? 0d : ACCENT_CHROMA_KEPT)));
         }
     }
 
@@ -973,25 +1004,36 @@ public final class MaterialTerminalColorScheme {
     }
 
     /**
-     * {@code color} moved along its own HCT tone axis to the nearest tone that reaches
-     * {@code target} against {@code surface}. When no tone reaches it — any colour on a mid-tone
-     * wallpaper at 7:1 — the tone that comes closest, never the colour unchanged: a floor that
-     * cannot be met is still worth getting as near to as the gamut allows.
+     * {@code color} moved along its own HCT tone axis toward {@code target} against
+     * {@code surface}, no further than {@code reach} tones from where the recipe put it and never
+     * outside {@code [minTone, maxTone]}, and only at tones where it keeps at least
+     * {@code minChromaKept} of its own chroma. The nearest tone in that window that meets the target
+     * wins; when none does — any colour on a mid-tone wallpaper at 4.5:1 — the one that reads best
+     * in the window, and never one that reads worse than the colour already does.
+     *
+     * <p>The window is what keeps a palette a palette. Chasing an unreachable target all the way
+     * ends every colour at tone 0 or 100, where HCT holds no chroma: on a sky wallpaper every ANSI
+     * colour came out pure black or pure white. Accents stop where they still hold their colour,
+     * text stops short of pure black and white, and the level's reach sets how hard each one tries.
      */
     @ColorInt
     @VisibleForTesting
-    static int contrastTone(@ColorInt int color, @ColorInt int surface, double target) {
+    static int contrastTone(@ColorInt int color, @ColorInt int surface, double target,
+                            double reach, double minTone, double maxTone, double minChromaKept) {
         double ratio = contrastRatio(color, surface);
         if (ratio >= target) return color;
         Hct source = Hct.fromInt(color);
+        int from = (int) Math.ceil(Math.max(minTone, source.getTone() - reach));
+        int to = (int) Math.floor(Math.min(maxTone, source.getTone() + reach));
         int best = color;
         double bestDistance = Double.MAX_VALUE;
         int strongest = color;
         double strongestRatio = ratio;
-        // HCT keeps semantic hue/chroma while tone supplies the requested legibility. Searching all
-        // displayable tones is more robust than assuming dark themes always want a lighter glyph.
-        for (int tone = 0; tone <= 100; tone++) {
+        // HCT keeps semantic hue/chroma while tone supplies the requested legibility. Searching both
+        // directions is more robust than assuming dark themes always want a lighter glyph.
+        for (int tone = from; tone <= to; tone++) {
             int candidate = Hct.from(source.getHue(), source.getChroma(), tone).toInt();
+            if (Hct.fromInt(candidate).getChroma() < source.getChroma() * minChromaKept) continue;
             double candidateRatio = contrastRatio(candidate, surface);
             if (candidateRatio > strongestRatio) {
                 strongestRatio = candidateRatio;

@@ -11,11 +11,11 @@ import androidx.annotation.NonNull;
  * chroma. Changes the terminal palette only, never the chrome bands or the pane's glass.
  */
 public enum TerminalContrastLevel {
-    //        value      body  ansi  cursor ×chroma chroma band  normal tone  bright tone  fg tone     bg tone
+    //        value      body  ansi  cursor ×chroma chroma band  normal tone  bright tone  fg tone     bg tone     reach
     //                                              min   max    dark  light  dark  light  dark light  dark light
-    SOFTER("softer",     3.0d, 3.5d, 3.0d, 0.65d,  14d,  30d,   84d,  46d,   92d,  34d,   80d, 30d,  16d,  90d),
-    DEFAULT("default",   4.5d, 4.5d, 3.0d, 1.0d,   28d,  52d,   80d,  40d,   90d,  30d,   90d, 10d,   8d,  97d),
-    HARDER("harder",     7.0d, 6.0d, 4.5d, 1.4d,   44d,  80d,   78d,  38d,   90d,  28d,   98d,  2d,   2d, 100d);
+    SOFTER("softer",     3.0d, 3.5d, 3.0d, 0.65d,  14d,  30d,   84d,  46d,   92d,  34d,   80d, 30d,  16d,  90d,   4d),
+    DEFAULT("default",   4.5d, 4.5d, 3.0d, 1.0d,   28d,  52d,   80d,  40d,   90d,  30d,   90d, 10d,   8d,  97d,  10d),
+    HARDER("harder",     7.0d, 6.0d, 4.5d, 1.4d,   44d,  80d,   78d,  38d,   90d,  28d,   96d,  6d,   2d, 100d,  20d);
 
     @NonNull public final String value;
     /**
@@ -38,13 +38,19 @@ public enum TerminalContrastLevel {
     public final double fgToneLight;
     public final double bgToneDark;
     public final double bgToneLight;
+    /**
+     * How far, in HCT tone, a colour may move from its recipe tone to chase its contrast target.
+     * The target is what the level aims for, not a demand: over a mid-tone wallpaper no colour can
+     * reach 4.5:1, and chasing it all the way ends every colour at black or white.
+     */
+    public final double toneReach;
 
     TerminalContrastLevel(@NonNull String value, double bodyTarget, double ansiRatio,
                           double cursorRatio, double chromaScale, double chromaMin,
                           double chromaMax, double normalToneDark, double normalToneLight,
                           double brightToneDark, double brightToneLight,
                           double fgToneDark, double fgToneLight,
-                          double bgToneDark, double bgToneLight) {
+                          double bgToneDark, double bgToneLight, double toneReach) {
         this.value = value;
         this.bodyTarget = bodyTarget;
         this.ansiRatio = ansiRatio;
@@ -60,6 +66,7 @@ public enum TerminalContrastLevel {
         this.fgToneLight = fgToneLight;
         this.bgToneDark = bgToneDark;
         this.bgToneLight = bgToneLight;
+        this.toneReach = toneReach;
     }
 
     /** {@code sourceChroma} as this level spends it: scaled, then held inside the level's band. */

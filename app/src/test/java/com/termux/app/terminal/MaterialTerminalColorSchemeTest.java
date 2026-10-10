@@ -812,15 +812,13 @@ public class MaterialTerminalColorSchemeTest {
                 MaterialTerminalColorScheme.createMaterialRoleProperties(context, palette, level)
                     .getProperty("mode"));
             double body = bodyRatio(palette, SKY);
+            // Text stops short of pure black, so Harder's 7:1 tops out a little under black's.
             assertTrue(level.value + " body " + body,
-                body + .01 >= Math.min(level.bodyTarget, black));
+                body + .01 >= Math.min(level.bodyTarget, 6.0d));
             assertTrue(level.value + " is more legible than the level below", body > previous);
             previous = body;
-            for (int i = 0; i < 16; i++) {
-                double floor = MaterialTerminalColorScheme.ansiFloor(i, level);
-                assertTrue("ANSI " + i + " at " + level.value,
-                    ratio(color(palette, "color" + i), SKY) + .01 >= Math.min(floor, black));
-            }
+            // The ANSI floors are out of reach on this ground for any colour that keeps its hue;
+            // noLevelCollapsesThePaletteToBlackOrWhite holds them to their colour instead.
             assertTrue("cursor at " + level.value,
                 ratio(color(palette, "cursor"), SKY) + .01 >= level.cursorRatio);
         }
@@ -828,8 +826,10 @@ public class MaterialTerminalColorSchemeTest {
             TerminalContrastLevel.SOFTER, SKY, null), SKY) + .01 >= 3.0d);
         assertTrue("Default reaches 4.5", bodyRatio(MaterialTerminalColorScheme.build(PONG,
             TerminalContrastLevel.DEFAULT, SKY, null), SKY) + .01 >= 4.5d);
-        assertEquals("Harder is black on the sky", black, bodyRatio(MaterialTerminalColorScheme
-            .build(PONG, TerminalContrastLevel.HARDER, SKY, null), SKY), .01d);
+        double harder = bodyRatio(MaterialTerminalColorScheme.build(PONG,
+            TerminalContrastLevel.HARDER, SKY, null), SKY);
+        assertTrue("Harder reads closest to black without being black: " + harder,
+            harder > 6.0d && harder < black);
     }
 
     /** (c) A dark wallpaper keeps the theme's pale ink, and every level still meets its target. */
@@ -998,19 +998,71 @@ public class MaterialTerminalColorSchemeTest {
     }
 
     /**
-     * (f) A target no tone can reach takes the tone that comes closest. It used to hand back the
-     * colour unchanged, which on a mid-tone wallpaper meant no floor at all.
+     * (f) The contrast search stays inside its window: a target out of reach takes the best tone
+     * the window allows, not black or white. Chasing it all the way is what turned every colour on
+     * pong's sky into pure black (Harder) or pure white (Default).
      */
     @Test
-    public void contrastToneTakesTheClosestToneWhenTheTargetIsUnreachable() {
+    public void contrastToneStaysInsideItsWindow() {
         int pale = Hct.from(250d, 10d, 85d).toInt();
-        int moved = MaterialTerminalColorScheme.contrastTone(pale, SKY, 7.0d);
-        assertNotEquals(pale, moved);
-        assertEquals(ratio(Color.BLACK, SKY), ratio(moved, SKY), .01d);
-        // A reachable target is still met at the nearest tone that meets it.
-        assertTrue(ratio(MaterialTerminalColorScheme.contrastTone(pale, SKY, 4.5d), SKY) >= 4.5d);
-        // And a colour already past the target is left alone.
-        assertEquals(Color.BLACK, MaterialTerminalColorScheme.contrastTone(Color.BLACK, SKY, 3.0d));
+        int moved = MaterialTerminalColorScheme.contrastTone(pale, SKY, 7.0d, 10d, 20d, 90d, 0d);
+        double tone = Hct.fromInt(moved).getTone();
+        assertTrue("tone " + tone + " stays in the window", tone >= 74.5d && tone <= 90.5d);
+        assertNotEquals(Color.BLACK, moved);
+        assertNotEquals(Color.WHITE, moved);
+        assertTrue("never reads worse than it did", ratio(moved, SKY) >= ratio(pale, SKY));
+        // A target the window can reach is met at the nearest tone that meets it.
+        assertTrue(ratio(MaterialTerminalColorScheme.contrastTone(pale, SKY, 2.3d, 10d, 20d, 90d, 0d),
+            SKY) >= 2.3d);
+        // And a colour already past the target is left alone, window or not.
+        assertEquals(Color.BLACK,
+            MaterialTerminalColorScheme.contrastTone(Color.BLACK, SKY, 3.0d, 10d, 20d, 90d, 0d));
+    }
+
+    /** pong's pane, transparent over the sky, as the chrome measured it: the mean under the pane. */
+    private static final int SKY_PANE = 0xFF1A7BC4;
+
+    /**
+     * The reported symptom: on pong's sky every colour went pure black at Harder and pure white at
+     * Default. Over any ground, at every level and whichever ink the palette wears, the text stops
+     * short of pure black and white and every ANSI accent keeps its hue and most of its colour.
+     */
+    @Test
+    public void noLevelCollapsesThePaletteToBlackOrWhite() {
+        for (int ground : new int[] {SKY, SKY_PANE, DUSK, CROSSOVER, Color.WHITE}) {
+            for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+                for (com.termux.app.chrome.ChromeInk.Polarity current
+                    : com.termux.app.chrome.ChromeInk.Polarity.values()) {
+                    Properties palette = MaterialTerminalColorScheme.build(PONG, level, ground,
+                        current);
+                    String at = level.value + " on " + Integer.toHexString(ground) + " from "
+                        + current;
+                    int foreground = color(palette, "foreground");
+                    assertNotEquals(at, Color.BLACK, foreground | 0xFF000000);
+                    assertNotEquals(at, Color.WHITE, foreground | 0xFF000000);
+                    Hct primary = Hct.fromInt(PONG.primary);
+                    Properties recipe = MaterialTerminalColorScheme.ansiSlots(primary.getHue(),
+                        primary.getChroma(), Hct.fromInt(PONG.error).getHue(),
+                        Hct.fromInt(PONG.surface).getHue(), Hct.fromInt(PONG.surface).getChroma(),
+                        MaterialTerminalColorScheme.polarityOf(palette)
+                            == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK, level);
+                    java.util.Set<Integer> seen = new java.util.HashSet<>();
+                    for (int slot : new int[] {1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14}) {
+                        Hct built = Hct.fromInt(color(palette, "color" + slot));
+                        Hct asked = Hct.fromInt(color(recipe, "color" + slot));
+                        assertTrue(at + " color" + slot + " keeps its colour: chroma "
+                                + built.getChroma() + " of " + asked.getChroma(),
+                            built.getChroma() >= Math.min(15d, asked.getChroma() * 0.6d));
+                        double hueDrift = Math.abs(built.getHue() - asked.getHue()) % 360d;
+                        assertTrue(at + " color" + slot + " keeps its hue",
+                            Math.min(hueDrift, 360d - hueDrift) <= 20d);
+                        seen.add(color(palette, "color" + slot));
+                    }
+                    assertTrue(at + ": the normal accents stay six distinct colours",
+                        seen.size() >= 6);
+                }
+            }
+        }
     }
 
     /**
