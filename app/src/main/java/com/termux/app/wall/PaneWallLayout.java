@@ -778,7 +778,9 @@ public final class PaneWallLayout extends ViewGroup {
      * A finger landed. It arms the border drag when the wall has another place to go, and the
      * keyboard swipe when the listener wants it — on a wall of one place too, since the keyboard
      * has to be reachable from every place in every mode — and the status bar's swipe on the same
-     * terms, below the phone's own strip at the top of the screen ({@link #topGestureLimit}).
+     * terms, below the phone's own strip at the top of the screen ({@link #topGestureLimit}). The
+     * bottom band reaches a hold only just inside the line and runs out to the wall's foot
+     * ({@link BorderDrag#BOTTOM_HOLD_REACH_DP}).
      */
     private void armBorderDrag(@NonNull MotionEvent event) {
         releaseBorderDrag();
@@ -799,12 +801,16 @@ public final class PaneWallLayout extends ViewGroup {
         float right = page.getLeft() + page.getTranslationX() + page.getWidth()
             - (inset ? Math.max(0, in[2]) : 0);
         float bottom = page.getTop() + page.getHeight() - (inset ? Math.max(0, in[3]) : 0);
+        float band = BorderDrag.BAND_DP * density;
+        // The wall stops where whatever stands below the page begins, so the air between the
+        // frame and the wall's own foot is all the bottom band's.
+        float below = Math.max(band, getHeight() - bottom);
         boolean armed = mBorderDrag.down(event.getX(), event.getY(),
-            left, top, right, bottom,
-            BorderDrag.BAND_DP * density,
+            left, top, right, bottom, band,
             CornerZones.clampSize(CornerZones.paneSizePx(density), page.getWidth(), page.getHeight()),
             ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardReach,
-            statusReach, statusReach > 0f ? topGestureLimit() : Float.NEGATIVE_INFINITY);
+            statusReach, statusReach > 0f ? topGestureLimit() : Float.NEGATIVE_INFINITY,
+            BorderDrag.BOTTOM_HOLD_REACH_DP * density, below);
         if (!armed) return;
         mBorderDownX = event.getX();
         mBorderDownY = event.getY();
