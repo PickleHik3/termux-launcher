@@ -19,6 +19,8 @@
     <string name="bw_calendar_tomorrow">Tomorrow</string>
     <string name="bw_calendar_all_day">All day</string>
     <string name="bw_calendar_today">Today</string>
+    <string name="bw_calendar_previous_month">Previous month</string>
+    <string name="bw_calendar_next_month">Next month</string>
     <string name="bw_calendar_untitled">(No title)</string>
 
     <!-- Agenda and Calendar widgets: headings. %1$s is a date or a month name. -->
