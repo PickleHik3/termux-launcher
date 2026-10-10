@@ -41,6 +41,7 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.Spring;
+import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.launcher.widget.WidgetGridCaps;
 import com.termux.app.place.ChromeShape;
 import com.termux.app.place.ChromeShape.Box;
@@ -1743,8 +1744,8 @@ public final class LayoutCanvasView extends View {
                     default: grow = -dy; break;
                 }
                 commitHandleValue(Handle.DOCK_HEIGHT, scaleFor(mHandleStartScale,
-                    mHandleStartExtentPx, grow, TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT,
-                    TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT));
+                    mHandleStartExtentPx, grow, handleMin(Handle.DOCK_HEIGHT),
+                    handleMax(Handle.DOCK_HEIGHT)));
                 return;
             }
             case KEYBOARD_HEIGHT:
@@ -4321,18 +4322,23 @@ public final class LayoutCanvasView extends View {
         }
     }
 
-    private static float handleMin(@NonNull Handle handle) {
+    /**
+     * The dock's ends are the stretch its icons follow ({@code DockLayoutPolicy}'s useful scale),
+     * per Style: past them the band stands still and the handle would move nothing.
+     */
+    private float handleMin(@NonNull Handle handle) {
         switch (handle) {
-            case DOCK_HEIGHT: return TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT;
+            case DOCK_HEIGHT: return DockLayoutPolicy.minUsefulScale();
             case KEYBOARD_HEIGHT: return TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE;
             case KEYBOARD_CHIN:
             default: return TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING;
         }
     }
 
-    private static float handleMax(@NonNull Handle handle) {
+    private float handleMax(@NonNull Handle handle) {
         switch (handle) {
-            case DOCK_HEIGHT: return TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT;
+            case DOCK_HEIGHT:
+                return DockLayoutPolicy.maxUsefulScale(mStyle == LayoutStyle.FLOATING);
             case KEYBOARD_HEIGHT: return TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE;
             case KEYBOARD_CHIN:
             default: return TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING;
