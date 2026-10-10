@@ -9103,8 +9103,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // itself, so an install that never pulls the drawer down still never builds one.
         if (mAppDrawerController != null)
             mAppDrawerController.setDockChoreographyTarget(mSuggestionBarView);
-        applySuggestionBarPreferences();
+        // The dock's geometry first: the preferences pass below renders the row, and a row
+        // rendered before it knows its icon size builds every slot at a fallback size.
         applyDockLayout(buildDockLayout(0));
+        applySuggestionBarPreferences();
         if (isLauncherCatalogEnabled()) {
             mSuggestionBarView.reload();
         }
@@ -9912,6 +9914,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         DockLayout dockLayout = getDockLayout();
         mSuggestionBarView.setIconScale(dockLayout.iconScale);
         mSuggestionBarView.setDockRowHeightHintPx(dockLayout.appsRowBandHintPx);
+        // The icon with the hint, always: a row told only the hint renders its icon as a share of
+        // it, which for a row that is the icon and its air is a size smaller than the dock's.
+        mSuggestionBarView.setDockIconSizePx(dockLayout.appsRowIconPx);
         mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity());
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
         mSuggestionBarView.setBlurConfig(ChromePolicy.dockBlurEnabled(blurRadiusDp), blurRadiusDp);
