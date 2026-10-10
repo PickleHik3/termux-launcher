@@ -49,6 +49,9 @@ public class CalendarWidgetView extends BuiltinWidgetView {
     /** The month heading's side padding, and the gap between its name, year and steppers. */
     private static final int HEADING_SIDE_DP = 4;
     private static final int HEADING_GAP_DP = 8;
+    /** Extra air under the month heading, taken from the grid's rows, so the steppers' touch areas
+     *  end before the weekday letters. */
+    private static final int HEADING_GRID_GAP_DP = 4;
 
     @Nullable private FrameLayout frame;
     @Nullable private BuiltinWidgetUi ui;
@@ -228,7 +231,8 @@ public class CalendarWidgetView extends BuiltinWidgetView {
     }
 
     @NonNull private View twoByTwo(@NonNull BuiltinWidgetUi ui, @NonNull CalendarWidgetSupport.Day day) {
-        LinearLayout root = ui.column(6, CalendarWidgetSupport.wide(monthHeading(ui, day)),
+        LinearLayout root = ui.column(HEADING_GRID_GAP_DP + 6,
+            CalendarWidgetSupport.wide(monthHeading(ui, day)),
             BuiltinWidgetUi.flexTall(monthGrid(ui, day, 6)));
         inset(root, 10, 12, 10, 12, ui);
         return root;
@@ -259,7 +263,7 @@ public class CalendarWidgetView extends BuiltinWidgetView {
     @NonNull private View fourByTwo(@NonNull BuiltinWidgetUi ui, @NonNull CalendarWidgetSupport.Day day) {
         Context context = getContext();
         MonthHeading monthHeading = monthHeading(ui, day);
-        LinearLayout month = ui.column(5, CalendarWidgetSupport.wide(monthHeading),
+        LinearLayout month = ui.column(HEADING_GRID_GAP_DP + 5, CalendarWidgetSupport.wide(monthHeading),
             BuiltinWidgetUi.flexTall(monthGrid(ui, day, 5)));
         // The month goes no narrower than 16dp a day column, nor than keeps the longest month's
         // name whole beside the steppers, measured in the face and font scale it is drawn in.
