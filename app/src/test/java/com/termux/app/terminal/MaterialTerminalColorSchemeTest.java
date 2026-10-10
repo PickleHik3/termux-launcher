@@ -932,6 +932,24 @@ public class MaterialTerminalColorSchemeTest {
         }
     }
 
+    /**
+     * At full opacity in wallpaper mode the pane's tint is opaque, so the measured ground is the
+     * tint whatever the wallpaper is: a dark theme over a white wallpaper stays pale ink, and the
+     * floors are measured on the overlay base the pane really shows.
+     */
+    @Test
+    public void anOpaqueTintOverABrightWallpaperDoesNotFlipADarkTheme() {
+        int tint = MaterialTerminalColorScheme.overlayBase(PONG.surface);
+        int ground = com.termux.app.chrome.OnGlass.backdrop(Color.WHITE, 0x33000000, tint);
+        assertEquals(tint, ground);
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Properties palette = MaterialTerminalColorScheme.build(PONG, level, ground, null);
+            assertSame(level.value, com.termux.app.chrome.ChromeInk.Polarity.PALE_INK,
+                MaterialTerminalColorScheme.polarityOf(palette));
+            assertTrue(level.value, bodyRatio(palette, ground) + .01 >= level.bodyTarget);
+        }
+    }
+
     /** An opaque terminal never flips, whatever ink it was last told it wore. */
     @Test
     public void anOpaqueTerminalKeepsTheThemesPolarity() {

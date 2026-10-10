@@ -24048,11 +24048,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public int terminalTextGround() {
-            // Opaque — no wallpaper, or the opacity slider at its top — the text stands on the
-            // palette's own background. Otherwise on what the pane band last measured: the
-            // wallpaper under each pane through the dim and the pane's tint.
-            if (mPreferences == null || !shouldUseWallpaperPassthroughMode()
-                    || mPreferences.getTerminalBackgroundOpacity() >= 100) {
+            // Without the wallpaper the text stands on the palette's own background. With it, on
+            // what the pane band last measured: the wallpaper under each pane through the dim and
+            // the pane's tint — at full opacity that is the opaque tint itself, the overlay base
+            // under the Look, not the palette's background.
+            if (mPreferences == null || !shouldUseWallpaperPassthroughMode()) {
                 return Color.TRANSPARENT;
             }
             return mChrome.ink().terminalPaneGround(paneSurfaceStyle().paneGlassTintColor());
