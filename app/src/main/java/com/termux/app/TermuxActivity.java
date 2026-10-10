@@ -4651,25 +4651,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     || params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != RelativeLayout.TRUE;
                 params.removeRule(RelativeLayout.ABOVE);
                 params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
-            } else if (underKeyboardBandsShown()) {
-                // Bands under the keyboard wear a sheet of their own (applyUnderKeyboardStackGlass),
-                // keyboard up or down, so the dock's sheet is pinned at both ends: the stack's top
-                // and the top of the keyboard's column. Anchoring only the bottom and sizing it by
-                // what the keyboard leaves counted the bands a second time, over the rows.
+            } else {
+                // The dock's sheet alone is pinned at both ends, the stack's top and the top of the
+                // keyboard's column, exactly where the rows stand. Anchoring only the bottom and
+                // sizing it by the keyboard's measured height let the sheet and the rows part
+                // whenever that measure and the laid-out column disagreed (#49, split keyboard),
+                // and counted bands under the keyboard a second time, over the rows. With the
+                // keyboard gone the column is empty and the sheet runs to the stack's bottom.
                 rulesChanged = params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != RelativeLayout.TRUE
                     || params.getRule(RelativeLayout.ABOVE) != R.id.accessory_keyboard_column;
                 params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
-                params.addRule(RelativeLayout.ABOVE, R.id.accessory_keyboard_column);
-            } else {
-                rulesChanged = params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != 0
-                    || params.getRule(RelativeLayout.ABOVE) != R.id.accessory_keyboard_column;
-                params.removeRule(RelativeLayout.ALIGN_PARENT_TOP);
                 params.addRule(RelativeLayout.ABOVE, R.id.accessory_keyboard_column);
                 params.alignWithParent = true;
             }
             if (rulesChanged)
                 surface.setLayoutParams(params);
         }
+        // Pinned at both ends, the sheet's height comes from its anchors; these bounds only carry
+        // its top inset and the rows' height the capsule's corner is clamped against.
         boolean underBands = underKeyboardBandsShown();
         Rect bounds = state.keyboardShown && !underBands
             && !shouldUseUnifiedDefaultKeyboardGlassSurface(state)
