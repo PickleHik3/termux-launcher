@@ -257,4 +257,11 @@ public final class CalendarWidgetFormats {
     public static boolean isWeekend(@NonNull DayOfWeek day) {
         return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
     }
+
+    // ----- whole months ---------------------------------------------------------------------
+
+    /** The first moment of {@code month} in {@code zone}; the next month's is where it ends. */
+    public static long monthStart(@NonNull YearMonth month, @NonNull ZoneId zone) {
+        return startOfDay(month.atDay(1), zone);
+    }
 }
