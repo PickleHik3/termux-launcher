@@ -202,7 +202,9 @@ public class TermuxApplication extends Application {
             Context configuredContext = context.createConfigurationContext(effectiveConfig);
             Context themedContext = new ContextThemeWrapper(configuredContext,
                 R.style.Theme_TermuxActivity_DayNight_NoActionBar);
-            return MaterialTerminalColorScheme.createPaletteSet(themedContext, level);
+            // No pane can be measured from here: the active palette stands on the ground the
+            // activity last measured, so a flip does not undo a wallpaper's polarity.
+            return MaterialTerminalColorScheme.createPaletteSetOnLastGround(themedContext, level);
         }, palettes -> new Handler(Looper.getMainLooper()).post(
             () -> TermuxTerminalSessionActivityClient.pushExportedPaletteToLiveSessions(
                 palettes.active())));

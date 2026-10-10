@@ -4494,8 +4494,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int resolveTerminalOverlayBaseColor() {
         if (mPreferences != null && mPreferences.isTerminalDynamicColorsEnabled()) {
-            return com.termux.app.terminal.MaterialTerminalColorScheme.backgroundColor(
-                this, mPreferences.getTerminalContrastLevel());
+            // Level-independent: Terminal contrast moves the text, never the pane's glass.
+            return com.termux.app.terminal.MaterialTerminalColorScheme.overlayBaseColor(this);
         }
         if (isNightThemeActive() || LauncherSchemeTheme.isSchemeChromeActive(this)) {
             return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
@@ -24045,6 +24045,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean isWallpaperModeEnabled() {
             return TermuxActivity.this.isWallpaperModeEnabled();
+        }
+
+        @Override public int terminalTextGround() {
+            // Without the wallpaper the text stands on the palette's own background. With it, on
+            // what the pane band last measured: the wallpaper under each pane through the dim and
+            // the pane's tint — at full opacity that is the opaque tint itself, the overlay base
+            // under the Look, not the palette's background.
+            if (mPreferences == null || !shouldUseWallpaperPassthroughMode()) {
+                return Color.TRANSPARENT;
+            }
+            return mChrome.ink().terminalPaneGround(paneSurfaceStyle().paneGlassTintColor());
+        }
+
+        @Override public void setTerminalTextGroundListener(@Nullable Runnable listener) {
+            mChrome.ink().setOnTerminalPaneGroundChanged(listener);
+        }
+
+        @Override public void seedTerminalTextGround(int ground) {
+            mChrome.ink().seedPaneGround(ground);
         }
 
         @Override public boolean toggleCursorTrail() {

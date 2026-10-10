@@ -488,6 +488,30 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     boolean isWallpaperModeEnabled();
 
+    /**
+     * What the terminal's default text stands on, which the palette's contrast is measured
+     * against: {@link android.graphics.Color#TRANSPARENT} while the terminal stands on its own
+     * opaque background, otherwise the opaque composite a translucent pane shows — wallpaper, the
+     * launcher's dim, the pane's tint — averaged over the panes, one palette serving them all.
+     * Cheap: it reads what the chrome last measured and never samples.
+     */
+    default int terminalTextGround() {
+        return android.graphics.Color.TRANSPARENT;
+    }
+
+    /**
+     * Runs {@code listener} whenever {@link #terminalTextGround()} may have moved: a wallpaper,
+     * opacity or tint change, a pane resized by the keyboard or a split. It can run from inside a
+     * draw, so it must only post. Null removes it.
+     */
+    default void setTerminalTextGroundListener(@Nullable Runnable listener) {}
+
+    /**
+     * The ground a previous run measured, for {@link #terminalTextGround()} to answer until a pane
+     * is measured in this one; transparent when none ever was, and the nominal glass stands in.
+     */
+    default void seedTerminalTextGround(int ground) {}
+
     boolean toggleCursorTrail();
 
     boolean isCursorTrailEnabled();

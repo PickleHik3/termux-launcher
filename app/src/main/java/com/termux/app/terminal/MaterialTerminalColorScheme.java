@@ -14,6 +14,8 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.color.utilities.Hct;
 import com.termux.R;
+import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.OnGlass;
 import com.termux.app.theme.templates.PaletteSet;
 import com.termux.shared.errors.Error;
 import com.termux.shared.file.FileUtils;
@@ -84,7 +86,32 @@ public final class MaterialTerminalColorScheme {
     private MaterialTerminalColorScheme() {}
 
     /**
-     * Build a palette for an explicit level; public so ratio and signature tests are deterministic.
+     * Material 3's primary role tones, dark and light. The cursor is the theme's own primary while
+     * the palette keeps the theme's polarity; a palette flipped to the other polarity takes the
+     * primary's hue and chroma at the other mode's tone, as that mode's theme would.
+     */
+    private static final double PRIMARY_TONE_DARK = 80d;
+    private static final double PRIMARY_TONE_LIGHT = 40d;
+
+    /**
+     * How much better the other ink has to read before a polarity that already meets the level's
+     * body target gives way. A polarity that falls short gives way at the chrome's own
+     * {@link ChromeInk#POLARITY_FLIP_MARGIN}; one that reads well enough holds until the other
+     * reads twice as well — pale text at 3.0:1 on a sky wallpaper where dark text reaches 6.9:1.
+     */
+    @VisibleForTesting
+    static final double MARKED_POLARITY_MARGIN = 2.0d;
+
+    /**
+     * How coarsely the measured ground enters {@link #signature}, in HCT tone. A pane re-sampled
+     * from the same wallpaper moves by a unit or two of RGB and stays inside one step; a wallpaper,
+     * dim or opacity change moves it by several.
+     */
+    private static final double GROUND_TONE_STEP = 5d;
+
+    /**
+     * Build a palette for an explicit level on the terminal's own background; public so ratio and
+     * signature tests are deterministic.
      *
      * <p>Colour keys only. The result goes straight to
      * {@code TerminalColors.COLOR_SCHEME.updateWith()}, which throws {@code IllegalArgumentException}
@@ -95,45 +122,264 @@ public final class MaterialTerminalColorScheme {
      */
     @NonNull
     public static Properties create(@NonNull Context context, @NonNull TerminalContrastLevel level) {
+        return create(context, level, Color.TRANSPARENT, null);
+    }
+
+    /**
+     * As {@link #create(Context, TerminalContrastLevel)}, measured against what the text really
+     * stands on.
+     *
+     * @param ground {@link Color#TRANSPARENT} when the terminal stands on its own opaque
+     *     background; otherwise the opaque composite behind a translucent pane — wallpaper, the
+     *     launcher's dim and the pane's tint — which the palette's own background never reaches
+     * @param current the ink polarity the terminal wears now, so a ground near the crossover keeps
+     *     it ({@link #inkPolarity}); null for the theme's own
+     */
+    @NonNull
+    public static Properties create(@NonNull Context context, @NonNull TerminalContrastLevel level,
+                                    @ColorInt int ground, @Nullable ChromeInk.Polarity current) {
+        return build(Seeds.of(context), level, ground, current);
+    }
+
+    /** The four theme roles a palette is built from, read once so the build itself is pure. */
+    @VisibleForTesting
+    static final class Seeds {
+        @ColorInt final int surface;
+        @ColorInt final int onSurface;
+        @ColorInt final int primary;
+        /** The theme's error role, or 0 when it carries none. */
+        @ColorInt final int error;
+
+        Seeds(@ColorInt int surface, @ColorInt int onSurface, @ColorInt int primary,
+              @ColorInt int error) {
+            this.surface = surface;
+            this.onSurface = onSurface;
+            this.primary = primary;
+            this.error = error;
+        }
+
+        @NonNull
+        static Seeds of(@NonNull Context context) {
+            // The error role is read raw, not through materialColor: the anchor is only replaced
+            // when the theme really carries an error role. An app-resource fallback would be a
+            // colour of ours, not one of the theme's, and the whole point of the substitution is
+            // to keep red inside the theme's own tonal system.
+            return new Seeds(
+                materialColor(context, com.google.android.material.R.attr.colorSurface,
+                    R.color.termux_surface_base),
+                materialColor(context, com.google.android.material.R.attr.colorOnSurface,
+                    R.color.termux_on_surface),
+                materialColor(context, androidx.appcompat.R.attr.colorPrimary,
+                    R.color.termux_primary),
+                MaterialColors.getColor(context, androidx.appcompat.R.attr.colorError, 0));
+        }
+    }
+
+    /**
+     * The palette itself, with no {@code Context} in sight.
+     *
+     * <p>The level owns the text outright: the foreground is the surface's warmed neutral at the
+     * level's own tone, so Softer, Default and Harder differ on any ground rather than only where
+     * a floor binds. Every floor — foreground, cursor, ANSI — is then measured against what the
+     * text stands on: the palette's background when the terminal is opaque, the measured ground
+     * when it is glass. Over a ground the theme's ink cannot read on, the palette changes polarity,
+     * takes the other mode's recipe and so reports the other mode to programs through its
+     * background.
+     */
+    @NonNull
+    @VisibleForTesting
+    static Properties build(@NonNull Seeds seeds, @NonNull TerminalContrastLevel level,
+                            @ColorInt int ground, @Nullable ChromeInk.Polarity current) {
         Properties props = new Properties();
+        ChromeInk.Polarity natural = naturalPolarity(seeds.surface);
+        boolean glass = Color.alpha(ground) != 0;
+        ChromeInk.Polarity ink = glass
+            ? inkPolarity(ground, level.bodyTarget, current != null ? current : natural)
+            : natural;
+        boolean dark = ink == ChromeInk.Polarity.PALE_INK;
+        // Read before the tone move so a surface pushed to tone 2 or 100 — where HCT cannot hold
+        // much chroma — still reports the neutral hue the rest of the theme was built from.
+        Hct surfaceHct = Hct.fromInt(seeds.surface);
+        Hct primaryHct = Hct.fromInt(seeds.primary);
 
-        int surface = materialColor(context, com.google.android.material.R.attr.colorSurface,
-            R.color.termux_surface_base);
-        int foreground = materialColor(context, com.google.android.material.R.attr.colorOnSurface,
-            R.color.termux_on_surface);
-        int primary = materialColor(context, androidx.appcompat.R.attr.colorPrimary,
-            R.color.termux_primary);
-        // Raw, not materialColor: the anchor is only replaced when the theme really carries an error
-        // role. An app-resource fallback would be a colour of ours, not one of the theme's, and the
-        // whole point of the substitution is to keep red inside the theme's own tonal system.
-        int themeError = MaterialColors.getColor(context, androidx.appcompat.R.attr.colorError, 0);
+        int background = surfaceTone(seeds.surface, level, dark);
+        int measuredOn = glass ? OnGlass.opaque(ground) : background;
 
-        boolean dark = perceivedBrightness(surface) < 128;
-        // Read before the tone move so a surface pushed to tone 4 or 99 — where HCT cannot hold much
-        // chroma — still reports the neutral hue the rest of the theme was built from.
-        Hct surfaceHct = Hct.fromInt(surface);
-        Hct primaryHct = Hct.fromInt(primary);
-
-        int background = surfaceTone(surface, level);
-
-        // The foreground is a neutral too — the same nudge as slots 0/7/8/15, before the legibility
-        // search, which keeps hue and chroma and only moves tone. The cursor is an accent and is
-        // left alone.
-        foreground = warmNeutral(foreground, surfaceHct.getHue());
-        foreground = contrastTone(foreground, background, level.foregroundRatio);
-        primary = contrastTone(primary, background, level.cursorRatio);
+        // The foreground is a neutral too — the same nudge as slots 0/7/8/15 — at the level's own
+        // tone, before the legibility search, which keeps hue and chroma and only moves tone.
+        int foreground = Hct.from(warmNeutralHue(surfaceHct.getHue()),
+            warmNeutralChroma(Hct.fromInt(seeds.onSurface).getChroma()),
+            dark ? level.fgToneDark : level.fgToneLight).toInt();
+        foreground = contrastTone(foreground, measuredOn, level.bodyTarget);
+        int cursor = ink == natural ? seeds.primary
+            : Hct.from(primaryHct.getHue(), primaryHct.getChroma(),
+                dark ? PRIMARY_TONE_DARK : PRIMARY_TONE_LIGHT).toInt();
+        cursor = contrastTone(cursor, measuredOn, level.cursorRatio);
 
         props.setProperty("background", hex(background));
         props.setProperty("foreground", hex(foreground));
-        props.setProperty("cursor", hex(primary));
+        props.setProperty("cursor", hex(cursor));
 
         props.putAll(ansiSlots(primaryHct.getHue(), primaryHct.getChroma(),
-            themeError != 0 ? Hct.fromInt(themeError).getHue() : ANSI_HUE_ANCHORS[0],
+            seeds.error != 0 ? Hct.fromInt(seeds.error).getHue() : ANSI_HUE_ANCHORS[0],
             surfaceHct.getHue(), surfaceHct.getChroma(), dark, level));
 
-        applyAnsiContrastFloor(props, background, level);
+        applyAnsiContrastFloor(props, measuredOn, level);
 
         return props;
+    }
+
+    /** The ink a theme's own surface asks for: pale on a dark theme, dark on a light one. */
+    @NonNull
+    private static ChromeInk.Polarity naturalPolarity(@ColorInt int surface) {
+        return perceivedBrightness(surface) < 128
+            ? ChromeInk.Polarity.PALE_INK : ChromeInk.Polarity.DARK_INK;
+    }
+
+    /**
+     * Which ink the terminal's text takes on {@code ground}, like the chrome's own polarity:
+     * {@code current} holds unless the other ink beats it by a clear margin. Measured with the
+     * extremes, white and black, so the answer is the ground's and not the recipe's.
+     *
+     * <p>A polarity short of {@code target} gives way when the other reads
+     * {@link ChromeInk#POLARITY_FLIP_MARGIN} better; one that meets it holds until the other reads
+     * {@link #MARKED_POLARITY_MARGIN} better. Either way the losing side has to win by a factor,
+     * so a ground near the crossover — where both inks read about the same — keeps whichever the
+     * terminal already wears, and a re-sampled wallpaper cannot flap the palette. The answer is
+     * stable: asked again with its own answer as {@code current}, it gives the same one.
+     */
+    @NonNull
+    @VisibleForTesting
+    static ChromeInk.Polarity inkPolarity(@ColorInt int ground, double target,
+                                          @NonNull ChromeInk.Polarity current) {
+        int surface = OnGlass.opaque(ground);
+        double pale = contrastRatio(Color.WHITE, surface);
+        double darkInk = contrastRatio(Color.BLACK, surface);
+        boolean holdingPale = current == ChromeInk.Polarity.PALE_INK;
+        double held = holdingPale ? pale : darkInk;
+        double other = holdingPale ? darkInk : pale;
+        double margin = held >= target ? MARKED_POLARITY_MARGIN : ChromeInk.POLARITY_FLIP_MARGIN;
+        if (other < held * margin) return current;
+        return holdingPale ? ChromeInk.Polarity.DARK_INK : ChromeInk.Polarity.PALE_INK;
+    }
+
+    /** The ink a built palette wears, read off its background the way {@code mode} is. */
+    @NonNull
+    public static ChromeInk.Polarity polarityOf(@NonNull Properties palette) {
+        double tone = Hct.fromInt(Color.parseColor(palette.getProperty("background"))).getTone();
+        return tone < 50d ? ChromeInk.Polarity.PALE_INK : ChromeInk.Polarity.DARK_INK;
+    }
+
+    /**
+     * What the terminal last built against, kept in memory for a rebuild with no activity to
+     * measure it, and in a small preferences file of its own so a cold start builds on it too: the
+     * first palette after a launch is built before any pane has been sampled, and building it on
+     * the nominal glass flipped it one way and then the other, which a program following the
+     * mode (2031) saw as two theme switches. A file of its own, not the app's preferences, so the
+     * fresh-install test that reads those is not disturbed by it.
+     */
+    private static final class LastGround {
+        @ColorInt final int ground;
+        @Nullable final ChromeInk.Polarity polarity;
+
+        LastGround(@ColorInt int ground, @Nullable ChromeInk.Polarity polarity) {
+            this.ground = ground;
+            this.polarity = polarity;
+        }
+    }
+
+    private static final String GROUND_PREFS = "terminal_ground";
+    private static final String GROUND_KEY = "ground";
+    private static final String GROUND_POLARITY_KEY = "polarity";
+
+    /** Null until read from the file or first recorded. */
+    @Nullable private static volatile LastGround sLastGround;
+
+    /**
+     * Records the ground the live palette was built against and the ink it chose, in memory and
+     * — when it moved — on disk. The day/night flip rebuilds the export from the application,
+     * where no pane can be measured, and a cold start builds before one is; both build on this
+     * rather than on the palette's own background or the nominal glass.
+     */
+    public static void rememberGround(@NonNull Context context, @ColorInt int ground,
+                                      @Nullable ChromeInk.Polarity polarity) {
+        LastGround previous = lastGround(context);
+        if (previous.ground == ground && previous.polarity == polarity) return;
+        sLastGround = new LastGround(ground, polarity);
+        try {
+            groundPrefs(context).edit()
+                .putInt(GROUND_KEY, ground)
+                .putString(GROUND_POLARITY_KEY, polarity == null ? null : polarity.name())
+                .apply();
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Cannot store the terminal ground", e);
+        }
+    }
+
+    /** The ground last recorded, before or since a restart; transparent when none ever was. */
+    @ColorInt
+    public static int lastGroundColor(@NonNull Context context) {
+        return lastGround(context).ground;
+    }
+
+    /** The ink last recorded with {@link #lastGroundColor}; null when none ever was. */
+    @Nullable
+    public static ChromeInk.Polarity lastGroundPolarity(@NonNull Context context) {
+        return lastGround(context).polarity;
+    }
+
+    @NonNull
+    private static LastGround lastGround(@NonNull Context context) {
+        LastGround last = sLastGround;
+        if (last != null) return last;
+        last = loadGround(context);
+        sLastGround = last;
+        return last;
+    }
+
+    @NonNull
+    private static LastGround loadGround(@NonNull Context context) {
+        try {
+            android.content.SharedPreferences prefs = groundPrefs(context);
+            ChromeInk.Polarity polarity = null;
+            String name = prefs.getString(GROUND_POLARITY_KEY, null);
+            if (name != null) {
+                try {
+                    polarity = ChromeInk.Polarity.valueOf(name);
+                } catch (IllegalArgumentException ignored) {
+                    // A name from a build that called it something else: no ink to keep.
+                }
+            }
+            return new LastGround(prefs.getInt(GROUND_KEY, Color.TRANSPARENT), polarity);
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Cannot read the terminal ground", e);
+            return new LastGround(Color.TRANSPARENT, null);
+        }
+    }
+
+    @NonNull
+    private static android.content.SharedPreferences groundPrefs(@NonNull Context context) {
+        Context app = context.getApplicationContext();
+        return (app != null ? app : context).getSharedPreferences(GROUND_PREFS,
+            Context.MODE_PRIVATE);
+    }
+
+    /** Drops the in-memory copy so the next read comes from the file, as after a restart. */
+    @VisibleForTesting
+    static void forgetGroundInMemory() {
+        sLastGround = null;
+    }
+
+    /**
+     * {@link #createPaletteSet(Context, TerminalContrastLevel)} with the active palette built on
+     * the last ground {@link #rememberGround} recorded.
+     */
+    @NonNull
+    public static PaletteSet createPaletteSetOnLastGround(@NonNull Context context,
+                                                          @NonNull TerminalContrastLevel level) {
+        LastGround last = lastGround(context);
+        return createPaletteSet(context, level,
+            create(context, level, last.ground, last.polarity));
     }
 
     /**
@@ -195,7 +441,7 @@ public final class MaterialTerminalColorScheme {
                                 double neutralHue, double neutralChroma, boolean dark,
                                 @NonNull TerminalContrastLevel level) {
         Properties slots = new Properties();
-        double chroma = Math.max(level.chromaMin, Math.min(level.chromaMax, sourceChroma));
+        double chroma = level.accentChroma(sourceChroma);
         double normalTone = dark ? level.normalToneDark : level.normalToneLight;
         double brightTone = dark ? level.brightToneDark : level.brightToneLight;
         for (int slot = 1; slot <= 6; slot++) {
@@ -280,12 +526,19 @@ public final class MaterialTerminalColorScheme {
     /**
      * The whole export: the active palette plus a dark and a light one.
      *
-     * <p>Both halves are the same derivation as the active one, run against a configuration context
+     * <p>Both halves are the same derivation as the opaque active one, run against a configuration context
      * with the {@code UI_MODE_NIGHT_*} bits forced and re-themed with the activity's own DayNight
      * theme — the trick {@code TermuxApplication}'s background refresh already uses. Dynamic colours
      * are pure resource qualifiers ({@code values-v31} / {@code values-night-v31}), so a forced
      * configuration resolves the other mode's roles exactly as the activity would in it; no activity
-     * and no recreation is involved.
+     * and no recreation is involved. The halves are measured on their own backgrounds: a mode file
+     * says what that mode's palette is, so it never takes the polarity a translucent pane's ground
+     * gave the active one.
+     *
+     * <p>The active roles are the caller's theme's, unless the ground flipped the palette to the
+     * other polarity: then they are the other mode's roles, from the same forced-mode context, so
+     * a file that says {@code mode=light} also hands a tool light roles to pair with the light
+     * terminal colours, rather than the dark theme's.
      *
      * <p>Must run on a thread that may resolve theme attributes and resources — in practice the main
      * thread, like every other {@link #create} call.
@@ -307,7 +560,9 @@ public final class MaterialTerminalColorScheme {
                                               @NonNull Properties activeTerminalProps) {
         Properties active = createMaterialRoleProperties(context, activeTerminalProps, level);
         Configuration base = context.getResources().getConfiguration();
-        return PaletteSet.of(active,
+        int flippedMode = flippedNightMode(context, activeTerminalProps);
+        return PaletteSet.of(
+            activeRoles(context, base, level, activeTerminalProps, flippedMode, active),
             paletteForNightMode(context, base, level, Configuration.UI_MODE_NIGHT_YES),
             paletteForNightMode(context, base, level, Configuration.UI_MODE_NIGHT_NO));
     }
@@ -320,6 +575,10 @@ public final class MaterialTerminalColorScheme {
      * theme that the source creates and only that thread ever touches, the way the application's
      * night-flip export already builds all three, from a snapshot of the caller's configuration
      * taken here — so the files say exactly what the single-thread build would have said.
+     *
+     * <p>A flipped palette's active roles come from a forced-mode context too, so they are built
+     * on the export thread with the halves; the theme's own roles are still built here, as the
+     * answer if that mode cannot be derived.
      */
     @NonNull
     public static java.util.concurrent.Callable<PaletteSet> paletteSetSource(
@@ -328,9 +587,58 @@ public final class MaterialTerminalColorScheme {
         Properties active = createMaterialRoleProperties(context, activeTerminalProps, level);
         Configuration base = new Configuration(context.getResources().getConfiguration());
         Context application = context.getApplicationContext();
-        return () -> PaletteSet.of(active,
+        int flippedMode = flippedNightMode(context, activeTerminalProps);
+        Properties terminal = new Properties();
+        terminal.putAll(activeTerminalProps);
+        return () -> PaletteSet.of(
+            activeRoles(application, base, level, terminal, flippedMode, active),
             paletteForNightMode(application, base, level, Configuration.UI_MODE_NIGHT_YES),
             paletteForNightMode(application, base, level, Configuration.UI_MODE_NIGHT_NO));
+    }
+
+    /**
+     * The {@code UI_MODE_NIGHT_*} whose roles describe {@code terminal}, or 0 when it wears the
+     * polarity of {@code context}'s theme. Reads the caller's theme, so it runs where the caller
+     * does.
+     */
+    private static int flippedNightMode(@NonNull Context context, @NonNull Properties terminal) {
+        ChromeInk.Polarity worn = polarityOf(terminal);
+        ChromeInk.Polarity natural = naturalPolarity(materialColor(context,
+            com.google.android.material.R.attr.colorSurface, R.color.termux_surface_base));
+        if (worn == natural) return 0;
+        return worn == ChromeInk.Polarity.PALE_INK
+            ? Configuration.UI_MODE_NIGHT_YES : Configuration.UI_MODE_NIGHT_NO;
+    }
+
+    /**
+     * The active role set: {@code ownRoles}, the caller's theme around {@code terminal}, unless the
+     * palette flipped ({@code flippedMode} non-zero) — then that mode's roles around the same
+     * terminal keys, or {@code ownRoles} again if that mode cannot be derived.
+     */
+    @NonNull
+    private static Properties activeRoles(@NonNull Context context, @NonNull Configuration base,
+                                          @NonNull TerminalContrastLevel level,
+                                          @NonNull Properties terminal, int flippedMode,
+                                          @NonNull Properties ownRoles) {
+        if (flippedMode == 0) return ownRoles;
+        try {
+            return createMaterialRoleProperties(forcedModeContext(context, base, flippedMode),
+                terminal, level);
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG,
+                "Cannot derive the roles for uiMode night " + flippedMode, e);
+            return ownRoles;
+        }
+    }
+
+    /** {@code context} with {@code nightMode} forced onto {@code base}, in the activity's theme. */
+    @NonNull
+    private static Context forcedModeContext(@NonNull Context context,
+                                             @NonNull Configuration base, int nightMode) {
+        Configuration configuration = new Configuration(base);
+        configuration.uiMode = (configuration.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | nightMode;
+        return new ContextThemeWrapper(context.createConfigurationContext(configuration),
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
     }
 
     /**
@@ -343,11 +651,7 @@ public final class MaterialTerminalColorScheme {
                                                   @NonNull TerminalContrastLevel level,
                                                   int nightMode) {
         try {
-            Configuration configuration = new Configuration(base);
-            configuration.uiMode = (configuration.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | nightMode;
-            Context themed = new ContextThemeWrapper(
-                context.createConfigurationContext(configuration),
-                R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+            Context themed = forcedModeContext(context, base, nightMode);
             return createMaterialRoleProperties(themed, create(themed, level), level);
         } catch (RuntimeException e) {
             // A palette for the mode the user is not in is worth having, never worth failing the
@@ -636,6 +940,31 @@ public final class MaterialTerminalColorScheme {
         return 31 * result + level.ordinal();
     }
 
+    /**
+     * As {@link #signature(Context, TerminalContrastLevel)}, for a palette built on {@code ground}
+     * with {@code current} as the ink it wears: the polarity that ground asks for and its tone in
+     * {@link #GROUND_TONE_STEP} steps join the fingerprint, so a wallpaper or opacity change that
+     * moves what the text stands on rebuilds the palette, and a re-sample of the same wallpaper
+     * does not. An opaque ground adds nothing: the palette is measured on its own background.
+     */
+    public static int signature(@NonNull Context context, @NonNull TerminalContrastLevel level,
+                                @ColorInt int ground, @Nullable ChromeInk.Polarity current) {
+        int result = signature(context, level);
+        if (Color.alpha(ground) == 0) return result;
+        ChromeInk.Polarity natural = naturalPolarity(materialColor(context,
+            com.google.android.material.R.attr.colorSurface, R.color.termux_surface_base));
+        ChromeInk.Polarity ink = inkPolarity(ground, level.bodyTarget,
+            current != null ? current : natural);
+        result = 31 * result + 1 + ink.ordinal();
+        return 31 * result + groundToneBucket(ground);
+    }
+
+    /** {@code ground}'s tone in {@link #GROUND_TONE_STEP} steps. */
+    @VisibleForTesting
+    static int groundToneBucket(@ColorInt int ground) {
+        return (int) Math.round(Hct.fromInt(OnGlass.opaque(ground)).getTone() / GROUND_TONE_STEP);
+    }
+
     /** WCAG relative-luminance contrast ratio. */
     public static double contrastRatio(@ColorInt int first, @ColorInt int second) {
         double a = luminance(first);
@@ -643,45 +972,74 @@ public final class MaterialTerminalColorScheme {
         return (Math.max(a, b) + 0.05d) / (Math.min(a, b) + 0.05d);
     }
 
+    /**
+     * {@code color} moved along its own HCT tone axis to the nearest tone that reaches
+     * {@code target} against {@code surface}. When no tone reaches it — any colour on a mid-tone
+     * wallpaper at 7:1 — the tone that comes closest, never the colour unchanged: a floor that
+     * cannot be met is still worth getting as near to as the gamut allows.
+     */
     @ColorInt
-    private static int contrastTone(@ColorInt int color, @ColorInt int surface, double target) {
-        if (contrastRatio(color, surface) >= target) return color;
+    @VisibleForTesting
+    static int contrastTone(@ColorInt int color, @ColorInt int surface, double target) {
+        double ratio = contrastRatio(color, surface);
+        if (ratio >= target) return color;
         Hct source = Hct.fromInt(color);
         int best = color;
         double bestDistance = Double.MAX_VALUE;
+        int strongest = color;
+        double strongestRatio = ratio;
         // HCT keeps semantic hue/chroma while tone supplies the requested legibility. Searching all
         // displayable tones is more robust than assuming dark themes always want a lighter glyph.
         for (int tone = 0; tone <= 100; tone++) {
             int candidate = Hct.from(source.getHue(), source.getChroma(), tone).toInt();
-            if (contrastRatio(candidate, surface) < target) continue;
+            double candidateRatio = contrastRatio(candidate, surface);
+            if (candidateRatio > strongestRatio) {
+                strongestRatio = candidateRatio;
+                strongest = candidate;
+            }
+            if (candidateRatio < target) continue;
             double distance = Math.abs(tone - source.getTone());
             if (distance < bestDistance) {
                 bestDistance = distance;
                 best = candidate;
             }
         }
-        return best;
+        return bestDistance == Double.MAX_VALUE ? strongest : best;
     }
 
     /**
-     * The generated terminal background alone.
+     * The colour a terminal pane's glass is tinted from in wallpaper mode.
      *
-     * <p>Split out because the surface colour is all the wallpaper-mode overlay needs, and reading it
-     * off a full {@link #create} was costing a 101-tone HCT contrast search for the foreground, the
-     * cursor and all sixteen ANSI colours — around 700µs on a desktop JVM, several milliseconds on a
-     * phone — every time the terminal surface was restyled.
+     * <p>Fixed at Default's background tone and never the palette's own: Terminal contrast moves
+     * the text, not the glass under it, and a palette flipped to light by a bright wallpaper must
+     * not turn the pane into a light slab. Split out of {@link #create} because the surface colour
+     * is all the overlay needs, and a full build costs a 101-tone HCT search per slot every time
+     * the terminal surface is restyled.
      */
     @ColorInt
-    public static int backgroundColor(@NonNull Context context,
-                                      @NonNull TerminalContrastLevel level) {
-        return surfaceTone(materialColor(context, com.google.android.material.R.attr.colorSurface,
-            R.color.termux_surface_base), level);
+    public static int overlayBaseColor(@NonNull Context context) {
+        return overlayBase(materialColor(context, com.google.android.material.R.attr.colorSurface,
+            R.color.termux_surface_base));
     }
 
     @ColorInt
     @VisibleForTesting
+    static int overlayBase(@ColorInt int surface) {
+        return surfaceTone(surface, TerminalContrastLevel.DEFAULT);
+    }
+
+    /** {@code color} at the level's background tone for its own polarity. */
+    @ColorInt
+    @VisibleForTesting
     static int surfaceTone(@ColorInt int color, @NonNull TerminalContrastLevel level) {
-        boolean dark = perceivedBrightness(color) < 128;
+        return surfaceTone(color, level, perceivedBrightness(color) < 128);
+    }
+
+    /** {@code color}'s hue and chroma at the level's dark or light background tone. */
+    @ColorInt
+    @VisibleForTesting
+    static int surfaceTone(@ColorInt int color, @NonNull TerminalContrastLevel level,
+                           boolean dark) {
         Hct source = Hct.fromInt(color);
         double tone = dark ? level.bgToneDark : level.bgToneLight;
         return Hct.from(source.getHue(), source.getChroma(), tone).toInt();
