@@ -14,13 +14,10 @@ import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.ContextCompat;
 
 import com.termux.R;
-import com.termux.app.chrome.KeyboardMaterialPolicy;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.place.PlaceLayout;
-import com.termux.shared.theme.ThemeUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.view.KeyboardUtils;
@@ -1577,7 +1574,6 @@ public final class TermuxInAppKeyboard {
         InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
         mKeyboardView.setKeyColorOverrides(scheme.resolvedOverrides());
-        applySplitSlabColor();
     }
 
     /**
@@ -1666,8 +1662,7 @@ public final class TermuxInAppKeyboard {
      * The parting [data] asks for, in key-width units; zero for any type but split. Never
      * narrower than {@link #setMinimumSplitGapPx}'s floor once the view has been measured: the
      * floor is pixels, and the units that buy them depend on how wide the keys are drawn. The
-     * floor is the strip left clear between the halves' slabs, which reach into the parting
-     * past the keys, so the keys part that much wider.
+     * floor is the strip between the two key runs, as the view reports it.
      */
     private float splitGapUnits(@Nullable KeyboardData data) {
         if (data == null || mForm != PlaceLayout.KeyboardForm.SPLIT)
@@ -1677,13 +1672,12 @@ public final class TermuxInAppKeyboard {
         if (mMinSplitGapPx <= 0 || mKeyboardView == null)
             return units;
         return Math.max(units, LayoutModifier.gapUnitsForPx(data,
-            mKeyboardView.getKeyContentWidthPx(),
-            mMinSplitGapPx + mKeyboardView.getSplitSlabReachPx()));
+            mKeyboardView.getKeyContentWidthPx(), mMinSplitGapPx));
     }
 
     /**
-     * Asks the split keyboard to leave a strip at least [px] wide clear between its halves, so
-     * a host can stand something in the gap; zero gives the user's own parting back.
+     * Asks the split keyboard to leave a strip at least [px] wide between its key runs, so a
+     * host can stand something in the gap; zero gives the user's own parting back.
      * Idempotent, and re-read on every call: the floor is in pixels, so the same floor asks for
      * different units once the view has been measured. Returns whether the halves moved, which
      * is a relayout the caller can wait for.
@@ -1709,40 +1703,15 @@ public final class TermuxInAppKeyboard {
 
     /**
      * Hands the view a layout together with the parting it was built with. The two travel
-     * together: the view sizes its keys from the layout, and the gap tells it where to stop
-     * painting and which presses are not its own.
+     * together: the view sizes its keys from the layout, and the gap tells it where the strip
+     * between the key runs is.
      */
     private void applyKeyboardToView(@Nullable KeyboardData data) {
         if (mKeyboardView == null)
             return;
         mKeyboardView.setSplitGapUnits(appliedSplitGapUnits());
-        applySplitSlabColor();
         if (data != null)
             mKeyboardView.setKeyboard(data);
-    }
-
-    /**
-     * The colour the split halves' slabs are painted in: the launcher's overlay surface role,
-     * {@code colorSurfaceContainerHigh}, resolved here because the keyboard module knows no
-     * launcher attributes.
-     *
-     * <p>A parted keyboard lies over the content on every place — the halves are the panel, not
-     * a fill inside one of the host's surfaces — so they
-     * are opaque in that one role and ignore the Keyboard surface's opacity. Pushed from the two
-     * places the view's appearance is settled: with the layout, and with every palette refresh,
-     * so a theme or wallpaper change repaints the slabs with the keys.
-     */
-    private void applySplitSlabColor() {
-        if (mKeyboardView == null)
-            return;
-        if (!KeyboardMaterialPolicy.paintsOwnSolidSlabs(mForm)) {
-            mKeyboardView.setSplitBackgroundColor(null);
-            return;
-        }
-        Context context = requireContainer().getContext();
-        mKeyboardView.setSplitBackgroundColor(ThemeUtils.getSystemAttrColor(context,
-            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-            ContextCompat.getColor(context, R.color.termux_surface_panel_high)));
     }
 
     /** Re-parts, or un-parts, what is on screen after the keyboard type or the gap moved. */
