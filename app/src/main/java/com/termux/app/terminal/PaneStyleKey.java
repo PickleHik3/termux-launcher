@@ -26,6 +26,7 @@ public final class PaneStyleKey {
     @Nullable private final ColorFilter mFrostFilter;
     private final int mTint;
     private final boolean mRim;
+    private final boolean mOpeningLine;
     private final int mGrainStrength;
     private final float mCornerRadiusPx;
     private final int mCornerRadiusDp;
@@ -42,6 +43,7 @@ public final class PaneStyleKey {
         mFrostFilter = style.paneGlassFrostFilter();
         mTint = style.paneGlassTintColor();
         mRim = style.paneGlassRimWanted();
+        mOpeningLine = style.paneOpeningLine();
         mGrainStrength = style.paneGlassGrainStrength();
         mCornerRadiusPx = style.paneGlassCornerRadiusPx();
         mCornerRadiusDp = style.paneCornerRadiusDp();
@@ -68,6 +70,7 @@ public final class PaneStyleKey {
             && mFrostFilter == that.mFrostFilter
             && mTint == that.mTint
             && mRim == that.mRim
+            && mOpeningLine == that.mOpeningLine
             && mGrainStrength == that.mGrainStrength
             && Float.compare(mCornerRadiusPx, that.mCornerRadiusPx) == 0
             && mCornerRadiusDp == that.mCornerRadiusDp
@@ -80,7 +83,7 @@ public final class PaneStyleKey {
     @Override
     public int hashCode() {
         return Objects.hash(mGlass, mBorder, System.identityHashCode(mFrame), mFrameRect,
-            System.identityHashCode(mFrostFilter), mTint, mRim, mGrainStrength, mCornerRadiusPx,
+            System.identityHashCode(mFrostFilter), mTint, mRim, mOpeningLine, mGrainStrength, mCornerRadiusPx,
             mCornerRadiusDp, mGapDp, System.identityHashCode(mWallBehind), mWallBehindColor,
             mRefraction);
     }

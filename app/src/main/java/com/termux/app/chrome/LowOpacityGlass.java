@@ -2,9 +2,9 @@ package com.termux.app.chrome;
 
 /**
  * How the fixed darkening floors give way when a surface's own opacity is very low (the Clear
- * Look sets 2%). A sheet that never goes under 92%, a chip under 88%, an insert always a tone step
- * darker than the frame and a frost that always takes 6 off every channel were each right for a
- * dock at its usual tint, and each turned a see-through Look back into a dark slab.
+ * Look sets 2%). A sheet that never goes under 92%, a chip under 88% and a frost that always takes
+ * 6 off every channel were each right for a dock at its usual tint, and each turned a see-through
+ * Look back into a dark slab.
  *
  * <p>One ramp serves them all: at or under {@link #CLEAR_UNDER} of opacity a floor is gone and the
  * surface is exactly as opaque as it says; from {@link #FULL_FROM} up the floor is whole, as it

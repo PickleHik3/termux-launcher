@@ -3185,9 +3185,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        // The lone pane's frame is the shared rim, the same border the status bar, dock and
-        // keyboard wear (the dock's gradient, under every look). The Material active colour belongs to
-        // the focused pane of a split only (PaneBorderStyle).
+        // The lone pane's frame is the shared rim under Floating, the same border the status bar,
+        // dock and keyboard wear (the dock's gradient, under every look), and the opening's line
+        // under Docked, as the panes' own frames are (PaneRim). The Material active colour belongs
+        // to the focused pane of a split only (PaneBorderStyle).
         borderView.setBackground(terminalBorderRim(borderView, cornerRadiusPx));
         if (borderView instanceof TerminalGlassFrameView) {
             ((TerminalGlassFrameView) borderView).setRim(false, 0f);
@@ -3228,24 +3229,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Drawable mTerminalBorderRim;
     private float mTerminalBorderRimRadiusPx = Float.NaN;
     private int mTerminalBorderRimStrokePx = -1;
+    /** Whether {@link #mTerminalBorderRim} is the Docked opening's line rather than the glass rim. */
+    private boolean mTerminalBorderRimIsLine;
 
     /**
-     * The rim the lone pane's frame line wears: the drawable it already has while the radius and
-     * the stroke it was made for still hold — it is drawn from those alone — else a new one.
+     * The rim the lone pane's frame line wears: the drawable it already has while the radius, the
+     * stroke and the Style it was made for still hold — it is drawn from those alone — else a new
+     * one: the opening's line under Docked, the glass's gradient rim under Floating.
      */
     @NonNull
     private Drawable terminalBorderRim(@NonNull View borderView, float cornerRadiusPx) {
         int strokePx = Math.max(1, Math.round(dpToPx(1)));
+        boolean line = !isRoundedDockStyle();
         Drawable rim = mTerminalBorderRim;
         if (rim != null && borderView.getBackground() == rim
             && Float.compare(cornerRadiusPx, mTerminalBorderRimRadiusPx) == 0
-            && strokePx == mTerminalBorderRimStrokePx) {
+            && strokePx == mTerminalBorderRimStrokePx && line == mTerminalBorderRimIsLine) {
             return rim;
         }
-        rim = mChrome.glass().rimDrawable(cornerRadiusPx);
+        rim = line ? com.termux.app.terminal.PaneRim.openingLine(this, cornerRadiusPx)
+            : mChrome.glass().rimDrawable(cornerRadiusPx);
         mTerminalBorderRim = rim;
         mTerminalBorderRimRadiusPx = cornerRadiusPx;
         mTerminalBorderRimStrokePx = strokePx;
+        mTerminalBorderRimIsLine = line;
         return rim;
     }
 
@@ -3463,17 +3470,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The frame glass's effective colour, for the insert's tone floor: the dock's tint at the
-     * dock's opacity over a mid grey standing for the wallpaper. Deliberately not sampled from the
-     * wallpaper, so the floor is a pure function of the settings and cannot flicker as it pans.
-     */
-    private int frameGlassEstimate() {
-        float alpha = mPreferences == null ? 0.5f : mPreferences.getAppBarOpacity() / 100f;
-        return androidx.core.graphics.ColorUtils.compositeColors(
-            resolveAccessorySurfaceColor(alpha), 0xFF808080);
-    }
-
-    /**
      * The glass supplier the pane controller paints from. Every value it reads is the same one the
      * dock and status surfaces use, so "Match all surfaces" moves the panes with everything else.
      */
@@ -3540,17 +3536,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public int paneGlassTintColor() {
-                int tint = shouldShowTerminalOverlaySurface()
+                // Under both Styles the pane is the frame's glass until Darkness is raised: the
+                // Docked insert reads as a window by the hairline round its opening, not by tone.
+                return shouldShowTerminalOverlaySurface()
                     ? mChrome.glass().look(mPreferences != null
                         ? mPreferences.getTerminalTintStrength()
                         : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
                         .flatTint(resolveTerminalSurfaceColor())
                     : Color.TRANSPARENT;
-                // The Docked insert stands at least one tone step darker than the frame glass.
-                return isRoundedDockStyle() ? tint
-                    : com.termux.app.chrome.InsertTone.floorTint(tint, frameGlassEstimate(),
-                        com.termux.app.chrome.LowOpacityGlass.keep(mPreferences != null
-                            ? mPreferences.getTerminalBackgroundOpacity() / 100f : 1f));
             }
 
             @Override public int paneGlassVeil(@NonNull Rect rootRect) {
@@ -3567,6 +3560,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public boolean paneGlassRimWanted() {
                 return true; // every look wears the dock's gradient rim
+            }
+
+            @Override public boolean paneOpeningLine() {
+                // Docked: the insert is a window in the frame, read by its line, not by its tone.
+                return !isRoundedDockStyle();
             }
 
             @Override @Nullable public Drawable paneGlassRim(float radiusPx) {
