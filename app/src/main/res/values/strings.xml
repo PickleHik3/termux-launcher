@@ -2450,6 +2450,14 @@
     <string name="termux_fonts_weight_dialog_title">Weight (%1$d–%2$d)</string>
     <string name="termux_fonts_weight_apply">Apply</string>
     <string name="termux_fonts_weight_reset">Family default</string>
+    <string name="termux_fonts_size_title">Font size</string>
+    <string name="termux_fonts_size_summary">%1$d dp</string>
+    <string name="termux_fonts_size_dialog_title">Font size (%1$d–%2$d)</string>
+    <string name="termux_fonts_size_reset">Default</string>
+    <string name="termux_fonts_size_unit">dp</string>
+    <string name="termux_fonts_size_decrease">Decrease font size</string>
+    <string name="termux_fonts_size_increase">Increase font size</string>
+    <string name="termux_fonts_size_out_of_range">Between %1$d and %2$d</string>
     <string name="termux_fonts_families_title">Families</string>
     <string name="termux_fonts_meta_installed">Installed</string>
     <!-- Count of real faces a family ships. A leading space in a resource value is stripped, so the

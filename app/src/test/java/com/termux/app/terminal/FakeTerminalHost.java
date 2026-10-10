@@ -366,6 +366,11 @@ class FakeTerminalHost implements TerminalHost {
         return true;
     }
 
+    @Override public boolean refreshPaneFontSizes() {
+        record("refreshPaneFontSizes");
+        return true;
+    }
+
     // --- Soft keyboard ---
 
     @Override public void onSystemImeRequested() {

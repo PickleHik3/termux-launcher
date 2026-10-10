@@ -92,7 +92,8 @@ with the full-width row, and the row's shell drops into the lower cell.
 
 Text size is separate from pane size. Pinch inside a pane, or run **Increase font size** /
 **Decrease font size** (`Ctrl+Alt++` / `Ctrl+Alt+-`), to change only that pane. A new split starts
-at its source pane's size, and panes you never zoomed follow the global size. The scratchpad keeps
+at its source pane's size, and panes you never zoomed follow the global size — set it with
+**Settings → Appearance → Terminal fonts → Font size**. The scratchpad keeps
 its own size.
 
 ## Automatic layouts

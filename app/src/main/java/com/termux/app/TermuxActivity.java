@@ -4651,25 +4651,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     || params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != RelativeLayout.TRUE;
                 params.removeRule(RelativeLayout.ABOVE);
                 params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
-            } else if (underKeyboardBandsShown()) {
-                // Bands under the keyboard wear a sheet of their own (applyUnderKeyboardStackGlass),
-                // keyboard up or down, so the dock's sheet is pinned at both ends: the stack's top
-                // and the top of the keyboard's column. Anchoring only the bottom and sizing it by
-                // what the keyboard leaves counted the bands a second time, over the rows.
+            } else {
+                // The dock's sheet alone is pinned at both ends, the stack's top and the top of the
+                // keyboard's column, exactly where the rows stand. Anchoring only the bottom and
+                // sizing it by the keyboard's measured height let the sheet and the rows part
+                // whenever that measure and the laid-out column disagreed (#49, split keyboard),
+                // and counted bands under the keyboard a second time, over the rows. With the
+                // keyboard gone the column is empty and the sheet runs to the stack's bottom.
                 rulesChanged = params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != RelativeLayout.TRUE
                     || params.getRule(RelativeLayout.ABOVE) != R.id.accessory_keyboard_column;
                 params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
-                params.addRule(RelativeLayout.ABOVE, R.id.accessory_keyboard_column);
-            } else {
-                rulesChanged = params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != 0
-                    || params.getRule(RelativeLayout.ABOVE) != R.id.accessory_keyboard_column;
-                params.removeRule(RelativeLayout.ALIGN_PARENT_TOP);
                 params.addRule(RelativeLayout.ABOVE, R.id.accessory_keyboard_column);
                 params.alignWithParent = true;
             }
             if (rulesChanged)
                 surface.setLayoutParams(params);
         }
+        // Pinned at both ends, the sheet's height comes from its anchors; these bounds only carry
+        // its top inset and the rows' height the capsule's corner is clamped against.
         boolean underBands = underKeyboardBandsShown();
         Rect bounds = state.keyboardShown && !underBands
             && !shouldUseUnifiedDefaultKeyboardGlassSurface(state)
@@ -4887,6 +4886,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             width >= height ? com.termux.app.place.ChromeShapeModel.SplitAxis.SIDE_BY_SIDE
                 : com.termux.app.place.ChromeShapeModel.SplitAxis.STACKED, 0f, null);
     }
+
+    /**
+     * Where the keyboard's host stands in the model: the keyboard, or a split keyboard's two
+     * halves. The host is one surface across both halves and the parting between them, so its
+     * clip and rim are those of the pieces' union, as the docked keyboard's are of its one piece.
+     */
+    private static final com.termux.app.place.ChromeShape.PieceId[] KEYBOARD_PIECES = {
+        com.termux.app.place.ChromeShape.PieceId.KEYBOARD,
+        com.termux.app.place.ChromeShape.PieceId.KEYBOARD_LEFT,
+        com.termux.app.place.ChromeShape.PieceId.KEYBOARD_RIGHT};
 
     /** The clip of the view that stands where {@code ids} stand in the model; null if none shown. */
     @Nullable
@@ -5328,7 +5337,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         List<Element> rows = new ArrayList<>(
             EdgeStackPolicy.overKeyboard(currentPlaceLayout()));
         List<com.termux.app.place.ChromeShape.PieceId> ids = chromePieceIds(rows);
-        if (withKeyboard) ids.add(com.termux.app.place.ChromeShape.PieceId.KEYBOARD);
+        if (withKeyboard) ids.addAll(Arrays.asList(KEYBOARD_PIECES));
         return ids;
     }
 
@@ -5694,11 +5703,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A scheme background color or a non-default background opacity must repaint only the
         // keyboard, not the material it would share with the dock, so either drops the keyboard
         // to its own local surface path. Every arrangement that is not the glass drops out of it
-        // too, and for one reason: it shares no material with the dock. One material spanning the
-        // dock and a split keyboard would span the parting between the halves; a floating card
-        // and an overlaying keyboard lie over the content, and the dock underneath keeps the
-        // glass it has. Bands under the keyboard wear a card of their own below it, and one
-        // material spanning the dock and the keyboard would run on down behind that card.
+        // too, and for one reason: it shares no material with the dock. A floating card and an
+        // overlaying keyboard lie over the content, and the dock underneath keeps the glass it
+        // has. A split keyboard is the docked one with its keys parted, so it shares the sheet
+        // like the docked one does. Bands under the keyboard wear a card of their own below it,
+        // and one material spanning the dock and the keyboard would run on down behind that card.
         if (underKeyboardBandsShown()) return false;
         return ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(state.toolbarShown,
             state.keyboardShown, isRoundedDockStyle(), isInAppKeyboardGlassSurface())
@@ -5734,10 +5743,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * True for every arrangement whose host crops no wallpaper: the split keyboard, whose halves
-     * paint their own slabs, the floating one, whose card is a solid panel, and the docked
-     * keyboard on a place it overlays, which paints one opaque fill. Nothing produces a backdrop
-     * for any of them, so nothing may wait on one.
+     * True for every arrangement whose host crops no wallpaper: the floating keyboard, whose card
+     * is a solid panel, and the docked or split keyboard on a place it overlays, which paints one
+     * opaque fill. Nothing produces a backdrop for any of them, so nothing may wait on one.
      */
     private boolean paintsNoInAppKeyboardBackdrop() {
         return inAppKeyboardMaterial() != KeyboardMaterialPolicy.Material.GLASS;
@@ -6139,7 +6147,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY;
     }
 
-    /** Whether the keyboard on screen is the split one, whose parting no surface may fill. */
+    /** Whether the keyboard on screen is the split one: the docked keyboard with its keys parted. */
     private boolean isInAppKeyboardSplit() {
         return mInAppKeyboard != null
             && mInAppKeyboard.getForm() == PlaceLayout.KeyboardForm.SPLIT;
@@ -6214,29 +6222,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Applies the in-app keyboard's surface treatment: rounded shape (margins + rounded clip +
-     * inner padding) when the Rounded surface style is active, and the dock's blurred-wallpaper +
-     * tinted-glass stack behind the keys. The glass stack is
-     * rendered as the host's background drawable (a pre-blurred wallpaper crop under the same
-     * tint, built by {@link com.termux.app.chrome.GlassStack}) so the wrap-content keyboard measurement is
-     * never affected by extra sibling views.
+     * Dresses the keyboard's host in the margins and padding of the shape it wears: a docked
+     * card's side gap, top gap and inner rim, a floating card's thin side rim, and the user's chin.
+     * They are part of the keyboard's height, so the geometry choreographer runs this before every
+     * measure ({@link KeyboardGeometryChoreographer.Surface#dressKeyboardHost}); a form or Style
+     * that changed since the last render is therefore measured as it will be laid out. Compares
+     * before setting, so a host already dressed costs nothing and asks for no layout.
+     *
+     * @return whether anything changed
      */
-    private void applyInAppKeyboardSurfaceState(@NonNull ChromeSpec state) {
+    private boolean dressInAppKeyboardHost() {
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
         if (surfaceHost == null) {
-            return;
+            return false;
         }
-        if (!state.keyboardShown) {
-            surfaceHost.setBackground(null);
-            clearInAppKeyboardBackdrop();
-            return;
-        }
-
         boolean capsule = isInAppKeyboardCapsule();
         boolean floating = isKeyboardFloating();
-        // Remembered, so a Style change that reaches the surfaces without a chrome render redresses
-        // the host at once instead of leaving the other Style's material on it.
-        mKeyboardSurfaceDressedAsCard = capsule;
         // The side gap keeps a docked capsule off the screen's edges; inside a floating card it was
         // only more rim round the keys.
         int horizontalMargin = floating ? 0 : resolveInAppKeyboardHorizontalInsetPx();
@@ -6260,6 +6261,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             capsule, 0, chinPaddingPx);
         int innerBottomPadding = floating ? 0 : ChromePolicy.keyboardChinBottomPaddingPx(
             capsule, innerPadding, chinPaddingPx);
+        boolean changed = false;
         ViewGroup.LayoutParams layoutParams = surfaceHost.getLayoutParams();
         if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) layoutParams;
@@ -6270,8 +6272,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 params.topMargin = topMargin;
                 params.bottomMargin = bottomMargin;
                 surfaceHost.setLayoutParams(params);
-                mKeyboardGeometry.markHeightDirty();
-                mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
+                changed = true;
             }
         }
         if (surfaceHost.getPaddingLeft() != innerPadding
@@ -6279,21 +6280,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || surfaceHost.getPaddingRight() != innerPadding
             || surfaceHost.getPaddingBottom() != innerBottomPadding) {
             surfaceHost.setPadding(innerPadding, innerTopPadding, innerPadding, innerBottomPadding);
+            changed = true;
+        }
+        if (changed) {
             mKeyboardGeometry.markHeightDirty();
+            // The host moved inside the stack, so its wallpaper crop is cut again.
             mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
         }
+        return changed;
+    }
 
+    /**
+     * Applies the in-app keyboard's material and clip: the rounded clip when the host is a card,
+     * and the dock's blurred-wallpaper + tinted-glass stack (or the overlay panel) behind the keys.
+     * The host's margins and padding are not this pass's: the spec this paints was built by a
+     * measure that already dressed the host ({@link #dressInAppKeyboardHost}). The glass stack is
+     * rendered as the host's background drawable (a pre-blurred wallpaper crop under the same
+     * tint, built by {@link com.termux.app.chrome.GlassStack}) so the wrap-content keyboard
+     * measurement is never affected by extra sibling views.
+     */
+    private void applyInAppKeyboardSurfaceState(@NonNull ChromeSpec state) {
+        View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+        if (surfaceHost == null) {
+            return;
+        }
+        if (!state.keyboardShown) {
+            surfaceHost.setBackground(null);
+            clearInAppKeyboardBackdrop();
+            return;
+        }
+
+        boolean capsule = isInAppKeyboardCapsule();
+        // Remembered, so a Style change that reaches the surfaces without a chrome render redresses
+        // the host at once instead of leaving the other Style's material on it.
+        mKeyboardSurfaceDressedAsCard = capsule;
         // A card's radius is the model's for the keyboard's piece (Corners, held to its size).
         com.termux.app.chrome.LiveChromeShape.Clip keyboardClip = capsule ? chromeClipOf(
-            com.termux.app.place.ChromeShape.PieceId.KEYBOARD) : null;
+            KEYBOARD_PIECES) : null;
         float cornerRadiusPx = !capsule ? 0f : keyboardClip != null ? keyboardClip.radius
             : resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
         applyInAppKeyboardSurfaceClip(surfaceHost, capsule, cornerRadiusPx);
-        // A split keyboard paints its own background under each half. The launcher's slab would
-        // fill the parting the halves leave open, so it is dropped and the keys keep the shape
-        // and insets applied above. A floating keyboard drops it for the opposite reason: its
-        // card is already one solid panel in the same surface role, and a glass slice inside it
-        // would draw a second material over the first.
+        // A floating keyboard paints nothing here: its card is already one solid panel in the
+        // same surface role, and a glass slice inside it would draw a second material over the
+        // first. A split keyboard is painted as the docked one is; only its keys part.
         PlaceLayout.KeyboardForm form = inAppKeyboardForm();
         boolean overlays = inAppKeyboardOverlays();
         KeyboardMaterialPolicy.Material material =
@@ -6425,7 +6454,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                float cornerRadiusPx) {
         boolean changed = mKeyboardOutline.setClip(capsule
             ? com.termux.app.chrome.LiveChromeShape.cardClip(cornerRadiusPx)
-            : chromeClipOf(com.termux.app.place.ChromeShape.PieceId.KEYBOARD));
+            : chromeClipOf(KEYBOARD_PIECES));
         if (surfaceHost.getOutlineProvider() != mKeyboardOutline)
             surfaceHost.setOutlineProvider(mKeyboardOutline);
         else if (changed)
@@ -6471,7 +6500,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the pill it continues into) are seams. A card keeps its rim all round.
         boolean floating = isKeyboardFloating();
         int modelRim = capsule ? com.termux.app.chrome.ChromeEdgeRule.ALL
-            : chromeRimEdges(com.termux.app.place.ChromeShape.PieceId.KEYBOARD);
+            : chromeRimEdges(KEYBOARD_PIECES);
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.keyboard(
                 mPreferences, state.barAlpha, capsule ? cornerRadiusPx : 0f, mFancierGlassLook)
             .withBlur(blurRadiusDp)
@@ -7745,6 +7774,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @NonNull @Override public DisplayMetrics displayMetrics() {
                 return getResources().getDisplayMetrics();
+            }
+
+            @Override public boolean dressKeyboardHost() {
+                return dressInAppKeyboardHost();
             }
 
             @Nullable @Override public View attachedKeyboardView() {
@@ -11066,8 +11099,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTermuxTerminalViewClient.setInAppKeyboardController(mInAppKeyboard);
         mInAppKeyboard.onCreate(savedInstanceState);
         // A cold start on a place whose type is Floating has to be hosted before the first
-        // geometry pass, or the stack reserves a keyboard that is not in it.
-        mFloatingKeyboard.onKeyboardFormResolved(currentPlaceLayout().keyboardForm);
+        // geometry pass, or the stack reserves a keyboard that is not in it. The keyboard hears
+        // the type here too: the place pass that normally tells it ran before it existed, so a
+        // stored split came up docked until the next arrangement change.
+        PlaceLayout.KeyboardForm form = currentPlaceLayout().keyboardForm;
+        mFloatingKeyboard.onKeyboardFormResolved(form);
+        mInAppKeyboard.onKeyboardFormChanged(form);
         syncWallKeyboardForRestoredPlace();
     }
 
@@ -13680,6 +13717,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 flushBottomInsetPx);
         }
         boolean accessoryHeightChanged = updateAccessoryStackContainerHeight(accessoryStackContainer, combinedHeight);
+        // What the container's layout listener holds the laid-out keyboard to.
+        mKeyboardGeometry.noteReservedHeightPx(state.keyboardHeight);
         boolean accessoryMarginChanged = updateAccessoryStackContainerBottomMargin(
             accessoryStackContainer,
             accessoryBottomMarginPx
@@ -20578,7 +20617,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // The keyboard's frame is the pad's: the host wraps its content, so a match-parent pad
         // would take every pixel above the keyboard instead of the keyboard's own room. Over a
-        // split keyboard that frame is the parting between the two halves.
+        // split keyboard it is a key's seat in the parting between the two key runs.
         View keyboardView = mAttachedInAppKeyboardView;
         // A keyboard that has not been laid out has no parting to report, and one that has just
         // been asked to part wider has not reported the new one yet. Wait that layout out rather
@@ -20596,11 +20635,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDisplayTouchpadWaitRound = 0;
         if (pad.getParent() instanceof ViewGroup) ((ViewGroup) pad.getParent()).removeView(pad);
         Rect gap = splitKeyboardTouchpadGap(keyboardView);
-        // In the parting the pad is flush with the halves either side of it, not a card over them.
-        pad.setInSplitGap(com.termux.app.x11.DisplayTouchpadPlacement.fitsGap(gap, density),
-            Keyboard2View.splitSlabRadiusPx());
-        host.addView(pad, com.termux.app.x11.DisplayTouchpadPlacement.padParams(gap,
-            keyboardView == null ? 0 : keyboardView.getHeight(), density));
+        host.addView(pad, seatDisplayTouchpad(pad, keyboardView, gap));
         if (keyboardView != null) {
             final com.termux.app.x11.DisplayTouchpadView following = pad;
             if (mDisplayTouchpadFollower != null)
@@ -20665,16 +20700,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Sizes the touchpad to the keyboard frame it stands in: the whole of it, or the parting of a
      * split keyboard. Beside a pad in the parting the halves keep typing, so their keys are lit.
      */
-    private void applyDisplayTouchpadFrame(@NonNull View pad, @Nullable View keyboardView) {
+    private void applyDisplayTouchpadFrame(@NonNull com.termux.app.x11.DisplayTouchpadView pad,
+                                           @Nullable View keyboardView) {
         Rect gap = splitKeyboardTouchpadGap(keyboardView);
-        float density = getResources().getDisplayMetrics().density;
-        FrameLayout.LayoutParams params = com.termux.app.x11.DisplayTouchpadPlacement.padParams(
-            gap, keyboardView == null ? 0 : keyboardView.getHeight(), density);
-        if (pad instanceof com.termux.app.x11.DisplayTouchpadView) {
-            ((com.termux.app.x11.DisplayTouchpadView) pad).setInSplitGap(
-                com.termux.app.x11.DisplayTouchpadPlacement.fitsGap(gap, density),
-                Keyboard2View.splitSlabRadiusPx());
-        }
+        FrameLayout.LayoutParams params = seatDisplayTouchpad(pad, keyboardView, gap);
         if (!com.termux.app.x11.DisplayTouchpadPlacement.describes(pad.getLayoutParams(), params)) {
             pad.setLayoutParams(params);
         }
@@ -20744,6 +20773,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         Rect gap = new Rect();
         return ((Keyboard2View) keyboardView).getSplitGapBounds(gap) ? gap : null;
+    }
+
+    /**
+     * Dresses the touchpad for where it stands and answers its layout: in a split keyboard's
+     * parting it takes the seat a key would take there, with the caps' radius and fill, so it
+     * reads as one more key on the keyboard's background; anywhere else it is the panel over the
+     * whole frame.
+     */
+    @NonNull
+    private FrameLayout.LayoutParams seatDisplayTouchpad(
+            @NonNull com.termux.app.x11.DisplayTouchpadView pad, @Nullable View keyboardView,
+            @Nullable Rect gap) {
+        float density = getResources().getDisplayMetrics().density;
+        Rect seat = null;
+        if (gap != null && keyboardView instanceof Keyboard2View) {
+            seat = new Rect();
+            if (!((Keyboard2View) keyboardView).getSplitGapKeyBounds(seat)) seat = null;
+        }
+        boolean inGap = com.termux.app.x11.DisplayTouchpadPlacement.standsInGap(gap, seat, density);
+        Keyboard2View keys = inGap ? (Keyboard2View) keyboardView : null;
+        pad.setInSplitGap(inGap, keys == null ? 0f : keys.getKeyCapRadiusPx(),
+            keys == null ? 0 : keys.getKeyCapColor());
+        return com.termux.app.x11.DisplayTouchpadPlacement.padParams(gap, seat,
+            keyboardView == null ? 0 : keyboardView.getHeight(), density);
     }
 
     private void createWidgetPaneController() {
@@ -23537,6 +23590,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.setActivePaneFontSize(size);
         }
 
+        @Override public boolean refreshPaneFontSizes() {
+            if (mPaneController == null) return false;
+            mPaneController.refreshAttachedPaneFontSizes();
+            return true;
+        }
+
         @Override public void onSystemImeRequested() {
             TermuxActivity.this.onSystemImeRequested();
         }
@@ -24702,7 +24761,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int oldWidth = oldRight - oldLeft;
             int height = bottom - top;
             int oldHeight = oldBottom - oldTop;
-            if (width == oldWidth && height == oldHeight) {
+            boolean resized = width != oldWidth || height != oldHeight;
+            if (v.getId() == R.id.inapp_keyboard_container) {
+                // Held to what the stack reserved for it, on every layout and not only a resize: a
+                // keyboard that keeps its height across a form switch can still have been reserved
+                // at another one, and the dock rows above it are what give way. A miss books the
+                // keyboard's pass once (booked, never run inside this layout), which measures
+                // afresh and reserves what is laid out. The memo is only marked stale: a slide
+                // reading the last height before that pass runs still gets one.
+                if (mKeyboardGeometry.reservationMissedBy(height)) {
+                    mKeyboardGeometry.markHeightDirty();
+                    mGeometry.request(GeometryScheduler.Reason.KEYBOARD,
+                        GeometryScheduler.ResizePolicy.NOW);
+                } else if (resized) {
+                    mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+                }
+                return;
+            }
+            if (!resized) {
                 return;
             }
             if (v.getId() == R.id.terminal_pane_host) {
@@ -24710,24 +24786,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // coming back, which the scheduler recognises and runs nothing for.
                 mGeometry.request(GeometryScheduler.Reason.LAYOUT,
                     GeometryScheduler.ResizePolicy.NONE);
-                return;
-            }
-            if (v.getId() == R.id.inapp_keyboard_container) {
-                // The desired height was measured independently before the stack height was set.
-                // Only retry if the laid-out child disagrees; equality is the stable terminal state
-                // and prevents layout -> requestLayout -> layout cycles.
-                if (height != mKeyboardGeometry.desiredHeightPx()) {
-                    v.post(() -> {
-                        if (!isFinishing() && !isDestroyed()
-                            && v.getHeight() != mKeyboardGeometry.desiredHeightPx()) {
-                            mKeyboardGeometry.discardMeasuredHeight();
-                            mGeometry.request(GeometryScheduler.Reason.KEYBOARD,
-                                GeometryScheduler.ResizePolicy.NOW);
-                        }
-                    });
-                } else {
-                    mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-                }
                 return;
             }
             mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
