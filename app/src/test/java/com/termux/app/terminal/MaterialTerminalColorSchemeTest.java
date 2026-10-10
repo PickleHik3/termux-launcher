@@ -44,7 +44,7 @@ public class MaterialTerminalColorSchemeTest {
                 ApplicationProvider.getApplicationContext(), level);
             int background = color(palette, "background");
             assertTrue(MaterialTerminalColorScheme.contrastRatio(
-                color(palette, "foreground"), background) + .01 >= level.foregroundRatio);
+                color(palette, "foreground"), background) + .01 >= level.bodyTarget);
             assertTrue(MaterialTerminalColorScheme.contrastRatio(
                 color(palette, "cursor"), background) + .01 >= level.cursorRatio);
             for (int i = 0; i < 16; i++) {
@@ -59,18 +59,33 @@ public class MaterialTerminalColorSchemeTest {
     }
 
     /**
-     * The cheap background helper and the full palette have to agree — the overlay reads one and the
-     * terminal reads the other, and a drift between them shows up as a terminal surface that is a
-     * slightly different colour from the terminal's own background.
+     * The pane's glass is tinted from Default's background at every level: Terminal contrast moves
+     * the text, never the glass. The overlay used to read the level's own background, so Harder
+     * darkened the pane and Softer lifted it — and a palette flipped to light by a bright wallpaper
+     * would have turned the pane into a light slab. The helper still agrees with the Default
+     * palette, so an opaque Default terminal and its glass are one colour.
      */
     @Test
-    public void theBackgroundHelperMatchesTheFullPaletteAtEveryLevel() {
+    public void thePaneOverlayBaseIsTheSameAtEveryLevel() {
+        Context context = ApplicationProvider.getApplicationContext();
+        int overlay = MaterialTerminalColorScheme.overlayBaseColor(context) | 0xFF000000;
+        assertEquals(color(MaterialTerminalColorScheme.create(context,
+            TerminalContrastLevel.DEFAULT), "background"), overlay);
+
+        int pongOverlay = MaterialTerminalColorScheme.overlayBase(PONG.surface);
+        assertEquals(color(MaterialTerminalColorScheme.build(PONG, TerminalContrastLevel.DEFAULT,
+            Color.TRANSPARENT, null), "background"), pongOverlay);
         for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
-            Properties palette = MaterialTerminalColorScheme.create(
-                ApplicationProvider.getApplicationContext(), level);
-            assertEquals("level " + level.value, color(palette, "background"),
-                MaterialTerminalColorScheme.backgroundColor(
-                    ApplicationProvider.getApplicationContext(), level) | 0xFF000000);
+            for (int ground : new int[] {Color.TRANSPARENT, SKY, DUSK}) {
+                Properties palette = MaterialTerminalColorScheme.build(PONG, level, ground, null);
+                // The palette is free to move; the overlay is not an input it can move.
+                assertEquals(level.value + " on " + Integer.toHexString(ground), pongOverlay,
+                    MaterialTerminalColorScheme.overlayBase(PONG.surface));
+                if (level != TerminalContrastLevel.DEFAULT || ground == SKY) {
+                    assertNotEquals("the palette background is what moves, at " + level.value,
+                        pongOverlay, color(palette, "background"));
+                }
+            }
         }
     }
 
@@ -548,14 +563,16 @@ public class MaterialTerminalColorSchemeTest {
             // not the generated background, whose tone move can leave it too grey to have a hue.
             Hct surface = Hct.fromInt(com.google.android.material.color.MaterialColors.getColor(
                 themed, com.google.android.material.R.attr.colorSurface, 0) | 0xFF000000);
-            assertEquals("foreground hue at " + level.value,
+            // Harder's light foreground sits at tone 2, where sRGB holds almost no chroma and the
+            // round trip leaves no hue worth measuring; the lean is asserted where there is one.
+            if (foreground.getChroma() >= 4d) assertEquals("foreground hue at " + level.value,
                 MaterialTerminalColorScheme.warmNeutralHue(surface.getHue()),
                 foreground.getHue(), 5d);
             assertTrue("foreground chroma at " + level.value, foreground.getChroma() <= 13d);
             assertTrue("foreground ratio at " + level.value,
                 MaterialTerminalColorScheme.contrastRatio(
                     color(palette, "foreground"), color(palette, "background"))
-                    + .01 >= level.foregroundRatio);
+                    + .01 >= level.bodyTarget);
         }
     }
 
@@ -698,7 +715,10 @@ public class MaterialTerminalColorSchemeTest {
         assertTrue(meanAccentChroma(dflt) < meanAccentChroma(harder));
     }
 
-    /** The background tone is the recipe's: Harder is not darker than tone 6 in the dark. */
+    /**
+     * The background tone is the recipe's, and the levels order it: Softer lifts the ground,
+     * Harder takes it to the end of the scale in both modes.
+     */
     @Test
     public void surfaceToneFollowsTheRecipe() {
         int dark = Hct.from(260d, 4d, 10d).toInt();
@@ -708,9 +728,212 @@ public class MaterialTerminalColorSchemeTest {
                 Hct.fromInt(MaterialTerminalColorScheme.surfaceTone(dark, level)).getTone(), 1.0d);
             assertEquals(level.bgToneLight,
                 Hct.fromInt(MaterialTerminalColorScheme.surfaceTone(light, level)).getTone(), 1.0d);
+            // The polarity can be asked for explicitly, which is how a flipped palette gets the
+            // other mode's ground from the theme's own surface.
+            assertEquals(level.bgToneLight, Hct.fromInt(
+                MaterialTerminalColorScheme.surfaceTone(dark, level, false)).getTone(), 1.0d);
         }
-        assertTrue(Hct.fromInt(MaterialTerminalColorScheme.surfaceTone(dark,
-            TerminalContrastLevel.HARDER)).getTone() >= 5.0d);
+        assertTrue(TerminalContrastLevel.SOFTER.bgToneDark > TerminalContrastLevel.DEFAULT.bgToneDark);
+        assertTrue(TerminalContrastLevel.DEFAULT.bgToneDark > TerminalContrastLevel.HARDER.bgToneDark);
+        assertTrue(TerminalContrastLevel.SOFTER.bgToneLight < TerminalContrastLevel.DEFAULT.bgToneLight);
+        assertTrue(TerminalContrastLevel.DEFAULT.bgToneLight < TerminalContrastLevel.HARDER.bgToneLight);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The level owns the text, measured against what the text stands on. pong's seeds (dark
+    // mode) and the grounds measured on it: a transparent pane over a sky wallpaper, and a dark
+    // one. These are the regression for "Harder looks the same as Default": the floors never bound
+    // on the palette's own background, and on glass they were measured against a background the
+    // pane never shows.
+    // ---------------------------------------------------------------------------------------------
+
+    /** pong: surface, on_surface, primary, error. */
+    private static final MaterialTerminalColorScheme.Seeds PONG = new MaterialTerminalColorScheme.Seeds(
+        0xFF0C141B, 0xFFDCE3ED, 0xFF93CCFF, 0xFFF2B8B5);
+    /** A light theme's seeds, for the other polarity of the opaque recipe. */
+    private static final MaterialTerminalColorScheme.Seeds DAYLIGHT = new MaterialTerminalColorScheme.Seeds(
+        0xFFF8F9FF, 0xFF191C20, 0xFF3A608F, 0xFFBA1A1A);
+    /** The ground behind pong's prompt, transparent pane over a sky wallpaper: L about 0.30. */
+    private static final int SKY = 0xFF569CC3;
+    /** A dark wallpaper's ground. */
+    private static final int DUSK = 0xFF1B1A17;
+    /** A grey just past the black/white crossover (0.179): dark ink reads a shade better. */
+    private static final int CROSSOVER = 0xFF797979;
+
+    private static double ratio(int ink, int ground) {
+        return MaterialTerminalColorScheme.contrastRatio(ink, ground);
+    }
+
+    private static double bodyRatio(Properties palette, int ground) {
+        return ratio(color(palette, "foreground"), ground);
+    }
+
+    /**
+     * (a) On the terminal's own background every step is visible: the foreground and background
+     * tones are the level's, not floors under the theme's, so body text moves by at least 15% per
+     * step. Default to Harder used to move it by 4%.
+     */
+    @Test
+    public void eachLevelStepMovesBodyTextOnAnOpaqueGround() {
+        for (MaterialTerminalColorScheme.Seeds seeds : new MaterialTerminalColorScheme.Seeds[] {PONG, DAYLIGHT}) {
+            double previous = 0d;
+            for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+                Properties palette = MaterialTerminalColorScheme.build(seeds, level,
+                    Color.TRANSPARENT, null);
+                double body = bodyRatio(palette, color(palette, "background"));
+                assertTrue(level.value + " body " + body + " over " + previous,
+                    body >= previous * 1.15d);
+                assertTrue(level.value + " meets its target", body + .01 >= level.bodyTarget);
+                previous = body;
+            }
+        }
+    }
+
+    /**
+     * (b) Over the sky ground no pale ink reaches the body target — white is 3.03:1 — so the
+     * palette flips to dark ink, takes the light recipe and reports light. Measured against the
+     * ground, not the palette's own background. Harder's 7:1 is out of reach of any ink on this
+     * ground (black is 6.94:1); it gets as close as the gamut allows.
+     */
+    @Test
+    public void aSkyGroundFlipsThePaletteToDarkInkAndMeetsTheLevel() {
+        Context context = ApplicationProvider.getApplicationContext();
+        double black = ratio(Color.BLACK, SKY);
+        assertTrue("black is the most any ink reads on the sky", black < 7.0d);
+        double previous = 0d;
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Properties palette = MaterialTerminalColorScheme.build(PONG, level, SKY,
+                com.termux.app.chrome.ChromeInk.Polarity.PALE_INK);
+            assertSame(level.value, com.termux.app.chrome.ChromeInk.Polarity.DARK_INK,
+                MaterialTerminalColorScheme.polarityOf(palette));
+            assertTrue(level.value + " background is light",
+                Hct.fromInt(color(palette, "background")).getTone() >= 50d);
+            assertEquals(level.value + " reports light", "light",
+                MaterialTerminalColorScheme.createMaterialRoleProperties(context, palette, level)
+                    .getProperty("mode"));
+            double body = bodyRatio(palette, SKY);
+            assertTrue(level.value + " body " + body,
+                body + .01 >= Math.min(level.bodyTarget, black));
+            assertTrue(level.value + " is more legible than the level below", body > previous);
+            previous = body;
+            for (int i = 0; i < 16; i++) {
+                double floor = MaterialTerminalColorScheme.ansiFloor(i, level);
+                assertTrue("ANSI " + i + " at " + level.value,
+                    ratio(color(palette, "color" + i), SKY) + .01 >= Math.min(floor, black));
+            }
+            assertTrue("cursor at " + level.value,
+                ratio(color(palette, "cursor"), SKY) + .01 >= level.cursorRatio);
+        }
+        assertTrue("Softer reaches 3.0", bodyRatio(MaterialTerminalColorScheme.build(PONG,
+            TerminalContrastLevel.SOFTER, SKY, null), SKY) + .01 >= 3.0d);
+        assertTrue("Default reaches 4.5", bodyRatio(MaterialTerminalColorScheme.build(PONG,
+            TerminalContrastLevel.DEFAULT, SKY, null), SKY) + .01 >= 4.5d);
+        assertEquals("Harder is black on the sky", black, bodyRatio(MaterialTerminalColorScheme
+            .build(PONG, TerminalContrastLevel.HARDER, SKY, null), SKY), .01d);
+    }
+
+    /** (c) A dark wallpaper keeps the theme's pale ink, and every level still meets its target. */
+    @Test
+    public void aDarkGroundKeepsPaleInkAndMeetsTheLevel() {
+        double previous = 0d;
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Properties palette = MaterialTerminalColorScheme.build(PONG, level, DUSK, null);
+            assertSame(level.value, com.termux.app.chrome.ChromeInk.Polarity.PALE_INK,
+                MaterialTerminalColorScheme.polarityOf(palette));
+            double body = bodyRatio(palette, DUSK);
+            assertTrue(level.value + " body " + body, body + .01 >= level.bodyTarget);
+            assertTrue(level.value + " is more legible than the level below", body > previous);
+            previous = body;
+            for (int i = 0; i < 16; i++) {
+                assertTrue("ANSI " + i + " at " + level.value,
+                    ratio(color(palette, "color" + i), DUSK) + .01
+                        >= MaterialTerminalColorScheme.ansiFloor(i, level));
+            }
+        }
+    }
+
+    /**
+     * (d) Near the crossover both inks read about the same, and the palette keeps whichever it
+     * wears: a re-sampled wallpaper there must not flap the terminal between light and dark.
+     */
+    @Test
+    public void aGroundNearTheCrossoverKeepsTheCurrentInk() {
+        com.termux.app.chrome.ChromeInk.Polarity pale = com.termux.app.chrome.ChromeInk.Polarity.PALE_INK;
+        com.termux.app.chrome.ChromeInk.Polarity dark = com.termux.app.chrome.ChromeInk.Polarity.DARK_INK;
+        assertTrue("dark ink reads a shade better here",
+            ratio(Color.BLACK, CROSSOVER) > ratio(Color.WHITE, CROSSOVER));
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            assertSame(level.value, pale,
+                MaterialTerminalColorScheme.inkPolarity(CROSSOVER, level.bodyTarget, pale));
+            assertSame(level.value, dark,
+                MaterialTerminalColorScheme.inkPolarity(CROSSOVER, level.bodyTarget, dark));
+            // Far from it the polarity does follow the ground, whatever it wore.
+            assertSame(level.value, dark,
+                MaterialTerminalColorScheme.inkPolarity(Color.WHITE, level.bodyTarget, pale));
+            assertSame(level.value, pale,
+                MaterialTerminalColorScheme.inkPolarity(Color.BLACK, level.bodyTarget, dark));
+            // And an answer is stable when asked again with itself as the current ink.
+            for (int ground : new int[] {SKY, DUSK, CROSSOVER}) {
+                for (com.termux.app.chrome.ChromeInk.Polarity current : new com.termux.app.chrome.ChromeInk.Polarity[] {pale, dark}) {
+                    com.termux.app.chrome.ChromeInk.Polarity answer =
+                        MaterialTerminalColorScheme.inkPolarity(ground, level.bodyTarget, current);
+                    assertSame(answer,
+                        MaterialTerminalColorScheme.inkPolarity(ground, level.bodyTarget, answer));
+                }
+            }
+        }
+        assertSame(pale, MaterialTerminalColorScheme.polarityOf(MaterialTerminalColorScheme.build(
+            PONG, TerminalContrastLevel.DEFAULT, CROSSOVER, pale)));
+        assertSame(dark, MaterialTerminalColorScheme.polarityOf(MaterialTerminalColorScheme.build(
+            PONG, TerminalContrastLevel.DEFAULT, CROSSOVER, dark)));
+    }
+
+    /** An opaque terminal never flips, whatever ink it was last told it wore. */
+    @Test
+    public void anOpaqueTerminalKeepsTheThemesPolarity() {
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            assertSame(com.termux.app.chrome.ChromeInk.Polarity.PALE_INK,
+                MaterialTerminalColorScheme.polarityOf(MaterialTerminalColorScheme.build(PONG,
+                    level, Color.TRANSPARENT, com.termux.app.chrome.ChromeInk.Polarity.DARK_INK)));
+            assertSame(com.termux.app.chrome.ChromeInk.Polarity.DARK_INK,
+                MaterialTerminalColorScheme.polarityOf(MaterialTerminalColorScheme.build(DAYLIGHT,
+                    level, Color.TRANSPARENT, com.termux.app.chrome.ChromeInk.Polarity.PALE_INK)));
+        }
+    }
+
+    /**
+     * (f) A target no tone can reach takes the tone that comes closest. It used to hand back the
+     * colour unchanged, which on a mid-tone wallpaper meant no floor at all.
+     */
+    @Test
+    public void contrastToneTakesTheClosestToneWhenTheTargetIsUnreachable() {
+        int pale = Hct.from(250d, 10d, 85d).toInt();
+        int moved = MaterialTerminalColorScheme.contrastTone(pale, SKY, 7.0d);
+        assertNotEquals(pale, moved);
+        assertEquals(ratio(Color.BLACK, SKY), ratio(moved, SKY), .01d);
+        // A reachable target is still met at the nearest tone that meets it.
+        assertTrue(ratio(MaterialTerminalColorScheme.contrastTone(pale, SKY, 4.5d), SKY) >= 4.5d);
+        // And a colour already past the target is left alone.
+        assertEquals(Color.BLACK, MaterialTerminalColorScheme.contrastTone(Color.BLACK, SKY, 3.0d));
+    }
+
+    /**
+     * The fingerprint follows the ground the text stands on: an opaque terminal adds nothing, a
+     * re-sample one RGB unit off stays put, a different wallpaper moves it.
+     */
+    @Test
+    public void theSignatureFollowsTheGround() {
+        Context context = themedContext();
+        TerminalContrastLevel level = TerminalContrastLevel.DEFAULT;
+        int opaque = MaterialTerminalColorScheme.signature(context, level);
+        assertEquals(opaque, MaterialTerminalColorScheme.signature(context, level,
+            Color.TRANSPARENT, com.termux.app.chrome.ChromeInk.Polarity.DARK_INK));
+        int sky = MaterialTerminalColorScheme.signature(context, level, SKY, null);
+        assertNotEquals(opaque, sky);
+        assertEquals(sky, MaterialTerminalColorScheme.signature(context, level, SKY + 1, null));
+        assertNotEquals(sky, MaterialTerminalColorScheme.signature(context, level, DUSK, null));
+        assertEquals(MaterialTerminalColorScheme.groundToneBucket(SKY),
+            MaterialTerminalColorScheme.groundToneBucket(SKY + 1));
     }
 
     private static int color(Properties properties, String key) {

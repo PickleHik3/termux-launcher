@@ -4494,8 +4494,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int resolveTerminalOverlayBaseColor() {
         if (mPreferences != null && mPreferences.isTerminalDynamicColorsEnabled()) {
-            return com.termux.app.terminal.MaterialTerminalColorScheme.backgroundColor(
-                this, mPreferences.getTerminalContrastLevel());
+            // Level-independent: Terminal contrast moves the text, never the pane's glass.
+            return com.termux.app.terminal.MaterialTerminalColorScheme.overlayBaseColor(this);
         }
         if (isNightThemeActive() || LauncherSchemeTheme.isSchemeChromeActive(this)) {
             return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
@@ -24045,6 +24045,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean isWallpaperModeEnabled() {
             return TermuxActivity.this.isWallpaperModeEnabled();
+        }
+
+        @Override public int terminalTextGround() {
+            // Opaque — no wallpaper, or the opacity slider at its top — the text stands on the
+            // palette's own background. Otherwise on what the pane band last measured: the
+            // wallpaper under each pane through the dim and the pane's tint.
+            if (mPreferences == null || !shouldUseWallpaperPassthroughMode()
+                    || mPreferences.getTerminalBackgroundOpacity() >= 100) {
+                return Color.TRANSPARENT;
+            }
+            return mChrome.ink().terminalPaneGround(paneSurfaceStyle().paneGlassTintColor());
+        }
+
+        @Override public void setTerminalTextGroundListener(@Nullable Runnable listener) {
+            mChrome.ink().setOnTerminalPaneGroundChanged(listener);
         }
 
         @Override public boolean toggleCursorTrail() {

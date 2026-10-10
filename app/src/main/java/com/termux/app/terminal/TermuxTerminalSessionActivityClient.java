@@ -80,6 +80,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private final android.graphics.Rect mPaneVisibleRect = new android.graphics.Rect();
     private boolean mForegroundRefreshPending;
     private int mLastMaterialTerminalPaletteSignature;
+    /** The ink the live palette wears, so the next build keeps it near the crossover. */
+    @Nullable private com.termux.app.chrome.ChromeInk.Polarity mTerminalInkPolarity;
+    /**
+     * How long the measured ground has to stay put before the palette is asked to follow it. A
+     * keyboard slide or a split re-dresses each pane in turn, and the band's mean moves with each;
+     * one rebuild after they settle, not one per pane.
+     */
+    private static final long GROUND_SETTLE_MS = 150L;
+    private final Runnable mGroundSettledRunnable = this::onTerminalTextGroundSettled;
     /** Cheap stamp (mtime, length) of colors.properties at the last non-dynamic apply. */
     private long mLastColorsFileStamp = Long.MIN_VALUE;
     @NonNull private String mLastFontErrorSummary = "";
@@ -134,6 +143,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * Should be called when onCreate() is called
      */
     public void onCreate() {
+        // The pane band's measured ground can move inside a draw; the palette follows it from a
+        // post, once it has settled, and only when the move changes what the signature sees.
+        mHost.setTerminalTextGroundListener(() -> {
+            mUiHandler.removeCallbacks(mGroundSettledRunnable);
+            mUiHandler.postDelayed(mGroundSettledRunnable, GROUND_SETTLE_MS);
+        });
         // Set terminal fonts and colors
         checkForFontAndColors();
     }
@@ -895,9 +910,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (dynamic) {
                 TerminalContrastLevel level =
                     com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences());
-                props = MaterialTerminalColorScheme.create(mContext, level);
-                mLastMaterialTerminalPaletteSignature =
-                    MaterialTerminalColorScheme.signature(mContext, level);
+                // What the text stands on: the palette's own background while the terminal is
+                // opaque, the measured glass ground while it is translucent.
+                int ground = mHost.terminalTextGround();
+                props = MaterialTerminalColorScheme.create(mContext, level, ground,
+                    mTerminalInkPolarity);
+                mTerminalInkPolarity = MaterialTerminalColorScheme.polarityOf(props);
+                MaterialTerminalColorScheme.rememberGround(ground, mTerminalInkPolarity);
+                mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(
+                    mContext, level, ground, mTerminalInkPolarity);
                 mLastColorsFileStamp = Long.MIN_VALUE;
                 // The active roles are built here, on the main thread, from the activity's theme, so
                 // the files describe the same palette the terminal just took. The dark and light
@@ -1090,8 +1111,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
-     * Rebuild the palette only if the Material roles or the contrast level actually moved. This is the
-     * path for resume, configuration changes and wallpaper-colour callbacks: they fire whether or not
+     * Rebuild the palette only if the Material roles, the contrast level or the ground the text
+     * stands on actually moved. This is the path for resume, configuration changes, wallpaper-colour
+     * callbacks and the pane band's measured ground settling: they fire whether or not
      * anything changed, and the work behind them is a full HCT palette build, a recolour and repaint of
      * every session, and two file writes that open shells watch.
      */
@@ -1103,9 +1125,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return;
         }
         int signature = MaterialTerminalColorScheme.signature(mContext,
-            com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()));
+            com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()),
+            mHost.terminalTextGround(), mTerminalInkPolarity);
         if (signature == mLastMaterialTerminalPaletteSignature) return;
         applyTerminalColors();
+    }
+
+    private void onTerminalTextGroundSettled() {
+        if (mHost.isHostAlive()) refreshMaterialTerminalColorsIfNeeded();
     }
 
     /**

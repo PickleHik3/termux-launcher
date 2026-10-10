@@ -205,6 +205,13 @@ public final class ChromeInk {
         new java.util.LinkedHashMap<>(MAX_PANE_ANSWERS, 0.75f, true);
 
     @Nullable private Polarity mPolarity;
+    /**
+     * The pane band's mean flat glass as last measured; survives {@link #invalidate} so a
+     * re-sample replaces it instead of leaving a gap. Transparent until a pane is measured.
+     */
+    @ColorInt private int mPaneGround = Color.TRANSPARENT;
+    /** Told when {@link #mPaneGround} moves; see {@link #setOnTerminalPaneGroundChanged}. */
+    @Nullable private Runnable mOnPaneGroundChanged;
     /** The user's legibility control as last read; every target is scaled by it. */
     @NonNull private LegibilityLevel mLevel = LegibilityLevel.DEFAULT;
     @ColorInt private int mBaseColor;
@@ -379,8 +386,39 @@ public final class ChromeInk {
         answer.dimInk = dimInk;
         answer.target = target;
         answer.flat = flat;
-        vote(GlassBackdropCache.Band.TERMINAL_PANE, meanPaneVote());
+        int ground = meanPaneVote();
+        vote(GlassBackdropCache.Band.TERMINAL_PANE, ground);
+        if (ground != mPaneGround) {
+            mPaneGround = ground;
+            if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
+        }
         return resolution;
+    }
+
+    /**
+     * What the terminal's text stands on across the pane band: the mean of the panes' flat glass —
+     * wallpaper, the launcher's dim, each pane's tint — opaque. Read only, never samples: before
+     * any pane has been measured it is the mode's nominal glass under {@code tint}, the same guess
+     * every band starts from. Independent of the palette, so a palette built on it cannot feed
+     * back into it.
+     *
+     * @param tint the pane's tint as drawn, alpha included, for the nominal answer
+     */
+    @ColorInt
+    public int terminalPaneGround(@ColorInt int tint) {
+        readMode();
+        if (Color.alpha(mPaneGround) != 0) return mPaneGround;
+        return OnGlass.backdrop(mCache.fallbackWallpaper(), mDimColor, tint);
+    }
+
+    /**
+     * Runs {@code listener} each time {@link #terminalPaneGround} moves — only when a pane is
+     * measured anew (a wallpaper, dim, tint or rect change), never for a memoised answer. It runs
+     * inside whatever pass asked about the pane, a draw included, so it must only post. Null
+     * removes it.
+     */
+    public void setOnTerminalPaneGroundChanged(@Nullable Runnable listener) {
+        mOnPaneGroundChanged = listener;
     }
 
     /** Terminal panes remembered right now, for tests. */
