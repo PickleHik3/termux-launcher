@@ -5,6 +5,13 @@ import android.content.Intent;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.InputFilter;
+import android.text.InputType;
+import android.text.TextWatcher;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.inputmethod.EditorInfo;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -16,8 +23,11 @@ import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.slider.Slider;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fonts.FontCatalog;
@@ -36,6 +46,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 /**
  * The terminal font picker: a family list with per-family license text and download sizes, the
@@ -518,25 +529,95 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         LinearLayout layout = new LinearLayout(context);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(padding, padding / 2, padding, 0);
-        TextView value = new TextView(context);
-        value.setText(getString(R.string.termux_fonts_size_summary, current));
+
+        // − [ 12 dp ] + over the slider: the buttons step one dp, the field takes an exact size,
+        // and the slider covers the whole range. All three show the same picked size.
+        LinearLayout stepper = new LinearLayout(context);
+        stepper.setOrientation(LinearLayout.HORIZONTAL);
+        stepper.setGravity(Gravity.CENTER_VERTICAL);
+        MaterialButton decrease = stepButton(context, "\u2212",
+            R.string.termux_fonts_size_decrease);
+        MaterialButton increase = stepButton(context, "+", R.string.termux_fonts_size_increase);
+        TextInputLayout field = new TextInputLayout(context, null,
+            com.google.android.material.R.attr.textInputOutlinedStyle);
+        field.setSuffixText(getString(R.string.termux_fonts_size_unit));
+        TextInputEditText input = new TextInputEditText(field.getContext());
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        input.setGravity(Gravity.CENTER);
+        input.setSingleLine(true);
+        input.setFilters(new InputFilter[]{
+            new InputFilter.LengthFilter(String.valueOf(max).length())});
+        input.setContentDescription(getString(R.string.termux_fonts_size_title));
+        field.addView(input);
+        LinearLayout.LayoutParams fieldParams = new LinearLayout.LayoutParams(0,
+            LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        fieldParams.setMargins(padding / 2, 0, padding / 2, 0);
+        stepper.addView(decrease);
+        stepper.addView(field, fieldParams);
+        stepper.addView(increase);
+
         Slider slider = new Slider(context);
         slider.setValueFrom(min);
         slider.setValueTo(max);
         slider.setStepSize(1f);
-        slider.setValue(current);
-        final int[] picked = {current};
-        slider.addOnChangeListener((changed, number, fromUser) -> {
-            picked[0] = Math.round(number);
-            value.setText(getString(R.string.termux_fonts_size_summary, picked[0]));
-        });
-        layout.addView(value);
+        layout.addView(stepper);
         layout.addView(slider);
+
+        final int[] picked = {current};
+        final boolean[] syncing = {false};
+        // Moves every control to {@code size}; the field is left alone while it is being typed in.
+        BiConsumer<Integer, Boolean> pick = (size, fromField) -> {
+            picked[0] = Math.max(min, Math.min(max, size));
+            syncing[0] = true;
+            slider.setValue(picked[0]);
+            if (!fromField) {
+                input.setText(String.valueOf(picked[0]));
+                input.setSelection(input.length());
+            }
+            syncing[0] = false;
+            decrease.setEnabled(picked[0] > min);
+            increase.setEnabled(picked[0] < max);
+        };
+        pick.accept(current, false);
+        slider.addOnChangeListener((changed, number, fromUser) -> {
+            if (!syncing[0]) pick.accept(Math.round(number), false);
+        });
+        decrease.setOnClickListener(v -> pick.accept(picked[0] - 1, false));
+        increase.setOnClickListener(v -> pick.accept(picked[0] + 1, false));
+        input.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(Editable text) {
+                if (syncing[0]) return;
+                Integer typed = parseSize(text);
+                boolean inRange = typed != null && typed >= min && typed <= max;
+                field.setError(typed == null || inRange ? null
+                    : getString(R.string.termux_fonts_size_out_of_range, min, max));
+                if (inRange) pick.accept(typed, true);
+            }
+        });
+        // Leaving the field, Done or Enter commits what was typed, clamped into the range, the
+        // same way Apply does; an empty field keeps the picked size.
+        Runnable commitField = () -> {
+            Integer typed = parseSize(input.getText());
+            field.setError(null);
+            pick.accept(typed == null ? picked[0] : typed, false);
+        };
+        input.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus) commitField.run();
+        });
+        input.setOnEditorActionListener((v, actionId, event) -> {
+            commitField.run();
+            return false;
+        });
 
         new MaterialAlertDialogBuilder(context)
             .setTitle(getString(R.string.termux_fonts_size_dialog_title, min, max))
             .setView(layout)
             .setPositiveButton(R.string.termux_fonts_weight_apply, (dialog, which) -> {
+                // A size typed but not confirmed still counts.
+                commitField.run();
                 preferences.setFontSize(Math.round(picked[0] * density));
                 updateFontSizeSummary(context);
             })
@@ -546,6 +627,39 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+    }
+
+    @NonNull
+    private MaterialButton stepButton(@NonNull Context context, @NonNull String label,
+                                      int description) {
+        // A round 48 dp target, so the field between the two gets the width.
+        MaterialButton button = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        int size = Math.round(48 * context.getResources().getDisplayMetrics().density);
+        button.setText(label);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        button.setContentDescription(getString(description));
+        button.setMinWidth(0);
+        button.setMinimumWidth(0);
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        button.setPadding(0, 0, 0, 0);
+        button.setCornerRadius(size / 2);
+        button.setLayoutParams(new LinearLayout.LayoutParams(size, size));
+        return button;
+    }
+
+    /** The whole number in {@code text}, or null when it holds none. */
+    @Nullable
+    private static Integer parseSize(@Nullable CharSequence text) {
+        if (text == null) return null;
+        try {
+            return Integer.parseInt(text.toString().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     // ------------------------------------------------------------------ helpers
