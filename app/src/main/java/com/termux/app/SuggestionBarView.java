@@ -1050,6 +1050,7 @@ public final class SuggestionBarView extends GridLayout
         invalidateRenderedIconCaches();
         childLayoutPending = true;
         requestLayout();
+        scheduleSlotIconResize();
     }
 
     /**
@@ -1074,6 +1075,7 @@ public final class SuggestionBarView extends GridLayout
         requestLayout();
         invalidate();
         scheduleStableDrawReleaseIfPossible();
+        scheduleSlotIconResize();
     }
 
     /**
@@ -1094,6 +1096,9 @@ public final class SuggestionBarView extends GridLayout
         requestLayout();
         invalidate();
         scheduleStableDrawReleaseIfPossible();
+        // The slots already built keep the size they were built at until something resizes
+        // them; nothing else re-renders the row when only the dock's size moved.
+        scheduleSlotIconResize();
     }
 
     public void setAppBarOpacity(int appBarOpacity) {
@@ -3045,6 +3050,7 @@ public final class SuggestionBarView extends GridLayout
         setTranslationX(0f);
         setAlpha(1f);
         removeAllViews();
+        slotIcons.clear();
         clearAzFocusedEntry();
         clearTerminalSearchFocus();
         lastAzResolvedSlot = -1;
@@ -3394,6 +3400,8 @@ public final class SuggestionBarView extends GridLayout
         // row height at a bar standing on a side, and that must not read as a new surface.
         signature = (31 * signature) + (vertical ? 1 : 0);
         signature = (31 * signature) + rowHeightHintPx();
+        // The icon the dock handed over, which outranks the hint whenever it is set.
+        signature = (31 * signature) + (vertical ? 0 : dockIconSizePx);
         signature = (31 * signature) + Math.max(1, buttonCount);
         signature = (31 * signature) + pinnedPageIndex;
         signature = (31 * signature) + activeAzPageIndex;
@@ -3552,6 +3560,20 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
+     * {@link #bindRenderedIcon} for a view that is already showing this entry at another size:
+     * what it shows stays up until the icon at {@code sizePx} is rendered, instead of giving way
+     * to a tile on every frame of a size drag.
+     */
+    private void rebindRenderedIcon(@NonNull ImageView view, @NonNull LauncherAppEntry entry,
+                                    int sizePx) {
+        if (sizePx <= 0) {
+            bindRenderedIcon(view, entry, sizePx);
+            return;
+        }
+        iconBinder.rebind(view, entry, sizePx, entry.icon);
+    }
+
+    /**
      * Renders {@code entries} at {@code sizePx} on the worker ahead of their cells, so a page
      * about to be shown binds from the cache. Capped at {@link AsyncIconBinder#MAX_PREFETCH}.
      */
@@ -3582,7 +3604,9 @@ public final class SuggestionBarView extends GridLayout
         ImageButton imageButton = new ImageButton(getContext());
         int size = iconSizePx();
         bindRenderedIcon(imageButton, entry, size);
-        imageButton.setScaleType(ImageButton.ScaleType.CENTER_INSIDE);
+        // Fit rather than centre-inside: while a resize waits for the icon at its new size, the
+        // one it has is stretched to the new box instead of standing at its old size inside it.
+        imageButton.setScaleType(ImageButton.ScaleType.FIT_CENTER);
         imageButton.setAdjustViewBounds(true);
         imageButton.setPadding(0, 0, 0, 0);
         imageButton.setBackgroundColor(0x00000000);
@@ -3594,7 +3618,114 @@ public final class SuggestionBarView extends GridLayout
         imageButton.setContentDescription(entry.label);
         registerLaunchTarget(entry.appRef, imageButton);
         shell.addView(imageButton);
+        slotIcons.add(new SlotIcon(shell, imageButton, imageButton, entry, null, null, null));
         return shell;
+    }
+
+    /**
+     * One built slot's icon, so a new icon size resizes the slot in place instead of rebuilding
+     * the row. Holds the views it sizes and the entries their artwork is rendered from; dropped
+     * with the slots by the next render.
+     */
+    private final class SlotIcon {
+        /** The slot the row holds; one a folder replaced before it was added is never resized. */
+        @NonNull final View slot;
+        /** The box the icon is: the app's button, or a folder's round shell. */
+        @NonNull final View box;
+        /** A single app's button and its entry; null for a folder. */
+        @Nullable final ImageView image;
+        @Nullable final LauncherAppEntry entry;
+        /** A folder's minis and their entries, index for index, and its overflow count. */
+        @Nullable final List<ImageView> minis;
+        @Nullable final List<LauncherAppEntry> miniEntries;
+        @Nullable final View overflow;
+
+        SlotIcon(@NonNull View slot, @NonNull View box, @Nullable ImageView image,
+                 @Nullable LauncherAppEntry entry, @Nullable List<ImageView> minis,
+                 @Nullable List<LauncherAppEntry> miniEntries, @Nullable View overflow) {
+            this.slot = slot;
+            this.box = box;
+            this.image = image;
+            this.entry = entry;
+            this.minis = minis;
+            this.miniEntries = miniEntries;
+            this.overflow = overflow;
+        }
+
+        /** The slot at {@code sizePx}; nothing at all when it already is that size. */
+        void resize(int sizePx) {
+            if (!setSquareSize(box, sizePx))
+                return;
+            if (image != null && entry != null) {
+                image.setMinimumWidth(sizePx);
+                image.setMinimumHeight(sizePx);
+                rebindRenderedIcon(image, entry, sizePx);
+            }
+            if (minis != null && miniEntries != null) {
+                int miniSize = folderMiniIconSizePx(sizePx);
+                for (int i = 0; i < minis.size() && i < miniEntries.size(); i++) {
+                    if (setSquareSize(minis.get(i), miniSize))
+                        rebindRenderedIcon(minis.get(i), miniEntries.get(i), miniSize);
+                }
+                if (overflow != null)
+                    setSquareSize(overflow, miniSize);
+            }
+        }
+    }
+
+    /** Sizes a view's box square, comparing first; true when it changed. */
+    private static boolean setSquareSize(@NonNull View view, int sizePx) {
+        ViewGroup.LayoutParams params = view.getLayoutParams();
+        if (params == null || (params.width == sizePx && params.height == sizePx))
+            return false;
+        params.width = sizePx;
+        params.height = sizePx;
+        view.setLayoutParams(params);
+        return true;
+    }
+
+    /** The slots the last render built, for {@link #resizeSlotIcons}. */
+    private final List<SlotIcon> slotIcons = new ArrayList<>();
+    /** One resize per frame however many of the dock's figures changed in it. */
+    private boolean slotIconResizePosted;
+    private final Runnable slotIconResizeRunnable = () -> {
+        slotIconResizePosted = false;
+        resizeSlotIcons();
+    };
+
+    /**
+     * Asks for the built slots to take the current icon size on the next frame. Posted rather
+     * than done here because the dock's setters can be reached from inside a layout pass, which
+     * must not change layout params, and because a drag frame changes the icon, the hint and the
+     * scale together: one pass serves them all.
+     */
+    private void scheduleSlotIconResize() {
+        if (vertical || slotIconResizePosted || slotIcons.isEmpty())
+            return;
+        slotIconResizePosted = true;
+        postOnAnimation(slotIconResizeRunnable);
+    }
+
+    /**
+     * The built slots at the size the row's icons are now: each box resized and its artwork
+     * rebound at that size, the old artwork standing in until the new one is rendered. A slot
+     * already that size is left alone, so the pass costs nothing when only the band moved.
+     */
+    private void resizeSlotIcons() {
+        if (vertical)
+            return;
+        int sizePx = iconSizePx();
+        if (sizePx <= 0)
+            return;
+        for (SlotIcon icon : slotIcons) {
+            if (icon.slot.getParent() == this)
+                icon.resize(sizePx);
+        }
+    }
+
+    /** A folder's mini icons, two to a side of its round shell. */
+    private int folderMiniIconSizePx(int shellSizePx) {
+        return Math.max(dp(9), Math.round(shellSizePx * 0.42f));
     }
 
     /**
@@ -4316,8 +4447,11 @@ public final class SuggestionBarView extends GridLayout
         miniGrid.setUseDefaultMargins(false);
         miniGrid.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
 
-        int miniSize = Math.max(dp(9), Math.round(shellSize * 0.42f));
+        int miniSize = folderMiniIconSizePx(shellSize);
         int placed = 0;
+        List<ImageView> minis = new ArrayList<>();
+        List<LauncherAppEntry> miniEntries = new ArrayList<>();
+        View overflowBadge = null;
         for (PinnedAppItem folderApp : folder.apps) {
             if (placed >= 4) break;
             LauncherAppEntry e = resolvePinnedApp(folderApp);
@@ -4332,6 +4466,8 @@ public final class SuggestionBarView extends GridLayout
             params.setMargins(miniMargin, miniMargin, miniMargin, miniMargin);
             mini.setLayoutParams(params);
             miniGrid.addView(mini);
+            minis.add(mini);
+            miniEntries.add(e);
             placed++;
         }
         if (folder.apps.size() > 4) {
@@ -4351,9 +4487,11 @@ public final class SuggestionBarView extends GridLayout
             badge.bottomMargin = pinnedFolderMiniIconMarginPx();
             badge.setMarginEnd(pinnedFolderMiniIconMarginPx());
             iconShell.addView(overflow, badge);
+            overflowBadge = overflow;
         }
         iconShell.addView(miniGrid, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         root.addView(iconShell, new FrameLayout.LayoutParams(shellSize, shellSize, Gravity.CENTER));
+        slotIcons.add(new SlotIcon(root, iconShell, null, null, minis, miniEntries, overflowBadge));
         return root;
     }
 

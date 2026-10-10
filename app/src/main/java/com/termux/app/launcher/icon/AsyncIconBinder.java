@@ -202,8 +202,36 @@ public final class AsyncIconBinder {
         IconArrivalDrawable tile = new IconArrivalDrawable(sizePx, tileColor.tileColor());
         slot.tile = tile;
         view.setImageDrawable(tile);
-        Request request = new Request(this, view, slot, slot.generation, tile, entry, sizePx,
-            fallback);
+        Request request = new Request(this, view, slot, slot.generation, tile, tile, entry,
+            sizePx, fallback);
+        pending.add(request);
+        worker.execute(request);
+        return false;
+    }
+
+    /**
+     * {@link #bind} for a view already showing this entry's icon at another size, as a resize
+     * leaves it: a held icon is set now, and a miss keeps what the view shows until the icon at
+     * {@code sizePx} is rendered, then swaps it in without a tile or a fade. A size drag rebinds
+     * every frame, and a tile per frame would blink the whole row. A view with nothing settled to
+     * keep — empty, or still waiting on its own tile — is bound the ordinary way. Main thread.
+     *
+     * @return true when the icon was bound now, false when it is on the way
+     */
+    public boolean rebind(@NonNull ImageView view, @NonNull LauncherAppEntry entry, int sizePx,
+                          @Nullable Drawable fallback) {
+        Drawable showing = view.getDrawable();
+        if (showing == null || isPending(view) || sSynchronousForTesting)
+            return bind(view, entry, sizePx, fallback);
+        Slot slot = slotFor(view);
+        release(slot);
+        Drawable held = renderer.peek(entry, sizePx);
+        if (held != null) {
+            view.setImageDrawable(held);
+            return true;
+        }
+        Request request = new Request(this, view, slot, slot.generation, null, showing, entry,
+            sizePx, fallback);
         pending.add(request);
         worker.execute(request);
         return false;
@@ -297,20 +325,24 @@ public final class AsyncIconBinder {
         @NonNull final WeakReference<ImageView> view;
         @NonNull final Slot slot;
         final int token;
-        @NonNull final IconArrivalDrawable tile;
+        /** The tile fading the icon in; null for a {@link #rebind}, which swaps it in. */
+        @Nullable final IconArrivalDrawable tile;
+        /** What the view shows while it waits, held weakly: the tile, or the icon it had. */
+        @NonNull final WeakReference<Drawable> shown;
         @NonNull final LauncherAppEntry entry;
         final int sizePx;
         @Nullable final Drawable fallback;
 
         Request(@NonNull AsyncIconBinder binder, @NonNull ImageView view, @NonNull Slot slot,
-                int token, @NonNull IconArrivalDrawable tile, @NonNull LauncherAppEntry entry,
-                int sizePx, @Nullable Drawable fallback) {
+                int token, @Nullable IconArrivalDrawable tile, @NonNull Drawable shown,
+                @NonNull LauncherAppEntry entry, int sizePx, @Nullable Drawable fallback) {
             this.owner = binder.owner;
             this.binder = new WeakReference<>(binder);
             this.view = new WeakReference<>(view);
             this.slot = slot;
             this.token = token;
             this.tile = tile;
+            this.shown = new WeakReference<>(shown);
             this.entry = entry;
             this.sizePx = sizePx;
             this.fallback = fallback;
@@ -332,7 +364,7 @@ public final class AsyncIconBinder {
             if (!isWanted()) return;
             Drawable rendered = host.renderQuietly(entry, sizePx);
             Drawable icon = rendered != null ? rendered : fallback;
-            host.main.execute(new Delivery(view, slot, token, tile, icon));
+            host.main.execute(new Delivery(view, slot, token, tile, shown, icon));
         }
     }
 
@@ -341,22 +373,35 @@ public final class AsyncIconBinder {
         @NonNull final WeakReference<ImageView> view;
         @NonNull final Slot slot;
         final int token;
-        @NonNull final IconArrivalDrawable tile;
+        @Nullable final IconArrivalDrawable tile;
+        @NonNull final WeakReference<Drawable> shown;
         @Nullable final Drawable icon;
 
         Delivery(@NonNull WeakReference<ImageView> view, @NonNull Slot slot, int token,
-                 @NonNull IconArrivalDrawable tile, @Nullable Drawable icon) {
+                 @Nullable IconArrivalDrawable tile, @NonNull WeakReference<Drawable> shown,
+                 @Nullable Drawable icon) {
             this.view = view;
             this.slot = slot;
             this.token = token;
             this.tile = tile;
+            this.shown = shown;
             this.icon = icon;
         }
 
         @Override
         public void run() {
             ImageView live = view.get();
-            if (live != null) deliver(live, slot, token, tile, icon);
+            if (live == null) return;
+            if (tile != null) {
+                deliver(live, slot, token, tile, icon);
+                return;
+            }
+            // A rebind: swapped in over the icon it stood in for, unless something else has
+            // been set since or the render came back empty — the stand-in beats nothing.
+            Drawable standIn = shown.get();
+            if (slot.generation != token || standIn == null || live.getDrawable() != standIn
+                || icon == null) return;
+            live.setImageDrawable(icon);
         }
     }
 
