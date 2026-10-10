@@ -13,9 +13,9 @@ import androidx.annotation.NonNull;
 public enum TerminalContrastLevel {
     //        value      body  ansi  cursor ×chroma chroma band  normal tone  bright tone  fg tone     bg tone     reach
     //                                              min   max    dark  light  dark  light  dark light  dark light
-    SOFTER("softer",     3.0d, 3.5d, 3.0d, 0.65d,  14d,  30d,   84d,  46d,   92d,  34d,   80d, 30d,  16d,  90d,   4d),
-    DEFAULT("default",   4.5d, 4.5d, 3.0d, 1.0d,   28d,  52d,   80d,  40d,   90d,  30d,   90d, 10d,   8d,  97d,  10d),
-    HARDER("harder",     7.0d, 6.0d, 4.5d, 1.4d,   44d,  80d,   78d,  38d,   90d,  28d,   96d,  6d,   2d, 100d,  20d);
+    SOFTER("softer",     3.0d, 3.5d, 3.0d, 0.5d,   10d,  24d,   84d,  46d,   92d,  34d,   80d, 30d,  16d,  90d,   4d),
+    DEFAULT("default",   4.5d, 4.5d, 3.0d, 1.0d,   16d, 200d,   80d,  40d,   90d,  30d,   90d, 10d,   8d,  97d,  10d),
+    HARDER("harder",     7.0d, 6.0d, 4.5d, 1.7d,   56d, 110d,   78d,  38d,   90d,  28d,   96d,  6d,   2d, 100d,  20d);
 
     @NonNull public final String value;
     /**
@@ -25,7 +25,11 @@ public enum TerminalContrastLevel {
     public final double bodyTarget;
     public final double ansiRatio;
     public final double cursorRatio;
-    /** Multiplies the theme's chroma before the band below clamps it. */
+    /**
+     * Multiplies the theme's chroma before the band below clamps it. Default is the theme's own
+     * Material chroma untouched — its band only keeps a near-grey theme's ANSI hues apart — and
+     * Softer and Harder sit well either side of it.
+     */
     public final double chromaScale;
     public final double chromaMin;
     public final double chromaMax;

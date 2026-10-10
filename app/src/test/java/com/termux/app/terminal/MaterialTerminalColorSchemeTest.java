@@ -419,22 +419,23 @@ public class MaterialTerminalColorSchemeTest {
 
     /**
      * The whole point of the rewrite: a muted wallpaper yields a muted palette and a vivid one a
-     * vivid palette, both inside one band. Asserted as an identity against the clamp endpoints —
-     * reading chroma back off the slots would measure sRGB gamut clipping instead of the rule.
+     * vivid palette. At Default the theme's chroma passes through as Material declares it, with
+     * only a floor so a near-grey theme keeps its ANSI hues apart. Asserted as an identity against
+     * the floor — reading chroma back off the slots would measure sRGB gamut clipping instead of
+     * the rule.
      */
     @Test
     public void chromaIsTheThemesChromaClampedToTheBand() {
         Properties muted = slots(220d, 4d, true);
         Properties vivid = slots(220d, 120d, true);
-        assertEquals(slots(220d, 28d, true), muted);
-        assertEquals(slots(220d, 52d, true), vivid);
+        assertEquals(slots(220d, 16d, true), muted);
         assertFalse("a muted and a vivid theme cannot produce the same palette", muted.equals(vivid));
         // Mid-band chroma is passed through untouched.
         assertNotEquals(slots(220d, 40d, true), muted);
         assertNotEquals(slots(220d, 40d, true), vivid);
-        // Nothing ever exceeds the ceiling; clipping can only take chroma away.
+        // Nothing ever exceeds the theme's own chroma; clipping can only take chroma away.
         for (int i = 1; i <= 6; i++) {
-            assertTrue("slot " + i, Hct.fromInt(color(vivid, "color" + i)).getChroma() <= 53d);
+            assertTrue("slot " + i, Hct.fromInt(color(vivid, "color" + i)).getChroma() <= 121d);
         }
     }
 
@@ -713,6 +714,20 @@ public class MaterialTerminalColorSchemeTest {
             TerminalContrastLevel.HARDER);
         assertTrue(meanAccentChroma(softer) < meanAccentChroma(dflt));
         assertTrue(meanAccentChroma(dflt) < meanAccentChroma(harder));
+    }
+
+    /**
+     * Default is pure Material: the accents carry the theme's own chroma, unclamped, and Softer
+     * and Harder sit clearly either side of it — half and 1.7 times on pong's chroma of 39.
+     */
+    @Test
+    public void defaultAccentChromaIsTheThemesOwn() {
+        for (double source : new double[] {24d, 39d, 60d}) {
+            assertEquals(source, TerminalContrastLevel.DEFAULT.accentChroma(source), 1e-9);
+        }
+        assertEquals(16d, TerminalContrastLevel.DEFAULT.accentChroma(4d), 1e-9);
+        assertTrue(TerminalContrastLevel.SOFTER.accentChroma(39d) <= 39d * 0.5d + 1e-9);
+        assertTrue(TerminalContrastLevel.HARDER.accentChroma(39d) >= 39d * 1.7d - 1e-9);
     }
 
     /**
