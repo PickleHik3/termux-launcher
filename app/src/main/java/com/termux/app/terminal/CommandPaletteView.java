@@ -13,6 +13,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
@@ -67,6 +68,12 @@ public final class CommandPaletteView extends View {
         /** A tap landed on the keycap at {@code index} in the frequent-action strip. */
         void onKeycapTapped(int index);
 
+        /**
+         * A tap landed on the trailing chip of the row at {@code index}: the
+         * row's own action, the contact results' call button.
+         */
+        void onRowActionTapped(int index);
+
         /** A long press landed on the row at {@code index}: the secondary action for that row. */
         void onRowLongPressed(int index);
 
@@ -87,25 +94,33 @@ public final class CommandPaletteView extends View {
         final boolean enabled;
         /** Leading artwork, for app rows; text rows leave the gutter out entirely. */
         @Nullable final Drawable icon;
+        /**
+         * Trailing chip the row carries, or {@code null} for rows without one.
+         * The contact results' call button: the one row kind with an action
+         * beside its name, so it is the only kind that draws one.
+         */
+        @Nullable final Action action;
 
         private Row(int kind, @NonNull String primary, @Nullable String description,
-                    @NonNull String shortcut, boolean enabled, @Nullable Drawable icon) {
+                    @NonNull String shortcut, boolean enabled, @Nullable Drawable icon,
+                    @Nullable Action action) {
             this.kind = kind;
             this.primary = primary;
             this.description = description;
             this.shortcut = shortcut;
             this.enabled = enabled;
             this.icon = icon;
+            this.action = action;
         }
 
         @NonNull
         public static Row category(@NonNull String label) {
-            return new Row(KIND_CATEGORY, label, null, "", true, null);
+            return new Row(KIND_CATEGORY, label, null, "", true, null, null);
         }
 
         @NonNull
         public static Row notice(@NonNull String text) {
-            return new Row(KIND_NOTICE, text, null, "", true, null);
+            return new Row(KIND_NOTICE, text, null, "", true, null, null);
         }
 
         @NonNull
@@ -118,7 +133,26 @@ public final class CommandPaletteView extends View {
         public static Row entry(@NonNull String title, @Nullable String description,
                                 @NonNull String shortcut, boolean enabled,
                                 @Nullable Drawable icon) {
-            return new Row(KIND_ENTRY, title, description, shortcut, enabled, icon);
+            return entry(title, description, shortcut, enabled, icon, null);
+        }
+
+        @NonNull
+        public static Row entry(@NonNull String title, @Nullable String description,
+                                @NonNull String shortcut, boolean enabled,
+                                @Nullable Drawable icon, @Nullable Action action) {
+            return new Row(KIND_ENTRY, title, description, shortcut, enabled, icon, action);
+        }
+
+        /**
+         * A trailing chip: an icon drawn inside its own round, so a
+         * contact's call button is a button, not a word.
+         */
+        public static final class Action {
+            @NonNull public final Drawable icon;
+
+            public Action(@NonNull Drawable icon) {
+                this.icon = icon;
+            }
         }
 
         public boolean isSelectable() {
@@ -147,6 +181,10 @@ public final class CommandPaletteView extends View {
     private static final float CATEGORY_PAD_LEFT = 12f;
     private static final float ICON_SIZE = 16f;
     private static final float ICON_GAP = 7f;
+    /** The call chip: a round just big enough to hold a phone. */
+    private static final float ACTION_CHIP_DP = 20f;
+    /** The phone inside the call chip's round. */
+    private static final float ACTION_ICON_DP = 12f;
     private static final float FOCUS_BAR_W = 2f;
     private static final float VIEWPORT_BOTTOM_SLACK = 26f;
     private static final float BOTTOM_FADE_H = 28f;
@@ -219,6 +257,12 @@ public final class CommandPaletteView extends View {
      */
     private final RectF mModalBounds = new RectF();
     private final List<RectF> mCapRects = new ArrayList<>();
+    /**
+     * The call chips of the visible rows, by row index. Rebuilt with every
+     * draw of the list, like the keycap rects, so a chip can only be tapped
+     * where it was just painted.
+     */
+    private final SparseArray<RectF> mActionRects = new SparseArray<>();
 
     @Nullable private Callbacks mCallbacks;
 
@@ -345,6 +389,8 @@ public final class CommandPaletteView extends View {
         if (focusIndex != mFocusIndex || rows != mRows) resetScroll();
         mRows = rows;
         mFocusIndex = focusIndex;
+        // Chips are laid out by the next draw; until then none is tappable.
+        mActionRects.clear();
         invalidate();
     }
 
@@ -631,6 +677,7 @@ public final class CommandPaletteView extends View {
     private void drawList(@NonNull Canvas canvas, float top, float bottom, int alpha) {
         int save = canvas.save();
         canvas.clipRect(mFrame.left, top, mFrame.right, bottom);
+        mActionRects.clear();
         float viewportHeight = bottom - top;
         updateScrollOffset(viewportHeight);
         float y = top - mScrollOffset;
@@ -704,6 +751,16 @@ public final class CommandPaletteView extends View {
             : mMono.measureText(row.shortcut) + dp(10f);
         mMono.setTextSize(sp(SIZE_ROW));
         float titleWidth = mFrame.right - dp(ROW_PAD_RIGHT) - shortcutWidth - textLeft;
+        // The chip first: its width is what the title has to leave room for.
+        if (row.action != null) {
+            float chipWidth = dp(ACTION_CHIP_DP);
+            titleWidth -= chipWidth + dp(CAP_GAP);
+            float chipRight = mFrame.right - dp(ROW_PAD_RIGHT);
+            float chipTop = top + dp(ROW_PAD_V)
+                + (lineHeight(SIZE_ROW) - chipWidth) / 2f;
+            mActionRects.put(index, new RectF(
+                chipRight - chipWidth, chipTop, chipRight, chipTop + chipWidth));
+        }
         canvas.drawText(ellipsize(mMono, row.primary, titleWidth), textLeft, titleBaseline, mMono);
 
         if (!row.shortcut.isEmpty()) {
@@ -721,6 +778,47 @@ public final class CommandPaletteView extends View {
             canvas.drawText(ellipsize(mMono, "↳ " + row.description, width),
                 textLeft, descriptionBaseline, mMono);
         }
+        if (row.action != null) {
+            drawActionChip(canvas, row.action, mActionRects.get(index), alpha);
+        }
+    }
+
+    /**
+     * Draws a row's trailing chip: a round in the keycap's fill,
+     * ramp and hairline, with the row's own icon centred inside
+     * it. A contact's call button is a button, not a word.
+     */
+    private void drawActionChip(@NonNull Canvas canvas, @NonNull Row.Action action,
+                                @Nullable RectF chip, int alpha) {
+        if (chip == null) return;
+        float radius = chip.height() / 2f;
+        mFill.setShader(null);
+        mFill.setColor(withBodyAlpha(mChipFill, alpha));
+        canvas.drawRoundRect(chip, radius, radius, mFill);
+        mFill.setShader(new LinearGradient(0f, chip.top, 0f, chip.bottom,
+            ColorUtils.setAlphaComponent(GlassTokens.HIGHLIGHT, 26),
+            ColorUtils.setAlphaComponent(GlassTokens.SHADE, 56), Shader.TileMode.CLAMP));
+        canvas.drawRoundRect(chip, radius, radius, mFill);
+        mFill.setShader(null);
+        mStroke.setColor(withBodyAlpha(
+            ColorUtils.setAlphaComponent(GlassTokens.HIGHLIGHT, 88), alpha));
+        float inset = mStroke.getStrokeWidth() / 2f;
+        mRect.set(chip.left + inset, chip.top + inset, chip.right - inset, chip.bottom - inset);
+        canvas.drawRoundRect(mRect, radius, radius, mStroke);
+
+        // The phone, centred in the round. Bounds are set per frame
+        // and the alpha restored, like the row icons: one shared
+        // instance is painted for every contact row at once.
+        Drawable icon = action.icon;
+        float iconSize = dp(ACTION_ICON_DP);
+        float iconLeft = chip.centerX() - iconSize / 2f;
+        float iconTop = chip.centerY() - iconSize / 2f;
+        int previous = icon.getAlpha();
+        icon.setBounds(Math.round(iconLeft), Math.round(iconTop),
+            Math.round(iconLeft + iconSize), Math.round(iconTop + iconSize));
+        icon.setAlpha(alpha);
+        icon.draw(canvas);
+        icon.setAlpha(previous);
     }
 
     /**
@@ -959,6 +1057,16 @@ public final class CommandPaletteView extends View {
 
     private void handleTap(float x, float y) {
         if (mCallbacks == null) return;
+        // A chip owns its own tap before the row it sits on: the call
+        // button dials, the row opens the contact.
+        for (int i = 0; i < mActionRects.size(); i++) {
+            RectF chip = mActionRects.valueAt(i);
+            if (x >= chip.left && x <= chip.right
+                && y >= chip.top && y <= chip.bottom) {
+                mCallbacks.onRowActionTapped(mActionRects.keyAt(i));
+                return;
+            }
+        }
         for (int i = 0; i < mCapRects.size(); i++) {
             RectF cap = mCapRects.get(i);
             if (x >= cap.left && x <= cap.right

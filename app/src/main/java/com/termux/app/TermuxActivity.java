@@ -728,6 +728,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int REQUEST_CODE_VOICE_INPUT_MICROPHONE = 4717;
     /** The built-in agenda and calendar widgets asking to read the calendar. */
     private static final int REQUEST_CODE_WIDGET_CALENDAR = 4718;
+    /** The command palette's contact search asking to read the contacts. */
+    public static final int REQUEST_CODE_PALETTE_CONTACTS = 4719;
     /** Whether this process has already asked for the calendar once; see the widget host. */
     private boolean mWidgetCalendarAsked;
     @Nullable private TerminalSession mVoiceTypingTargetSession;
@@ -16542,6 +16544,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mWelcomeSheet != null) mWelcomeSheet.refresh();
         } else if (requestCode == REQUEST_CODE_WIDGET_CALENDAR) {
             if (mWidgetPaneController != null) mWidgetPaneController.onCalendarPermissionChanged();
+        } else if (requestCode == REQUEST_CODE_PALETTE_CONTACTS) {
+            // The palette's contact search: its rows rebuild themselves
+            // from the result, granted or not.
+            boolean granted = grantResults.length > 0
+                && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            getCommandPaletteController().onContactsAccessChanged(granted);
         } else if (requestCode == REQUEST_CODE_VOICE_INPUT_MICROPHONE) {
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {

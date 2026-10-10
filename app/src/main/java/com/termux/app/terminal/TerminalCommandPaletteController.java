@@ -4,8 +4,14 @@ import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.Manifest;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.ContactsContract;
 import android.provider.Settings;
 import android.view.Choreographer;
 import android.view.HapticFeedbackConstants;
@@ -19,6 +25,8 @@ import android.widget.LinearLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
@@ -157,12 +165,26 @@ public final class TerminalCommandPaletteController
      * Rebuilt with the rows so a stale icon can never outlive the app row it belonged to.
      */
     private final Map<String, Drawable> mRowIcons = new HashMap<>();
+    /** The phone inside a contact row's call chip; white, so it reads on the glass. */
+    @Nullable private Drawable mCallIcon;
     /**
      * Stable id to the chord bound to that app. Built once per show() and again when a cold app
      * cache lands or a capture writes a new binding — never per keystroke, since resolving it walks
      * every binding in the config.
      */
     @NonNull private Map<String, String> mAppShortcuts = java.util.Collections.emptyMap();
+
+    /**
+     * The warm contact cache the current search narrows, loaded when the
+     * palette opens with contact access already granted, or when access
+     * lands after the palette asked for it on a query.
+     */
+    @NonNull private List<CommandPaletteContacts.Contact> mContacts =
+        java.util.Collections.emptyList();
+    /** Whether contact search is live: the permission granted. */
+    private boolean mContactsAccess;
+    /** Whether this show already asked for contact access, so one query asks once. */
+    private boolean mContactsRequested;
 
     private Mode mMode = Mode.LIST;
     /**
@@ -271,6 +293,15 @@ public final class TerminalCommandPaletteController
         mListRevealed = false;
         mOpen = true;
         mAppShortcuts = TerminalCommandPalette.buildAppShortcuts(mAppProvider);
+        // Contact search is live only with contact access; the cache warms
+        // with the palette so a first query does not sweep the contacts itself.
+        mContacts = java.util.Collections.emptyList();
+        mContactsAccess = ContextCompat.checkSelfPermission(mActivity,
+            Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED;
+        mContactsRequested = false;
+        if (mContactsAccess) {
+            CommandPaletteContacts.load(mActivity, this::onContactsLoaded);
+        }
 
         mView.refreshPalette();
         mView.setArgumentMode(false, "", "");
@@ -615,6 +646,21 @@ public final class TerminalCommandPaletteController
             new ArrayList<>(CommandPaletteFilter.filterAndRank(mEntries, mQuery));
         ranked.addAll(TerminalCommandPalette.buildAppEntries(mActivity, mAppProvider,
             mAppUsageStats, mQuery, mAppShortcuts, mRowIcons));
+        if (!mQuery.trim().isEmpty()) {
+            if (mContactsAccess) {
+                List<CommandPaletteContacts.Match> matches =
+                    CommandPaletteContacts.filter(mContacts, mQuery);
+                ranked.addAll(
+                    TerminalCommandPalette.buildContactEntries(mActivity, matches));
+                if (!matches.isEmpty()) ensureCallIcon();
+            } else {
+                // The ask is on its way or was refused; either way the
+                // row says why contacts are not in the results yet.
+                rows.add(CommandPaletteView.Row.notice(
+                    mActivity.getString(R.string.palette_contacts_notice)));
+                mRowEntries.add(null);
+            }
+        }
         if (ranked.isEmpty()) {
             rows.add(CommandPaletteView.Row.notice(
                 mActivity.getString(R.string.palette_no_match, upper(mQuery))));
@@ -646,10 +692,13 @@ public final class TerminalCommandPaletteController
 
     private void addEntryRow(@NonNull List<CommandPaletteView.Row> rows,
                              @NonNull CommandPaletteFilter.Entry entry) {
+        boolean contact = TerminalCommandPalette.CATEGORY_CONTACTS.equals(entry.category);
         rows.add(CommandPaletteView.Row.entry(entry.title,
             entry.enabled ? entry.subtitle : entry.disabledReason,
             entry.shortcutLabel(), entry.enabled,
-            entry.iconKey == null ? null : mRowIcons.get(entry.iconKey)));
+            entry.iconKey == null ? null : mRowIcons.get(entry.iconKey),
+            // A contact row carries its call button; no other row has one.
+            contact ? new CommandPaletteView.Row.Action(mCallIcon) : null));
         mRowEntries.add(entry);
     }
 
@@ -917,8 +966,55 @@ public final class TerminalCommandPaletteController
             mView.setHeader(headerMeta(), mCrumb);
             return;
         }
+        // The contacts section is search-only, so the ask belongs to the
+        // first thing typed, not to the palette opening.
+        if (!mQuery.trim().isEmpty()) maybeRequestContactCallAccess();
         mFocus = 0;
         rebuildRows();
+    }
+
+    /**
+     * The palette's own permission result: contact search goes live
+     * from here, wherever the request was made from.
+     */
+    public void onContactsAccessChanged(boolean granted) {
+        mContactsAccess = granted;
+        if (!granted) return;
+        CommandPaletteContacts.load(mActivity, this::onContactsLoaded);
+        if (mOpen && mMode == Mode.LIST && !mQuery.trim().isEmpty()) rebuildRows();
+    }
+
+    private void onContactsLoaded(@NonNull List<CommandPaletteContacts.Contact> contacts) {
+        mContacts = contacts;
+        if (mOpen && mMode == Mode.LIST && !mQuery.trim().isEmpty()) rebuildRows();
+    }
+
+    /** The phone inside a contact row's call chip; white, so it reads on the glass. */
+    private void ensureCallIcon() {
+        if (mCallIcon != null) return;
+        mCallIcon = ContextCompat.getDrawable(mActivity, R.drawable.ic_palette_dial);
+    }
+
+    /**
+     * Asks for contact access once per show, on the first query,
+     * together with call access so a result's call button can
+     * place the call itself. A denial stands for the rest of the
+     * show — the notice row says why contacts are absent — and
+     * the system keeps its own "ask no more" decision.
+     */
+    private void maybeRequestContactCallAccess() {
+        if (mContactsAccess && callAccessGranted() || mContactsRequested) return;
+        mContactsRequested = true;
+        ActivityCompat.requestPermissions(mActivity,
+            new String[]{Manifest.permission.READ_CONTACTS,
+                Manifest.permission.CALL_PHONE},
+            TermuxActivity.REQUEST_CODE_PALETTE_CONTACTS);
+    }
+
+    /** Call access as it stands now, so a tap never places a call without it. */
+    private boolean callAccessGranted() {
+        return ContextCompat.checkSelfPermission(mActivity,
+            Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
     }
 
     private void popMode() {
@@ -1164,6 +1260,12 @@ public final class TerminalCommandPaletteController
                 ? entry.disabledReason : mActivity.getString(R.string.palette_empty), false);
             return;
         }
+        // Contact rows carry their own outcome: the row opens the
+        // contact, its chip dials. Neither is a registry tool.
+        if (TerminalCommandPalette.CATEGORY_CONTACTS.equals(entry.category)) {
+            openContact(entry);
+            return;
+        }
         if (entry.isSubmenu()) {
             mMode = Mode.CHOICES;
             mPendingEntry = entry;
@@ -1237,6 +1339,41 @@ public final class TerminalCommandPaletteController
         }
     }
 
+    /** Opens the contact's card in the Contacts app. */
+    private void openContact(@NonNull CommandPaletteFilter.Entry entry) {
+        JSONObject arguments = entry.arguments;
+        long contactId = arguments == null ? -1 : arguments.optLong("contact_id", -1);
+        String lookupKey = arguments == null
+            ? "" : arguments.optString("lookup_key", "");
+        if (contactId < 0 || lookupKey.isEmpty()) return;
+        playTick();
+        collapse();
+        Intent intent = new Intent(Intent.ACTION_VIEW,
+            ContactsContract.Contacts.getLookupUri(contactId, lookupKey));
+        try {
+            mActivity.startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            AppNotice.show(mActivity, R.string.palette_contact_open_failed, false);
+        }
+    }
+
+    /** Dials the number the row carries: places the call itself with call access, the dialer otherwise. */
+    private void callContact(@NonNull CommandPaletteFilter.Entry entry) {
+        JSONObject arguments = entry.arguments;
+        String number = arguments == null ? "" : arguments.optString("number", "");
+        if (number.isEmpty()) return;
+        playTick();
+        collapse();
+        Uri tel = Uri.parse("tel:" + Uri.encode(number));
+        Intent intent = new Intent(callAccessGranted()
+            ? Intent.ACTION_CALL : Intent.ACTION_DIAL, tel);
+        try {
+            mActivity.startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            AppNotice.show(mActivity, R.string.palette_contact_call_failed, false);
+        }
+    }
+
     /** No match: ⏎ hands the query to the shell verbatim. */
     private void runQueryInShell() {
         String command = mQuery.trim();
@@ -1300,6 +1437,17 @@ public final class TerminalCommandPaletteController
         if (entry == null) return;
         mFocus = index;
         beginCapture(entry);
+    }
+
+    /** A contact row's call chip: dials the number the row carries. */
+    @Override
+    public void onRowActionTapped(int index) {
+        if (index < 0 || index >= mRowEntries.size()) return;
+        CommandPaletteFilter.Entry entry = mRowEntries.get(index);
+        if (entry == null
+            || !TerminalCommandPalette.CATEGORY_CONTACTS.equals(entry.category)) return;
+        mFocus = index;
+        callContact(entry);
     }
 
     @Override
