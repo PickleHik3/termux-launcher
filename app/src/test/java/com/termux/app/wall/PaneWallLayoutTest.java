@@ -1228,6 +1228,40 @@ public class PaneWallLayoutTest {
     }
 
     @Test
+    public void theBottomLineIsTheOpeningsNotThePageInsetAgain() {
+        // Floating: the opening is 40 in from the wall, and the terminal's own margins carry its
+        // border's 3 of air on top. The line a hold finds is the opening's, where it is drawn.
+        buildWithContent();
+        android.view.ViewGroup.MarginLayoutParams margins =
+            (android.view.ViewGroup.MarginLayoutParams) terminal.getLayoutParams();
+        margins.setMargins(43, 43, 43, 43);
+        terminal.setLayoutParams(margins);
+        wall.setTerminalFrameAirPx(3);
+        wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, WIDTH, HEIGHT);
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public int[] borderInsetsPx() { return new int[] {40, 40, 40, 40}; }
+        });
+
+        // The page's last row, 10 inside its foot: inset twice, the line stood 40 above it.
+        float lastRow = terminal.getBottom() - 10f;
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, lastRow,
+            0L));
+        letTheHoldElapse();
+        assertFalse("a hold on the last row is the content's", wall.isDragging());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, lastRow,
+            520L));
+
+        // On the drawn line the hold pages.
+        float line = HEIGHT - 40f;
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, line,
+            1000L));
+        letTheHoldElapse();
+        assertTrue("a hold on the line pages", wall.isDragging());
+    }
+
+    @Test
     public void withGesturesOffTheBottomBorderIsTheContents() {
         buildWithContent();
         listenForKeyboardSwipes();

@@ -794,13 +794,19 @@ public final class PaneWallLayout extends ViewGroup {
         if (!canPage && keyboardReach <= 0f && statusReach <= 0f) return;
         View page = mPageViews.get(mCurrent);
         if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
+        // The line is the opening's: the wall's edges less the listener's insets. The page itself
+        // is already laid out inside its frame margins (onLayout), so insetting the page again
+        // put the line a whole margin inside the drawn one under Floating, over the last rows.
         int[] in = mListener != null ? mListener.borderInsetsPx() : null;
         boolean inset = in != null && in.length == 4;
-        float left = page.getLeft() + page.getTranslationX() + (inset ? Math.max(0, in[0]) : 0);
-        float top = page.getTop() + (inset ? Math.max(0, in[1]) : 0);
-        float right = page.getLeft() + page.getTranslationX() + page.getWidth()
-            - (inset ? Math.max(0, in[2]) : 0);
-        float bottom = page.getTop() + page.getHeight() - (inset ? Math.max(0, in[3]) : 0);
+        float slide = page.getTranslationX();
+        float left = inset ? getPaddingLeft() + slide + Math.max(0, in[0])
+            : page.getLeft() + slide;
+        float top = inset ? getPaddingTop() + Math.max(0, in[1]) : page.getTop();
+        float right = inset ? getWidth() - getPaddingRight() + slide - Math.max(0, in[2])
+            : page.getLeft() + slide + page.getWidth();
+        float bottom = inset ? getHeight() - getPaddingBottom() - Math.max(0, in[3])
+            : page.getTop() + page.getHeight();
         float band = BorderDrag.BAND_DP * density;
         // The wall stops where whatever stands below the page begins, so the air between the
         // frame and the wall's own foot is all the bottom band's.
