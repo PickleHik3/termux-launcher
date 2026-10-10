@@ -3463,17 +3463,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The frame glass's effective colour, for the insert's tone floor: the dock's tint at the
-     * dock's opacity over a mid grey standing for the wallpaper. Deliberately not sampled from the
-     * wallpaper, so the floor is a pure function of the settings and cannot flicker as it pans.
-     */
-    private int frameGlassEstimate() {
-        float alpha = mPreferences == null ? 0.5f : mPreferences.getAppBarOpacity() / 100f;
-        return androidx.core.graphics.ColorUtils.compositeColors(
-            resolveAccessorySurfaceColor(alpha), 0xFF808080);
-    }
-
-    /**
      * The glass supplier the pane controller paints from. Every value it reads is the same one the
      * dock and status surfaces use, so "Match all surfaces" moves the panes with everything else.
      */
@@ -3540,17 +3529,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public int paneGlassTintColor() {
-                int tint = shouldShowTerminalOverlaySurface()
+                // Under both Styles the pane is the frame's glass until Darkness is raised: the
+                // Docked insert reads as a window by the hairline round its opening, not by tone.
+                return shouldShowTerminalOverlaySurface()
                     ? mChrome.glass().look(mPreferences != null
                         ? mPreferences.getTerminalTintStrength()
                         : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
                         .flatTint(resolveTerminalSurfaceColor())
                     : Color.TRANSPARENT;
-                // The Docked insert stands at least one tone step darker than the frame glass.
-                return isRoundedDockStyle() ? tint
-                    : com.termux.app.chrome.InsertTone.floorTint(tint, frameGlassEstimate(),
-                        com.termux.app.chrome.LowOpacityGlass.keep(mPreferences != null
-                            ? mPreferences.getTerminalBackgroundOpacity() / 100f : 1f));
             }
 
             @Override public int paneGlassVeil(@NonNull Rect rootRect) {
