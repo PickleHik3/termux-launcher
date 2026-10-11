@@ -70,6 +70,18 @@ public final class TerminalCommandPalette {
     /** Display-only grouping key for live sessions; not a registry category. */
     public static final String CATEGORY_SESSIONS = "sessions";
 
+    /**
+     * Display-only grouping key for contact search results; not a registry
+     * category. Contact rows are acted on directly by the controller, so the
+     * tool name below is a sentinel the dispatcher never sees.
+     */
+    public static final String CATEGORY_CONTACTS = "contacts";
+
+    /** Sentinel tool name for contact rows. */
+    private static final String TOOL_CONTACT_OPEN = "contact.open";
+    /** Sentinel tool name for the row that asks for contact access. */
+    static final String TOOL_CONTACTS_ALLOW = "contact.allow";
+
     private TerminalCommandPalette() {
     }
 
@@ -408,6 +420,67 @@ public final class TerminalCommandPalette {
         });
     }
 
+    /**
+     * Contact rows for the current query, from the warm contact cache the
+     * controller keeps. A name or a phone number finds the contact; the row
+     * opens it in the Contacts app, and its chip opens the dialer on the
+     * number the query matched — the first number when it matched by name.
+     *
+     * <p>Pure projection of the cache, so the row shape is testable without
+     * a content provider.
+     */
+    @NonNull
+    static List<CommandPaletteFilter.Entry> buildContactEntries(
+        @NonNull Context context,
+        @NonNull List<CommandPaletteContacts.Match> matches
+    ) {
+        List<CommandPaletteFilter.Entry> entries = new ArrayList<>(matches.size());
+        for (CommandPaletteContacts.Match match : matches) {
+            JSONObject arguments = new JSONObject();
+            try {
+                // The lookup uri targets one contact exactly, so a row cannot
+                // drift to a different contact that shares its name.
+                arguments.put("contact_id", match.contact.contactId);
+                arguments.put("lookup_key", match.contact.lookupKey);
+                arguments.put("number", match.number);
+            } catch (JSONException ignored) {
+            }
+            entries.add(new CommandPaletteFilter.Entry(
+                TOOL_CONTACT_OPEN,
+                match.contact.name,
+                // The subtitle doubles as the row's second line: the number
+                // the call button hands to the dialer, so the row says what it will do.
+                match.number,
+                CATEGORY_CONTACTS,
+                Collections.<String>emptyList(),
+                true,
+                null,
+                false,
+                LauncherToolRegistry.ToolRisk.LOW,
+                arguments));
+        }
+        return entries;
+    }
+
+    /**
+     * The row a search shows while contact access is not granted: picking
+     * it asks for access, so the ask follows a choice rather than a keystroke.
+     */
+    @NonNull
+    static CommandPaletteFilter.Entry buildContactsAllowEntry(@NonNull Context context) {
+        return new CommandPaletteFilter.Entry(
+            TOOL_CONTACTS_ALLOW,
+            context.getString(R.string.palette_contacts_allow),
+            context.getString(R.string.palette_contacts_allow_hint),
+            CATEGORY_CONTACTS,
+            Collections.<String>emptyList(),
+            true,
+            null,
+            false,
+            LauncherToolRegistry.ToolRisk.LOW,
+            null);
+    }
+
     static boolean hasRequiredArguments(@NonNull LauncherToolRegistry.ToolMetadata tool) {
         JSONArray required = tool.schema.optJSONArray("required");
         return required != null && required.length() > 0;
@@ -470,6 +543,7 @@ public final class TerminalCommandPalette {
             case LauncherToolRegistry.CATEGORY_APPS: return context.getString(R.string.palette_category_apps);
             case LauncherToolRegistry.CATEGORY_WALL: return context.getString(R.string.palette_category_wall);
             case CATEGORY_SESSIONS: return context.getString(R.string.palette_category_sessions);
+            case CATEGORY_CONTACTS: return context.getString(R.string.palette_category_contacts);
             default: return category;
         }
     }
