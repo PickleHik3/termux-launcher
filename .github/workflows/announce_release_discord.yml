@@ -1,0 +1,96 @@
+name: Announce Release On Discord
+
+# Posts a published release to the Discord server: a stable `vX.Y.Z` to #releases, a pre-release
+# channel drop `vX.Y.Z-pre.N` to #pre-release. Every version ships three GitHub releases (plain,
+# nix-, vaj-); only the plain tag posts, once, linking all three editions. Nightlies are workflow
+# artifacts, not releases, so they never post. The tag name decides the channel, not GitHub's
+# Pre-release flag (reserved for -pre drops since 1.0.4; the nix- stables before that carried it).
+#
+# Secrets: DISCORD_WEBHOOK_RELEASES, DISCORD_WEBHOOK_PRERELEASE (channel webhook URLs). A missing
+# secret skips the post with a notice instead of failing the run.
+#
+# A pre-release pings the Testers role (members opt in through the server's Onboarding). Nothing
+# else is ever pinged: allowed_mentions names that one role and parses nothing from the notes.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing plain release tag to (re)announce, e.g. v1.0.3 or v1.1.0-pre.1'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to Discord
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          # Untrusted text (tag, body) reaches the script only through the environment, never
+          # interpolated into it.
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          EVENT_BODY: ${{ github.event.release.body }}
+          INPUT_TAG: ${{ github.event.inputs.release_tag }}
+          WEBHOOK_RELEASES: ${{ secrets.DISCORD_WEBHOOK_RELEASES }}
+          WEBHOOK_PRERELEASE: ${{ secrets.DISCORD_WEBHOOK_PRERELEASE }}
+          # The server's Testers role (Discord role ID; not a secret).
+          TESTERS_ROLE_ID: '1558766521663356980'
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess, sys, urllib.request
+
+          repo = os.environ["REPO"]
+          tag = os.environ.get("INPUT_TAG") or os.environ.get("EVENT_TAG") or ""
+          body = os.environ.get("EVENT_BODY") or ""
+          if os.environ.get("INPUT_TAG"):
+              body = subprocess.run(["gh", "release", "view", tag, "-R", repo, "--json", "body",
+                                     "--jq", ".body"], capture_output=True, text=True,
+                                    check=True).stdout
+
+          if re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+              kind, hook, color = "release", os.environ.get("WEBHOOK_RELEASES"), 0x22C55E
+          elif re.fullmatch(r"v\d+\.\d+\.\d+-pre\.\d+", tag):
+              kind, hook, color = "pre-release", os.environ.get("WEBHOOK_PRERELEASE"), 0xF59E0B
+          else:
+              print(f"'{tag}' is not a plain stable or pre-release tag (edition tags post via the plain one); nothing to announce.")
+              sys.exit(0)
+          if not hook:
+              print(f"::notice::No Discord webhook secret for {kind}s; skipping {tag}.")
+              sys.exit(0)
+
+          base = f"https://github.com/{repo}/releases/tag/"
+          editions = (f"[Termux edition]({base}{tag}) · [Nix edition]({base}nix-{tag}) · "
+                      f"[VAJ edition]({base}vaj-{tag})")
+          note = ("APKs are attached to each release within a few minutes of this post."
+                  if kind == "release" else
+                  "⚠️ Pre-release: may break. Install only from these GitHub links, and back up "
+                  "your home folder first. It installs over your current build.")
+          limit = 4096 - 400  # embed description cap, minus the links and note below
+          text = body.strip()
+          if len(text) > limit:
+              text = text[:limit].rsplit("\n", 1)[0] + "\n\n…full notes on GitHub."
+          embed = {
+              "title": f"Termux Launcher {tag}" + (" (pre-release)" if kind == "pre-release" else ""),
+              "url": base + tag,
+              "description": f"{text}\n\n**Download:** {editions}\n{note}",
+              "color": color,
+          }
+          payload = {"username": "Termux Launcher releases", "embeds": [embed],
+                     "allowed_mentions": {"parse": []}}  # release notes never ping anyone
+          testers = os.environ.get("TESTERS_ROLE_ID", "")
+          if kind == "pre-release" and testers.isdigit():
+              payload["content"] = f"<@&{testers}> {tag} is out, test build below 👇"
+              payload["allowed_mentions"] = {"parse": [], "roles": [testers]}
+          req = urllib.request.Request(hook, data=json.dumps(payload).encode(), method="POST",
+                                       headers={"Content-Type": "application/json",
+                                                "User-Agent": "termux-launcher-release-announcer"})
+          with urllib.request.urlopen(req, timeout=20) as resp:
+              print(f"Announced {tag} as a {kind}: HTTP {resp.status}")
+          PY

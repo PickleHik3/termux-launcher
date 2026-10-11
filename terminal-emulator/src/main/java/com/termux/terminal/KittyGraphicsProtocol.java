@@ -11,9 +11,13 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.zip.DataFormatException;
@@ -39,10 +43,38 @@ final class KittyGraphicsProtocol {
     private Upload upload;
     private long generation;
     private long decodeBytesInFlight;
-    /** Placements waiting on the worker behind an earlier transmission; see {@link #handlePlacement}. */
-    private int placementsInFlight;
+    /**
+     * Changes to the placement layer, in stream order, behind the work still on the worker that
+     * comes before them: a display decode or a bounced placement holds its place here until its
+     * result is posted back, and a delete that arrives meanwhile queues behind it instead of landing
+     * first. A synchronized update (mode 2026) collects everything it carries into one batch entry
+     * that applies whole. See {@link #changeLayer} and {@link #land}.
+     */
+    private final ArrayDeque<LayerStep> layerSteps = new ArrayDeque<>();
+    /** The batch of the synchronized update still open, already in {@link #layerSteps}; or null. */
+    @Nullable private LayerStep window;
+    /** When {@link #window} opened, in {@link System#currentTimeMillis} time. */
+    private long windowOpenedAt;
+    /**
+     * When a window that outlived its screen hold must seal regardless; 0 while it lasts only as long
+     * as the hold. See {@link #synchronizedHoldEnded}.
+     */
+    private long windowGraceDeadline;
+    /**
+     * How long after it opened a window may stay open past its hold for a picture still arriving.
+     * A test in this package shortens it.
+     */
+    long windowUploadGraceMillis = WINDOW_UPLOAD_GRACE_MILLIS;
+    static final long WINDOW_UPLOAD_GRACE_MILLIS = 1000;
     /** How many decodes this protocol has started: a test hook for "a re-placement decodes nothing". */
     int decodeCount;
+    /** The worker decodes run on; a test in this package swaps in one it steps by hand. */
+    Executor decoder = PNG_DECODER;
+    /**
+     * Stands in for the platform decode of a display transmission in tests in this package, where
+     * the stub {@link Bitmap} decodes nothing. Null outside tests.
+     */
+    @Nullable BitmapProducer decodeForTests;
 
     KittyGraphicsProtocol(TerminalEmulator emulator, TerminalOutput output) {
         this.emulator = emulator;
@@ -296,7 +328,10 @@ final class KittyGraphicsProtocol {
         }
 
         if (command.action == 'd') {
-            resetUploadAndDecodes();
+            // A delete ends a chunked upload, but it no longer cancels the decodes in flight: it is
+            // queued behind them instead (see handleDelete), which reaches the same end state
+            // without a frame where the old picture is gone and its replacement has not landed.
+            upload = null;
             handleDelete(command);
             return;
         }
@@ -570,7 +605,8 @@ final class KittyGraphicsProtocol {
             } else {
                 if (command.action == 't' || command.placeholder == 1) {
                     // Retransmission replaces the image, and its placements go with it.
-                    emulator.deleteKittyImageEverywhere(effectiveId);
+                    final long replacedId = effectiveId;
+                    changeLayer(() -> emulator.deleteKittyImageEverywhere(replacedId));
                 }
                 store.reserve(effectiveId, command.number, sourceWidth, sourceHeight, estimate);
                 if (virtualPlacement != null)
@@ -593,12 +629,13 @@ final class KittyGraphicsProtocol {
             reply(command, "ENOSPC:too much image data pending", true, false, effectiveId);
             return;
         }
+        final KittyImageStore.Entry reservation = store.get(effectiveId);
         decodeBytesInFlight += transmittedBytes;
-        PNG_DECODER.execute(() -> {
+        decoder.execute(() -> {
             Bitmap bitmap = null;
             String error = null;
             try {
-                bitmap = producer.produce();
+                bitmap = (decodeForTests != null ? decodeForTests : producer).produce();
                 if (bitmap == null) {
                     error = "EINVAL:image decode failed";
                 } else if (bitmap.getAllocationByteCount() > MAX_DECODED_BYTES) {
@@ -620,12 +657,14 @@ final class KittyGraphicsProtocol {
             output.postTerminalUpdate(() -> {
                 decodeBytesInFlight = Math.max(0, decodeBytesInFlight - transmittedBytes);
                 if (decodeError != null) {
-                    store.abandon(effectiveId);
+                    if (store.get(effectiveId) == reservation) store.abandon(effectiveId);
                     reply(command, decodeError, true, false, effectiveId);
                     return;
                 }
-                // A delete that raced the decode wins; the transmission still succeeded.
-                if (!store.complete(effectiveId, result, result.getAllocationByteCount()))
+                // A delete that raced the decode wins, and so does a later transmission under the
+                // same id; the transmission still succeeded.
+                if (store.get(effectiveId) != reservation
+                    || !store.complete(effectiveId, result, result.getAllocationByteCount()))
                     result.recycle();
                 reply(command, "OK", false, false, effectiveId);
             });
@@ -675,13 +714,15 @@ final class KittyGraphicsProtocol {
         emulator.advanceKittyGraphicsCursor(command, displaySize[0] + offsetX, displaySize[1] + offsetY,
             row, col, cellWidth, cellHeight);
         final boolean storeCopy = storeRequested;
+        final KittyImageStore.Entry reservation = storeRequested ? store.get(effectiveId) : null;
+        final LayerStep step = holdLayerPlace();
 
-        PNG_DECODER.execute(() -> {
+        decoder.execute(() -> {
             Bitmap decodedBitmap = null;
             String error = null;
             try {
                 decodeCount++;
-                decodedBitmap = producer.produce();
+                decodedBitmap = (decodeForTests != null ? decodeForTests : producer).produce();
                 if (decodedBitmap == null) {
                     error = "EINVAL:image decode failed";
                 } else if (decodedBitmap.getAllocationByteCount() > MAX_DECODED_BYTES) {
@@ -705,30 +746,35 @@ final class KittyGraphicsProtocol {
             final String decodeError = error;
             output.postTerminalUpdate(() -> {
                 decodeBytesInFlight = Math.max(0, decodeBytesInFlight - transmittedBytes);
-                if (decodeError != null) {
-                    if (storeCopy) store.abandon(effectiveId);
-                    if (acceptedGeneration == generation)
-                        reply(command, decodeError, true, false, effectiveId);
-                    return;
-                }
-                long bytes = decoded.getAllocationByteCount();
-                // Completed regardless of screen generation: the store is not screen state. A
-                // delete that raced the decode leaves the placement owning the pixels instead.
-                boolean shared = storeCopy && store.complete(effectiveId, decoded, (int) bytes);
-                if (acceptedGeneration != generation) {
-                    if (!shared) decoded.recycle();
-                    return;
-                }
-                int anchorRow = row - (int) (emulator.scrollEventCount() - scrollsAtSubmit);
-                if (!emulator.placeKittyGraphics(decoded, !shared, estimatedBytes(sourceWidth, sourceHeight, bytes),
-                    command, effectiveId, anchorRow, col, new int[] { 0, 0, sourceWidth, sourceHeight },
-                    displaySize[0], displaySize[1], offsetX, offsetY, cellWidth, cellHeight)) {
-                    if (!shared) decoded.recycle();
-                    reply(command, "EINVAL:image placement failed", true, false, effectiveId);
-                    return;
-                }
-                markPlaced(effectiveId);
-                reply(command, "OK", false, false, effectiveId);
+                land(step, () -> {
+                    if (decodeError != null) {
+                        if (storeCopy && store.get(effectiveId) == reservation) store.abandon(effectiveId);
+                        if (acceptedGeneration == generation)
+                            reply(command, decodeError, true, false, effectiveId);
+                        return;
+                    }
+                    long bytes = decoded.getAllocationByteCount();
+                    // Completed regardless of screen generation: the store is not screen state. A
+                    // delete that raced the decode leaves the placement owning the pixels instead,
+                    // and so does a later transmission under the same id: its reservation waits
+                    // for its own pixels, not for this frame's.
+                    boolean shared = storeCopy && store.get(effectiveId) == reservation
+                        && store.complete(effectiveId, decoded, (int) bytes);
+                    if (acceptedGeneration != generation) {
+                        if (!shared) decoded.recycle();
+                        return;
+                    }
+                    int anchorRow = row - (int) (emulator.scrollEventCount() - scrollsAtSubmit);
+                    if (!emulator.placeKittyGraphics(decoded, !shared, estimatedBytes(sourceWidth, sourceHeight, bytes),
+                        command, effectiveId, anchorRow, col, new int[] { 0, 0, sourceWidth, sourceHeight },
+                        displaySize[0], displaySize[1], offsetX, offsetY, cellWidth, cellHeight)) {
+                        if (!shared) decoded.recycle();
+                        reply(command, "EINVAL:image placement failed", true, false, effectiveId);
+                        return;
+                    }
+                    markPlaced(effectiveId);
+                    reply(command, "OK", false, false, effectiveId);
+                });
             });
         });
     }
@@ -745,6 +791,8 @@ final class KittyGraphicsProtocol {
      * on the decode worker; otherwise it is bounced through the worker and back so it lands
      * strictly after the referenced transmission's own completion, which is what makes
      * back-to-back {@code a=t} then {@code a=p} from real clients safe with an asynchronous decoder.
+     * While bounced it holds its place in {@link #layerSteps}, so a later delete waits for it; one
+     * that needs no bounce still lands in stream order, through {@link #changeLayer}.
      */
     private void handlePlacement(Command command) {
         final long id = store.resolveId(command.imageId, command.number);
@@ -820,20 +868,18 @@ final class KittyGraphicsProtocol {
             reply(command, "OK", false, false, id);
         };
         KittyImageStore.Entry now = store.get(id);
-        if (now != null && now.bitmap != null && decodeBytesInFlight == 0 && placementsInFlight == 0) {
-            // Nothing earlier in the stream is still on the worker, so placing right here keeps
-            // stream order — and keeps the placement inside the synchronized update (mode 2026)
-            // that carried it, so a moving picture never shows a frame of the move half done.
-            place.run();
+        if (now != null && now.bitmap != null && decodeBytesInFlight == 0) {
+            // Nothing earlier in the stream is still decoding, so the pixels are here: the
+            // placement lands now, behind what the queue already holds, or with the rest of the
+            // synchronized update (mode 2026) that carried it, so a moving picture never shows a
+            // frame of the move half done.
+            changeLayer(place);
             return;
         }
         // Otherwise wait behind whatever is on the worker (the transmission this refers to above
         // all), then place on the update thread, in the order the commands arrived.
-        placementsInFlight++;
-        PNG_DECODER.execute(() -> output.postTerminalUpdate(() -> {
-            placementsInFlight = Math.max(0, placementsInFlight - 1);
-            place.run();
-        }));
+        final LayerStep step = holdLayerPlace();
+        decoder.execute(() -> output.postTerminalUpdate(() -> land(step, place)));
     }
 
     private static KittyImageStore.VirtualPlacement createVirtualPlacement(Command command,
@@ -922,7 +968,7 @@ final class KittyGraphicsProtocol {
         final int transmittedBytes = data.length;
         decodeBytesInFlight += transmittedBytes;
 
-        PNG_DECODER.execute(() -> {
+        decoder.execute(() -> {
             int[] pixels = null;
             int pixelsWidth = 0;
             int pixelsHeight = 0;
@@ -988,7 +1034,7 @@ final class KittyGraphicsProtocol {
                     ? Command.unsigned(command.values, 'Y') : 0;
                 final int imageWidth = entry.width;
                 final int imageHeight = entry.height;
-                PNG_DECODER.execute(() -> {
+                decoder.execute(() -> {
                     Bitmap composed = null;
                     String composeError = null;
                     try {
@@ -1128,7 +1174,7 @@ final class KittyGraphicsProtocol {
         final int imageWidth = entry.width;
         final int imageHeight = entry.height;
 
-        PNG_DECODER.execute(() -> output.postTerminalUpdate(() -> {
+        decoder.execute(() -> output.postTerminalUpdate(() -> {
             KittyImageStore.Entry live = store.get(id);
             if (live != entry) {
                 reply(command, "ENOENT:image not found", true, false, id);
@@ -1140,7 +1186,7 @@ final class KittyGraphicsProtocol {
                 reply(command, "EINVAL:frame data unavailable", true, false, id);
                 return;
             }
-            PNG_DECODER.execute(() -> {
+            decoder.execute(() -> {
                 Bitmap composed = null;
                 String error = null;
                 try {
@@ -1277,6 +1323,9 @@ final class KittyGraphicsProtocol {
     void shutdown() {
         cancelAnimationTick();
         upload = null;
+        layerSteps.clear();
+        window = null;
+        windowGraceDeadline = 0;
         for (KittyImageStore.Entry entry : store.entries()) {
             if (entry.bitmap != null && !entry.bitmap.isRecycled()) entry.bitmap.recycle();
             for (KittyImageStore.Frame frame : entry.frames) {
@@ -1399,7 +1448,12 @@ final class KittyGraphicsProtocol {
         }
     }
 
-    /** The delete forms ({@code a=d}). An uppercase specifier also frees the targeted stored data. */
+    /**
+     * The delete forms ({@code a=d}). An uppercase specifier also frees the targeted stored data.
+     * Validation, the reply and the store's own side run here, in stream order. Taking placements
+     * off the layer goes through {@link #changeLayer}: immediate when nothing is on the worker,
+     * otherwise after the decodes ahead of it land and in the same update as them.
+     */
     private void handleDelete(Command command) {
         boolean free = Character.isUpperCase(command.deleteMode);
         char form = Character.toLowerCase(command.deleteMode);
@@ -1409,7 +1463,7 @@ final class KittyGraphicsProtocol {
         else if (form == 'a' && command.number != 0) form = 'n';
         switch (form) {
             case 'a':
-                emulator.deleteKittyPlacements((placement, row) -> true, true);
+                changeLayer(() -> emulator.deleteKittyPlacements((placement, row) -> true, true));
                 if (free) store.removeImagesWithoutVirtualPlacements();
                 break;
             case 'i':
@@ -1428,11 +1482,12 @@ final class KittyGraphicsProtocol {
                     KittyImageStore.Entry entry = store.get(id);
                     if (entry != null)
                         KittyImageStore.removeVirtualPlacements(entry, command.placementId);
-                    emulator.deleteKittyPlacements((placement, row) ->
-                        placement.imageId == id
-                            && (command.placementId == 0 || placement.placementId == command.placementId), true);
-                    if (free && emulator.kittyPlacementsFor(id).isEmpty())
-                        store.removeIfNoVirtualPlacements(id);
+                    changeLayer(() -> {
+                        emulator.deleteKittyPlacements((placement, row) ->
+                            placement.imageId == id
+                                && (command.placementId == 0 || placement.placementId == command.placementId), true);
+                        if (free) freeIfUnplaced(id, entry);
+                    });
                 }
                 break;
             }
@@ -1450,8 +1505,8 @@ final class KittyGraphicsProtocol {
                 if (!store.removeFrame(entry, command.displayRows)) {
                     // No extra frames: d=F deletes the whole image, d=f is a no-op — kitty's rule.
                     if (free) {
-                        emulator.deleteKittyPlacements((placement, row) ->
-                            placement.imageId == id, true);
+                        changeLayer(() -> emulator.deleteKittyPlacements((placement, row) ->
+                            placement.imageId == id, true));
                         store.removeIfNoVirtualPlacements(id);
                     }
                 } else if (entry.currentFrame != before) {
@@ -1485,8 +1540,11 @@ final class KittyGraphicsProtocol {
                     return;
                 }
                 int row = command.srcY - 1;
-                deleteMatching((placement, anchorRow) ->
-                    row >= anchorRow && row < anchorRow + placement.rows, false, free);
+                long scrolls = emulator.scrollEventCount();
+                deleteMatching((placement, anchorRow) -> {
+                    int target = row - scrolledSince(scrolls);
+                    return target >= anchorRow && target < anchorRow + placement.rows;
+                }, false, free);
                 break;
             }
             case 'z': {
@@ -1506,18 +1564,160 @@ final class KittyGraphicsProtocol {
 
     /** Delete placements that cover one screen cell, optionally also matching a z value. */
     private void deleteAtCell(int column, int row, Integer z, boolean free) {
+        long scrolls = emulator.scrollEventCount();
         deleteMatching((placement, anchorRow) ->
-            placement.covers(column, row) && (z == null || placement.z == z), false, free);
+            placement.covers(column, row - scrolledSince(scrolls)) && (z == null || placement.z == z),
+            false, free);
+    }
+
+    /**
+     * Lines scrolled since {@code scrolls} was read. A delete by position names a screen row as it
+     * was when the command arrived; queued behind a decode, it has to follow the content the same
+     * way a placement's anchor does.
+     */
+    private int scrolledSince(long scrolls) {
+        return (int) (emulator.scrollEventCount() - scrolls);
     }
 
     /** Delete every placement the filter matches; the uppercase forms also free unplaced images. */
     private void deleteMatching(TerminalBuffer.KittyPlacementFilter filter, boolean includeScrollback,
                                 boolean free) {
-        List<KittyPlacement> deleted = emulator.deleteKittyPlacements(filter, includeScrollback);
-        if (!free) return;
-        for (KittyPlacement placement : deleted) {
-            if (emulator.kittyPlacementsFor(placement.imageId).isEmpty())
-                store.removeIfNoVirtualPlacements(placement.imageId);
+        // Which image each id named when the command arrived: by the time a queued delete runs, a
+        // later transmission may have put a new image under one of the ids.
+        Map<Long, KittyImageStore.Entry> named = new HashMap<>();
+        if (free) {
+            for (KittyImageStore.Entry entry : store.entries()) named.put(entry.id, entry);
+        }
+        changeLayer(() -> {
+            List<KittyPlacement> deleted = emulator.deleteKittyPlacements(filter, includeScrollback);
+            if (!free) return;
+            for (KittyPlacement placement : deleted)
+                freeIfUnplaced(placement.imageId, named.get(placement.imageId));
+        });
+    }
+
+    /**
+     * Free a stored image once nothing displays it, unless it is no longer the image {@code named}:
+     * a queued delete must not free what a transmission after it in the stream has stored.
+     */
+    private void freeIfUnplaced(long id, @Nullable KittyImageStore.Entry named) {
+        if (store.get(id) == named && emulator.kittyPlacementsFor(id).isEmpty())
+            store.removeIfNoVirtualPlacements(id);
+    }
+
+    /**
+     * Apply a change to the placement layer now when nothing is queued ahead of it and no
+     * synchronized update is open; otherwise queue it in stream order.
+     */
+    private void changeLayer(Runnable change) {
+        LayerStep step = new LayerStep();
+        step.change = change;
+        if (!queueLayerStep(step, true)) change.run();
+    }
+
+    /** Hold a place in the layer queue for work that is about to go to the worker. */
+    private LayerStep holdLayerPlace() {
+        LayerStep step = new LayerStep();
+        queueLayerStep(step, false);
+        return step;
+    }
+
+    /**
+     * Put a step where it belongs: into the open synchronized update's batch, or behind whatever
+     * the queue holds. Returns false, queueing nothing, when {@code mayRunNow} and there is
+     * neither, so the caller can apply the change at once.
+     */
+    private boolean queueLayerStep(LayerStep step, boolean mayRunNow) {
+        // Asking is also what seals a window whose hold has run out, unless a picture it started
+        // is still arriving: then the window outlives the hold (see synchronizedHoldEnded).
+        if (emulator.isScreenUpdateHeld() || window != null) {
+            if (window == null) {
+                window = new LayerStep();
+                window.batch = new ArrayList<>();
+                layerSteps.add(window);
+                windowOpenedAt = System.currentTimeMillis();
+            }
+            window.batch.add(step);
+            return true;
+        }
+        if (mayRunNow && layerSteps.isEmpty()) return false;
+        layerSteps.add(step);
+        return true;
+    }
+
+    /**
+     * The synchronized update ended (reset, or its hold ran out): its batch is complete, and applies
+     * as soon as every decode in it has come back and everything ahead of it has applied — right
+     * now, when that is already so.
+     */
+    void endSynchronizedWindow() {
+        windowGraceDeadline = 0;
+        if (window == null) return;
+        window.sealed = true;
+        window = null;
+        applyReadyLayerSteps();
+    }
+
+    /**
+     * The screen hold ended without the update ending: it ran out, or was cleared some other way.
+     * Text is released either way. But when a picture the update started is still arriving — a big
+     * uncompressed frame over a slow link takes longer than the hold allows — sealing now would
+     * apply the update's delete with the replacement nowhere near, and the screen would show no
+     * picture until it lands. So the window stays open for the rest of the update: until it ends,
+     * or {@link #windowUploadGraceMillis} after it opened, whichever is first. Until then the old
+     * picture stays on screen, never none.
+     */
+    void synchronizedHoldEnded() {
+        if (window == null) return;
+        if (windowGraceDeadline == 0) {
+            if (!streamOpen && upload == null) {
+                endSynchronizedWindow();
+                return;
+            }
+            windowGraceDeadline = windowOpenedAt + windowUploadGraceMillis;
+        }
+        if (System.currentTimeMillis() >= windowGraceDeadline) endSynchronizedWindow();
+    }
+
+    /**
+     * The worker's result for {@code step} is back on the update thread. Apply it together with
+     * every change queued behind it that is now unblocked, in order, all inside this one posted
+     * update, so the renderer sees them as one change. A step a reset let go of applies at once:
+     * its change checks the generation itself.
+     */
+    private void land(LayerStep step, Runnable change) {
+        step.change = change;
+        if (step.released) {
+            change.run();
+            return;
+        }
+        applyReadyLayerSteps();
+    }
+
+    private void applyReadyLayerSteps() {
+        while (!layerSteps.isEmpty() && layerSteps.peekFirst().isReady())
+            layerSteps.pollFirst().apply();
+    }
+
+    /**
+     * A reset, a screen switch or a clear is about to move the generation on. Whatever is queued
+     * was addressed to the screen as it is now, so the ready changes land now, in order, batches
+     * included; the steps still on the worker are let go and will see the new generation when they
+     * come back. An open synchronized update starts a fresh batch with its next change.
+     */
+    private void releaseLayerSteps() {
+        List<LayerStep> steps = new ArrayList<>(layerSteps);
+        layerSteps.clear();
+        window = null;
+        windowGraceDeadline = 0;
+        for (LayerStep step : steps) {
+            for (LayerStep part : step.batch != null ? step.batch : Collections.singletonList(step)) {
+                if (part.change != null) {
+                    part.change.run();
+                } else {
+                    part.released = true;
+                }
+            }
         }
     }
 
@@ -1549,6 +1749,7 @@ final class KittyGraphicsProtocol {
 
     private void resetUploadAndDecodes() {
         upload = null;
+        releaseLayerSteps();
         generation++;
     }
 
@@ -1717,8 +1918,41 @@ final class KittyGraphicsProtocol {
         }
     }
 
-    private interface BitmapProducer {
+    interface BitmapProducer {
         Bitmap produce();
+    }
+
+    /**
+     * One entry of {@link #layerSteps}: a change ready to apply, a place held for the worker, or the
+     * batch of one synchronized update.
+     */
+    private static final class LayerStep {
+        /** Null while the work this step holds a place for is still on the worker. */
+        @Nullable Runnable change;
+        /** Set when a reset let go of the step; its result then applies on arrival. */
+        boolean released;
+        /** A synchronized update's steps in stream order; null for a single step. */
+        @Nullable List<LayerStep> batch;
+        /** Whether the synchronized update has ended, so its batch can take no more steps. */
+        boolean sealed;
+
+        /** A batch is ready once sealed with every step in it back from the worker. */
+        boolean isReady() {
+            if (batch == null) return change != null;
+            if (!sealed) return false;
+            for (LayerStep part : batch) {
+                if (part.change == null) return false;
+            }
+            return true;
+        }
+
+        void apply() {
+            if (batch == null) {
+                change.run();
+                return;
+            }
+            for (LayerStep part : batch) part.change.run();
+        }
     }
 
     private static final class Upload {

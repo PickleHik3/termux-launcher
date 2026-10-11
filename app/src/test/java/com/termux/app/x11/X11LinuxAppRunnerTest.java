@@ -237,4 +237,18 @@ public class X11LinuxAppRunnerTest {
             out.write(contents.getBytes(StandardCharsets.UTF_8));
         }
     }
+
+    @Test
+    public void anAppOnADisplayItJustStartedWaitsForTheManagerBeforeItRuns() {
+        String wait = X11WindowManager.awaitCommand(X11WindowManager.AWAIT_MANAGER_FOR_APP_TRIES);
+        String script = X11LinuxAppRunner.script(app("firefox"), ":1", Collections.emptyList(),
+            false, wait);
+        assertTrue(script.contains(wait));
+        assertTrue("the wait comes before the app", script.indexOf(wait) < script.indexOf("exec "));
+        assertTrue(wait.contains("kill -0 \"$wm\""));
+        assertTrue(wait.contains("-lt " + X11WindowManager.AWAIT_MANAGER_FOR_APP_TRIES + " ]"));
+        // Without one the script is what it always was.
+        assertEquals(X11LinuxAppRunner.script(app("firefox"), ":1", Collections.emptyList(), false),
+            X11LinuxAppRunner.script(app("firefox"), ":1", Collections.emptyList(), false, null));
+    }
 }

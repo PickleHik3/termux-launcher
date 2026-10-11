@@ -1,6 +1,7 @@
 package com.termux.app.chrome;
 
 import android.graphics.BitmapShader;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RuntimeShader;
@@ -15,6 +16,8 @@ import androidx.annotation.RequiresApi;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+
+import java.util.Arrays;
 
 /**
  * The one AGSL glass every surface refracts through (API 33+).
@@ -199,12 +202,19 @@ public final class GlassRefraction {
      * {@code RenderEffect}, the frame's {@link BitmapShader} as a paint shader — and
      * {@code uFrameScale}/{@code uFrameOffset} are the aim that puts frame pixel {@code (0, 0)}
      * where the frame's rect begins, as {@link SharedFrameDrawable#aim} states it: identity under
-     * a {@code RenderEffect}.
+     * a {@code RenderEffect}. {@code uLocalX}/{@code uLocalY}/{@code uLocalW} are the rows of
+     * {@link GlassAnchor.Aim#local}, from the surface's own px to px from its origin on screen,
+     * applied first with its perspective divide: identity everywhere but on a wall page that is
+     * sunk or tipped, where it keeps the wallpaper fixed to the screen. {@link #framePx} is the
+     * same mapping in Java.
      */
     static final String AGSL =
         "uniform shader content;\n" +
         "uniform float2 uFrameScale;\n" +
         "uniform float2 uFrameOffset;\n" +
+        "uniform float3 uLocalX;\n" +
+        "uniform float3 uLocalY;\n" +
+        "uniform float3 uLocalW;\n" +
         "uniform float2 uRectMin;\n" +
         "uniform float2 uRectMax;\n" +
         "uniform float uRadius;\n" +
@@ -226,6 +236,13 @@ public final class GlassRefraction {
         "float sdRoundRect(float2 p, float2 b, float r) {\n" +
         "    float2 q = abs(p) - b + float2(r, r);\n" +
         "    return min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0, 0.0))) - r;\n" +
+        "}\n" +
+        // A surface pixel to the content's own pixel: the local matrix, then the aim undone. With
+        // the local matrix at identity this is exactly the old (c - offset) / scale.
+        "float2 framePx(float2 c) {\n" +
+        "    float3 p = float3(c, 1.0);\n" +
+        "    float3 h = float3(dot(uLocalX, p), dot(uLocalY, p), dot(uLocalW, p));\n" +
+        "    return (h.xy / h.z - uFrameOffset) / uFrameScale;\n" +
         "}\n" +
         "half4 main(float2 fragCoord) {\n" +
         "    float2 center = (uRectMin + uRectMax) * 0.5;\n" +
@@ -253,13 +270,13 @@ public final class GlassRefraction {
         "        }\n" +
         "    }\n" +
         // The bent sample, read from the content in its own pixels: the aim undone.
-        "    half4 col = content.eval((sampleCoord - uFrameOffset) / uFrameScale);\n" +
+        "    half4 col = content.eval(framePx(sampleCoord));\n" +
         // Dispersion: red is bent a little less than green and blue a little more, so the rim
         // fringes the way a thick edge does. Off, and the one sample above is the whole picture.
         "    if (uDisp > 0.0) {\n" +
         "        float2 split = n * (e * uDisp);\n" +
-        "        col.r = content.eval((sampleCoord + split - uFrameOffset) / uFrameScale).r;\n" +
-        "        col.b = content.eval((sampleCoord - split - uFrameOffset) / uFrameScale).b;\n" +
+        "        col.r = content.eval(framePx(sampleCoord + split)).r;\n" +
+        "        col.b = content.eval(framePx(sampleCoord - split)).b;\n" +
         "    }\n" +
         // One clean, sharp hairline rim where the light catches the glass edge. No dark contour, no
         // wide bevel band, no inner shadow — minimal/zen: a crisp pane with slight edge refraction.
@@ -268,6 +285,24 @@ public final class GlassRefraction {
         "    col.rgb = col.rgb + half3(lensGlow * uRim * 0.6);\n" +
         "    return col;\n" +
         "}\n";
+
+    /** The local matrix's values, row-major as {@link Matrix#getValues} gives them, for none. */
+    private static final float[] IDENTITY = {1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f};
+
+    /**
+     * The program's own mapping from a surface pixel {@code (x, y)} to the content's pixel, into
+     * {@code out}: {@code local} (a {@link Matrix}'s nine values) with its perspective divide,
+     * then the aim undone. The plain draw's shader matrix ({@link GlassAnchor.Aim#shaderMatrix})
+     * is its inverse, so the two draws sample the same wallpaper.
+     */
+    static void framePx(@NonNull float[] local, float scaleX, float scaleY, float offsetX,
+                        float offsetY, float x, float y, @NonNull float[] out) {
+        float hx = local[0] * x + local[1] * y + local[2];
+        float hy = local[3] * x + local[4] * y + local[5];
+        float hw = local[6] * x + local[7] * y + local[8];
+        out[0] = (hx / hw - offsetX) / Math.max(1e-4f, scaleX);
+        out[1] = (hy / hw - offsetY) / Math.max(1e-4f, scaleY);
+    }
 
     /** The key lens's own strength and feather, which no knob reaches: the press reads the same in both modes. */
     private static final float LENS_STRENGTH = 0.20f;
@@ -284,6 +319,10 @@ public final class GlassRefraction {
         @NonNull private final RuntimeShader mShader;
         private final float mDensity;
         private float mScaleX = Float.NaN, mScaleY, mOffsetX, mOffsetY;
+        /** The local matrix last written, and scratch to read the next one into. */
+        private final float[] mLocal = new float[9];
+        private final float[] mLocalNext = new float[9];
+        private boolean mLocalWritten;
         private float mLeft = Float.NaN, mTop, mRight, mBottom, mRadius;
         @Nullable private Look mLook;
         private boolean mLensOn;
@@ -296,6 +335,7 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uLensStrength", LENS_STRENGTH);
             mShader.setFloatUniform("uLensFeather", density * LENS_FEATHER_DP);
             setAim(1f, 1f, 0f, 0f);
+            setLocal(null);
             setLook(Look.DEFAULT);
             mLensOn = true; // so the clear below is a write, not a skip
             clearLens();
@@ -361,6 +401,24 @@ public final class GlassRefraction {
             mOffsetY = offsetY;
             mShader.setFloatUniform("uFrameScale", Math.max(1e-4f, scaleX), Math.max(1e-4f, scaleY));
             mShader.setFloatUniform("uFrameOffset", offsetX, offsetY);
+        }
+
+        /**
+         * What the surface's transform does past {@link #setAim}, from its own px to px from its
+         * origin on screen: {@link GlassAnchor.Aim#local}, a scale or a perspective on a wall page
+         * that is sunk or tipped. Null, the default, is identity — every surface but the wall's,
+         * and the wall's at rest, which then samples exactly as it did before there was one.
+         */
+        public void setLocal(@Nullable Matrix local) {
+            float[] next = mLocalNext;
+            if (local == null) System.arraycopy(IDENTITY, 0, next, 0, IDENTITY.length);
+            else local.getValues(next);
+            if (mLocalWritten && Arrays.equals(next, mLocal)) return;
+            mLocalWritten = true;
+            System.arraycopy(next, 0, mLocal, 0, next.length);
+            mShader.setFloatUniform("uLocalX", next[0], next[1], next[2]);
+            mShader.setFloatUniform("uLocalY", next[3], next[4], next[5]);
+            mShader.setFloatUniform("uLocalW", next[6], next[7], next[8]);
         }
 
         /** The rounded rect the rim runs along, in the surface's own coordinates. */

@@ -8,7 +8,7 @@ All of it is arranged in the **Layout** tab of **Appearance**.
 Open **Appearance** in any of these ways, then tap **Layout** in the pill at the top
 (**Wallpaper | Look | Layout | Icon pack**):
 
-- **Settings → Appearance** ("Wallpaper, theme and layout").
+- **Settings → Appearance → Wallpaper, look and layout**.
 - Hold a corner of a page and tap **Appearance**.
 - Long-press the terminal and choose **Appearance**.
 
@@ -103,7 +103,7 @@ display take the room. Open Layout while it is on to choose what it keeps.
 - The keyboard goes down when you enter. Swipe up from the bottom border, or tap the terminal, to
   raise it.
 
-The page border stays drawn in minimal mode, so you can still hold it and drag to change place.
+The page border stays drawn in minimal mode, so you can still swipe along it to change place.
 
 ## Full screen
 
@@ -118,7 +118,8 @@ The page border stays drawn in minimal mode, so you can still hold it and drag t
 
 These work on every place and in every layout, minimal mode included:
 
-- Hold the page border and drag sideways to change place.
+- Swipe sideways along the top or bottom border to change place. On the left and right borders,
+  hold first, then drag.
 - Swipe up or down on the bottom border to open or close the keyboard.
 - Swipe down or up on the top border to open or fold the status bar, while it stands along the top.
 

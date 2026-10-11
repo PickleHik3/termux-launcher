@@ -12,6 +12,7 @@ import com.termux.app.launcher.widget.WidgetCellRect;
 import com.termux.app.launcher.widget.WidgetGridMetrics;
 import com.termux.app.launcher.widget.WidgetGridView;
 import com.termux.app.terminal.TerminalWindowBar;
+import com.termux.app.wall.BorderDrag;
 import com.termux.app.wall.BorderGrabber;
 import com.termux.app.wall.PaneWallLayout;
 import com.termux.app.wall.PaneWallPage;
@@ -57,6 +58,10 @@ public final class HelpTargets {
     }
     public static final class Snapshot {
         public final Rect wall;
+        /**
+         * The measured controls. One id may come more than once — the page's border is a strip
+         * along each edge — and then its first target is the one its card is seated against.
+         */
         public final List<Target> targets = new ArrayList<>();
         public final List<KeyLabel> keys = new ArrayList<>();
         Snapshot(Rect wall) { this.wall = wall; }
@@ -67,8 +72,6 @@ public final class HelpTargets {
             return s.toString();
         }
     }
-    /** How tall the strip that stands for the page's border is, in dp. */
-    private static final float BORDER_BAND_DP = 10f;
     /** Room round the keyboard grabber's pill, so its box reads as a target and not a hairline. */
     private static final float GRABBER_AIR_DP = 10f;
     /** The keyboard value the launcher's own settings hang off; the cog is how it is drawn. */
@@ -158,19 +161,27 @@ public final class HelpTargets {
         return s;
     }
     /**
-     * The page's border as one strip along its left edge, less the corner squares: the frame line
-     * a border drag is held on. Any side takes the drag; the left one is shown because the bottom
-     * edge already carries the dock and the keyboard swipe's pill, and a card for the border there
-     * would have nowhere to stand. The wall is the page at rest, so its bounds are the page's.
+     * The page's border as two strips, one along its top edge and one along its bottom, less the
+     * corner squares: the frame line and the air beside it, from the wall's edge to the page's,
+     * where a hold and a sideways swipe change place. Both edges take that gesture, so both are
+     * measured, under the one id and the top first: the topic's card, marker and demonstration sit
+     * on the top strip, and the bottom one is reached by a second leader from the same card. The
+     * bottom strip runs under the keyboard swipe's pill, which is measured as a control of its own
+     * and drawn over the strip.
      */
     private void pageBorder(Snapshot s, Rect wall) {
-        float density = context.getResources().getDisplayMetrics().density;
-        int corner = Math.round(com.termux.app.chrome.CornerZones.paneSizePx(density));
-        int band = Math.round(BORDER_BAND_DP * density);
-        Rect strip = new Rect(wall.left, wall.top + corner, wall.left + band,
-            wall.bottom - corner);
-        add(s, "border", strip, 0);
+        View wallView = finder.findHelpView(R.id.terminal_pane_wall);
+        if (!(wallView instanceof PaneWallLayout)) return;
+        for (BorderDrag.Border side : PLACE_BORDERS) {
+            Rect strip = new Rect();
+            if (!((PaneWallLayout) wallView).borderZone(side, strip)) continue;
+            strip.offset(wall.left, wall.top);
+            add(s, "border", strip, 0);
+        }
     }
+    /** The borders a hold and a sideways swipe change place from, in the order they are measured. */
+    private static final BorderDrag.Border[] PLACE_BORDERS =
+        {BorderDrag.Border.TOP, BorderDrag.Border.BOTTOM};
 
     /**
      * The pill on the page's bottom border that marks the keyboard swipe, where the wall draws

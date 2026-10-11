@@ -9,6 +9,7 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.Icon;
 import android.media.MediaMetadata;
 import android.media.session.MediaController;
+import android.media.session.MediaSession;
 import android.media.session.MediaSessionManager;
 import android.media.session.PlaybackState;
 import android.os.Bundle;
@@ -16,6 +17,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Process;
+import android.os.SystemClock;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 
@@ -27,6 +29,7 @@ import androidx.core.app.Person;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.statusbar.EssentialNotificationRule;
 import com.termux.app.statusbar.EssentialNotificationRules;
+import com.termux.app.statusbar.MediaSessionPick;
 import com.termux.app.statusbar.PinnedConversations;
 import com.termux.app.statusbar.PinnedNotification;
 import com.termux.app.statusbar.TopPaneFeed;
@@ -67,6 +70,8 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     private static final long PINNED_REBUILD_DELAY_MS = 120L;
     /** Stands for a removed notification among the pending shade changes. */
     private static final Object REMOVED = new Object();
+    /** At most this often does the bar coming on screen re-read the active sessions. */
+    private static final long MEDIA_RESYNC_MIN_INTERVAL_MS = 1000L;
 
     private static volatile boolean listenerConnected;
     private static volatile LauncherCtlNotificationListener activeInstance;
@@ -117,25 +122,20 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     private final Set<String> mUnpinned = new HashSet<>();
 
     private final MediaSessionManager.OnActiveSessionsChangedListener mSessionsListener =
-        this::attachTopPaneController;
+        controllers -> {
+            if (isLive()) watchSessions(controllers);
+        };
 
-    private final MediaController.Callback mMediaCallback = new MediaController.Callback() {
-        @Override public void onPlaybackStateChanged(@Nullable PlaybackState state) {
-            mTopPaneState = state;
-            publishTopPaneMedia();
-        }
-
-        @Override public void onMetadataChanged(@Nullable MediaMetadata metadata) {
-            mTopPaneMetadata = metadata;
-            publishTopPaneMedia();
-        }
-
-        @Override public void onSessionDestroyed() {
-            detachTopPaneController();
-            syncTopPaneMedia();
-        }
-    };
-
+    /**
+     * Every active media session, in the system's priority order, each with a callback of its
+     * own. The sessions-changed callback only says when a session comes or goes, not when one
+     * that is already active starts playing, so the media row follows a player only if every
+     * session is watched, not just the one on the row. Only playback states are kept for the
+     * sessions not followed: their artwork is never held.
+     */
+    private final LinkedHashMap<MediaSession.Token, WatchedSession> mWatched = new LinkedHashMap<>();
+    /** The watched session the media row follows, picked by {@link MediaSessionPick}. */
+    @Nullable private WatchedSession mFollowed;
     @Nullable private MediaController mTopPaneController;
     /**
      * What {@link #mTopPaneController} last reported, kept from its callbacks so republishing
@@ -144,6 +144,45 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
      */
     @Nullable private PlaybackState mTopPaneState;
     @Nullable private MediaMetadata mTopPaneMetadata;
+    private long mLastMediaResyncMs = Long.MIN_VALUE / 2;
+
+    /**
+     * Between {@link #onListenerConnected} and {@link #onListenerDisconnected}. The system can
+     * keep calling an instance it has already unbound and destroyed (dumpsys then lists the
+     * listener twice); such an instance must not write the process-wide state the live one owns.
+     */
+    private boolean mConnected;
+    private boolean mDestroyed;
+
+    /** One active session and the callback that tells us its playback state. */
+    private final class WatchedSession extends MediaController.Callback {
+        @NonNull final MediaController controller;
+        int state;
+
+        WatchedSession(@NonNull MediaController controller) {
+            this.controller = controller;
+            this.state = stateOf(readPlaybackState(controller));
+        }
+
+        @Override public void onPlaybackStateChanged(@Nullable PlaybackState playback) {
+            if (!isLive()) return;
+            state = stateOf(playback);
+            if (mFollowed == this) mTopPaneState = playback;
+            followTopPaneSession();
+        }
+
+        @Override public void onMetadataChanged(@Nullable MediaMetadata metadata) {
+            if (!isLive() || mFollowed != this) return;
+            mTopPaneMetadata = metadata;
+            publishTopPaneMedia();
+        }
+
+        @Override public void onSessionDestroyed() {
+            if (!isLive()) return;
+            unwatch(this);
+            followTopPaneSession();
+        }
+    }
 
     @Override
     public void onCreate() {
@@ -157,6 +196,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
 
     @Override
     public void onDestroy() {
+        mDestroyed = true;
         mWorker = null;
         HandlerThread thread = mWorkerThread;
         mWorkerThread = null;
@@ -166,7 +206,12 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
 
     @Override
     public void onListenerConnected() {
+        if (mDestroyed) {
+            Logger.logWarn(LOG_TAG, "Ignoring a connection to a destroyed listener instance");
+            return;
+        }
         activeInstance = this;
+        mConnected = true;
         listenerConnected = true;
         Logger.logInfo(LOG_TAG, "Notification listener connected");
         TopPaneFeed.setControls(this);
@@ -182,13 +227,18 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         mPinnedRebuild.request();
     }
 
+    /**
+     * The framework calls this from {@link #onDestroy} as well, so it can run twice; and it can
+     * run for an instance a newer one has already replaced. Its own sessions and cards always go;
+     * the process-wide state (the dots, the feed) only when it is still the live instance.
+     */
     @Override
     public void onListenerDisconnected() {
-        if (activeInstance == this) activeInstance = null;
-        listenerConnected = false;
-        LauncherNotificationBadgeStore.clear();
+        boolean current = activeInstance == this;
+        if (current) activeInstance = null;
+        mConnected = false;
         unregisterSessionsListener();
-        detachTopPaneController();
+        unwatchAllSessions();
         mPinned.clear();
         mUnpinned.clear();
         mShadeChanges.clear();
@@ -196,13 +246,22 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         mChildGroups.clear();
         Handler worker = mWorker;
         if (worker != null) worker.post(this::clearShadeOnWorker);
+        if (!current) return;
+        listenerConnected = false;
+        LauncherNotificationBadgeStore.clear();
         TopPaneFeed.setControls(null);
         TopPaneFeed.setListenerConnected(false);
         Logger.logWarn(LOG_TAG, "Notification listener disconnected");
     }
 
+    /** Whether this instance is the connection the process listens through. */
+    private boolean isLive() {
+        return mConnected && !mDestroyed && activeInstance == this;
+    }
+
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
+        if (!isLive()) return;
         LauncherNotificationBadgeStore.onNotificationPosted(sbn, null);
         onShadePosted(sbn);
         persistPosted(sbn);
@@ -212,6 +271,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn, NotificationListenerService.RankingMap rankingMap) {
+        if (!isLive()) return;
         LauncherNotificationBadgeStore.onNotificationPosted(sbn, rankingMap);
         onShadePosted(sbn);
         persistPosted(sbn);
@@ -221,6 +281,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
 
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
+        if (!isLive()) return;
         LauncherNotificationBadgeStore.onNotificationRemoved(sbn);
         if (sbn != null) {
             mUnpinned.remove(sbn.getKey());
@@ -760,12 +821,13 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         }
     }
 
+    /** Reads the active sessions and watches each of them; see {@link #mWatched}. */
     private void syncTopPaneMedia() {
         try {
             MediaSessionManager manager =
                 (MediaSessionManager) getSystemService(MEDIA_SESSION_SERVICE);
             if (manager == null) return;
-            attachTopPaneController(manager.getActiveSessions(
+            watchSessions(manager.getActiveSessions(
                 new ComponentName(this, LauncherCtlNotificationListener.class)));
         } catch (SecurityException e) {
             Logger.logWarn(LOG_TAG, "Media sessions unavailable without notification listener access");
@@ -774,75 +836,164 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         }
     }
 
-    private void attachTopPaneController(@Nullable List<MediaController> controllers) {
-        MediaController selected = selectTopPaneController(controllers);
-        boolean same = selected != null && mTopPaneController != null
-            && mTopPaneController.getSessionToken().equals(selected.getSessionToken());
-        if (!same) {
-            detachTopPaneController();
-            mTopPaneController = selected;
-            if (selected != null) {
-                mTopPaneMetadata = selected.getMetadata();
-                selected.registerCallback(mMediaCallback, mMainHandler);
+    /**
+     * Brings {@link #mWatched} level with {@code controllers}, in their order. A session already
+     * watched keeps its controller and callback (the fresh controller is dropped) and has its
+     * state read again, as a backstop for a callback that never came.
+     */
+    private void watchSessions(@Nullable List<MediaController> controllers) {
+        LinkedHashMap<MediaSession.Token, WatchedSession> next = new LinkedHashMap<>();
+        if (controllers != null) {
+            for (MediaController controller : controllers) {
+                MediaSession.Token token = controller == null ? null : controller.getSessionToken();
+                if (token == null || next.containsKey(token)) continue;
+                WatchedSession held = mWatched.remove(token);
+                if (held != null) {
+                    refreshState(held);
+                    next.put(token, held);
+                    continue;
+                }
+                WatchedSession watched = new WatchedSession(controller);
+                try {
+                    controller.registerCallback(watched, mMainHandler);
+                } catch (Throwable throwable) {
+                    Logger.logWarn(LOG_TAG, "Failed to watch a media session: " + throwable.getMessage());
+                }
+                next.put(token, watched);
             }
         }
-        if (selected != null) mTopPaneState = selected.getPlaybackState();
-        publishTopPaneMedia();
+        for (WatchedSession gone : mWatched.values()) release(gone);
+        mWatched.clear();
+        mWatched.putAll(next);
+        followTopPaneSession();
     }
 
-    private void detachTopPaneController() {
-        mTopPaneState = null;
-        mTopPaneMetadata = null;
-        if (mTopPaneController == null) return;
+    private void unwatch(@NonNull WatchedSession session) {
+        mWatched.values().remove(session);
+        release(session);
+    }
+
+    private void unwatchAllSessions() {
+        for (WatchedSession session : mWatched.values()) release(session);
+        mWatched.clear();
+        release(mFollowed);
+    }
+
+    /** Stops listening to {@code session}; the row lets go of it if it was following it. */
+    private void release(@Nullable WatchedSession session) {
+        if (session == null) return;
         try {
-            mTopPaneController.unregisterCallback(mMediaCallback);
+            session.controller.unregisterCallback(session);
         } catch (Throwable ignored) {
         }
-        mTopPaneController = null;
+        if (session == mFollowed) {
+            mFollowed = null;
+            mTopPaneController = null;
+            mTopPaneState = null;
+            mTopPaneMetadata = null;
+        }
+    }
+
+    private void refreshState(@NonNull WatchedSession session) {
+        PlaybackState playback = readPlaybackState(session.controller);
+        session.state = stateOf(playback);
+        if (session == mFollowed) mTopPaneState = playback;
     }
 
     /**
-     * Republishes the media card after a notification event. A post or removal from the playing
-     * app (its own media notification moving) also re-reads the playback state, as a backstop for
-     * a callback that has not arrived yet; any other app's notification changes nothing here, so
-     * the cached state is republished and {@link TopPaneFeed#setMedia} drops it as unchanged.
+     * Asks {@link MediaSessionPick} which watched session the row follows, switches to it if that
+     * changed, and publishes. Reads only the cached states, so it is cheap enough to run on every
+     * state change of any session and on every notification.
      */
-    private void refreshTopPaneMediaFor(@Nullable StatusBarNotification sbn) {
-        MediaController controller = mTopPaneController;
-        if (controller != null && sbn != null
-            && controller.getPackageName().equals(sbn.getPackageName())) {
-            try {
-                mTopPaneState = controller.getPlaybackState();
-            } catch (Throwable throwable) {
-                Logger.logWarn(LOG_TAG, "Failed to read playback state: " + throwable.getMessage());
+    private void followTopPaneSession() {
+        List<WatchedSession> sessions = new ArrayList<>(mWatched.values());
+        int[] states = new int[sessions.size()];
+        int current = MediaSessionPick.NONE;
+        for (int i = 0; i < states.length; i++) {
+            WatchedSession session = sessions.get(i);
+            states[i] = session.state;
+            if (session == mFollowed) current = i;
+        }
+        int pick = MediaSessionPick.choose(states, current);
+        WatchedSession next = pick == MediaSessionPick.NONE ? null : sessions.get(pick);
+        if (next != mFollowed) {
+            mFollowed = next;
+            mTopPaneController = next == null ? null : next.controller;
+            mTopPaneState = null;
+            mTopPaneMetadata = null;
+            if (next != null) {
+                try {
+                    mTopPaneState = next.controller.getPlaybackState();
+                    mTopPaneMetadata = next.controller.getMetadata();
+                    next.state = stateOf(mTopPaneState);
+                } catch (Throwable throwable) {
+                    Logger.logWarn(LOG_TAG, "Failed to read media session: " + throwable.getMessage());
+                }
             }
         }
         publishTopPaneMedia();
     }
 
-    /** Only playing or paused sessions claim the slot; stopped and released ones release it. */
-    @Nullable
-    private MediaController selectTopPaneController(@Nullable List<MediaController> controllers) {
-        if (controllers == null || controllers.isEmpty()) return null;
-        MediaController paused = null;
-        for (MediaController controller : controllers) {
-            PlaybackState state = controller.getPlaybackState();
-            int value = state == null ? PlaybackState.STATE_NONE : state.getState();
-            if (value == PlaybackState.STATE_PLAYING) return controller;
-            if (paused == null && value == PlaybackState.STATE_PAUSED) paused = controller;
+    /**
+     * After a notification event: a post or removal from an app with a watched session (its own
+     * media notification moving) re-reads that session's state, as a backstop for a callback that
+     * has not arrived yet. A media notification naming a session that is not watched means a
+     * sessions change was missed, so the sessions are read again. Any other notification only
+     * republishes, which {@link TopPaneFeed#setMedia} drops as unchanged.
+     */
+    private void refreshTopPaneMediaFor(@Nullable StatusBarNotification sbn) {
+        String packageName = sbn == null ? null : sbn.getPackageName();
+        if (packageName != null) {
+            for (WatchedSession session : mWatched.values()) {
+                if (packageName.equals(session.controller.getPackageName())) refreshState(session);
+            }
+            MediaSession.Token token = mediaSessionOf(sbn);
+            if (token != null && !mWatched.containsKey(token)) {
+                syncTopPaneMedia();
+                return;
+            }
         }
-        return paused;
+        followTopPaneSession();
+    }
+
+    @Nullable
+    private static MediaSession.Token mediaSessionOf(@NonNull StatusBarNotification sbn) {
+        try {
+            Notification notification = sbn.getNotification();
+            Bundle extras = notification == null ? null : notification.extras;
+            if (extras == null) return null;
+            Object token = extras.getParcelable(Notification.EXTRA_MEDIA_SESSION);
+            return token instanceof MediaSession.Token ? (MediaSession.Token) token : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private static PlaybackState readPlaybackState(@NonNull MediaController controller) {
+        try {
+            return controller.getPlaybackState();
+        } catch (Throwable throwable) {
+            Logger.logWarn(LOG_TAG, "Failed to read playback state: " + throwable.getMessage());
+            return null;
+        }
+    }
+
+    /** A session that reports no state counts as having none. */
+    private static int stateOf(@Nullable PlaybackState playback) {
+        return playback == null ? PlaybackState.STATE_NONE : playback.getState();
     }
 
     private void publishTopPaneMedia() {
+        if (!isLive()) return;
         MediaController controller = mTopPaneController;
         if (controller == null) {
             TopPaneFeed.setMedia(null);
             return;
         }
         PlaybackState state = mTopPaneState;
-        int value = state == null ? PlaybackState.STATE_NONE : state.getState();
-        if (value != PlaybackState.STATE_PLAYING && value != PlaybackState.STATE_PAUSED) {
+        int value = stateOf(state);
+        if (!MediaSessionPick.showsRow(value)) {
             TopPaneFeed.setMedia(null);
             return;
         }
@@ -961,6 +1112,15 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     @Override
     public void refreshPinned() {
         mPinnedRebuild.request();
+    }
+
+    @Override
+    public void resyncMedia() {
+        if (!isLive()) return;
+        long now = SystemClock.elapsedRealtime();
+        if (now - mLastMediaResyncMs < MEDIA_RESYNC_MIN_INTERVAL_MS) return;
+        mLastMediaResyncMs = now;
+        syncTopPaneMedia();
     }
 
     /** The conversation whose card holds {@code key}, or null. */

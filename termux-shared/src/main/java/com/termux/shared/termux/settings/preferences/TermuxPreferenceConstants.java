@@ -603,6 +603,13 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
         public static final boolean DEFAULT_STATUS_WIDGET_RAM = false;
 
+        /**
+         * Whether the media row may take the status bar's widget slot while something plays. On by
+         * default, as the row always was; off, the slot keeps the clock (and any pinned cards).
+         */
+        public static final String KEY_STATUS_WIDGET_MEDIA = "status_widget_media";
+        public static final boolean DEFAULT_STATUS_WIDGET_MEDIA = true;
+
         public static final String KEY_STATUS_WIDGET_WEATHER = "status_widget_weather";
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER = true;
 

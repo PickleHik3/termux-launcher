@@ -2,10 +2,12 @@ package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 
 import android.app.Activity;
 import android.app.Application;
 import android.os.Build;
+import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
@@ -40,6 +42,7 @@ public class X11PaneFrameEmptyStateTest {
         page.addView(textView(activity, R.id.x11_pane_empty_message));
         page.addView(textView(activity, R.id.x11_pane_start));
         page.addView(textView(activity, R.id.x11_pane_guide));
+        page.addView(textView(activity, R.id.x11_pane_install));
         page.onFinishInflate();
         return page;
     }
@@ -69,6 +72,37 @@ public class X11PaneFrameEmptyStateTest {
 
         assertEquals("arrival re-ran the policy and put the current answer back",
             derived, message.getText().toString());
+    }
+
+    /**
+     * The JVM has no prefix, so the probe answers "missing": the install button stands where
+     * Start does, the guide link is gone, and a tap hands the host this edition's command.
+     */
+    @Test
+    public void missingKeyboardDataOffersTheInstallAndHandsTheHostTheCommand() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        X11PaneFrame page = page(activity);
+        java.util.List<java.util.List<String>> asked = new java.util.ArrayList<>();
+        page.setHost(new X11PaneFrame.Host() {
+            @Override public void startDisplay() { }
+            @Override public void installKeyboardData(java.util.List<String> command) {
+                asked.add(command);
+            }
+        });
+        page.refreshEmptyStateReadiness();
+
+        View install = page.findViewById(R.id.x11_pane_install);
+        assertEquals(View.VISIBLE, install.getVisibility());
+        assertEquals(View.GONE, page.findViewById(R.id.x11_pane_start).getVisibility());
+        assertEquals(View.GONE, page.findViewById(R.id.x11_pane_guide).getVisibility());
+
+        install.performClick();
+
+        assertEquals(1, asked.size());
+        java.util.List<String> expected = KeyboardDataInstall.command(
+            com.termux.app.tour.TourEdition.of(activity.getPackageName()));
+        assertNotNull(expected);
+        assertEquals(expected, asked.get(0));
     }
 
     @Test

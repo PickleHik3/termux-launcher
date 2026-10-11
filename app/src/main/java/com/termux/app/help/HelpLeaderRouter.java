@@ -1,6 +1,7 @@
 package com.termux.app.help;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -43,12 +44,30 @@ public final class HelpLeaderRouter {
     /** One control asking for a card: where it is, which edge it is past, and how big its card is. */
     public static final class Target {
         public final String id;
+        /** The box the card is seated against: the first of {@link #boxes}. */
         public final Box box;
+        /**
+         * Every box the control is drawn as, {@link #box} first. Most controls are one box; one that
+         * works from two places — the page's top and bottom borders — is one box per place, and its
+         * one card has a leader to each.
+         */
+        public final List<Box> boxes;
         public final Side side;
         public final float cardWidth, cardHeight;
         public Target(String id, Box box, Side side, float cardWidth, float cardHeight) {
-            this.id = id; this.box = box; this.side = side;
+            this(id, Collections.singletonList(box), side, cardWidth, cardHeight);
+        }
+        public Target(String id, List<Box> boxes, Side side, float cardWidth, float cardHeight) {
+            this.id = id; this.side = side;
             this.cardWidth = cardWidth; this.cardHeight = cardHeight;
+            this.box = boxes.isEmpty() ? null : boxes.get(0);
+            List<Box> kept = new ArrayList<>();
+            if (box != null) kept.add(box);
+            for (int i = 1; i < boxes.size(); i++) {
+                Box b = boxes.get(i);
+                if (b != null && b.width() > 0 && b.height() > 0) kept.add(b);
+            }
+            this.boxes = Collections.unmodifiableList(kept);
         }
     }
 
@@ -86,15 +105,25 @@ public final class HelpLeaderRouter {
         }
     }
 
-    /** One seated card: where it went, the line back to its control, and which side it took. */
+    /** One seated card: where it went, the lines back to its control, and which side it took. */
     public static final class Placement {
         public final Target target;
         public final Box card;
+        /** Every leg of every leader, for drawing them and for keeping the next card's clear. */
         public final List<Segment> lines;
+        /** One leader per box of the target, in {@link Target#boxes}' order; empty where none. */
+        public final List<List<Segment>> leaders;
         public final int page, column;
-        Placement(Target target, Box card, List<Segment> lines, int page, int column) {
+        Placement(Target target, Box card, List<List<Segment>> leaders, int page, int column) {
             this.target = target; this.card = card;
-            this.lines = Collections.unmodifiableList(lines);
+            List<Segment> all = new ArrayList<>();
+            List<List<Segment>> each = new ArrayList<>();
+            for (List<Segment> leader : leaders) {
+                all.addAll(leader);
+                each.add(Collections.unmodifiableList(leader));
+            }
+            this.lines = Collections.unmodifiableList(all);
+            this.leaders = Collections.unmodifiableList(each);
             this.page = page; this.column = column;
         }
     }
@@ -128,6 +157,9 @@ public final class HelpLeaderRouter {
      * elbow is allowed — and only when no lane is left does the card itself move. A card whose
      * leader cannot be kept off the other cards and boxes settles for a leader that only has to
      * clear the other leaders. A new page starts only when a card fits nowhere on the current one.
+     * <p>A control drawn as more than one box — the page's top and bottom borders — still has one
+     * card, seated against its first box, and a leader to every box. A seat from which one of the
+     * others cannot be reached on the same terms is passed over like a seat that is taken.
      */
     public static Result arrange(Box band, float gutter, float gap, List<Target> input,
                                  List<Box> hard, List<Box> soft) {
@@ -213,7 +245,7 @@ public final class HelpLeaderRouter {
         int away = 1; // the direction that leads away from the control when the ideal spot is taken
         float farX = x + w / 2 < band.cx() ? right - w : left;
         List<Box> near = new ArrayList<>();
-        for (Placement p : placed) if (p.page == page) { near.add(p.card); near.add(p.target.box); }
+        for (Placement p : placed) if (p.page == page) { near.add(p.card); near.addAll(p.target.boxes); }
         // A leader that cannot be routed from here moves the card a little, never a hair.
         float step = Math.max(Math.max(1, gap), h / 2);
         for (int tier = 0; tier < 2; tier++) {
@@ -237,17 +269,21 @@ public final class HelpLeaderRouter {
                             continue;
                         }
                         int column = cx + w / 2 < band.cx() ? 0 : 1;
-                        if (mode == 2) return new Placement(t, card, Collections.emptyList(),
-                            page, column);
-                        for (List<Segment> path : leaders(t, card, gap, near)) {
+                        if (mode == 2) return unlined(t, card, page, column);
+                        // The control's other boxes first: a card that cannot reach all of them
+                        // on these terms is in the wrong place, whatever its first line does.
+                        List<List<Segment>> more = moreLeaders(t, card, page, gap, placed, near,
+                            hard, soft, mode == 0);
+                        if (more != null) for (List<Segment> path : leaders(t, card, gap, near)) {
                             // A control outside the band is only ever reached by a line, so an
                             // empty leader there is a last resort and not a first answer: a card
                             // that lands away from its box with nothing joining them reads as
                             // belonging to nothing. Inside the band the card touches its box and
                             // the absence of a line is the point.
                             if (path.isEmpty() && t.side != Side.INSIDE) continue;
-                            if (clears(t, card, path, placed, page, gap, mode == 0))
-                                return new Placement(t, card, path, page, column);
+                            if (clears(t, card, path, placed, page, gap, mode == 0)
+                                    && !tooClose(path, more, gap))
+                                return lined(t, card, path, more, page, column);
                         }
                         yy += d > 0 ? step : -step;
                     }
@@ -291,7 +327,7 @@ public final class HelpLeaderRouter {
         for (Placement p : placed) if (p.page == page) {
             blocked.add(p.card);
             near.add(p.card);
-            near.add(p.target.box);
+            near.addAll(p.target.boxes);
         }
         float ideal = clamp((alongX ? t.box.cx() : t.box.cy()) - length / 2, lo, hi);
         // The first shelf leans on the control; each step moves a shelf's thickness toward and
@@ -313,7 +349,7 @@ public final class HelpLeaderRouter {
             boolean any = false;
             for (float x : shelfSlots(ideal, lo, hi, length, gap)) {
                 Box card = alongX ? new Box(x, a, x + length, b) : new Box(a, x, b, x + length);
-                if (card.overlaps(t.box) || hits(card, blocked)) continue;
+                if (hits(card, t.boxes) || hits(card, blocked)) continue;
                 any = true;
                 float away = Math.abs(x - ideal) + 2 * shelf * (thickness + gap);
                 // Covering a dimmed control costs up to three shelves, in proportion to how much
@@ -338,17 +374,21 @@ public final class HelpLeaderRouter {
                     if (tier == 0 && cover.get(i) >= 0.5f) continue;
                     Box card = spots.get(i);
                     int column = card.cx() < band.cx() ? 0 : 1;
+                    List<List<Segment>> more = moreLeaders(t, card, page, gap, placed, near,
+                        hard, soft, mode == 0);
+                    if (more == null) continue;
                     for (List<Segment> path : leaders(t, card, gap, near)) {
                         if (path.isEmpty()) continue;
-                        if (clears(t, card, path, placed, page, gap, mode == 0))
-                            return new Placement(t, card, path, page, column);
+                        if (clears(t, card, path, placed, page, gap, mode == 0)
+                                && !tooClose(path, more, gap))
+                            return lined(t, card, path, more, page, column);
                     }
                 }
             }
         }
         for (int i : order) {
             Box card = spots.get(i);
-            return new Placement(t, card, Collections.emptyList(), page, card.cx() < band.cx() ? 0 : 1);
+            return unlined(t, card, page, card.cx() < band.cx() ? 0 : 1);
         }
         return null;
     }
@@ -467,17 +507,102 @@ public final class HelpLeaderRouter {
      */
     private static boolean clears(Target t, Box card, List<Segment> path, List<Placement> placed,
                                   int page, float gap, boolean strict) {
-        for (Segment s : path) if (s.enters(card) || s.enters(t.box)) return false;
+        for (Segment s : path) if (s.enters(card) || enters(s, t.boxes)) return false;
         for (Placement p : placed) {
             if (p.page != page) continue;
             for (Segment s : path) {
                 for (Segment o : p.lines) if (s.tooClose(o, gap)) return false;
-                if (strict && (s.enters(p.card) || s.enters(p.target.box))) return false;
+                if (strict && (s.enters(p.card) || enters(s, p.target.boxes))) return false;
             }
             if (strict) for (Segment o : p.lines)
-                if (o.enters(card) || o.enters(t.box)) return false;
+                if (o.enters(card) || enters(o, t.boxes)) return false;
         }
         return true;
+    }
+
+    /**
+     * The leaders from {@code card} to each of the target's boxes after its first, or null when one
+     * of them cannot be drawn on these terms; empty for a control that is one box. Each takes the
+     * first candidate that also keeps out of every other control, hard and soft alike — a line from
+     * one border to the other crosses the whole band, where a line beside its card crosses nothing
+     * — and failing that the first one {@link #clears} allows.
+     */
+    private static List<List<Segment>> moreLeaders(Target t, Box card, int page, float gap,
+                                                   List<Placement> placed, List<Box> near,
+                                                   List<Box> hard, List<Box> soft, boolean strict) {
+        List<List<Segment>> out = new ArrayList<>();
+        if (t.boxes.size() < 2) return out;
+        List<Box> controls = new ArrayList<>(hard);
+        controls.addAll(soft);
+        List<Segment> taken = new ArrayList<>();
+        for (int i = 1; i < t.boxes.size(); i++) {
+            Target leg = new Target(t.id, t.boxes.get(i), t.side, t.cardWidth, t.cardHeight);
+            List<Segment> found = null;
+            for (List<Segment> path : leaders(leg, card, gap, near)) {
+                // An empty line means the card lies on this box, and so hides what it explains.
+                if (path.isEmpty() || tooClose(path, Collections.singletonList(taken), gap)
+                    || !clears(t, card, path, placed, page, gap, strict)) continue;
+                if (!entersAny(path, controls)) { found = path; break; }
+                if (found == null) found = path;
+            }
+            if (found == null) return null;
+            out.add(found);
+            taken.addAll(found);
+        }
+        return out;
+    }
+
+    /**
+     * One more leader from a card already seated to another box of its own control, for the one
+     * card of "Explore this screen", whose first line {@link HelpExplorePlacement} draws. The same
+     * candidates {@link #arrange} tries, nearest the natural line first: the first that keeps out
+     * of every box in {@code avoid} and clear of the {@code taken} lines, else the first clear of
+     * the lines alone, else the plain line. Empty only when the card lies on the box.
+     */
+    public static List<Segment> reach(Box card, Box box, float gap, List<Box> avoid,
+                                      List<Segment> taken) {
+        Target leg = new Target("", box, Side.INSIDE, card.width(), card.height());
+        List<Segment> fallback = null;
+        for (List<Segment> path : leaders(leg, card, gap, avoid)) {
+            if (path.isEmpty() || entersAny(path, Arrays.asList(card, box))
+                || tooClose(path, Collections.singletonList(taken), gap)) continue;
+            if (!entersAny(path, avoid)) return path;
+            if (fallback == null) fallback = path;
+        }
+        return fallback != null ? fallback : leader(leg, card);
+    }
+
+    /** A seated card whose leaders are {@code first} to its first box and {@code more} to the rest. */
+    private static Placement lined(Target t, Box card, List<Segment> first,
+                                   List<List<Segment>> more, int page, int column) {
+        List<List<Segment>> leaders = new ArrayList<>();
+        leaders.add(first);
+        leaders.addAll(more);
+        return new Placement(t, card, leaders, page, column);
+    }
+
+    /** A seated card with no line at all, paired with its control by colour alone. */
+    private static Placement unlined(Target t, Box card, int page, int column) {
+        List<List<Segment>> leaders = new ArrayList<>();
+        for (int i = 0; i < t.boxes.size(); i++) leaders.add(Collections.emptyList());
+        return new Placement(t, card, leaders, page, column);
+    }
+
+    private static boolean enters(Segment s, List<Box> boxes) {
+        for (Box b : boxes) if (s.enters(b)) return true;
+        return false;
+    }
+
+    private static boolean entersAny(List<Segment> path, List<Box> boxes) {
+        for (Segment s : path) if (enters(s, boxes)) return true;
+        return false;
+    }
+
+    /** Whether any leg of {@code path} runs within {@code gap} of a leg of the other lines. */
+    private static boolean tooClose(List<Segment> path, List<List<Segment>> others, float gap) {
+        for (List<Segment> other : others)
+            for (Segment s : path) for (Segment o : other) if (s.tooClose(o, gap)) return true;
+        return false;
     }
 
     private static float clamp(float v, float lo, float hi) {

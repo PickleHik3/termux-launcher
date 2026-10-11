@@ -64,6 +64,13 @@ public class MediaWidgetView extends BuiltinWidgetView {
     private static final int SPREAD_GAP_DP = 4;
     /** The narrowest a control in a spread row is made, to fit three of them in 89dp. */
     private static final int CONTROL_MIN_DP = 32;
+    /**
+     * The 4×2 text column at its narrowest beside the art: the deck's five marks spread at their
+     * narrowest (13 + 32 + 38 + 32 + 13 with four 4dp gaps). The art gives up width to keep it.
+     */
+    private static final int DECK_COLUMN_MIN_DP = 144;
+    /** The air above and below the 1-row art. */
+    private static final int ROW_ART_AIR_DP = 12;
     /** The previous and next controls, which go from a narrow row after the decorations. */
     private static final int CONTROL_RANK = 30;
     private static final int DECORATION_RANK = 10;
@@ -241,6 +248,9 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
     // ----- layouts --------------------------------------------------------------------------
 
+    /** Every layout takes a tall card's height in its art, which a zoom would only narrow. */
+    @Override protected boolean zoomsToFill(@NonNull BuiltinWidgetSpan span) { return false; }
+
     @Override protected void onBuild(@NonNull FrameLayout frame, @NonNull BuiltinWidgetSpan span,
                                      @NonNull BuiltinWidgetUi ui) {
         if (isPreview()) {
@@ -286,7 +296,7 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
     @NonNull private View buildOneByOne(@NonNull BuiltinWidgetUi ui) {
         FrameLayout root = new FrameLayout(getContext());
-        root.addView(artFrame(ui, 8, 6, false, 0), matchParent());
+        root.addView(artFrame(ui, 8, 6), matchParent());
         playButton = control(ui, GLYPH_PAUSE, 15, style().onPrimary, 40, this::onPlayPause);
         root.addView(playButton, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
@@ -295,27 +305,30 @@ public class MediaWidgetView extends BuiltinWidgetView {
     }
 
     @NonNull private View buildTwoByOne(@NonNull BuiltinWidgetUi ui) {
-        ArtFrame artView = artFrame(ui, 10, 6, false, 68);
+        ArtFrame artView = artFrame(ui, 10, 6);
+        artView.setLayoutParams(rowArtParams(ui));
         title = ui.text("", 12.5f, style().sansBold, style().onSurface);
         artist = ui.text("", 11, style().sansMedium, style().onSurfaceVariant);
         playButton = control(ui, GLYPH_PAUSE, 11, style().onPrimary, 28, this::onPlayPause);
         nextButton = control(ui, GLYPH_NEXT, 12, style().onSurfaceVariant, 0, TopPaneFeed::skipNext);
         FitStack controls = controlRow(ui, false, 10, playButton, 28, nextButton, 12);
         // At 56dp the title and the controls fill the card: the artist goes first. At 109dp
-        // wide the card has no room for the art beside two controls, so the art goes too.
+        // wide the card has no room for the art beside two controls, so the art goes too. In a
+        // card taller than the design the art grows with it, and narrows to keep the column.
         FitStack column = FitStack.column(getContext()).centerAlong()
             .add(title, FitStack.ESSENTIAL, 0)
             .add(artist, 20, 0)
             .addShrink(controls, 30, controlGap(ui, 6, 28), ui.dp(TOUCH_DP), ui.dp(TOUCH_MIN_DP));
         FitStack row = FitStack.row(getContext()).centerAcross()
-            .add(artView, 10, 0)
-            .addFlex(column, FitStack.ESSENTIAL, ui.dp(10), ui.dp(2 * TOUCH_MIN_DP));
+            .addSquareOrNarrower(artView, 10, 0, ui.dp(ART_MIN_DP))
+            .addFlex(column, FitStack.ESSENTIAL, ui.dp(10),
+                Math.max(ui.dp(2 * TOUCH_MIN_DP), naturalWidth(controls)));
         inset(row, 10, 0, 10, 0, ui);
         return row;
     }
 
     @NonNull private View buildTwoByTwo(@NonNull BuiltinWidgetUi ui) {
-        ArtFrame artView = artFrame(ui, 10, 6, false, 0);
+        ArtFrame artView = artFrame(ui, 10, 6);
         title = ui.text("", 13, style().sansBold, style().onSurface);
         artist = ui.text("", 11, style().sansMedium, style().onSurfaceVariant);
         bar = ui.bar(0f, style().primary, 4);
@@ -342,7 +355,8 @@ public class MediaWidgetView extends BuiltinWidgetView {
     }
 
     @NonNull private View buildFourByOne(@NonNull BuiltinWidgetUi ui) {
-        ArtFrame artView = artFrame(ui, 10, 6, false, 68);
+        ArtFrame artView = artFrame(ui, 10, 6);
+        artView.setLayoutParams(rowArtParams(ui));
         title = ui.text("", 13, style().sansBold, style().onSurface);
         elapsedOfTotal = ui.mono("", 10.5f);
         LinearLayout head = ui.row(8, BuiltinWidgetUi.flex(title), elapsedOfTotal);
@@ -354,24 +368,23 @@ public class MediaWidgetView extends BuiltinWidgetView {
         FitStack controls = controlRow(ui, false, 18,
             decoration(ui, GLYPH_SHUFFLE, 12), 12, previousButton, 12, playButton, 28,
             nextButton, 12, decoration(ui, GLYPH_HEART, 12), 12);
-        // At 56dp the title line and the controls fill the card: the progress bar goes. At 245dp
-        // wide the shuffle and heart marks go from the controls before the buttons do.
+        // At 56dp the title line and the controls fill the card: the progress bar goes. The
+        // column keeps the whole control row; the art narrows for it, and goes before it would.
         FitStack column = FitStack.column(getContext()).centerAlong()
             .add(BuiltinWidgetUi.size(head, ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT), FitStack.ESSENTIAL, 0)
             .add(bar, 10, ui.dp(7))
             .addShrink(controls, 20, controlGap(ui, 7, 28), ui.dp(TOUCH_DP), ui.dp(TOUCH_MIN_DP));
         FitStack row = FitStack.row(getContext()).centerAcross()
-            .add(artView, 10, 0)
-            .addFlex(column, FitStack.ESSENTIAL, ui.dp(12), ui.dp(3 * TOUCH_MIN_DP));
+            .addSquareOrNarrower(artView, 10, 0, ui.dp(ART_MIN_DP))
+            .addFlex(column, FitStack.ESSENTIAL, ui.dp(12),
+                Math.max(ui.dp(3 * TOUCH_MIN_DP), naturalWidth(controls)));
         inset(row, 12, 0, 12, 0, ui);
         return row;
     }
 
     @NonNull private View buildFourByTwo(@NonNull BuiltinWidgetUi ui) {
-        ArtFrame artView = artFrame(ui, 12, 7, true, 0);
-        artView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
+        ArtFrame artView = artFrame(ui, 12, 7);
 
         sourceLabel = ui.mono("", 10.5f);
         LinearLayout source = ui.row(5, ui.glyph(GLYPH_MUSIC, 10.5f, style().onSurfaceVariant),
@@ -406,9 +419,12 @@ public class MediaWidgetView extends BuiltinWidgetView {
         inset(column, 0, 4, 4, 4, ui);
         column.setLayoutParams(new ViewGroup.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT));
 
+        // The art is square to the card's height while the column keeps the deck; past that it
+        // gives up width, as tall as ever, rather than being left out of a tall card whose
+        // height alone would make it wider than the row.
         FitStack row = FitStack.row(getContext())
-            .add(artView, 10, 0)
-            .addFlex(column, FitStack.ESSENTIAL, ui.dp(16), ui.dp(3 * TOUCH_MIN_DP));
+            .addSquareOrNarrower(artView, 10, 0, ui.dp(ART_MIN_DP))
+            .addFlex(column, FitStack.ESSENTIAL, ui.dp(16), ui.dp(DECK_COLUMN_MIN_DP));
         inset(row, 12, 12, 12, 12, ui);
         return row;
     }
@@ -523,12 +539,10 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
     /**
      * The art well: the striped stand-in with the session's artwork over it when there is some,
-     * rounded to the card's corner less {@code insetDp}. {@code desiredDp} makes it a square of
-     * that size that settles for the room it is given; zero fills what the parent gives.
+     * rounded to the card's corner less {@code insetDp}. It fills what its parent gives it.
      */
-    @NonNull private ArtFrame artFrame(@NonNull BuiltinWidgetUi ui, int insetDp, int bandDp,
-                                       boolean square, int desiredDp) {
-        ArtFrame frame = new ArtFrame(getContext(), square, ui.dp(desiredDp));
+    @NonNull private ArtFrame artFrame(@NonNull BuiltinWidgetUi ui, int insetDp, int bandDp) {
+        ArtFrame frame = new ArtFrame(getContext());
         float radius = ui.innerRadius(insetDp);
         frame.setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
@@ -547,6 +561,25 @@ public class MediaWidgetView extends BuiltinWidgetView {
         artPlaceholder = placeholder;
         art = image;
         return frame;
+    }
+
+    /** {@code view}'s width given all the room it wants: what a column keeps to show it whole. */
+    private static int naturalWidth(@NonNull View view) {
+        int open = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        view.measure(open, open);
+        return view.getMeasuredWidth();
+    }
+
+    /**
+     * The 1-row art's place in its row: the card's height less the design's 12dp above and below,
+     * which is the design's 68dp square in a 92dp card.
+     */
+    @NonNull private static ViewGroup.MarginLayoutParams rowArtParams(@NonNull BuiltinWidgetUi ui) {
+        ViewGroup.MarginLayoutParams params = new ViewGroup.MarginLayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        params.topMargin = ui.dp(ROW_ART_AIR_DP);
+        params.bottomMargin = ui.dp(ROW_ART_AIR_DP);
+        return params;
     }
 
     /**
@@ -673,36 +706,11 @@ public class MediaWidgetView extends BuiltinWidgetView {
             FrameLayout.LayoutParams.MATCH_PARENT);
     }
 
-    /**
-     * The art well. With a desired size it is a square of that size, or of the room it is given
-     * if that is smaller; at 4×2 it is square to its height, which the card decides.
-     */
+    /** The art well: a frame the accessibility tree passes over. */
     private static final class ArtFrame extends FrameLayout {
-        private final boolean square;
-        private final int desiredPx;
-
-        ArtFrame(@NonNull Context context, boolean square, int desiredPx) {
+        ArtFrame(@NonNull Context context) {
             super(context);
-            this.square = square;
-            this.desiredPx = desiredPx;
             setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        }
-
-        @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            if (desiredPx > 0) {
-                int side = Math.min(desiredPx, Math.min(room(widthMeasureSpec),
-                    room(heightMeasureSpec)));
-                int exact = MeasureSpec.makeMeasureSpec(side, MeasureSpec.EXACTLY);
-                super.onMeasure(exact, exact);
-                return;
-            }
-            if (square && MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.UNSPECIFIED) {
-                int side = MeasureSpec.getSize(heightMeasureSpec);
-                int exact = MeasureSpec.makeMeasureSpec(side, MeasureSpec.EXACTLY);
-                super.onMeasure(exact, exact);
-                return;
-            }
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         }
     }
 

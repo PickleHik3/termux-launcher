@@ -19,14 +19,30 @@ put away in the tray. See `docs/en/Launcher_Usage.md`.
 _Avoid_: alphabet bar (the Layout editor's file names still say `alphabets`), fast scroller
 
 **Border drag**:
-The one finger gesture that pages the wall, on every place and in every mode: a press held on the
-current page's border — the frame line on any of its four sides, less the corner squares — for the
-same hold a corner takes, then dragged sideways. A tap, a sideways swipe without the hold, a drag
-that sets off before it and a second finger all stay the content's; a vertical swipe off the
-bottom border is the keyboard swipe, and one off the top border is the status swipe. The border
+The one finger gesture that pages the wall, on every place and in every mode, on the current
+page's border — the frame line on any of its four sides and the air between it and the next thing
+out (the status bar, the dock or keyboard, the screen's edge), less the corner squares. On the top
+and bottom borders, out in that air, it is a plain sideways swipe: past the touch slop the wall is
+claimed at once and follows the finger from there. On the left and right borders, which share
+their edge with Android's back swipe, and wherever a border reaches into the page, it is a press
+held for the same hold a corner takes, then dragged sideways; a hold works on the top and bottom
+too. The top and bottom borders are one gesture: the finger lands and the edge lights, then
+sideways pages, up or down is the keyboard swipe (bottom) or the status swipe (top), and holding
+still pages. The border never reaches the page's text, so a tap, long press or mouse click on the
+terminal is the terminal's right up to its edge: the left and right borders reach 2dp over the
+page's edge, into the clearance before the text, and where Margin leaves less than 6dp of air a
+border reaches in by the shortfall, whichever is further. Where a border reaches into the page, in
+the boxes by the grabber pills, and on the left and right borders, a sideways drag before the hold
+stays the page's (a scroll, a selection, a program's own drag); a second finger always gives the
+border up. A swipe from Android's own strip at the very top of the screen is never taken. The border
 is always drawn while the
 border preference is on (the slab's rim on glass, the plain stroke otherwise), on the terminal,
-the Widgets page and the Display page alike, so the gesture has a line to find. The hold sinks
+the Widgets page and the Display page alike, so the gesture has a line to find. A finger that
+lands where it can page lights that edge at once, in the accent the grabbers use: full at the
+touch on the top and bottom air, where a swipe pages at once, and brightening until the hold takes
+on the sides and inside the page. The glow stays full through the drag and fades if the press is
+given up or handed to a grabber (full and gone at once when motion is reduced). The claim, by hold
+or by swipe, sinks
 the page away from the user until the finger lets go, in every mode unless motion is reduced;
 where the extra glass is active (see **Fancier Glass**) the page held and the page arriving both tip
 like planks toward the finger, as if it pressed its weight into them, and lie flat as the settle lands; the Display place does
@@ -53,11 +69,13 @@ _Avoid_: taskbar, nav bar, hotseat
 
 **Keyboard swipe**:
 The one way to the keyboard every place and every mode shares: a swipe that sets off up or down
-from the current page's bottom border — the frame line or just below it, less the corner squares
-— before the border drag's hold. Up opens the keyboard, down closes it; opening turns a keyboard
-that was switched off back on, as the keyboard key does. It is claimed as soon as it moves, so the
-content under the line is told its touch is over; a sideways start and a hold stay as they were.
-A docked keyboard follows the finger and the release finishes it past a third of the way or on a
+from the current page's bottom border — the frame line and the air below it down to the dock or
+keyboard, less the corner squares — before the border drag's hold. It also starts near the grabber
+pill, one row into the page; only the swipe is taken there, so a tap, long press or sideways drag
+on that row stays the page's. Up opens the keyboard, down closes it; opening turns a keyboard
+that was switched off back on, as the keyboard key does. It is claimed as soon as it moves more up
+or down than across; a sideways start from the border's air is the border drag, and a hold still
+pages. The border's glow, lit at the touch, hands over to the grabber when the swipe is claimed. A docked keyboard follows the finger and the release finishes it past a third of the way or on a
 flick, and takes it back otherwise; a floating keyboard, Android's, and one switched off answer
 the release alone. A small **grabber** pill on the bottom border marks it.
 The keyboard itself carries no swipe of its own.
@@ -124,7 +142,9 @@ _Avoid_: screen, tab. "Page" and "wall page" are the code's word for a place (`P
 
 **Status swipe**:
 The keyboard swipe's mirror on the current page's top border: a swipe that sets off down or up
-from it before the border drag's hold. Down unfolds the status bar, up folds it: the bar's own
+from it — the frame line and the air above it up to the status bar — before the border drag's
+hold. Like the keyboard swipe it also starts near its grabber pill, one row into the page, and
+only the swipe is taken there; from the border's air a sideways start is the border drag instead. Down unfolds the status bar, up folds it: the bar's own
 two forms, compact and open, driven by the same fold its drag across itself drives, following the
 finger and landing by the keyboard swipe's rule. A grabber pill marks it. It is there only while
 the status bar stands along the top and can unfold, minimal mode included; a bar on another edge

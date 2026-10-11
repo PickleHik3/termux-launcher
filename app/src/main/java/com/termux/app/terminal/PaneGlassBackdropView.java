@@ -18,6 +18,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.FrameCrossfade;
 import com.termux.app.chrome.GlassAnchor;
+import com.termux.app.chrome.GlassFilters;
 import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.chrome.WallpaperParallax;
 
@@ -29,9 +30,11 @@ import com.termux.app.chrome.WallpaperParallax;
  *
  * <p>The wallpaper frame is never cropped into a per-pane bitmap: panes resize on every split, drag
  * and keyboard toggle, and cropping would allocate a pane-sized ARGB_8888 bitmap each time. The one
- * cached frame is drawn through a translation matrix instead, recomputed only when this view's
- * position over the wallpaper actually changes — its layout position, the wall page's slide, or
- * the wallpaper's own parallax offset.
+ * cached frame is drawn through a matrix instead, recomputed only when this view's place over the
+ * wallpaper actually changes — its layout position, the wall page's slide, sink or tilt, or the
+ * wallpaper's own parallax offset. The page's transform is undone in that matrix
+ * ({@link GlassAnchor#place}), so the wallpaper in the slab stays fixed to the screen while the
+ * slab's own tint, grain and rim move with the page.
  *
  * <p>With Fancier Glass on ({@link #setRefraction}), that same aim is handed to
  * {@link GlassRefraction} as uniforms and the frame is drawn through its program instead — bent
@@ -48,9 +51,12 @@ public final class PaneGlassBackdropView extends View {
     private final Paint mFramePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint mTintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Matrix mFrameMatrix = new Matrix();
-    /** The aim as {@code {scaleX, scaleY, translateX, translateY}}; the matrix or the uniforms are set from it. */
-    private final float[] mAim = new float[4];
-    private final int[] mLocation = new int[2];
+    /** Where this slab stands over the wallpaper; read on every draw, see {@link GlassAnchor#place}. */
+    private final GlassAnchor.Placement mPlacement = new GlassAnchor.Placement();
+    /** The aim; the shader's matrix or the program's uniforms are set from it. */
+    private final GlassAnchor.Aim mAim = new GlassAnchor.Aim();
+    /** The matrix to the screen the aim was last written for. */
+    private final Matrix mLastToScreen = new Matrix();
     private final int[] mRootLocation = new int[2];
     private final Rect mFrameRect = new Rect();
     private final RectF mClipRect = new RectF();
@@ -72,6 +78,8 @@ public final class PaneGlassBackdropView extends View {
     /** The grain strength {@link #mGrain} was built from: a fresh drawable is not comparable. */
     private int mGrainStrength;
     @Nullable private ColorFilter mFrostFilter;
+    /** The sink dim the frame paints' filter last undid; 255 for the plain frost. */
+    private int mFilterKeptBrightness = 0xFF;
     /** False until the first {@link #setGlass} call, so the defaults are never mistaken for a dress. */
     private boolean mDressed;
     private int mTintColor;
@@ -84,8 +92,8 @@ public final class PaneGlassBackdropView extends View {
     private int mCornerMaskWidth;
     private int mCornerMaskHeight;
     private float mCornerMaskPathRadius;
-    private int mLastLeft = Integer.MIN_VALUE;
-    private int mLastTop = Integer.MIN_VALUE;
+    /** True until the aim has been written for the frame, the program and the place drawn now. */
+    private boolean mAimStale = true;
     private int mLastWidth = -1;
     private int mLastHeight = -1;
     /**
@@ -93,8 +101,8 @@ public final class PaneGlassBackdropView extends View {
      * copied in, so every slab samples the frame at the same offset the backdrop draws it at.
      */
     @Nullable private WallpaperParallax mParallax;
-    /** The wall slide and parallax the matrix was last aimed for, in px. */
-    private float mLastShiftX;
+    /** The parallax the matrix was last aimed for, in px. */
+    private float mLastParallax;
     /** The shader the aim was last written for; a rebind of the paint needs its own matrix. */
     @Nullable private BitmapShader mLastAimShader;
     /** Fancier Glass, or null for the plain draw. */
@@ -210,7 +218,8 @@ public final class PaneGlassBackdropView extends View {
         mFrostFilter = frostFilter;
         mFramePaint.setColorFilter(frostFilter);
         mPreviousFramePaint.setColorFilter(frostFilter);
-        mLastLeft = Integer.MIN_VALUE;   // force the matrix to be rebuilt against the new frame
+        mFilterKeptBrightness = 0xFF;
+        mAimStale = true;   // force the matrix to be rebuilt against the new frame
         invalidate();
         return true;
     }
@@ -274,7 +283,6 @@ public final class PaneGlassBackdropView extends View {
             || mVeilRect.width() != getWidth() || mVeilRect.height() != getHeight();
     }
 
-    /** Recompute the frame matrix on the next draw; call after this pane has moved. */
     /**
      * Paint only the four corner arcs, and skip the tint and grain.
      *
@@ -306,7 +314,7 @@ public final class PaneGlassBackdropView extends View {
         syncRefraction();
         // Whichever way the draw goes now, its aim has to be written afresh: the program's on
         // first use, the shader's matrix after the program cleared it.
-        mLastLeft = Integer.MIN_VALUE;
+        mAimStale = true;
         invalidate();
     }
 
@@ -374,8 +382,12 @@ public final class PaneGlassBackdropView extends View {
         invalidate();
     }
 
+    /**
+     * Re-aim on the next draw; call after this slab has moved, or after its page did — a slide,
+     * the sink, the plank's tilt — since a transform alone never redraws a child.
+     */
     public void invalidateGlassPosition() {
-        mLastLeft = Integer.MIN_VALUE;
+        mAimStale = true;
         invalidate();
     }
 
@@ -425,43 +437,50 @@ public final class PaneGlassBackdropView extends View {
                 && (mProgram == null || canvas.isHardwareAccelerated())) {
             BitmapShader aimShader = mFrameShader;
             Bitmap aimFrame = mFrame;
-            float slideX = layoutOriginOnScreen(mLocation);
-            // The page's slide carries this view to the right over the wallpaper, and the parallax
-            // carries the wallpaper to the left under it; either way the frame is sampled that
-            // much further along.
-            float shiftX = (mParallax == null ? 0f : mParallax.offsetPx()) + slideX;
+            // Where this slab is on screen through its page's slide, sink and tilt: the frame is
+            // aimed past all of it, so the wallpaper in the slab stays where the wallpaper behind
+            // the wall is. The parallax carries the wallpaper to the left under it.
+            GlassAnchor.place(this, mPlacement);
+            // The sink dims the page's layer, this slab with it; the wallpaper behind does not
+            // darken, so the frame is lifted by as much as the layer will take away.
+            int kept = mPlacement.keptBrightness;
+            if (kept != mFilterKeptBrightness) {
+                mFilterKeptBrightness = kept;
+                ColorFilter filter = GlassFilters.undimmed(mFrostFilter, kept);
+                mFramePaint.setColorFilter(filter);
+                mPreviousFramePaint.setColorFilter(filter);
+            }
+            float parallax = mParallax == null ? 0f : mParallax.offsetPx();
             GlassRefraction.Program program = mProgram;
-            if (aimShader != mLastAimShader || mLocation[0] != mLastLeft || mLocation[1] != mLastTop
-                || width != mLastWidth || height != mLastHeight || shiftX != mLastShiftX) {
-                mLastLeft = mLocation[0];
-                mLastTop = mLocation[1];
+            if (mAimStale || aimShader != mLastAimShader || !mPlacement.toScreen.equals(mLastToScreen)
+                || width != mLastWidth || height != mLastHeight || parallax != mLastParallax) {
+                mAimStale = false;
+                mLastToScreen.set(mPlacement.toScreen);
                 mLastWidth = width;
                 mLastHeight = height;
-                mLastShiftX = shiftX;
+                mLastParallax = parallax;
                 mLastAimShader = aimShader;
-                mAim[0] = mFrameRect.width() / (float) Math.max(1, aimFrame.getWidth());
-                mAim[1] = mFrameRect.height() / (float) Math.max(1, aimFrame.getHeight());
-                mAim[2] = mFrameRect.left - mLastLeft - shiftX;
-                mAim[3] = mFrameRect.top - mLastTop;
+                mAim.set(mPlacement.toScreen, mFrameRect, aimFrame.getWidth(), aimFrame.getHeight(),
+                    parallax);
+                float[] aim = mAim.scaleOffset;
                 if (program != null) {
                     // The same aim, as uniforms: the program samples the frame by its own pixels,
-                    // and the rim runs along this slab's own rounded rect.
-                    program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
+                    // and the rim runs along this slab's own rounded rect, so the bend and the
+                    // light move with the page while the wallpaper they bend stays put.
+                    program.setAim(aim[0], aim[1], aim[2], aim[3]);
+                    program.setLocal(mAim.local);
                     program.setRect(0f, 0f, width, height, mRadiusPx);
                     if (mPreviousProgram != null) {
-                        mPreviousProgram.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
+                        mPreviousProgram.setAim(aim[0], aim[1], aim[2], aim[3]);
+                        mPreviousProgram.setLocal(mAim.local);
                         mPreviousProgram.setRect(0f, 0f, width, height, mRadiusPx);
                     } else if (mPreviousFrameShader != null) {
                         // No program for the retiring frame: it fades out drawn plain.
-                        mFrameMatrix.reset();
-                        mFrameMatrix.setScale(mAim[0], mAim[1]);
-                        mFrameMatrix.postTranslate(mAim[2], mAim[3]);
+                        mAim.shaderMatrix(mFrameMatrix);
                         mPreviousFrameShader.setLocalMatrix(mFrameMatrix);
                     }
                 } else {
-                    mFrameMatrix.reset();
-                    mFrameMatrix.setScale(mAim[0], mAim[1]);
-                    mFrameMatrix.postTranslate(mAim[2], mAim[3]);
+                    mAim.shaderMatrix(mFrameMatrix);
                     aimShader.setLocalMatrix(mFrameMatrix);
                     // The retired frame shares this pane's rect and, always, the current frame's
                     // own size — both are full captures of the same radius — so the same matrix

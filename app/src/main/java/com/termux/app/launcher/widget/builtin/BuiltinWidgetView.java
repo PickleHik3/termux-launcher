@@ -4,15 +4,18 @@ import android.content.Context;
 import android.graphics.Outline;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.text.Layout;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 
 import androidx.annotation.CallSuper;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -25,6 +28,13 @@ import java.util.List;
  * is rebuilt whenever the span bucket, the settings or the style change; a subclass builds one
  * layout per {@link BuiltinWidgetSpan} in {@link #onBuild} and keeps live data flowing between
  * {@link #onStart} and {@link #onStop}, which bracket the time the view is on screen.</p>
+ *
+ * <p>A card taller than its bucket's design is not left with bands of empty card above and below
+ * the layout: the content is laid out smaller and zoomed up to fill the card, so the design is
+ * drawn larger, margins and all. The zoom is the largest that keeps everything the layout shows
+ * at the card's own size (nothing more left out, no label newly cut short), which the card's
+ * width decides as often as its height: a 2×1 on a 4×5 grid is taller than the design but no
+ * wider.</p>
  */
 public abstract class BuiltinWidgetView extends FrameLayout {
     /** One editable setting of a widget, offered by the settings sheet. */
@@ -51,6 +61,17 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     private boolean built;
     private boolean started;
 
+    /** The most a layout is zoomed, however tall the card. */
+    private static final float MAX_ZOOM = 2f;
+    /** A zoom closer to 1 than this is not worth drawing the content scaled. */
+    private static final float MIN_ZOOM = 1.02f;
+    /** Steps of the search for the largest zoom that loses nothing. */
+    private static final int ZOOM_STEPS = 6;
+    /** How much the content is drawn larger than it is laid out; chosen per size and layout. */
+    private float zoom = 1f;
+    private int zoomWidth = -1, zoomHeight = -1;
+    private boolean zoomStale = true;
+
     private final View background;
     private final FrameLayout content;
 
@@ -67,6 +88,12 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         addView(background, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         content = new FrameLayout(context);
         content.setClipToOutline(true);
+        // A subclass may swap the layout in place (a permission granted, a file opened) without
+        // a rebuild; the zoom chosen for the old one is not the new one's.
+        content.setOnHierarchyChangeListener(new OnHierarchyChangeListener() {
+            @Override public void onChildViewAdded(View parent, View child) { zoomStale = true; }
+            @Override public void onChildViewRemoved(View parent, View child) { zoomStale = true; }
+        });
         addView(content, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         setContentDescription(context.getString(kind.label));
         applyChrome();
@@ -114,7 +141,96 @@ public abstract class BuiltinWidgetView extends FrameLayout {
                 rebuild();
             }
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.EXACTLY
+            || MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.EXACTLY) {
+            setZoom(1f);
+            zoomStale = true;
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            return;
+        }
+        int width = MeasureSpec.getSize(widthMeasureSpec);
+        int height = MeasureSpec.getSize(heightMeasureSpec);
+        if (zoomStale || width != zoomWidth || height != zoomHeight) {
+            zoomWidth = width;
+            zoomHeight = height;
+            zoomStale = false;
+            setZoom(chooseZoom(width, height));
+        }
+        background.measure(widthMeasureSpec, heightMeasureSpec);
+        measureContent(width, height, zoom);
+        setMeasuredDimension(width, height);
+    }
+
+    @Override protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        background.layout(0, 0, right - left, bottom - top);
+        content.layout(0, 0, content.getMeasuredWidth(), content.getMeasuredHeight());
+    }
+
+    private void setZoom(float next) {
+        if (next == zoom) return;
+        zoom = next;
+        content.setPivotX(0f);
+        content.setPivotY(0f);
+        content.setScaleX(next);
+        content.setScaleY(next);
+        // The outline is drawn zoomed too: its radius is the card's, unzoomed.
+        content.invalidateOutline();
+    }
+
+    /**
+     * The zoom that lays the bucket out at its design height, or the largest below it at which
+     * the layout keeps what it keeps unzoomed; 1 for a card no taller than the design.
+     */
+    private float chooseZoom(int width, int height) {
+        if (!zoomsToFill(span)) return 1f;
+        float density = getResources().getDisplayMetrics().density;
+        float most = Math.min(MAX_ZOOM, height / (span.heightDp * density));
+        if (most < MIN_ZOOM) return 1f;
+        int allowed = lossesAt(width, height, 1f);
+        if (lossesAt(width, height, most) <= allowed) return most;
+        float low = 1f, high = most;
+        for (int i = 0; i < ZOOM_STEPS; i++) {
+            float middle = (low + high) / 2f;
+            if (lossesAt(width, height, middle) <= allowed) low = middle;
+            else high = middle;
+        }
+        return low < MIN_ZOOM ? 1f : low;
+    }
+
+    private void measureContent(int width, int height, float scale) {
+        content.measure(
+            MeasureSpec.makeMeasureSpec(Math.round(width / scale), MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(Math.round(height / scale), MeasureSpec.EXACTLY));
+    }
+
+    /** What the layout gives up at {@code scale}: parts left out, labels cut short, numerals shrunk. */
+    private int lossesAt(int width, int height, float scale) {
+        measureContent(width, height, scale);
+        return losses(content);
+    }
+
+    private static int losses(@NonNull View view) {
+        if (view.getVisibility() == GONE) return 0;
+        if (view instanceof ClockNumeralView) return ((ClockNumeralView) view).isShrunk() ? 1 : 0;
+        if (view instanceof TextView) {
+            Layout layout = ((TextView) view).getLayout();
+            int lines = layout == null ? 0 : layout.getLineCount();
+            return lines > 0 && layout.getEllipsisCount(lines - 1) > 0 ? 1 : 0;
+        }
+        if (!(view instanceof ViewGroup)) return 0;
+        int count = 0;
+        if (view instanceof FitStack) {
+            // A FitStack's children are what this measure kept, not what the last layout attached.
+            FitStack stack = (FitStack) view;
+            count += stack.leftOutCount();
+            List<View> shown = new ArrayList<>();
+            stack.collectShown(shown);
+            for (View child : shown) count += losses(child);
+            return count;
+        }
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) count += losses(group.getChildAt(i));
+        return count;
     }
 
     /** The look changed under the widget: a theme, a Look, the direction setting. */
@@ -144,6 +260,13 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         try { return Integer.parseInt(value.trim()); } catch (NumberFormatException e) { return fallback; }
     }
 
+    /**
+     * Whether {@code span}'s layout is zoomed to fill a card taller than its design. A layout
+     * that already takes the height itself (art that grows with the card) says no: zooming it
+     * would narrow the room it grows into.
+     */
+    protected boolean zoomsToFill(@NonNull BuiltinWidgetSpan span) { return true; }
+
     /** The settings this widget offers; empty means no cog in edit mode. */
     @NonNull public List<ConfigField> configFields() { return Collections.emptyList(); }
 
@@ -158,6 +281,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         content.removeAllViews();
         onBuild(content, span, ui());
         built = true;
+        zoomStale = true;
         if (wasStarted || (isAttachedToWindow() && !preview)) startInternal();
     }
 
@@ -209,13 +333,17 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         card.setCornerRadius(style.cornerRadiusPx);
         if (style.hasRim()) card.setStroke(Math.round(style.rimWidthPx), style.rim);
         background.setBackground(card);
-        ViewOutlineProvider outline = new ViewOutlineProvider() {
+        background.setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline out) {
                 out.setRoundRect(0, 0, view.getWidth(), view.getHeight(), style.cornerRadiusPx);
             }
-        };
-        background.setOutlineProvider(outline);
-        content.setOutlineProvider(outline);
+        });
+        content.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View view, Outline out) {
+                out.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
+                    style.cornerRadiusPx / zoom);
+            }
+        });
         background.invalidateOutline();
         content.invalidateOutline();
         setClickable(true);

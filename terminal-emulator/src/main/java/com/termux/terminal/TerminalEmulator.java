@@ -43,6 +43,12 @@ public final class TerminalEmulator {
      */
     public static final int MOUSE_LEFT_BUTTON_MOVED = 32;
 
+    /**
+     * Mouse moving with no button held: xterm's "no button" code 3 plus 32 for motion. Reported only
+     * while any-event tracking (DECSET 1003) is on.
+     */
+    public static final int MOUSE_MOVED_NO_BUTTON = 35;
+
     public static final int MOUSE_WHEELUP_BUTTON = 64;
 
     public static final int MOUSE_WHEELDOWN_BUTTON = 65;
@@ -264,6 +270,21 @@ public final class TerminalEmulator {
      * DECSET 1006 - SGR-like mouse protocol (the modern sane choice).
      */
     private static final int DECSET_BIT_MOUSE_PROTOCOL_SGR = 1 << 9;
+
+    /**
+     * DECSET 1003 - like 1002, but report motion with no button held too.
+     */
+    private static final int DECSET_BIT_MOUSE_TRACKING_ANY_EVENT = 1 << 17;
+
+    /**
+     * DECSET 1016 - SGR-Pixels: the SGR format (whether or not 1006 is set), with the position in
+     * pixels of the text area instead of cells, as in xterm, kitty, foot and WezTerm.
+     */
+    private static final int DECSET_BIT_MOUSE_PROTOCOL_SGR_PIXELS = 1 << 18;
+
+    /** DECSET 1000, 1002 and 1003, of which at most one is on. */
+    private static final int DECSET_BITS_MOUSE_TRACKING = DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE
+        | DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT | DECSET_BIT_MOUSE_TRACKING_ANY_EVENT;
 
     /**
      * DECSET 2004 - see {@link #paste(String)}
@@ -814,14 +835,10 @@ public final class TerminalEmulator {
 
     private void setDecsetinternalBit(int internalBit, boolean set) {
         if (set) {
-            // The mouse modes are mutually exclusive.
-            if (internalBit == DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE) {
-                setDecsetinternalBit(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT, false);
-            } else if (internalBit == DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT) {
-                setDecsetinternalBit(DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE, false);
+            // The mouse tracking modes are mutually exclusive.
+            if ((internalBit & DECSET_BITS_MOUSE_TRACKING) != 0) {
+                mCurrentDecSetFlags &= ~DECSET_BITS_MOUSE_TRACKING;
             }
-        }
-        if (set) {
             mCurrentDecSetFlags |= internalBit;
         } else {
             mCurrentDecSetFlags &= ~internalBit;
@@ -847,12 +864,15 @@ public final class TerminalEmulator {
             case 1000:
                 return DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE;
             case 1002:
-            case 1003:
                 return DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT;
+            case 1003:
+                return DECSET_BIT_MOUSE_TRACKING_ANY_EVENT;
             case 1004:
                 return DECSET_BIT_SEND_FOCUS_EVENTS;
             case 1006:
                 return DECSET_BIT_MOUSE_PROTOCOL_SGR;
+            case 1016:
+                return DECSET_BIT_MOUSE_PROTOCOL_SGR_PIXELS;
             case 2004:
                 return DECSET_BIT_BRACKETED_PASTE_MODE;
             case 2026:
@@ -921,6 +941,25 @@ public final class TerminalEmulator {
      *                  release and motion alike.
      */
     public void sendMouseEvent(int mouseButton, int column, int row, boolean pressed, int modifiers) {
+        // Without a pixel position, a program that asked for pixels gets the cell's top-left one.
+        column = Math.max(1, Math.min(mColumns, column));
+        row = Math.max(1, Math.min(mRows, row));
+        sendMouseEvent(mouseButton, column, row, (column - 1) * mCellWidthPixels,
+            (row - 1) * mCellHeightPixels, pressed, modifiers);
+    }
+
+    /**
+     * Report a mouse event at a cell and at the pixel inside it. The pixel is only used while
+     * SGR-Pixels (DECSET 1016) is on, and is clamped to the text area there.
+     *
+     * @param column the 1-based cell column, clamped to the screen.
+     * @param row the 1-based cell row, clamped to the screen.
+     * @param pixelX the 0-based pixel from the left of the text area, in the cell size the program
+     *               is told ({@link #getCellWidthPixels()}), so that {@code pixelX / cell width}
+     *               is {@code column - 1}. It goes out 1-based, as xterm sends it.
+     * @param pixelY the same from the top of the text area.
+     */
+    public void sendMouseEvent(int mouseButton, int column, int row, int pixelX, int pixelY, boolean pressed, int modifiers) {
         modifiers &= MOUSE_MODIFIER_SHIFT | MOUSE_MODIFIER_ALT | MOUSE_MODIFIER_CTRL;
         if (column < 1)
             column = 1;
@@ -930,8 +969,15 @@ public final class TerminalEmulator {
             row = 1;
         if (row > mRows)
             row = mRows;
-        if (mouseButton == MOUSE_LEFT_BUTTON_MOVED && !isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT)) {
+        if (mouseButton == MOUSE_LEFT_BUTTON_MOVED && !isMouseTrackingMotionActive()) {
             // Do not send tracking.
+        } else if (mouseButton == MOUSE_MOVED_NO_BUTTON && !isMouseTrackingAnyEventActive()) {
+            // Motion with no button held is only for any-event tracking.
+        } else if (isMousePixelPositionActive()) {
+            pixelX = Math.max(0, Math.min(mColumns * mCellWidthPixels - 1, pixelX));
+            pixelY = Math.max(0, Math.min(mRows * mCellHeightPixels - 1, pixelY));
+            mSession.write(String.format(Locale.US, "\033[<%d;%d;%d" + (pressed ? 'M' : 'm'),
+                mouseButton | modifiers, pixelX + 1, pixelY + 1));
         } else if (isDecsetInternalBitSet(DECSET_BIT_MOUSE_PROTOCOL_SGR)) {
             mSession.write(String.format("\033[<%d;%d;%d" + (pressed ? 'M' : 'm'), mouseButton | modifiers, column, row));
         } else {
@@ -1022,14 +1068,19 @@ public final class TerminalEmulator {
     /**
      * Whether a synchronized update (mode 2026) is holding screen updates back from the client right
      * now. A hold whose timeout has passed ends here, so the caller that asks is also the one that
-     * unfreezes the screen — there is no separate expiry path to keep in step with this one.
+     * unfreezes the screen — there is no separate expiry path to keep in step with this one. The
+     * kitty graphics window that rides on the hold ends with it, on the same answer, unless a picture
+     * is still arriving (see {@link KittyGraphicsProtocol#synchronizedHoldEnded}).
      */
     public boolean isScreenUpdateHeld() {
-        if (!isDecsetInternalBitSet(DECSET_BIT_SYNCHRONIZED_UPDATE))
+        if (!isDecsetInternalBitSet(DECSET_BIT_SYNCHRONIZED_UPDATE)) {
+            mKittyGraphics.synchronizedHoldEnded();
             return false;
+        }
         if (System.currentTimeMillis() >= mSynchronizedUpdateDeadline) {
             setDecsetinternalBit(DECSET_BIT_SYNCHRONIZED_UPDATE, false);
             mSynchronizedUpdateDeadline = 0;
+            mKittyGraphics.synchronizedHoldEnded();
             return false;
         }
         return true;
@@ -1233,14 +1284,30 @@ public final class TerminalEmulator {
      * If mouse events are being sent as escape codes to the terminal.
      */
     public boolean isMouseTrackingActive() {
-        return isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE) || isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT);
+        return isDecsetInternalBitSet(DECSET_BITS_MOUSE_TRACKING);
     }
 
     /**
      * If motion while a button is held should be reported, i.e. DECSET 1002 or 1003 is set.
      */
     public boolean isMouseTrackingMotionActive() {
-        return isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT);
+        return isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT | DECSET_BIT_MOUSE_TRACKING_ANY_EVENT);
+    }
+
+    /**
+     * If motion with no button held should be reported too, i.e. DECSET 1003 is set; see
+     * {@link #MOUSE_MOVED_NO_BUTTON}.
+     */
+    public boolean isMouseTrackingAnyEventActive() {
+        return isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_ANY_EVENT);
+    }
+
+    /**
+     * If mouse positions go out in pixels rather than cells (DECSET 1016), so a caller that moves
+     * the pointer within a cell has something new to report.
+     */
+    public boolean isMousePixelPositionActive() {
+        return isDecsetInternalBitSet(DECSET_BIT_MOUSE_PROTOCOL_SGR_PIXELS);
     }
 
     /**
@@ -2413,6 +2480,8 @@ public final class TerminalEmulator {
             // SGR Mouse Mode
             case 1006:
             case 1015:
+            // SGR-Pixels Mouse Mode
+            case 1016:
             case // Interpret "meta" key, sets eighth bit.
             1034:
                 break;
@@ -2468,9 +2537,17 @@ public final class TerminalEmulator {
                 // Synchronized output. Setting it starts the hold and arms its timeout; resetting it
                 // ends the hold and hands the client the one update the whole frame is worth.
                 if (setting) {
-                    mSynchronizedUpdateDeadline = System.currentTimeMillis() + mSynchronizedUpdateTimeoutMillis;
+                    // A hold that ran out without anyone asking still ended then, and a window
+                    // kept open past its hold for a picture still arriving ends with the next
+                    // update: either is sealed before the new one can collect anything.
+                    long now = System.currentTimeMillis();
+                    if (mSynchronizedUpdateDeadline == 0 || now >= mSynchronizedUpdateDeadline)
+                        mKittyGraphics.endSynchronizedWindow();
+                    mSynchronizedUpdateDeadline = now + mSynchronizedUpdateTimeoutMillis;
                 } else {
                     mSynchronizedUpdateDeadline = 0;
+                    // Sealed first, so a window with nothing left to decode is part of this update.
+                    mKittyGraphics.endSynchronizedWindow();
                     mSession.onScreenChanged();
                 }
                 break;

@@ -32,10 +32,12 @@ edge or hidden; see [Layout and full screen](Layout_And_Full_Screen.md).
 
 ## Move around
 
-- **Change place.** Hold the page's border (the frame line around the terminal, the widgets or the
-  display, on any side) until it ticks and sinks under your finger, then drag sideways. A short
-  drag goes back; a longer drag or a flick lands on the next place. A tap or a swipe on the border
-  without the hold belongs to the page, so it never changes place by accident.
+- **Change place.** Swipe sideways along the top or bottom border (the frame line around the
+  terminal, the widgets or the display, and the space outside it). The edge lights as soon as you
+  touch it, and the page follows your finger. A short drag goes back; a longer drag or a flick lands
+  on the next place. On the left and right borders, hold until the page ticks and sinks under your
+  finger, then drag; holding works on the top and bottom too. A swipe that starts on the page
+  itself belongs to the page, so a scroll or selection never changes place by accident.
 - **Tap a place icon.** The other two places peek in from the edges of the status bar. Tap one to
   go there.
 - **Keyboard.** Swipe up from the bottom border to open the keyboard, and down to put it away. It
@@ -116,7 +118,7 @@ wants you to try, and **Skip** is on every card. In order:
 
 1. How you will use the launcher (the Launcher mode).
 2. Hold a corner, then tap **?**.
-3. Hold the page border and drag to the next place, then back.
+3. Swipe sideways along the page's top or bottom border to the next place, then back.
 4. Swipe up and down on the bottom border for the keyboard.
 5. Swipe down and up on the top border for the status bar.
 6. Hold an empty spot in the apps row to pin apps.

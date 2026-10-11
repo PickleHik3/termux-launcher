@@ -85,6 +85,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         default void toggleDisplayPower() { }
         /** The cog: open the display's settings. */
         default void openDisplaySettings() { }
+        /**
+         * The install button: run {@code command} in a new terminal window and show it. The
+         * launcher refreshes this page's empty state when that window's shell ends.
+         */
+        default void installKeyboardData(@NonNull java.util.List<String> command) { }
         default void showHelpOverlay() {}
         /** The sliders: open the Appearance editor on this place, as every corner tab does. */
         default void openSurfaceEditor() {}
@@ -246,6 +251,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         });
         View guide = findViewById(R.id.x11_pane_guide);
         if (guide != null) guide.setOnClickListener(v -> openKeyboardDataGuide());
+        View install = findViewById(R.id.x11_pane_install);
+        if (install != null) install.setOnClickListener(v -> installKeyboardData());
         View setup = findViewById(R.id.x11_pane_setup);
         if (setup != null) setup.setOnClickListener(v -> openDistroSetup());
         // The controls tab sits above everything, drawn only while shown; the frame itself
@@ -733,6 +740,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                 ? R.string.termux_x11_start_display : R.string.termux_x11_turn_on);
         }
         if (start != null) start.setVisibility(state.startVisible ? VISIBLE : GONE);
+        View install = findViewById(R.id.x11_pane_install);
+        if (install != null) install.setVisibility(state.installVisible() ? VISIBLE : GONE);
         View guide = findViewById(R.id.x11_pane_guide);
         if (guide != null) guide.setVisibility(state.guideVisible() ? VISIBLE : GONE);
         applySetupOffer(state);
@@ -781,7 +790,18 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         applyEmptyState();
     }
 
-    /** The empty state's guide button: the setup section of the Linux display guide. */
+    /**
+     * The empty state's install button: this edition's command for the keyboard data, handed to
+     * the launcher to run where the user can watch it. Nix has none, and never shows the button.
+     */
+    private void installKeyboardData() {
+        if (mHost == null) return;
+        java.util.List<String> command =
+            KeyboardDataInstall.command(TourEdition.of(getContext().getPackageName()));
+        if (command != null) mHost.installKeyboardData(command);
+    }
+
+    /** The empty state's guide button (nix): the setup section of the Linux display guide. */
     private void openKeyboardDataGuide() {
         try {
             android.content.Intent intent = new android.content.Intent(

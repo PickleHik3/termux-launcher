@@ -5,8 +5,8 @@ and screen effects. Home, Terminal and Display share one look, so a change appli
 
 ## Appearance
 
-Open **Appearance** from **Settings → Appearance**, from **Appearance** on a corner tab, or from the
-terminal's long-press menu. It has four tabs in a pill at the top: **Wallpaper | Look | Layout |
+Open **Appearance** from **Settings → Appearance → Wallpaper, look and layout**, from
+**Appearance** on a corner tab, or from the terminal's long-press menu. It has four tabs in a pill at the top: **Wallpaper | Look | Layout |
 Icon pack**. It opens on Wallpaper, or on the tab you last used if you were there in the last half
 hour.
 
@@ -79,10 +79,11 @@ The Icon pack tab previews each installed pack on your real dock. Tap a tile to 
 the first tile, **System**, uses the apps' own icons. **Pinned app icons only** limits the pack to
 the pinned apps.
 
-## Theme & fonts
+## Appearance settings
 
-The **Theme & fonts** page has no row in Settings. Reach it by searching Settings (for example
-`wallpaper colors` or `fonts`), or from the command palette's **Look and feel settings**. It holds:
+**Settings → Appearance** is a settings page; the command palette's **Look and feel settings** opens
+it too, and Settings search finds every row on it. Its first row, **Wallpaper, look and layout**,
+opens the Appearance editor above. Below that it holds:
 
 - **Terminal fonts**: see [Terminal fonts](Terminal_Fonts.md).
 - **App theme**: **System**, **Light** or **Dark**.

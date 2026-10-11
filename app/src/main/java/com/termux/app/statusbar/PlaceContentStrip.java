@@ -17,6 +17,9 @@ public final class PlaceContentStrip extends LinearLayout {
      */
     public static final float LENS_WIDTH_DP = 10f;
 
+    /** What a column keeps clear under its chips, before the readings below them. */
+    public static final float COLUMN_FOOT_DP = 8f;
+
     public PlaceContentStrip(Context context, AttributeSet attrs) {
         super(context, attrs);
         setOrientation(HORIZONTAL);
@@ -36,9 +39,37 @@ public final class PlaceContentStrip extends LinearLayout {
         setVerticalFadingEdgeEnabled(vertical);
     }
 
-    @Override protected float getLeftFadingEdgeStrength() { return 1f; }
+    /**
+     * The end facing the readings feathers only while the place slides, growing over the first
+     * fade-length of travel. At rest that edge belongs to the window chips, which feather there
+     * themselves exactly when they run past it and not otherwise; a second, constant fade on top
+     * dimmed the last chip of a row that fit.
+     */
+    @Override protected float getLeftFadingEdgeStrength() {
+        return isRtl() ? travelStrength() : 1f;
+    }
 
-    @Override protected float getRightFadingEdgeStrength() { return 1f; }
+    @Override protected float getRightFadingEdgeStrength() {
+        return isRtl() ? 1f : travelStrength();
+    }
+
+    @Override public void setTranslationX(float translationX) {
+        float before = travelStrength();
+        super.setTranslationX(translationX);
+        // The fade is drawn with the strip's own content, which a translation alone does not
+        // redraw; only the first fade-length of travel changes it.
+        if (travelStrength() != before) invalidate();
+    }
+
+    private float travelStrength() {
+        int length = getHorizontalFadingEdgeLength();
+        if (length <= 0) return 1f;
+        return Math.min(1f, Math.abs(getTranslationX()) / length);
+    }
+
+    private boolean isRtl() {
+        return getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+    }
 
     @Override protected float getTopFadingEdgeStrength() { return 1f; }
 

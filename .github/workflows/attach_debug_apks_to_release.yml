@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Existing release tag to upload APKs to (for example: v1.0.0, nix-v1.0.0 or vaj-v1.0.0)'
+        description: 'Existing release tag to upload APKs to (for example: v1.0.0, nix-v1.0.0, vaj-v1.0.0, or a pre-release channel drop such as v1.1.0-pre.1 / nix-v1.1.0-pre.1 / vaj-v1.1.0-pre.1)'
         required: false
         type: string
 
@@ -87,6 +87,23 @@ jobs:
           if [ -z "$RELEASE_BODY" ]; then
             exit_on_error "Release notes are empty for '$RELEASE_VERSION_NAME'. Add changelog/release notes before attaching APKs."
           fi
+
+          # GitHub's Pre-release flag is reserved for the pre-release channel (AGENTS.md, "The
+          # pre-release channel"): a <edition->vX.Y.Z-pre.N tag must carry it; a stable tag must
+          # not carry it on any edition (editions use --latest=false).
+          RELEASE_IS_PRERELEASE="$(gh release view "$RELEASE_VERSION_NAME" --json isPrerelease --jq '.isPrerelease')"
+          case "$RELEASE_VERSION_PLAIN" in
+            *-pre.*)
+              if [ "$RELEASE_IS_PRERELEASE" != "true" ]; then
+                exit_on_error "'$RELEASE_VERSION_NAME' is a pre-release channel tag but its GitHub release is not flagged Pre-release. Run: gh release edit $RELEASE_VERSION_NAME --prerelease --latest=false, then re-run."
+              fi ;;
+            *-*)
+              exit_on_error "Version '$RELEASE_VERSION_PLAIN' has a prerelease part that is not '-pre.N'. The pre-release channel uses X.Y.Z-pre.N only." ;;
+            *)
+              if [ "$RELEASE_IS_PRERELEASE" = "true" ]; then
+                exit_on_error "'$RELEASE_VERSION_NAME' is a stable tag but its GitHub release is flagged Pre-release. Stable editions use --latest=false instead. Run: gh release edit $RELEASE_VERSION_NAME --prerelease=false --latest=false, then re-run."
+              fi ;;
+          esac
 
           if ! printf "%s" "$RELEASE_VERSION_PLAIN" | grep -qP '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'; then
            exit_on_error "The versionName '$RELEASE_VERSION_PLAIN' is not a valid version as per semantic version '2.0.0' spec in the format 'major.minor.patch(-prerelease)(+buildmetadata)'. https://semver.org/spec/v2.0.0.html."

@@ -21,7 +21,8 @@ import com.termux.app.tour.TourEdition;
  *
  * <p>The nix edition installs that data the same way it installs everything else — named in
  * {@code home.nix} and switched in — so it gets the same two states, with a message that says it
- * in nix's own words instead of naming a {@code pkg} command that edition does not have.
+ * in nix's own words instead of naming a {@code pkg} command that edition does not have, and the
+ * guide where the other editions get a button that installs the package.
  */
 public final class DisplayEmptyStatePolicy {
 
@@ -36,12 +37,20 @@ public final class DisplayEmptyStatePolicy {
         }
 
         /**
-         * True exactly while the message names the missing package: the only state with
-         * something to read about setting one up, and so the only one the guide route is out for.
+         * True while the message names the missing package on an edition that installs it with
+         * {@code pkg}: the button runs {@link KeyboardDataInstall}'s command for it.
+         */
+        public boolean installVisible() {
+            return messageRes == R.string.termux_x11_needs_keyboard_data;
+        }
+
+        /**
+         * True while nix's message names the missing package. Nix installs it from
+         * {@code home.nix}, which the launcher does not edit, so that edition keeps the route to
+         * the guide instead of an install button.
          */
         public boolean guideVisible() {
-            return messageRes == R.string.termux_x11_needs_keyboard_data
-                || messageRes == R.string.termux_x11_needs_keyboard_data_nix;
+            return messageRes == R.string.termux_x11_needs_keyboard_data_nix;
         }
 
         /**

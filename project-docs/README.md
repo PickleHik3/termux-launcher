@@ -25,6 +25,7 @@ Three rules keep this directory from rotting:
 | [`verification/`](verification/) | Runnable probes, not prose. |
 | [`backlog.md`](backlog.md) | The one authoritative list of unfinished terminal work, with a stated reason each deferred item waits. |
 | [`release-notes.md`](release-notes.md) | The changelog. See below. |
+| [`prerelease-notes.md`](prerelease-notes.md) | The rolling notes of the pre-release channel: what the channel carries beyond the latest stable, restated in full by every drop, one file for all three editions. See below. |
 
 ## Active
 
@@ -103,6 +104,11 @@ The release being written keeps its own `release-notes-v<version>.md` so `gh rel
 --notes-file` can point at it; once every edition is published it moves into `release-notes.md` and
 that file goes: one history, never two. Versions before v0.2.35 live on their GitHub releases only.
 AGENTS.md has the full convention.
+
+[`prerelease-notes.md`](prerelease-notes.md) is the pre-release channel's rolling list
+(`vX.Y.Z-pre.N` with `nix-` and `vaj-` tags alongside, cut by `scripts/cut-prerelease.sh`): what is heading for
+the next stable plus the experiments merged into the drop. Every drop's GitHub release body is this
+whole file. A line lives here until it ships in a stable, then moves into that release's notes.
 
 ## Verification
 

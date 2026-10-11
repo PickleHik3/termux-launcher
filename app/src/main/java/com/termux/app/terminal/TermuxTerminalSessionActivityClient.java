@@ -399,6 +399,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // running in it (tlstore-ui's `keyboard.hide --hold`) must not leave it stuck down just
         // because the shell exited instead of asking nicely with `keyboard.show`.
         TerminalActionDispatcher.getInstance().onSessionFinished(finishedSession);
+        // Before anything below drops its pane: the host reads its status and whether it is the
+        // shell on screen.
+        mHost.onShellFinished(finishedSession);
         // Nothing to paint for a shell that has ended, and no reason to hold it here until the
         // wall next moves.
         mDeferredScreenUpdateSessions.remove(finishedSession);

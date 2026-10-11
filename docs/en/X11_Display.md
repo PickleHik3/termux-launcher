@@ -1,8 +1,8 @@
 # The Linux display
 
 The launcher can show a Linux desktop or any X11 app beside the terminal, as the **Display**
-place of the pane wall. Reach it by holding a press on the terminal's border until it ticks and
-dragging left, or by tapping the screen glyph at the status bar's right edge. The display server
+place of the pane wall. Reach it by swiping left along the terminal's top or bottom border, or by
+tapping the screen glyph at the status bar's right edge. The display server
 runs in your shell like any other command, so everything you know from Termux:X11 (its flags, its
 preferences, `pkill termux-x11`) works the same way. This page is the short route from switching it
 on to running a desktop in a proot.

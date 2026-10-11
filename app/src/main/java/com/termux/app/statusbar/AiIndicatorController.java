@@ -7,26 +7,31 @@ import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.ai.TaiRuntimePresence;
+import com.termux.ai.TaiSettings;
 
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
- * The status bar's AI glyph: a robot with the countdown to the idle unload, shown only while a model
- * is actually resident.
+ * The status bar's AI glyph: a robot that drains like a gauge towards the idle unload, shown only
+ * while a model is actually resident. The fill is the part of the idle window still left
+ * ({@link AiUnloadGauge}); the exact time is the widget's spoken description.
  *
  * <p>Presence comes from {@link TaiRuntimePresence} — a file the runtime process publishes — so this
  * never binds the runtime service and therefore never keeps a model alive by watching it. The
- * countdown itself is computed locally between publishes; the runtime's idle deadline is an absolute
- * timestamp, so one tick a second needs no cross-process traffic at all.
+ * gauge itself is computed locally between publishes; the runtime's idle deadline is an absolute
+ * timestamp, so one tick a second needs no cross-process traffic at all, and the icon redraws only
+ * when the fill line crosses a pixel row.
  *
  * <p>An unload greys the glyph for a few seconds before it disappears. A widget that vanished the
  * instant a model unloaded would read as a glitch — the grey tail says "it was here, it is gone".
@@ -51,6 +56,9 @@ public final class AiIndicatorController {
     });
 
     @NonNull private TaiRuntimePresence.Snapshot snapshot = TaiRuntimePresence.empty();
+    private final AiUnloadGauge gauge = new AiUnloadGauge();
+    /** The idle-unload setting, for a deadline first seen mid-countdown; read off the main thread. */
+    private long configuredWindowMs;
     private long lastSnapshotReadMs;
     private long unloadObservedAtMs;
     private boolean started;
@@ -118,8 +126,11 @@ public final class AiIndicatorController {
         lastSnapshotReadMs = System.currentTimeMillis();
         reader.execute(() -> {
             TaiRuntimePresence.Snapshot next = TaiRuntimePresence.read(context);
+            long window = TimeUnit.MINUTES.toMillis(
+                new TaiSettings(context).getIdleUnloadMinutes());
             handler.post(() -> {
                 snapshot = next;
+                configuredWindowMs = window;
                 render(System.currentTimeMillis());
             });
         });
@@ -130,10 +141,21 @@ public final class AiIndicatorController {
         if (active) {
             unloadObservedAtMs = 0L;
             widget.setMuted(false);
-            widget.setValue(valueFor(snapshot, nowMs));
+            gauge.track(snapshot.loading ? 0L : snapshot.idleUnloadAtMs, nowMs,
+                configuredWindowMs);
+            float fraction = gauge.fraction(nowMs);
+            widget.setIconGauge(fraction, AiUnloadGauge.ROBOT_INK_TOP,
+                AiUnloadGauge.ROBOT_INK_BOTTOM);
+            // The gauge says it in the bar; the words are for whoever cannot see it.
+            widget.setValue(fraction >= 0f ? "" : valueFor(snapshot));
+            describe(fraction >= 0f
+                ? unloadDescription(snapshot.idleUnloadAtMs - nowMs) : null);
             show(true);
             return;
         }
+        gauge.track(0L, nowMs, configuredWindowMs);
+        widget.setIconGauge(-1f, 0f, 1f);
+        describe(null);
         if (widget.getVisibility() != View.VISIBLE) {
             show(false);
             return;
@@ -168,27 +190,36 @@ public final class AiIndicatorController {
         return false;
     }
 
+    /** The word beside the robot while there is no gauge to read: loading, or no idle timer. */
     @NonNull
-    private String valueFor(@NonNull TaiRuntimePresence.Snapshot snapshot, long nowMs) {
+    private String valueFor(@NonNull TaiRuntimePresence.Snapshot snapshot) {
         if (snapshot.loading)
             return context.getString(R.string.termux_status_widget_ai_loading);
-        if (snapshot.idleUnloadAtMs <= 0L)
-            return context.getString(R.string.termux_status_widget_ai_resident);
-        return countdownText(snapshot.idleUnloadAtMs - nowMs);
+        return context.getString(R.string.termux_status_widget_ai_resident);
     }
 
-    /**
-     * @return the countdown as it reads in a 34dp-wide glyph: seconds only in the last minute,
-     *     m:ss under ten minutes, whole minutes above that.
-     */
+    /** The widget's spoken description: the time left in words, or the plain one when null. */
+    private void describe(@Nullable String unloadIn) {
+        CharSequence description = unloadIn != null ? unloadIn
+            : context.getString(R.string.termux_status_widget_ai_content_description);
+        if (!TextUtils.equals(widget.getContentDescription(), description)) {
+            widget.setContentDescription(description);
+        }
+    }
+
     @NonNull
-    public static String countdownText(long remainingMs) {
-        long seconds = Math.max(0L, remainingMs) / 1000L;
-        if (seconds < 60L) return seconds + "s";
-        long minutes = seconds / 60L;
-        if (minutes < 10L) return String.format(Locale.US, "%d:%02d", minutes, seconds % 60L);
-        if (minutes < 100L) return minutes + "m";
-        return (minutes / 60L) + "h";
+    private String unloadDescription(long remainingMs) {
+        int minutes = wholeMinutesLeft(remainingMs);
+        if (minutes < 1) {
+            return context.getString(R.string.termux_status_widget_ai_unloads_within_a_minute);
+        }
+        return context.getResources().getQuantityString(
+            R.plurals.termux_status_widget_ai_unloads_in_minutes, minutes, minutes);
+    }
+
+    /** Whole minutes left before the unload, as a person reading "9:41" would say it: nine. */
+    static int wholeMinutesLeft(long remainingMs) {
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, remainingMs) / 60_000L);
     }
 
     /**

@@ -62,6 +62,8 @@ Coding agents add a dot before the label: **Working**, **Needs you** or **Idle**
   matrix**, **Tape**, **Slab**. Alignment: **Left**, **Center**, **Right**.
 
 When the bar is open, the clock keeps its full face and scales to the room left beside any cards.
+Beside cards or the media row, **Right** puts the clock at the bar's end with the cards before it;
+**Center** steps over to the left, so the cards and the media row keep their room.
 
 ## Media
 
@@ -69,12 +71,17 @@ While an app is playing, the open bar shows a media row: the album art next to t
 and the title. Tap the art or the title to open the app that is playing. The row needs
 **Notification access**; see [Permissions and Shizuku](Shizuku.md#permissions).
 
+To hide the row, turn off **Settings → Status bar → Indicators → Media** (on by default). The bar
+then keeps the clock, beside any pinned cards, while something plays; the **Media** widget on the
+Widgets page is not affected.
+
 ## Indicators
 
 Under **Settings → Status bar → Indicators**:
 
 - **CPU usage**: off by default. Tap the reading for cores, load and top processes.
 - **Memory usage**: off by default.
+- **Media**: on by default. "Show what's playing in the status bar."
 
 The readings describe the whole phone, not only your shells.
 

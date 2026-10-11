@@ -105,12 +105,11 @@ public final class HelpOverlayView extends FrameLayout {
     /** One control's marker: the topic it opens, the dot the finger lands on, and its colour. */
     private static final class Marker {
         final HelpTopics.Entry entry;
-        final Rect target;
         final TextView view;
         final Rect bounds;
         final int color;
-        Marker(HelpTopics.Entry entry, Rect target, TextView view, Rect bounds, int color) {
-            this.entry = entry; this.target = target; this.view = view;
+        Marker(HelpTopics.Entry entry, TextView view, Rect bounds, int color) {
+            this.entry = entry; this.view = view;
             this.bounds = bounds; this.color = color;
         }
     }
@@ -174,6 +173,8 @@ public final class HelpOverlayView extends FrameLayout {
     private String cardTopicId;
     private Rect cardBounds;
     private HelpLeaderRouter.Segment cardLeader;
+    /** The legs of the lines to the control's other boxes, for one measured as more than one. */
+    private final List<HelpLeaderRouter.Segment> cardReaches = new ArrayList<>();
     /** Said once per selection, so a layout pass does not report the same shortfall twice. */
     private boolean reportedNoSeat;
     private String announced;
@@ -284,7 +285,7 @@ public final class HelpOverlayView extends FrameLayout {
         removeAllViews();
         touchable.clear(); childBounds.clear(); rendered.clear();
         markers.clear(); markerViews.clear(); markerSpecs.clear();
-        card = null; cardTopicId = null; cardBounds = null; cardLeader = null;
+        card = null; cardTopicId = null; cardBounds = null; cardLeader = null; cardReaches.clear();
         keyCards.clear(); keyCardViews.clear(); keyCardSpecs.clear();
         cardViews.clear(); cardSpecs.clear(); boxColors.clear(); unplaced.clear();
         routed = null;
@@ -411,6 +412,7 @@ public final class HelpOverlayView extends FrameLayout {
         cardTopicId = null;
         cardBounds = null;
         cardLeader = null;
+        cardReaches.clear();
         keyCards.clear();
         keyCardViews.clear();
         keyCardSpecs.clear();
@@ -453,7 +455,7 @@ public final class HelpOverlayView extends FrameLayout {
         markers.clear();
         markerViews.clear();
         markerSpecs.clear();
-        card = null; cardTopicId = null; cardBounds = null; cardLeader = null;
+        card = null; cardTopicId = null; cardBounds = null; cardLeader = null; cardReaches.clear();
         keyCards.clear();
         toolbar = null; toolbarBounds = null;
         placeButtons();
@@ -505,8 +507,9 @@ public final class HelpOverlayView extends FrameLayout {
 
     /**
      * The curated cards, seated all at once. Each card takes the shelf between its own control and
-     * the wall, in the control's own colour, with one line joining the two; the router keeps them
-     * off each other, off the controls they explain, off the key labels and off the two buttons.
+     * the wall, in the control's own colour, with a line to each of the control's boxes — one box,
+     * except the page's border, which is a strip on each edge with a line to each; the router keeps
+     * them off each other, off the controls they explain, off the key labels and off the two buttons.
      *
      * <p>Run on a layout change, never per frame: the cards are measured once and then only moved.
      */
@@ -546,9 +549,13 @@ public final class HelpOverlayView extends FrameLayout {
                 MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
             cardViews.put(entry.targetId, view);
             cardSpecs.put(entry.targetId, spec);
-            inputs.add(new HelpLeaderRouter.Target(entry.targetId, box(target), side,
+            // Every box the control is measured as, the one its card is seated against first:
+            // the page's border is a strip on each edge, one card with a leader to each.
+            List<HelpLeaderRouter.Box> boxes = new ArrayList<>();
+            for (Rect rect : targetRects(entry.targetId)) boxes.add(box(rect));
+            inputs.add(new HelpLeaderRouter.Target(entry.targetId, boxes, side,
                 width, view.getMeasuredHeight()));
-            (side == HelpLeaderRouter.Side.INSIDE ? soft : boxed).add(box(target));
+            (side == HelpLeaderRouter.Side.INSIDE ? soft : boxed).addAll(boxes);
         }
         arrangeKeyCards(light, band);
         if (inputs.isEmpty()) return;
@@ -771,11 +778,12 @@ public final class HelpOverlayView extends FrameLayout {
             view.setOnClickListener(v -> select(targetId, false));
             Rect bounds = markerBounds(target, taken);
             taken.add(bounds);
-            markers.add(new Marker(entry, target, view, bounds, color));
+            markers.add(new Marker(entry, view, bounds, color));
             markerViews.put(entry.targetId, view);
             markerSpecs.put(entry.targetId, spec);
         }
-        HelpLog.d("markers: " + markers.size() + " of " + snapshot.targets.size()
+        // Controls, not boxes: the page's border is two strips and one control.
+        HelpLog.d("markers: " + markers.size() + " of " + measuredIds().size()
             + " measured controls on " + place);
     }
 
@@ -856,6 +864,10 @@ public final class HelpOverlayView extends FrameLayout {
         List<HelpLeaderRouter.Box> reserved = new ArrayList<>();
         if (toolbarBounds != null) reserved.add(box(toolbarBounds));
         for (KeyCard key : keyCards) reserved.add(box(key.bounds));
+        // The control's other boxes are as much the control as the one the card is seated by, so
+        // the card may not cover them either.
+        List<Rect> rects = targetRects(entry.targetId);
+        for (int i = 1; i < rects.size(); i++) reserved.add(box(rects.get(i)));
         List<HelpLeaderRouter.Box> others = new ArrayList<>();
         for (HelpTargets.Target other : snapshot.targets)
             if (!other.id.equals(entry.targetId)) others.add(box(other.rect));
@@ -873,8 +885,26 @@ public final class HelpOverlayView extends FrameLayout {
             if (!seat.fits()) continue;
             cardBounds = rect(seat.card);
             cardLeader = seat.leader;
+            // One more line from the same card to each of the control's other boxes, kept off
+            // the toolbar, the key cards, the other controls and the first line where it can be.
+            cardReaches.clear();
+            int leaders = seat.leader == null ? 0 : 1;
+            if (rects.size() > 1) {
+                List<HelpLeaderRouter.Box> avoid = new ArrayList<>(reserved);
+                avoid.addAll(others);
+                List<HelpLeaderRouter.Segment> taken = new ArrayList<>();
+                if (seat.leader != null) taken.add(seat.leader);
+                for (int i = 1; i < rects.size(); i++) {
+                    List<HelpLeaderRouter.Segment> line = HelpLeaderRouter.reach(seat.card,
+                        box(rects.get(i)), dp(10), avoid, taken);
+                    if (!line.isEmpty()) leaders++;
+                    cardReaches.addAll(line);
+                    taken.addAll(line);
+                }
+            }
             HelpLog.d("card for " + entry.id + ": " + seat.seat + " at " + cardBounds.toShortString()
-                + (seat.leader == null ? ", no leader" : ", one leader"));
+                + ", " + leaders + (leaders == 1 ? " leader" : " leaders") + " to "
+                + rects.size() + (rects.size() == 1 ? " box" : " boxes"));
             return true;
         }
         return false;
@@ -945,13 +975,19 @@ public final class HelpOverlayView extends FrameLayout {
             return;
         }
         // The edge farthest from the control, and the near edge only when the far one would land
-        // on the control itself.
+        // on the control itself — on any of its boxes, for the border that runs along both edges.
         boolean farIsHigh = target.centerY() > safe.centerY();
         Rect far = farIsHigh ? high : low, near = farIsHigh ? low : high;
-        toolbarBounds = !Rect.intersects(far, target) ? far
-            : !Rect.intersects(near, target) ? near : far;
-        if (Rect.intersects(toolbarBounds, target))
+        List<Rect> rects = targetRects(selected.targetId);
+        toolbarBounds = !intersectsAny(far, rects) ? far
+            : !intersectsAny(near, rects) ? near : far;
+        if (intersectsAny(toolbarBounds, rects))
             HelpLog.d("the toolbar has nowhere clear of " + selected.id + "'s control");
+    }
+
+    private static boolean intersectsAny(Rect seat, List<Rect> rects) {
+        for (Rect rect : rects) if (Rect.intersects(seat, rect)) return true;
+        return false;
     }
 
     /** How many measured controls a toolbar seat would lie over. */
@@ -1445,16 +1481,22 @@ public final class HelpOverlayView extends FrameLayout {
         announceForAccessibility(text);
     }
 
+    /**
+     * A control's first box: the one its card and marker are seated by and its gesture is played
+     * over. For the page's border that is the top strip, which is measured first.
+     */
     private Rect targetRect(String id) {
         if (id == null || snapshot == null) return null;
         for (HelpTargets.Target target : snapshot.targets) if (target.id.equals(id)) return target.rect;
         return null;
     }
 
-    private float radiusOf(String id) {
-        if (snapshot == null) return 0;
-        for (HelpTargets.Target target : snapshot.targets) if (target.id.equals(id)) return target.radius;
-        return 0;
+    /** Every box a control is measured as, the first box first; empty when it is not on screen. */
+    private List<Rect> targetRects(String id) {
+        List<Rect> rects = new ArrayList<>();
+        if (id == null || snapshot == null) return rects;
+        for (HelpTargets.Target target : snapshot.targets) if (target.id.equals(id)) rects.add(target.rect);
+        return rects;
     }
 
     private void put(View view, Rect rect) {
@@ -1506,7 +1548,7 @@ public final class HelpOverlayView extends FrameLayout {
             for (Marker marker : markers) {
                 if (marker.entry.targetId.equals(selected)) continue;
                 paint.setColor(ColorUtils.setAlphaComponent(onTheWash(marker.color), 150));
-                drawBox(canvas, marker.target, radiusOf(marker.entry.targetId));
+                drawBoxes(canvas, marker.entry.targetId);
             }
             drawSelected(canvas, selected);
         }
@@ -1521,14 +1563,14 @@ public final class HelpOverlayView extends FrameLayout {
     private void drawOverview(Canvas canvas) {
         if (routed != null) for (HelpLeaderRouter.Placement p : routed.placements) {
             if (p.page != 0) continue;
-            Rect target = targetRect(p.target.id);
-            if (target == null) continue;
+            if (targetRect(p.target.id) == null) continue;
             Integer color = boxColors.get(p.target.id);
             paint.setColor(onTheWash(color == null ? accent : color));
             paint.setPathEffect(null);
+            // Every leg of every leader: a control with two boxes has a line to each.
             for (HelpLeaderRouter.Segment line : p.lines)
                 canvas.drawLine(line.x1, line.y1, line.x2, line.y2, paint);
-            drawBox(canvas, target, radiusOf(p.target.id));
+            drawBoxes(canvas, p.target.id);
         }
         // The extra keys share one colour: they are one row, and seven hues along a keyboard
         // would read as seven unrelated things rather than as the keys of one row.
@@ -1540,18 +1582,23 @@ public final class HelpOverlayView extends FrameLayout {
         }
     }
 
-    /** The one highlight, its one short leader, and the extra keys' own cards when they are up. */
+    /**
+     * The one highlight, its short leader, a line to each other box of a control measured as more
+     * than one, and the extra keys' own cards when they are up.
+     */
     private void drawSelected(Canvas canvas, String selected) {
         if (selected == null) return;
-        Rect rect = targetRect(selected);
-        if (rect == null) return;
+        if (targetRect(selected) == null) return;
         paint.setColor(onTheWash(model.markerColor(accent, selected, lightMode())));
         paint.setStrokeWidth(dp(2.5f));
-        if (cardLeader != null) {
-            paint.setPathEffect(null);
+        paint.setPathEffect(null);
+        if (cardLeader != null)
             canvas.drawLine(cardLeader.x1, cardLeader.y1, cardLeader.x2, cardLeader.y2, paint);
+        for (int i = 0; i < cardReaches.size(); i++) {
+            HelpLeaderRouter.Segment line = cardReaches.get(i);
+            canvas.drawLine(line.x1, line.y1, line.x2, line.y2, paint);
         }
-        drawBox(canvas, rect, radiusOf(selected));
+        drawBoxes(canvas, selected);
         paint.setStrokeWidth(dp(1.5f));
         // The extra keys share one colour: they are one row, and seven hues along a keyboard
         // would read as seven unrelated things rather than as the keys of one row.
@@ -1569,6 +1616,38 @@ public final class HelpOverlayView extends FrameLayout {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
         return Color.HSVToColor(new float[] {hsv[0], Math.max(hsv[1], 0.85f), Math.min(hsv[2], 0.55f)});
+    }
+
+    /**
+     * Every box a control is measured as, in the paint already set. A control measured as more
+     * than one box is the page's border, a strip along each edge, and the controls standing on
+     * those edges — the keyboard swipe's pill on the bottom one — are drawn over it: each strip's
+     * outline stops at their boxes, so theirs stay whole and the pill is never ringed twice.
+     * Indexed rather than iterated, because this runs every frame and allocates nothing.
+     */
+    private void drawBoxes(Canvas canvas, String id) {
+        List<HelpTargets.Target> all = snapshot.targets;
+        boolean strips = boxCount(id) > 1;
+        for (int i = 0; i < all.size(); i++) {
+            HelpTargets.Target target = all.get(i);
+            if (!target.id.equals(id)) continue;
+            if (!strips) { drawBox(canvas, target.rect, target.radius); continue; }
+            canvas.save();
+            for (int j = 0; j < all.size(); j++) {
+                HelpTargets.Target over = all.get(j);
+                if (!over.id.equals(id) && Rect.intersects(over.rect, target.rect))
+                    canvas.clipOutRect(over.rect);
+            }
+            drawBox(canvas, target.rect, target.radius);
+            canvas.restore();
+        }
+    }
+
+    /** How many boxes one control was measured as this pass. */
+    private int boxCount(String id) {
+        int n = 0;
+        for (int i = 0; i < snapshot.targets.size(); i++) if (snapshot.targets.get(i).id.equals(id)) n++;
+        return n;
     }
 
     private void drawBox(Canvas canvas, Rect rect, float radius) {
@@ -1645,15 +1724,20 @@ public final class HelpOverlayView extends FrameLayout {
         return false;
     }
 
-    /** The smallest marked control under the finger, so a badge inside a bar wins over the bar. */
+    /**
+     * The smallest marked box under the finger, so a badge inside a bar wins over the bar and the
+     * keyboard pill over the border strip it stands on. Every box of a control counts: a tap on
+     * the bottom border opens the border's topic as surely as one on the top.
+     */
     private String targetAt(float x, float y) {
         String best = null;
+        if (snapshot == null) return null;
         long area = Long.MAX_VALUE;
-        for (Marker marker : markers) {
-            Rect r = marker.target;
-            if (!r.contains((int) x, (int) y)) continue;
+        for (HelpTargets.Target target : snapshot.targets) {
+            Rect r = target.rect;
+            if (!markerViews.containsKey(target.id) || !r.contains((int) x, (int) y)) continue;
             long size = (long) r.width() * r.height();
-            if (size < area) { area = size; best = marker.entry.targetId; }
+            if (size < area) { area = size; best = target.id; }
         }
         return best;
     }

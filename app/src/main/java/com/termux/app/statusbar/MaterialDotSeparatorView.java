@@ -29,6 +29,10 @@ public final class MaterialDotSeparatorView extends View {
     @NonNull private StatusBarWidgetView.ColorRole mRole = StatusBarWidgetView.ColorRole.SECONDARY;
     /** What the chrome measured; null until the bar has been measured, and then the old colour. */
     @Nullable private Integer mInk;
+    /** Whether a row short of room has taken this dot out: it keeps no width and draws nothing. */
+    private boolean mTucked;
+    /** The width the dot takes when it is not tucked, as last measured. */
+    private int mUntuckedWidth;
 
     public MaterialDotSeparatorView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -74,9 +78,34 @@ public final class MaterialDotSeparatorView extends View {
             : mRole == StatusBarWidgetView.ColorRole.PRIMARY ? primary : secondary);
     }
 
+    /**
+     * Takes the dot out of a row that is short of room, without touching its visibility: that
+     * stays the business of whoever decides there are two things to separate. Its margins stay,
+     * as a sliver of the gap it stood in.
+     */
+    public void setTucked(boolean tucked) {
+        if (mTucked == tucked) return;
+        mTucked = tucked;
+        requestLayout();
+        invalidate();
+    }
+
+    /** The width the dot takes along a row, tucked or not. */
+    public int widthPx(boolean tucked) {
+        return tucked ? 0 : mUntuckedWidth;
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        mUntuckedWidth = getMeasuredWidth();
+        if (mTucked) setMeasuredDimension(0, getMeasuredHeight());
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        if (mTucked) return;
         canvas.drawCircle(getWidth() / 2f, getHeight() / 2f,
             Math.min(getWidth(), getHeight()) / 2f, mPaint);
     }

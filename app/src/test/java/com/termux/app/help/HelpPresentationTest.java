@@ -861,7 +861,7 @@ public class HelpPresentationTest {
         ExtraKeysInfo keys = new ExtraKeysInfo("[[{key:'tool:pane.split',popup:'tool:window.new'},'LEFT']]",
             "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES);
         assertEquals("Split", HelpCopy.keyLabel(activity, keys.getMatrix()[0][0]));
-        assertEquals("window", HelpCopy.keyLabel(activity, keys.getMatrix()[0][0].getPopup()));
+        assertEquals("new window", HelpCopy.keyLabel(activity, keys.getMatrix()[0][0].getPopup()));
         assertEquals(keys.getMatrix()[0][1].getDisplay(),
             HelpCopy.keyLabel(activity, keys.getMatrix()[0][1]));
     }

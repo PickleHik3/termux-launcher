@@ -455,4 +455,99 @@ public class HelpLeaderRouterTest {
         assertTrue(dock.card.top <= rail.cy() && dock.card.bottom >= rail.cy());
         assertFalse(placement(r, "prefix").card.overlaps(dock.card));
     }
+
+    // ---- One control, two boxes: the page's border along its top and its bottom. ----
+
+    /**
+     * The phone's overview with the page's border measured on both edges: a strip under the status
+     * bar and a strip over the dock, with the keyboard pill's box standing on the bottom one. The
+     * border keeps one card, seated against the top strip, and gets a line to each strip; the line
+     * to the bottom one keeps out of the pill and every other card, box and line, and the dock, the
+     * prefix keys and the cog still find their cards on the same page.
+     */
+    @Test public void oneControlOnBothBordersHasOneCardAndALineToEachStrip() {
+        Box band = B(0, 232, 1080, 1406);
+        // Strips 12dp thick at 2.75x, so the top one reaches past the band's edge and the card
+        // stands a gap off it rather than against it.
+        Box top = B(132, 210, 948, 243), bottom = B(132, 1395, 948, 1428);
+        Box pill = B(457, 1402, 623, 1465);
+        Box status = B(0, 126, 1080, 210), dock = B(0, 1428, 1080, 1581);
+        Box prefix = B(0, 2225, 250, 2349), cog = B(196, 2236, 254, 2294);
+        List<Target> input = Arrays.asList(
+            new Target("status", status, Side.ABOVE, 316, 130),
+            new Target("border", Arrays.asList(top, bottom), Side.INSIDE, 490, 120),
+            new Target("dock", dock, Side.UNDER, 316, 130),
+            new Target("prefix", prefix, Side.UNDER, 316, 160),
+            new Target("settings", cog, Side.UNDER, 316, 150));
+        List<Box> hard = new ArrayList<>(Arrays.asList(status, dock, prefix, cog));
+        // The overlay's own soft boxes: the controls with no card, the pill among them, and the
+        // border's two strips, which no other card may lie on either.
+        List<Box> soft = Arrays.asList(top, bottom, pill, B(0, 1581, 1080, 1631));
+        Result r = HelpLeaderRouter.arrange(band, 33, 33, input, hard, soft);
+        assertTrue("unplaced " + ids(r.unplaced), r.unplaced.isEmpty());
+        assertEquals(1, r.pages);
+        assertEquals("one card each", 5, r.placements.size());
+        assertNoOverlap(r);
+        assertLeadersClear(r, 33);
+
+        Placement border = placement(r, "border");
+        assertEquals(2, border.target.boxes.size());
+        assertEquals("a leader per strip", 2, border.leaders.size());
+        assertFalse("no line to the top strip", border.leaders.get(0).isEmpty());
+        assertFalse("no line to the bottom strip", border.leaders.get(1).isEmpty());
+        int legs = border.leaders.get(0).size() + border.leaders.get(1).size();
+        assertEquals("every leg is drawn", legs, border.lines.size());
+        assertFalse(border.card.overlaps(top));
+        assertFalse(border.card.overlaps(bottom));
+        assertTrue("the line meets the top strip", touches(border.leaders.get(0), top));
+        assertTrue("the line meets the bottom strip", touches(border.leaders.get(1), bottom));
+        for (Segment s : border.leaders.get(1)) {
+            assertFalse("the bottom line runs through the pill", enters(s, pill));
+            for (Box h : hard) assertFalse("the bottom line runs through a control", enters(s, h));
+            for (Placement p : r.placements)
+                if (p != border) assertFalse("the bottom line runs through " + p.target.id + "'s card",
+                    enters(s, p.card));
+        }
+    }
+
+    /** A control that is one box has one leader, and its lines are that leader. */
+    @Test public void oneBoxHasOneLeader() {
+        Result r = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 12,
+            Collections.singletonList(t("status", 0, 0, 480, 48, Side.ABOVE)),
+            Collections.emptyList(), Collections.emptyList());
+        Placement p = placement(r, "status");
+        assertEquals(1, p.leaders.size());
+        assertEquals(p.leaders.get(0), p.lines);
+    }
+
+    /**
+     * The one card of "Explore this screen" reaching its control's second box: around the pill
+     * standing on the strip, clear of the first line, and ending on the strip's edge.
+     */
+    @Test public void aSecondLineFromASeatedCardGoesAroundWhatStandsOnTheStrip() {
+        Box card = B(100, 300, 500, 420), strip = B(40, 1000, 560, 1020);
+        Box pill = B(250, 990, 350, 1040);
+        List<Segment> first = Collections.singletonList(line(300, 280, 300, 300));
+        List<Segment> path = HelpLeaderRouter.reach(card, strip, 30,
+            Collections.singletonList(pill), first);
+        assertFalse(path.isEmpty());
+        assertTrue("the line meets the strip", touches(path, strip));
+        for (Segment s : path) {
+            assertFalse("through the pill", enters(s, pill));
+            assertFalse("through its own card", enters(s, card));
+            for (Segment f : first) assertFalse("onto the first line", crosses(s, f));
+        }
+    }
+
+    /** Whether one end of the line lies on the box's edge. */
+    private static boolean touches(List<Segment> path, Box b) {
+        for (Segment s : path) {
+            for (float[] p : new float[][] {{s.x1, s.y1}, {s.x2, s.y2}}) {
+                boolean inX = p[0] >= b.left && p[0] <= b.right, inY = p[1] >= b.top && p[1] <= b.bottom;
+                if (inX && (p[1] == b.top || p[1] == b.bottom) || inY && (p[0] == b.left || p[0] == b.right))
+                    return true;
+            }
+        }
+        return false;
+    }
 }

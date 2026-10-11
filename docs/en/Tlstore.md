@@ -47,8 +47,8 @@ endpoint** in the [Model centre](On_Device_AI.md#functions), and finds notes by 
 **Dawn notes integration** function.
 
 The wallpaper-matching prompt theme and the Neovim colour scheme are not tlstore items: they are
-set up from **Tools that follow the terminal colours** on the **Theme & fonts** page (search
-Settings for it, or run **Look and feel settings** from the command palette). See
+set up from **Tools that follow the terminal colours** in **Settings → Appearance** (or run
+**Look and feel settings** from the command palette). See
 [Look and themes](Look_And_Themes.md).
 
 ## Commands
