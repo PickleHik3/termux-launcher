@@ -55,8 +55,13 @@ final class FitStack extends ViewGroup {
         final int gap;
         final Kind kind;
         final boolean elastic;
-        final int preferred;
-        final int minimum;
+        /**
+         * The floor of a child that wants to be square to the stack's depth, 0 for any other:
+         * its preferred and least lengths are set from the depth at each measure.
+         */
+        int squareFloor;
+        int preferred;
+        int minimum;
         boolean shown;
         int main;
 
@@ -120,6 +125,19 @@ final class FitStack extends ViewGroup {
         return this;
     }
 
+    /**
+     * A child that fills the stack's depth and wants to be as long along it — square, in a row,
+     * to the card's height — but gives up length, down to {@code minPx} (or the depth, if that
+     * is less), before anything is left out. Short of length it is narrower than it is deep,
+     * never shorter: it keeps the same top and bottom as the rest of the row.
+     */
+    @NonNull FitStack addSquareOrNarrower(@NonNull View child, int rank, int gapPx, int minPx) {
+        Slot square = slot(child, rank, gapPx, Kind.SHRINK, false, minPx, minPx);
+        square.squareFloor = Math.max(1, minPx);
+        slots.add(square);
+        return this;
+    }
+
     /** {@link #addShrink}, behind a gap that stretches as {@link #addElastic} does. */
     @NonNull FitStack addShrinkElastic(@NonNull View child, int rank, int gapPx, int preferredPx,
                                        int minPx) {
@@ -160,6 +178,12 @@ final class FitStack extends ViewGroup {
         for (Slot slot : slots) {
             slot.shown = slot.view.getVisibility() != GONE;
             if (!slot.shown) continue;
+            if (slot.squareFloor > 0) {
+                int depth = crossBounded ? Math.max(0, crossLimit - crossMargins(slot.view))
+                    : slot.squareFloor;
+                slot.preferred = depth;
+                slot.minimum = Math.min(slot.squareFloor, depth);
+            }
             switch (slot.kind) {
                 case SHRINK: slot.main = slot.preferred; break;
                 case FLEX: slot.main = slot.minimum; break;
@@ -281,7 +305,9 @@ final class FitStack extends ViewGroup {
         int dimension = params == null ? WRAP_CONTENT : vertical ? params.width : params.height;
         int room = Math.max(0, crossLimit - crossMargins(view));
         int crossSpec;
-        if (!crossBounded) {
+        if (slot.squareFloor > 0 && crossBounded) {
+            crossSpec = MeasureSpec.makeMeasureSpec(room, MeasureSpec.EXACTLY);
+        } else if (!crossBounded) {
             crossSpec = dimension > 0 ? MeasureSpec.makeMeasureSpec(dimension, MeasureSpec.EXACTLY)
                 : MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
         } else if (dimension == MATCH_PARENT) {
@@ -315,6 +341,20 @@ final class FitStack extends ViewGroup {
         MarginLayoutParams margins = (MarginLayoutParams) params;
         return vertical ? margins.leftMargin + margins.rightMargin
             : margins.topMargin + margins.bottomMargin;
+    }
+
+    /** How many children the last measure left out; a child set {@code GONE} is not counted. */
+    int leftOutCount() {
+        int count = 0;
+        for (Slot slot : slots) {
+            if (!slot.shown && slot.view.getVisibility() != GONE) count++;
+        }
+        return count;
+    }
+
+    /** The children the last measure kept, attached or about to be. */
+    void collectShown(@NonNull List<View> out) {
+        for (Slot slot : slots) if (slot.shown) out.add(slot.view);
     }
 
     // ----- layout ---------------------------------------------------------------------------

@@ -787,6 +787,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_RAM, value, false);
     }
 
+    public boolean isStatusWidgetMediaEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_MEDIA, TERMUX_APP.DEFAULT_STATUS_WIDGET_MEDIA);
+    }
+
+    public void setStatusWidgetMediaEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_MEDIA, value, false);
+    }
+
     public boolean isStatusWidgetWeatherEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_WEATHER, TERMUX_APP.DEFAULT_STATUS_WIDGET_WEATHER);

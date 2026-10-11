@@ -266,14 +266,20 @@ public final class X11LinuxAppRunner {
             List<String> env = installedEnv(X11GpuProbe.probe(context));
             // Reading the setting and looking for the binary are both file work, so they happen
             // here beside the probe rather than on the main thread when the desktop ends.
-            String configured = app.session ? configuredWindowManager() : "";
+            String configured = app.session || displayJustStarted ? configuredWindowManager() : "";
             String stopWm = app.session
                 ? X11WindowManager.stopCommand(X11WindowManager.command(configured),
                     displayJustStarted)
                 : null;
             String startWm = app.session ? X11WindowManager.startCommand(configured) : null;
+            // An app whose tap started the display waits for the manager the server is about to
+            // start, or its window maps unmanaged and keeps its own size.
+            String awaitWm = !app.session && displayJustStarted
+                && X11WindowManager.command(configured) != null
+                ? X11WindowManager.awaitCommand(X11WindowManager.AWAIT_MANAGER_FOR_APP_TRIES)
+                : null;
             String script = app.session ? sessionScript(app, display, env, stopWm)
-                : script(app, display, env, noSandbox);
+                : script(app, display, env, noSandbox, awaitWm);
             String restart = startWm == null ? null : windowManagerScript(startWm, display);
             handler.post(() -> {
                 Logger.logInfo(LOG_TAG, "Running " + app.id + " on the display"
@@ -475,11 +481,23 @@ public final class X11LinuxAppRunner {
     @NonNull
     static String script(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
                          @NonNull List<String> env, boolean noSandbox) {
+        return script(app, display, env, noSandbox, null);
+    }
+
+    /**
+     * The same, first running {@code awaitWindowManager} ({@link X11WindowManager#awaitCommand})
+     * when it is not null: the wait for the manager on a display the launch has just started.
+     */
+    @NonNull
+    static String script(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
+                         @NonNull List<String> env, boolean noSandbox,
+                         @Nullable String awaitWindowManager) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
         script.append("cd \"$HOME\"\n");
+        if (awaitWindowManager != null) script.append(awaitWindowManager);
         script.append("exec ").append(noSandbox ? app.commandWith("--no-sandbox") : app.command())
             .append('\n');
         return script.toString();

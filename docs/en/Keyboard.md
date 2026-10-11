@@ -135,9 +135,9 @@ each set separately for portrait and landscape:
   internal storage; **Use system default** goes back. With a custom font the space bar's icons
   keep the bundled symbols font.
 
-The Keyboard theme page is also on the **Theme & fonts** page under **Keyboard look**, beside
-**Surface style**. No Settings row leads to Theme & fonts: open it by searching Settings, or with
-**Look and feel settings** in the palette. See [Look and themes](Look_And_Themes.md).
+The Keyboard theme page is also in **Settings → Appearance** under **Keyboard look**, beside
+**Surface style**; **Look and feel settings** in the palette opens the same page. See
+[Look and themes](Look_And_Themes.md).
 
 ## Typing and feedback
 

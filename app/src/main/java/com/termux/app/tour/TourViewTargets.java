@@ -16,6 +16,7 @@ import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
+import com.termux.app.wall.BorderDrag;
 import com.termux.app.wall.BorderGrabber;
 import com.termux.app.wall.PaneWallLayout;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
@@ -50,9 +51,6 @@ public final class TourViewTargets implements TourTargets {
      * belong to the corners on either side of it, and so does the glow that teaches them.
      */
     private static final float PANE_CORNER_SLOP_DP = 6f;
-
-    /** How tall the border strip is that a border drag is shown on, in dp. */
-    private static final float BORDER_BAND_DP = 10f;
 
     /** Room round a grabber's pill, so a glow drawn on it reads as a target and not a hairline. */
     private static final float GRABBER_AIR_DP = 10f;
@@ -330,20 +328,21 @@ public final class TourViewTargets implements TourTargets {
 
     /**
      * A strip along the bottom of the page that is up, which is the page's border: the frame line
-     * a border drag is held on, less the corner squares, which are the corner tab's. The wall is
-     * the page at rest, so its bounds are the page's.
+     * and the air below it down to the wall's foot, where a sideways swipe changes place (the top
+     * border takes the same swipe, and the card's text names both), less the corner squares, which
+     * are the corner tab's.
      */
     @Nullable
     private Rect pageBorderRect() {
-        Rect wall = rectInOverlay(mFinder.findTourView(R.id.terminal_pane_wall),
-            "the pane wall is not on screen");
+        View wallView = mFinder.findTourView(R.id.terminal_pane_wall);
+        Rect wall = rectInOverlay(wallView, "the pane wall is not on screen");
         if (wall == null) return null;
-        float density = mOverlay.getResources().getDisplayMetrics().density;
-        int corner = Math.round(CornerZones.paneSizePx(density));
-        int band = Math.round(BORDER_BAND_DP * density);
-        Rect strip = new Rect(wall.left + corner, wall.bottom - band, wall.right - corner,
-            wall.bottom);
-        return strip.isEmpty() ? miss("the page is too narrow to have a border to hold") : strip;
+        if (!(wallView instanceof PaneWallLayout)) return miss("the pane wall has no border");
+        Rect strip = new Rect();
+        if (!((PaneWallLayout) wallView).borderZone(BorderDrag.Border.BOTTOM, strip))
+            return miss("the page is too narrow to have a border to hold");
+        strip.offset(wall.left, wall.top);
+        return strip;
     }
 
     /**

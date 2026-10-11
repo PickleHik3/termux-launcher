@@ -18846,16 +18846,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 // The top border's swipe drives the bar's own fold: the drag the bar takes
                 // across itself, and the landing its release runs, from the other side of the line.
-                @Override @Nullable public int[] borderInsetsPx() {
-                    // The pane card's rim under Floating; the opening's own edge, with no inset,
-                    // under Docked.
-                    // One chrome shape for both numbers, per border touch.
-                    terminalFrameInsetsPx(mTmpFrameInsets);
-                    int horizontal = mTmpFrameInsets[0];
-                    int vertical = mTmpFrameInsets[1];
-                    return new int[] {horizontal, vertical, horizontal, vertical};
-                }
-
                 @Override public boolean isBorderStatusSwipeEnabled() {
                     return isBorderStatusSwipeAvailable();
                 }
@@ -18882,12 +18872,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // are the pane host's less the stroke's air on every side, so the two share
                     // a centre and one scale about it keeps the line where it frames the page.
                     if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
+                    // The slabs' wallpaper stays on the screen while their page sinks under it.
+                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
                     View borderView = hotView(R.id.terminal_border_overlay);
                     if (borderView == null) return;
                     borderView.setPivotX(borderView.getWidth() / 2f);
                     borderView.setPivotY(borderView.getHeight() / 2f);
                     borderView.setScaleX(scale);
                     borderView.setScaleY(scale);
+                }
+                @Override public void onPagePoseChanged() {
+                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
                 }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
@@ -19322,14 +19317,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Each is put back to nothing on the other axis: a column's top padding carried over into
         // a row once, and pushed the row's chips down out of their 24dp.
         boolean vertical = isStatusBarVertical();
-        // The strip's own trailing padding turns with it too. Left standing across a column it is
-        // width the chips do not have — a 26dp chip in a 34dp column — so they slide off the
-        // bar's centre line and the capsule's curve clips them.
-        int trailing = Math.max(strip.getPaddingEnd(), strip.getPaddingBottom());
+        // A column keeps a foot under its chips. A row keeps nothing at its end: the window bar
+        // owns the gap before the readings there (StatusRowLayout), and a strip padding on top of
+        // it was dead space between the chips and the CPU figure. Neither is carried across: a
+        // trailing padding left standing across a column is width the chips do not have — a 26dp
+        // chip in a 34dp column — so they slide off the bar's centre line and the curve clips them.
         int start = vertical ? 0 : lens;
         int top = vertical ? lens : 0;
-        int end = vertical ? 0 : trailing;
-        int bottom = vertical ? trailing : 0;
+        int end = 0;
+        int bottom = vertical
+            ? Math.round(dpToPx(com.termux.app.statusbar.PlaceContentStrip.COLUMN_FOOT_DP)) : 0;
         if (strip.getPaddingStart() != start || strip.getPaddingTop() != top
             || strip.getPaddingEnd() != end || strip.getPaddingBottom() != bottom) {
             strip.setPaddingRelative(start, top, end, bottom);
@@ -19595,6 +19592,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public void startDisplay() { startEmbeddedDisplay(); }
             @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
+            @Override public void installKeyboardData(@NonNull java.util.List<String> command) {
+                runKeyboardDataInstall(command);
+            }
             @Override public void toggleDisplayPower() {
                 if (!isX11DisplayEnabled()) turnOnEmbeddedDisplay();
                 else if (isEmbeddedDisplayRunning()) confirmStopEmbeddedDisplay();
@@ -19780,6 +19780,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
             ? null : mPaneWallController.displayPage();
         if (display != null) display.refreshEmptyStateReadiness();
+    }
+
+    /** The shell the Display page's install button started, until it ends. */
+    @Nullable private TerminalSession mKeyboardDataInstallShell;
+
+    /**
+     * The Display page's install button: {@code command} in a new window of the current session,
+     * with the wall turned to the terminal to show it, the route a widget's "open in terminal"
+     * takes. Compatibility mode has no windows, so there it is a plain session made current.
+     */
+    private void runKeyboardDataInstall(@NonNull java.util.List<String> command) {
+        String title = getString(R.string.termux_x11_install_keyboard_data);
+        TerminalSession shell = openCommandWindow(command, null, title, true);
+        if (shell == null && !isSplitPanesEnabled()) {
+            shell = createCommandShell(command, null, title, false);
+            if (shell != null) getTermuxTerminalSessionClient().setCurrentSession(shell);
+        }
+        if (shell == null) {
+            // The one refusal the user can act on; the others pass once the service is up.
+            if (mTermuxService != null && mTermuxService.getTermuxSessionsSize()
+                    >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
+                showTerminalNotice(getString(R.string.title_max_terminals_reached) + " — "
+                    + getString(R.string.msg_max_terminals_reached), AppNoticeItem.Hold.REFUSAL);
+            }
+            return;
+        }
+        mKeyboardDataInstallShell = shell;
+        if (mPaneWallController != null) {
+            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+        }
+    }
+
+    /**
+     * The install's shell ended. The user never left the activity, so nothing else re-reads the
+     * keyboard-data probe: the Display page's empty state is refreshed here. When the install
+     * worked and its window is the one on screen, the wall goes back to the Display page, which
+     * now offers Start. A failed install does not end on its own (its script keeps the window
+     * open in the user's shell), so this runs for it only once they exit that shell.
+     */
+    private void onKeyboardDataInstallFinished(@NonNull TerminalSession session) {
+        if (session != mKeyboardDataInstallShell) return;
+        mKeyboardDataInstallShell = null;
+        refreshDisplayEmptyStateReadiness();
+        if (session.getExitStatus() != 0 || session != getCurrentSession()) return;
+        if (mPaneWallController == null || !com.termux.app.x11.X11CliInstaller.hasKeyboardData()
+            || mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.TERMINAL) {
+            return;
+        }
+        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, isVisible());
     }
 
     /**
@@ -22263,6 +22312,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean cpuOn = mPreferences != null && mPreferences.isStatusWidgetCpuEnabled();
         boolean ramOn = mPreferences != null && mPreferences.isStatusWidgetRamEnabled();
         boolean weatherOn = mPreferences != null && mPreferences.isStatusWidgetWeatherEnabled();
+        View widgetSlot = findViewById(R.id.terminal_top_widget_area);
+        if (widgetSlot instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
+            ((com.termux.app.statusbar.TopPaneWidgetSlot) widgetSlot).setMediaEnabled(
+                mPreferences == null || mPreferences.isStatusWidgetMediaEnabled());
+        }
 
         if (cpu != null) {
             cpu.setVisibility(cpuOn ? View.VISIBLE : View.GONE);
@@ -23936,6 +23990,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void clearShellAttention(int shellPid) {
             TermuxActivity.this.clearShellAttention(shellPid);
+        }
+
+        @Override public void onShellFinished(@NonNull TerminalSession session) {
+            onKeyboardDataInstallFinished(session);
         }
 
         @Override public void showTerminalNotice(@Nullable String text,

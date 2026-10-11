@@ -212,7 +212,9 @@
                      over the pane's glass (backdrop, blur, surface) and must never be
                      composited into it, whatever elevation a glass pass gives those siblings.
                      outlineProvider=none keeps the lift from casting a shadow. -->
-                <LinearLayout
+                <!-- The row runs the chips up to the readings, one gap short of the first
+                     reading's ink, whatever its padding: see StatusRowLayout. -->
+                <com.termux.app.statusbar.StatusRowLayout
                     android:id="@+id/terminal_status_row"
                     android:layout_width="match_parent"
                     android:layout_height="24dp"
@@ -235,7 +237,6 @@
                         android:layout_height="match_parent"
                         android:layout_weight="1"
                         android:paddingStart="14dp"
-                        android:paddingEnd="8dp"
                         android:gravity="center_vertical">
 
                         <com.termux.app.statusbar.SessionsIndicatorView
@@ -275,7 +276,6 @@
                         android:layout_height="match_parent"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:paddingStart="3dp"
                         android:clipChildren="false"
                         android:clipToPadding="false">
 
@@ -380,7 +380,7 @@
                             android:contentDescription="@string/termux_status_widget_mouse_content_description" />
 
                     </LinearLayout>
-                </LinearLayout>
+                </com.termux.app.statusbar.StatusRowLayout>
 
             </com.termux.app.statusbar.StatusBarSwipeLayout>
 

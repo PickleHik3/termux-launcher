@@ -1,6 +1,7 @@
 package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -59,6 +60,7 @@ public class StatusBarPreferencesFragmentTest {
         assertTrue(screen.findPreference("top_pane_clock_am_pm") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("status_widget_cpu") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("status_widget_ram") instanceof SwitchPreferenceCompat);
+        assertTrue(screen.findPreference("status_widget_media") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("status_widget_weather") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("status_widget_weather_fahrenheit") instanceof SwitchPreferenceCompat);
         // Moved to the Notifications page; a link row points there instead.
@@ -89,5 +91,20 @@ public class StatusBarPreferencesFragmentTest {
         TerminalIOPreferencesDataStore io = TerminalIOPreferencesDataStore.getInstance(app);
         assertTrue(io.getBoolean("top_pane_clock_am_pm", false));
         assertTrue(io.getBoolean("status_widget_cpu", false));
+    }
+
+    @Test
+    public void mediaIsOnByDefaultAndTurnsOffThroughTheSharedTerminalIoStore() {
+        StatusBarPreferencesFragment fragment = launch();
+        SwitchPreferenceCompat media = fragment.findPreference("status_widget_media");
+        assertTrue(media.isChecked());
+
+        media.setChecked(false);
+
+        Application app = RuntimeEnvironment.getApplication();
+        TerminalIOPreferencesDataStore io = TerminalIOPreferencesDataStore.getInstance(app);
+        assertFalse(io.getBoolean("status_widget_media", true));
+        media.setChecked(true);
+        assertTrue(io.getBoolean("status_widget_media", false));
     }
 }

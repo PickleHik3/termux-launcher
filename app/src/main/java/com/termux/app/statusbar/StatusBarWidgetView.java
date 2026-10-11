@@ -2,6 +2,7 @@ package com.termux.app.statusbar;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Canvas;
 import android.graphics.Typeface;
 import android.util.AttributeSet;
 import android.util.TypedValue;
@@ -33,7 +34,7 @@ public final class StatusBarWidgetView extends LinearLayout {
 
     public enum ColorRole { PRIMARY, SECONDARY, TERTIARY }
 
-    private final ImageView mIcon;
+    private final GaugeIcon mIcon;
     private final TextView mGlyph;
     @Nullable private LottieAnimationView mAnimation;
     private final TextView mValue;
@@ -53,6 +54,11 @@ public final class StatusBarWidgetView extends LinearLayout {
     @Nullable private Integer mMutedInk;
     /** The stats share a floor so a value ticking between widths does not shift its neighbours. */
     private static final int MIN_WIDTH_WITH_VALUE_DP = 34;
+    /** The widget's own room at each end along a row, and what it keeps of it in a tight row. */
+    private static final int SIDE_PADDING_DP = 5;
+    private static final int TIGHT_SIDE_PADDING_DP = 2;
+    /** Whether the row is short of room and the readings stand closer together. */
+    private boolean mTight;
     private static final long VALUE_FADE_MS = 120L;
 
     public StatusBarWidgetView(Context context) {
@@ -70,7 +76,7 @@ public final class StatusBarWidgetView extends LinearLayout {
         setPadding(dp(5), dp(1), dp(5), dp(1));
         setMinimumWidth(dp(MIN_WIDTH_WITH_VALUE_DP));
 
-        mIcon = new ImageView(context);
+        mIcon = new GaugeIcon(context);
         mIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         mIcon.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         addView(mIcon, new LayoutParams(dp(15), dp(15)));
@@ -109,9 +115,7 @@ public final class StatusBarWidgetView extends LinearLayout {
         if (getOrientation() == orientation) return;
         setOrientation(orientation);
         setGravity(stacked ? Gravity.CENTER : Gravity.CENTER_VERTICAL);
-        setMinimumWidth(stacked ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP));
-        setPadding(dp(stacked ? 1 : 5), dp(stacked ? 3 : 1), dp(stacked ? 1 : 5),
-            dp(stacked ? 3 : 1));
+        applySizing();
         mValue.setGravity(stacked ? Gravity.CENTER : Gravity.CENTER_VERTICAL);
         LayoutParams valueParams = (LayoutParams) mValue.getLayoutParams();
         valueParams.setMarginStart(stacked ? 0 : dp(2));
@@ -221,11 +225,7 @@ public final class StatusBarWidgetView extends LinearLayout {
         boolean empty = android.text.TextUtils.isEmpty(value);
         int visibility = empty ? GONE : VISIBLE;
         if (mValue.getVisibility() != visibility) mValue.setVisibility(visibility);
-        // Only on a change: View.setMinimumWidth requests a layout every time it is called, and
-        // this is called from the stats cluster's layout listener. Unconditional, it scheduled a
-        // layout from every layout for as long as the Widgets place was up (2026-10-07).
-        int minimumWidth = empty ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP);
-        if (getMinimumWidth() != minimumWidth) setMinimumWidth(minimumWidth);
+        applySizing();
         if (android.text.TextUtils.equals(mValue.getText(), value)) return;
         mValue.setText(value);
     }
@@ -335,11 +335,15 @@ public final class StatusBarWidgetView extends LinearLayout {
             int label = mMuted ? mMutedInk : mLabelInk;
             int icon = mMuted ? mMutedInk : mIconInk;
             ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(icon));
+            mIcon.setEmptyColor(mMutedInk);
             mGlyph.setTextColor(icon);
             mValue.setTextColor(label);
             return;
         }
 
+        // A gauge's empty part is the grey the unload tail wears.
+        mIcon.setEmptyColor(ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, roleColor), 120));
         int alpha = mMuted ? 120 : mAccent ? 255 : 238;
         ImageViewCompat.setImageTintList(mIcon,
             ColorStateList.valueOf(ColorUtils.setAlphaComponent(roleColor, alpha)));
@@ -363,8 +367,132 @@ public final class StatusBarWidgetView extends LinearLayout {
             weight >= 700 ? Typeface.BOLD : Typeface.NORMAL);
     }
 
+    /**
+     * Turns the vector icon into a vertical gauge: the part below {@code fraction} of its ink
+     * (between {@code inkTop} and {@code inkBottom}, fractions of the icon's height) in the
+     * icon's own colour, the part above in the grey a muted widget wears. A negative fraction
+     * puts the plain icon back. Redrawn only when the fill line crosses a pixel row.
+     */
+    public void setIconGauge(float fraction, float inkTop, float inkBottom) {
+        mIcon.setGauge(fraction, inkTop, inkBottom);
+    }
+
+    /**
+     * Stands closer to its neighbours along a row that is short of room: each end keeps
+     * {@value #TIGHT_SIDE_PADDING_DP}dp instead of {@value #SIDE_PADDING_DP}, and the floor the
+     * stats share shrinks by the same, so the figure itself never moves inside the widget. A
+     * widget standing in a column is not affected.
+     */
+    public void setTight(boolean tight) {
+        if (mTight == tight) return;
+        mTight = tight;
+        applySizing();
+    }
+
+    /** What tightening saves along a row, at both ends together; nothing in a column. */
+    public int tightSavingPx() {
+        return getOrientation() == VERTICAL ? 0
+            : 2 * (dp(SIDE_PADDING_DP) - dp(TIGHT_SIDE_PADDING_DP));
+    }
+
+    /** The room before the icon along a row, tight or not. */
+    public int leadingPaddingPx(boolean tight) {
+        if (getOrientation() == VERTICAL) return getPaddingStart();
+        return dp(tight ? TIGHT_SIDE_PADDING_DP : SIDE_PADDING_DP);
+    }
+
+    /**
+     * Padding and the shared floor for the form the widget is in. Only on a change:
+     * View.setMinimumWidth and setPadding request a layout every time they are called, and this
+     * runs from the stats cluster's layout listener (through setValue) and from the row's measure.
+     * Unconditional, it scheduled a layout from every layout for as long as the Widgets place was
+     * up (2026-10-07).
+     */
+    private void applySizing() {
+        boolean stacked = getOrientation() == VERTICAL;
+        int side = dp(stacked ? 1 : mTight ? TIGHT_SIDE_PADDING_DP : SIDE_PADDING_DP);
+        int across = dp(stacked ? 3 : 1);
+        if (getPaddingLeft() != side || getPaddingRight() != side
+            || getPaddingTop() != across || getPaddingBottom() != across) {
+            setPadding(side, across, side, across);
+        }
+        // An icon alone (no value) has no figure to share a floor with.
+        int minimumWidth = stacked || mValue.getVisibility() != VISIBLE ? 0
+            : dp(MIN_WIDTH_WITH_VALUE_DP) - (mTight ? tightSavingPx() : 0);
+        if (getMinimumWidth() != minimumWidth) setMinimumWidth(minimumWidth);
+    }
+
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * The vector icon, drawn once whole or, as a gauge, twice: the empty part above the fill line
+     * through a layer tinted grey, the filled part below it as the icon is.
+     */
+    private static final class GaugeIcon extends androidx.appcompat.widget.AppCompatImageView {
+        private final android.graphics.Paint mEmptyPaint = new android.graphics.Paint();
+        @Nullable private Integer mEmptyColor;
+        private float mFraction = -1f;
+        private float mInkTop;
+        private float mInkBottom = 1f;
+        /** The fill line's pixel row as last drawn, or -1 for the plain icon. */
+        private int mFillTop = -1;
+
+        GaugeIcon(Context context) {
+            super(context);
+        }
+
+        void setEmptyColor(@ColorInt int color) {
+            if (mEmptyColor != null && mEmptyColor == color) return;
+            mEmptyColor = color;
+            android.graphics.ColorFilter filter = new android.graphics.PorterDuffColorFilter(
+                color, android.graphics.PorterDuff.Mode.SRC_IN);
+            mEmptyPaint.setColorFilter(filter);
+            if (mFillTop > 0) invalidate();
+        }
+
+        void setGauge(float fraction, float inkTop, float inkBottom) {
+            mFraction = fraction;
+            mInkTop = inkTop;
+            mInkBottom = inkBottom;
+            int row = fillTop(getHeight());
+            if (row == mFillTop) return;
+            mFillTop = row;
+            invalidate();
+        }
+
+        private int fillTop(int height) {
+            if (mFraction < 0f || height <= 0) return -1;
+            return AiUnloadGauge.fillTopRow(mFraction, Math.round(height * mInkTop),
+                Math.round(height * mInkBottom));
+        }
+
+        @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            mFillTop = fillTop(h);
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            int top = mFillTop;
+            if (top < 0) {
+                super.onDraw(canvas);
+                return;
+            }
+            int width = getWidth();
+            int height = getHeight();
+            if (top > 0) {
+                int layer = canvas.saveLayer(0f, 0f, width, top, mEmptyPaint);
+                super.onDraw(canvas);
+                canvas.restoreToCount(layer);
+            }
+            if (top < height) {
+                int clip = canvas.save();
+                canvas.clipRect(0, top, width, height);
+                super.onDraw(canvas);
+                canvas.restoreToCount(clip);
+            }
+        }
     }
 
 }

@@ -23,19 +23,22 @@ public class DisplayEmptyStatePolicyTest {
         assertEquals(R.string.termux_x11_display_off, off.messageRes);
         assertTrue("nothing to fix while the setting itself is off", off.startVisible);
         assertFalse(off.guideVisible());
+        assertFalse(off.installVisible());
 
         State stillOff = DisplayEmptyStatePolicy.decide(false, false);
         assertEquals(R.string.termux_x11_display_off, stillOff.messageRes);
         assertTrue(stillOff.startVisible);
         assertFalse(stillOff.guideVisible());
+        assertFalse("the setting is the thing to fix first", stillOff.installVisible());
     }
 
     @Test public void enabledWithoutTheKeyboardDataNamesThePackageAndHidesStart() {
         State state = DisplayEmptyStatePolicy.decide(true, false);
         assertEquals(R.string.termux_x11_needs_keyboard_data, state.messageRes);
         assertFalse("a server that cannot start has nothing for Start to do", state.startVisible);
-        assertTrue("the only state with something to read about setting one up",
-            state.guideVisible());
+        assertTrue("the button that installs the package stands where Start does",
+            state.installVisible());
+        assertFalse("the install button replaces the guide link", state.guideVisible());
     }
 
     @Test public void enabledWithTheKeyboardDataIsThePlainNoDisplayMessage() {
@@ -43,6 +46,7 @@ public class DisplayEmptyStatePolicyTest {
         assertEquals(R.string.termux_x11_no_display, state.messageRes);
         assertTrue(state.startVisible);
         assertFalse(state.guideVisible());
+        assertFalse(state.installVisible());
     }
 
     /**
@@ -56,11 +60,11 @@ public class DisplayEmptyStatePolicyTest {
 
         assertEquals(R.string.termux_x11_needs_keyboard_data, before.messageRes);
         assertFalse(before.startVisible);
-        assertTrue(before.guideVisible());
+        assertTrue(before.installVisible());
 
         assertEquals(R.string.termux_x11_no_display, after.messageRes);
         assertTrue(after.startVisible);
-        assertFalse(after.guideVisible());
+        assertFalse("the install button goes once the package is there", after.installVisible());
     }
 
     /**
@@ -84,6 +88,7 @@ public class DisplayEmptyStatePolicyTest {
                     TourEdition.TERMUX);
                 assertEquals(plain.messageRes, termux.messageRes);
                 assertEquals(plain.startVisible, termux.startVisible);
+                assertEquals(plain.installVisible(), termux.installVisible());
             }
         }
     }
@@ -98,6 +103,8 @@ public class DisplayEmptyStatePolicyTest {
         assertEquals(R.string.termux_x11_needs_keyboard_data_nix, withoutData.messageRes);
         assertFalse("nothing to start without the keyboard data", withoutData.startVisible);
         assertTrue("there is something to read about it", withoutData.guideVisible());
+        assertFalse("nix installs it from home.nix, not with a button",
+            withoutData.installVisible());
         assertFalse(withoutData.resting());
 
         State withData = DisplayEmptyStatePolicy.decide(true, true, TourEdition.NIX);
@@ -105,6 +112,7 @@ public class DisplayEmptyStatePolicyTest {
         assertTrue(withData.startVisible);
         assertTrue(withData.resting());
         assertFalse(withData.guideVisible());
+        assertFalse(withData.installVisible());
     }
 
     @Test public void nixStillSaysTheSettingIsOffWhenItIs() {
@@ -122,6 +130,9 @@ public class DisplayEmptyStatePolicyTest {
                     TourEdition.TERMUX);
                 assertEquals(termux.messageRes, vaj.messageRes);
                 assertEquals(termux.startVisible, vaj.startVisible);
+                assertEquals("VAJ installs the package with pkg too",
+                    termux.installVisible(), vaj.installVisible());
+                assertEquals(termux.guideVisible(), vaj.guideVisible());
             }
         }
     }

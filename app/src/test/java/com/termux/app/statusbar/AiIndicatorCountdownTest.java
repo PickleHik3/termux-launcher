@@ -6,23 +6,16 @@ import com.termux.ai.TaiRuntimePresence;
 
 import org.junit.Test;
 
-/** The AI glyph's countdown text and its "the runtime was killed" rule. */
+/** The AI glyph's spoken countdown and its "the runtime was killed" rule. */
 public class AiIndicatorCountdownTest {
 
-    @Test public void lastMinuteCountsSeconds() {
-        assertEquals("59s", AiIndicatorController.countdownText(59_400L));
-        assertEquals("0s", AiIndicatorController.countdownText(0L));
-        assertEquals("0s", AiIndicatorController.countdownText(-5_000L));
-    }
-
-    @Test public void minutesReadAsClockUnderTen() {
-        assertEquals("1:00", AiIndicatorController.countdownText(60_000L));
-        assertEquals("9:05", AiIndicatorController.countdownText(545_000L));
-    }
-
-    @Test public void longWaitsCollapseToWholeUnits() {
-        assertEquals("10m", AiIndicatorController.countdownText(10 * 60_000L));
-        assertEquals("2h", AiIndicatorController.countdownText(150 * 60_000L));
+    @Test public void theSpokenCountdownIsWholeMinutesAsTheClockWouldRead() {
+        assertEquals("9:41 reads as nine", 9, AiIndicatorController.wholeMinutesLeft(581_000L));
+        assertEquals(1, AiIndicatorController.wholeMinutesLeft(60_000L));
+        assertEquals("under a minute is its own sentence",
+            0, AiIndicatorController.wholeMinutesLeft(59_400L));
+        assertEquals(0, AiIndicatorController.wholeMinutesLeft(-5_000L));
+        assertEquals(150, AiIndicatorController.wholeMinutesLeft(150 * 60_000L));
     }
 
     @Test public void aLoadedSnapshotThatStoppedPublishingIsStale() {

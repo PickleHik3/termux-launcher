@@ -3,6 +3,7 @@ package com.termux.app.wall;
 import android.content.Context;
 import android.graphics.LightingColorFilter;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -113,9 +114,11 @@ public final class PaneWallLayout extends ViewGroup {
          */
         default boolean isPlankTiltEnabled(@NonNull PaneWallPage page) { return false; }
         /**
-         * Whether a vertical swipe off the current page's bottom border is the keyboard's
-         * ({@link BorderDrag#KEYBOARD_REACH_DP}); asked as each finger lands, and by the grabber
-         * that marks the border ({@link BorderGrabber}), which is drawn only while it is.
+         * Whether a vertical swipe off the current page's bottom border — from the air between the
+         * page's foot and the wall's, or a row into the page by the grabber
+         * ({@link BorderDrag}) — is the keyboard's; asked as each
+         * finger lands, and by the grabber that marks the border ({@link BorderGrabber}), which is
+         * drawn only while it is.
          */
         default boolean isBorderKeyboardSwipeEnabled() { return false; }
         /**
@@ -141,19 +144,13 @@ public final class PaneWallLayout extends ViewGroup {
          */
         default void onKeyboardRevealEnd(boolean open) { }
         /**
-         * Whether a vertical swipe off the current page's top border drives the status bar's fold
-         * ({@link BorderDrag#STATUS_REACH_DP}): only where the bar stands along the top and can
-         * unfold. Asked as each finger lands, and by the top grabber on every frame the wall
-         * draws, so it has to be cheap.
+         * Whether a vertical swipe off the current page's top border — from the air between the
+         * wall's top and the page's, or a row into the page by the grabber
+         * ({@link BorderDrag}) — drives the status bar's fold: only
+         * where the bar stands along the top and can unfold. Asked as each finger lands, and by
+         * the top grabber on every frame the wall draws, so it has to be cheap.
          */
         default boolean isBorderStatusSwipeEnabled() { return false; }
-        /**
-         * How far in from the page's own edge the border the drag grips stands, as left, top,
-         * right and bottom in px. Docked the page is the opening and its edge is the line (the
-         * bars' inner edges, the screen's where none stands), so none; Floating the pane is a
-         * card standing Margin in, and its rim is the line.
-         */
-        @Nullable default int[] borderInsetsPx() { return null; }
         /**
          * A swipe off the top border asked for the status bar unfolded ({@code expand}, down) or
          * folded (up): the release-only path, for a swipe the bar did not follow
@@ -185,6 +182,13 @@ public final class PaneWallLayout extends ViewGroup {
          * centre, 1 once it is back at rest: for chrome drawn outside the page that frames it.
          */
         default void onPageSinkChanged(@NonNull PaneWallPage page, float scale) { }
+        /**
+         * A page's plank tilt or sink dim changed on a frame that neither the slide
+         * ({@link #onWallOffsetChanged}) nor the sink ({@link #onPageSinkChanged}) reports: a
+         * drag claiming a moving wall, a surface page's stand-in joining mid-motion. Glass on the
+         * pages is aimed past their transforms and re-aims here.
+         */
+        default void onPagePoseChanged() { }
     }
 
     private final Map<PaneWallPage, View> mPageViews = new EnumMap<>(PaneWallPage.class);
@@ -211,6 +215,21 @@ public final class PaneWallLayout extends ViewGroup {
     @Nullable private Boolean mTerminalOffScreen;
     /** The border drag under way, if any; one instance, so a gesture allocates nothing. */
     private final BorderDrag mBorderDrag = new BorderDrag();
+    /** The current page's border zones, refilled for every press ({@link #loadBorderZone}). */
+    private final BorderDrag.Zone mBorderZone = new BorderDrag.Zone();
+    /** Scratch for {@link #borderZone}; main thread only. */
+    private final float[] mBorderZoneBounds = new float[4];
+    /**
+     * How much of each side border the phone's back swipe leaves to the wall, in dp. The side
+     * borders lie inside the back swipe's strip, which takes any sideways drag that starts there,
+     * so a hold could never page from them. Android grants a window 200dp of such exclusions per
+     * edge; the A–Z pull tab ({@code AzPullTabLayer}) asks for its 56dp touch on a side too, so
+     * the wall keeps to the rest.
+     */
+    private static final float SIDE_BACK_EXCLUSION_DP = 144f;
+    /** The side stretches last handed to {@link #setSystemGestureExclusionRects}, in px. */
+    private final Rect mBackExclusionLeft = new Rect();
+    private final Rect mBackExclusionRight = new Rect();
     /** Where the armed finger landed, in the wall's coordinates: what the child's cancel says. */
     private float mBorderDownX;
     private float mBorderDownY;
@@ -252,6 +271,10 @@ public final class PaneWallLayout extends ViewGroup {
     private float mGrabberDrawnSink = Float.NaN;
     /** The status bar swipe's grabber on the current page's top border. */
     @NonNull private final BorderGrabber mStatusGrabber;
+    /** The glow along the border a hold that can page is on ({@link BorderGlow}). */
+    @NonNull private final BorderGlow mGlow;
+    /** The page the glow is drawn on: the one the wall rested on when the finger landed. */
+    @Nullable private View mGlowPage;
     /**
      * The status bar's fold the finger drives ({@link Listener#onStatusFoldBegin}): its whole way
      * in px from the claim to the lift, 0 while no fold is engaged. The fold is carried on the
@@ -320,6 +343,7 @@ public final class PaneWallLayout extends ViewGroup {
         setClipToPadding(false);
         mGrabber = new BorderGrabber(this);
         mStatusGrabber = new BorderGrabber(this, true);
+        mGlow = new BorderGlow(this);
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -342,6 +366,10 @@ public final class PaneWallLayout extends ViewGroup {
             releasePlankPage(previous);
         }
         if (previous != null && previous != view && previous == mWeightPage) mWeightPage = null;
+        if (previous != null && previous != view && previous == mGlowPage) {
+            mGlow.reset();
+            mGlowPage = null;
+        }
         // A surface page leaving the wall lets go of its stand-in and the copy it kept.
         if (previous instanceof SurfacePage && previous != view) {
             mStillPlaces.remove(page);
@@ -371,6 +399,7 @@ public final class PaneWallLayout extends ViewGroup {
             notifyPageChanged();
         }
         applyPagePositions();
+        publishBackExclusion();
     }
 
     @NonNull
@@ -478,8 +507,12 @@ public final class PaneWallLayout extends ViewGroup {
     public void setGesturesEnabled(boolean enabled) {
         boolean changed = enabled != mGesturesEnabled;
         mGesturesEnabled = enabled;
-        // The grabber marks a gesture that is on: it goes and comes back with it.
-        if (changed) invalidate();
+        // The grabber marks a gesture that is on: it goes and comes back with it, and so does the
+        // side borders' hold on the back swipe.
+        if (changed) {
+            invalidate();
+            publishBackExclusion();
+        }
         // A border swipe under way asks for nothing once another surface owns the gesture, and
         // a keyboard it was carrying lands at once where it was going.
         if (!enabled && (mBorderDrag.isKeyboardSwipe() || mBorderDrag.isStatusSwipe())) {
@@ -629,13 +662,18 @@ public final class PaneWallLayout extends ViewGroup {
         // The wall's own border drag is a claimant like the others: the rest of its finger's
         // travel is swallowed and moves nothing.
         mBorderDrag.abandon();
+        syncBorderGlow();
     }
 
     // ---- The border drag ---------------------------------------------------------------------
 
     /**
      * Every touch on the wall passes through here, whoever ends up with it. A finger down on the
-     * current page's border arms the drag ({@link BorderDrag}) and starts the hold's timer; the
+     * current page's border — the air between the page and the wall's edge, and on the left and
+     * right {@link BorderDrag#SIDE_REACH_DP} of the page's clearance, or further in where that air
+     * is thinner than {@link BorderDrag#MIN_BAND_DP} — arms the drag
+     * ({@link BorderDrag}) and starts the hold's timer. Usually nothing under it is a child and the
+     * wall keeps the stream ({@link #onTouchEvent}); where the zone reaches into the page, the
      * child under it gets the DOWN and everything after, exactly as if the border were not there,
      * until the hold fires on a finger that has held still. The claim is made by the timer, not
      * by a touch, and it is made here rather than in {@code onInterceptTouchEvent} because the
@@ -646,10 +684,15 @@ public final class PaneWallLayout extends ViewGroup {
      * ({@link #cancelChildGesture}), so the terminal has released whatever mouse button or hold
      * it had begun, and every later event is read here and goes no further.
      *
-     * <p>The keyboard swipe is claimed the same way, by the move rather than by the timer: a
-     * finger that sets off up or down from the bottom border before the hold is the keyboard's
-     * ({@link BorderDrag#move}). Where the listener can move the keyboard with it, the keyboard
-     * follows the finger and the lift settles it ({@link KeyboardReveal}); elsewhere the lift
+     * <p>On the top and bottom borders out in the air beyond the page, a finger that sets off
+     * sideways before the hold claims the wall by that move ({@link BorderDrag#slidePages}), and
+     * the drag begins there as the hold's would ({@link #takeBorderDrag}).
+     *
+     * <p>The keyboard swipe is claimed by the move rather than by the timer too: a
+     * finger that sets off up or down from the bottom border, or from the box by its grabber a row
+     * into the page, before the hold is the keyboard's ({@link BorderDrag#move}). Where the
+     * listener can move the keyboard with it, the keyboard follows the finger and the lift
+     * settles it ({@link KeyboardReveal}); elsewhere the lift
      * asks the listener to open or close it. The status bar's swipe off the top border is claimed
      * the same way and folds the bar under the finger ({@link #claimStatusSwipe}).
      */
@@ -657,8 +700,10 @@ public final class PaneWallLayout extends ViewGroup {
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (mCancellingChild) return super.dispatchTouchEvent(event);
         boolean handled = dispatchBorderTouch(event);
-        // The grabber answers whatever the event made of the finger on the band.
+        // The grabber answers whatever the event made of the finger in its zone, and so does
+        // the glow of a hold.
         syncGrabberPress(event);
+        syncBorderGlow();
         return handled;
     }
 
@@ -690,6 +735,14 @@ public final class PaneWallLayout extends ViewGroup {
                 }
                 if (claim == BorderDrag.Claim.STATUS) {
                     claimStatusSwipe(event);
+                    return true;
+                }
+                if (claim == BorderDrag.Claim.PAGING) {
+                    // Slid sideways off the top or bottom border: the wall's at once, no hold.
+                    mHoldHandler.removeCallbacks(mHoldElapsed);
+                    if (takeBorderDrag(event.getX()) && mBorderVelocity != null) {
+                        mBorderVelocity.addMovement(event);
+                    }
                     return true;
                 }
                 if (claim == BorderDrag.Claim.ABANDONED) {
@@ -763,9 +816,9 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
-     * A DOWN nothing under the finger took — the air around the pages, which is the wall's own —
-     * is kept only while the drag is armed, so a press on a border from just outside the page
-     * can still hold. Anything else that lands here belongs to an armed finger whose child has
+     * A DOWN nothing under the finger took — the air around the pages, which is the wall's own
+     * and where the borders live — is kept only while the drag is armed, so a press on a border
+     * can hold or swipe. Anything else that lands here belongs to an armed finger whose child has
      * already been cancelled, and is swallowed.
      */
     @Override
@@ -778,49 +831,98 @@ public final class PaneWallLayout extends ViewGroup {
      * A finger landed. It arms the border drag when the wall has another place to go, and the
      * keyboard swipe when the listener wants it — on a wall of one place too, since the keyboard
      * has to be reachable from every place in every mode — and the status bar's swipe on the same
-     * terms, below the phone's own strip at the top of the screen ({@link #topGestureLimit}). The
-     * bottom band reaches a hold only just inside the line and runs out to the wall's foot
-     * ({@link BorderDrag#BOTTOM_HOLD_REACH_DP}).
+     * terms, below the phone's own strip at the top of the screen ({@link #topGestureLimit}). Every
+     * one of them lives outside the current page's text, in the air between its edges and the
+     * wall's and, on the sides, the page's clearance before its text ({@link #loadBorderZone}), so
+     * the page keeps every tap, long press and click on its content.
+     * The two vertical swipes also start near their grabber pills, a row into the page
+     * ({@link BorderDrag#pillAt}): the child under the finger gets the press as it does wherever a
+     * zone reaches in, and keeps it unless the finger sets off up or down before the hold.
      */
     private void armBorderDrag(@NonNull MotionEvent event) {
         releaseBorderDrag();
         if (!mGesturesEnabled) return;
         boolean canPage = mPages.size() > 1;
-        float density = getResources().getDisplayMetrics().density;
-        float keyboardReach = mListener != null && mListener.isBorderKeyboardSwipeEnabled()
-            ? BorderDrag.KEYBOARD_REACH_DP * density : 0f;
-        float statusReach = mListener != null && mListener.isBorderStatusSwipeEnabled()
-            ? BorderDrag.STATUS_REACH_DP * density : 0f;
-        if (!canPage && keyboardReach <= 0f && statusReach <= 0f) return;
-        View page = mPageViews.get(mCurrent);
-        if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
-        // The line is the opening's: the wall's edges less the listener's insets. The page itself
-        // is already laid out inside its frame margins (onLayout), so insetting the page again
-        // put the line a whole margin inside the drawn one under Floating, over the last rows.
-        int[] in = mListener != null ? mListener.borderInsetsPx() : null;
-        boolean inset = in != null && in.length == 4;
-        float slide = page.getTranslationX();
-        float left = inset ? getPaddingLeft() + slide + Math.max(0, in[0])
-            : page.getLeft() + slide;
-        float top = inset ? getPaddingTop() + Math.max(0, in[1]) : page.getTop();
-        float right = inset ? getWidth() - getPaddingRight() + slide - Math.max(0, in[2])
-            : page.getLeft() + slide + page.getWidth();
-        float bottom = inset ? getHeight() - getPaddingBottom() - Math.max(0, in[3])
-            : page.getTop() + page.getHeight();
-        float band = BorderDrag.BAND_DP * density;
-        // The wall stops where whatever stands below the page begins, so the air between the
-        // frame and the wall's own foot is all the bottom band's.
-        float below = Math.max(band, getHeight() - bottom);
-        boolean armed = mBorderDrag.down(event.getX(), event.getY(),
-            left, top, right, bottom, band,
-            CornerZones.clampSize(CornerZones.paneSizePx(density), page.getWidth(), page.getHeight()),
-            ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardReach,
-            statusReach, statusReach > 0f ? topGestureLimit() : Float.NEGATIVE_INFINITY,
-            BorderDrag.BOTTOM_HOLD_REACH_DP * density, below);
+        boolean keyboardSwipe = mListener != null && mListener.isBorderKeyboardSwipeEnabled();
+        boolean statusSwipe = mListener != null && mListener.isBorderStatusSwipeEnabled();
+        if (!canPage && !keyboardSwipe && !statusSwipe) return;
+        if (!loadBorderZone(true)) return;
+        boolean armed = mBorderDrag.down(event.getX(), event.getY(), mBorderZone,
+            ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardSwipe,
+            statusSwipe, topGestureLimit());
         if (!armed) return;
         mBorderDownX = event.getX();
         mBorderDownY = event.getY();
-        mHoldHandler.postDelayed(mHoldElapsed, HoldTiming.holdTimeoutMs());
+        long holdMs = HoldTiming.holdTimeoutMs();
+        mHoldHandler.postDelayed(mHoldElapsed, holdMs);
+        // A press that could page lights its border at once: full where a slide pages at once,
+        // and filling over the hold where only the hold does.
+        if (mBorderDrag.holdPages()) {
+            mGlowPage = mPageViews.get(mCurrent);
+            if (mBorderDrag.slidePages()) {
+                mGlow.light(mBorderDrag.border());
+            } else {
+                mGlow.press(mBorderDrag.border(), SystemClock.uptimeMillis(), holdMs,
+                    mReducedMotion);
+            }
+        }
+    }
+
+    /**
+     * Fills {@link #mBorderZone} for the current page: its edges where it stands (its slide
+     * applied when {@code withSlide}), and the air from each edge out to the wall's own edge — the
+     * frame line and the space before the status bar, the dock or keyboard, or the screen's edge,
+     * since the wall has no padding and meets its neighbours edge to edge. The air is measured at
+     * rest, so a page caught mid-slide keeps a zone of the same width rather than one reaching over
+     * the page sliding in beside it. The boxes by the grabber pills are centred where the pills
+     * are drawn ({@link #grabberCentreX}).
+     *
+     * @return false where there is no page laid out to have a border
+     */
+    private boolean loadBorderZone(boolean withSlide) {
+        View page = mPageViews.get(mCurrent);
+        if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return false;
+        float density = getResources().getDisplayMetrics().density;
+        float slide = withSlide ? page.getTranslationX() : 0f;
+        mBorderZone.page(page.getLeft() + slide, page.getTop(), page.getRight() + slide,
+                page.getBottom())
+            .gaps(page.getLeft(), page.getTop(), getWidth() - page.getRight(),
+                getHeight() - page.getBottom())
+            .minBand(BorderDrag.MIN_BAND_DP * density)
+            .sideReach(BorderDrag.SIDE_REACH_DP * density)
+            .corner(CornerZones.paneSizePx(density))
+            .pills(grabberCentreX(page, slide), BorderDrag.PILL_SWIPE_WIDTH_DP * density,
+                BorderDrag.PILL_SWIPE_REACH_DP * density);
+        return true;
+    }
+
+    /**
+     * Where the grabber pills of {@code page} are centred sideways, in the wall's coordinates:
+     * the page's middle, carried by {@code slide} and scaled with the page about its pivot. One
+     * answer for the drawn pills and the boxes a swipe starts in, so the two never part.
+     */
+    private static float grabberCentreX(@NonNull View page, float slide) {
+        return page.getLeft() + slide + page.getPivotX()
+            + (page.getWidth() / 2f - page.getPivotX()) * page.getScaleX();
+    }
+
+    /**
+     * Where a border gesture is found along {@code side} of the current page at rest, in the
+     * wall's own coordinates, less the corner squares: the air from the wall's edge to the page's,
+     * and a little way in — {@link BorderDrag#SIDE_REACH_DP} on the left and right, more where
+     * that air is thinner than {@link BorderDrag#MIN_BAND_DP}. For help
+     * and the tour, which point at it.
+     *
+     * @return false, with {@code out} emptied, where there is no page or no zone on that side
+     */
+    public boolean borderZone(@NonNull BorderDrag.Border side, @NonNull Rect out) {
+        if (!loadBorderZone(false) || !mBorderZone.bounds(side, mBorderZoneBounds)) {
+            out.setEmpty();
+            return false;
+        }
+        out.set((int) Math.floor(mBorderZoneBounds[0]), (int) Math.floor(mBorderZoneBounds[1]),
+            (int) Math.ceil(mBorderZoneBounds[2]), (int) Math.ceil(mBorderZoneBounds[3]));
+        return true;
     }
 
     /**
@@ -844,29 +946,55 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
-     * The hold time passed with the finger still on the border. The wall takes the gesture from
-     * here: the child is told its touch is over, the hand is told the hold was heard, and the
-     * drag begins where the finger stands, so the first move after the hold is the first pixel
-     * of travel. The velocity tracker starts here too: the hold's stillness is not the flick's.
-     * And the page sinks under the finger ({@link PageSink}), pushed in on the held side where
-     * the plank is on: the weight is what says the hold was taken.
+     * The hold time passed with the finger still on the border: the wall takes the gesture from
+     * here ({@link #takeBorderDrag}), from where the finger landed.
      */
     private void onBorderHoldElapsed() {
-        if (!mBorderDrag.holdElapsed()) return;
+        if (!mBorderDrag.holdElapsed()) {
+            // A still finger the hold could not page is the content's long press from here, and
+            // a finger holding still sends no event to put a lit grabber back at rest.
+            if (mBorderDrag.claim() == BorderDrag.Claim.ABANDONED) {
+                mGrabber.setPressed(false, 0f, mReducedMotion);
+                mStatusGrabber.setPressed(false, 0f, mReducedMotion);
+            }
+            syncBorderGlow();
+            return;
+        }
+        takeBorderDrag(mBorderDownX);
+    }
+
+    /**
+     * The border drag just claimed the finger — the hold elapsed, or a slide set off sideways —
+     * and the wall takes the gesture: the child is told its touch is over, the hand is told the
+     * claim was heard, and the drag begins where the finger stands, so the next move is the first
+     * pixel of travel. The velocity tracker starts here too: the hold's stillness is not the
+     * flick's. And the page sinks under the finger ({@link PageSink}), pushed in on a held side
+     * where the plank is on: the weight is what says the wall was taken. Both claims go through
+     * here, so a slide and a hold feel and look the same from the claim on.
+     *
+     * @param fingerX where the finger stands, for the plank's weight
+     * @return whether the drag began; false where the wall can no longer page and the rest of the
+     *         gesture is swallowed
+     */
+    private boolean takeBorderDrag(float fingerX) {
         if (!mGesturesEnabled || mPages.size() <= 1) {
             mBorderDrag.abandon();
-            return;
+            syncBorderGlow();
+            return false;
         }
         cancelChildGesture();
         Haptics.tick(this, HapticFeedbackConstants.GESTURE_START);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
-        // The hold made the finger the wall's, not the keyboard's: the grabber goes back to rest.
+        // The claim made the finger the wall's, not a swipe's: the grabbers go back to rest.
         mGrabber.setPressed(false, 0f, mReducedMotion);
         mStatusGrabber.setPressed(false, 0f, mReducedMotion);
         mBorderVelocity = VelocityTracker.obtain();
-        beginDrag(true, mBorderDownX);
+        // The glow is full from here until the drag ends.
+        syncBorderGlow();
+        beginDrag(true, fingerX);
         engageSink(mBorderDrag.border());
         dragTo(0f);
+        return true;
     }
 
     /**
@@ -1210,8 +1338,9 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
-     * A finger on the keyboard swipe's band — pending there or holding the swipe — lights the
-     * grabber and draws it a little way along; anything else puts it back at rest.
+     * A finger in the keyboard swipe's zone — the bottom border or the box by its pill, pending
+     * there or holding the swipe — lights the grabber and draws it a little way along; the status
+     * bar's grabber answers its own zone the same way; anything else puts them back at rest.
      */
     private void syncGrabberPress(@NonNull MotionEvent event) {
         boolean pressed = mBorderDrag.isKeyboardSwipe()
@@ -1226,10 +1355,58 @@ public final class PaneWallLayout extends ViewGroup {
             mReducedMotion);
     }
 
-    /** Re-read the grabber's accent, after a theme or scheme change. */
+    /** Re-read the grabbers' and the glow's accent, after a theme or scheme change. */
     public void refreshGrabberColor() {
         mGrabber.refreshColor();
         mStatusGrabber.refreshColor();
+        mGlow.refreshColor();
+    }
+
+    // ---- The hold's glow ---------------------------------------------------------------------
+
+    /**
+     * The glow follows the press it was lit for ({@link BorderGlow}): full once the wall claims
+     * the finger, and fading out once the press is given up, handed to the keyboard's or the
+     * status bar's grabber, or the drag ends — whatever made the finger anything but a pending
+     * press that can page, or the wall's drag.
+     */
+    private void syncBorderGlow() {
+        if (!mGlow.isHeld()) return;
+        BorderDrag.Claim claim = mBorderDrag.claim();
+        if (claim == BorderDrag.Claim.PAGING) {
+            mGlow.claim();
+        } else if (claim != BorderDrag.Claim.PENDING || !mBorderDrag.holdPages()) {
+            mGlow.release(SystemClock.uptimeMillis(), mReducedMotion);
+        }
+    }
+
+    /**
+     * The glow along the held edge of the page it was lit on, as that page is drawn now: slid,
+     * sunk about its pivot, tilted with the plank, and faded with its outline as it leaves its
+     * rest.
+     */
+    private void drawBorderGlow(@NonNull android.graphics.Canvas canvas) {
+        View page = mGlowPage;
+        if (page == null || !mGlow.isShowing()) return;
+        if (page.getVisibility() != VISIBLE || page.getWidth() <= 0 || page.getHeight() <= 0) {
+            return;
+        }
+        float visibility = PaneWallPolicy.pageOutlineAlpha(page.getTranslationX(), getWidth());
+        // Drawn in the page's own space, through the page's whole transform: its slide, its sink
+        // and the plank's tilt (rotationY under a camera), so the glow stays on the edge the
+        // page actually shows rather than where that edge would be flat.
+        int save = canvas.save();
+        canvas.translate(page.getLeft(), page.getTop());
+        canvas.concat(page.getMatrix());
+        mGlow.draw(canvas, 0f, 0f, page.getWidth(), page.getHeight(), 1f, visibility,
+            SystemClock.uptimeMillis());
+        canvas.restoreToCount(save);
+    }
+
+    /** The hold's glow, for tests. */
+    @NonNull
+    BorderGlow borderGlow() {
+        return mGlow;
     }
 
     /** The grabber, for tests. */
@@ -1245,13 +1422,15 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
-     * The pages first, then the grabbers over the bottom and top borders of each page on screen:
-     * faded with the page's own outline as it leaves its rest, so a slide shows one, and scaled
-     * with a sunk page about its centre, so each stays on the edge it marks.
+     * The pages first, then the glow of a hold along the border it is on, then the grabbers over
+     * the bottom and top borders of each page on screen: faded with the page's own outline as it
+     * leaves its rest, so a slide shows one, and scaled with a sunk page about its centre, so
+     * each stays on the edge it marks.
      */
     @Override
     protected void dispatchDraw(android.graphics.Canvas canvas) {
         super.dispatchDraw(canvas);
+        drawBorderGlow(canvas);
         mGrabberDrawnOffsetPx = mOffsetPx;
         mGrabberDrawnSink = mSink;
         boolean bottom = isGrabberShown();
@@ -1263,8 +1442,7 @@ public final class PaneWallLayout extends ViewGroup {
             if (page == null || page.getVisibility() != VISIBLE || page.getWidth() <= 0) continue;
             float visibility = PaneWallPolicy.pageOutlineAlpha(page.getTranslationX(), width);
             if (!(visibility > 0f)) continue;
-            float centreX = page.getLeft() + page.getTranslationX() + page.getPivotX()
-                + (page.getWidth() / 2f - page.getPivotX()) * page.getScaleX();
+            float centreX = grabberCentreX(page, page.getTranslationX());
             float pivotY = page.getTop() + page.getTranslationY() + page.getPivotY();
             if (bottom) {
                 float bottomY = pivotY + (page.getHeight() - page.getPivotY()) * page.getScaleY();
@@ -1277,9 +1455,12 @@ public final class PaneWallLayout extends ViewGroup {
         }
     }
 
-    /** The grabber follows its page: a frame that moved the wall or sank the page redraws it. */
+    /**
+     * The grabbers and the glow follow their page: a frame that moved the wall or sank the page
+     * redraws them.
+     */
     private void invalidateGrabberIfMoved() {
-        if (!isGrabberShown() && !isStatusGrabberShown()) return;
+        if (!isGrabberShown() && !isStatusGrabberShown() && !mGlow.isShowing()) return;
         if (mOffsetPx == mGrabberDrawnOffsetPx && mSink == mGrabberDrawnSink) return;
         invalidate();
     }
@@ -1322,11 +1503,16 @@ public final class PaneWallLayout extends ViewGroup {
             if (steps != 0 && place == mCurrent) continue;
             if (mListener.isPlankTiltEnabled(place)) mPlankPlaces.add(place);
         }
-        if (mPlankPlaces.isEmpty()) return;
-        // The weight stays where it pressed on the page it held.
-        mWeightPage = held;
-        mWeightOffsetPx = fingerX - (held.getLeft() + held.getTranslationX() + held.getWidth() / 2f);
-        applyPlanks();
+        if (!mPlankPlaces.isEmpty()) {
+            // The weight stays where it pressed on the page it held.
+            mWeightPage = held;
+            mWeightOffsetPx = fingerX
+                - (held.getLeft() + held.getTranslationX() + held.getWidth() / 2f);
+            applyPlanks();
+        }
+        // Laying the last drag's planks flat and tipping these moves no page along the wall, so
+        // no slide frame reports it.
+        mListener.onPagePoseChanged();
     }
 
     /**
@@ -1538,6 +1724,16 @@ public final class PaneWallLayout extends ViewGroup {
         }
     }
 
+    /**
+     * The brightness, of 255 per channel, the sink's dim leaves {@code page}: 255 unless it is the
+     * sunk page and its layer is dimming it. Glass on the page undoes the dim on the wallpaper it
+     * shows ({@code GlassFilters#undimmed}): the wallpaper behind a sinking page does not darken.
+     */
+    public int keptBrightness(@NonNull View page) {
+        if (page != mSinkPage || !mSinkLayered || mSinkDimLevel <= 0) return 0xFF;
+        return PageSink.dimMultiplier(mSinkDimLevel, SINK_DIM_STEPS) & 0xFF;
+    }
+
     /** The page sunk under a hold, for tests; null while none is. */
     @Nullable
     View sinkPage() {
@@ -1609,6 +1805,7 @@ public final class PaneWallLayout extends ViewGroup {
             applySinkDim(page, mSink);
         }
         applyPlanks();
+        if (mListener != null) mListener.onPagePoseChanged();
     }
 
     /**
@@ -1716,6 +1913,9 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     private void notifyPageChanged() {
+        // The side stretches are the current page's: pages are only moved, never laid out again,
+        // so a page change is the one moment they would otherwise go stale.
+        publishBackExclusion();
         if (mListener != null) mListener.onWallPageChanged(mCurrent);
     }
 
@@ -1862,6 +2062,41 @@ public final class PaneWallLayout extends ViewGroup {
             }
             child.layout(left, top, right, bottom);
         }
+        publishBackExclusion();
+    }
+
+    /**
+     * Asks the phone's back swipe to leave a stretch of each side border to the wall
+     * ({@link #SIDE_BACK_EXCLUSION_DP}), centred along it, so a hold there can page. Only while
+     * the wall can page at all and its gestures are on; otherwise the back swipe keeps the whole
+     * edge. Every page sits the same Margin in, so the stretch does not move with the page.
+     */
+    private void publishBackExclusion() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        Rect left = new Rect();
+        Rect right = new Rect();
+        if (mGesturesEnabled && mPages.size() > 1) {
+            int stretch = Math.round(SIDE_BACK_EXCLUSION_DP
+                * getResources().getDisplayMetrics().density);
+            centredStretch(BorderDrag.Border.LEFT, stretch, left);
+            centredStretch(BorderDrag.Border.RIGHT, stretch, right);
+        }
+        if (left.equals(mBackExclusionLeft) && right.equals(mBackExclusionRight)) return;
+        mBackExclusionLeft.set(left);
+        mBackExclusionRight.set(right);
+        List<Rect> rects = new ArrayList<>(2);
+        if (!left.isEmpty()) rects.add(left);
+        if (!right.isEmpty()) rects.add(right);
+        setSystemGestureExclusionRects(rects);
+    }
+
+    /** {@code side}'s border zone cut to {@code stretch} px about its middle, or empty. */
+    private void centredStretch(@NonNull BorderDrag.Border side, int stretch, @NonNull Rect out) {
+        if (!borderZone(side, out)) return;
+        int half = Math.min(stretch, out.height()) / 2;
+        int centre = out.centerY();
+        out.top = centre - half;
+        out.bottom = centre + half;
     }
 
     // The activity sets the terminal page's frame by writing margins into its layout params and
@@ -1910,5 +2145,7 @@ public final class PaneWallLayout extends ViewGroup {
         releaseStills();
         mGrabber.reset();
         mStatusGrabber.reset();
+        mGlow.reset();
+        mGlowPage = null;
     }
 }

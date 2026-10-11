@@ -51,6 +51,12 @@ public final class GuiAppsSetup {
     public static final String KEYBOARD_DATA_PACKAGE = "xkeyboard-config";
     /** The session bus: a whole desktop needs one and XFCE starts none of its own on X11. */
     public static final String BUS_PACKAGE = "dbus";
+    /**
+     * The window manager the display starts by default ({@link X11WindowManager}): without it
+     * every app opens at its own size in a corner and the status bar lists no windows. It runs on
+     * the Termux side, beside the server, whichever route the apps came from.
+     */
+    public static final String WINDOW_MANAGER_PACKAGE = "openbox";
 
     /** Where {@code proot-distro} 5.x keeps its containers, as a Termux shell writes it. */
     private static final String CONTAINERS_PATH = "$PREFIX/var/lib/proot-distro/containers";
@@ -340,12 +346,17 @@ public final class GuiAppsSetup {
         // A whole desktop needs a session bus and XFCE starts none of its own on X11 (D6); it
         // rides along the same way, not as a tickable starter app.
         packages.add(BUS_PACKAGE);
+        // The window manager the display starts. VAJ's repository was last checked before it
+        // mattered, so there it is asked for on its own after the rest, and a repository without
+        // it stops nothing.
+        if (!vaj) packages.add(WINDOW_MANAGER_PACKAGE);
         for (StarterApp app : StarterApp.values()) {
             if (vaj && app == StarterApp.BROWSER) continue;
             if (starters.contains(app)) packages.add(termuxPackageFor(app));
         }
         String install = "pkg install -y " + join(packages);
-        return vaj ? install : "pkg install -y x11-repo && " + install;
+        return vaj ? install + " && { pkg install -y " + WINDOW_MANAGER_PACKAGE + " || true; }"
+            : "pkg install -y x11-repo && " + install;
     }
 
     /**
@@ -370,6 +381,10 @@ public final class GuiAppsSetup {
         // edition in its main repository, so the repo step is allowed to fail quietly.
         out.append("[ -d \"$PREFIX/share/X11/xkb\" ] || { pkg install -y x11-repo >/dev/null 2>&1 || true; "
             + "pkg install -y ").append(KEYBOARD_DATA_PACKAGE).append("; }\n");
+        // The window manager runs beside the server, on the Termux side, not in the container.
+        out.append("command -v ").append(WINDOW_MANAGER_PACKAGE)
+            .append(" >/dev/null 2>&1 || { pkg install -y x11-repo >/dev/null 2>&1 || true; "
+                + "pkg install -y ").append(WINDOW_MANAGER_PACKAGE).append("; }\n");
         out.append("[ -d \"").append(CONTAINERS_PATH).append('/').append(distro.alias)
             .append("/rootfs\" ] || proot-distro install ").append(distro.alias).append('\n');
         // The name is asked for out here, not inside the container: the container is entered once,

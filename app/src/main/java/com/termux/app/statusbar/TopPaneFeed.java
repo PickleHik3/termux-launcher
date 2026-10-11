@@ -39,6 +39,13 @@ public final class TopPaneFeed {
 
         /** Re-read the rules and rebuild the pins, e.g. after a rule was switched off. */
         void refreshPinned();
+
+        /**
+         * Read the active media sessions afresh and follow the right one: a backstop for a
+         * playback change whose callback never arrived, asked for whenever the bar comes on
+         * screen.
+         */
+        void resyncMedia();
     }
 
     public interface Observer {
@@ -152,6 +159,12 @@ public final class TopPaneFeed {
         Controls current = controls;
         if (muted && current != null) current.refreshPinned();
         return muted;
+    }
+
+    /** Has the listener, when connected, re-read which media session the row should follow. */
+    public static void requestMediaResync() {
+        Controls current = controls;
+        if (current != null) current.resyncMedia();
     }
 
     public static boolean openPinned(@NonNull String key) {

@@ -17,16 +17,16 @@ it reads **Custom** once one of them differs. See
 
 ## Appearance
 
-Under **Personalization**. "Wallpaper, theme and layout": opens the Appearance screen over the
-launcher, with tabs **Wallpaper | Look | Layout | Icon pack**, rather than a settings page. See
-[Look and themes](Look_And_Themes.md).
+Under **Personalization**. "Wallpaper, theme, fonts and icons": its first row, **Wallpaper, look
+and layout**, opens the Appearance editor over the launcher, with tabs **Wallpaper | Look | Layout |
+Icon pack**. Below it sit **Terminal fonts**, the app theme, wallpaper colours, terminal contrast,
+the wallpaper options, icon options and keyboard look. The palette's **Look and feel settings**
+opens the same page. See [Look and themes](Look_And_Themes.md).
 
 ### Look
 
-The glass look of every surface, the clock face, cursor trail and terminal effect. The
-**Theme & fonts** page (app theme, wallpaper colours, terminal fonts, icon options) has no row of
-its own; reach it through Settings search or the palette's **Look and feel settings**. See
-[Look and themes](Look_And_Themes.md).
+The Look tab of the Appearance editor: the glass look of every surface, the clock face, cursor
+trail and terminal effect. See [Look and themes](Look_And_Themes.md).
 
 ### Layout editor
 
@@ -48,8 +48,8 @@ search** and **Double-tap to lock** pages. See [Home screen and apps](Home_Scree
 
 ## Status bar
 
-"Clock, indicators and weather": **12-hour time**, **CPU usage**, **Memory usage**, **Weather**,
-**Fahrenheit** and the weather **Location**. See [Status bar](Status_Bar.md).
+"Clock, indicators and weather": **12-hour time**, **CPU usage**, **Memory usage**, **Media**,
+**Weather**, **Fahrenheit** and the weather **Location**. See [Status bar](Status_Bar.md).
 
 ## Notifications
 

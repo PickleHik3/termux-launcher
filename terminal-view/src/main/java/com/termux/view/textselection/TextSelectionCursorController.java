@@ -98,10 +98,25 @@ public class TextSelectionCursorController implements CursorController {
 
     public void setInitialTextSelectionPosition(MotionEvent event) {
         int[] columnAndRow = terminalView.getColumnAndRow(event, true);
+        TerminalBuffer screen = terminalView.mEmulator.getScreen();
+        clampToScreen(columnAndRow, terminalView.mEmulator.mColumns, terminalView.mEmulator.mRows,
+            screen.getActiveTranscriptRows());
         mSelX1 = mSelX2 = columnAndRow[0];
         mSelY1 = mSelY2 = columnAndRow[1];
         expandSelectionToWord();
         snapSelectionToTextBlocks();
+    }
+
+    /**
+     * Pulls a press's cell onto the screen: a long press in the clearance below the last row (or
+     * past the last column) maps to a cell one beyond it, which the buffer refuses outright. The
+     * selection starts on the nearest cell there is instead.
+     */
+    static void clampToScreen(int[] columnAndRow, int columns, int screenRows,
+                              int activeTranscriptRows) {
+        columnAndRow[0] = Math.max(0, Math.min(columnAndRow[0], columns - 1));
+        columnAndRow[1] = Math.max(-activeTranscriptRows,
+            Math.min(columnAndRow[1], screenRows - 1));
     }
 
     /**

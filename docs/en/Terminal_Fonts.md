@@ -7,10 +7,9 @@ setting; see [Keyboard](Keyboard.md#size-and-look).
 
 ## Install a font from the app
 
-The picker is called **Terminal fonts**. Open it from the [command palette](Command_Palette_And_Actions.md)
-(**Terminal fonts**), or search Settings for "fonts". It also sits on the **Theme & fonts** page
-under **Terminal font**, which **Look and feel settings** in the palette opens; no Settings row
-leads there directly.
+The picker is called **Terminal fonts**. Open it from **Settings → Appearance → Terminal fonts**,
+from the [command palette](Command_Palette_And_Actions.md) (**Terminal fonts**), or by searching
+Settings for "fonts".
 
 The picker has four sections:
 
@@ -40,11 +39,15 @@ The palette action `fonts.install` installs a family by id, such as `maple-mono`
 
 ## Tune the selected family
 
+- **Font size** sets the text size, in dp, for every pane you have not pinch-zoomed. Step it with
+  **−** and **+**, type an exact size, or drag the slider; **Default** goes back to 12 dp. It works
+  with any font, and a pane you zoomed keeps its own size.
 - **Nerd Font icons** routes the private-use icon ranges to the bundled symbols font.
 - **Ligature policy**: keep ligatures, break them only under the cursor, or turn them off.
 - **Weight** sets the `wght` axis, for variable families only.
 
-Each change rewrites `10-launcher.conf` and applies at once. A family's line metrics decide the
+The size is a launcher setting. Each of the other changes rewrites `10-launcher.conf` and applies
+at once. A family's line metrics decide the
 cell height, so a taller face fits fewer rows, and a full-screen program may need to redraw.
 `modify_font cell_height` in `fonts.conf` gets rows back.
 

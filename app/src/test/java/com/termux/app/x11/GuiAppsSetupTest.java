@@ -60,7 +60,7 @@ public class GuiAppsSetupTest {
     }
 
     @Test public void theX11RouteWithNothingTickedIsJustTheRepository() {
-        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus",
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox",
             command(Route.X11_REPO, Distro.DEBIAN, NONE));
     }
 
@@ -68,7 +68,7 @@ public class GuiAppsSetupTest {
         String command = command(Route.X11_REPO, Distro.DEBIAN,
             EnumSet.of(StarterApp.TEXT_EDITOR));
 
-        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus mousepad",
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox mousepad",
             command);
     }
 
@@ -88,6 +88,9 @@ public class GuiAppsSetupTest {
             assertTrue(distro.name(), command.contains(
                 "command -v proot-distro >/dev/null 2>&1 || pkg install -y proot-distro"));
             assertTrue(command.contains("pkg install -y xkeyboard-config"));
+            // The window manager is the Termux side's, whichever route the apps came from.
+            assertTrue(command.contains("command -v openbox >/dev/null 2>&1 || {"));
+            assertTrue(command.contains("pkg install -y openbox; }"));
             assertTrue(distro.name(), command.contains(
                 "[ -d \"$PREFIX/var/lib/proot-distro/containers/" + distro.alias
                     + "/rootfs\" ] || proot-distro install " + distro.alias));
@@ -287,7 +290,7 @@ public class GuiAppsSetupTest {
         String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
             GuiAppsSetup.defaultStarters(), TourEdition.VAJ);
 
-        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad", command);
+        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad && { pkg install -y openbox || true; }", command);
     }
 
     @Test public void vajsX11CommandAddsTheTerminalWhenTicked() {
@@ -296,7 +299,7 @@ public class GuiAppsSetupTest {
         String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
             TourEdition.VAJ);
 
-        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad xfce4-terminal",
+        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad xfce4-terminal && { pkg install -y openbox || true; }",
             command);
     }
 
@@ -305,7 +308,7 @@ public class GuiAppsSetupTest {
             EnumSet.of(StarterApp.BROWSER), TourEdition.VAJ);
 
         // VAJ ships no browser at all; ticking it adds nothing to the command.
-        assertEquals("pkg install -y xkeyboard-config dbus", command);
+        assertEquals("pkg install -y xkeyboard-config dbus && { pkg install -y openbox || true; }", command);
         assertFalse(command.contains("firefox"));
     }
 
@@ -313,7 +316,7 @@ public class GuiAppsSetupTest {
         assertEquals(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL),
             GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
         assertEquals("pkg install -y x11-repo && pkg install -y "
-                + "xkeyboard-config dbus firefox pcmanfm mousepad xfce4-terminal",
+                + "xkeyboard-config dbus openbox firefox pcmanfm mousepad xfce4-terminal",
             GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
     }
 

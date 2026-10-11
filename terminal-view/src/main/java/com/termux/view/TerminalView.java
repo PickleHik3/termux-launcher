@@ -260,7 +260,16 @@ public final class TerminalView extends View {
     /**
      * Keep track of where mouse touch event started which we report as mouse scroll.
      */
-    private int mMouseScrollStartX = -1, mMouseScrollStartY = -1;
+    private final MousePoint mMouseScrollStart = new MousePoint();
+
+    /**
+     * Where a real pointer was last reported, so motion that would repeat it is not sent again:
+     * per pixel when the program asked for pixels, per cell for hovering.
+     */
+    private final MousePoint mMouseMotionLast = new MousePoint();
+
+    /** Working space for the position of the event being handled; see {@link #pointAt}. */
+    private final MousePoint mMousePointScratch = new MousePoint();
 
     /**
      * Keep track of the time when a touch event leading to sending mouse scroll events started.
@@ -338,7 +347,7 @@ public final class TerminalView extends View {
         return mScrollAxis;
     }
 
-    private int mTouchMouseDragLastCol, mTouchMouseDragLastRow;
+    private final MousePoint mTouchMouseDragLast = new MousePoint();
 
     /**
      * Mouse mode: every touch is the mouse, for a program that asked for one. A finger down is
@@ -364,12 +373,12 @@ public final class TerminalView extends View {
     private boolean mHoldExempt;
     /** Mouse mode's left button, and whether its press is still waiting on a pane corner. */
     private final MouseModePress mTouchMouseModePress = new MouseModePress();
-    private int mTouchMouseModeLastCol, mTouchMouseModeLastRow;
+    private final MousePoint mTouchMouseModeLast = new MousePoint();
     /** Two fingers are down and their travel is the wheel. */
     private boolean mTouchMouseWheelActive;
     private float mTouchMouseWheelStartY;
     private int mTouchMouseWheelSent;
-    private int mTouchMouseWheelCol, mTouchMouseWheelRow;
+    private final MousePoint mTouchMouseWheelAt = new MousePoint();
     private android.view.VelocityTracker mTouchMouseWheelVelocity;
     /** Carries the wheel on after a fast two-finger lift; its axis is finger travel in pixels. */
     private Scroller mTouchMouseWheelFling;
@@ -380,7 +389,7 @@ public final class TerminalView extends View {
             if (mTouchMouseWheelFling == null || mEmulator == null) return;
             if (!mTouchMouseWheelFling.computeScrollOffset()) return;
             int notches = Math.round(mTouchMouseWheelFling.getCurrY() / touchMouseWheelNotchPx());
-            turnWheel(notches - mTouchMouseWheelFlingSent, mTouchMouseWheelCol, mTouchMouseWheelRow);
+            turnWheel(notches - mTouchMouseWheelFlingSent, mTouchMouseWheelAt);
             mTouchMouseWheelFlingSent = notches;
             if (!mTouchMouseWheelFling.isFinished()) postOnAnimation(this);
         }
@@ -543,7 +552,7 @@ public final class TerminalView extends View {
                     // for zooming.
                     float[] at = TapPrecision.clickPointFor(mTouchDownX, mTouchDownY, event.getX(),
                         event.getY(), mRenderer.mFontLineSpacing);
-                    sendClickAt(getColumnForX(at[0]), getRowForY(at[1]), event);
+                    sendClickAt(pointAt(at[0], at[1], mMousePointScratch), event);
                     mClient.onMouseTrackingTap(event);
                     return true;
                 }
@@ -1477,15 +1486,90 @@ public final class TerminalView extends View {
     }
 
     private int getColumnForX(float x) {
-        return (int) ((x - getHorizontalContentOffset()) / mRenderer.mFontWidth);
+        return (int) (textAreaOffsetX(x) / mRenderer.mFontWidth);
     }
 
     private int getRowForY(float y) {
+        return (int) (textAreaOffsetY(y) / mRenderer.mFontLineSpacing);
+    }
+
+    /** How far right of the grid's left edge view position {@code x} is, in pixels. */
+    private float textAreaOffsetX(float x) {
+        return x - getHorizontalContentOffset();
+    }
+
+    /** How far below the first row's top view position {@code y} is, in pixels. */
+    private float textAreaOffsetY(float y) {
         // While a smooth fling/settle holds a fractional offset, drawn content sits that many
         // pixels above its nominal row position, so screen Y maps back by adding it; the
         // centring offset shifts it the other way.
-        return (int) ((y - getVerticalContentOffset() + mScrollOffsetPixels
-            - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
+        return y - getVerticalContentOffset() + mScrollOffsetPixels
+            - mRenderer.mFontLineSpacingAndAscent;
+    }
+
+    /**
+     * Where the pointer is, as a program tracking the mouse reads it: the cell under it and, for a
+     * program that asked for pixels (DECSET 1016), the pixel of the text area under it, both
+     * 0-based. See {@link TerminalView#pointAt}.
+     */
+    static final class MousePoint {
+        int column = Integer.MIN_VALUE, row = Integer.MIN_VALUE;
+        int pixelX = Integer.MIN_VALUE, pixelY = Integer.MIN_VALUE;
+
+        void set(MousePoint other) {
+            column = other.column;
+            row = other.row;
+            pixelX = other.pixelX;
+            pixelY = other.pixelY;
+        }
+
+        /** Hold no position, so whatever comes next is news. */
+        void forget() {
+            column = row = pixelX = pixelY = Integer.MIN_VALUE;
+        }
+
+        /** Whether moving here from {@code other} is no news: the same pixel, or the same cell. */
+        boolean sameAs(MousePoint other, boolean pixels) {
+            return pixels ? pixelX == other.pixelX && pixelY == other.pixelY
+                : column == other.column && row == other.row;
+        }
+    }
+
+    /**
+     * The cell and text-area pixel under view position ({@code x}, {@code y}), written into
+     * {@code out}. The cell is {@link #getColumnForX} and {@link #getRowForY}'s. The pixel is
+     * counted in the cell size the program was told ({@link TerminalEmulator#getCellWidthPixels()},
+     * {@link TerminalEmulator#getCellHeightPixels()}), because the program finds the cell by
+     * dividing the pixel by that size: the drawn cell can be a fraction of a pixel wider than the
+     * whole number the program gets, and a raw device pixel would then divide to a column further
+     * right the further right it is. Where the two sizes agree - rows always, columns whenever
+     * the font's advance is a whole number of pixels - it is the device pixel.
+     */
+    private MousePoint pointAt(float x, float y, MousePoint out) {
+        float offsetX = textAreaOffsetX(x);
+        float offsetY = textAreaOffsetY(y);
+        out.column = (int) (offsetX / mRenderer.mFontWidth);
+        out.row = (int) (offsetY / mRenderer.mFontLineSpacing);
+        out.pixelX = textAreaPixel(offsetX, mRenderer.mFontWidth, mEmulator.getCellWidthPixels(),
+            mEmulator.mColumns);
+        out.pixelY = textAreaPixel(offsetY, mRenderer.mFontLineSpacing,
+            mEmulator.getCellHeightPixels(), mEmulator.mRows);
+        return out;
+    }
+
+    /**
+     * One axis of {@link #pointAt}'s pixel: {@code offsetPx} into the text area, where a cell is
+     * drawn {@code drawnCellPx} long, counted in cells of {@code reportedCellPx} and clamped to the
+     * {@code cells} there are. The re-count is kept inside the cell the offset falls in, found by
+     * the same float division the cell mapping uses, so that the pixel divided by
+     * {@code reportedCellPx} is always that cell whatever the rounding.
+     */
+    static int textAreaPixel(float offsetPx, float drawnCellPx, int reportedCellPx, int cells) {
+        if (drawnCellPx <= 0f || reportedCellPx <= 0 || cells <= 0) return 0;
+        long cellStart = (long) Math.floor(offsetPx / drawnCellPx) * reportedCellPx;
+        long pixel = (long) Math.floor((double) offsetPx * reportedCellPx / drawnCellPx);
+        pixel = Math.max(cellStart, Math.min(cellStart + reportedCellPx - 1, pixel));
+        return (int) Math.max(0, Math.min(cells * reportedCellPx - 1L, pixel));
     }
 
     /** Turn mouse mode on or off; see {@link #mTouchMouseMode}. */
@@ -1493,8 +1577,7 @@ public final class TerminalView extends View {
         if (mTouchMouseMode == enabled) return;
         MouseModePress.Step step = mTouchMouseModePress.release();
         if (step == MouseModePress.Step.RELEASE && mEmulator != null) {
-            sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
-                mTouchMouseModeLastRow, false);
+            sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLast, false);
         }
         mTouchMouseWheelActive = false;
         stopTouchMouseWheelFling();
@@ -1613,8 +1696,7 @@ public final class TerminalView extends View {
      */
     private void handleTouchMouseMode(MotionEvent event) {
         int action = event.getActionMasked();
-        int column = getColumnForX(event.getX());
-        int row = getRowForY(event.getY());
+        MousePoint at = pointAt(event.getX(), event.getY(), mMousePointScratch);
         boolean tracking = mEmulator.isMouseTrackingActive();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
@@ -1625,8 +1707,7 @@ public final class TerminalView extends View {
                     mTouchMouseWheelVelocity.clear();
                 }
                 mTouchMouseWheelVelocity.addMovement(event);
-                mTouchMouseModeLastCol = column;
-                mTouchMouseModeLastRow = row;
+                mTouchMouseModeLast.set(at);
                 applyMouseModePress(mTouchMouseModePress.down(tracking, mHoldExempt));
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
@@ -1635,8 +1716,7 @@ public final class TerminalView extends View {
                 mTouchMouseWheelActive = true;
                 mTouchMouseWheelStartY = meanY(event);
                 mTouchMouseWheelSent = 0;
-                mTouchMouseWheelCol = column;
-                mTouchMouseWheelRow = row;
+                mTouchMouseWheelAt.set(at);
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (mTouchMouseWheelVelocity != null) mTouchMouseWheelVelocity.addMovement(event);
@@ -1644,18 +1724,18 @@ public final class TerminalView extends View {
                     // Fingers moving up bring the content up, which is the wheel turning down.
                     int notches = Math.round((mTouchMouseWheelStartY - meanY(event))
                         / touchMouseWheelNotchPx());
-                    turnWheel(notches - mTouchMouseWheelSent, mTouchMouseWheelCol, mTouchMouseWheelRow);
+                    turnWheel(notches - mTouchMouseWheelSent, mTouchMouseWheelAt);
                     mTouchMouseWheelSent = notches;
                     break;
                 }
                 // A press deferred for a pane corner goes out here, at the cell the finger landed
                 // on, the moment the movement is real enough that no corner is going to claim it.
                 applyMouseModePress(mTouchMouseModePress.move(movedPastSlop(event)));
+                // Motion goes out per cell, or per pixel to a program that asked for pixels.
                 if (mTouchMouseModePress.isPressed()
-                    && (column != mTouchMouseModeLastCol || row != mTouchMouseModeLastRow)) {
-                    mTouchMouseModeLastCol = column;
-                    mTouchMouseModeLastRow = row;
-                    sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, column, row, true);
+                    && !at.sameAs(mTouchMouseModeLast, mEmulator.isMousePixelPositionActive())) {
+                    mTouchMouseModeLast.set(at);
+                    sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, mTouchMouseModeLast, true);
                 }
                 break;
             case MotionEvent.ACTION_POINTER_UP:
@@ -1686,15 +1766,13 @@ public final class TerminalView extends View {
     private void applyMouseModePress(MouseModePress.Step step) {
         switch (step) {
             case PRESS:
-                sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
-                    mTouchMouseModeLastRow, true);
+                sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLast, true);
                 break;
             case CLICK:
-                sendClickAt(mTouchMouseModeLastCol, mTouchMouseModeLastRow, null);
+                sendClickAt(mTouchMouseModeLast, null);
                 break;
             case RELEASE:
-                sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
-                    mTouchMouseModeLastRow, false);
+                sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLast, false);
                 break;
             default:
                 break;
@@ -1724,17 +1802,17 @@ public final class TerminalView extends View {
 
     /**
      * Turn the wheel {@code notches} clicks, down for positive. A program tracking the mouse gets
-     * wheel buttons at the gesture's cell; the transcript scrolls itself otherwise, or arrow keys
+     * wheel buttons at the gesture's point; the transcript scrolls itself otherwise, or arrow keys
      * stand in on the alternate screen, exactly as a two-finger drag does outside mouse mode.
      */
-    private void turnWheel(int notches, int column, int row) {
+    private void turnWheel(int notches, MousePoint at) {
         if (notches == 0 || mEmulator == null) return;
         boolean down = notches > 0;
         int amount = Math.abs(notches);
         for (int i = 0; i < amount; i++) {
             if (mEmulator.isMouseTrackingActive()) {
                 sendMouseEventAt(down ? TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
-                    : TerminalEmulator.MOUSE_WHEELUP_BUTTON, column, row, true);
+                    : TerminalEmulator.MOUSE_WHEELUP_BUTTON, at, true);
             } else if (mEmulator.isAlternateBufferActive()) {
                 handleKeyCode(down ? KeyEvent.KEYCODE_DPAD_DOWN : KeyEvent.KEYCODE_DPAD_UP, 0);
             } else {
@@ -1769,21 +1847,28 @@ public final class TerminalView extends View {
      * Send a single mouse event code to the terminal.
      */
     void sendMouseEventCode(MotionEvent e, int button, boolean pressed) {
-        int modifiers = mouseModifiersFor(e, button, pressed);
-        int[] columnAndRow = getColumnAndRow(e, false);
-        int x = columnAndRow[0] + 1;
-        int y = columnAndRow[1] + 1;
+        MousePoint at = pointAt(e.getX(), e.getY(), mMousePointScratch);
         if (pressed && (button >= TerminalEmulator.MOUSE_WHEELDOWN_BUTTON && button <= TerminalEmulator.MOUSE_WHEEL_RIGHT)) {
             if (mMouseStartDownTime == e.getDownTime()) {
-                x = mMouseScrollStartX;
-                y = mMouseScrollStartY;
+                at = mMouseScrollStart;
             } else {
                 mMouseStartDownTime = e.getDownTime();
-                mMouseScrollStartX = x;
-                mMouseScrollStartY = y;
+                mMouseScrollStart.set(at);
             }
+        } else if (!isWheelButton(button)) {
+            // A pointer's motion arrives here from more than one path. Per cell, a dragged button's
+            // motion has always gone out as it came; per pixel, and when hovering, a repeat of the
+            // last position reported is no news.
+            boolean pixels = mEmulator.isMousePixelPositionActive();
+            boolean motion = button == TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED
+                || button == TerminalEmulator.MOUSE_MOVED_NO_BUTTON;
+            if (motion && (pixels || button == TerminalEmulator.MOUSE_MOVED_NO_BUTTON)
+                && at.sameAs(mMouseMotionLast, pixels))
+                return;
+            mMouseMotionLast.set(at);
         }
-        mEmulator.sendMouseEvent(button, x, y, pressed, modifiers);
+        int modifiers = mouseModifiersFor(e, button, pressed);
+        mEmulator.sendMouseEvent(button, at.column + 1, at.row + 1, at.pixelX, at.pixelY, pressed, modifiers);
     }
 
     private static boolean isWheelButton(int button) {
@@ -1793,11 +1878,13 @@ public final class TerminalView extends View {
     /**
      * The modifier bits a mouse report owes. A left press reads the keyboard and the extra keys row
      * (consuming a one-shot latch, which so covers the press and its release) and remembers the
-     * bits; motion and release repeat them. A wheel notch takes only what the hardware keyboard
-     * holds, so scrolling does not eat a latch meant for the next click.
+     * bits; motion and release repeat them. A wheel notch, like a pointer hovering with no button
+     * held, takes only what the hardware keyboard holds, so it does not eat a latch meant for the
+     * next click.
      */
     private int mouseModifiersFor(MotionEvent e, int button, boolean pressed) {
-        if (isWheelButton(button)) return e == null ? 0 : modifiersOf(e, false, false, false);
+        if (isWheelButton(button) || button == TerminalEmulator.MOUSE_MOVED_NO_BUTTON)
+            return e == null ? 0 : modifiersOf(e, false, false, false);
         if (button == TerminalEmulator.MOUSE_LEFT_BUTTON && pressed)
             return mMousePressModifiers = takeMouseModifiers(e);
         int modifiers = mMousePressModifiers;
@@ -1995,18 +2082,21 @@ public final class TerminalView extends View {
         return mEmulator != null && mRenderer != null && mEmulator.isMouseTrackingMotionActive();
     }
 
-    private void sendMouseEventAt(int button, int column, int row, boolean pressed) {
-        mEmulator.sendMouseEvent(button, column + 1, row + 1, pressed, mouseModifiersFor(null, button, pressed));
+    private void sendMouseEventAt(int button, MousePoint at, boolean pressed) {
+        mEmulator.sendMouseEvent(button, at.column + 1, at.row + 1, at.pixelX, at.pixelY, pressed,
+            mouseModifiersFor(null, button, pressed));
     }
 
     /**
-     * Press and release the left button on one cell, which is the whole of a finger click. The
+     * Press and release the left button on one point, which is the whole of a finger click. The
      * modifiers are read once, so a latched one-shot Ctrl covers both halves and is then spent.
      */
-    private void sendClickAt(int column, int row, MotionEvent e) {
+    private void sendClickAt(MousePoint at, MotionEvent e) {
         int modifiers = takeMouseModifiers(e);
-        mEmulator.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON, column + 1, row + 1, true, modifiers);
-        mEmulator.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON, column + 1, row + 1, false, modifiers);
+        mEmulator.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON, at.column + 1, at.row + 1,
+            at.pixelX, at.pixelY, true, modifiers);
+        mEmulator.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON, at.column + 1, at.row + 1,
+            at.pixelX, at.pixelY, false, modifiers);
     }
 
     /**
@@ -2110,13 +2200,11 @@ public final class TerminalView extends View {
             case DRAG_STARTED:
                 mTouchMouseDragActive = true;
                 mTouchMouseDragReported = true;
-                mTouchMouseDragLastCol = getColumnForX(mHoldGesture.holdX());
-                mTouchMouseDragLastRow = getRowForY(mHoldGesture.holdY());
+                pointAt(mHoldGesture.holdX(), mHoldGesture.holdY(), mTouchMouseDragLast);
                 // Distinct from the hold's own haptic, so committing to a reported drag - as
                 // opposed to the finger lifting into a click - is felt.
                 performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseDragLastCol,
-                    mTouchMouseDragLastRow, true);
+                sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseDragLast, true);
                 // The move that committed the drag is also the first move to report.
                 reportTouchMouseDragTo(mHoldGesture.x(), mHoldGesture.y());
                 break;
@@ -2133,7 +2221,7 @@ public final class TerminalView extends View {
                     float[] at = TapPrecision.clickPointFor(mHoldGesture.holdX(),
                         mHoldGesture.holdY(), mHoldGesture.x(), mHoldGesture.y(),
                         mRenderer.mFontLineSpacing);
-                    sendClickAt(getColumnForX(at[0]), getRowForY(at[1]), null);
+                    sendClickAt(pointAt(at[0], at[1], mMousePointScratch), null);
                 }
                 break;
             case ABANDONED:
@@ -2167,13 +2255,12 @@ public final class TerminalView extends View {
     private void reportTouchMouseDragTo(float x, float y) {
         if (!mTouchMouseDragActive)
             return;
-        int column = getColumnForX(x);
-        int row = getRowForY(y);
-        if (column == mTouchMouseDragLastCol && row == mTouchMouseDragLastRow)
+        // Per cell, or per pixel to a program that asked for pixels.
+        MousePoint at = pointAt(x, y, mMousePointScratch);
+        if (at.sameAs(mTouchMouseDragLast, mEmulator.isMousePixelPositionActive()))
             return;
-        mTouchMouseDragLastCol = column;
-        mTouchMouseDragLastRow = row;
-        sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, column, row, true);
+        mTouchMouseDragLast.set(at);
+        sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, mTouchMouseDragLast, true);
     }
 
     /** Neither stage of the hold is owed any longer. */
@@ -2193,7 +2280,7 @@ public final class TerminalView extends View {
         if (!mTouchMouseDragActive)
             return;
         mTouchMouseDragActive = false;
-        sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseDragLastCol, mTouchMouseDragLastRow, false);
+        sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseDragLast, false);
     }
 
     /**
@@ -2208,6 +2295,24 @@ public final class TerminalView extends View {
             return true;
         }
         return false;
+    }
+
+    /**
+     * A mouse or trackpad pointer moving with no button held, which a program that asked for every
+     * motion (DECSET 1003) is told about. The framework still gets every hover event after.
+     */
+    @Override
+    public boolean onHoverEvent(MotionEvent event) {
+        if (mEmulator != null && mRenderer != null && event.isFromSource(InputDevice.SOURCE_MOUSE)) {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_HOVER_MOVE && mEmulator.isMouseTrackingAnyEventActive()) {
+                sendMouseEventCode(event, TerminalEmulator.MOUSE_MOVED_NO_BUTTON, true);
+            } else if (action == MotionEvent.ACTION_HOVER_EXIT) {
+                // Coming back in is news, wherever it lands.
+                mMouseMotionLast.forget();
+            }
+        }
+        return super.onHoverEvent(event);
     }
 
     @SuppressLint("ClickableViewAccessibility")

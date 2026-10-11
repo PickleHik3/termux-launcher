@@ -82,6 +82,56 @@ public class DockIconSizeScaleTest {
         }
     }
 
+    /**
+     * Issue #49: the box a lying-down row is handed holds its icon, and is never shorter than the
+     * floor the row itself waits for before it renders ({@link DockLayoutPolicy#minRowContentPx}).
+     * Docked at the bottom of the stretch hands a 55px box at 420dpi — a 21dp icon — and the row
+     * used to wait for 24dp, so it never drew a single icon.
+     */
+    @Test
+    public void theRowsBoxHoldsItsIconAndClearsTheRenderFloorAcrossTheStretch() {
+        float[] densities = {2f, 2.25f, 2.5f, 2.625f, 2.75f, 3f, 3.25f, 3.5f};
+        boolean[] bools = {false, true};
+        for (float density : densities) {
+            for (boolean capsule : STYLES) {
+                float min = DockLayoutPolicy.minUsefulScale();
+                float max = DockLayoutPolicy.maxUsefulScale(capsule);
+                for (boolean alone : bools) {
+                    for (boolean nextToCanvas : bools) {
+                        for (int i = 0; i <= 40; i++) {
+                            float scale = min + (max - min) * i / 40f;
+                            DockLayout l = DockLayoutPolicy.compute(
+                                DockLayoutPolicy.DockInputs.builder()
+                                    .preferencesAvailable(true)
+                                    .capsule(capsule)
+                                    .appsRowEnabledPref(true)
+                                    .azRowEnabledPref(true)
+                                    .appsRowAlone(alone)
+                                    .appsRowNextToCanvas(nextToCanvas)
+                                    .appsRowPageStripShown(true)
+                                    .density(density)
+                                    .barHeightScale(scale)
+                                    .baseToolbarHeightPx(
+                                        DockLayoutPolicy.baseToolbarHeightPx(density))
+                                    .build());
+                            String at = "density " + density + " capsule " + capsule
+                                + " alone " + alone + " scale " + scale;
+                            assertTrue(at + ": icon " + l.appsRowIconPx + " in box "
+                                + l.appsRowBandHintPx, l.appsRowIconPx <= l.appsRowBandHintPx);
+                            assertTrue(at + ": box " + l.appsRowBandHintPx + " under floor "
+                                    + DockLayoutPolicy.minRowContentPx(density),
+                                l.appsRowBandHintPx >= DockLayoutPolicy.minRowContentPx(density));
+                        }
+                    }
+                }
+            }
+        }
+        // The reported case: Docked at 1.45 on a 420dpi phone draws a 55px icon, under the 63px
+        // (24dp) the row used to wait for and over the 53px (20dp) floor it waits for now.
+        assertEquals(55, icon(false, 1.45f, 2.625f));
+        assertEquals(53, DockLayoutPolicy.minRowContentPx(2.625f));
+    }
+
     /** Every icon the stretch reaches comes back from its own scale; the rest go to the nearest. */
     @Test
     public void theInverseRoundTripsEveryIconTheStretchReaches() {

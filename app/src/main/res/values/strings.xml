@@ -136,6 +136,8 @@
     <string name="settings_cpu_usage_title">CPU usage</string>
     <string name="settings_memory_usage_title">Memory usage</string>
     <string name="settings_memory_usage_summary"></string>
+    <string name="settings_status_media_title">Media</string>
+    <string name="settings_status_media_summary">Show what\'s playing in the status bar.</string>
     <string name="settings_weather_title">Weather</string>
     <string name="settings_weather_summary">Uses your device location, which needs location permission, or the location set below.</string>
     <string name="settings_weather_fahrenheit_title">Fahrenheit</string>
@@ -307,6 +309,7 @@
     <string name="termux_x11_needs_keyboard_data">The display needs the xkeyboard-config package installed before it can start.</string>
     <string name="termux_x11_needs_keyboard_data_nix">Add xkeyboard-config to home.nix and switch, then come back.</string>
     <string name="termux_x11_read_guide">Read the guide</string>
+    <string name="termux_x11_install_keyboard_data">Install xkeyboard-config</string>
     <string name="termux_x11_start_display">Start display</string>
     <string name="termux_x11_display_off">The Linux display is switched off.</string>
     <string name="termux_x11_turn_on">Turn on</string>
@@ -947,6 +950,11 @@
                 <string name="termux_status_widget_ai_loading">…</string>
                 <string name="termux_status_widget_ai_resident">on</string>
                 <string name="termux_status_widget_ai_unloaded">off</string>
+                <string name="termux_status_widget_ai_unloads_within_a_minute">AI model unloads in less than a minute</string>
+                <plurals name="termux_status_widget_ai_unloads_in_minutes">
+                    <item quantity="one">AI model unloads in %d minute</item>
+                    <item quantity="other">AI model unloads in %d minutes</item>
+                </plurals>
                 <string name="termux_status_widget_cpu_summary">Tap the widget for cores, load and top processes.</string>
                 <string name="termux_top_pane_clock_style_flip">Flip</string>
                 <string name="termux_top_pane_clock_style_lcd">LCD</string>
@@ -2532,7 +2540,7 @@
     <string name="tour_chapter_status_and_apps">Status bar and apps</string>
     <string name="tour_chapter_commands_and_help">Commands and help</string>
     <string name="tour_title_places">Slide between places</string>
-    <string name="tour_body_places">Hold the bottom edge of the page, then drag sideways to reach the next place.</string>
+    <string name="tour_body_places">Hold the top or bottom border, then swipe left or right to switch places.</string>
     <string name="tour_title_keyboard_away">Put the keyboard away</string>
     <string name="tour_body_keyboard_away">Swipe down from the bottom edge of the page.</string>
     <string name="tour_title_keyboard_back">Bring it back</string>
@@ -2551,7 +2559,7 @@
     <string name="tour_body_corner">Every pane keeps a menu in its corners. Press and hold the top-left one.</string>
     <string name="tour_title_help">Tap ?</string>
     <string name="tour_body_help">Help mode explains whatever you touch next. It lives in every corner menu.</string>
-    <string name="tour_card_return_to_terminal">Hold the page\'s border and drag back to the terminal to continue.</string>
+    <string name="tour_card_return_to_terminal">Hold the top or bottom border, then swipe left or right to get back to the terminal and continue.</string>
     <string name="tour_closing_title">You\'re set</string>
     <string name="tour_tip_help">Hold any corner and tap ? to learn what something does.</string>
     <string name="tour_tip_wallpaper">Set your wallpaper: hold any corner and tap Appearance.</string>
@@ -2629,15 +2637,15 @@
     <string name="help_pad_two">Two fingers scroll, pinch or right-click.</string>
     <string name="help_pad_three">Three fingers middle-click or switch windows.</string>
     <string name="help_key_action">Action</string>
-    <string name="help_key_form">form</string>
+    <string name="help_key_form">keyboard type</string>
     <string name="help_key_mouse">Mouse</string>
     <string name="help_key_widgets">Home</string>
     <string name="help_key_terminal">Terminal</string>
     <string name="help_key_display">Display</string>
     <string name="help_key_split">Split</string>
-    <string name="help_key_window">window</string>
+    <string name="help_key_window">new window</string>
     <string name="help_key_sessions">Sessions</string>
-    <string name="help_key_session">session</string>
+    <string name="help_key_session">new session</string>
     <string name="help_key_keyboard">Keyboard</string>
     <string name="help_key_secondary">↑ %1$s</string>
     <string name="help_topic_dock_purpose">The dock holds your pinned apps, the A–Z index and the extra keys.</string>
@@ -2712,10 +2720,10 @@
     <!-- Help centre: Find your way. -->
     <string name="help_topic_places_title">Places</string>
     <string name="help_topic_places_summary">The launcher has up to three places: Home, Terminal and Display, as your Mode allows.</string>
-    <string name="help_topic_places_action">Hold the page\'s border, then drag sideways to move between them.</string>
+    <string name="help_topic_places_action">Hold the top or bottom border, then swipe left or right to switch places.</string>
     <string name="help_topic_places_step1">Home holds your widgets, Terminal your shells, and Display runs Linux apps.</string>
-    <string name="help_topic_places_back">Hold the border and drag back to return to where you were.</string>
-    <string name="help_topic_places_aliases">places, switch place, home, terminal, widgets, display, border, drag, mode</string>
+    <string name="help_topic_places_back">Swipe back the other way to return to where you were.</string>
+    <string name="help_topic_places_aliases">places, switch place, home, terminal, widgets, display, border, top border, bottom border, swipe, drag, mode</string>
     <string name="help_topic_corners_back">Tap away from the controls to put them away.</string>
     <string name="help_topic_corners_step1">A page of its own has Appearance, Minimal mode and ?, and Settings on Terminal and Display.</string>
     <string name="help_topic_corners_step2">A split pane\'s tab has Close, Move and Maximise instead; hold its corner, then drag the move icon to move the pane.</string>
@@ -2995,7 +3003,7 @@
     <string name="help_term_editors_title">Layout and Appearance editors</string>
     <string name="help_term_editors_definition">Open Appearance, then Look to change how the launcher looks or Layout to arrange its parts.</string>
     <string name="help_term_border_drag_title">Border drag</string>
-    <string name="help_term_border_drag_definition">Hold a page\'s border, then drag sideways to change place.</string>
+    <string name="help_term_border_drag_definition">Hold the top or bottom border, then swipe left or right to switch places.</string>
     <string name="help_term_keyboard_swipe_title">Keyboard swipe</string>
     <string name="help_term_keyboard_swipe_definition">Swipe up from a page\'s bottom border to open the keyboard, and down to close it.</string>
     <string name="help_term_status_swipe_title">Status swipe</string>
@@ -3041,7 +3049,7 @@
     <string name="help_lesson_find_help_title">Find help</string>
     <string name="help_lesson_find_help_summary">Open help from a page\'s corner tab.</string>
     <string name="help_lesson_border_drag_title">Change place</string>
-    <string name="help_lesson_border_drag_summary">Hold the page\'s border and drag to the next place.</string>
+    <string name="help_lesson_border_drag_summary">Hold the top or bottom border, then swipe left or right to the next place.</string>
     <string name="help_lesson_status_swipe_title">Open the status bar</string>
     <string name="help_lesson_status_swipe_summary">Swipe down from the top border to open the status bar.</string>
     <string name="help_lesson_find_apps_title">Open your apps</string>

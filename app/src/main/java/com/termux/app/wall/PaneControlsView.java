@@ -30,6 +30,8 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.chrome.GlassAnchor;
+import com.termux.app.chrome.GlassFilters;
 import com.termux.app.chrome.GlassRefraction;
 import com.termux.shared.termux.font.NerdFontSpans;
 
@@ -273,17 +275,19 @@ public final class PaneControlsView extends View {
     private final Paint mFrostPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Matrix mFrostMatrix = new Matrix();
     private final Rect mFrostRect = new Rect();
-    private final int[] mLocation = new int[2];
+    /** Where the tab stands over the wallpaper; see {@link GlassAnchor#place}. */
+    private final GlassAnchor.Placement mPlacement = new GlassAnchor.Placement();
     /** The wallpaper's live x-offset the frost follows, or null while nothing pans. */
     @Nullable private com.termux.app.chrome.WallpaperParallax mParallax;
-    private final int[] mRootLocation = new int[2];
     @Nullable private ColorFilter mFrostFilter;
+    /** The sink dim the frost paint's filter last undid; 255 for the plain frost. */
+    private int mFilterKeptBrightness = 0xFF;
     /** Fancier Glass on the tab's blur, or null for the plain frost. */
     @Nullable private GlassRefraction.Look mLook;
     /** The program the blur draws through while {@link #mLook} is set and the phone runs one. */
     @Nullable private GlassRefraction.Program mProgram;
     /** Scratch for the frost's aim and the rim's rect; never allocated per frame. */
-    private final float[] mAim = new float[4];
+    private final GlassAnchor.Aim mAim = new GlassAnchor.Aim();
     private final float[] mRim = new float[4];
     /** Scratch for the tab's path points; never allocated per frame. */
     private final float[] mPathPoints = new float[CornerTabGeometry.PATH_POINTS * 2];
@@ -482,6 +486,7 @@ public final class PaneControlsView extends View {
         }
         mFrostFrame = live;
         mFrostPaint.setColorFilter(frostFilter);
+        mFilterKeptBrightness = 0xFF;
         mFrostFilter = frostFilter;
         mFrostRect.set(frameRect);
         syncRefraction();
@@ -862,7 +867,9 @@ public final class PaneControlsView extends View {
             if (program != null) {
                 // The same aim, as uniforms; the rim runs along the tab's own free edge and its
                 // one corner, and past the two edges that are the frame's.
-                program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
+                float[] aim = mAim.scaleOffset;
+                program.setAim(aim[0], aim[1], aim[2], aim[3]);
+                program.setLocal(mAim.local);
                 GlassRefraction.Look look = mLook;
                 float reach = look == null ? 0f
                     : GlassRefraction.seamReachPx(look, program.density(), radiusPx);
@@ -870,8 +877,7 @@ public final class PaneControlsView extends View {
                     CornerTabGeometry.refractionSeams(corner()));
                 program.setRect(mRim[0], mRim[1], mRim[2], mRim[3], radiusPx);
             } else {
-                mFrostMatrix.setScale(mAim[0], mAim[1]);
-                mFrostMatrix.postTranslate(mAim[2], mAim[3]);
+                mAim.shaderMatrix(mFrostMatrix);
                 mFrostShader.setLocalMatrix(mFrostMatrix);
             }
             mFrostPaint.setAlpha(Math.round(255f * mProgress));
@@ -909,33 +915,23 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * Aim the frost at the wallpaper under this view, into {@link #mAim}: scale then translate,
-     * as {@code SharedFrameDrawable}'s aim states it. Recomputed on every draw: the tab is out
+     * Aim the frost at the wallpaper under this view, into {@link #mAim}, exactly as the slab it
+     * grows out of aims ({@link GlassAnchor#place}): past the page's slide, sink and tilt and the
+     * wallpaper's parallax, so the tab shows the same screen-fixed wallpaper as the slab while
+     * the page moves. Recomputed on every draw: the tab is out
      * only briefly and the overlay it lives in moves under the keyboard, so caching by position
      * buys nothing here and risks a stale aim.
      */
     private void aimFrost(@NonNull Bitmap frame) {
-        float slideX = layoutOriginOnScreen(mLocation);
-        // Past the page's slide and the wallpaper's parallax, exactly as the slab aims: the tab
-        // is cut from the same glass and has to show the same wallpaper mid-slide.
-        float shiftX = slideX + (mParallax == null ? 0f : mParallax.offsetPx());
-        mAim[0] = mFrostRect.width() / (float) Math.max(1, frame.getWidth());
-        mAim[1] = mFrostRect.height() / (float) Math.max(1, frame.getHeight());
-        mAim[2] = mFrostRect.left - mLocation[0] - shiftX;
-        mAim[3] = mFrostRect.top - mLocation[1];
-    }
-
-    /**
-     * This view's position on screen as laid out, ignoring every transform on the way up — the
-     * same anchor the pane's own slab uses ({@link com.termux.app.chrome.GlassAnchor}), so the
-     * tab's frost lines up with the slab it grows out of while the pane tilts or slides under a
-     * finger. The one transform that is not ignored is the wall page's slide, returned rather
-     * than folded in, since a page travelling over the wallpaper shows the wallpaper it is over.
-     *
-     * @return the wall page's translation on the way up, in px; 0 off the wall
-     */
-    private float layoutOriginOnScreen(@NonNull int[] out) {
-        return com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, out, mRootLocation);
+        GlassAnchor.place(this, mPlacement);
+        mAim.set(mPlacement.toScreen, mFrostRect, frame.getWidth(), frame.getHeight(),
+            mParallax == null ? 0f : mParallax.offsetPx());
+        // And past the sink's dim on the page's layer, as the slab does.
+        int kept = mPlacement.keptBrightness;
+        if (kept != mFilterKeptBrightness) {
+            mFilterKeptBrightness = kept;
+            mFrostPaint.setColorFilter(GlassFilters.undimmed(mFrostFilter, kept));
+        }
     }
 
     private void drawText(@NonNull Canvas canvas, @NonNull RectF button, @NonNull Action action,

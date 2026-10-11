@@ -360,6 +360,13 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void clearShellAttention(int shellPid);
 
+    /**
+     * A shell has ended, told before its pane or session is taken down, while its exit status is
+     * readable and it is still the current shell if it was on screen. For a feature that started
+     * a shell and wants to know how it went.
+     */
+    default void onShellFinished(@NonNull TerminalSession session) {}
+
     /** The corner chip that reports a session switch, an exit, or a refused split. */
     /**
      * Raises a notice the terminal is the subject of, held for as long as its kind is worth

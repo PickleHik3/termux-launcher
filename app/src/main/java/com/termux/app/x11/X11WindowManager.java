@@ -51,6 +51,15 @@ public final class X11WindowManager {
      */
     @VisibleForTesting static final int AWAIT_MANAGER_TRIES = 150;
 
+    /**
+     * How many tenths of a second an ordinary app waits for the manager on a display its own tap
+     * has just started. An app that maps its window before the manager holds the screen keeps the
+     * size it asked for and never gets the maximise rule; the wrapper only writes the pid down
+     * after a second's check, so that second is always spent. Five in all, so a manager that never
+     * comes costs the app no more than that.
+     */
+    @VisibleForTesting static final int AWAIT_MANAGER_FOR_APP_TRIES = 50;
+
     public static final String WM_PID_PATH =
         TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/termux-x11-wm.pid";
 
@@ -128,18 +137,27 @@ public final class X11WindowManager {
         if (command == null) return null;
         String pidFile = ProotDistro.singleQuote(WM_PID_PATH);
         String read = "wm=$(cat " + pidFile + " 2>/dev/null)\n";
-        String wait = !displayJustStarted ? "" :
-            "i=0\n"
-            + "while [ \"$i\" -lt " + AWAIT_MANAGER_TRIES + " ]; do\n"
-            + read
-            + "[ -n \"$wm\" ] && kill -0 \"$wm\" 2>/dev/null && break\n"
-            + "sleep 0.1\n"
-            + "i=$((i+1))\n"
-            + "done\n";
+        String wait = !displayJustStarted ? "" : awaitCommand(AWAIT_MANAGER_TRIES);
         return wait
             + read
             + "[ -n \"$wm\" ] && kill \"$wm\" 2>/dev/null\n"
             + "rm -f " + pidFile;
+    }
+
+    /**
+     * Shell lines that wait, up to {@code tries} tenths of a second, for the manager this launcher
+     * started to be running: the pid file naming a live process, not merely the file.
+     */
+    @NonNull
+    public static String awaitCommand(int tries) {
+        String pidFile = ProotDistro.singleQuote(WM_PID_PATH);
+        return "i=0\n"
+            + "while [ \"$i\" -lt " + tries + " ]; do\n"
+            + "wm=$(cat " + pidFile + " 2>/dev/null)\n"
+            + "[ -n \"$wm\" ] && kill -0 \"$wm\" 2>/dev/null && break\n"
+            + "sleep 0.1\n"
+            + "i=$((i+1))\n"
+            + "done\n";
     }
 
     /**

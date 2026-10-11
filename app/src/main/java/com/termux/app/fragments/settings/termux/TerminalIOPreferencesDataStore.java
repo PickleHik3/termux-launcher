@@ -78,6 +78,9 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "status_widget_ram":
                 mPreferences.setStatusWidgetRamEnabled(value);
                 break;
+            case "status_widget_media":
+                mPreferences.setStatusWidgetMediaEnabled(value);
+                break;
             case "status_widget_weather":
                 mPreferences.setStatusWidgetWeatherEnabled(value);
                 break;
@@ -124,6 +127,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isStatusWidgetCpuEnabled();
             case "status_widget_ram":
                 return mPreferences.isStatusWidgetRamEnabled();
+            case "status_widget_media":
+                return mPreferences.isStatusWidgetMediaEnabled();
             case "status_widget_weather":
                 return mPreferences.isStatusWidgetWeatherEnabled();
             case "status_widget_weather_fahrenheit":

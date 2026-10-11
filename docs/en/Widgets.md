@@ -4,7 +4,8 @@ Home is the place to the left of the terminal. It holds a grid of widgets on one
 Android home-screen widgets and the launcher's own. This page covers adding, arranging and sizing
 them.
 
-To get there, hold the page border and drag, or tap the house icon peeking in from the status bar.
+To get there, swipe right along the page's top or bottom border, or tap the house icon peeking in
+from the status bar.
 The widget page is switched on and off with **Settings → Apps → Home widgets** ("Show a widget page
 beside the terminal.").
 

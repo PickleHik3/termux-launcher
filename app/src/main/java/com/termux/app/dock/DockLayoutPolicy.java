@@ -471,12 +471,22 @@ public final class DockLayoutPolicy {
      */
     public static int dockIconSizePx(int rowContentHeightPx, float iconScale, float density) {
         float safeDensity = Math.max(0f, density);
-        int minPx = Math.round(safeDensity * MIN_DOCK_ICON_DP);
+        int minPx = minRowContentPx(safeDensity);
         int usablePx = Math.max(Math.round(safeDensity * 24f),
             rowContentHeightPx - Math.round(safeDensity * 2f));
         int candidate = Math.round(
             usablePx * AccessoryStackLayoutPolicy.computeDockIconFillRatio(iconScale));
         return Math.max(minPx, Math.min(Math.max(minPx, usablePx), candidate));
+    }
+
+    /**
+     * The shortest box a pinned-apps row lying down is ever handed: its smallest icon,
+     * {@link #MIN_DOCK_ICON_DP}. The row's box is its icon (or, alone, the baseline the icon is a
+     * share of), so a row that asks for more than this before it renders refuses sizes the dock
+     * really gives it — Docked at the bottom of the size stretch is a 21dp box.
+     */
+    public static int minRowContentPx(float density) {
+        return Math.round(Math.max(0f, density) * MIN_DOCK_ICON_DP);
     }
 
     /** One rail icon's size, the same on every side and independent of the dock's size preset. */

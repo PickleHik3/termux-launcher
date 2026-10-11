@@ -2,7 +2,9 @@
 
 Every shipped release, newest first. This is the whole changelog — the notes for the release
 currently being written live in their own `release-notes-v<version>.md` until it is published, then
-they move in here and that file goes. AGENTS.md has the convention and the voice.
+they move in here and that file goes. Pre-release channel drops (`vX.Y.Z-pre.N`) are not listed
+here: their rolling notes are `prerelease-notes.md`, and what they carried appears under the stable
+it shipped in. AGENTS.md has the convention and the voice.
 
 Entries are kept as they shipped and are not revised afterwards. Where an old entry describes the
 state of an edition, read it as of that release, not as of today.
@@ -13,6 +15,33 @@ or VAJ (`io.vaj.tl`) build; everything above it applies to all three.
 **Versioning.** From v1.0.0 every edition ships the same plain `X.Y.Z`; the edition is in the tag
 (`vX.Y.Z`, `nix-vX.Y.Z`, `vaj-vX.Y.Z`) and the APK name, and hotfixes bump the patch number. Older
 entries keep the tags they shipped under (`-nix`, `-vaj`, `+hotfixN`, `-a`).
+
+---
+
+## v1.0.3
+
+A split keyboard that keeps the keyboard's glass and no longer pushes the dock around, text selection on the terminal's last lines, and a font size setting.
+
+### New
+
+#### Terminal
+
+- Settings › Appearance › Terminal fonts has a Font size row: step it or type the exact size you want. Thanks to @AbineshDev01 (#50, #51).
+
+### Changes
+
+- The split keyboard keeps the keyboard's own glass behind it. Only the keys move to the sides, and the glass shows between them.
+- To change page from the bottom of the terminal, hold the border or the space between the terminal and the dock, then drag sideways.
+
+### Fixes
+
+- Switching to the split keyboard no longer pushes the extra keys row out of the dock (#49).
+- A split keyboard stays split after the launcher restarts.
+- Long-pressing the terminal's last lines selects text instead of changing page.
+
+### Editions
+
+Shipped as `nix-v1.0.3` and `vaj-v1.0.3`. Nothing was exclusive to an edition.
 
 ---
 

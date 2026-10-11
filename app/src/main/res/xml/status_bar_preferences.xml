@@ -21,6 +21,11 @@
             app:title="@string/settings_memory_usage_title"
             app:summary="@string/settings_memory_usage_summary"
             app:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="status_widget_media"
+            app:title="@string/settings_status_media_title"
+            app:summary="@string/settings_status_media_summary"
+            app:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_status_weather_header">
