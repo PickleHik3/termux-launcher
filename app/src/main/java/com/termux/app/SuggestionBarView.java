@@ -8059,11 +8059,14 @@ public final class SuggestionBarView extends GridLayout
             return getWidth() >= minStableWidth && lengthPx >= minStableLength;
         }
         int minStableWidth = Math.max(1, dp(120));
-        int minStableHeight = Math.max(1, dp(24));
+        // The shortest box the dock ever hands the row, not a figure of the view's own: a floor
+        // above it holds back every render of a row that small, for good (issue #49).
+        int minStableHeight = Math.max(1,
+            com.termux.app.dock.DockLayoutPolicy.minRowContentPx(screenDensity()));
         if (getWidth() < minStableWidth || getHeight() < minStableHeight) {
             return false;
         }
-        // The floors above are the row's own, and they are the ones that never lapse. The hint is
+        // The floors above are the ones that never lapse. The hint is
         // the dock's idea of the band the row was given — furniture the row is not (the page-tick
         // strip) sits in that band too, and a hint handed over ahead of the next layout pass
         // describes a row that does not exist yet — so it only ever holds the first frame back,
