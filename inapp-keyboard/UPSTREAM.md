@@ -257,6 +257,12 @@ fails when the catalogue has gone stale.
 - Enter's north swipe in the bundled `termux_launcher_qwerty.xml` (2026-10-09) is
   `tool:voice.dictate` — the launcher's own dictation — not upstream's `voice_typing`, which hands
   off to the voice engine the settings name (possibly the system's).
+- Picture paste glyph (local addition, 2026-10-12): `Keyboard2View.setPasteShowsPicture`,
+  pushed by the launcher while paste will put in a picture (one on the clipboard, or a fresh
+  screenshot it offers), makes `drawLabel`, `drawSubLabel`,
+  the corner-bounds probe and the popup labels draw `paste` and `pasteAsPlainText` as Nerd Font
+  nf-md-image (U+F02E9, symbols face) instead of their key-font glyphs. Only the drawn label
+  changes; size, colour and the value sent are the key's own. Upstream has no such state.
 
 ## Refresh procedure
 

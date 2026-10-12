@@ -57,6 +57,20 @@ public class StatusStatsClusterPolicyTest {
         assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(false, true, true));
     }
 
+    @Test public void cpuShowsOnlyWithItsSwitchAndPrivilegedAccess() {
+        assertTrue(StatusStatsClusterPolicy.cpuShown(true, true));
+        assertFalse(StatusStatsClusterPolicy.cpuShown(true, false));
+        assertFalse(StatusStatsClusterPolicy.cpuShown(false, true));
+        assertFalse(StatusStatsClusterPolicy.cpuShown(false, false));
+    }
+
+    @Test public void aCpuHiddenForWantOfAccessLeavesNoDotBehind() {
+        // Switch on, no access, RAM and weather on: the CPU-RAM dot goes with the CPU.
+        boolean cpuOn = StatusStatsClusterPolicy.cpuShown(true, false);
+        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(cpuOn, true, true));
+        assertTrue(StatusStatsClusterPolicy.ramWeatherDotVisible(true, true));
+    }
+
     @Test public void ramWeatherDotShowsOnlyWhenBothShow() {
         assertTrue(StatusStatsClusterPolicy.ramWeatherDotVisible(true, true));
         assertFalse(StatusStatsClusterPolicy.ramWeatherDotVisible(true, false));

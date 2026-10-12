@@ -98,13 +98,18 @@ map --label "Repo status" ctrl+alt+j send-text "cd ~/src\n"
 `app.launch` takes a package name, an app label or a stable id; an exact package match wins,
 otherwise the best fuzzy match.
 
-## Bind an app from the palette
+`contact.open` takes a contact's lookup key, then optionally `contact_id=`, and opens that
+contact's card. The key stays with the contact when it is renamed, so binding contacts from the
+palette, which writes both for you, is the easy way.
 
-Find the app in the palette's **Apps** section, hold its row (or press `Ctrl+Alt+Enter` on it), then
-press a key combination: `⏎` saves, `⌫` clears, `Esc` cancels. The palette writes the line under a
-managed header in the bindings file, labelled with the app's name, keeps your comments and order,
-and applies it at once.
+## Bind from the palette
 
+Hold an app, a contact or an action in the palette (or press `Ctrl+Alt+Enter` on it), then press a
+key combination: `⏎` saves, `⌫` clears, `Esc` cancels. The palette writes the line under a managed
+header in the bindings file, labelled with the row's name, keeps your comments and order, and
+applies it at once. Binding a row again moves its shortcut instead of adding a second one.
+
+- Rows that open a list or ask for a value cannot be bound here; write those in the file.
 - A bare key is refused; add Ctrl, Alt or Shift.
 - `⏎`, `Esc` and `⌫` cannot be captured. Bind those in the file.
 - If the combination is taken, the palette says by what and saves anyway, replacing it.

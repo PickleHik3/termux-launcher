@@ -397,6 +397,40 @@ public class LayoutModeViewsTest {
     }
 
     /**
+     * The heading row's Surface | Edge toggle is the global set's alone: it shows with nothing
+     * tapped, with the group asked for checked, and never for an element, whose set is one.
+     */
+    @Test
+    public void theGroupToggleShowsForTheGlobalSetOnly() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContextThemeWrapper themed = new ContextThemeWrapper(activity,
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
+        MaterialButtonToggleGroup toggle = panel.view().findViewById(R.id.appearance_editor_group);
+        assertEquals("GONE until the controller gives it groups", View.GONE,
+            toggle.getVisibility());
+        panel.showRow2(R.string.appearance_editor_target_all);
+        panel.setGroups(AppearanceLooks.groups(null, true), AppearanceLooks.Group.EDGE);
+        assertEquals(java.util.Arrays.asList(AppearanceLooks.Group.SURFACE,
+            AppearanceLooks.Group.EDGE), panel.shownGroups());
+        assertEquals(R.id.appearance_editor_group_edge, toggle.getCheckedButtonId());
+        assertTrue("Row B up: the toggle takes touches", toggle.isEnabled());
+        assertNotNull(toggle.getContentDescription());
+        for (AppearanceLooks.Target target : AppearanceLooks.Target.values()) {
+            panel.showRow2(R.string.appearance_editor_target_keyboard);
+            panel.setGroups(AppearanceLooks.groups(target, true), AppearanceLooks.Group.SURFACE);
+            assertTrue(target + " has no toggle", panel.shownGroups().isEmpty());
+            assertEquals(View.GONE, toggle.getVisibility());
+        }
+        panel.setGroups(AppearanceLooks.groups(null, false), AppearanceLooks.Group.SURFACE);
+        assertTrue("no Edge to offer: no toggle", panel.shownGroups().isEmpty());
+        panel.setGroups(AppearanceLooks.groups(null, true), AppearanceLooks.Group.SURFACE);
+        assertEquals(R.id.appearance_editor_group_surface, toggle.getCheckedButtonId());
+        panel.hideRow2();
+        assertFalse("Row B down: the toggle takes none", toggle.isEnabled());
+    }
+
+    /**
      * A switch into or out of Icons fades the rows that show in over the sheet; rows that do not
      * show are left opaque, and a zero fade (or a cut-short one) settles everything at full alpha.
      */

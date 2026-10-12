@@ -136,6 +136,7 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_COMMAND_PALETTE, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_LAUNCH, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_CONTACT_OPEN, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_KEY_INSPECTOR, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APPEARANCE_SET_WALLPAPER, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APPEARANCE_TOGGLE_WALLPAPER, Band.LAUNCHER);

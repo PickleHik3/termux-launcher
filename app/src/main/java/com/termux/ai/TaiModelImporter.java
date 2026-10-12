@@ -357,6 +357,169 @@ public final class TaiModelImporter {
         }
     }
 
+    // ---- folders saved by Export AI models ----
+
+    /** A model folder written by Export AI models: where it is in the picked tree, and what it holds. */
+    public static final class ExportedModel {
+        @NonNull final String documentId;
+        @NonNull public final TaiModelExport.Manifest manifest;
+
+        ExportedModel(@NonNull String documentId, @NonNull TaiModelExport.Manifest manifest) {
+            this.documentId = documentId;
+            this.manifest = manifest;
+        }
+    }
+
+    /**
+     * The saved models in a picked folder: the folder itself when it is one model's folder, else
+     * each model folder directly inside it (the {@link TaiModelExport#FOLDER_NAME} folder the export
+     * made), or inside a {@link TaiModelExport#FOLDER_NAME} folder in it (the folder the export was
+     * pointed at). Empty for any other folder, and when the folder cannot be read. Reads the small
+     * manifests only; nothing is copied.
+     */
+    @NonNull
+    public java.util.List<ExportedModel> exportedModels(@NonNull Uri tree) {
+        java.util.List<ExportedModel> found = new java.util.ArrayList<>();
+        try {
+            String rootId = android.provider.DocumentsContract.getTreeDocumentId(tree);
+            java.util.List<String[]> top = listChildren(tree, rootId);
+            ExportedModel self = exportedModel(tree, rootId, top);
+            if (self != null) {
+                found.add(self);
+                return found;
+            }
+            for (String[] child : top) {
+                if (!android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(child[2])) continue;
+                java.util.List<String[]> children = listChildren(tree, child[0]);
+                ExportedModel model = exportedModel(tree, child[0], children);
+                if (model != null) {
+                    found.add(model);
+                } else if (TaiModelExport.FOLDER_NAME.equals(child[1])) {
+                    // The folder the export was pointed at, picked again: its models sit one level down.
+                    for (String[] grandchild : children) {
+                        if (!android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(grandchild[2])) continue;
+                        ExportedModel nested = exportedModel(tree, grandchild[0], listChildren(tree, grandchild[0]));
+                        if (nested != null) found.add(nested);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            found.clear();
+        }
+        return found;
+    }
+
+    /** The folder's model when it holds a readable manifest, else null. */
+    @Nullable
+    private ExportedModel exportedModel(@NonNull Uri tree, @NonNull String documentId, @NonNull java.util.List<String[]> children) {
+        for (String[] child : children) {
+            if (!TaiModelExport.MANIFEST_NAME.equals(child[1])
+                || android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(child[2])) continue;
+            Uri document = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, child[0]);
+            try (InputStream input = appContext.getContentResolver().openInputStream(document)) {
+                if (input == null) return null;
+                java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    bytes.write(buffer, 0, read);
+                    if (bytes.size() > TaiModelExport.MAX_MANIFEST_BYTES) return null;
+                }
+                return new ExportedModel(documentId,
+                    TaiModelExport.readManifest(new JSONObject(bytes.toString("UTF-8"))));
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /** {document id, display name, MIME type} of each child of {@code documentId}. */
+    @NonNull
+    private java.util.List<String[]> listChildren(@NonNull Uri tree, @NonNull String documentId) throws java.io.IOException {
+        java.util.List<String[]> children = new java.util.ArrayList<>();
+        Uri uri = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, documentId);
+        try (Cursor cursor = appContext.getContentResolver().query(uri, new String[]{
+            android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE}, null, null, null)) {
+            if (cursor == null) throw new java.io.IOException("Could not read the selected folder.");
+            while (cursor.moveToNext() && children.size() < TaiModelExport.MAX_FILES) {
+                String id = cursor.getString(0);
+                if (id != null) children.add(new String[]{id, cursor.getString(1), cursor.getString(2)});
+            }
+        }
+        return children;
+    }
+
+    /**
+     * Copies one saved model into app-private storage and registers it under its own id with its
+     * own record, so it comes back as the model it was: the same id (which the feature choices and
+     * per-model settings name), name, capabilities, runtime and files. Every file the manifest
+     * names must be there at its size; the package is checked as a download is before it becomes
+     * visible. A model whose id is already on this phone is left alone ({@code model_exists}).
+     * {@code running} is the byte count across every model being added, for the listener.
+     */
+    @NonNull
+    public JSONObject importExportedModel(@NonNull Uri tree, @NonNull ExportedModel saved,
+                                          @Nullable ProgressListener listener, @NonNull long[] running) throws JSONException {
+        TaiModelExport.Manifest manifest = saved.manifest;
+        File destination = new File(store.getModelsDirectory(), manifest.id);
+        if (destination.exists() || store.getUserModel(manifest.id) != null)
+            return error(409, "model_exists", "This model is already on this phone.");
+        File staging = null;
+        try {
+            java.util.LinkedHashMap<String, Uri> documents = new java.util.LinkedHashMap<>();
+            collectDocuments(tree, saved.documentId, "", documents, 0);
+            if (!store.getModelsDirectory().isDirectory() && !store.getModelsDirectory().mkdirs())
+                throw new java.io.IOException("Could not create the model directory.");
+            staging = new File(store.getModelsDirectory(), ".import-" + java.util.UUID.randomUUID());
+            if (!staging.mkdirs()) throw new java.io.IOException("Could not create the import directory.");
+            for (TaiModelExport.Entry entry : manifest.files) {
+                Uri document = documents.get(entry.path);
+                if (document == null) throw new java.io.IOException("The saved model is missing " + entry.path);
+                File output = new File(staging, entry.path);
+                File parent = output.getParentFile();
+                if (parent == null || !parent.isDirectory() && !parent.mkdirs())
+                    throw new java.io.IOException("Could not create the package directory.");
+                if (staging.getUsableSpace() < entry.size)
+                    throw new java.io.IOException("Not enough storage to import this model.");
+                copyDocument(document, output, entry.size, listener, running);
+                if (output.length() != entry.size)
+                    throw new java.io.IOException("The saved copy of " + entry.path + " is incomplete.");
+            }
+            TaiModelSpec staged = TaiModelExport.restoredSpec(manifest, staging);
+            checkRestored(staged);
+            if (!staging.renameTo(destination)) throw new java.io.IOException("Could not finish importing the model.");
+            staging = null;
+            TaiModelSpec spec = TaiModelExport.restoredSpec(manifest, destination);
+            if (manifest.exposure != null) store.setExposure(spec.id, manifest.exposure);
+            store.upsertUserModel(spec);
+            return new JSONObject().put("ok", true).put("imported", true).put("model", spec.toJson());
+        } catch (Exception e) {
+            JSONObject result = failed(e);
+            result.put("_statusCode", 400);
+            return result;
+        } finally {
+            if (staging != null) deleteImportDirectory(staging);
+        }
+    }
+
+    /** The same readability check each backend's own import or download makes before registering. */
+    private void checkRestored(@NonNull TaiModelSpec spec) throws Exception {
+        File main = new File(spec.localPath == null ? "" : spec.localPath);
+        if (TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(spec.backend)) {
+            TaiDiffusionPackage.Result checked = TaiDiffusionPackage.inspect(main, TaiDiffusionPackage.parseType(spec.architecture));
+            if (!checked.ok()) throw new java.io.IOException(checked.message);
+        } else if (TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+            TaiMnnPackage.validate(main);
+        } else if (!main.isFile() || main.length() == 0L) {
+            // A LiteRT model's sizes were checked file by file above; a voice model's graph can be
+            // smaller than the single-file import's minimum, so only its presence is asked here.
+            throw new ImportFailure(REASON_UNREADABLE, "The saved file does not look like a readable model package.");
+        }
+    }
+
     /** Installs the bundled Stable Diffusion tokenizer into {@code directory} when it needs and matches it. */
     private void checkDiffusionTokenizer(@NonNull File directory, int type) throws java.io.IOException {
         if (type == TaiDiffusionPackage.TYPE_SANA) return;

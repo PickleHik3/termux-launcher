@@ -28,16 +28,19 @@ public final class CommandPaletteFilter {
      * Score tiers, highest first. Every title tier — including the subsequence pass — outranks
      * every non-title tier, so what the row actually says decides the order before its id,
      * category, description or shortcut get a vote.
+     *
+     * <p>This is also the one scale app and contact rows are placed on, so a search ranks all three
+     * sources in a single list ({@link CommandPaletteRanking}).
      */
-    private static final int SCORE_EXACT_TITLE = 100;
-    private static final int SCORE_TITLE_PREFIX = 90;
-    private static final int SCORE_WORD_PREFIX = 80;
-    private static final int SCORE_TITLE_SUBSTRING = 70;
-    private static final int SCORE_TITLE_SUBSEQUENCE = 65;
-    private static final int SCORE_ID_SUBSTRING = 60;
-    private static final int SCORE_CATEGORY_MATCH = 50;
-    private static final int SCORE_TEXT_MATCH = 45;
-    private static final int SCORE_NONE = 0;
+    static final int SCORE_EXACT_TITLE = 100;
+    static final int SCORE_TITLE_PREFIX = 90;
+    static final int SCORE_WORD_PREFIX = 80;
+    static final int SCORE_TITLE_SUBSTRING = 70;
+    static final int SCORE_TITLE_SUBSEQUENCE = 65;
+    static final int SCORE_ID_SUBSTRING = 60;
+    static final int SCORE_CATEGORY_MATCH = 50;
+    static final int SCORE_TEXT_MATCH = 45;
+    static final int SCORE_NONE = 0;
 
     /** Fuzzy subsequence matching needs at least this many characters to be useful. */
     private static final int FUZZY_MIN_QUERY_LENGTH = 2;

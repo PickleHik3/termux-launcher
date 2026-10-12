@@ -31,7 +31,8 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
         if (context == null) return;
         setPreferencesFromResource(R.xml.about_support_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
-        url("documentation", "https://github.com/PickleHik3/termux-launcher/tree/dev/docs");
+        url("documentation", TermuxConstants.TERMUX_LAUNCHER_DOCS_URL);
+        url("discord", TermuxConstants.TERMUX_LAUNCHER_DISCORD_URL);
         url("report_issue", "https://github.com/PickleHik3/termux-launcher/issues");
         url("source_code", "https://github.com/PickleHik3/termux-launcher");
         configureAbout(context);

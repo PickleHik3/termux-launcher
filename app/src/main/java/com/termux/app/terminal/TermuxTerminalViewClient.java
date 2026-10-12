@@ -1514,14 +1514,31 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         });
     }
 
+    /** Ctrl+Alt+V, the palette's and the local API's {@code clipboard.paste}: into the current pane. */
     public void doPaste() {
         TerminalSession session = mHost.currentSession();
         if (session == null)
             return;
         if (!session.isRunning())
             return;
-        String text = ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
-        if (text != null)
-            session.getEmulator().paste(text);
+        TerminalEmulator emulator = session.getEmulator();
+        if (emulator != null)
+            mTermuxTerminalSessionActivityClient.pasteClipboard(emulator);
+    }
+
+    /** A middle click or the accessibility paste on {@code view}: into that pane. */
+    @Override
+    public void onPasteRequest(TerminalView view) {
+        if (view.mEmulator != null)
+            mTermuxTerminalSessionActivityClient.pasteClipboard(view.mEmulator);
+    }
+
+    /** A picture the system keyboard inserted: pasted the way a picture on the clipboard is. */
+    @Override
+    public boolean onCommitContent(TerminalView view, Uri uri, String mime, Runnable release) {
+        if (view.mEmulator == null)
+            return false;
+        mTermuxTerminalSessionActivityClient.pasteContent(view.mEmulator, uri, mime, release);
+        return true;
     }
 }

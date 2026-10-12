@@ -2,7 +2,7 @@
 <!--
   The Appearance editor (appearance-layout-editor SPEC §3): the frame's tap targets, the bottom
   area's mode pill, Look slider, the Custom row's vertical sliders, Layout mode's Style toggle and
-  Corners / Margin sliders, and the doors that open it. Kept in their own file so the editor's copy travels
+  Corner radius / Margin sliders, and the doors that open it. Kept in their own file so the editor's copy travels
   together.
 -->
 <resources>
@@ -55,11 +55,22 @@
     <string name="appearance_editor_grain">Grain · %1$d%%</string>
     <string name="appearance_editor_tint">Tint · %1$d%%</string>
     <string name="appearance_editor_tint_name">Tint</string>
+    <!-- The global row's two groups, switched in its heading row: the shared glass and shape, and
+         the glass edge. -->
+    <string name="appearance_editor_group_description">Settings to show</string>
+    <string name="appearance_editor_group_surface">Surface</string>
+    <string name="appearance_editor_group_edge">Edge</string>
+    <!-- The Edge group: how the glass edge bends and lights the wallpaper behind it. -->
+    <string name="appearance_editor_bend">Bend · %1$d dp</string>
+    <string name="appearance_editor_edge_width">Edge width · %1$d dp</string>
+    <string name="appearance_editor_edge_light">Edge light · %1$d%%</string>
+    <string name="appearance_editor_specular">Shine · %1$d%%</string>
+    <string name="appearance_editor_dispersion">Dispersion · %1$d%%</string>
     <!-- The keyboard's door to its theme page in Settings; also that page's title. -->
     <string name="appearance_editor_keyboard_theme">Keyboard theme</string>
 
     <!-- Layout mode's global shape: no Look sets these. -->
-    <string name="appearance_editor_corners">Corners · %1$d dp</string>
+    <string name="appearance_editor_corners">Corner radius · %1$d dp</string>
     <string name="appearance_editor_corners_description">Corner radius</string>
     <string name="appearance_editor_margin">Margin · %1$d dp</string>
     <string name="appearance_editor_margin_description">Margin</string>

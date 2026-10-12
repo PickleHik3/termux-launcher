@@ -187,8 +187,9 @@ public final class SurfacePresets {
     /**
      * The user's saved look as a preset, or null when they have not saved one.
      *
-     * <p>Stored rather than derived, so it survives every later edit: this is what the fifth card
-     * applies, and what its mock is drawn from.
+     * <p>Stored rather than derived, so it survives every later edit. Written by Done at the Custom
+     * stop; the Look slider's move to Custom no longer applies it (Custom starts from the Look on
+     * screen), so today it is a record, kept for a later way back to it.
      */
     @Nullable
     public static Preset custom(@NonNull TermuxAppSharedPreferences prefs) {

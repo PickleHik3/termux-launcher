@@ -1,8 +1,11 @@
 package com.termux.app.terminal;
 
 import android.app.Application;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.RectF;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.provider.Settings;
 
@@ -12,6 +15,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,7 +30,8 @@ import static org.junit.Assert.assertTrue;
  * Robolectric 4.13 runs LEGACY graphics, so Canvas and Path are shadow no-ops: no test here can
  * prove the palette's corners are actually clipped — that is on-device work. What these do cover is
  * that every drawing mode still completes, which is what guards the cached frame path against
- * rewind and null bugs, plus the pure height arithmetic.
+ * rewind and null bugs, plus the pure height arithmetic. The keycap cases opt in to native
+ * graphics, since their widths come from real text metrics.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -131,6 +136,93 @@ public class CommandPaletteViewTest {
                 ApplicationProvider.getApplicationContext().getContentResolver(),
                 Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
         }
+    }
+
+    /**
+     * An app or contact pill differs from an action key only in what leads it: an inset, the
+     * 14 dp mark and its gap, where a key has its padding, glyph and gap. Same label, same
+     * everything else, so the widths differ by exactly that.
+     */
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w360dp-h640dp-xxhdpi")
+    public void keycaps_aPillIsWiderThanAKeyByItsMarkAgainstTheGlyph() {
+        CommandPaletteView view = stripOnly();
+        float density = view.getResources().getDisplayMetrics().density;
+        CommandPaletteView.Keycap key = new CommandPaletteView.Keycap("▸", "mail");
+
+        view.setKeycaps(Collections.singletonList(key));
+        RectF keyRect = view.keycapRect(0);
+        view.setKeycaps(Collections.singletonList(CommandPaletteView.Keycap.app("mail", null)));
+        RectF appRect = view.keycapRect(0);
+        view.setKeycaps(Collections.singletonList(
+            CommandPaletteView.Keycap.contact("mail", "Mail Room", null)));
+        RectF contactRect = view.keycapRect(0);
+
+        float mark = CommandPaletteView.MARK_SIZE * density;
+        float markLead = (appRect.height() - mark) / 2f + mark
+            + CommandPaletteView.MARK_GAP * density;
+        float glyphLead = CommandPaletteView.CAP_PAD_H * density + key.mGlyphWidth
+            + CommandPaletteView.CAP_LEAD_GAP * density;
+        assertTrue(appRect.width() > keyRect.width());
+        assertEquals(markLead - glyphLead, appRect.width() - keyRect.width(), 0.5f);
+        assertEquals(appRect.width(), contactRect.width(), 0.01f);
+        assertEquals("one height for every kind", keyRect.height(), appRect.height(), 0.01f);
+    }
+
+    /** A full strip of mixed kinds fits a 360 dp phone's palette, one cap after another. */
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w360dp-h640dp-xxhdpi")
+    public void keycaps_fourMixedCapsFitA360dpPalette_withoutOverlapping() {
+        CommandPaletteView view = stripOnly();
+        List<CommandPaletteView.Keycap> caps = Arrays.asList(
+            CommandPaletteView.Keycap.app("Shizuku", new ColorDrawable(Color.BLUE)),
+            CommandPaletteView.Keycap.contact("Sam", "Sam Rivera", null),
+            CommandPaletteView.Keycap.app("Solid Explorer", null),
+            new CommandPaletteView.Keycap("⌨", "docked"));
+        view.setKeycaps(caps);
+
+        RectF frame = openFrame(view);
+        RectF previous = null;
+        for (int i = 0; i < caps.size(); i++) {
+            RectF cap = view.keycapRect(i);
+            assertTrue("cap " + i + " inside the palette",
+                cap.left >= frame.left - 0.5f && cap.right <= frame.right + 0.5f);
+            if (previous != null)
+                assertTrue("cap " + i + " clears the one before", cap.left >= previous.right);
+            float room = view.keycapLabelRoom(i);
+            assertTrue("cap " + i + " keeps room for its label", room > 0f);
+            assertTrue("a label is never given more than it needs",
+                room <= caps.get(i).mLabelWidth + 0.01f);
+            previous = cap;
+        }
+        // Draws with real text, the icon and the monogram, allocating its labels once.
+        Bitmap bitmap = Bitmap.createBitmap(view.getWidth(), view.getHeight(),
+            Bitmap.Config.ARGB_8888);
+        view.draw(new Canvas(bitmap));
+        bitmap.recycle();
+    }
+
+    /** A palette open on a 360 dp screen, inset as the controller insets it, with no rows. */
+    private static CommandPaletteView stripOnly() {
+        CommandPaletteView view = new CommandPaletteView(
+            ApplicationProvider.getApplicationContext());
+        view.setQuery("", "search");
+        int width = view.getResources().getDisplayMetrics().widthPixels;
+        int height = view.getResources().getDisplayMetrics().heightPixels;
+        view.setModalBounds(new RectF(0f, 0f, width, height));
+        view.setFrame(openFrame(view), 26f, 1f, 1f, 0f, 1f);
+        view.layout(0, 0, width, height);
+        return view;
+    }
+
+    /** The open frame on this screen: the full width less the controller's 14 dp sides. */
+    private static RectF openFrame(CommandPaletteView view) {
+        float density = view.getResources().getDisplayMetrics().density;
+        float side = 14f * density;
+        return new RectF(side, 40f * density,
+            view.getResources().getDisplayMetrics().widthPixels - side, 240f * density);
     }
 
     private static CommandPaletteView palette() {

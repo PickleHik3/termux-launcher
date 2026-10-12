@@ -559,6 +559,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Trailing CPU/RAM/weather widgets, their data controllers, and the shared detail card host. */
     @Nullable private com.termux.app.statusbar.SystemStatsController mStatsController;
     @Nullable private com.termux.app.statusbar.AiIndicatorController mAiIndicatorController;
+    /**
+     * The CPU reading needs privileged access, so it shows or hides as access comes and goes.
+     * Registered from onStart to onStop, the same span the stats sampler runs: a stopped activity
+     * re-reads availability on its next onStart anyway.
+     */
+    private final com.termux.privileged.PrivilegedAvailabilitySignal.Listener
+        mPrivilegedAvailabilityListener = available -> updateStatusWidgets();
     @Nullable private com.termux.app.statusbar.SystemStatsCardView mStatsCardView;
     /**
      * Presentation smoothing for the two bar readings only. One controller feeds both surfaces, and
@@ -729,6 +736,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int REQUEST_CODE_VOICE_INPUT_MICROPHONE = 4717;
     /** The built-in agenda and calendar widgets asking to read the calendar. */
     private static final int REQUEST_CODE_WIDGET_CALENDAR = 4718;
+    /** The command palette's contact search asking to read the contacts. */
+    public static final int REQUEST_CODE_PALETTE_CONTACTS = 4719;
     /** Whether this process has already asked for the calendar once; see the widget host. */
     private boolean mWidgetCalendarAsked;
     @Nullable private TerminalSession mVoiceTypingTargetSession;
@@ -2080,6 +2089,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // updateStatusWidgets(), reached solely from refreshTerminalWindowBar()'s tail — which
         // neither onStart nor onResume calls. Without this the CPU and memory readings never
         // resumed after leaving the app and coming back.
+        PrivilegedBackendManager.getInstance().addAvailabilityListener(mPrivilegedAvailabilityListener);
         updateStatusWidgets();
         // onStop let go of the display's surface; nothing else re-attaches it when the wall
         // already rests on the Display place, and a display whose surface is not attached takes
@@ -8467,6 +8477,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mKeybindHintPresenter.hideNow(false);
         if (mStatsController != null) mStatsController.stop();
         if (mAiIndicatorController != null) mAiIndicatorController.stop();
+        PrivilegedBackendManager.getInstance().removeAvailabilityListener(mPrivilegedAvailabilityListener);
         // Sampling stops here, so the smoothed history stops meaning anything. Dropped now rather
         // than aged out on resume: the first reading the user sees again has to be the true one.
         mBarCpuSmoother.reset();
@@ -11517,6 +11528,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         }
 
+        @Override public boolean isGlassRefractionActive() {
+            return currentFancierGlassLook() != null;
+        }
+
         @Override @Nullable public int[] terminalFrameRectInRoot() {
             View host = findViewById(R.id.terminal_surface_host);
             View root = findViewById(R.id.terminal_root_container);
@@ -12024,6 +12039,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void paste() {
+            if (mTermuxTerminalSessionActivityClient == null)
+                return;
+            com.termux.app.terminal.inappkeyboard.RecentScreenshot.Shot screenshot =
+                mInAppKeyboard == null ? null : mInAppKeyboard.takeScreenshotToPaste();
+            if (screenshot != null)
+                mTermuxTerminalSessionActivityClient.pasteContentIntoFocused(screenshot.uri(), screenshot.mime);
+            else
+                mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(getCurrentSession());
+        }
+
+        @Override
+        public void pasteClipboard() {
             if (mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(getCurrentSession());
         }
@@ -16547,6 +16574,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mWelcomeSheet != null) mWelcomeSheet.refresh();
         } else if (requestCode == REQUEST_CODE_WIDGET_CALENDAR) {
             if (mWidgetPaneController != null) mWidgetPaneController.onCalendarPermissionChanged();
+        } else if (requestCode == REQUEST_CODE_PALETTE_CONTACTS) {
+            // The palette's contact search: its rows rebuild themselves
+            // from the result, granted or not.
+            boolean granted = grantResults.length > 0
+                && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            getCommandPaletteController().onContactsAccessChanged(granted);
         } else if (requestCode == REQUEST_CODE_VOICE_INPUT_MICROPHONE) {
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -22314,7 +22347,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.terminal_status_dot_cpu_ram);
         com.termux.app.statusbar.MaterialDotSeparatorView ramWeatherDot =
             findViewById(R.id.terminal_status_dot_ram_weather);
-        boolean cpuOn = mPreferences != null && mPreferences.isStatusWidgetCpuEnabled();
+        // The CPU reading needs privileged access; without it the widget hides rather than show a
+        // dash, and comes back through mPrivilegedAvailabilityListener. The backend itself is
+        // brought up (and retried) by refreshPrivilegedBackendIfNeeded() on every resume.
+        boolean cpuOn = com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
+            mPreferences != null && mPreferences.isStatusWidgetCpuEnabled(),
+            PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
         boolean ramOn = mPreferences != null && mPreferences.isStatusWidgetRamEnabled();
         boolean weatherOn = mPreferences != null && mPreferences.isStatusWidgetWeatherEnabled();
         View widgetSlot = findViewById(R.id.terminal_top_widget_area);
@@ -23921,6 +23959,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override @Nullable public TerminalSession openCommandPane(
                 @NonNull java.util.List<String> command, @Nullable String cwd,
                 @Nullable String title, boolean focus) {
+            return openCommandPane(command, cwd, title, focus, null);
+        }
+
+        @Override @Nullable public TerminalSession openCommandPane(
+                @NonNull java.util.List<String> command, @Nullable String cwd,
+                @Nullable String title, boolean focus,
+                @Nullable com.termux.app.terminal.TerminalPaneController.PlacementRequest placement) {
             if (!isSplitPanesEnabled() || mPaneController == null
                 || mPaneController.getActiveSession() == null) return null;
             TerminalSession shell = createCommandShell(command, cwd, title);
@@ -23936,10 +23981,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return null;
             }
             boolean[] added = {false};
-            runWithoutNotices(() -> added[0] = mPaneController.addPane(shell, focus));
+            runWithoutNotices(() -> added[0] = placement == null
+                ? mPaneController.addPane(shell, focus)
+                : mPaneController.addPaneAt(shell, placement, focus));
             if (!added[0]) {
                 mTermuxService.killTermuxSession(shell);
                 return null;
+            }
+            // A pane placed in a window that is not on screen is focused there; bringing it up
+            // is what focus means, as pane.focus does for a pane in another window.
+            if (focus && mPaneController.windowOf(shell) != mPaneController.activeWindow()) {
+                activateSessionInPanes(shell);
             }
             return shell;
         }

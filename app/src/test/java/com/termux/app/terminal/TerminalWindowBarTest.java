@@ -181,8 +181,12 @@ public class TerminalWindowBarTest {
         assertEquals("work", ((TextView) tabs.getChildAt(1)).getText().toString());
     }
 
+    /**
+     * A window that is working and asking wears the ask: the mark tints the chip instead of the
+     * breath, so it holds still and costs no frames, and the breath comes back once it is seen.
+     */
     @Test
-    public void attentionAndBusyBothShow_onTheCornerAndOnTheOutline() {
+    public void aBellOutranksTheBreathAndHandsItBackOnceSeen() {
         TerminalWindowBar.WindowItem both = new TerminalWindowBar.WindowItem("home", "home")
             .withBusy(true).withAttention(true);
         assertTrue(both.busy);
@@ -194,18 +198,54 @@ public class TerminalWindowBarTest {
         TerminalWindowBar bar = attachedBar();
         bar.setWindows(Arrays.asList(both), 0);
         LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
-        // The label is the title alone either way; the bell has the corner and the ring has the
-        // outline, so a window that is working and asking now says both at once.
+        // The label is the title alone either way; the bell takes the whole chip, still.
         assertEquals("home", ((TextView) tabs.getChildAt(0)).getText().toString());
         assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
         assertTrue(bar.chipWatermarkAt(0).busy());
-        assertTrue(bar.isBusyAnimationRunning());
+        assertFalse(bar.chipWatermarkAt(0).breathing());
+        assertFalse("a marked chip is static", TerminalWindowBar.needsClock(both));
+        assertFalse(bar.isBusyAnimationRunning());
 
-        // Acknowledged, the corner clears and the ring keeps turning.
+        // Lazy mode's working tint gives way to the mark the same way.
+        bar.setLazyMode(true);
+        assertFalse(bar.chipWatermarkAt(0).workingTint());
+        bar.setLazyMode(false);
+
+        // Acknowledged, the mark clears and the breath comes back.
         bar.setWindows(Arrays.asList(both.withAttention(false)), 0);
         assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
         assertTrue(bar.chipWatermarkAt(0).busy());
+        assertTrue(bar.chipWatermarkAt(0).breathing());
+        assertTrue(TerminalWindowBar.needsClock(both.withAttention(false)));
         assertTrue(bar.isBusyAnimationRunning());
+    }
+
+    /**
+     * Each mark tints the chip in its own colour: done in the done colour and filled, attention in
+     * the attention colour and filled, and a failure in the attention colour as an edge alone — the
+     * hollow form is all that tells it from a window asking for the user.
+     */
+    @Test
+    public void eachMarkWearsItsColourAndOnlyAFailureGoesUnfilled() {
+        assertFalse(ChipWatermarkDrawable.Mark.NONE.filled());
+        assertTrue(ChipWatermarkDrawable.Mark.ATTENTION.filled());
+        assertTrue(ChipWatermarkDrawable.Mark.DONE.filled());
+        assertFalse(ChipWatermarkDrawable.Mark.FAILED.filled());
+
+        TerminalWindowBar bar = attachedBar();
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("build", "build");
+        bar.setWindows(Arrays.asList(item.withAttention(true), item.withDone(true),
+            item.withDone(true, true)), 0);
+        ChipWatermarkDrawable attention = bar.chipWatermarkAt(0);
+        ChipWatermarkDrawable done = bar.chipWatermarkAt(1);
+        ChipWatermarkDrawable failed = bar.chipWatermarkAt(2);
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, attention.mark());
+        assertEquals(ChipWatermarkDrawable.Mark.DONE, done.mark());
+        assertEquals(ChipWatermarkDrawable.Mark.FAILED, failed.mark());
+        assertTrue("done is not the attention colour", done.markColor() != attention.markColor());
+        assertEquals(attention.markColor(), failed.markColor());
+        // None of the three asks the bar for frames.
+        assertFalse(bar.isBusyAnimationRunning());
     }
 
     /**
@@ -528,12 +568,12 @@ public class TerminalWindowBarTest {
     }
 
     /**
-     * The turning arc used to be driven by a ValueAnimator, so it redrew every working pill once
-     * per vsync — 154 times a turn on a 120 Hz panel, and a Choreographer callback every frame for
-     * as long as any shell was working. It now runs on a clock of its own at about 30 a second.
+     * The working ring used to be driven by a ValueAnimator, so it redrew every working pill once
+     * per vsync, a Choreographer callback every frame for as long as any shell was working. The
+     * breath runs on a clock of its own, four steps a second.
      */
     @Test
-    public void aTurningRingRedrawsOnItsOwnClockRatherThanEveryVsync() {
+    public void aBreathingChipRedrawsOnItsOwnClockRatherThanEveryVsync() {
         TerminalWindowBar bar = attachedBar();
         bar.setWindows(Arrays.asList(
             new TerminalWindowBar.WindowItem("home", "home", true)), 0);
@@ -541,18 +581,19 @@ public class TerminalWindowBarTest {
         int before = bar.mRingRedraws;
 
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
-            .idleFor(com.termux.app.statusbar.WindowActivityRing.SPIN_MS,
+            .idleFor(4000L,
                 java.util.concurrent.TimeUnit.MILLISECONDS);
 
         int redraws = bar.mRingRedraws - before;
-        assertTrue("one turn cost " + redraws + " redraws", redraws >= 30 && redraws <= 45);
+        // Four seconds at 4 Hz is about sixteen steps; vsync would be hundreds.
+        assertTrue("4 s cost " + redraws + " redraws", redraws >= 14 && redraws <= 18);
 
         // And it stops with the work, rather than ticking on behind an idle row.
         bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem("home", "home")), 0);
         assertFalse(bar.isBusyAnimationRunning());
         int settled = bar.mRingRedraws;
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
-            .idleFor(com.termux.app.statusbar.WindowActivityRing.SPIN_MS,
+            .idleFor(4000L,
                 java.util.concurrent.TimeUnit.MILLISECONDS);
         assertEquals(settled, bar.mRingRedraws);
     }
