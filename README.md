@@ -1,37 +1,21 @@
-# Termux Launcher
-
-> [!TIP]
-> **Termux Launcher v1.0 is out!**
->
-> It's been exactly almost a year since I asked GPT-5 Codex (god bless its soul) to add sixel image drawing to [TEL](https://github.com/t-e-l/tel). A few too many “just one more feature”s later, the launcher I'd always pictured in my head is finally here for you all.
->
-> [Get the release](https://github.com/PickleHik3/termux-launcher/releases/tag/v1.0.0) · [Read the full story](project-docs/release-notes.md#v100)
-
-> [!NOTE]
-> **This project is entirely vibe-coded.**
-> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been stable so far, does not appear to have any noticeable impact on battery life, and uses about ~350 MB of RAM at idle (for reference, something like smart launcher uses about 250 on fresh install).
->
-> **Security review wanted**
->
-> I’ve made several security-review passes over the codebase using LLMs (FABLE), i would have considered it enough if it continued to be just my launcher, but now that there are others using it, i would really appreciate if an actual developer can have a quick look at the code.
->
-> I’m actively looking for someone with Android, Termux, or application-security experience who would be willing to review the project. If you spot anything security-related, please open an issue or discussion.
-
-> [!IMPORTANT]
-> **This is an independent fork.** Termux Launcher is not affiliated with, endorsed by, or
-> supported by the official [Termux](https://github.com/termux/termux-app) project or its
-> maintainers. It is a separately maintained modification that reuses the Termux name only to
-> describe what it is built on. Do not report issues with this fork to Termux — file them
-> [here](https://github.com/PickleHik3/termux-launcher/issues). The `com.termux` edition shares a
-> package name with official Termux and **replaces it** on the device; the other editions install
-> side by side. Termux is a trademark of its respective owners.
-
 <p align="center">
   <img src="screenshots/banner.webp" alt="Termux Launcher showing seven authentic Android screens: terminal home, split panes, widgets, voice dictation, Dawn notes, tlstore, and the app drawer" width="100%">
 </p>
 
-**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | **[💬 Discord](https://discord.gg/sWSCRh7aVR)** | [Releases & changelog](https://github.com/PickleHik3/termux-launcher/releases) | [Local AI API](docs/en/LauncherCtl_API.md) | [On-device AI](docs/en/On_Device_AI.md)
+<p align="center">
+  <a href="https://picklehik3.github.io/termux-launcher-site/"><b>🌐 Website &amp; docs</b></a> ·
+  <a href="https://discord.gg/sWSCRh7aVR"><b>💬 Discord</b></a> ·
+  <a href="https://github.com/PickleHik3/termux-launcher/releases">Releases</a>
+</p>
 
+> [!NOTE]
+> This project is entirely vibe-coded. I daily-drive it, but if you have Android or
+> app-security experience, a review would be very welcome. Please open an issue or discussion.
+
+> [!IMPORTANT]
+> **An independent fork, not affiliated with [Termux](https://github.com/termux/termux-app).**
+> Report issues [here](https://github.com/PickleHik3/termux-launcher/issues), not to Termux.
+> The `com.termux` edition **replaces** official Termux on your device; the other editions install side by side.
 
 ## About
 

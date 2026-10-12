@@ -9,6 +9,7 @@ import static org.junit.Assert.assertTrue;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.surfaces.AppearanceLooks.Control;
 import com.termux.app.surfaces.AppearanceLooks.Door;
+import com.termux.app.surfaces.AppearanceLooks.Group;
 import com.termux.app.surfaces.AppearanceLooks.Target;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -100,6 +101,63 @@ public class AppearanceLooksTest {
                 AppearanceLooks.controls(target).get(0));
         }
         assertEquals(AppearanceLooks.MAX_CONTROLS, AppearanceLooks.controls(null).size());
+    }
+
+    /**
+     * The global set is two groups, Surface (today's six) and Edge (the glass edge's five); an
+     * element's set ignores the group, and the one-argument form is the Surface group.
+     */
+    @Test
+    public void theGlobalSetIsSurfaceAndEdge() {
+        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
+            Control.MARGIN, Control.CORNER_RADIUS), AppearanceLooks.controls(null, Group.SURFACE));
+        assertEquals(Arrays.asList(Control.BEND, Control.EDGE_WIDTH, Control.EDGE_LIGHT,
+            Control.SPECULAR, Control.DISPERSION), AppearanceLooks.controls(null, Group.EDGE));
+        assertTrue(AppearanceLooks.controls(null, Group.EDGE).size()
+            <= AppearanceLooks.MAX_CONTROLS);
+        assertEquals(AppearanceLooks.controls(null, Group.SURFACE), AppearanceLooks.controls(null));
+        for (Target target : Target.values()) {
+            for (Group group : Group.values())
+                assertEquals(target + " ignores " + group, AppearanceLooks.controls(target),
+                    AppearanceLooks.controls(target, group));
+            assertEquals(target + " is the Surface overload",
+                AppearanceLooks.controls(target, Group.SURFACE), AppearanceLooks.controls(target));
+        }
+    }
+
+    /**
+     * Only the global set has groups, and only where the glass edge can be drawn at all: an
+     * element never offers the edge's knobs, which are global.
+     */
+    @Test
+    public void onlyTheGlobalSetHasGroupsAndEdgeNeedsRefraction() {
+        assertEquals(Arrays.asList(Group.SURFACE, Group.EDGE), AppearanceLooks.groups(null, true));
+        assertTrue("nothing to switch between without the edge",
+            AppearanceLooks.groups(null, false).isEmpty());
+        for (Target target : Target.values()) {
+            assertTrue(target.name(), AppearanceLooks.groups(target, true).isEmpty());
+            assertTrue(target.name(), AppearanceLooks.groups(target, false).isEmpty());
+            for (Control control : AppearanceLooks.controls(target))
+                assertFalse(target + " never holds the edge's " + control,
+                    AppearanceLooks.controls(null, Group.EDGE).contains(control));
+        }
+    }
+
+    /** The edge's knobs run over the ranges their preferences store. */
+    @Test
+    public void theEdgesRangesAreTheStoredRanges() {
+        assertEquals(TERMUX_APP.MIN_FANCIER_GLASS_BEND, Control.BEND.min);
+        assertEquals(TERMUX_APP.MAX_FANCIER_GLASS_BEND, Control.BEND.max);
+        assertEquals(TERMUX_APP.MIN_FANCIER_GLASS_EDGE_WIDTH, Control.EDGE_WIDTH.min);
+        assertEquals(TERMUX_APP.MAX_FANCIER_GLASS_EDGE_WIDTH, Control.EDGE_WIDTH.max);
+        assertEquals(0, Control.EDGE_LIGHT.min);
+        assertEquals(TERMUX_APP.MAX_FANCIER_GLASS_EDGE_LIGHT, Control.EDGE_LIGHT.max);
+        assertEquals(0, Control.SPECULAR.min);
+        assertEquals(TERMUX_APP.MAX_FANCIER_GLASS_SPECULAR, Control.SPECULAR.max);
+        assertEquals(0, Control.DISPERSION.min);
+        assertEquals(TERMUX_APP.MAX_FANCIER_GLASS_DISPERSION, Control.DISPERSION.max);
+        for (Control control : AppearanceLooks.controls(null, Group.EDGE))
+            assertEquals(control.name(), 1, control.step);
     }
 
     /** The buttons above the sliders: Keyboard theme, Trail and Effect, Clock; none elsewhere. */

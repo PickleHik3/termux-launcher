@@ -19,7 +19,9 @@ import java.util.List;
  * Clear, Mist, Tint, Solid — and Custom last. At Custom the sheet shows a row of vertical sliders
  * whose set follows the selection ({@link #controls}): the global set with nothing tapped, or the
  * tapped element's own, with the buttons above them ({@link #doors}). Blur, Grain and Opacity are
- * the shared glass on the global set and the element's own values on an element.</p>
+ * the shared glass on the global set and the element's own values on an element. The global set
+ * is two {@link Group}s the heading row switches between ({@link #groups}): Surface, the shared
+ * glass and shape, and Edge, the glass edge's knobs, which are global and never an element's.</p>
  *
  * <p>Layout mode's Corners and Margin (SPEC §3.5) are here too: the global shape, which no Look
  * sets (2026-10-01); the Custom row's Margin and Corner radius write the same keys.</p>
@@ -122,7 +124,8 @@ public final class AppearanceLooks {
      * Icon size is the pinned icon in dp, and its slider runs over the range the dock gives under
      * the Style ({@link #iconSizeRangeDp}); the bounds here are only the ones no dock passes, the
      * icon's floor and the deepest row. Key spacing is the key margin scale in tenths; the others
-     * are their own units (dp, percent, a count, a stop).
+     * are their own units (dp, percent, a count, a stop). Bend through Dispersion are the glass
+     * edge's knobs over their stored ranges: Bend and Edge width in dp, the rest in percent.
      */
     public enum Control {
         BLUR(0, BLUR_MAX_DP, 1),
@@ -136,7 +139,15 @@ public final class AppearanceLooks {
         ICON_SIZE(Math.round(DockLayoutPolicy.MIN_DOCK_ICON_DP),
             DockLayoutPolicy.maxRowBandPx(1f), 1),
         APP_ICONS(APP_ICONS_MIN, APP_ICONS_MAX, 1),
-        CONTRAST(0, 2, 1);
+        CONTRAST(0, 2, 1),
+        BEND(TERMUX_APP.MIN_FANCIER_GLASS_BEND, TERMUX_APP.MAX_FANCIER_GLASS_BEND, 1),
+        EDGE_WIDTH(TERMUX_APP.MIN_FANCIER_GLASS_EDGE_WIDTH,
+            TERMUX_APP.MAX_FANCIER_GLASS_EDGE_WIDTH, 1),
+        EDGE_LIGHT(TERMUX_APP.MIN_FANCIER_GLASS_EDGE_LIGHT,
+            TERMUX_APP.MAX_FANCIER_GLASS_EDGE_LIGHT, 1),
+        SPECULAR(TERMUX_APP.MIN_FANCIER_GLASS_SPECULAR, TERMUX_APP.MAX_FANCIER_GLASS_SPECULAR, 1),
+        DISPERSION(TERMUX_APP.MIN_FANCIER_GLASS_DISPERSION,
+            TERMUX_APP.MAX_FANCIER_GLASS_DISPERSION, 1);
 
         public final int min;
         public final int max;
@@ -173,12 +184,31 @@ public final class AppearanceLooks {
     public static final int APP_ICONS_MAX = 10;
 
     /**
-     * The sliders of the Custom row for a selection, in legend order (left to right): the global
-     * set for nothing tapped (null), or the element's own. Blur, Grain, Opacity and Tint come first for
-     * everything, so the same four columns stay under the user's thumb as the selection changes.
+     * The global set's two halves: Surface, the shared glass and shape, and Edge, the glass
+     * edge's knobs. Only the global set has them; an element's set is one.
      */
+    public enum Group {
+        SURFACE,
+        EDGE
+    }
+
+    /** The Custom row's sliders for a selection, with the global set at its Surface group. */
     @NonNull
     public static List<Control> controls(@Nullable Target target) {
+        return controls(target, Group.SURFACE);
+    }
+
+    /**
+     * The sliders of the Custom row for a selection, in legend order (left to right): the global
+     * set's {@code group} for nothing tapped (null), or the element's own, which ignores the
+     * group. Blur, Grain, Opacity and Tint come first for everything but Edge, so the same four
+     * columns stay under the user's thumb as the selection changes.
+     */
+    @NonNull
+    public static List<Control> controls(@Nullable Target target, @NonNull Group group) {
+        if (target == null && group == Group.EDGE)
+            return Arrays.asList(Control.BEND, Control.EDGE_WIDTH, Control.EDGE_LIGHT,
+                Control.SPECULAR, Control.DISPERSION);
         if (target == null)
             return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
                 Control.MARGIN, Control.CORNER_RADIUS);
@@ -215,6 +245,18 @@ public final class AppearanceLooks {
             default:
                 return Collections.emptyList();
         }
+    }
+
+    /**
+     * The groups the heading row switches between for a selection: Surface and Edge for the
+     * global set, none for an element. Edge is offered only where the glass edge can be drawn at
+     * all ({@code refractionAvailable}); without it there is nothing to switch between.
+     */
+    @NonNull
+    public static List<Group> groups(@Nullable Target target, boolean refractionAvailable) {
+        if (target != null || !refractionAvailable)
+            return Collections.emptyList();
+        return Arrays.asList(Group.SURFACE, Group.EDGE);
     }
 
     /** The most sliders any selection has: the columns the sheet is built for. */

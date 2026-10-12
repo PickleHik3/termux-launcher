@@ -44,7 +44,7 @@ public class RootPreferencesSearchIndexTest {
     private static final String[][] EXPECTED_ROWS = {
         {"wallpaper_style", "launcher_apps", "status_bar", "notifications"},
         {"terminal", "keyboard_input", "display", "on_device_ai"},
-        {"app_behavior", "services_permissions", "advanced_diagnostics", "about_support"}
+        {"app_behavior", "backup_restore", "services_permissions", "advanced_diagnostics", "about_support"}
     };
 
     private SettingsActivity.RootPreferencesFragment launch() {

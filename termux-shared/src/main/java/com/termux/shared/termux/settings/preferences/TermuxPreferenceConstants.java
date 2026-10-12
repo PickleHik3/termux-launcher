@@ -1515,9 +1515,9 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_SURFACE_GLASS_MOTION = GLASS_MOTION_CLASSIC;
 
         /**
-         * The look the user pinned as the editor's Custom preset, as the preset format's JSON.
-         * Written only by the editor's save glyph — never by Done, which commits the live
-         * preferences and would otherwise replace the pin every time someone left the editor.
+         * The look last saved as the editor's Custom preset, as the preset format's JSON. Written
+         * by Done at the Custom stop; the editor no longer reads it when the slider moves to
+         * Custom, which starts from the look on screen.
          */
         public static final String KEY_SURFACE_CUSTOM_PRESET = "surface_custom_preset";
 

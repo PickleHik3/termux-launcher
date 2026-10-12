@@ -3,6 +3,8 @@ package com.termux.terminal;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Map;
+
 /**
  * The interface for communication between {@link TerminalSession} and its client. It is used to
  * send callbacks to the client when {@link TerminalSession} changes or for sending other
@@ -26,6 +28,28 @@ public interface TerminalSessionClient {
      */
     default String onReadTextFromClipboard(@NonNull TerminalSession session) {
         return null;
+    }
+
+    /**
+     * Answer an OSC 5522 clipboard read: call {@code callback} exactly once with what the
+     * clipboard holds, or null when the read is refused. {@code pasted} is true when the read
+     * fetches a paste the user just made. The callback may run later and on another thread; see
+     * {@link KittyClipboard.Handler#read}. The default offers the text
+     * {@link #onReadTextFromClipboard} answers, at once.
+     */
+    default void onReadClipboard(@NonNull TerminalSession session, boolean pasted,
+                                 @NonNull KittyClipboard.ReadCallback callback) {
+        String text = onReadTextFromClipboard(session);
+        callback.onOffer(text == null ? null : ClipboardOffer.ofText(text));
+    }
+
+    /**
+     * Put the pictures of a finished OSC 5522 write on the clipboard, by MIME type, with the
+     * write's text or null. The default has nowhere to put a picture and keeps the text.
+     */
+    default void onWriteClipboard(@NonNull TerminalSession session, @NonNull Map<String, byte[]> images,
+                                  @Nullable String text) {
+        if (text != null) onCopyTextToClipboard(session, text);
     }
 
     void onBell(@NonNull TerminalSession session);

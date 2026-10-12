@@ -4,6 +4,11 @@ import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.Manifest;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -19,6 +24,8 @@ import android.widget.LinearLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
@@ -96,18 +103,29 @@ public final class TerminalCommandPaletteController
 
     private enum Mode { LIST, ARGUMENT, CHOICES, CAPTURE }
 
-    /** Fallback strip when nothing has been run yet, per the handoff's default six. */
+    /**
+     * Fallback strip for the slots usage leaves empty, per the handoff's default six less
+     * scrollback search, which {@link CommandPaletteStrip#EXCLUDED_TOOLS} keeps off the strip.
+     */
     private static final String[][] DEFAULT_KEYCAPS = {
         {LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD, "⌨", "kbd"},
         {LauncherToolRegistry.TOOL_TERMINAL_HINTS, "✎", "pick"},
         {LauncherToolRegistry.TOOL_PANE_SPLIT_VERTICAL, "⧉", "split"},
-        {LauncherToolRegistry.TOOL_TERMINAL_SEARCH_SCROLLBACK, "⌕", "find"},
         {LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_INCREASE, "A", "font"},
         {LauncherToolRegistry.TOOL_SESSION_NEW, "＋", "new"},
     };
+    private static final List<String> DEFAULT_KEYCAP_TOOLS;
+    static {
+        List<String> tools = new ArrayList<>(DEFAULT_KEYCAPS.length);
+        for (String[] fallback : DEFAULT_KEYCAPS) tools.add(fallback[0]);
+        DEFAULT_KEYCAP_TOOLS = java.util.Collections.unmodifiableList(tools);
+    }
+    /** The glyph for the keyboard's own rows (its types and layouts), as the kbd default has. */
+    private static final String KEYBOARD_GLYPH = "⌨";
 
     private final TermuxActivity mActivity;
     private final CommandPaletteActionStats mStats;
+    private final CommandPaletteQueryMemory.Store mQueryMemory;
     private final LauncherAppDataProvider mAppProvider;
     private final LauncherUsageStatsStore mAppUsageStats;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
@@ -150,6 +168,18 @@ public final class TerminalCommandPaletteController
     /** Parallel to {@link #mRows}: the entry a row runs, or null for a rule or notice. */
     private final List<CommandPaletteFilter.Entry> mRowEntries = new ArrayList<>();
     private final List<CommandPaletteFilter.Entry> mKeycapEntries = new ArrayList<>();
+    /** Row keys of {@link #mKeycapEntries}, to tell whether a cache landing changed anything. */
+    private final List<String> mKeycapKeys = new ArrayList<>();
+    /** The chips the strip shows, parallel to {@link #mKeycapEntries}. */
+    private final List<CommandPaletteView.Keycap> mKeycaps = new ArrayList<>();
+    /**
+     * The contacts the strip showed, by row key: the contact cache reloads on every show, and
+     * without these a contact chip would pop in a beat after the rest of the strip. At most
+     * {@link CommandPaletteView#KEYCAP_COUNT}, refreshed whenever the cache lands.
+     */
+    private final Map<String, CommandPaletteContacts.Contact> mStripContacts = new HashMap<>();
+    /** The contact chips' photos, kept across shows so a reopened palette decodes nothing. */
+    private final CommandPaletteContactPhotos mContactPhotos = new CommandPaletteContactPhotos();
     private List<CommandPaletteView.Row> mRows = new ArrayList<>();
 
     /**
@@ -157,12 +187,45 @@ public final class TerminalCommandPaletteController
      * Rebuilt with the rows so a stale icon can never outlive the app row it belonged to.
      */
     private final Map<String, Drawable> mRowIcons = new HashMap<>();
+    /** The phone inside a contact row's call chip; white, so it reads on the glass. */
+    @Nullable private Drawable mCallIcon;
     /**
      * Stable id to the chord bound to that app. Built once per show() and again when a cold app
      * cache lands or a capture writes a new binding — never per keystroke, since resolving it walks
      * every binding in the config.
      */
     @NonNull private Map<String, String> mAppShortcuts = java.util.Collections.emptyMap();
+    /** Lookup key to the chord bound to that contact; rebuilt with {@link #mAppShortcuts}. */
+    @NonNull private Map<String, String> mContactShortcuts = java.util.Collections.emptyMap();
+
+    /**
+     * The warm contact cache the current search narrows, loaded when the
+     * palette opens with contact access already granted, or when access
+     * lands after the allow row asked for it.
+     */
+    @NonNull private List<CommandPaletteContacts.Contact> mContacts =
+        java.util.Collections.emptyList();
+    /** Whether contact search is live: the permission granted. */
+    private boolean mContactsAccess;
+    /** Whether {@link #mContacts} is this show's load, rather than the empty list it starts as. */
+    private boolean mContactsLoaded;
+    /** Whether this show already asked for contact access; the allow row stays hidden once it has. */
+    private boolean mContactsRequested;
+
+    /**
+     * Decayed usage, by app stable id and by palette row key, that breaks ties between equal
+     * matches. Taken once per show() rather than per keystroke: a run collapses the palette anyway,
+     * and nothing typed should reshuffle rows that match equally well.
+     */
+    @NonNull private Map<String, Double> mAppUsage = java.util.Collections.emptyMap();
+    @NonNull private Map<String, Double> mRowUsage = java.util.Collections.emptyMap();
+    /**
+     * The list row last picked from a search, and the query that found it. Query memory learns the
+     * pair only once the row actually runs, which for a submenu, an argument row or a confirmed
+     * action is a step or two later.
+     */
+    @Nullable private String mPickQuery;
+    @Nullable private String mPickKey;
 
     private Mode mMode = Mode.LIST;
     /**
@@ -199,6 +262,7 @@ public final class TerminalCommandPaletteController
                                      @NonNull ClipboardText clipboardSource) {
         mActivity = activity;
         mStats = new CommandPaletteActionStats(activity);
+        mQueryMemory = new CommandPaletteQueryMemory.Store(activity);
         mAppProvider = LauncherAppDataProvider.getInstance(activity);
         mAppUsageStats = LauncherUsageStatsStore.getInstance(activity);
         mDensity = activity.getResources().getDisplayMetrics().density;
@@ -270,12 +334,28 @@ public final class TerminalCommandPaletteController
         mFocus = 0;
         mListRevealed = false;
         mOpen = true;
+        mPickQuery = null;
+        mPickKey = null;
+        long now = System.currentTimeMillis();
+        mRowUsage = mStats.decayedScores(now);
+        mAppUsage = mAppUsageStats.decayedScores(mAppProvider.getAllApps(), now);
         mAppShortcuts = TerminalCommandPalette.buildAppShortcuts(mAppProvider);
+        mContactShortcuts = TerminalCommandPalette.buildContactShortcuts();
+        // Contact search is live only with contact access; the cache warms
+        // with the palette so a first query does not sweep the contacts itself.
+        mContacts = java.util.Collections.emptyList();
+        mContactsLoaded = false;
+        mContactsAccess = ContextCompat.checkSelfPermission(mActivity,
+            Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED;
+        mContactsRequested = false;
+        if (mContactsAccess) {
+            CommandPaletteContacts.load(mActivity, this::onContactsLoaded);
+        }
 
         mView.refreshPalette();
         mView.setArgumentMode(false, "", "");
         mView.setQuery("", mActivity.getString(R.string.palette_search_hint));
-        rebuildKeycaps();
+        rebuildKeycaps(false);
         rebuildRows();
         // A cold app list arrives later; the palette opens now and grows its Apps section when
         // the load lands.
@@ -283,12 +363,17 @@ public final class TerminalCommandPaletteController
             mAppProvider.warmAsync(() -> {
                 // The chords could not resolve against a cold cache, so rebuild the index too.
                 mAppShortcuts = TerminalCommandPalette.buildAppShortcuts(mAppProvider);
+                mAppUsage = mAppUsageStats.decayedScores(mAppProvider.getAllApps(),
+                    System.currentTimeMillis());
+                // App chips could not resolve either; the strip fills in what it skipped.
+                if (mOpen) rebuildKeycaps(true);
                 if (mOpen && mMode == Mode.LIST) rebuildRows();
             });
 
         resolveAnchor();
         resolveSeed();
         mView.setModalBounds(mModalBounds);
+        mView.setOpenFrameWidth(mHost.getWidth() - 2f * dp(SIDE_INSET));
         mView.resetScroll();
         mProgress.reset(0f);
         mHeight.reset(targetHeight());
@@ -611,20 +696,29 @@ public final class TerminalCommandPaletteController
         // strip, and it grows the ledger once there is something to narrow — or once ↓ asks for
         // the whole catalogue.
         if (!mListRevealed && mQuery.trim().isEmpty()) return;
-        List<CommandPaletteFilter.Entry> ranked =
-            new ArrayList<>(CommandPaletteFilter.filterAndRank(mEntries, mQuery));
-        ranked.addAll(TerminalCommandPalette.buildAppEntries(mActivity, mAppProvider,
-            mAppUsageStats, mQuery, mAppShortcuts, mRowIcons));
+        // A leading ">" limits the search to launcher actions; ">" alone browses them all.
+        CommandPaletteRanking.Query query = CommandPaletteRanking.Query.parse(mQuery);
+        boolean searching = !query.text.isEmpty();
+        List<CommandPaletteFilter.Entry> ranked = searching ? rankSearch(query)
+            : browseEntries(query.actionsOnly);
+        // Without contact access a search offers it once per show, as the last row, so
+        // the ask follows a choice rather than a keystroke.
+        CommandPaletteFilter.Entry allow =
+            searching && !query.actionsOnly && !mContactsAccess && !mContactsRequested
+                ? TerminalCommandPalette.buildContactsAllowEntry(mActivity) : null;
         if (ranked.isEmpty()) {
-            rows.add(CommandPaletteView.Row.notice(
-                mActivity.getString(R.string.palette_no_match, upper(mQuery))));
+            rows.add(CommandPaletteView.Row.notice(query.actionsOnly
+                ? mActivity.getString(R.string.palette_no_action_match, upper(query.text))
+                : mActivity.getString(R.string.palette_no_match, upper(mQuery))));
             mRowEntries.add(null);
+            if (allow != null) addEntryRow(rows, allow);
             return;
         }
         // A ranked result is one flat list: grouping it would fight the ranking. Only the
         // unfiltered view carries the category rules.
-        if (!mQuery.trim().isEmpty()) {
+        if (searching) {
             for (CommandPaletteFilter.Entry entry : ranked) addEntryRow(rows, entry);
+            if (allow != null) addEntryRow(rows, allow);
             return;
         }
         Map<String, List<CommandPaletteFilter.Entry>> byCategory = new LinkedHashMap<>();
@@ -644,12 +738,70 @@ public final class TerminalCommandPaletteController
         }
     }
 
+    /**
+     * The unfiltered catalogue: every action, then the most-used apps unless only actions were
+     * asked for.
+     */
+    @NonNull
+    private List<CommandPaletteFilter.Entry> browseEntries(boolean actionsOnly) {
+        List<CommandPaletteFilter.Entry> entries = new ArrayList<>(mEntries);
+        if (!actionsOnly)
+            entries.addAll(TerminalCommandPalette.buildAppEntries(mActivity, mAppProvider,
+                mAppUsageStats, "", mAppShortcuts, mRowIcons, null));
+        return entries;
+    }
+
+    /**
+     * One list for a search: the matching actions, apps and contacts gathered here, ordered by
+     * {@link CommandPaletteRanking}.
+     */
+    @NonNull
+    private List<CommandPaletteFilter.Entry> rankSearch(
+        @NonNull CommandPaletteRanking.Query query) {
+        List<CommandPaletteRanking.Candidate> candidates =
+            CommandPaletteRanking.actionCandidates(mEntries, query.text);
+        if (!query.actionsOnly) {
+            Map<String, Integer> appScores = new HashMap<>();
+            for (CommandPaletteFilter.Entry app : TerminalCommandPalette.buildAppEntries(mActivity,
+                mAppProvider, mAppUsageStats, query.text, mAppShortcuts, mRowIcons, appScores)) {
+                Integer score = app.iconKey == null ? null : appScores.get(app.iconKey);
+                if (score != null && score > 0) candidates.add(new CommandPaletteRanking.Candidate(
+                    app, CommandPaletteRanking.Source.APP, score));
+            }
+            if (mContactsAccess) {
+                List<CommandPaletteContacts.Match> matches =
+                    CommandPaletteContacts.filter(mContacts, query.text);
+                // buildContactEntries projects the matches one to one, in order.
+                List<CommandPaletteFilter.Entry> contacts =
+                    TerminalCommandPalette.buildContactEntries(mActivity, matches,
+                        mContactShortcuts);
+                for (int i = 0; i < contacts.size(); i++)
+                    candidates.add(new CommandPaletteRanking.Candidate(contacts.get(i),
+                        CommandPaletteRanking.Source.CONTACT, matches.get(i).score));
+                if (!matches.isEmpty()) ensureCallIcon();
+            }
+        }
+        return CommandPaletteRanking.rank(candidates, mAppUsage, mRowUsage,
+            mQueryMemory.picksFor(mQuery, System.currentTimeMillis()));
+    }
+
     private void addEntryRow(@NonNull List<CommandPaletteView.Row> rows,
                              @NonNull CommandPaletteFilter.Entry entry) {
-        rows.add(CommandPaletteView.Row.entry(entry.title,
-            entry.enabled ? entry.subtitle : entry.disabledReason,
+        boolean contact = TerminalCommandPalette.CATEGORY_CONTACTS.equals(entry.category)
+            && !isContactsAllow(entry);
+        String description = entry.enabled ? entry.subtitle : entry.disabledReason;
+        // Every row a hold can bind says so, the way app rows already do in their own subtitle.
+        if (entry.enabled && !LauncherToolRegistry.CATEGORY_APPS.equals(entry.category)
+            && TerminalCommandPalette.isBindable(entry)) {
+            description = description == null || description.isEmpty()
+                ? mActivity.getString(R.string.palette_row_hold_to_bind)
+                : mActivity.getString(R.string.palette_row_subtitle_hold_to_bind, description);
+        }
+        rows.add(CommandPaletteView.Row.entry(entry.title, description,
             entry.shortcutLabel(), entry.enabled,
-            entry.iconKey == null ? null : mRowIcons.get(entry.iconKey)));
+            entry.iconKey == null ? null : mRowIcons.get(entry.iconKey),
+            // A contact row carries its call button; no other row has one, the allow row included.
+            contact ? new CommandPaletteView.Row.Action(mCallIcon) : null));
         mRowEntries.add(entry);
     }
 
@@ -664,7 +816,8 @@ public final class TerminalCommandPaletteController
         if (mMode == Mode.LIST && !mListRevealed && mQuery.trim().isEmpty())
             return mActivity.getString(R.string.palette_meta_idle);
         int count = 0;
-        for (CommandPaletteFilter.Entry entry : mRowEntries) if (entry != null) count++;
+        for (CommandPaletteFilter.Entry entry : mRowEntries)
+            if (entry != null && !isContactsAllow(entry)) count++;
         return mActivity.getResources().getQuantityString(R.plurals.palette_meta_results,
             count, count);
     }
@@ -678,9 +831,20 @@ public final class TerminalCommandPaletteController
             mFocus = firstSelectable();
     }
 
+    /**
+     * The row a fresh query focuses. Never the allow row: with nothing else
+     * matched, ⏎ still hands the query to the shell rather than asking for access.
+     */
     private int firstSelectable() {
-        for (int i = 0; i < mRowEntries.size(); i++) if (mRowEntries.get(i) != null) return i;
+        for (int i = 0; i < mRowEntries.size(); i++) {
+            CommandPaletteFilter.Entry entry = mRowEntries.get(i);
+            if (entry != null && !isContactsAllow(entry)) return i;
+        }
         return -1;
+    }
+
+    private static boolean isContactsAllow(@NonNull CommandPaletteFilter.Entry entry) {
+        return TerminalCommandPalette.TOOL_CONTACTS_ALLOW.equals(entry.toolName);
     }
 
     private void moveFocus(int delta) {
@@ -710,31 +874,187 @@ public final class TerminalCommandPaletteController
         }
     }
 
-    private void rebuildKeycaps() {
+    /**
+     * Fills the strip from the usage snapshot this show took ({@link CommandPaletteStrip}): the
+     * most-run rows of any kind, then the defaults. Runs when the palette opens, and again only
+     * when a cold app or contact cache lands, so the strip never reorders under a finger.
+     *
+     * @param onlyIfChanged leave the strip alone when it would hold the same rows, so a landing
+     *                      cache that resolves nothing new does not even invalidate it
+     */
+    private void rebuildKeycaps(boolean onlyIfChanged) {
+        StripResolver resolver = new StripResolver();
+        List<String> keys = CommandPaletteStrip.pickKeys(mRowUsage, resolver::canResolve,
+            DEFAULT_KEYCAP_TOOLS, CommandPaletteView.KEYCAP_COUNT);
+        if (mContactsLoaded) mStripContacts.clear();
+        List<CommandPaletteView.Keycap> caps = new ArrayList<>(keys.size());
+        List<CommandPaletteFilter.Entry> entries = new ArrayList<>(keys.size());
+        for (String key : keys) {
+            StripCap cap = resolver.resolved.get(key);
+            if (cap == null) continue;
+            entries.add(cap.entry);
+            caps.add(cap.keycap);
+            if (cap.contact == null) continue;
+            if (mContactsLoaded) mStripContacts.put(key, cap.contact);
+            // Shown as a monogram until the photo lands, which onContactPhoto swaps in.
+            if (cap.keycap.drawsMonogram())
+                mContactPhotos.request(mActivity, cap.contact.contactId, cap.contact.photoUri(),
+                    this::onContactPhoto);
+        }
+        if (onlyIfChanged && keys.equals(mKeycapKeys)) return;
+        mKeycapKeys.clear();
+        mKeycapKeys.addAll(keys);
         mKeycapEntries.clear();
-        List<CommandPaletteView.Keycap> caps = new ArrayList<>();
-        List<CommandPaletteFilter.Entry> ranked =
-            mStats.rank(mEntries, CommandPaletteView.KEYCAP_COUNT);
-        for (CommandPaletteFilter.Entry entry : ranked) {
-            mKeycapEntries.add(entry);
-            caps.add(new CommandPaletteView.Keycap(glyphFor(entry.toolName),
-                shortLabel(entry.toolName)));
+        mKeycapEntries.addAll(entries);
+        mKeycaps.clear();
+        mKeycaps.addAll(caps);
+        mView.setKeycaps(new ArrayList<>(mKeycaps));
+    }
+
+    /**
+     * A contact's photo has decoded: its chip trades the monogram for it, if the palette is still
+     * up and the contact still on the strip. The mark is the same size either way, so the strip
+     * keeps its layout.
+     */
+    private void onContactPhoto(long contactId, @NonNull Drawable photo) {
+        if (!mOpen || mView == null) return;
+        boolean changed = false;
+        for (int i = 0; i < mKeycapEntries.size(); i++) {
+            CommandPaletteFilter.Entry entry = mKeycapEntries.get(i);
+            if (!isContact(entry) || entry.arguments == null
+                || entry.arguments.optLong("contact_id", -1) != contactId) continue;
+            mKeycaps.set(i, mKeycaps.get(i).withPhoto(photo));
+            changed = true;
         }
-        for (String[] fallback : DEFAULT_KEYCAPS) {
-            if (mKeycapEntries.size() >= CommandPaletteView.KEYCAP_COUNT) break;
-            CommandPaletteFilter.Entry entry = findEntry(fallback[0]);
-            if (entry == null || containsTool(mKeycapEntries, fallback[0])) continue;
-            mKeycapEntries.add(entry);
-            caps.add(new CommandPaletteView.Keycap(fallback[1], fallback[2]));
+        if (changed) mView.setKeycaps(new ArrayList<>(mKeycaps));
+    }
+
+    /** A strip key turned back into the row it runs and the chip that shows it. */
+    private static final class StripCap {
+        final CommandPaletteFilter.Entry entry;
+        final CommandPaletteView.Keycap keycap;
+        /** The contact a contact chip opens, remembered for the next show; null otherwise. */
+        @Nullable final CommandPaletteContacts.Contact contact;
+
+        StripCap(@NonNull CommandPaletteFilter.Entry entry,
+                 @NonNull CommandPaletteView.Keycap keycap,
+                 @Nullable CommandPaletteContacts.Contact contact) {
+            this.entry = entry;
+            this.keycap = keycap;
+            this.contact = contact;
         }
-        mView.setKeycaps(caps);
+    }
+
+    /**
+     * Turns strip keys back into rows for one rebuild, reading each cache at most once: the app
+     * cache by stable id and the actions by row key are indexed on first need.
+     */
+    private final class StripResolver {
+        final Map<String, StripCap> resolved = new HashMap<>();
+        @Nullable private Map<String, com.termux.app.launcher.model.LauncherAppEntry> mApps;
+        @Nullable private Map<String, CommandPaletteFilter.Entry> mActions;
+
+        boolean canResolve(@NonNull String key) {
+            if (!resolved.containsKey(key)) resolved.put(key, resolve(key));
+            return resolved.get(key) != null;
+        }
+
+        /**
+         * The row a strip key names now, or null when it names nothing that can run: an app no
+         * longer installed (or not in the warm cache yet), a contact without access or not
+         * loaded, an action that is gone, disabled or asks for more. Built the way the palette
+         * builds that row, so a chip runs exactly as its row would.
+         */
+        @Nullable
+        private StripCap resolve(@NonNull String key) {
+            String tool = CommandPaletteStrip.toolOf(key);
+            if (LauncherToolRegistry.TOOL_APP_LAUNCH.equals(tool)) return resolveApp(key);
+            if (LauncherToolRegistry.TOOL_CONTACT_OPEN.equals(tool)) return resolveContact(key);
+            if (mActions == null) {
+                mActions = new HashMap<>();
+                for (CommandPaletteFilter.Entry entry : mEntries) {
+                    // A submenu or a prompt asks for more than a tap; a chip only runs.
+                    if (!entry.enabled || entry.isSubmenu() || entry.isArgumentPrompt()) continue;
+                    String rowKey = CommandPaletteActionStats.keyFor(entry);
+                    if (!mActions.containsKey(rowKey)) mActions.put(rowKey, entry);
+                }
+            }
+            CommandPaletteFilter.Entry entry = mActions.get(key);
+            if (entry == null) return null;
+            return new StripCap(entry, new CommandPaletteView.Keycap(glyphFor(entry.toolName),
+                CommandPaletteStrip.actionLabel(entry, bareLabel(entry.toolName))), null);
+        }
+
+        @Nullable
+        private StripCap resolveApp(@NonNull String key) {
+            JSONObject arguments = CommandPaletteStrip.argumentsOf(key);
+            String stableId = arguments == null ? "" : arguments.optString("query", "");
+            if (stableId.isEmpty()) return null;
+            // The warm cache only: a strip never waits on a PackageManager sweep.
+            if (mApps == null) {
+                mApps = new HashMap<>();
+                for (com.termux.app.launcher.model.LauncherAppEntry app
+                    : mAppProvider.getAllApps())
+                    mApps.put(app.appRef.stableId(), app);
+            }
+            com.termux.app.launcher.model.LauncherAppEntry app = mApps.get(stableId);
+            if (app == null) return null;
+            CommandPaletteFilter.Entry entry =
+                TerminalCommandPalette.appEntry(mActivity, app, mAppShortcuts);
+            return new StripCap(entry, CommandPaletteView.Keycap.app(app.label,
+                LauncherAppDataProvider.artworkFor(mActivity, app)), null);
+        }
+
+        @Nullable
+        private StripCap resolveContact(@NonNull String key) {
+            CommandPaletteContacts.Contact contact = stripContact(key);
+            if (contact == null) return null;
+            JSONObject arguments = CommandPaletteStrip.argumentsOf(key);
+            String number = arguments == null ? "" : arguments.optString("number", "");
+            List<CommandPaletteFilter.Entry> rows = TerminalCommandPalette.buildContactEntries(
+                mActivity, java.util.Collections.singletonList(
+                    new CommandPaletteContacts.Match(contact, number)), mContactShortcuts);
+            if (rows.isEmpty()) return null;
+            return new StripCap(rows.get(0), CommandPaletteView.Keycap.contact(
+                CommandPaletteStrip.firstName(contact.name), contact.name,
+                mContactPhotos.cached(contact.contactId, contact.photoUri())), contact);
+        }
+    }
+
+    /**
+     * The contact a strip key names: from this show's contact cache once it has loaded, until
+     * then the one the strip showed last time. Null without contact access.
+     */
+    @Nullable
+    private CommandPaletteContacts.Contact stripContact(@NonNull String key) {
+        if (!mContactsAccess) return null;
+        JSONObject arguments = CommandPaletteStrip.argumentsOf(key);
+        long contactId = arguments == null ? -1 : arguments.optLong("contact_id", -1);
+        if (contactId < 0) return null;
+        if (!mContactsLoaded) return mStripContacts.get(key);
+        for (CommandPaletteContacts.Contact contact : mContacts)
+            if (contact.contactId == contactId) return contact;
+        return null;
+    }
+
+    private static boolean isContact(@NonNull CommandPaletteFilter.Entry entry) {
+        return TerminalCommandPalette.CATEGORY_CONTACTS.equals(entry.category);
     }
 
     @NonNull
     private static String glyphFor(@NonNull String toolName) {
         for (String[] fallback : DEFAULT_KEYCAPS)
             if (fallback[0].equals(toolName)) return fallback[1];
+        if (toolName.startsWith("keyboard.")) return KEYBOARD_GLYPH;
         return "▸";
+    }
+
+    /** A bare tool's cap label: a default's own, else the tool's verb. */
+    @NonNull
+    private static String bareLabel(@NonNull String toolName) {
+        for (String[] fallback : DEFAULT_KEYCAPS)
+            if (fallback[0].equals(toolName)) return fallback[2];
+        return shortLabel(toolName);
     }
 
     /** Short cap label: the tool's own verb, e.g. {@code pane.split_vertical} → {@code split}. */
@@ -744,20 +1064,6 @@ public final class TerminalCommandPaletteController
         String tail = dot < 0 ? toolName : toolName.substring(dot + 1);
         int underscore = tail.indexOf('_');
         return underscore < 0 ? tail : tail.substring(0, underscore);
-    }
-
-    private static boolean containsTool(@NonNull List<CommandPaletteFilter.Entry> entries,
-                                        @NonNull String toolName) {
-        for (CommandPaletteFilter.Entry entry : entries)
-            if (entry.toolName.equals(toolName)) return true;
-        return false;
-    }
-
-    @Nullable
-    private CommandPaletteFilter.Entry findEntry(@NonNull String toolName) {
-        for (CommandPaletteFilter.Entry entry : mEntries)
-            if (entry.toolName.equals(toolName) && entry.enabled) return entry;
-        return null;
     }
 
     // ------------------------------------------------------------------ input
@@ -814,7 +1120,7 @@ public final class TerminalCommandPaletteController
         // to the list rather than closing the palette, and routing first is also what guarantees
         // Esc, Enter and Backspace can never be captured as the bound key.
         if (mMode == Mode.CAPTURE) return handleCaptureKey(keyCode, event);
-        // Ctrl/Alt+⏎ on the focused app row starts a capture; ⏎ alone stays "launch".
+        // Ctrl/Alt+⏎ on the focused row starts a capture; ⏎ alone stays "run".
         if ((keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER)
             && (event.isCtrlPressed() || event.isAltPressed())) {
             beginCaptureFocused();
@@ -921,10 +1227,51 @@ public final class TerminalCommandPaletteController
         rebuildRows();
     }
 
+    /**
+     * The palette's own permission result: contact search goes live
+     * from here, wherever the request was made from.
+     */
+    public void onContactsAccessChanged(boolean granted) {
+        mContactsAccess = granted;
+        if (!granted) return;
+        CommandPaletteContacts.load(mActivity, this::onContactsLoaded);
+        if (mOpen && mMode == Mode.LIST && !mQuery.trim().isEmpty()) rebuildRows();
+    }
+
+    private void onContactsLoaded(@NonNull List<CommandPaletteContacts.Contact> contacts) {
+        mContacts = contacts;
+        mContactsLoaded = true;
+        if (mOpen) rebuildKeycaps(true);
+        if (mOpen && mMode == Mode.LIST && !mQuery.trim().isEmpty()) rebuildRows();
+    }
+
+    /** The phone inside a contact row's call chip; white, so it reads on the glass. */
+    private void ensureCallIcon() {
+        if (mCallIcon != null) return;
+        mCallIcon = ContextCompat.getDrawable(mActivity, R.drawable.ic_palette_dial);
+    }
+
+    /**
+     * The allow row, picked: asks for contact access once per show. The row
+     * leaves with the ask, and a refusal keeps it away for the rest of the
+     * show; the system keeps its own "ask no more" decision.
+     */
+    private void requestContactsAccess() {
+        if (mContactsAccess || mContactsRequested) return;
+        mContactsRequested = true;
+        rebuildRows();
+        ActivityCompat.requestPermissions(mActivity,
+            new String[]{Manifest.permission.READ_CONTACTS},
+            TermuxActivity.REQUEST_CODE_PALETTE_CONTACTS);
+    }
+
     private void popMode() {
         mMode = Mode.LIST;
         mCrumb = "";
         mPendingEntry = null;
+        // Backing out abandons the pick that led here.
+        mPickQuery = null;
+        mPickKey = null;
         mQuery = "";
         mQueryCursor = 0;
         mCaptureStroke = "";
@@ -942,13 +1289,11 @@ public final class TerminalCommandPaletteController
     private static final String CAPTURE_PROMPT = "key ❯";
 
     /**
-     * Starts capturing a key for an app row. Guarded on the Apps category: nothing else has a
-     * per-row argument the binding file can address, and binding a tool row would duplicate what
-     * the config file already does better.
+     * Starts capturing a key for a row the binding file can address: an app, a contact, or an
+     * action that runs as it stands ({@link TerminalCommandPalette#isBindable}).
      */
     private void beginCapture(@NonNull CommandPaletteFilter.Entry entry) {
-        if (!LauncherToolRegistry.CATEGORY_APPS.equals(entry.category)
-            || entry.arguments == null) return;
+        if (!TerminalCommandPalette.isBindable(entry)) return;
         mMode = Mode.CAPTURE;
         mPendingEntry = entry;
         mCrumb = entry.title;
@@ -1100,16 +1445,31 @@ public final class TerminalCommandPaletteController
             AppNotice.show(mActivity, R.string.palette_capture_needs_modifier, false);
             return;
         }
-        String stableId = pending.arguments == null ? "" : pending.arguments.optString("query", "");
-        if (stableId.isEmpty()) {
+        String tool;
+        List<String> arguments;
+        if (LauncherToolRegistry.CATEGORY_APPS.equals(pending.category)) {
+            String stableId = pending.arguments == null
+                ? "" : pending.arguments.optString("query", "");
+            tool = LauncherToolRegistry.TOOL_APP_LAUNCH;
+            arguments = stableId.isEmpty() ? java.util.Collections.<String>emptyList()
+                : java.util.Collections.singletonList(CommandPaletteAppShortcuts
+                    .bindingArgumentFor(stableId, defaultStableIdForPackage(stableId)));
+        } else if (TerminalCommandPalette.CATEGORY_CONTACTS.equals(pending.category)) {
+            tool = LauncherToolRegistry.TOOL_CONTACT_OPEN;
+            arguments = TerminalCommandPalette.contactBindingArguments(pending.arguments);
+        } else {
+            tool = pending.toolName;
+            arguments = java.util.Collections.emptyList();
+        }
+        // An app or contact row names its target in its arguments; without one there is nothing
+        // to bind. An action row carries none and needs none.
+        if (pending.arguments != null && arguments.isEmpty()) {
             popMode();
             return;
         }
         // The row's own title becomes the binding's --label, so the keybind legend names the app
-        // instead of repeating "Launch app" for every chord captured this way.
-        String error = TerminalBindingConfigWriter.bindAppLaunch(mCaptureStroke,
-            CommandPaletteAppShortcuts.bindingArgumentFor(stableId,
-                defaultStableIdForPackage(stableId)),
+        // or the contact instead of repeating "Launch app" for every chord captured this way.
+        String error = TerminalBindingConfigWriter.bind(mCaptureStroke, tool, arguments,
             pending.title);
         if (error != null) {
             Logger.logWarn(LOG_TAG, "Could not write binding: " + error);
@@ -1117,6 +1477,7 @@ public final class TerminalCommandPaletteController
             return;
         }
         mAppShortcuts = TerminalCommandPalette.buildAppShortcuts(mAppProvider);
+        mContactShortcuts = TerminalCommandPalette.buildContactShortcuts();
         String saved = mActivity.getString(R.string.palette_capture_saved,
             CommandPaletteFilter.compactStroke(mCaptureStroke), pending.title);
         playTick();
@@ -1162,6 +1523,15 @@ public final class TerminalCommandPaletteController
         if (!entry.enabled) {
             AppNotice.show(mActivity, entry.disabledReason != null
                 ? entry.disabledReason : mActivity.getString(R.string.palette_empty), false);
+            return;
+        }
+        notePick(entry);
+        // Contact rows carry their own outcome: the row opens the
+        // contact, its chip dials, and the allow row asks for access.
+        // None is a registry tool.
+        if (TerminalCommandPalette.CATEGORY_CONTACTS.equals(entry.category)) {
+            if (isContactsAllow(entry)) requestContactsAccess();
+            else openContact(entry);
             return;
         }
         if (entry.isSubmenu()) {
@@ -1225,6 +1595,7 @@ public final class TerminalCommandPaletteController
      */
     private void run(@NonNull CommandPaletteFilter.Entry entry) {
         mStats.recordRun(CommandPaletteActionStats.keyFor(entry));
+        rememberPick();
         playTick();
         collapse();
         JSONObject result = TerminalActionDispatcher.getInstance().execute(entry.toolName,
@@ -1237,8 +1608,74 @@ public final class TerminalCommandPaletteController
         }
     }
 
+    /**
+     * Notes the list row a search led to, so query memory can learn the pair once the row runs.
+     * Only a top-level list pick counts: a choice or an argument belongs to the row that opened
+     * it, and the allow row is not a destination.
+     */
+    private void notePick(@NonNull CommandPaletteFilter.Entry entry) {
+        if (mMode != Mode.LIST) return;
+        boolean searched = !CommandPaletteQueryMemory.normalize(mQuery).isEmpty();
+        mPickQuery = searched && !isContactsAllow(entry) ? mQuery : null;
+        mPickKey = mPickQuery == null ? null : CommandPaletteActionStats.keyFor(entry);
+    }
+
+    /** The noted pick ran: from now on that query puts its row first. */
+    private void rememberPick() {
+        if (mPickQuery != null && mPickKey != null) mQueryMemory.record(mPickQuery, mPickKey);
+        mPickQuery = null;
+        mPickKey = null;
+    }
+
+    /**
+     * Contacts open outside the dispatcher, so their runs are counted here, for the search's
+     * tie-breaks and the keycap strip alike.
+     */
+    private void recordContactRun(@NonNull CommandPaletteFilter.Entry entry) {
+        mStats.recordRun(CommandPaletteActionStats.keyFor(entry));
+        rememberPick();
+    }
+
+    /** Opens the contact's card in the Contacts app. */
+    private void openContact(@NonNull CommandPaletteFilter.Entry entry) {
+        JSONObject arguments = entry.arguments;
+        long contactId = arguments == null ? -1 : arguments.optLong("contact_id", -1);
+        String lookupKey = arguments == null
+            ? "" : arguments.optString("lookup_key", "");
+        if (contactId < 0 || lookupKey.isEmpty()) return;
+        recordContactRun(entry);
+        playTick();
+        collapse();
+        Intent intent = new Intent(Intent.ACTION_VIEW,
+            CommandPaletteContacts.cardUri(contactId, lookupKey));
+        try {
+            mActivity.startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            AppNotice.show(mActivity, R.string.palette_contact_open_failed, false);
+        }
+    }
+
+    /** Hands the number the row carries to the dialer; the user places the call there. */
+    private void callContact(@NonNull CommandPaletteFilter.Entry entry) {
+        JSONObject arguments = entry.arguments;
+        String number = arguments == null ? "" : arguments.optString("number", "");
+        if (number.isEmpty()) return;
+        recordContactRun(entry);
+        playTick();
+        collapse();
+        Uri tel = Uri.parse("tel:" + Uri.encode(number));
+        Intent intent = new Intent(Intent.ACTION_DIAL, tel);
+        try {
+            mActivity.startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            AppNotice.show(mActivity, R.string.palette_contact_call_failed, false);
+        }
+    }
+
     /** No match: ⏎ hands the query to the shell verbatim. */
     private void runQueryInShell() {
+        // An actions-only search never reaches the shell: ">name" there would truncate a file.
+        if (mMode == Mode.LIST && CommandPaletteRanking.Query.parse(mQuery).actionsOnly) return;
         String command = mQuery.trim();
         collapse();
         if (command.isEmpty()) return;
@@ -1298,14 +1735,37 @@ public final class TerminalCommandPaletteController
         if (index < 0 || index >= mRowEntries.size()) return;
         CommandPaletteFilter.Entry entry = mRowEntries.get(index);
         if (entry == null) return;
+        // The allow row asks for access; it has no chord to bind.
+        if (isContactsAllow(entry)) return;
         mFocus = index;
         beginCapture(entry);
+    }
+
+    /** A contact row's call chip: opens the dialer on the number the row carries. */
+    @Override
+    public void onRowActionTapped(int index) {
+        if (index < 0 || index >= mRowEntries.size()) return;
+        CommandPaletteFilter.Entry entry = mRowEntries.get(index);
+        if (entry == null
+            || !TerminalCommandPalette.CATEGORY_CONTACTS.equals(entry.category)) return;
+        mFocus = index;
+        notePick(entry);
+        callContact(entry);
     }
 
     @Override
     public void onKeycapTapped(int index) {
         if (index < 0 || index >= mKeycapEntries.size()) return;
-        runEntry(mKeycapEntries.get(index));
+        // A keycap is not an answer to whatever is typed above it.
+        mPickQuery = null;
+        mPickKey = null;
+        CommandPaletteFilter.Entry entry = mKeycapEntries.get(index);
+        // A contact is no registry tool: its chip opens the card, as its row does.
+        if (isContact(entry)) {
+            openContact(entry);
+            return;
+        }
+        runEntry(entry);
     }
 
     @Override

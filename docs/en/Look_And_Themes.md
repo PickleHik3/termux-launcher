@@ -38,12 +38,19 @@ The Wallpaper tab has a **Lock screen** card and a **Home screen** card.
 ## Look
 
 The Look tab has a slider with five stops: **Clear**, **Mist**, **Tint**, **Solid** and
-**Custom**. Clear is the most see-through and Solid the least.
+**Custom**. Clear is the most see-through and Solid the least. Custom starts from the Look that is
+on screen, so you tune what you see; **Undo** puts back what you opened with.
 
 At **Custom**, vertical sliders appear:
 
-- With nothing tapped: **Blur**, **Grain**, **Opacity**, **Tint**, **Margin** and **Corners**, for
-  every surface.
+- With nothing tapped, a **Surface** | **Edge** toggle beside **All surfaces** switches between two
+  sets for every surface:
+  - **Surface**: **Blur**, **Grain**, **Opacity**, **Tint**, **Margin** and **Corner radius**, the
+    glass and the shape.
+  - **Edge**: **Bend**, **Edge width**, **Edge light**, **Shine** and **Dispersion**, how the glass
+    edge bends and lights the wallpaper behind it. The edge needs Android 13 and a wallpaper set
+    from the Wallpaper tab (see [Glass](#glass)); without it these sliders stay greyed out, and
+    below Android 13 the toggle is not shown.
 - Tap an element in the frame to tune it on its own:
   - **Status bar**: the four glass sliders, plus a **Clock** button for the face and alignment
     (see [Status bar](Status_Bar.md#clock)).

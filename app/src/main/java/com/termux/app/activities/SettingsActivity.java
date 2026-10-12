@@ -620,6 +620,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 R.xml.app_drawer_preferences});
             CHILD_XML_RESOURCES.put("app_behavior", new int[]{
                 R.xml.app_behavior_preferences});
+            CHILD_XML_RESOURCES.put("backup_restore", new int[]{
+                R.xml.backup_restore_preferences});
             CHILD_XML_RESOURCES.put("services_permissions", new int[]{
                 R.xml.services_permissions_preferences,
                 R.xml.termux_privileged_access_preferences, R.xml.termux_api_preferences});

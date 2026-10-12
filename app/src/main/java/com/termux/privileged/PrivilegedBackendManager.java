@@ -1,7 +1,12 @@
 package com.termux.privileged;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.Collections;
 import java.util.List;
@@ -52,6 +57,10 @@ public class PrivilegedBackendManager {
     private ShizukuBackend shizukuBackend;
     private ShellBackend shellBackend;
     private boolean shizukuOnlyMode;
+    @Nullable private Handler mainHandler;
+    /** Fed by every state change and every availability check; see {@link #addAvailabilityListener}. */
+    private final PrivilegedAvailabilitySignal availability =
+        new PrivilegedAvailabilitySignal(command -> mainHandler().post(command));
 
     private final ShizukuBackend.Callback shizukuCallback = new ShizukuBackend.Callback() {
         @Override
@@ -272,6 +281,9 @@ public class PrivilegedBackendManager {
             this.statusMessage = message;
         }
         Log.i(TAG, "Backend state -> " + state + ", reason -> " + reason + ", message -> " + message);
+        // Every transition that can flip availability passes here (initialize, the Shizuku
+        // callbacks, the shell fallback, the master switch's reselect, cleanup).
+        isPrivilegedAvailable();
     }
 
     private boolean isCurrentBackendConsistentForState(BackendState state) {
@@ -340,13 +352,49 @@ public class PrivilegedBackendManager {
         }
     }
 
+    /**
+     * Whether any privileged backend (Shizuku, or su/rish) can run a command right now. Each call
+     * also reports what it found to the availability listeners, so a binder that died without a
+     * callback, or a master switch flipped under us, is noticed by the next reader (the stats
+     * sampler reads this every tick).
+     */
     public boolean isPrivilegedAvailable() {
+        boolean available = computePrivilegedAvailable();
+        availability.report(available);
+        return available;
+    }
+
+    private boolean computePrivilegedAvailable() {
         if (!isMasterEnabled()) {
             return false;
         }
         BackendState state = getBackendState();
         return (state == BackendState.READY || state == BackendState.FALLBACK_SHELL)
             && currentBackend != null && currentBackend.isAvailable() && currentBackend.hasPermission();
+    }
+
+    /**
+     * Main thread only: the availability the listeners were last told, with no binder call. A
+     * view deciding whether to show a privileged reading reads this and listens, so it starts
+     * hidden until the backend has decided and never misses a change after.
+     */
+    public boolean isPrivilegedAvailableForUi() {
+        return availability.delivered();
+    }
+
+    /**
+     * Main thread only. The listener hears each real flip of {@link #isPrivilegedAvailable()},
+     * on main; it is not called with the current value (read {@link #isPrivilegedAvailableForUi()}).
+     * Pair with {@link #removeAvailabilityListener} in the matching lifecycle callback: this
+     * singleton outlives every activity and view.
+     */
+    public void addAvailabilityListener(@NonNull PrivilegedAvailabilitySignal.Listener listener) {
+        availability.add(listener);
+    }
+
+    /** Main thread only. */
+    public void removeAvailabilityListener(@NonNull PrivilegedAvailabilitySignal.Listener listener) {
+        availability.remove(listener);
     }
 
     public PrivilegedBackend.Type getBackendType() {
@@ -439,6 +487,11 @@ public class PrivilegedBackendManager {
         executorService.shutdown();
         applyBackend(new NoOpBackend(), BackendState.UNAVAILABLE, StatusReason.UNAVAILABLE,
             "Resources cleaned up");
+    }
+
+    @NonNull private synchronized Handler mainHandler() {
+        if (mainHandler == null) mainHandler = new Handler(Looper.getMainLooper());
+        return mainHandler;
     }
 
     private synchronized ExecutorService getExecutorService() {
