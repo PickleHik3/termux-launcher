@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Ask on Discord
+    url: https://discord.gg/sWSCRh7aVR
+    about: Quickest way to get help. TildeBot answers in #help, and humans step in when it can't.
   - name: Have a question about Termux Launcher?
     url: https://github.com/PickleHik3/termux-launcher/discussions
     about: Join GitHub Discussions

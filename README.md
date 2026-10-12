@@ -30,7 +30,7 @@
   <img src="screenshots/banner.webp" alt="Termux Launcher showing seven authentic Android screens: terminal home, split panes, widgets, voice dictation, Dawn notes, tlstore, and the app drawer" width="100%">
 </p>
 
-**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Releases & changelog](https://github.com/PickleHik3/termux-launcher/releases) | [Local AI API](docs/en/LauncherCtl_API.md) | [On-device AI](docs/en/On_Device_AI.md)
+**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | **[💬 Discord](https://discord.gg/sWSCRh7aVR)** | [Releases & changelog](https://github.com/PickleHik3/termux-launcher/releases) | [Local AI API](docs/en/LauncherCtl_API.md) | [On-device AI](docs/en/On_Device_AI.md)
 
 
 ## About
@@ -124,6 +124,10 @@ In-repo references:
 - [Developer Docs](docs/en/Developer_Docs.md): advanced API routes, runtime notes, helper scripts, and security details.
 - [Glossary](docs/GLOSSARY.md): the words the code, the docs and the developer use.
 - [Developer specs and research](project-docs/README.md): active specs, delivered records, research and the backlog.
+
+## Getting help
+
+Questions, setups and ideas all go to the [Discord server](https://discord.gg/sWSCRh7aVR). TildeBot, the server's help bot, answers in `#help` first and points you to the right part of the docs, and a human steps in when it can't sort you out. Bugs you can reproduce can also go straight to [GitHub issues](https://github.com/PickleHik3/termux-launcher/issues).
 
 ## Upstream Base
 
