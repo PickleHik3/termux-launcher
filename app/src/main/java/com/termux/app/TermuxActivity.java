@@ -154,6 +154,7 @@ import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.terminal.inappkeyboard.voice.DictationMarks;
 import com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher;
 import com.termux.app.terminal.inappkeyboard.voice.ReadAloudCard;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceCardEdit;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceCommandFormatter;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceDictation;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceInputSession;
@@ -559,6 +560,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Trailing CPU/RAM/weather widgets, their data controllers, and the shared detail card host. */
     @Nullable private com.termux.app.statusbar.SystemStatsController mStatsController;
     @Nullable private com.termux.app.statusbar.AiIndicatorController mAiIndicatorController;
+    /**
+     * The CPU reading needs privileged access, so it shows or hides as access comes and goes.
+     * Registered from onStart to onStop, the same span the stats sampler runs: a stopped activity
+     * re-reads availability on its next onStart anyway.
+     */
+    private final com.termux.privileged.PrivilegedAvailabilitySignal.Listener
+        mPrivilegedAvailabilityListener = available -> updateStatusWidgets();
     @Nullable private com.termux.app.statusbar.SystemStatsCardView mStatsCardView;
     /**
      * Presentation smoothing for the two bar readings only. One controller feeds both surfaces, and
@@ -741,6 +749,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private ReadAloudCard mReadAloudCard;
     /** The dictation in the panel: what has been heard, and the ✓ or Copy waiting for it to settle. */
     private final VoiceDictation mVoiceDictation = new VoiceDictation();
+    /** Editing the dictation card's text by hand; built on the first tap of the text. */
+    @Nullable private VoiceCardEdit mVoiceCardEdit;
+    /** That editor raised the phone's keyboard (the in-app one is off), so it puts it down again. */
+    private boolean mVoiceEditRaisedIme;
     /**
      * Tells a program that asked for them (mode 7727 with bracketed paste) when the microphone
      * opens and closes and which paste is dictated; every other program gets today's bytes.
@@ -823,6 +835,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The one-time language notices, once per process. */
     private boolean mVoiceLanguageFallbackNoticed;
     private boolean mVoiceEnglishOnlyNoticed;
+    /**
+     * The running dictation's spoken language (ISO 639), from {@link VoiceInputSession.Host#onSpeechLanguage}:
+     * forced by the setting, or heard and locked. Null while unknown, for Parakeet and .en models,
+     * and once the session has ended.
+     */
+    @Nullable private String mVoiceSpokenLanguage;
     private boolean mVoiceMicrophonePromptShowing;
     /** Whether the microphone was asked for from the voice key rather than the Dictate key. */
     private boolean mVoiceMicrophoneAskedFromKeyboard;
@@ -2082,6 +2100,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // updateStatusWidgets(), reached solely from refreshTerminalWindowBar()'s tail — which
         // neither onStart nor onResume calls. Without this the CPU and memory readings never
         // resumed after leaving the app and coming back.
+        PrivilegedBackendManager.getInstance().addAvailabilityListener(mPrivilegedAvailabilityListener);
         updateStatusWidgets();
         // onStop let go of the display's surface; nothing else re-attaches it when the wall
         // already rests on the Display place, and a display whose surface is not attached takes
@@ -2125,6 +2144,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mAzTabTouch = mAzTabLayer != null
                     && mAzTabLayer.isOnTab(ev.getRawX(), ev.getRawY());
             }
+            // Seen before any view acts on it: a tap off the dictation card's text ends its edit.
+            if (mVoiceCardEdit != null)
+                mVoiceCardEdit.onWindowTouch(ev.getActionMasked(), ev.getRawX(), ev.getRawY());
             feedDockPlank(ev);
             if (!mAzTabTouch) feedTerminalPlank(ev);
             if (!mAzTabTouch && touchBeganOverTerminal(ev))
@@ -2151,11 +2173,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private static boolean viewContainsScreenPoint(@Nullable View view, @NonNull MotionEvent ev) {
+        return viewContainsScreenPoint(view, ev.getRawX(), ev.getRawY());
+    }
+
+    private static boolean viewContainsScreenPoint(@Nullable View view, float x, float y) {
         if (view == null || !view.isShown()) return false;
         int[] location = new int[2];
         view.getLocationOnScreen(location);
-        float x = ev.getRawX();
-        float y = ev.getRawY();
         return x >= location[0] && x < location[0] + view.getWidth()
             && y >= location[1] && y < location[1] + view.getHeight();
     }
@@ -2803,6 +2827,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onPause() {
         mReturnHold.onPaused();
         dismissHelpOverlay();
+        // An edit of the dictation card's text is kept and its typing handed back, before the
+        // microphone closes below and the text settles with it.
+        endVoiceEdit();
         // The microphone is only ever open while this activity is the one on screen; what was
         // said stays in the panel, waiting for the user to come back to it.
         endVoiceInput(VoiceInputSession.EndReason.PAUSED);
@@ -8502,6 +8529,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mKeybindHintPresenter.hideNow(false);
         if (mStatsController != null) mStatsController.stop();
         if (mAiIndicatorController != null) mAiIndicatorController.stop();
+        PrivilegedBackendManager.getInstance().removeAvailabilityListener(mPrivilegedAvailabilityListener);
         // Sampling stops here, so the smoothed history stops meaning anything. Dropped now rather
         // than aged out on resume: the first reading the user sees again has to be the true one.
         mBarCpuSmoother.reset();
@@ -11451,6 +11479,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.isRoundedDockStyle();
         }
 
+        @Override public boolean isAppsRowAlone() {
+            return TermuxActivity.this.isAppsRowAlone(currentPlaceLayout());
+        }
+
         @Override public void setTopStatusBarExpandedForEditor(boolean expanded, boolean animate) {
             TermuxActivity.this.setTopStatusBarExpandedForEditor(expanded, animate);
         }
@@ -11563,6 +11595,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // rebuilds the dock's whole app row.
             applySuggestionBarSurfaceStyling();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        }
+
+        @Override public boolean isGlassRefractionActive() {
+            return currentFancierGlassLook() != null;
         }
 
         @Override @Nullable public int[] terminalFrameRectInRoot() {
@@ -12072,6 +12108,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void paste() {
+            if (mTermuxTerminalSessionActivityClient == null)
+                return;
+            com.termux.app.terminal.inappkeyboard.RecentScreenshot.Shot screenshot =
+                mInAppKeyboard == null ? null : mInAppKeyboard.takeScreenshotToPaste();
+            if (screenshot != null)
+                mTermuxTerminalSessionActivityClient.pasteContentIntoFocused(screenshot.uri(), screenshot.mime);
+            else
+                mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(getCurrentSession());
+        }
+
+        @Override
+        public void pasteClipboard() {
             if (mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(getCurrentSession());
         }
@@ -15202,6 +15250,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
         registry.register(this::onHelpBackPressed);
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            // The dictation card floats over every other surface, so its editor is innermost.
+            @Override public boolean onBack() {
+                // Back keeps the edit, as Enter does; only the card's × and swipe discard.
+                if (mVoiceCardEdit == null || !mVoiceCardEdit.isActive()) return false;
+                mVoiceCardEdit.end();
+                return true;
+            }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return mVoiceCardEdit != null && mVoiceCardEdit.handleKeyDown(keyCode, event);
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                return mVoiceCardEdit != null && mVoiceCardEdit.handleCodePoint(codePoint, ctrlDown);
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                endVoiceEdit();
+            }
+        });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
                 // Closing the chip discards the draft, unlike a tap outside.
                 if (!isTerminalRenameActive()) return false;
@@ -16038,8 +16104,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             requestVoiceInputMicrophone();
             return;
         }
-        String language = resolveVoiceLanguage(model);
-        VoiceInputSession.Config config = new VoiceInputSession.Config(modelId, language,
+        VoiceLanguage.Choice language = resolveVoiceLanguage(model);
+        VoiceInputSession.Config config = new VoiceInputSession.Config(modelId, language.forced, language.hint,
             mPreferences.getInAppKeyboardVoicePauseMs(), windowSeconds,
             mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs(),
             mPreferences.isInAppKeyboardVoiceSoundsEnabled(),
@@ -16054,14 +16120,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             launchVoiceTyping(false);
             return;
         }
-        // Text still waiting in the panel is carried on from rather than lost, a cleanup still
-        // running on it included (the new dictation's pass covers the whole text); a pill that is
-        // only saying what became of used text gives way.
+        // Text still waiting in the panel is carried on from rather than lost; a pill that is
+        // only saying what became of used text gives way. Waiting text that is a cleanup or an
+        // edit is final and is not cleaned again; text as heard is, and a cleanup still running on
+        // it hands over what it had cleaned. An edit still open is kept first, so the new
+        // dictation carries on from it.
+        endVoiceEdit();
         String base = mVoiceDictation.carryOver();
+        boolean baseFinal = !base.trim().equals(mVoiceDictation.raw().trim());
+        VoiceSessionCleanup previous = null;
         if (base.isEmpty()) {
             closeVoicePill();
         } else {
-            VoiceSessionCleanup previous = mVoiceCleanup;
+            previous = mVoiceCleanup;
             mVoiceCleanup = null;
             if (previous != null) previous.cancel();
             getWindow().getDecorView().removeCallbacks(mVoicePillAutoClose);
@@ -16070,12 +16141,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mVoiceTiedToKeyboard = fromKeyboard;
         mVoiceDictation.start(base);
         // Phrases collect as heard; with cleanup on, the chat model resolves and loads on its own
-        // thread while the user speaks, and one pass cleans the whole dictation at the end. With
-        // no Gemma installed that pass hands the raw text back and nothing changes.
+        // thread while the user speaks, cleans what was said so far at phrase pauses when it is
+        // quick enough, and cleans the rest at the end. With no Gemma installed the passes hand
+        // the raw text back and nothing changes.
         if (mPreferences.isInAppKeyboardVoicePolishEnabled()) {
-            VoiceTextPolisher polisher = new LocalTaiVoiceTextPolisher(this,
-                mPreferences.getInAppKeyboardVoicePolishLevel());
-            VoiceSessionCleanup cleanup = new VoiceSessionCleanup(polisher);
+            String level = mPreferences.getInAppKeyboardVoicePolishLevel();
+            VoiceSessionCleanup cleanup = new VoiceSessionCleanup(new LocalTaiVoiceTextPolisher(this, level), level);
+            cleanup.carryOn(base, baseFinal, previous);
+            // A language the setting forces (or an English-only model) is certain; otherwise the
+            // speech model's own guess arrives later (onSpeechLanguage), and the keyboard's or the
+            // phone's language is assumed only for text that reads as no language in particular.
+            cleanup.setLanguageHint(language.forced != null ? language.forced
+                : com.termux.ai.TaiSpeechModels.isEnglishOnly(model) ? "en" : null);
+            cleanup.setLanguageFallback(VoiceLanguage.resolve(mPreferences.getInAppKeyboardVoiceLanguage(),
+                mInAppKeyboard == null ? null : mInAppKeyboard.getActiveTextLayoutId(), userLocale()).code);
             mVoiceCleanup = cleanup;
             cleanup.warm(this::refreshVoiceWarmUp);
         }
@@ -16106,13 +16185,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The language token for a multilingual graph, or null for an English-only one. Both one-time
-     * notices live here: a layout and locale Whisper does not know (English is used), and a
-     * non-English choice against an {@code .en} model (the choice is ignored).
+     * What a dictation sends the speech model: the setting's language forced on a multilingual
+     * Whisper graph, or with Auto no language and the layout's (then the locale's) as the hint
+     * the graph falls back to while it is not sure what it hears; nothing for an English-only
+     * graph or Parakeet, which decide alone. Both one-time notices live here: a setting Whisper
+     * does not know (English is used), and a non-English choice against an {@code .en} model (the
+     * choice is ignored).
      */
-    @Nullable
-    private String resolveVoiceLanguage(@NonNull com.termux.ai.TaiModelSpec model) {
+    @NonNull
+    private VoiceLanguage.Choice resolveVoiceLanguage(@NonNull com.termux.ai.TaiModelSpec model) {
+        mVoiceSpokenLanguage = null;
         String setting = mPreferences.getInAppKeyboardVoiceLanguage();
+        if (com.termux.ai.TaiSpeechModels.isParakeet(model.id, model.localPath)) return VoiceLanguage.Choice.NONE;
         boolean englishOnly = com.termux.ai.TaiSpeechModels.isEnglishOnly(model);
         if (englishOnly) {
             if (!VoiceLanguage.AUTO.equals(setting) && !VoiceLanguage.FALLBACK.equals(setting)
@@ -16121,17 +16205,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 AppNotice.show(this, getString(R.string.voice_input_english_only_model,
                     new java.util.Locale(setting).getDisplayLanguage()), true);
             }
-            return null;
+            return VoiceLanguage.Choice.NONE;
         }
         String layoutId = mInAppKeyboard == null ? null : mInAppKeyboard.getActiveTextLayoutId();
-        java.util.Locale system = getResources().getConfiguration().getLocales().isEmpty()
-            ? java.util.Locale.getDefault() : getResources().getConfiguration().getLocales().get(0);
-        VoiceLanguage.Resolution resolution = VoiceLanguage.resolve(setting, layoutId, system);
-        if (resolution.fallback && !mVoiceLanguageFallbackNoticed) {
+        VoiceLanguage.Resolution resolution = VoiceLanguage.resolve(setting, layoutId, userLocale());
+        // Auto listens, so an unknown layout only means an English hint, not English forced.
+        if (resolution.fallback && resolution.explicit && !mVoiceLanguageFallbackNoticed) {
             mVoiceLanguageFallbackNoticed = true;
             AppNotice.show(this, R.string.voice_input_language_fallback, false);
         }
-        return resolution.code;
+        return VoiceLanguage.Choice.forWhisper(resolution);
+    }
+
+    @NonNull
+    private java.util.Locale userLocale() {
+        return getResources().getConfiguration().getLocales().isEmpty()
+            ? java.util.Locale.getDefault() : getResources().getConfiguration().getLocales().get(0);
     }
 
     private void requestVoiceInputMicrophone() {
@@ -16186,7 +16275,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // right, under the status bar and the top bars, the same on Home, Terminal and Display.
         View panes = findViewById(R.id.terminal_surface_host);
         if (panes == null) return;
-        if (mVoiceIndicator == null) mVoiceIndicator = new VoiceListeningIndicator(this, panes, mVoicePillPlace);
+        if (mVoiceIndicator == null) {
+            mVoiceIndicator = new VoiceListeningIndicator(this, panes, mVoicePillPlace);
+            mVoiceIndicator.setTypingKeyboardBounds(out ->
+                mInAppKeyboard != null && mInAppKeyboard.getKeyboardRectOnScreen(out));
+        }
         mVoiceIndicator.show(mVoicePillCallbacks, mVoiceCleanup != null, mVoiceDictation.raw());
         refreshVoiceWarmUp();
         // Talking is not touching, so the phone's screen timeout would dim and then lock mid-sentence.
@@ -16230,6 +16323,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * changes. No-op when it is down.
      */
     private void closeVoicePill() {
+        // The editor goes with the text, and gives the keyboard's typing back first.
+        if (mVoiceCardEdit != null) mVoiceCardEdit.abandon();
         VoiceSessionCleanup cleanup = mVoiceCleanup;
         mVoiceCleanup = null;
         if (cleanup != null) cleanup.cancel();
@@ -16261,23 +16356,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * pressed while listening. None of them ever erases or retypes anything in the terminal.
      */
     private final VoiceListeningIndicator.Callbacks mVoicePillCallbacks = new VoiceListeningIndicator.Callbacks() {
+        // Every button ends an edit of the text first, kept, and with it the editor's claim on
+        // the keyboard's typing; the × and the swipe end it unkept with the text.
+
         @Override
         public void onPause() {
+            endVoiceEdit();
             endVoiceInput(VoiceInputSession.EndReason.USER);
         }
 
         @Override
         public void onResume() {
+            endVoiceEdit();
             resumeVoiceDictation();
         }
 
         @Override
         public void onClose() {
+            if (mVoiceCardEdit != null) mVoiceCardEdit.abandon();
             discardVoiceDictation();
         }
 
         @Override
+        public void onTextTapped(int shownOffset) {
+            voiceCardEdit().onTextTapped(shownOffset);
+        }
+
+        @Override
         public void onUndo() {
+            endVoiceEdit();
             if (!mVoiceDictation.toggleUndo()) return;
             if (mVoiceIndicator != null) mVoiceIndicator.setUndone(mVoiceDictation.isUndone());
         }
@@ -16324,6 +16431,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * can.
      */
     private void useVoiceDictation(@NonNull VoiceDictation.Use use) {
+        // Kept, and the keyboard's slot handed back, before anything is typed: ✓ must never type
+        // into the card's own editor.
+        endVoiceEdit();
         if (mVoiceDictation.press(use)) {
             carryOutVoiceUse(use, mVoiceDictation.result(), false);
             return;
@@ -16368,16 +16478,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Types {@code text} once where the keyboard would type right now on the place on screen, and
-     * never with an Enter (the text has no line breaks, {@link VoiceDictation}): first whatever
-     * has claimed the launcher keyboard's typing — the palette, the drawer's search, a rename, a
-     * sheet, or on the Display place the display itself; then, on the Display place without a
-     * launcher keyboard, the display through the same bridge; then a focused text field of the
-     * launcher's own (a widget's editor, typed into by the phone's keyboard); and on the Terminal
-     * place the shell in front. Home has no shell in front of it and a display with no server has
+     * never with an Enter. The text may hold line breaks, a Polished cleanup's paragraphs and list
+     * items ({@link VoiceTextSanitizer#cleanLines}): the shell in front gets them in one bracketed
+     * paste when its program takes that and on one line otherwise ({@link DictationMarks#type}), a
+     * multi-line text field gets them as they are, and everywhere else a line break could run
+     * something, so the text goes in on one line ({@link VoiceTextSanitizer#oneLine}). In order:
+     * first whatever has claimed the launcher keyboard's typing — the palette, the drawer's
+     * search, a rename, a sheet, or on the Display place the display itself; then, on the Display
+     * place without a launcher keyboard, the display through the same bridge; then a focused text
+     * field of the launcher's own (a widget's editor, typed into by the phone's keyboard); and on
+     * the Terminal place the shell in front. Home has no shell in front of it and a display with no server has
      * nobody listening, so false there, and the caller copies instead.
      */
     private boolean typeVoiceText(@NonNull String text) {
-        juloo.keyboard2.KeyValue value = juloo.keyboard2.KeyValue.makeStringKey(text);
+        String oneLine = VoiceTextSanitizer.oneLine(text);
+        juloo.keyboard2.KeyValue value = juloo.keyboard2.KeyValue.makeStringKey(oneLine);
         if (offerToInAppKeyboardInterceptor(value, false, false, false)) return true;
         com.termux.app.wall.PaneWallPage page = currentWallPage();
         if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
@@ -16392,7 +16507,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (editable != null) {
                 int start = Math.max(0, Math.min(field.getSelectionStart(), field.getSelectionEnd()));
                 int end = Math.max(start, Math.max(field.getSelectionStart(), field.getSelectionEnd()));
-                editable.replace(start, end, text);
+                boolean multiLine = (field.getInputType() & android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0;
+                editable.replace(start, end, multiLine ? text : oneLine);
                 return true;
             }
         }
@@ -16403,17 +16519,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
-    /** One transcribed phrase into the panel, as heard; nothing reaches the terminal. */
+    /**
+     * One transcribed phrase into the panel, as heard; nothing reaches the terminal. The cleanup
+     * may clean what was said so far in the background, shown only once the dictation ends.
+     */
     private void appendVoicePhrase(@NonNull String transcript) {
         String piece = mVoiceDictation.append(transcript);
-        if (!piece.isEmpty() && mVoiceIndicator != null) mVoiceIndicator.appendTranscript(piece);
+        if (piece.isEmpty()) return;
+        VoiceSessionCleanup cleanup = mVoiceCleanup;
+        VoiceInputSession session = mVoiceInput;
+        if (cleanup != null) {
+            cleanup.onPhrase(mVoiceDictation.raw(), session != null && session.isTranscribing(),
+                mVoiceDictation.isByHand());
+        }
+        // While the text is open in the editor the phrase joins the draft's end instead.
+        if (mVoiceCardEdit != null && mVoiceCardEdit.onPhrase(piece)) return;
+        if (mVoiceIndicator != null) mVoiceIndicator.appendTranscript(piece);
     }
 
     /**
      * The microphone is released and every phrase delivered. Nothing heard closes the pill; a
      * dictated command is written as one ({@link VoiceCommandFormatter}, no model, cleanup on or
-     * off); with cleanup on and something worth cleaning, the one pass runs; otherwise the text
-     * waits as heard.
+     * off); with cleanup on and something worth cleaning, what the passes during the dictation
+     * have not cleaned is cleaned now; otherwise the text waits as heard.
      */
     private void finishVoiceSession(@NonNull VoiceInputSession.EndReason reason) {
         mVoiceDictation.onStopped();
@@ -16425,6 +16553,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         VoiceSessionCleanup cleanup = mVoiceCleanup;
+        if (mVoiceDictation.isByHand()) {
+            // The user has edited the text: neither the formatter nor the model may rewrite it.
+            mVoiceCleanup = null;
+            if (cleanup != null) cleanup.cancel();
+            indicator.showAsHeard(R.string.voice_input_ready);
+            settleVoiceDictation(raw, false);
+            if (mVoiceCardEdit != null) mVoiceCardEdit.onSettled();
+            return;
+        }
         String command = VoiceCommandFormatter.format(raw);
         if (command != null) {
             // The formatter's alone: the model is never sent a command (skipReason "command").
@@ -16445,7 +16582,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (cleanup != null && cleanable) {
             indicator.setCleaningUp();
             cleanup.run(raw, (cleanedRaw, result) -> onVoiceCleaned(cleanup, cleanedRaw, result));
-            cleanup.close();
             return;
         }
         mVoiceCleanup = null;
@@ -16455,8 +16591,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The one pass has landed. Anything but a real change keeps the text as heard; a change shows
-     * with its words marked. Either way the text now waits for the panel's buttons. A pass that
+     * The cleanup has landed, the whole text at once. Anything but a real change keeps the text
+     * as heard; a change shows with its words marked. Either way the text now waits for the panel's buttons. A pass that
      * is no longer the dictation's own — a resume or a discard replaced it, or the text moved on
      * from what it cleaned — is dropped, so an older version never comes back over the panel.
      */
@@ -16468,7 +16604,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (indicator == null || !indicator.isShowing()) return;
         if (mVoiceDictation.phase() != VoiceDictation.Phase.FINISHING
             || !raw.trim().equals(mVoiceDictation.raw().trim())) return;
-        String cleaned = result.isPolished() ? VoiceTextSanitizer.clean(result.text) : "";
+        // A Polished pass's paragraphs and list items keep their line breaks.
+        String cleaned = result.isPolished() ? VoiceTextSanitizer.cleanLines(result.text) : "";
         if (cleaned.isEmpty() || cleaned.equals(raw.trim())) {
             indicator.showAsHeard(R.string.voice_input_kept_as_heard);
             settleVoiceDictation(raw.trim(), false);
@@ -16483,7 +16620,113 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The screen stays on while the text waits, until the idle release lets it sleep.
         holdVoiceScreen();
         VoiceDictation.Use early = cleaned ? mVoiceDictation.onCleaned(text) : mVoiceDictation.onSettled(text);
-        if (early != null) carryOutVoiceUse(early, text, cleaned);
+        // The dictation's result, not text: an edit kept before the text settled is what is used.
+        if (early != null) carryOutVoiceUse(early, mVoiceDictation.result(), cleaned);
+    }
+
+    /** Ends an edit of the dictation card's text, keeping it. No-op when none is open. */
+    private void endVoiceEdit() {
+        if (mVoiceCardEdit != null) mVoiceCardEdit.end();
+    }
+
+    @NonNull
+    private VoiceCardEdit voiceCardEdit() {
+        if (mVoiceCardEdit == null) {
+            mVoiceCardEdit = new VoiceCardEdit(mVoiceDictation, new VoiceCardEditHost(),
+                ClipboardText.forContext(this), android.view.ViewConfiguration.get(this).getScaledTouchSlop());
+        }
+        return mVoiceCardEdit;
+    }
+
+    /** The activity's half of editing the dictation card's text: the microphone, the cleanup, the keyboards. */
+    private final class VoiceCardEditHost implements VoiceCardEdit.Host {
+        @Nullable
+        @Override
+        public VoiceCardEdit.Card card() {
+            VoiceListeningIndicator indicator = mVoiceIndicator;
+            return indicator != null && indicator.isShowing() ? indicator : null;
+        }
+
+        @Override
+        public void stopListening() {
+            VoiceInputSession session = mVoiceInput;
+            if (session != null && !session.isStopRequested()) session.stop(VoiceInputSession.EndReason.USER);
+        }
+
+        @Override
+        public void dropCleanup() {
+            VoiceSessionCleanup cleanup = mVoiceCleanup;
+            mVoiceCleanup = null;
+            if (cleanup != null) cleanup.cancel();
+            refreshVoiceWarmUp();
+            VoiceListeningIndicator indicator = mVoiceIndicator;
+            // The session had ended and only the cleanup was left: nothing else settles the text.
+            if (mVoiceInput == null && mVoiceDictation.phase() == VoiceDictation.Phase.FINISHING
+                && indicator != null && indicator.isShowing()) {
+                indicator.showAsHeard(R.string.voice_input_ready);
+                settleVoiceDictation(mVoiceDictation.raw().trim(), false);
+            }
+        }
+
+        @Override
+        public boolean ensureTypingKeyboard() {
+            return ensureInAppTypingKeyboard();
+        }
+
+        @Override
+        public void showSystemKeyboard() {
+            if (!isImeVisible()) mVoiceEditRaisedIme = true;
+            // Focus stays on the terminal view, which owns the input connection; committed text
+            // reaches the editor through the overlay channel.
+            onSystemImeRequested();
+            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, mTerminalView);
+        }
+
+        @Override
+        public void releaseSystemKeyboard() {
+            if (!mVoiceEditRaisedIme) return;
+            mVoiceEditRaisedIme = false;
+            if (getWindow() == null) return;
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView()).hide(Type.ime());
+        }
+
+        @Override
+        public void claimTyping(@Nullable com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler
+                                    .KeyValueInterceptor interceptor) {
+            if (mInAppKeyboard == null) return;
+            if (interceptor != null) {
+                mInAppKeyboard.setKeyValueInterceptor(interceptor);
+            } else {
+                restoreInAppKeyboardTypingClaim();
+            }
+        }
+
+        @Override
+        public boolean isOnTypingKeyboard(float rawX, float rawY) {
+            // The keys, and the extra-keys row beside them: both type into the edit.
+            return isPointOnInAppKeyboard(rawX, rawY)
+                || viewContainsScreenPoint(findViewById(R.id.inapp_keyboard_container), rawX, rawY)
+                || viewContainsScreenPoint(findViewById(R.id.terminal_toolbar_host), rawX, rawY);
+        }
+    }
+
+    /**
+     * Hands the in-app keyboard's interceptor slot back to whoever owns it now, after a surface
+     * that borrowed it: the palette, a sheet, the display on the Display place, or the drawer's
+     * search (which also keeps a rename's claim, {@link #setAppDrawerInterceptorActive}).
+     */
+    private void restoreInAppKeyboardTypingClaim() {
+        if (mInAppKeyboard == null) return;
+        if (isCommandPaletteOpen()) {
+            mInAppKeyboard.setKeyValueInterceptor(getCommandPaletteController());
+        } else if (isTerminalSheetOpen()) {
+            mInAppKeyboard.setKeyValueInterceptor(getTerminalSheetController());
+        } else if (currentWallPage() == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
+            && mPaneWallController != null && mPaneWallController.displayPage() != null) {
+            mInAppKeyboard.setKeyValueInterceptor(x11KeyboardBridge());
+        } else {
+            setAppDrawerInterceptorActive(isAppDrawerOpen());
+        }
     }
 
     private final VoiceInputSession.Host mVoiceInputHost = new VoiceInputSession.Host() {
@@ -16526,6 +16769,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
+        public void onSpeechLanguage(@NonNull String iso, boolean differsFromHint) {
+            mVoiceSpokenLanguage = iso;
+            if (mVoiceCleanup != null) mVoiceCleanup.setLanguageHint(iso);
+            // Named only when it was heard and is not the keyboard's or the phone's language, so
+            // someone dictating in their own language sees nothing new.
+            if (mVoiceIndicator != null) {
+                mVoiceIndicator.setSpokenLanguage(differsFromHint ? VoiceLanguage.displayName(iso, userLocale()) : null);
+            }
+        }
+
+        @Override
         public void onTranscript(@NonNull String text) {
             appendVoicePhrase(text);
         }
@@ -16561,6 +16815,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mInAppKeyboard != null) mInAppKeyboard.setVoiceTypingActive(false);
             refreshVoiceWarmUp();
             finishVoiceSession(reason);
+            // After the finish, which still reads the session's language; the card's strip moves
+            // on to the outcome, which never names it.
+            mVoiceSpokenLanguage = null;
+            if (mVoiceIndicator != null) mVoiceIndicator.setSpokenLanguage(null);
         }
     };
 
@@ -22369,7 +22627,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.terminal_status_dot_cpu_ram);
         com.termux.app.statusbar.MaterialDotSeparatorView ramWeatherDot =
             findViewById(R.id.terminal_status_dot_ram_weather);
-        boolean cpuOn = mPreferences != null && mPreferences.isStatusWidgetCpuEnabled();
+        // The CPU reading needs privileged access; without it the widget hides rather than show a
+        // dash, and comes back through mPrivilegedAvailabilityListener. The backend itself is
+        // brought up (and retried) by refreshPrivilegedBackendIfNeeded() on every resume.
+        boolean cpuOn = com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
+            mPreferences != null && mPreferences.isStatusWidgetCpuEnabled(),
+            PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
         boolean ramOn = mPreferences != null && mPreferences.isStatusWidgetRamEnabled();
         boolean weatherOn = mPreferences != null && mPreferences.isStatusWidgetWeatherEnabled();
         View widgetSlot = findViewById(R.id.terminal_top_widget_area);
@@ -23976,6 +24239,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override @Nullable public TerminalSession openCommandPane(
                 @NonNull java.util.List<String> command, @Nullable String cwd,
                 @Nullable String title, boolean focus) {
+            return openCommandPane(command, cwd, title, focus, null);
+        }
+
+        @Override @Nullable public TerminalSession openCommandPane(
+                @NonNull java.util.List<String> command, @Nullable String cwd,
+                @Nullable String title, boolean focus,
+                @Nullable com.termux.app.terminal.TerminalPaneController.PlacementRequest placement) {
             if (!isSplitPanesEnabled() || mPaneController == null
                 || mPaneController.getActiveSession() == null) return null;
             TerminalSession shell = createCommandShell(command, cwd, title);
@@ -23991,10 +24261,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return null;
             }
             boolean[] added = {false};
-            runWithoutNotices(() -> added[0] = mPaneController.addPane(shell, focus));
+            runWithoutNotices(() -> added[0] = placement == null
+                ? mPaneController.addPane(shell, focus)
+                : mPaneController.addPaneAt(shell, placement, focus));
             if (!added[0]) {
                 mTermuxService.killTermuxSession(shell);
                 return null;
+            }
+            // A pane placed in a window that is not on screen is focused there; bringing it up
+            // is what focus means, as pane.focus does for a pane in another window.
+            if (focus && mPaneController.windowOf(shell) != mPaneController.activeWindow()) {
+                activateSessionInPanes(shell);
             }
             return shell;
         }

@@ -468,6 +468,8 @@
     <string name="settings_permission_fix_summary">Action needed · Tap to fix.</string>
     <string name="settings_documentation_title">Documentation</string>
     <string name="settings_documentation_summary">Read launcher and terminal guides.</string>
+    <string name="settings_discord_title">Ask on Discord</string>
+    <string name="settings_discord_summary">Get help from the community. The TildeBot help bot answers first.</string>
     <string name="settings_send_feedback_title">Send feedback</string>
     <string name="settings_source_code_title">Source code</string>
     <string name="settings_source_code_summary">GitHub</string>
@@ -2281,13 +2283,13 @@
     <string name="settings_keyboard_voice_engine_system">Android system</string>
     <string name="settings_keyboard_voice_engine_on_device">On-device</string>
     <string name="settings_keyboard_voice_language_title">Voice language</string>
-    <string name="settings_keyboard_voice_language_auto">Auto</string>
+    <string name="settings_keyboard_voice_language_auto">Auto-detect</string>
     <string name="settings_keyboard_voice_polish_title">Clean up dictation</string>
     <string name="settings_keyboard_voice_polish_summary">Review local corrections before inserting; requires a cleanup model.</string>
     <string name="settings_keyboard_voice_polish_model_title">Cleanup model</string>
     <string name="settings_keyboard_voice_polish_level_title">Cleanup level</string>
-    <string name="settings_keyboard_voice_polish_level_light">Light: punctuation, fillers and grammar, in your words. Runs on this phone.</string>
-    <string name="settings_keyboard_voice_polish_level_polished">Polished: also paragraphs and lists. Uses your remote model when one is set up.</string>
+    <string name="settings_keyboard_voice_polish_level_light">Light: what you meant, as one cleaned-up paragraph.</string>
+    <string name="settings_keyboard_voice_polish_level_polished">Polished: also paragraphs and lists.</string>
     <string name="settings_keyboard_voice_pause_title">Phrase pause</string>
     <string name="settings_keyboard_voice_silence_timeout_title">Stop after silence</string>
     <string name="settings_keyboard_voice_mic_sensitivity_title">Mic sensitivity</string>
@@ -2351,6 +2353,11 @@
     <string name="voice_input_undo">Undo the cleanup</string>
     <string name="voice_input_move_handle">Move the dictation panel. Double-tap to put it back in the corner</string>
     <string name="voice_input_redo">Redo the cleanup</string>
+    <string name="voice_input_editing">Editing</string>
+    <string name="voice_input_edited">Edited</string>
+    <string name="voice_input_before_edit">Before your edit</string>
+    <string name="voice_input_undo_edit">Undo your edit</string>
+    <string name="voice_input_redo_edit">Redo your edit</string>
     <string name="voice_input_insert">Insert at the cursor</string>
     <string name="voice_input_inserted">Inserted</string>
     <string name="voice_input_no_target_copied">Nothing here takes typing, so the dictation was copied instead</string>
@@ -2366,6 +2373,8 @@
     <string name="voice_input_meta_undone">· cleanup undone</string>
     <string name="voice_input_meta_inserted">· at the cursor</string>
     <string name="voice_input_meta_copied">· to the clipboard</string>
+    <!-- The language a dictation was heard in, beside "Listening…" when it is not the keyboard's: "· Spanish" -->
+    <string name="voice_input_meta_language">· %1$s</string>
     <!-- Read aloud's card: the dictation card's shell, reading the terminal selection. -->
     <string name="read_aloud_reading">Reading</string>
     <string name="read_aloud_paused">Paused</string>
@@ -2381,6 +2390,7 @@
     <string name="voice_input_no_model">No speech model installed — using the Android recognizer</string>
     <string name="voice_input_fallback">%1$s — using the Android recognizer</string>
     <string name="voice_input_stopped">Voice input stopped: %1$s</string>
+    <string name="voice_input_runtime_closed">the speech model closed</string>
     <string name="voice_input_mic_unavailable">Microphone unavailable</string>
     <string name="voice_input_permission_denied">Microphone access denied</string>
     <string name="voice_input_permission_title">Microphone for voice input</string>
@@ -2795,9 +2805,9 @@
     <string name="help_topic_copy_summary">Terminal text can be scrolled back, selected and copied.</string>
     <string name="help_topic_copy_action">Long-press the text, then drag the handles over what you want.</string>
     <string name="help_topic_copy_step1">Tap Copy to take the selection.</string>
-    <string name="help_topic_copy_step2">Long-press an empty spot and tap Paste to put it back.</string>
+    <string name="help_topic_copy_step2">Long-press an empty spot and tap Paste to put it back. A copied picture pastes as the path to a saved copy.</string>
     <string name="help_topic_copy_step3">Swipe up with one finger to scroll back through older output.</string>
-    <string name="help_topic_copy_aliases">copy, paste, clipboard, select, selection, scroll, scrollback</string>
+    <string name="help_topic_copy_aliases">copy, paste, clipboard, select, selection, scroll, scrollback, picture, image, screenshot</string>
     <string name="help_topic_mouse_title">Touch and mouse mode</string>
     <string name="help_topic_mouse_summary">Touch scrolls the terminal; mouse mode sends your taps to the program instead.</string>
     <string name="help_topic_mouse_step1">In a full-screen program such as htop or nvim, hold on the text and your finger is the mouse: lift to click, drag to drag.</string>
@@ -3051,7 +3061,7 @@
     <string name="help_home_practice">Practice the basics</string>
     <string name="help_topic_unavailable">This topic is not part of this screen.</string>
     <string name="help_docs_link">Full documentation ↗</string>
-    <string name="help_support_link">Get support ↗</string>
+    <string name="help_support_link">Ask on Discord ↗</string>
     <string name="help_search_suggested">Suggested</string>
     <string name="help_search_kind_guide">Guide</string>
     <string name="help_search_kind_term">Term</string>
@@ -3105,4 +3115,70 @@
     <string name="termux_ai_memory_limits_unrestricted">Unrestricted</string>
     <string name="termux_ai_memory_limits_relaxed_summary">Keeps enough memory free for the phone to stay responsive while a model loads.</string>
     <string name="termux_ai_memory_limits_unrestricted_summary">Loads larger models by letting Android close apps in the background. The phone may slow down while a model loads.</string>
+    <!-- Settings › Backup & restore -->
+    <string name="settings_destination_backup_restore">Backup &amp; restore</string>
+    <string name="settings_destination_backup_restore_summary">Move your setup to another phone</string>
+    <string name="settings_backup_export_title">Export settings</string>
+    <string name="settings_backup_export_summary">Save your launcher setup to a file</string>
+    <string name="settings_backup_import_title">Import settings</string>
+    <string name="settings_backup_import_summary">Restore your setup from a saved file</string>
+    <string name="settings_backup_exported">Settings saved</string>
+    <string name="settings_backup_exported_skipped">Settings saved, leaving out files over 20 MB</string>
+    <string name="settings_backup_export_failed">Couldn\'t save your settings.</string>
+    <string name="settings_backup_import_not_backup">This file isn\'t a launcher settings backup.</string>
+    <string name="settings_backup_import_newer">This backup is from a newer version of the launcher.</string>
+    <string name="settings_backup_import_too_large">This backup is too large to restore.</string>
+    <string name="settings_backup_import_read_failed">Couldn\'t open that file.</string>
+    <string name="settings_backup_import_confirm_title">Restore settings from %1$s?</string>
+    <string name="settings_backup_import_confirm_message">Saved by version %1$s. Your settings are replaced and the launcher restarts, closing open terminal sessions. Widgets and permissions need setting up again.</string>
+    <string name="settings_backup_import_confirm_action">Restore</string>
+    <string name="settings_backup_import_partial">Some settings couldn\'t be restored.</string>
+    <!-- Settings › Backup & restore: on-device AI models -->
+    <string name="settings_backup_export_models_title">Export AI models</string>
+    <string name="settings_backup_export_models_summary">Save downloaded models so you don\'t download them again</string>
+    <string name="settings_backup_export_models_none">No downloaded models to save yet</string>
+    <string name="settings_backup_import_models_title">Import AI models</string>
+    <string name="settings_backup_import_models_summary">Add models from a saved folder</string>
+    <string name="settings_backup_models_busy">Your models are already being saved.</string>
+    <string name="settings_backup_models_saving">Saving AI models</string>
+    <string name="settings_backup_models_preparing">Getting ready…</string>
+    <!-- Notification progress: the model being saved, then how much of the whole export is done. -->
+    <string name="settings_backup_models_progress">%1$s · %2$s of %3$s</string>
+    <string name="settings_backup_models_result_title">AI models</string>
+    <plurals name="settings_backup_models_saved">
+        <item quantity="one">%1$d model saved to %2$s</item>
+        <item quantity="other">%1$d models saved to %2$s</item>
+    </plurals>
+    <plurals name="settings_backup_models_stopped">
+        <item quantity="one">Stopped. %1$d model saved.</item>
+        <item quantity="other">Stopped. %1$d models saved.</item>
+    </plurals>
+    <plurals name="settings_backup_models_failed">
+        <item quantity="one">Couldn\'t finish saving. %1$d model saved.</item>
+        <item quantity="other">Couldn\'t finish saving. %1$d models saved.</item>
+    </plurals>
+    <string name="settings_backup_models_no_space">Not enough space. Free up %1$s and try again.</string>
+    <!-- Size line for the saved AI models: "3 models · 6.2 GB". -->
+    <plurals name="settings_backup_models_count">
+        <item quantity="one">%1$d model</item>
+        <item quantity="other">%1$d models</item>
+    </plurals>
+    <string name="settings_backup_models_size">%1$s · %2$s</string>
+    <!-- Model centre folder import of a folder saved by Export AI models. -->
+    <plurals name="tai_import_saved_adding">
+        <item quantity="one">Adding %1$d model…</item>
+        <item quantity="other">Adding %1$d models…</item>
+    </plurals>
+    <plurals name="tai_import_saved_added">
+        <item quantity="one">%1$d model added.</item>
+        <item quantity="other">%1$d models added.</item>
+    </plurals>
+    <plurals name="tai_import_saved_present">
+        <item quantity="one">%1$d was already here.</item>
+        <item quantity="other">%1$d were already here.</item>
+    </plurals>
+    <plurals name="tai_import_saved_failed">
+        <item quantity="one">%1$d couldn\'t be added.</item>
+        <item quantity="other">%1$d couldn\'t be added.</item>
+    </plurals>
 </resources>

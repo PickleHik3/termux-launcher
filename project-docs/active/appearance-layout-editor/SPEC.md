@@ -372,7 +372,10 @@ replace Bare, Classic and Slate.
 - **Depth per Look** maps to the Fancier Glass keys bend / edge width / edge light: subtle
   4 / 10 / 18%, medium 9 / 20 / 18%, off 0 / 1 / 0. Fancier Glass is on wherever the device
   supports it (API 33, in-app wallpaper); Lazy mode turns it off with the other effects. The
-  switch and its three sliders leave the UI.
+  switch leaves the UI. Its five knobs returned on 2026-10-12 as the Custom row's **Edge** group
+  (§3.4): Bend, Edge width, Edge light, Shine, Dispersion, behind a Surface | Edge toggle in the
+  heading row with nothing tapped. The tapped elements keep their own sets; the edge knobs are
+  global.
 - Style (docked / floating) is never part of a Look.
 
 ## 5. Layout canvas artwork
@@ -421,7 +424,7 @@ The view is renamed from "miniature" to **layout canvas** in code and docs as it
 | Preset tiles Classic · Mist · Slate · Bare · Custom | Look slider stops Clear · Mist · Tint · Solid · Custom |
 | Material Solid / Glass / Frost toggle | inside the Look |
 | Opacity · Blur · Grain, base and per surface (15 sliders) | Custom row 2: Darkness, Key corners, one shared Blur; grain inside the Look |
-| Fancier Glass switch · Bend · Edge width · Edge light | depth per Look; on where supported; Lazy mode off |
+| Fancier Glass switch · Bend · Edge width · Edge light | depth per Look; on where supported; Lazy mode off. Since 2026-10-12 the five knobs stand in the Custom row's Edge group (§3.4) |
 | Shape Docked / Floating | style glyph toggle in Layout mode, beside Portrait / Landscape |
 | Corners · Margin · side gap · pane gap | Layout mode: one Corners and one Margin slider |
 | Key radius | Custom · keyboard: Key corners |

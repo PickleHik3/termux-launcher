@@ -265,10 +265,10 @@ public class TaiLoadBudgetTest {
         assertEquals(4096, plan.contextWindow);
     }
 
-    // --- Estimates: measured worst case over seed, and what a seed counts as new pressure ---
+    // --- Estimates: the typical measured drop over seed, and what a seed counts as new pressure ---
 
     @Test
-    public void aMeasuredWorstCaseReplacesTheSeedEstimateWithTenPercentHeadroom() {
+    public void aMeasuredDropReplacesTheSeedEstimateWithTenPercentHeadroom() {
         long worst = 3_200_000_000L;
         TaiLoadBudget.History history = (accelerator, context) -> "gpu".equals(accelerator) && context == 4096 ? worst : 0L;
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 9_000_000_000L, GPU_THEN_CPU,
@@ -397,6 +397,100 @@ public class TaiLoadBudgetTest {
         assertTrue(plan.fits);
         assertEquals("gpu", plan.accelerator);
         assertEquals(3_520_000_000L + PEAK, plan.neededFreeBytes());
+    }
+
+    // --- Cleanup on pong, 2026-10-13: what a refusal reports, and the typical estimate ---
+
+    private static TaiLoadBudget.History gpuMeasured(long bytes) {
+        return (accelerator, context) -> "gpu".equals(accelerator) ? bytes : 0L;
+    }
+
+    private static TaiLoadBudget.Plan cleanupOnPong(long available, TaiLoadBudget.History history) {
+        return TaiLoadBudget.plan(request(E4B, PONG_TOTAL, available, GPU_THEN_CPU, 2048, false, history, NOTHING));
+    }
+
+    /**
+     * "load refused: needs 3238 MB free, 4138 MB available": 3238 was E4B's CPU seed (0.6 of the
+     * file plus 2048 tokens of KV, 2470 MB) plus the 768 MB hold floor, an accelerator the ladder
+     * never tried (over 3 GB, no CPU step). What it compared was the GPU: 3166 MB measured plus
+     * 10% is 3482 MB, plus the floor 4250 MB, against 4138. The refusal now reports that rung.
+     */
+    @Test
+    public void aRefusalReportsTheRungTheLadderComparedNotOneItSkipped() {
+        TaiLoadBudget.Plan plan = cleanupOnPong(4138L * MIB, gpuMeasured(3166L * MIB));
+        assertFalse(plan.fits);
+        assertEquals("gpu", plan.accelerator);
+        assertEquals(2048, plan.contextWindow);
+        assertEquals(TaiLoadBudget.SOURCE_MEASURED, plan.estimateSource);
+        assertEquals(3482L, plan.estimatedBytes / MIB);
+        assertEquals(HOLD, plan.reserveBytes);
+        assertEquals(4250L, plan.neededFreeBytes() / MIB);
+        assertTrue(plan.neededFreeBytes() > plan.availableBytes);
+        assertEquals("needs 3482 MB + 768 MB floor = 4250 MB free, 4138 MB available", plan.needText());
+        // The figure the old report quoted: the CPU seed the ladder never reached.
+        long cpuSeed = TaiLoadBudget.estimateBytes(TaiModelSpec.BACKEND_LITERT_LM, "cpu", E4B, false, 2048);
+        assertEquals(3238L, (cpuSeed + HOLD) / MIB);
+    }
+
+    /** With both rungs tried and refused, the report is the one that needed less. */
+    @Test
+    public void aRefusalAfterBothAcceleratorsReportsTheCheaperOne() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 1_500_000_000L, GPU_THEN_CPU,
+            4096, false, cpuMeasured(1_000_000_000L), NOTHING));
+        assertFalse(plan.fits);
+        assertEquals("cpu", plan.accelerator);
+        assertEquals(1_100_000_000L, plan.estimatedBytes);
+        assertEquals(TaiLoadBudget.SOURCE_MEASURED, plan.estimateSource);
+    }
+
+    /**
+     * The target: E4B on the GPU at the 2048 cleanup window goes ahead at about 3.8 GB free on pong
+     * when the history plans on the typical load (2588 MB of 2119, 2588 and 3188), and is still
+     * refused where even that leaves less than the floor.
+     */
+    @Test
+    public void theTypicalE4bCleanupLoadIsAdmittedAtThreePointEightGigabytesFree() {
+        TaiLoadBudget.History typical = gpuMeasured(2588L * MIB);
+        TaiLoadBudget.Plan plan = cleanupOnPong(3804L * MIB, typical);
+        assertTrue(plan.fits);
+        assertEquals("gpu", plan.accelerator);
+        assertEquals(2048, plan.contextWindow);
+        assertEquals(3614L, plan.neededFreeBytes() / MIB);
+        assertTrue(plan.evicted.isEmpty());
+        assertFalse(cleanupOnPong(3600L * MIB, typical).fits);
+        // The worst of the three would still have refused it there.
+        assertFalse(cleanupOnPong(3804L * MIB, gpuMeasured(3188L * MIB)).fits);
+    }
+
+    // --- A memory stop: the accelerator held back, the window left alone ---
+
+    /**
+     * Within the cooldown an automatic load skips the accelerator it was stopped on; it is not a
+     * crash record, so nothing halves the window, and the next accelerator still needs a measured
+     * reason (E4B has no CPU step at all).
+     */
+    @Test
+    public void aHeldBackAcceleratorIsSkippedWithoutHalvingTheWindow() {
+        TaiLoadBudget.History typical = gpuMeasured(2588L * MIB);
+        TaiLoadBudget.Request cleanup = request(E4B, PONG_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, false, typical, NOTHING);
+        TaiLoadBudget.Plan held = TaiLoadBudget.plan(cleanup.withHeldBack("gpu"));
+        assertFalse(held.fits);
+        assertEquals("gpu", held.accelerator);
+        assertEquals(2048, held.contextWindow);
+
+        TaiLoadBudget.Plan free = TaiLoadBudget.plan(cleanup.withHeldBack(null));
+        assertTrue(free.fits);
+        assertEquals(2048, free.contextWindow);
+
+        // A crash at the same window halves it, under the floor: the rule a stop no longer triggers.
+        assertFalse(TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false,
+            PONG_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, "gpu", 2048, false, typical, NOTHING)).fits);
+
+        // A smaller file with a measured CPU cost takes the CPU while its GPU is held back.
+        TaiLoadBudget.Plan e2b = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 4500L * MIB, GPU_THEN_CPU, 4096, false,
+            cpuMeasured(800_000_000L), NOTHING).withHeldBack("gpu"));
+        assertTrue(e2b.fits);
+        assertEquals("cpu", e2b.accelerator);
     }
 
     // --- Eviction ---

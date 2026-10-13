@@ -21,6 +21,12 @@ public final class IconPack {
     @NonNull public final List<String> iconMasks;
     @NonNull public final List<String> iconUpons;
     public final float scale;
+    /**
+     * How much this pack's own drawables are enlarged so they read as big as stock icons
+     * ({@code LauncherIconResolver}); 0 until measured. It rides on the parsed pack, so a pack that
+     * is upgraded, replaced or dropped by a cache clear is measured again with its new parse.
+     */
+    private volatile float footprintScale;
 
     IconPack(
         @NonNull IconPackInfo info,
@@ -65,5 +71,14 @@ public final class IconPack {
     @NonNull
     public Map<String, String> componentDrawables() {
         return componentDrawables;
+    }
+
+    /** The measured scale for this pack's drawables, or 0 while it has not been measured. */
+    float footprintScale() {
+        return footprintScale;
+    }
+
+    void setFootprintScale(float footprintScale) {
+        this.footprintScale = footprintScale;
     }
 }

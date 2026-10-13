@@ -45,6 +45,7 @@ import android.view.autofill.AutofillValue;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.InputContentInfo;
 import android.widget.Scroller;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
@@ -817,7 +818,35 @@ public final class TerminalView extends View {
         // Note that IME_ACTION_NONE cannot be used as that makes it impossible to input newlines using the on-screen
         // keyboard on Android TV (see https://github.com/termux/termux-app/issues/221).
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN;
+        // Keyboards only offer pictures (their clipboard strip, GIFs) to editors that declare
+        // them; what is inserted goes to the client, as a paste does.
+        outAttrs.contentMimeTypes = new String[] {"image/*"};
         return new BaseInputConnection(this, true) {
+
+            @Override
+            public boolean commitContent(InputContentInfo inputContentInfo, int flags, Bundle opts) {
+                if (TERMINAL_VIEW_KEY_LOGGING_ENABLED)
+                    mClient.logInfo(LOG_TAG, "IME: commitContent(" + inputContentInfo.getDescription() + ", " + flags + ")");
+                String mime = null;
+                for (int i = 0; i < inputContentInfo.getDescription().getMimeTypeCount() && mime == null; i++) {
+                    String type = inputContentInfo.getDescription().getMimeType(i);
+                    if (type != null && type.startsWith("image/") && !type.equals("image/*")) mime = type;
+                }
+                if (mEmulator == null || mime == null) return false;
+                if ((flags & InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION) != 0) {
+                    try {
+                        inputContentInfo.requestPermission();
+                    } catch (Exception e) {
+                        mClient.logStackTraceWithMessage(LOG_TAG, "IME: commitContent permission refused", e);
+                        return false;
+                    }
+                }
+                stopTextSelectionMode();
+                boolean taken = mClient.onCommitContent(TerminalView.this, inputContentInfo.getContentUri(), mime,
+                    inputContentInfo::releasePermission);
+                if (!taken) inputContentInfo.releasePermission();
+                return taken;
+            }
 
             @Override
             public boolean finishComposingText() {
@@ -2372,19 +2401,11 @@ public final class TerminalView extends View {
         return true;
     }
 
+    /** A middle click or the accessibility action: the client pastes, as for every other paste. */
     private void doPaste() {
-        ClipboardManager clipboardManager = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
-        ClipData clipData = clipboardManager.getPrimaryClip();
-        if (clipData != null) {
-            ClipData.Item clipItem = clipData.getItemAt(0);
-            if (clipItem != null) {
-                CharSequence text = clipItem.coerceToText(getContext());
-                if (!TextUtils.isEmpty(text)) {
-                    snapToBottomForInput();
-                    mEmulator.paste(text.toString());
-                }
-            }
-        }
+        if (mEmulator == null || mClient == null) return;
+        snapToBottomForInput();
+        mClient.onPasteRequest(this);
     }
 
     @Override

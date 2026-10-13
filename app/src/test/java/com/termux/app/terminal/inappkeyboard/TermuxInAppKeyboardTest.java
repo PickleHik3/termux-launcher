@@ -4,15 +4,24 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.robolectric.Shadows.shadowOf;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.Application;
+import android.content.ClipData;
+import android.content.ClipDescription;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Looper;
+import android.provider.MediaStore;
 import android.util.SparseArray;
 import android.view.KeyEvent;
 import android.view.View;
@@ -37,11 +46,13 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.shadow.api.Shadow;
 import org.robolectric.util.ReflectionHelpers;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
@@ -789,6 +800,165 @@ public class TermuxInAppKeyboardTest {
         mController.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
         mController.show(TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
         assertTrue(mController.isVisible());
+    }
+
+    @Test
+    public void theKeysWatchTheClipboardOnlyWhileTheyAreUp() {
+        ClipboardManager clipboard =
+            (ClipboardManager) mActivity.getSystemService(Context.CLIPBOARD_SERVICE);
+        clipboard.setPrimaryClip(pictureClip("image/png"));
+        mPreferences.setInAppKeyboardEnabled(true);
+
+        mController.onCreate(null);
+        Keyboard2View view = (Keyboard2View) mHost.attachedView;
+        assertEquals(1, clipListeners(clipboard).size());
+        assertTrue("what the clipboard holds on show reaches the view", holdsPicture(view));
+
+        clipboard.setPrimaryClip(ClipData.newPlainText("text", "hello"));
+        assertFalse("text on the clipboard puts the paste glyph back", holdsPicture(view));
+
+        mController.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
+        assertTrue("down, the keys stop listening", clipListeners(clipboard).isEmpty());
+        clipboard.setPrimaryClip(pictureClip("image/png"));
+        assertFalse(holdsPicture(view));
+
+        mController.show(TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
+        assertEquals(1, clipListeners(clipboard).size());
+        assertTrue("a picture copied while down shows on the way up", holdsPicture(view));
+
+        mController.onStop();
+        assertTrue("a stopped launcher does not listen", clipListeners(clipboard).isEmpty());
+        mController.onStart();
+        mController.onResume();
+        assertEquals(1, clipListeners(clipboard).size());
+
+        mController.onDestroy();
+        assertTrue(clipListeners(clipboard).isEmpty());
+        mController = null;
+    }
+
+    @Test
+    public void aRecreatedKeyboardViewIsToldThePictureIsStillThere() {
+        ClipboardManager clipboard =
+            (ClipboardManager) mActivity.getSystemService(Context.CLIPBOARD_SERVICE);
+        clipboard.setPrimaryClip(pictureClip("image/jpeg"));
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+
+        mController.onConfigurationChanged(mActivity.getResources().getConfiguration());
+
+        Keyboard2View view = (Keyboard2View) mHost.attachedView;
+        assertTrue(holdsPicture(view));
+        assertEquals(1, clipListeners(clipboard).size());
+    }
+
+    @Test
+    public void onlyAConcretePictureTypeCountsAsAPicture() {
+        assertTrue(TermuxInAppKeyboard.clipboardHoldsPicture(
+            new ClipDescription("p", new String[] {"image/png"})));
+        // Paste takes the picture even with a caption riding along, so the glyph does too.
+        assertTrue(TermuxInAppKeyboard.clipboardHoldsPicture(
+            new ClipDescription("p", new String[] {"image/png", ClipDescription.MIMETYPE_TEXT_PLAIN})));
+        assertFalse(TermuxInAppKeyboard.clipboardHoldsPicture(
+            new ClipDescription("t", new String[] {ClipDescription.MIMETYPE_TEXT_PLAIN})));
+        assertFalse(TermuxInAppKeyboard.clipboardHoldsPicture(
+            new ClipDescription("w", new String[] {"image/*"})));
+        assertFalse("an unfocused launcher is told nothing",
+            TermuxInAppKeyboard.clipboardHoldsPicture(null));
+    }
+
+    @Test
+    public void aScreenshotTakenAfterTheLastCopyShowsOnPasteAndIsTakenOnce() {
+        ClipboardManager clipboard =
+            (ClipboardManager) mActivity.getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipData copied = ClipData.newPlainText("text", "hello");
+        clipboard.setPrimaryClip(copied);
+        setAt(copied, System.currentTimeMillis() - 60_000);
+        RecentScreenshotTest.FakeMedia media = screenshotTakenSecondsAgo(5, 11);
+        mPreferences.setInAppKeyboardEnabled(true);
+
+        mController.onCreate(null);
+        shadowOf(Looper.getMainLooper()).idle();
+        Keyboard2View view = (Keyboard2View) mHost.attachedView;
+        assertEquals(1, media.queries);
+        assertEquals(PasteOffer.SCREENSHOT, mController.getPasteOffer());
+        assertTrue("the paste key shows the screenshot is waiting", holdsPicture(view));
+
+        RecentScreenshot.Shot shot = mController.takeScreenshotToPaste();
+        assertEquals(11, shot.id);
+        assertEquals("image/png", shot.mime);
+        assertEquals(PasteOffer.CLIPBOARD, mController.getPasteOffer());
+        assertFalse("taken, the key is the clipboard's again", holdsPicture(view));
+        assertNull("one paste takes it", mController.takeScreenshotToPaste());
+    }
+
+    @Test
+    public void aCopyMadeJustBeforeThePasteWinsOverTheScreenshot() {
+        ClipboardManager clipboard =
+            (ClipboardManager) mActivity.getSystemService(Context.CLIPBOARD_SERVICE);
+        screenshotTakenSecondsAgo(60, 11);
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(PasteOffer.SCREENSHOT, mController.getPasteOffer());
+
+        // The clipboard panel copies and pastes in one go: the paste comes before the keyboard
+        // has heard that the copy is newer than the screenshot.
+        ClipData copied = ClipData.newPlainText("text", "hello");
+        clipboard.setPrimaryClip(copied);
+        setAt(copied, System.currentTimeMillis());
+        assertEquals(PasteOffer.SCREENSHOT, mController.getPasteOffer());
+
+        assertNull(mController.takeScreenshotToPaste());
+        assertEquals(PasteOffer.CLIPBOARD, mController.getPasteOffer());
+    }
+
+    @Test
+    public void withTheKeysDownPasteIsTheClipboards() {
+        screenshotTakenSecondsAgo(5, 11);
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        shadowOf(Looper.getMainLooper()).idle();
+        Keyboard2View view = (Keyboard2View) mHost.attachedView;
+        assertEquals(PasteOffer.SCREENSHOT, mController.getPasteOffer());
+
+        mController.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
+        assertNull(mController.takeScreenshotToPaste());
+        assertEquals(PasteOffer.CLIPBOARD, mController.getPasteOffer());
+        assertFalse(holdsPicture(view));
+
+        mController.show(TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals("untaken, it is offered again on the way up",
+            PasteOffer.SCREENSHOT, mController.getPasteOffer());
+    }
+
+    /** A fake media store holding one screenshot, readable by the launcher. */
+    private RecentScreenshotTest.FakeMedia screenshotTakenSecondsAgo(long seconds, long id) {
+        shadowOf(mActivity.getApplication()).grantPermissions(Manifest.permission.READ_EXTERNAL_STORAGE);
+        RecentScreenshotTest.FakeMedia media =
+            Robolectric.setupContentProvider(RecentScreenshotTest.FakeMedia.class, MediaStore.AUTHORITY);
+        media.row(id, System.currentTimeMillis() / 1000 - seconds, "image/png");
+        return media;
+    }
+
+    /** Stamps [clip], already on the clipboard, as set at [millis] wall clock, as Android does. */
+    private static void setAt(ClipData clip, long millis) {
+        ReflectionHelpers.callInstanceMethod(clip.getDescription(), "setTimestamp",
+            ReflectionHelpers.ClassParameter.from(long.class, millis));
+    }
+
+    private static ClipData pictureClip(String type) {
+        return new ClipData(new ClipDescription("picture", new String[] {type}),
+            new ClipData.Item(Uri.parse("content://example/picture")));
+    }
+
+    private static Collection<?> clipListeners(ClipboardManager clipboard) {
+        return ReflectionHelpers.getField(Shadow.extract(clipboard), "listeners");
+    }
+
+    private static boolean holdsPicture(Keyboard2View view) {
+        return ReflectionHelpers.getField(view, "_pasteShowsPicture");
     }
 
     private TermuxInAppKeyboard newController() throws Exception {

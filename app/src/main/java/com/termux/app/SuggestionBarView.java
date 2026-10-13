@@ -106,6 +106,7 @@ import com.termux.app.launcher.popup.MenuRow;
 import com.termux.app.launcher.popup.MenuRowFactory;
 import com.termux.app.launcher.popup.MenuRowWidths;
 import com.termux.app.launcher.popup.MenuSpec;
+import com.termux.app.launcher.icon.ArtworkFootprint;
 import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.launcher.icon.DockIconCache;
 import com.termux.app.launcher.icon.RenderedIconDrawable;
@@ -2217,28 +2218,10 @@ public final class SuggestionBarView extends GridLayout
         int height = bitmap.getHeight();
         int[] pixels = new int[width * height];
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
-        int maxAlpha = 0;
-        for (int pixel : pixels) {
-            maxAlpha = Math.max(maxAlpha, pixel >>> 24);
-        }
-        int threshold = Math.max(8, Math.round(maxAlpha * 0.25f));
-        int left = width;
-        int top = height;
-        int right = -1;
-        int bottom = -1;
-        for (int y = 0; y < height; y++) {
-            int row = y * width;
-            for (int x = 0; x < width; x++) {
-                if ((pixels[row + x] >>> 24) < threshold) continue;
-                left = Math.min(left, x);
-                top = Math.min(top, y);
-                right = Math.max(right, x);
-                bottom = Math.max(bottom, y);
-            }
-        }
-        return right >= left && bottom >= top
-            ? new Rect(left, top, right + 1, bottom + 1)
-            : new Rect();
+        int[] visible = ArtworkFootprint.visibleBounds(pixels, width, height);
+        return visible == null
+            ? new Rect()
+            : new Rect(visible[0], visible[1], visible[2], visible[3]);
     }
 
     private void approximateAzSlotIconBounds(int slot, int slotCount, @NonNull int[] rowLocation,
@@ -8506,11 +8489,15 @@ public final class SuggestionBarView extends GridLayout
         // band it would be the band less the air less the air again.
         if (dockIconSizePx > 0)
             return dockIconSizePx;
+        // The box the dock hands over is the band less its air, which is the icon itself, alone
+        // or sharing its container; a fill ratio of it would draw a lone row's icons small.
+        int hintPx = rowHeightHintPx();
+        if (hintPx > 0)
+            return hintPx;
         // Only when it has not does the measured host decide, and then it is capped: a plank
         // measured before it was sized, or a stack that swallowed the whole content column, is a
         // host several screens tall and must not scale one pinned icon across it.
-        int availableHeight = rowHeightHintPx();
-        if (availableHeight <= 0) availableHeight = measuredRowHeightPx();
+        int availableHeight = measuredRowHeightPx();
         if (availableHeight <= 0) {
             return Math.max(dp(20), Math.round(24f * iconScale * getResources().getDisplayMetrics().density));
         }

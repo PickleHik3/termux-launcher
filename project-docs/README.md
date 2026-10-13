@@ -11,8 +11,9 @@ Three rules keep this directory from rotting:
 - **A finished spec is deleted, not left ticked.** The merged commit and `git log` are the
   implementation record. What survives is *reasoning* git log cannot carry: research, comparisons,
   measurements and the delivered records below. Old specs are in git history.
-- **A document that contradicts AGENTS.md is worse than no document.** Build commands, branch
-  models and release process live in AGENTS.md alone; nothing here restates them.
+- **A document that contradicts AGENTS.md is worse than no document.** Build commands live in
+  AGENTS.md, and the branch model and release process in `docs/agents/releasing.md`; nothing here
+  restates them.
 - **Move a document when its state changes**: `active/` while the work is open, `reference/` when it
   is delivered or is research that will not change.
 
@@ -43,7 +44,8 @@ Three rules keep this directory from rotting:
 | [`active/keyboard-mis-input-correction.md`](active/keyboard-mis-input-correction.md) | Mis-tap correction on the in-app keyboard. Stage 1 built (`TapCorrectionController`); the rest is a study. |
 | [`active/input-latency-study.md`](active/input-latency-study.md) | Touch-to-intent latency measured on pong, 2026-09-08: twelve tactical fixes and seven architectural directions. Not started. |
 | [`active/perf-home-terminal-idle-handoff-2026-09-27.md`](active/perf-home-terminal-idle-handoff-2026-09-27.md) | Home to Terminal slide cost and idle redraw: symptoms and a code map. Not started. |
-| [`active/device-checks-pending-2026-09-27.md`](active/device-checks-pending-2026-09-27.md) | Device checks owed on pong. |
+| [`device-checks.md`](device-checks.md) | Device checks owed, rolling: Agent and Developer items, deleted once seen; read before every drop and cut. |
+| [`active/device-checks-pending-2026-09-27.md`](active/device-checks-pending-2026-09-27.md) | The 2026-09-27 parked list, to be folded into `device-checks.md` or dropped. |
 | [`active/termux-api-consolidation-research.md`](active/termux-api-consolidation-research.md) | Termux:API against the launcher: what to port, bridge, keep delegating or remove. |
 | [`active/terminal-url-tap-research.md`](active/terminal-url-tap-research.md) | Why tapping a link in the terminal often does nothing. Research, no decision yet. |
 
@@ -77,6 +79,7 @@ task-oriented guide for the terminal is
 | [`reference/launcher/proot-gui-apps-research.md`](reference/launcher/proot-gui-apps-research.md), [`de-sessions-research.md`](reference/launcher/de-sessions-research.md) | Linux apps and desktop sessions from a proot distro. |
 | [`reference/launcher/appwidget-host-research.md`](reference/launcher/appwidget-host-research.md), [`lawnchair-16-comparison.md`](reference/launcher/lawnchair-16-comparison.md) | The widget host and Lawnchair 16, compared. |
 | [`reference/launcher/first-boot-tour.md`](reference/launcher/first-boot-tour.md), [`help-overlay.md`](reference/launcher/help-overlay.md), [`help-overlay-inventory.md`](reference/launcher/help-overlay-inventory.md), [`hold-gestures.md`](reference/launcher/hold-gestures.md), [`2026-09-15-corner-touch-targets.md`](reference/launcher/2026-09-15-corner-touch-targets.md) | The shipped first-boot tour, help overlay and hold gestures, with the corner touch-target measurements behind them. |
+| [`reference/launcher/gestures-and-style.md`](reference/launcher/gestures-and-style.md) | The full behaviour of the border drag, the keyboard and status swipes, minimal mode and the chrome Style. The glossary has the short definitions. |
 | [`reference/launcher/mist-preset-obsidian-values.md`](reference/launcher/mist-preset-obsidian-values.md) | The Obsidian-Music values the Mist look and motion are taken from. |
 | [`reference/launcher/miniature-material/`](reference/launcher/miniature-material/) | The Material artwork for the Layout editor's miniature (SVG and vector XML, plus the build script). |
 | [`reference/launcher/termux-on-device-build.md`](reference/launcher/termux-on-device-build.md) | Building the launcher from a Termux session on the phone: the aarch64 NDK and build-tools, the three AGP workarounds, minimum specs. |

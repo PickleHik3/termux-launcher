@@ -61,3 +61,12 @@ rebuild. `PaneSurfaceStyle.paneGlassRefraction` carries the look to the slabs an
 `PaneStyleKey` compares it. The corner tab in `wall/` still draws the frame plain; it is a control,
 not a slab. Video wallpapers, the unlock pairs, the motions and the parallax switch of the spec
 are later slices and change nothing decided here.
+
+**Amended 2026-10-12.** The program's bend follows the rounded rect's true outward normal on a
+quarter-circle profile instead of an elliptical normal on a square one, so the rim reads as the
+bevel of a thick slab; the stored `specular` key drives a directional bevel light under the rim
+(lit from the 45° diagonal, so it is not the double rim the first specular was); and dispersion is
+seven spectral taps, taken only in the band and only while the knob is above zero, so a Look with
+it off costs the one tap it always did. The five knobs are in the Appearance editor again, as the
+Custom row's Edge group; the shipped Looks keep Shine and Dispersion at zero, so turning them up is
+the user's trade of battery for glass.
