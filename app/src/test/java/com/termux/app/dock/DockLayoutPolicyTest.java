@@ -67,8 +67,10 @@ public class DockLayoutPolicyTest {
             {2.18f, false, true, 0, 0, 69, 0, 0, 67, 17, 17, 172, 88, 1.68f, 110},
             {2.18f, true, false, 133, 108, 52, 25, 28, 67, 25, 25, 313, 83, 2.21312f, 108},
             {2.18f, true, true, 0, 0, 69, 0, 28, 67, 17, 17, 172, 83, 2.21312f, 108},
-            {2.45f, false, false, 153, 128, 52, 25, 0, 67, 25, 25, 333, 88, 1.89072f, 128},
-            {2.45f, false, true, 0, 0, 69, 0, 0, 67, 17, 17, 172, 88, 1.89072f, 128},
+            // Docked at 2.45 was past its old cap (2.36), where the curve stood still at 128px;
+            // with the larger top it is inside the stretch and draws the extended curve's icon.
+            {2.45f, false, false, 164, 139, 52, 25, 0, 67, 25, 25, 344, 88, 1.9960802f, 139},
+            {2.45f, false, true, 0, 0, 69, 0, 0, 67, 17, 17, 172, 88, 1.9960802f, 139},
             {2.45f, true, false, 147, 122, 52, 25, 28, 67, 25, 25, 327, 83, 2.508f, 122},
             {2.45f, true, true, 0, 0, 69, 0, 28, 67, 17, 17, 172, 83, 2.508f, 122},
         };
@@ -228,6 +230,9 @@ public class DockLayoutPolicyTest {
         int[] legacyCapsuleHints = {107, 120, 135, 151};
         int[] defaultIcons = {75, 91, 110, 128};
         int[] capsuleIcons = {83, 96, 108, 122};
+        // Docked's last preset was past its old cap, where the legacy band stood still; it now
+        // follows the curve that runs on to the larger top. Every other preset is unchanged.
+        int[] defaultIconsNow = {75, 91, 110, 139};
         for (int i = 0; i < DockLayoutPolicy.sizePresetCount(); i++) {
             float scale = DockLayoutPolicy.sizePreset(i);
             assertEquals("default preset " + i, defaultIcons[i],
@@ -238,7 +243,7 @@ public class DockLayoutPolicyTest {
                 DockLayoutPolicy.dockIconSizePx(legacyCapsuleHints[i],
                     DockLayoutPolicy.capsuleDockIconScaleForProgress(
                         DockLayoutPolicy.sizeProgress(scale)), DENSITY));
-            assertEquals(defaultIcons[i], DockLayoutPolicy.compute(
+            assertEquals(defaultIconsNow[i], DockLayoutPolicy.compute(
                 inputs(scale, false, false).build()).appsRowIconPx);
             assertEquals(capsuleIcons[i], DockLayoutPolicy.compute(
                 inputs(scale, true, false).build()).appsRowIconPx);
@@ -253,11 +258,12 @@ public class DockLayoutPolicyTest {
     @Test
     public void theSizeControlsIconIsTheDocksIcon() {
         assertEquals(expectedIconPx,
-            DockLayoutPolicy.iconPxForScale(capsule, preset, BASE_TOOLBAR_PX, DENSITY));
-        assertEquals(expectedIconPx, DockLayoutPolicy.iconPxForScale(capsule, preset, DENSITY));
+            DockLayoutPolicy.iconPxForScale(capsule, false, preset, BASE_TOOLBAR_PX, DENSITY));
+        assertEquals(expectedIconPx,
+            DockLayoutPolicy.iconPxForScale(capsule, false, preset, DENSITY));
         if (preset <= DockLayoutPolicy.maxUsefulScale(capsule)) {
             assertEquals(preset,
-                DockLayoutPolicy.scaleForIconPx(capsule, expectedIconPx, DENSITY), 0f);
+                DockLayoutPolicy.scaleForIconPx(capsule, false, expectedIconPx, DENSITY), 0f);
         }
     }
 
@@ -331,7 +337,7 @@ public class DockLayoutPolicyTest {
     }
 
     @Test
-    public void aRowStandingAloneKeepsASliverOfAirAndTheSameIcon() {
+    public void aRowStandingAloneKeepsASliverOfAirAndFillsItsBaseline() {
         // The complaint: a row on a plank of its own was spaced like a row on a dock with two
         // others under it — the dock's paddings inside the sheet, the plank's margin outside it.
         DockLayout shared = DockLayoutPolicy.compute(inputs(2.18f, true, false).build());
@@ -341,9 +347,11 @@ public class DockLayoutPolicyTest {
         DockLayout aloneNoTicks = DockLayoutPolicy.compute(inputs(2.18f, true, false)
             .appsRowAlone(true).appsRowPageStripShown(false).build());
         int sliverPx = DockLayoutPolicy.loneRowAirPx(DENSITY);
-        int stripPx = PageTickStrip.bandPx(DENSITY);
+        int stripPx = DockLayoutPolicy.stripBandPx(true, DENSITY);
         assertEquals("4dp at density 2.75", 11, sliverPx);
-        assertEquals("9dp at density 2.75", 25, stripPx);
+        // Updated with a reason: a lone row's ticks stand in a band of their own, a size down from
+        // the strip's 9dp, which a bar one icon tall spent twice over.
+        assertEquals("6.5dp at density 2.75", 18, stripPx);
         assertEquals(sliverPx, aloneNoTicks.appsTopPaddingPx);
         assertEquals(sliverPx, aloneNoTicks.appsRowTickSideAirPx);
         assertEquals(135 + (2 * sliverPx), aloneNoTicks.appsRowBandPx);
@@ -355,16 +363,18 @@ public class DockLayoutPolicyTest {
         assertEquals(stripPx, alone.appsRowTickSideAirPx);
         assertEquals("the strip fills that side, so the row keeps nothing of it",
             0, alone.appsRowPaddingBesideTicksPx());
-        // The icon is the same size either way: only the air around it changes.
-        assertEquals(shared.appsRowIconPx, alone.appsRowIconPx);
-        // P8's baseline, untouched: a lone row is still formed around the preset's own baseline
-        // rather than around the icon, so the box its icons stand in is the one it drew.
+        // Updated with a reason: alone, the icon fills the preset's baseline instead of taking
+        // the shared row's fill ratio of it, which left a tall bar around a small icon.
+        assertEquals(108, shared.appsRowIconPx);
+        assertEquals(135, alone.appsRowIconPx);
+        assertEquals(135, aloneNoTicks.appsRowIconPx);
+        // P8's baseline, untouched: the box a lone row's icons stand in is the one it always
+        // drew, so the bar is exactly as tall as it was.
         assertEquals(135, alone.appsRowBandHintPx);
-        assertEquals("band = icon box + the ticks' 9dp band on both sides",
+        assertEquals("band = icon box + the ticks' lone band on both sides",
             135 + (2 * stripPx), alone.appsRowBandPx);
         // Updated for Q7 with a reason: the shared row is the tighter of the two now. Its band is
-        // the icon and its air, where the lone row's is a baseline that still carries the preset's
-        // leftover around the same icon.
+        // the icon and its air, where the lone row's is the whole baseline its larger icon fills.
         assertTrue("and the shared row is the tighter for it",
             shared.appsRowBandPx < alone.appsRowBandPx);
         assertEquals(25, shared.appsTopPaddingPx);
@@ -399,7 +409,7 @@ public class DockLayoutPolicyTest {
         // Alone the row has no band beyond it, so next to the canvas changes nothing.
         DockLayout alone = DockLayoutPolicy.compute(inputs(2.18f, true, false)
             .appsRowAlone(true).appsRowNextToCanvas(true).build());
-        assertEquals(stripPx, alone.appsTopPaddingPx);
+        assertEquals(DockLayoutPolicy.stripBandPx(true, DENSITY), alone.appsTopPaddingPx);
     }
 
     @Test
@@ -553,12 +563,15 @@ public class DockLayoutPolicyTest {
         assertEquals(0f, DockLayoutPolicy.sizeProgress(0.5f), 0f);
         assertEquals(0.27f, DockLayoutPolicy.sizeProgress(1.72f), 0.000001f);
         assertEquals(1f, DockLayoutPolicy.sizeProgress(2.45f), 0f);
-        assertEquals(1f, DockLayoutPolicy.sizeProgress(9f), 0f);
+        // Past the window it runs on to the top of the stored range, 3.0.
+        assertEquals(1.55f, DockLayoutPolicy.sizeProgress(3.0f), 0.000001f);
+        assertEquals(1.55f, DockLayoutPolicy.sizeProgress(9f), 0.000001f);
         assertEquals(0.27f, DockLayoutPolicy.defaultDockSizeProgress(1.45f), 0.000001f);
         assertEquals(0.54f, DockLayoutPolicy.defaultDockSizeProgress(1.72f), 0.000001f);
-        // The shifted progress is capped one notch above the capsule's own ceiling.
-        assertEquals(1.18f, DockLayoutPolicy.defaultDockSizeProgress(2.45f), 0.000001f);
-        assertEquals(1.18f, DockLayoutPolicy.defaultDockSizeProgress(99f), 0.000001f);
+        assertEquals(1.27f, DockLayoutPolicy.defaultDockSizeProgress(2.45f), 0.000001f);
+        // The shifted progress has a cap of its own, where Docked's icon meets Floating's top.
+        assertEquals(1.38f, DockLayoutPolicy.defaultDockSizeProgress(2.56f), 0.000001f);
+        assertEquals(1.38f, DockLayoutPolicy.defaultDockSizeProgress(99f), 0.000001f);
     }
 
     @Test

@@ -91,11 +91,22 @@ public class SuggestionBarDrawerGestureTest {
         assertEquals(1, listener.ends);
         assertEquals(0, listener.cancels);
         // The claiming move begins the drag from the down point and contributes its own travel;
-        // the two after it continue driving it.
-        assertEquals(3, listener.drags);
+        // the two after it and the release continue driving it.
+        assertEquals(4, listener.drags);
         assertEquals(1, child.countOf(MotionEvent.ACTION_CANCEL));
         // The drag is anchored to where the finger went down, not to where the claim landed.
         assertEquals(20f, listener.downRawY, 0.01f);
+    }
+
+    @Test
+    public void theReleaseIsWhereTheDragEnds() {
+        dispatch(MotionEvent.ACTION_DOWN, 100f, 20f);
+        dispatch(MotionEvent.ACTION_MOVE, 100f, 20f + TRAVEL);
+        // A busy frame: the finger is long past the last move the row was shown when it lifts.
+        dispatch(MotionEvent.ACTION_UP, 100f, 20f + (TRAVEL * 3f));
+
+        assertEquals(20f + (TRAVEL * 3f), listener.lastDragRawY, 0.01f);
+        assertEquals(1, listener.ends);
     }
 
     @Test
@@ -162,10 +173,10 @@ public class SuggestionBarDrawerGestureTest {
     @Test
     public void everyVetoBlocksTheDrawerAndLeavesThePageSwipeIntact() {
         List<String> failures = new ArrayList<>();
-        // "searchText" is deliberately absent: a filtered apps row no longer vetoes the pull-down
-        // (the vertical pull is unambiguous even over filtered results).
+        // "searchText" and "azLetter" are deliberately absent: neither a filtered apps row nor a
+        // lingering A–Z preview vetoes the pull-down (the vertical pull is unambiguous over both).
         for (String veto : new String[] {"pref", "surfaceEditor", "palette", "engaged",
-            "azLetter", "landscape", "activePickup", "noListener"}) {
+            "landscape", "activePickup", "noListener"}) {
             setUp();
             applyVeto(veto);
 
@@ -196,6 +207,17 @@ public class SuggestionBarDrawerGestureTest {
         assertEquals(1, listener.begins);
     }
 
+    @Test
+    public void anAzPreviewRowStillOpensTheDrawer() {
+        ReflectionHelpers.setField(row, "activeAzLetter", Character.valueOf('A'));
+
+        dispatch(MotionEvent.ACTION_DOWN, 100f, 20f);
+        dispatch(MotionEvent.ACTION_MOVE, 100f, 20f + TRAVEL);
+
+        assertEquals(CLAIM_DRAWER_DRAG, claim());
+        assertEquals(1, listener.begins);
+    }
+
     private void applyVeto(String veto) {
         switch (veto) {
             case "pref": listener.drawerEnabled = false; break;
@@ -203,9 +225,6 @@ public class SuggestionBarDrawerGestureTest {
             case "palette": listener.paletteOpen = true; break;
             case "engaged": listener.drawerEngaged = true; break;
             case "searchText": ReflectionHelpers.setField(row, "lastInput", "ls "); break;
-            case "azLetter":
-                ReflectionHelpers.setField(row, "activeAzLetter", Character.valueOf('A'));
-                break;
             case "landscape":
                 context.getResources().getConfiguration().orientation =
                     Configuration.ORIENTATION_LANDSCAPE;
@@ -364,6 +383,7 @@ public class SuggestionBarDrawerGestureTest {
         int ends;
         int cancels;
         float downRawY;
+        float lastDragRawY;
 
         @Override
         public boolean isAppDrawerEnabled() {
@@ -394,6 +414,7 @@ public class SuggestionBarDrawerGestureTest {
         @Override
         public void onDrawerDrag(float rawY) {
             drags++;
+            lastDragRawY = rawY;
         }
 
         @Override

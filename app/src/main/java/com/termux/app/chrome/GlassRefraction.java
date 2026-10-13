@@ -25,9 +25,14 @@ import java.util.Arrays;
  * <p>What separates real glass from frosted polymer is that glass <em>bends</em> light at its
  * edges and catches a crisp highlight there, instead of only diffusing it. The program samples
  * the blurred wallpaper and, within a band along the surface's rounded-rect rim, displaces the
- * sample inward along the edge normal — the picture compresses at the rim like the bevel of a
- * thick slab — then lays one sharp hairline of light where the edge catches it. A pressed extra
- * key adds a lens that magnifies toward the key's centre and eases to nothing at its pill rim.</p>
+ * sample inward along the rim's own normal by the curve of a thick slab's rounded bevel: nothing
+ * at the band's inner edge, bending ever faster toward the rim, where the picture compresses and
+ * at the very edge folds back on itself. It then lays one sharp hairline of light where the edge
+ * catches it. Two extras sit on top for the clearest glass, both off unless a Look sets them: a
+ * bevel light falling along the diagonal, which the top-left and bottom-right of the rim catch
+ * and the other two corners do not, and a split of the bent picture into its colours across the
+ * band, the way a prism fans out white light. A pressed extra key adds a lens that magnifies
+ * toward the key's centre and eases to nothing at its pill rim.</p>
  *
  * <p>It used to live in the activity as the dock's own effect. It is one program now, with two
  * ways in: as a {@code RenderEffect} over a view's finished pixels, which is what the dock and
@@ -56,8 +61,9 @@ public final class GlassRefraction {
     /**
      * The knobs the Appearance editor offers, as one value: how far the picture is bent
      * under the rim, how far in from the rim the bend reaches, how bright the rim's light is, and
-     * two optional extras for the clearest glass, a bevel highlight and a chromatic split at the
-     * rim, both off unless a Look sets them.
+     * two optional extras for the clearest glass: a bevel light that the rim catches along the
+     * diagonal, and a split of the colours across the band. Both are off unless a Look sets them,
+     * and every shipped Look leaves them off.
      * Stored in dp and percent so two reads compare equal whatever the screen's density; the
      * program converts when it is handed one.
      */
@@ -75,8 +81,20 @@ public final class GlassRefraction {
         /** The brightest the bevel's lit side can be; 100% lands here. */
         static final float MAX_SPEC = 0.6f;
 
-        /** The widest the red/blue split gets at the rim, in dp; 100% lands here. */
-        static final float MAX_DISPERSION_DP = 6f;
+        /**
+         * The widest the red/blue split gets at the rim, in dp; 100% lands here. 6 dp read as
+         * nothing on a real phone (the taps sample the blurred wall, so only a wide split leaves
+         * a fringe), hence the width.
+         */
+        static final float MAX_DISPERSION_DP = 16f;
+
+        /**
+         * How far in the bevel light reaches, as a share of the edge width, and the narrowest and
+         * widest it gets in dp: a thin rounded lip on any band, never a wash over a wide one.
+         */
+        static final float BEVEL_SHARE = 0.5f;
+        static final float MIN_BEVEL_DP = 1f;
+        static final float MAX_BEVEL_DP = 12f;
 
         public final int bendDp;
         public final int edgeWidthDp;
@@ -124,9 +142,22 @@ public final class GlassRefraction {
             return Math.max(0, Math.min(100, edgeLightPercent)) / 100f * MAX_RIM;
         }
 
-        /** The edge highlight once drawn inside the hairline (removed: it read as a double rim); kept as a stored value only. */
+        /**
+         * {@code uSpec}: the light the bevel's lit side adds at the rim, 0..{@link #MAX_SPEC},
+         * fading to nothing {@link #bevelPx} in.
+         */
         public float specular() {
             return Math.max(0, Math.min(100, specularPercent)) / 100f * MAX_SPEC;
+        }
+
+        /**
+         * {@code uBevel}: how far in from the rim the bevel light reaches, in px: half the edge
+         * width, held between {@link #MIN_BEVEL_DP} and {@link #MAX_BEVEL_DP}, and never past the
+         * band, so {@link GlassRefraction#seamReachPx} already pushes it off a seam edge.
+         */
+        public float bevelPx(float density) {
+            float dp = Math.max(MIN_BEVEL_DP, Math.min(MAX_BEVEL_DP, edgeWidthDp * BEVEL_SHARE));
+            return Math.min(bandPx(density), dp * density);
         }
 
         /** {@code uDisp}: how far red and blue part from green at the rim, in px; 100% is {@link #MAX_DISPERSION_DP}. */
@@ -222,6 +253,8 @@ public final class GlassRefraction {
         "uniform float uStrength;\n" +
         "uniform float uRim;\n" +
         "uniform float uDisp;\n" +
+        "uniform float uSpec;\n" +
+        "uniform float uBevel;\n" +
         "uniform float uDensity;\n" +
         // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
         // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
@@ -237,6 +270,19 @@ public final class GlassRefraction {
         "    float2 q = abs(p) - b + float2(r, r);\n" +
         "    return min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0, 0.0))) - r;\n" +
         "}\n" +
+        // The outward normal of the rounded rect: round the corner arc, straight out along an edge,
+        // and on the inner rect, where no arc reaches, the axis of the nearer edge.
+        "float2 rectNormal(float2 p, float2 b, float r) {\n" +
+        "    float2 q = abs(p) - b + float2(r, r);\n" +
+        "    float2 outside = max(q, float2(0.0, 0.0));\n" +
+        "    float len = length(outside);\n" +
+        "    float2 s = float2(p.x < 0.0 ? -1.0 : 1.0, p.y < 0.0 ? -1.0 : 1.0);\n" +
+        "    if (len > 0.001) {\n" +
+        "        return s * (outside / len);\n" +
+        "    }\n" +
+        "    float useX = step(q.y, q.x);\n" +
+        "    return s * float2(useX, 1.0 - useX);\n" +
+        "}\n" +
         // A surface pixel to the content's own pixel: the local matrix, then the aim undone. With
         // the local matrix at identity this is exactly the old (c - offset) / scale.
         "float2 framePx(float2 c) {\n" +
@@ -249,9 +295,12 @@ public final class GlassRefraction {
         "    float2 b = (uRectMax - uRectMin) * 0.5;\n" +
         "    float2 p = fragCoord - center;\n" +
         "    float inside = -sdRoundRect(p, b, uRadius);\n" +
-        "    float2 n = normalize(float2(p.x / max(b.x, 1.0), p.y / max(b.y, 1.0)) + float2(1e-4, 1e-4));\n" +
-        "    float e = clamp(1.0 - inside / uBand, 0.0, 1.0);\n" +
-        "    e = e * e;\n" +
+        // The normal eases round the corner on an arc wider than the drawn one (1.5x, held under the
+        // half size), so the bend never snaps where two edges meet.
+        "    float2 n = rectNormal(p, b, min(uRadius * 1.5, min(b.x, b.y)));\n" +
+        // The bevel of a thick slab: a quarter circle, 0 at the band's inner edge, 1 at the rim.
+        "    float x = clamp(1.0 - inside / uBand, 0.0, 1.0);\n" +
+        "    float e = 1.0 - sqrt(1.0 - x * x);\n" +
         "    float2 sampleCoord = fragCoord - n * (e * uStrength);\n" +
         // Per-key lens: magnify the backdrop toward the key centre, fading out to the pill rim.
         "    float lensGlow = 0.0;\n" +
@@ -269,20 +318,47 @@ public final class GlassRefraction {
         "            lensGlow = fade * (1.0 - rr);\n" +
         "        }\n" +
         "    }\n" +
-        // The bent sample, read from the content in its own pixels: the aim undone.
-        "    half4 col = content.eval(framePx(sampleCoord));\n" +
-        // Dispersion: red is bent a little less than green and blue a little more, so the rim
-        // fringes the way a thick edge does. Off, and the one sample above is the whole picture.
-        "    if (uDisp > 0.0) {\n" +
-        "        float2 split = n * (e * uDisp);\n" +
-        "        col.r = content.eval(framePx(sampleCoord + split)).r;\n" +
-        "        col.b = content.eval(framePx(sampleCoord - split)).b;\n" +
+        // The bent sample, read from the content in its own pixels: the aim undone. With dispersion
+        // on and the pixel in the band, seven samples spread along the normal stand in for the
+        // spectrum: red weighs the three bent least (and a seventh of the one bent most, the violet
+        // end), green the middle three (and a seventh of the next one out), blue the three bent
+        // most. Each channel's weights sum to 1, as alpha's seven sevenths do, so a flat picture
+        // stays exactly as it was. Anywhere else, and on every Look with dispersion off, the one
+        // sample is the whole picture. The split grows linearly across the band (x, not the bevel
+        // profile e): e is near zero over most of the band and only reaches the full width in the
+        // last pixel under the hairline, which left the fringe invisible at any setting.
+        "    half4 col = half4(0.0);\n" +
+        "    if (uDisp > 0.0 && x > 0.0) {\n" +
+        "        float2 split = n * (x * uDisp);\n" +
+        "        half4 c = content.eval(framePx(sampleCoord + split));\n" +
+        "        col.r += c.r / 3.5; col.a += c.a / 7.0;\n" +
+        "        c = content.eval(framePx(sampleCoord + split * (2.0 / 3.0)));\n" +
+        "        col.r += c.r / 3.5; col.g += c.g / 7.0; col.a += c.a / 7.0;\n" +
+        "        c = content.eval(framePx(sampleCoord + split * (1.0 / 3.0)));\n" +
+        "        col.r += c.r / 3.5; col.g += c.g / 3.5; col.a += c.a / 7.0;\n" +
+        "        c = content.eval(framePx(sampleCoord));\n" +
+        "        col.g += c.g / 3.5; col.a += c.a / 7.0;\n" +
+        "        c = content.eval(framePx(sampleCoord - split * (1.0 / 3.0)));\n" +
+        "        col.g += c.g / 3.5; col.b += c.b / 3.0; col.a += c.a / 7.0;\n" +
+        "        c = content.eval(framePx(sampleCoord - split * (2.0 / 3.0)));\n" +
+        "        col.b += c.b / 3.0; col.a += c.a / 7.0;\n" +
+        "        c = content.eval(framePx(sampleCoord - split));\n" +
+        "        col.r += c.r / 7.0; col.b += c.b / 3.0; col.a += c.a / 7.0;\n" +
+        "    } else {\n" +
+        "        col = content.eval(framePx(sampleCoord));\n" +
         "    }\n" +
         // One clean, sharp hairline rim where the light catches the glass edge. No dark contour, no
         // wide bevel band, no inner shadow — minimal/zen: a crisp pane with slight edge refraction.
         "    float rim = 1.0 - smoothstep(0.0, 2.0 * uDensity, inside);\n" +
         "    col.rgb = col.rgb + half3(rim * uRim);\n" +
         "    col.rgb = col.rgb + half3(lensGlow * uRim * 0.6);\n" +
+        // The bevel light, falling along the diagonal: the top-left and bottom-right of the rim face
+        // it and catch it, the other two corners run edge-on to it and stay dark. It rounds off
+        // within uBevel of the rim, a lip of light inside the hairline. Off at uSpec 0.
+        "    float lit = abs(dot(n, float2(0.70710678, 0.70710678)));\n" +
+        "    float bevel = clamp(1.0 - inside / uBevel, 0.0, 1.0);\n" +
+        "    bevel = bevel * bevel;\n" +
+        "    col.rgb = col.rgb + half3(bevel * lit * uSpec);\n" +
         "    return col;\n" +
         "}\n";
 
@@ -434,7 +510,7 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uRadius", Math.max(0f, cornerRadiusPx));
         }
 
-        /** The three knobs, converted at this program's density. */
+        /** The five knobs, converted at this program's density. */
         public void setLook(@NonNull Look look) {
             if (look.equals(mLook)) return;
             mLook = look;
@@ -442,6 +518,8 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uStrength", look.strengthPx(mDensity));
             mShader.setFloatUniform("uRim", look.rim());
             mShader.setFloatUniform("uDisp", look.dispersionPx(mDensity));
+            mShader.setFloatUniform("uSpec", look.specular());
+            mShader.setFloatUniform("uBevel", look.bevelPx(mDensity));
         }
 
         /**

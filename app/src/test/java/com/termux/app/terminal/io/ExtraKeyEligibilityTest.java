@@ -252,9 +252,9 @@ public class ExtraKeyEligibilityTest {
             Band band = ExtraKeyEligibility.bandOfTool(tool);
             counts.put(band, counts.get(band) + 1);
         }
-        assertEquals(94, declared);
+        assertEquals(95, declared);
         assertEquals(Integer.valueOf(0), counts.get(Band.TERMINAL_INPUT));
-        assertEquals(Integer.valueOf(29), counts.get(Band.LAUNCHER));
+        assertEquals(Integer.valueOf(30), counts.get(Band.LAUNCHER));
         assertEquals(Integer.valueOf(4), counts.get(Band.SESSION_OVERLAY));
         assertEquals(Integer.valueOf(41), counts.get(Band.MULTIPLEX));
         assertEquals(Integer.valueOf(20), counts.get(Band.TERMINAL_TOOL));

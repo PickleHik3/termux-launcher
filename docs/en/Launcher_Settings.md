@@ -90,6 +90,49 @@ Under **App**. "Battery use and vibration": **Reduce idle activity** (lazy mode)
 switches, and **Show in Recents when not the default launcher**. See
 [Look and themes](Look_And_Themes.md#reduce-idle-activity).
 
+## Backup & restore
+
+"Move your setup to another phone": **Export settings** saves your launcher setup to one `.zip`
+file (it suggests Downloads), and **Import settings** restores it, on this phone or a new one, on
+any edition.
+
+The file holds:
+
+- the launcher's settings: Appearance, Layout, dock, drawer, pinned and hidden apps, status bar,
+  keyboard, terminal, display, on-device AI settings, terminal font choices and Shizuku switches;
+- your config files in `~/.termux`: `termux.properties`, `colors.properties`, `font.ttf`,
+  `font-italic.ttf`, `fonts.conf` and your own files in `fonts.d/`,
+  `termux-launcher-bindings.conf`, `keyboard/layout.xml`, `launcher-theme.properties`,
+  `app-categories.conf`, `shell`, and the `theme-templates/`, `workspaces/` and `background/`
+  folders, plus `~/.config/termux/termux.properties`;
+- the keyboard's label font, and the home and lock screen pictures you set from the launcher.
+
+It leaves out your home folder, installed packages, tokens and API keys, usage history, the
+clipboard, notification history and widgets. A file over 20 MB is left out of the export.
+
+Importing replaces your current launcher settings and restarts the launcher, which closes open
+terminal sessions. Afterwards, add your widgets again, grant the permissions the launcher asks
+for, and pick your downloaded terminal font again so it downloads on this phone.
+
+### AI models
+
+Downloaded on-device AI models are too large for the settings file, so they have their own rows.
+**Export AI models** shows how many models you have and how much space they take, and copies them
+into a folder you pick (it opens in Documents). It makes a `Termux Launcher models` folder there,
+with one folder per model: chat models, speech-to-text, voice output, embedding and image models
+alike, each with every file it needs. The copy runs in the background with a notification you can
+cancel from; a model already saved there at the same size is skipped, so running it again finishes
+an export that was cut short.
+
+**Import AI models** adds them back, on this phone or a new one: pick the `Termux Launcher models`
+folder (or one model's folder inside it). Each model returns under its own name with its
+settings, so the features that used it pick it up again. A model already on the phone is left as
+it is. The same folder import is in the Model centre, under the link bar's menu.
+
+Import your settings first, then your models.
+
+For your home folder and packages, use `termux-backup` and `termux-restore` in the terminal.
+
 ## Permissions & services
 
 "Access and connected services": **Files and media**, **Wallpaper access**, **Notification

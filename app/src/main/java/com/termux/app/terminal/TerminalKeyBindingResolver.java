@@ -111,18 +111,27 @@ public final class TerminalKeyBindingResolver {
         @NonNull final List<TerminalBindingConfig.Action> actions;
         /** Display name the user gave this binding with {@code --label}, else null. */
         @Nullable final String label;
+        /** Whether the user's file wrote this claim, rather than a built-in default. */
+        final boolean configured;
 
         Claim(@NonNull String toolName, @NonNull LauncherToolRegistry.BindingCondition condition) {
             this(Collections.singletonList(TerminalBindingConfig.Action.tool(toolName)), condition,
-                null);
+                null, false);
         }
 
         Claim(@NonNull List<TerminalBindingConfig.Action> actions,
               @NonNull LauncherToolRegistry.BindingCondition condition, @Nullable String label) {
+            this(actions, condition, label, true);
+        }
+
+        private Claim(@NonNull List<TerminalBindingConfig.Action> actions,
+                      @NonNull LauncherToolRegistry.BindingCondition condition,
+                      @Nullable String label, boolean configured) {
             this.toolName = actions.isEmpty() ? "unmap" : actions.get(0).diagnosticName();
             this.condition = condition;
             this.actions = Collections.unmodifiableList(new ArrayList<>(actions));
             this.label = label;
+            this.configured = configured;
         }
     }
 
@@ -428,23 +437,28 @@ public final class TerminalKeyBindingResolver {
         return configErrors;
     }
 
-    /** Effective (default plus user overrides) sequences that invoke a tool now. */
+    /**
+     * Effective (default plus user overrides) sequences that invoke a tool now, the user's own
+     * first: a palette row shows the first, and a chord the user chose is the one they look for.
+     */
     @NonNull
     public List<String> getStrokesForTool(@NonNull String toolName,
                                           @NonNull LauncherToolRegistry.ActionContext context) {
-        List<String> result = new ArrayList<>();
+        List<String> configured = new ArrayList<>();
+        List<String> defaults = new ArrayList<>();
         for (Map.Entry<String, List<Claim>> entry : bindings.entrySet()) {
             Claim claim = firstHolding(entry.getValue(), context);
             if (claim == null) continue;
             for (TerminalBindingConfig.Action action : claim.actions) {
                 if (action.type == TerminalBindingConfig.ActionType.TOOL
                     && toolName.equals(action.value)) {
-                    result.add(entry.getKey());
+                    (claim.configured ? configured : defaults).add(entry.getKey());
                     break;
                 }
             }
         }
-        return result;
+        configured.addAll(defaults);
+        return configured;
     }
 
     /**

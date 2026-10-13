@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pictures a program copied, served to the app that pastes them (ClipboardFileProvider). -->
+<paths>
+    <cache-path name="clipboard" path="clipboard/" />
+</paths>

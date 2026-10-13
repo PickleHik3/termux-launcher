@@ -167,3 +167,30 @@ Checks 1–5 pass (the developer, 2026-09-28).
    then the cleaned text with changed and added words in the accent and removed words struck
    through. The marks stay until the panel closes; they never fade to plain text. ✓ inserts the plain
    cleaned text (no struck-through words). Undo shows the as-heard text; redo shows the marks again.
+
+## Agent pane control (branch feat/agent-pane-control)
+Run from a shell inside the launcher, with "Let programs and agents control panes" on.
+1. **Placement.** `launcherctl pane open --direction right --size 0.4 --no-focus -- htop` opens beside
+   the calling pane at about 40% width; `--direction down --rows 12` opens a 12-row pane below it.
+   Focus stays in the caller. In a grid or tall window, the window switches to manual splits and the
+   answer's `"layout"` is `null`; a plain `pane open` leaves the layout alone.
+2. **Off-screen window.** From a pane in a window that is not on screen, `pane open --no-focus -- htop`
+   splits that window without switching to it; showing the window later shows the new pane. Without
+   `--no-focus`, that window comes up.
+3. **Geometry.** `launcherctl pane current` reports `geometry` (left, top, columns, rows) that matches
+   what is on screen, in portrait and landscape, and neighbouring panes agree on the divider.
+4. **Resize.** `launcherctl pane resize <id> --columns 50` and `--size 0.3` move the divider;
+   a pane alone in its window answers 409 `no_split`.
+5. **Windows.** `window open --cwd ~/tmp -- sh` starts in `~/tmp`; `window focus <id>` switches the strip
+   with the launcher visible; `window close <id>` closes a window opened that way and answers 403 for
+   one of yours.
+6. **Caller's directory.** `cd /sdcard && launcherctl pane open -- sh` starts in `/sdcard`.
+7. **--print-id.** `id=$(launcherctl pane open --print-id --no-focus -- sh)` gives one bare id.
+8. **wait.** `launcherctl pane write "$id" --enter 'sleep 3; echo done-now'` then
+   `launcherctl pane wait "$id" --match done-now --timeout 10000` returns after about 3 s; a missing
+   string times out with 408 `timeout`; five waits at once: the fifth answers 429 `too_many_waits`.
+9. **Help.** `launcherctl pane --help` and `launcherctl window --help` print their group's help; bare
+   `launcherctl pane` exits 2 and acts on nothing.
+10. **terminal-browser** (tlstore build with the launcher adapter): from an agent's shell,
+   `terminal-browser open --split right <url>` opens the browser in a pane beside it; on a launcher
+   without this branch, it opens wherever the layout puts a new pane.

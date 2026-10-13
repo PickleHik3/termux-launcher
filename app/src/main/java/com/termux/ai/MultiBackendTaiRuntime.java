@@ -358,9 +358,10 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
      */
     @NonNull
     public JSONObject transcribe(@NonNull TaiModelSpec model, @NonNull File audio,
-                                 @Nullable String language, @Nullable String biasPrompt) throws JSONException {
+                                 @Nullable String language, @Nullable String languageHint,
+                                 @Nullable String biasPrompt) throws JSONException {
         if (!isSpeechToTextModel(model)) return notSpeechToText(model);
-        return sttFor(model).transcribe(model, audio, language, biasPrompt);
+        return sttFor(model).transcribe(model, audio, language, languageHint, biasPrompt);
     }
 
     /** Loads a {@code speech_to_text} model ahead of its first request; see {@link SttRuntime#warm}. */

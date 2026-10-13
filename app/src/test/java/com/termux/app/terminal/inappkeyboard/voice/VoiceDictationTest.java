@@ -165,4 +165,101 @@ public class VoiceDictationTest {
         // Undo goes back to what went into this cleanup: the carried-on text and the new words.
         assertEquals("ls -la dash h", dictation.result());
     }
+
+    @Test
+    public void anEditOfTheWaitingTextBecomesTheTextAndUndoSwitchesWithTheTextBeforeIt() {
+        VoiceDictation dictation = new VoiceDictation();
+        dictation.start("");
+        dictation.append("open the read me");
+        dictation.onStopped();
+        dictation.onCleaned("Open the README.");
+        assertTrue(dictation.beginEdit());
+        assertEquals("Open the README.", dictation.editText());
+        assertTrue(dictation.commitEdit("Open the README file."));
+        assertEquals("Open the README file.", dictation.result());
+        assertTrue(dictation.isEditPair());
+        assertEquals("Open the README.", dictation.editedFrom());
+        // Two states: the edit and the text before it (the cleaned one here); the as-heard text is folded away.
+        assertTrue(dictation.toggleUndo());
+        assertEquals("Open the README.", dictation.result());
+        assertTrue(dictation.toggleUndo());
+        assertEquals("Open the README file.", dictation.result());
+        assertTrue(dictation.press(VoiceDictation.Use.INSERT));
+        assertEquals("Open the README file.", dictation.result());
+    }
+
+    @Test
+    public void anEditThatChangedNothingLeavesTheCleanupUndoAlone() {
+        VoiceDictation dictation = new VoiceDictation();
+        dictation.start("");
+        dictation.append("ls dash la");
+        dictation.onStopped();
+        dictation.onCleaned("ls -la");
+        dictation.beginEdit();
+        assertFalse(dictation.commitEdit("ls -la"));
+        assertFalse(dictation.isEditPair());
+        assertNull(dictation.editedFrom());
+        assertTrue(dictation.toggleUndo());
+        assertEquals("ls dash la", dictation.result());
+    }
+
+    @Test
+    public void anEditBeforeTheTextSettlesWinsAndLatePhrasesJoinIt() {
+        VoiceDictation dictation = new VoiceDictation();
+        dictation.start("");
+        dictation.append("note to self");
+        dictation.press(VoiceDictation.Use.COPY);
+        // The tap pauses the microphone; the edit drops the early press.
+        assertTrue(dictation.beginEdit());
+        assertNull(dictation.pending());
+        dictation.onStopped();
+        assertTrue(dictation.commitEdit("Note to self:"));
+        assertEquals("Note to self:", dictation.carryOver());
+        dictation.append("buy milk");
+        assertEquals("Note to self: buy milk", dictation.editText());
+        // The cleanup is never taken over an edit: it settles as heard, the edit kept.
+        assertTrue(dictation.isByHand());
+        assertNull(dictation.onCleaned("Note to self, buy milk."));
+        assertEquals(VoiceDictation.Phase.WAITING, dictation.phase());
+        assertEquals("Note to self: buy milk", dictation.result());
+        assertEquals("note to self buy milk", dictation.editedFrom());
+        assertTrue(dictation.toggleUndo());
+        assertEquals("note to self buy milk", dictation.result());
+    }
+
+    @Test
+    public void anEditIsNotOfferedOnceTheTextIsUsedAndAResumeForgetsIt() {
+        VoiceDictation dictation = new VoiceDictation();
+        assertFalse(dictation.beginEdit());
+        dictation.start("");
+        dictation.append("hello");
+        dictation.onStopped();
+        dictation.onSettled("hello");
+        dictation.beginEdit();
+        dictation.commitEdit("hello there");
+        dictation.start(dictation.carryOver());
+        assertEquals("hello there", dictation.raw());
+        assertFalse(dictation.isByHand());
+        assertFalse(dictation.canUndo());
+        dictation.onStopped();
+        dictation.onSettled("hello there");
+        dictation.press(VoiceDictation.Use.INSERT);
+        assertFalse(dictation.canEdit());
+        assertFalse(dictation.beginEdit());
+        assertFalse(dictation.commitEdit("changed"));
+        assertEquals("hello there", dictation.result());
+    }
+
+    @Test
+    public void aPolishedCleanupKeepsItsLineBreaksAsTheText() {
+        VoiceDictation dictation = new VoiceDictation();
+        dictation.start("");
+        dictation.append("shopping list milk eggs");
+        dictation.onStopped();
+        dictation.onCleaned("Shopping list:\n- milk\n- eggs");
+        assertEquals("Shopping list:\n- milk\n- eggs", dictation.result());
+        dictation.beginEdit();
+        dictation.commitEdit("Shopping list:\n- milk\n- eggs\n- bread");
+        assertEquals("Shopping list:\n- milk\n- eggs\n- bread", dictation.result());
+    }
 }

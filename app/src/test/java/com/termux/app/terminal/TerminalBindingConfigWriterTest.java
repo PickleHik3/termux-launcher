@@ -195,6 +195,26 @@ public class TerminalBindingConfigWriterTest {
     }
 
     @Test
+    public void aWrittenContactParsesBackToItsLookupKeyIdAndName() {
+        TerminalBindingConfigWriter.Edit edit = TerminalBindingConfigWriter.putMapping(
+            Collections.singletonList("# mine"), "ctrl+alt+shift+a",
+            LauncherToolRegistry.TOOL_CONTACT_OPEN, Arrays.asList("0r12-3A4B5C", "contact_id=42"),
+            "Ana Silva");
+        assertTrue(edit.error, edit.ok());
+        assertEquals(Arrays.asList("# mine", "",
+            TerminalBindingConfigWriter.MANAGED_HEADER,
+            "map --label \"Ana Silva\" ctrl+alt+shift+a contact.open 0r12-3A4B5C contact_id=42"),
+            edit.lines);
+
+        TerminalBindingConfig.Mapping mapping = parse(edit.lines).mappings.get(0);
+        assertEquals("ctrl+alt+shift+a", mapping.sequence);
+        assertEquals("Ana Silva", mapping.label);
+        assertEquals(LauncherToolRegistry.TOOL_CONTACT_OPEN, mapping.actions.get(0).value);
+        assertEquals("0r12-3A4B5C", mapping.actions.get(0).arguments.optString("lookup_key"));
+        assertEquals(42L, mapping.actions.get(0).arguments.optLong("contact_id", -1));
+    }
+
+    @Test
     public void aWrittenLabelParsesBackAsTheBindingsDisplayName() {
         TerminalBindingConfigWriter.Edit edit = TerminalBindingConfigWriter.putMapping(
             Collections.<String>emptyList(), "ctrl+alt+w",
@@ -248,6 +268,69 @@ public class TerminalBindingConfigWriterTest {
     }
 
     @Test
+    public void rebind_movesAnActionsChordInsteadOfAddingASecond() {
+        List<String> original = Arrays.asList(
+            "# mine",
+            "map --label Equalize ctrl+alt+shift+q pane.equalize   # old chord",
+            "map ctrl+alt+j pane.focus_direction direction=down");
+
+        TerminalBindingConfigWriter.Edit edit = TerminalBindingConfigWriter.rebind(original,
+            "ctrl+alt+shift+e", "pane.equalize", Collections.<String>emptyList(), "Equalize");
+
+        assertTrue(edit.error, edit.ok());
+        assertEquals(Arrays.asList(
+            "# mine",
+            "map ctrl+alt+j pane.focus_direction direction=down",
+            "",
+            TerminalBindingConfigWriter.MANAGED_HEADER,
+            "map --label Equalize ctrl+alt+shift+e pane.equalize"), edit.lines);
+    }
+
+    @Test
+    public void rebind_movesAContactsChordHoweverItsKeyWasSpelled() {
+        List<String> original = Collections.singletonList(
+            "map ctrl+alt+shift+b contact.open lookup_key=0r12-3A4B5C contact_id=42");
+
+        TerminalBindingConfigWriter.Edit edit = TerminalBindingConfigWriter.rebind(original,
+            "ctrl+alt+shift+a", LauncherToolRegistry.TOOL_CONTACT_OPEN,
+            Arrays.asList("0r12-3A4B5C", "contact_id=42"), "Ana Silva");
+
+        assertTrue(edit.error, edit.ok());
+        TerminalBindingConfig.Result parsed = parse(edit.lines);
+        assertEquals(1, parsed.mappings.size());
+        assertEquals("ctrl+alt+shift+a", parsed.mappings.get(0).sequence);
+    }
+
+    @Test
+    public void rebind_leavesAChainAConditionAndAnotherTargetAlone() {
+        List<String> original = Arrays.asList(
+            "map ctrl+alt+shift+q pane.equalize",
+            "map ctrl+alt+shift+q pane.rotate",
+            "map --when splits-on ctrl+alt+shift+w pane.equalize",
+            "map ctrl+alt+shift+x contact.open someone-else");
+
+        TerminalBindingConfigWriter.Edit edit = TerminalBindingConfigWriter.rebind(original,
+            "ctrl+alt+shift+e", "pane.equalize", Collections.<String>emptyList(), null);
+
+        assertTrue(edit.error, edit.ok());
+        assertEquals(original, edit.lines.subList(0, original.size()));
+    }
+
+    @Test
+    public void rebind_doesNotBringABuiltInDefaultBackWhenItTakesAChordAway() {
+        // Ctrl+Alt+M is the action sheet's default; the user gave it to Equalize. Moving Equalize
+        // must not hand Ctrl+Alt+M back to the action sheet behind the user's back.
+        List<String> original = Collections.singletonList("map ctrl+alt+m pane.equalize");
+
+        TerminalBindingConfigWriter.Edit edit = TerminalBindingConfigWriter.rebind(original,
+            "ctrl+alt+shift+e", "pane.equalize", Collections.<String>emptyList(), null);
+
+        assertTrue(edit.error, edit.ok());
+        assertEquals("unmap ctrl+alt+m", edit.lines.get(0));
+        assertEquals("map ctrl+alt+shift+e pane.equalize", edit.lines.get(edit.index));
+    }
+
+    @Test
     public void quoteWord_quotesOnlyWhatTheTokenizerWouldMangle() {
         assertEquals("plain", TerminalBindingConfigWriter.quoteWord("plain"));
         assertEquals("com.example/.Main", TerminalBindingConfigWriter.quoteWord("com.example/.Main"));
@@ -280,6 +363,15 @@ public class TerminalBindingConfigWriterTest {
         TerminalBindingConfigWriter.Edit edit = bind(Collections.<String>emptyList(), "");
         assertNotNull(edit.error);
         assertFalse(edit.ok());
+    }
+
+    private static TerminalBindingConfig.Result parse(List<String> lines) {
+        StringBuilder file = new StringBuilder();
+        for (String line : lines) file.append(line).append('\n');
+        TerminalBindingConfig.Result parsed = TerminalBindingConfig.parse(file.toString(),
+            LauncherToolRegistry.getInstance(), true);
+        assertTrue(parsed.errors.toString(), parsed.errors.isEmpty());
+        return parsed;
     }
 
     private static TerminalBindingConfigWriter.Edit bind(List<String> lines, String sequence) {

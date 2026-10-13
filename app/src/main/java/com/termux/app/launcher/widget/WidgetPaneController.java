@@ -688,9 +688,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 : cell.getWidth() - cell.providerContentWidth();
             int padHeight = cell == null || cell.getHeight() <= 0 ? 0
                 : cell.getHeight() - cell.providerContentHeight();
+            // Maximums arrived in API 31; reading the fields before it throws NoSuchFieldError.
+            int maxWidth = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? info.maxResizeWidth : 0;
+            int maxHeight = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? info.maxResizeHeight : 0;
             WidgetGridMetrics.Span maxSpan = metrics.largestSpanWithin(
-                info.maxResizeWidth > 0 ? info.maxResizeWidth + padWidth : 0,
-                info.maxResizeHeight > 0 ? info.maxResizeHeight + padHeight : 0);
+                maxWidth > 0 ? maxWidth + padWidth : 0,
+                maxHeight > 0 ? maxHeight + padHeight : 0);
             maxColumns = maxSpan.columns;
             maxRows = maxSpan.rows;
         }

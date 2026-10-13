@@ -53,7 +53,8 @@ import java.util.Map;
  * </ul>
  *
  * <p>Installed apps and live sessions are the two row sources that are not tool projections.
- * Apps are rebuilt per query — usage-ranked with no query, fuzzy-ranked with one — and each row
+ * Apps are rebuilt per query — usage-ranked with no query, fuzzy-matched with one and then ranked
+ * in one list with the actions and contacts ({@link CommandPaletteRanking}) — and each row
  * runs {@code app.launch} with its own stable id; sessions run
  * {@code session.activate_by_index} with their own index. Either way a run from here takes the
  * same path as a run from a keybind.
@@ -69,6 +70,18 @@ public final class TerminalCommandPalette {
 
     /** Display-only grouping key for live sessions; not a registry category. */
     public static final String CATEGORY_SESSIONS = "sessions";
+
+    /**
+     * Display-only grouping key for contact search results; not a registry
+     * category. Contact rows are acted on directly by the controller; their
+     * tool name is the one a key bound to the row runs.
+     */
+    public static final String CATEGORY_CONTACTS = "contacts";
+
+    /** Tool name for contact rows: the bindable {@code contact.open}. */
+    private static final String TOOL_CONTACT_OPEN = LauncherToolRegistry.TOOL_CONTACT_OPEN;
+    /** Sentinel tool name for the row that asks for contact access. */
+    static final String TOOL_CONTACTS_ALLOW = "contact.allow";
 
     private TerminalCommandPalette() {
     }
@@ -326,13 +339,16 @@ public final class TerminalCommandPalette {
      * App rows for the current query, built from the provider's warm cache only —
      * the palette must never block the main thread on a PackageManager sweep.
      * Without a query the rows are usage-ranked, so the apps actually used land on
-     * top; with one, the launcher's own fuzzy ranking decides.
+     * top; with one, the launcher's own fuzzy ranking decides which apps make the cut.
      *
      * <p>{@code shortcuts} maps stable id to the chord already bound to that app, so a row can show
      * what will launch it — and, because {@code score()} matches an entry's bindings, so the row is
      * findable by typing its chord. Additionally fills {@code iconsOut} with the artwork for the
      * rows it returns, keyed by {@link CommandPaletteFilter.Entry#iconKey}; only these rows carry
      * icons, so the map stays as short as the Apps section rather than the whole installed set.
+     * With a query, {@code scoresOut} likewise receives each row's match on the palette's score
+     * scale ({@link CommandPaletteAppMatch}), so the caller can rank the apps against the other
+     * rows.
      */
     @NonNull
     static List<CommandPaletteFilter.Entry> buildAppEntries(
@@ -341,7 +357,8 @@ public final class TerminalCommandPalette {
         @NonNull LauncherUsageStatsStore usageStats,
         @NonNull String query,
         @NonNull Map<String, String> shortcuts,
-        @Nullable Map<String, Drawable> iconsOut
+        @Nullable Map<String, Drawable> iconsOut,
+        @Nullable Map<String, Integer> scoresOut
     ) {
         List<LauncherAppEntry> apps = provider.getAllApps();
         if (apps.isEmpty()) return Collections.emptyList();
@@ -355,38 +372,52 @@ public final class TerminalCommandPalette {
         for (int i = 0; i < limit; i++) {
             LauncherAppEntry app = ranked.get(i);
             String stableId = app.appRef.stableId();
-            JSONObject arguments = new JSONObject();
-            try {
-                // The stable id targets one activity exactly, so a row cannot drift
-                // to a different app of the same package.
-                arguments.put("query", stableId);
-            } catch (JSONException ignored) {
-            }
             if (iconsOut != null) {
                 android.graphics.drawable.Drawable artwork = com.termux.app.launcher.data
                     .LauncherAppDataProvider.artworkFor(context, app);
                 if (artwork != null) iconsOut.put(stableId, artwork);
             }
-            String stroke = shortcuts.get(stableId);
-            entries.add(new CommandPaletteFilter.Entry(
-                LauncherToolRegistry.TOOL_APP_LAUNCH,
-                app.label,
-                // The subtitle doubles as the only place the palette says a row is bindable;
-                // drawRow renders the description on the focused row alone, so this costs no rows.
-                context.getString(R.string.palette_app_row_subtitle, app.appRef.packageName),
-                LauncherToolRegistry.CATEGORY_APPS,
-                stroke == null ? Collections.<String>emptyList()
-                    : Collections.singletonList(stroke),
-                true,
-                null,
-                false,
-                LauncherToolRegistry.ToolRisk.MEDIUM,
-                arguments,
-                null,
-                null,
-                stableId));
+            if (scoresOut != null && !trimmed.isEmpty())
+                scoresOut.put(stableId, CommandPaletteAppMatch.score(app, trimmed));
+            entries.add(appEntry(context, app, shortcuts));
         }
         return entries;
+    }
+
+    /**
+     * One app's row, launched by stable id. The keycap strip builds its app chips with this too,
+     * so a chip launches exactly as the row does.
+     */
+    @NonNull
+    static CommandPaletteFilter.Entry appEntry(@NonNull Context context,
+                                               @NonNull LauncherAppEntry app,
+                                               @NonNull Map<String, String> shortcuts) {
+        String stableId = app.appRef.stableId();
+        JSONObject arguments = new JSONObject();
+        try {
+            // The stable id targets one activity exactly, so a row cannot drift
+            // to a different app of the same package.
+            arguments.put("query", stableId);
+        } catch (JSONException ignored) {
+        }
+        String stroke = shortcuts.get(stableId);
+        return new CommandPaletteFilter.Entry(
+            LauncherToolRegistry.TOOL_APP_LAUNCH,
+            app.label,
+            // The subtitle doubles as the only place the palette says a row is bindable;
+            // drawRow renders the description on the focused row alone, so this costs no rows.
+            context.getString(R.string.palette_app_row_subtitle, app.appRef.packageName),
+            LauncherToolRegistry.CATEGORY_APPS,
+            stroke == null ? Collections.<String>emptyList()
+                : Collections.singletonList(stroke),
+            true,
+            null,
+            false,
+            LauncherToolRegistry.ToolRisk.MEDIUM,
+            arguments,
+            null,
+            null,
+            stableId);
     }
 
     /**
@@ -406,6 +437,113 @@ public final class TerminalCommandPalette {
             LauncherAppEntry app = TerminalActionDispatcher.resolveApp(provider, query, false);
             return app == null ? null : app.appRef.stableId();
         });
+    }
+
+    /**
+     * Lookup key to chord, for every {@code contact.open} binding in the config. The lookup key is
+     * the row's identity as much as the binding's, so unlike apps nothing needs resolving: a row
+     * shows a chord only when the binding names that very contact.
+     */
+    @NonNull
+    static Map<String, String> buildContactShortcuts() {
+        return TerminalKeyBindingResolver.getInstance().getArgumentStrokesForTool(
+            LauncherToolRegistry.TOOL_CONTACT_OPEN, "lookup_key",
+            TerminalActionDispatcher.getInstance().actionContext());
+    }
+
+    /**
+     * Contact rows for the current query, from the warm contact cache the
+     * controller keeps. A name or a phone number finds the contact; the row
+     * opens it in the Contacts app, and its chip opens the dialer on the
+     * number the query matched — the first number when it matched by name.
+     * {@code shortcuts} maps lookup key to the chord bound to that contact.
+     *
+     * <p>Pure projection of the cache, so the row shape is testable without
+     * a content provider.
+     */
+    @NonNull
+    static List<CommandPaletteFilter.Entry> buildContactEntries(
+        @NonNull Context context,
+        @NonNull List<CommandPaletteContacts.Match> matches,
+        @NonNull Map<String, String> shortcuts
+    ) {
+        List<CommandPaletteFilter.Entry> entries = new ArrayList<>(matches.size());
+        for (CommandPaletteContacts.Match match : matches) {
+            JSONObject arguments = new JSONObject();
+            try {
+                // The lookup uri targets one contact exactly, so a row cannot
+                // drift to a different contact that shares its name.
+                arguments.put("contact_id", match.contact.contactId);
+                arguments.put("lookup_key", match.contact.lookupKey);
+                arguments.put("number", match.number);
+            } catch (JSONException ignored) {
+            }
+            String stroke = shortcuts.get(match.contact.lookupKey);
+            entries.add(new CommandPaletteFilter.Entry(
+                TOOL_CONTACT_OPEN,
+                match.contact.name,
+                // The subtitle doubles as the row's second line: the number
+                // the call button hands to the dialer, so the row says what it will do.
+                match.number,
+                CATEGORY_CONTACTS,
+                stroke == null ? Collections.<String>emptyList()
+                    : Collections.singletonList(stroke),
+                true,
+                null,
+                false,
+                LauncherToolRegistry.ToolRisk.LOW,
+                arguments));
+        }
+        return entries;
+    }
+
+    /**
+     * The row a search shows while contact access is not granted: picking
+     * it asks for access, so the ask follows a choice rather than a keystroke.
+     */
+    @NonNull
+    static CommandPaletteFilter.Entry buildContactsAllowEntry(@NonNull Context context) {
+        return new CommandPaletteFilter.Entry(
+            TOOL_CONTACTS_ALLOW,
+            context.getString(R.string.palette_contacts_allow),
+            context.getString(R.string.palette_contacts_allow_hint),
+            CATEGORY_CONTACTS,
+            Collections.<String>emptyList(),
+            true,
+            null,
+            false,
+            LauncherToolRegistry.ToolRisk.LOW,
+            null);
+    }
+
+    /**
+     * Whether holding the row binds a key to it: an app or a contact, which carry their own target,
+     * or an action that runs as it stands — enabled, with nothing left to choose or type. Rows that
+     * supply a value of their own (a session, a keyboard layout or type) and the allow row are not
+     * bound from here; the file still binds them.
+     */
+    static boolean isBindable(@NonNull CommandPaletteFilter.Entry entry) {
+        if (LauncherToolRegistry.CATEGORY_APPS.equals(entry.category))
+            return entry.arguments != null && !entry.arguments.optString("query", "").isEmpty();
+        if (CATEGORY_CONTACTS.equals(entry.category))
+            return TOOL_CONTACT_OPEN.equals(entry.toolName)
+                && !contactBindingArguments(entry.arguments).isEmpty();
+        return entry.enabled && entry.arguments == null && !entry.isSubmenu()
+            && !entry.isArgumentPrompt()
+            && LauncherToolRegistry.getInstance().getTool(entry.toolName) != null;
+    }
+
+    /**
+     * The words after {@code contact.open} on a contact row's binding line: the lookup key, then
+     * the id as the lookup's hint. Empty when the row carries no key.
+     */
+    @NonNull
+    static List<String> contactBindingArguments(@Nullable JSONObject arguments) {
+        String lookupKey = arguments == null ? "" : arguments.optString("lookup_key", "");
+        if (lookupKey.isEmpty()) return Collections.emptyList();
+        long contactId = arguments.optLong("contact_id", -1);
+        return contactId < 0 ? Collections.singletonList(lookupKey)
+            : java.util.Arrays.asList(lookupKey, "contact_id=" + contactId);
     }
 
     static boolean hasRequiredArguments(@NonNull LauncherToolRegistry.ToolMetadata tool) {
@@ -470,6 +608,7 @@ public final class TerminalCommandPalette {
             case LauncherToolRegistry.CATEGORY_APPS: return context.getString(R.string.palette_category_apps);
             case LauncherToolRegistry.CATEGORY_WALL: return context.getString(R.string.palette_category_wall);
             case CATEGORY_SESSIONS: return context.getString(R.string.palette_category_sessions);
+            case CATEGORY_CONTACTS: return context.getString(R.string.palette_category_contacts);
             default: return category;
         }
     }

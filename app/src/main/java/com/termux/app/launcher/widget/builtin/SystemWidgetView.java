@@ -17,10 +17,14 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.statusbar.SystemStatsController;
+import com.termux.privileged.PrivilegedAvailabilitySignal;
+import com.termux.privileged.PrivilegedBackendManager;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
 
 /**
@@ -28,6 +32,10 @@ import java.util.concurrent.RejectedExecutionException;
  * at 4×2 the CPU over its last 32 samples with the rest underneath. CPU and memory come from the
  * shared {@link SystemStatsController}; the temperature is the battery's, the only device
  * temperature an app can read; storage is the data partition.
+ *
+ * <p>The CPU reading needs privileged access (Shizuku or su/rish): without it most phones refuse
+ * the app {@code /proc/stat}, so every span is built without its CPU row until access is there,
+ * and rebuilt when it comes or goes, rather than showing a dash.
  */
 public class SystemWidgetView extends BuiltinWidgetView
         implements SystemStatsController.Listener, BatterySource.Listener {
@@ -62,6 +70,11 @@ public class SystemWidgetView extends BuiltinWidgetView
     private int temperatureTenths = Integer.MIN_VALUE;
     private long diskUsedBytes = -1L, diskTotalBytes = -1L;
 
+    /** Whether the current layout was built with the CPU row; see the class comment. */
+    private boolean cpuShown;
+    private final PrivilegedAvailabilitySignal.Listener availabilityListener =
+        available -> syncCpuRow();
+
     private final int[] history = new int[HISTORY];
     private int historyCount;
     private long lastSampleAtMs;
@@ -76,6 +89,8 @@ public class SystemWidgetView extends BuiltinWidgetView
     @Override protected void onBuild(@NonNull FrameLayout frame, @NonNull BuiltinWidgetSpan span,
                                      @NonNull BuiltinWidgetUi ui) {
         clearRefs();
+        cpuShown = isPreview()
+            || PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi();
         View root;
         switch (span) {
             case TWO_BY_ONE: root = buildTwoByOne(ui); break;
@@ -101,15 +116,18 @@ public class SystemWidgetView extends BuiltinWidgetView
 
     @NonNull private View buildOneByOne(@NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle s = ui.style;
-        cpuValue = ui.numeral("", 16f);
+        List<View> rows = new ArrayList<>();
+        if (cpuShown) {
+            cpuValue = ui.numeral("", 16f);
+            rows.add(glyphRow(ui, StatGlyphs.CPU, s.primary, R.string.bw_device_cpu, cpuValue));
+        }
         ramValue = ui.numeral("", 16f);
         tempValue = ui.numeral("", 16f);
-        LinearLayout root = ui.column(7,
-            glyphRow(ui, StatGlyphs.CPU, s.primary, R.string.bw_device_cpu, cpuValue),
-            glyphRow(ui, StatGlyphs.MEMORY, s.onTertiaryContainer, R.string.bw_device_ram,
-                ramValue),
-            glyphRow(ui, StatGlyphs.TEMPERATURE, s.warm, R.string.bw_device_temperature,
-                tempValue));
+        rows.add(glyphRow(ui, StatGlyphs.MEMORY, s.onTertiaryContainer, R.string.bw_device_ram,
+            ramValue));
+        rows.add(glyphRow(ui, StatGlyphs.TEMPERATURE, s.warm, R.string.bw_device_temperature,
+            tempValue));
+        LinearLayout root = ui.column(7, rows.toArray(new View[0]));
         root.setGravity(Gravity.CENTER_VERTICAL);
         inset(root, 12, 0, 12, 0, ui);
         return root;
@@ -125,17 +143,20 @@ public class SystemWidgetView extends BuiltinWidgetView
 
     @NonNull private View buildTwoByOne(@NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle s = ui.style;
-        cpuValue = shortValue(ui);
+        List<View> rows = new ArrayList<>();
+        if (cpuShown) {
+            cpuValue = shortValue(ui);
+            cpuBar = ui.bar(0f, s.primary, 5);
+            rows.add(barRow(ui, StatGlyphs.CPU, R.string.bw_device_cpu, cpuBar, cpuValue));
+        }
         ramValue = shortValue(ui);
         tempValue = shortValue(ui);
-        cpuBar = ui.bar(0f, s.primary, 5);
         ramBar = ui.bar(0f, s.onTertiaryContainer, 5);
         tempBar = ui.bar(0f, s.warm, 5);
-        LinearLayout root = ui.column(8,
-            barRow(ui, StatGlyphs.CPU, R.string.bw_device_cpu, cpuBar, cpuValue),
-            barRow(ui, StatGlyphs.MEMORY, R.string.bw_device_ram, ramBar, ramValue),
-            barRow(ui, StatGlyphs.TEMPERATURE, R.string.bw_device_temperature, tempBar,
-                tempValue));
+        rows.add(barRow(ui, StatGlyphs.MEMORY, R.string.bw_device_ram, ramBar, ramValue));
+        rows.add(barRow(ui, StatGlyphs.TEMPERATURE, R.string.bw_device_temperature, tempBar,
+            tempValue));
+        LinearLayout root = ui.column(8, rows.toArray(new View[0]));
         root.setGravity(Gravity.CENTER_VERTICAL);
         inset(root, 14, 0, 14, 0, ui);
         return root;
@@ -169,25 +190,29 @@ public class SystemWidgetView extends BuiltinWidgetView
         BuiltinWidgetStyle s = ui.style;
         View caption = ui.caption(getContext().getString(R.string.bw_device_system_caption),
             StatGlyphs.CPU, getContext().getString(R.string.bw_device_system_path));
-        cpuValue = groupValue(ui);
         ramValue = groupValue(ui);
         tempValue = groupValue(ui);
         diskValue = groupValue(ui);
-        cpuBar = ui.bar(0f, s.primary, 5);
         ramBar = ui.bar(0f, s.onTertiaryContainer, 5);
         tempBar = ui.bar(0f, s.warm, 5);
         diskBar = ui.bar(0f, s.done, 5);
         uptime = ui.mono("", 10.5f);
+        View ramGroup = group(ui, StatGlyphs.MEMORY, R.string.bw_device_ram, ramValue, ramBar);
         // At 115dp the four groups, the caption and the uptime are over a card high: the uptime
         // goes first, then the caption, then the groups from the disk up; the groups share any
-        // room that is left between them.
-        FitStack root = FitStack.column(getContext())
-            .add(caption, 20, 0)
-            .add(group(ui, StatGlyphs.CPU, R.string.bw_device_cpu, cpuValue, cpuBar),
-                FitStack.ESSENTIAL, ui.dp(10))
-            .addElastic(group(ui, StatGlyphs.MEMORY, R.string.bw_device_ram, ramValue, ramBar),
-                50, 0)
-            .addElastic(group(ui, StatGlyphs.TEMPERATURE, R.string.bw_device_temperature,
+        // room that is left between them. The first group, the CPU's or else the memory's, sits
+        // where the CPU's does and is never left out.
+        FitStack root = FitStack.column(getContext()).add(caption, 20, 0);
+        if (cpuShown) {
+            cpuValue = groupValue(ui);
+            cpuBar = ui.bar(0f, s.primary, 5);
+            root.add(group(ui, StatGlyphs.CPU, R.string.bw_device_cpu, cpuValue, cpuBar),
+                    FitStack.ESSENTIAL, ui.dp(10))
+                .addElastic(ramGroup, 50, 0);
+        } else {
+            root.add(ramGroup, FitStack.ESSENTIAL, ui.dp(10));
+        }
+        root.addElastic(group(ui, StatGlyphs.TEMPERATURE, R.string.bw_device_temperature,
                 tempValue, tempBar), 40, 0)
             .addElastic(group(ui, StatGlyphs.DISK, R.string.bw_device_storage, diskValue,
                 diskBar), 30, 0)
@@ -215,23 +240,26 @@ public class SystemWidgetView extends BuiltinWidgetView
 
     @NonNull private View buildFourByOne(@NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle s = ui.style;
-        cpuValue = ui.numeral("", 22f);
+        List<View> tiles = new ArrayList<>();
+        if (cpuShown) {
+            cpuValue = ui.numeral("", 22f);
+            cpuBar = ui.bar(0f, s.primary, 4);
+            tiles.add(BuiltinWidgetUi.flex(tile(ui, StatGlyphs.CPU, s.primary,
+                R.string.bw_device_cpu, cpuValue, cpuBar)));
+        }
         ramValue = ui.numeral("", 22f);
         tempValue = ui.numeral("", 22f);
         diskValue = ui.numeral("", 22f);
-        cpuBar = ui.bar(0f, s.primary, 4);
         ramBar = ui.bar(0f, s.onTertiaryContainer, 4);
         tempBar = ui.bar(0f, s.warm, 4);
         diskBar = ui.bar(0f, s.done, 4);
-        LinearLayout root = ui.row(12,
-            BuiltinWidgetUi.flex(tile(ui, StatGlyphs.CPU, s.primary, R.string.bw_device_cpu,
-                cpuValue, cpuBar)),
-            BuiltinWidgetUi.flex(tile(ui, StatGlyphs.MEMORY, s.onTertiaryContainer,
-                R.string.bw_device_ram, ramValue, ramBar)),
-            BuiltinWidgetUi.flex(tile(ui, StatGlyphs.TEMPERATURE, s.warm,
-                R.string.bw_device_temperature, tempValue, tempBar)),
-            BuiltinWidgetUi.flex(tile(ui, StatGlyphs.DISK, s.done, R.string.bw_device_storage,
-                diskValue, diskBar)));
+        tiles.add(BuiltinWidgetUi.flex(tile(ui, StatGlyphs.MEMORY, s.onTertiaryContainer,
+            R.string.bw_device_ram, ramValue, ramBar)));
+        tiles.add(BuiltinWidgetUi.flex(tile(ui, StatGlyphs.TEMPERATURE, s.warm,
+            R.string.bw_device_temperature, tempValue, tempBar)));
+        tiles.add(BuiltinWidgetUi.flex(tile(ui, StatGlyphs.DISK, s.done,
+            R.string.bw_device_storage, diskValue, diskBar)));
+        LinearLayout root = ui.row(12, tiles.toArray(new View[0]));
         inset(root, 16, 0, 16, 0, ui);
         return root;
     }
@@ -245,18 +273,29 @@ public class SystemWidgetView extends BuiltinWidgetView
 
     @NonNull private View buildFourByTwo(@NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle s = ui.style;
-        // The glyph stands in for the word "CPU" beside a 30sp reading: sized to read as its
-        // peer, not as a caption.
-        TextView label = ui.statGlyph(StatGlyphs.CPU, 22f, s.onSurfaceVariant,
-            getContext().getString(R.string.bw_device_cpu));
-        cpuValue = ui.numeral("", 30f);
-        LinearLayout left = baseline(ui.row(8, label, cpuValue));
-        left.setBaselineAlignedChildIndex(1);
         headerDetail = ui.mono("", 10.5f);
-        headerDetail.setGravity(Gravity.END);
-        LinearLayout header = baseline(ui.row(12, left, BuiltinWidgetUi.flex(headerDetail)));
-
-        chart = BuiltinWidgetUi.flexTall(new SparkBarsView(getContext(), s));
+        LinearLayout header;
+        View middle;
+        if (cpuShown) {
+            // The glyph stands in for the word "CPU" beside a 30sp reading: sized to read as its
+            // peer, not as a caption.
+            TextView label = ui.statGlyph(StatGlyphs.CPU, 22f, s.onSurfaceVariant,
+                getContext().getString(R.string.bw_device_cpu));
+            cpuValue = ui.numeral("", 30f);
+            LinearLayout left = baseline(ui.row(8, label, cpuValue));
+            left.setBaselineAlignedChildIndex(1);
+            headerDetail.setGravity(Gravity.END);
+            header = baseline(ui.row(12, left, BuiltinWidgetUi.flex(headerDetail)));
+            chart = BuiltinWidgetUi.flexTall(new SparkBarsView(getContext(), s));
+            middle = chart;
+        } else {
+            // No reading to lead the header and no history to chart: the cores, clock and
+            // uptime open the header, and the chart's room is left empty so the readings keep
+            // to the bottom edge, where they sit with the CPU shown.
+            headerDetail.setGravity(Gravity.START);
+            header = baseline(ui.row(12, BuiltinWidgetUi.flex(headerDetail)));
+            middle = BuiltinWidgetUi.flexTall(new View(getContext()));
+        }
 
         ramTail = tailValue(ui);
         tempTail = tailValue(ui);
@@ -275,7 +314,7 @@ public class SystemWidgetView extends BuiltinWidgetView
         // equal weights then cut the longer RAM and storage readings short beside free space.
         BuiltinWidgetUi.size(header, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         BuiltinWidgetUi.size(tail, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        LinearLayout root = ui.column(10, header, chart, tail);
+        LinearLayout root = ui.column(10, header, middle, tail);
         inset(root, 16, 16, 16, 16, ui);
         return root;
     }
@@ -310,6 +349,11 @@ public class SystemWidgetView extends BuiltinWidgetView
     // ----- data -----------------------------------------------------------------------------
 
     @Override protected void onStart() {
+        PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+        manager.addAvailabilityListener(availabilityListener);
+        // Built while off screen, with no listener: access may have changed since. Posted, as a
+        // rebuild from inside onStart would release what this start has not yet acquired.
+        if (manager.isPrivilegedAvailableForUi() != cpuShown) services.main().post(this::syncCpuRow);
         if (SystemClock.elapsedRealtime() - lastSampleAtMs > HISTORY_FRESH_MS) historyCount = 0;
         stats = services.acquireStats(this, SAMPLE_INTERVAL_MS);
         battery = BatterySource.get(getContext());
@@ -318,10 +362,18 @@ public class SystemWidgetView extends BuiltinWidgetView
     }
 
     @Override protected void onStop() {
+        PrivilegedBackendManager.getInstance().removeAvailabilityListener(availabilityListener);
         services.releaseStats(this);
         stats = null;
         if (battery != null) battery.release(this);
         battery = null;
+    }
+
+    /** Rebuilds with or without the CPU row once privileged access has come or gone. */
+    private void syncCpuRow() {
+        if (!isStarted()) return;
+        if (PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi() == cpuShown) return;
+        rebuild();
     }
 
     @Override public void onStatsUpdated(@NonNull SystemStatsController.Stats value) {
@@ -474,16 +526,19 @@ public class SystemWidgetView extends BuiltinWidgetView
     @NonNull private String describe(int ram) {
         Context context = getContext();
         String separator = context.getString(R.string.bw_device_desc_separator);
-        StringBuilder out = new StringBuilder(cpuPercent >= 0
-            ? context.getString(R.string.bw_device_desc_cpu, cpuPercent)
-            : context.getString(R.string.bw_device_desc_cpu_unknown));
-        if (ram >= 0) {
-            out.append(separator).append(context.getString(R.string.bw_device_desc_memory, ram));
+        List<String> parts = new ArrayList<>();
+        if (cpuShown) {
+            parts.add(cpuPercent >= 0
+                ? context.getString(R.string.bw_device_desc_cpu, cpuPercent)
+                : context.getString(R.string.bw_device_desc_cpu_unknown));
         }
+        if (ram >= 0) parts.add(context.getString(R.string.bw_device_desc_memory, ram));
         if (temperatureTenths != Integer.MIN_VALUE) {
-            out.append(separator).append(context.getString(R.string.bw_device_desc_degrees,
+            parts.add(context.getString(R.string.bw_device_desc_degrees,
                 Math.round(temperatureTenths / 10f)));
         }
-        return out.toString();
+        // Nothing known yet, and no CPU row to own up to that: the widget's own name.
+        if (parts.isEmpty()) return context.getString(kind().label);
+        return String.join(separator, parts);
     }
 }

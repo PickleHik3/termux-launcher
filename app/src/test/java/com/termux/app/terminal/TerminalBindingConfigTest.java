@@ -70,6 +70,23 @@ public class TerminalBindingConfigTest {
     }
 
     @Test
+    public void aContactIsBoundByItsLookupKeyWithItsIdAsAHint() {
+        TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
+            "map --label \"Ana Silva\" ctrl+alt+shift+a contact.open 0r12-3A4B5C contact_id=42\n"
+                + "map ctrl+alt+shift+b contact.open 3189i7d2a9\n",
+            registry, true);
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(2, result.mappings.size());
+        TerminalBindingConfig.Action ana = result.mappings.get(0).actions.get(0);
+        assertEquals(LauncherToolRegistry.TOOL_CONTACT_OPEN, ana.value);
+        assertEquals("0r12-3A4B5C", ana.arguments.optString("lookup_key"));
+        assertEquals(42L, ana.arguments.optLong("contact_id", -1));
+        assertEquals("Ana Silva", result.mappings.get(0).label);
+        assertFalse(result.mappings.get(1).actions.get(0).arguments.has("contact_id"));
+    }
+
+    @Test
     public void inlineArgumentsAreValidatedAgainstTheSchema() {
         TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
             "map ctrl+alt+shift+g pane.layout sideways\n"

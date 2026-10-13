@@ -46,9 +46,12 @@ public class TaiLoadMeasurementTest {
 
     // --- History ---
 
-    /** Identical GPU loads spread over ±0.9 GB on pong; the budget plans against the worst one seen. */
+    /**
+     * Identical GPU loads spread over ±0.9 GB on pong; the budget plans on the typical one (the
+     * upper median), and the runtime's watch stops a load that runs past it.
+     */
     @Test
-    public void historyKeepsTheLargestMeasuredDropPerKey() {
+    public void historyPlansOnTheTypicalMeasuredDropPerKey() {
         TaiModelSpec spec = chatSpec("gemma-4-e4b");
         assertEquals(0L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096));
 
@@ -56,6 +59,8 @@ public class TaiLoadMeasurementTest {
         TaiRuntimeHistory.recordMeasuredLoad(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096, 2_400_000_000L);
         assertEquals(3_000_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096));
         TaiRuntimeHistory.recordMeasuredLoad(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096, 4_200_000_000L);
+        assertEquals(3_000_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096));
+        TaiRuntimeHistory.recordMeasuredLoad(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096, 4_400_000_000L);
         assertEquals(4_200_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096));
 
         // Another accelerator or backend is another key; a non-positive drop is not a record.
