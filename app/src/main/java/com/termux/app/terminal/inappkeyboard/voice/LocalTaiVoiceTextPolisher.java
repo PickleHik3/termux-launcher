@@ -27,9 +27,10 @@ import java.util.Map;
 
 /**
  * {@link VoiceTextPolisher} on the local Gemma chat model through the TAI runtime: one
- * non-streamed {@code /v1/chat/completions} for the whole session at temperature 0, thinking off,
- * with the budgets and the prompt for the chosen cleanup level that {@link VoicePolishRules}
- * computes. Chat requests run on the runtime's serial chat lane and STT on its own, so the load
+ * non-streamed {@code /v1/chat/completions} per group of sentences the gate flags in each part of
+ * the session ({@link VoiceGatedCleanup}, {@link VoiceCleanupPlan}) at
+ * temperature 0, thinking off, with the budgets and the prompt for the chosen cleanup level that
+ * {@link VoicePolishRules} computes. Chat requests run on the runtime's serial chat lane and STT on its own, so the load
  * never holds up a transcription.
  *
  * <p><b>Model.</b> Cleanup's {@link TaiFeaturePlan} decides it (the "Cleanup model" keyboard setting is
@@ -41,6 +42,12 @@ import java.util.Map;
  * installed the session stays as heard and the log says {@code fallback:no_model}. With the routing
  * "Only when no local model fits", a local model that cannot load hands the session to the provider.
  * Resolution happens in {@link #warm}, off the main thread, because the plan reads files.
+ *
+ * <p><b>While listening.</b> Parts are cleaned during the dictation only with a remote model or a
+ * local one the plan puts on the GPU ({@link #cleansWhileListening}): on pong E2B on the GPU runs
+ * beside speech-to-text (which has its own lock) at a 20–40% cost to itself and none to
+ * transcription. A local model on the CPU would compete with speech-to-text for the same cores, so
+ * it keeps the one pass at the end.
  *
  * <p><b>Load.</b> Requests name the feature, and TAI loads by the plan: its accelerator, its
  * speculative decoding and its 2048-token window. Nothing about the load is decided here.
@@ -69,6 +76,8 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
     private volatile boolean remote;
     /** The provider to switch to when the local model cannot load; {@code null} without one. */
     @Nullable private volatile String remoteFallback;
+    /** Set in {@link #warm}: the plan puts the local model on the GPU. */
+    private volatile boolean onGpu;
 
     /** @param level the "Cleanup level" setting; anything unknown reads as Polished. */
     public LocalTaiVoiceTextPolisher(@NonNull Context context, @Nullable String level) {
@@ -85,12 +94,25 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
         @Nullable final String skipReason;
         /** {@code remote/<id>} to ask when the local model cannot load; {@code null} without one. */
         @Nullable final String remoteFallback;
+        /** A local model the plan loads on the GPU. */
+        final boolean onGpu;
 
         Plan(@NonNull String model, boolean remote, @Nullable String skipReason, @Nullable String remoteFallback) {
+            this(model, remote, skipReason, remoteFallback, false);
+        }
+
+        Plan(@NonNull String model, boolean remote, @Nullable String skipReason, @Nullable String remoteFallback,
+             boolean onGpu) {
             this.model = model;
             this.remote = remote;
             this.skipReason = skipReason;
             this.remoteFallback = remoteFallback;
+            this.onGpu = onGpu;
+        }
+
+        /** Whether parts are cleaned while the user speaks: a remote model, or a local one on the GPU. */
+        boolean cleansWhileListening() {
+            return skipReason == null && (remote || onGpu);
         }
     }
 
@@ -102,7 +124,8 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
             case REMOTE:
                 return new Plan(model == null ? "" : model, true, null, null);
             case ON_DEVICE:
-                return new Plan(model == null ? "" : model, false, null, feature.remoteFallback);
+                return new Plan(model == null ? "" : model, false, null, feature.remoteFallback,
+                    TaiTierPolicy.ACCEL_GPU.equals(feature.accelerator));
             default:
                 boolean raw = feature.without == TaiTierPolicy.WithoutModel.RAW_TEXT
                     || feature.without == TaiTierPolicy.WithoutModel.OFF;
@@ -157,6 +180,7 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
         modelId = resolved;
         remote = plan.remote;
         remoteFallback = plan.remoteFallback;
+        onGpu = plan.onGpu;
         // A remote model loads nothing here: the request goes to the provider when the text is ready.
         if (plan.remote) {
             Logger.logInfo(LOG_TAG, "polish warm skipped: remote model " + resolved);
@@ -207,9 +231,26 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
         return true;
     }
 
+    @Override
+    public boolean cleansWhileListening() {
+        return unavailableReason == null && !modelId.isEmpty() && (remote || onGpu);
+    }
+
     @NonNull
     @Override
     public Result polish(@NonNull String text, long timeoutMs) {
+        return polish(text, "", timeoutMs);
+    }
+
+    @NonNull
+    @Override
+    public Result polish(@NonNull String text, @NonNull String context, long timeoutMs) {
+        return polish(text, context, null, timeoutMs);
+    }
+
+    @NonNull
+    @Override
+    public Result polish(@NonNull String text, @NonNull String context, @Nullable String language, long timeoutMs) {
         String reason = unavailableReason;
         if (reason != null) return Result.fallback(text, reason);
         String model = modelId;
@@ -223,14 +264,17 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
         }
         try {
             JSONObject response = TaiManager.getInstance(appContext)
-                .openAiChatCompletions(request(model, level, text).toString(), timeoutMs);
+                .openAiChatCompletions(request(model, level, text, context, language).toString(), timeoutMs);
             VoiceInputSession.Failure failure = VoiceInputSession.Failure.of(response);
             if (failure != null) {
-                if (useRemoteFallback(failure.code)) return polish(text, timeoutMs);
+                if (useRemoteFallback(failure.code)) return polish(text, context, language, timeoutMs);
                 if (disablesForSession(failure.code)) unavailableReason = failure.code;
                 return Result.fallback(text, failure.code);
             }
-            String content = VoicePolishRules.contentOf(response);
+            String answer = VoicePolishRules.contentOf(response);
+            String content = VoicePolishRules.withoutEcho(context, text,
+                VoicePolishRules.withoutRepeatedEarlier(context, text, answer));
+            if (answer != null && content == null) return Result.fallback(text, "context_echo");
             String accepted = VoicePolishRules.accept(text, content, level);
             if (accepted != null) return Result.polished(accepted);
             // Kept apart in the log: a refusal or an answer is the model misbehaving, not an empty reply.
@@ -268,12 +312,32 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
      */
     @NonNull
     public static JSONObject request(@NonNull String model, @Nullable String level, @NonNull String text) throws JSONException {
+        return request(model, level, text, "");
+    }
+
+    /**
+     * {@link #request(String, String, String)} for a part that follows {@code context}, the earlier
+     * text as already cleaned, sent ahead of it in the user turn; {@code ""} sends the request above.
+     */
+    @NonNull
+    public static JSONObject request(@NonNull String model, @Nullable String level, @NonNull String text,
+                                     @NonNull String context) throws JSONException {
+        return request(model, level, text, context, null);
+    }
+
+    /**
+     * {@link #request(String, String, String, String)} for a dictation in {@code language}, which the
+     * system turn names ({@link VoicePolishRules#instructions(String, String, String, String)}).
+     */
+    @NonNull
+    public static JSONObject request(@NonNull String model, @Nullable String level, @NonNull String text,
+                                     @NonNull String context, @Nullable String language) throws JSONException {
         JSONObject system = new JSONObject();
         system.put("role", "system");
-        system.put("content", VoicePolishRules.instructions(level, text));
+        system.put("content", VoicePolishRules.instructions(level, text, context, language));
         JSONObject message = new JSONObject();
         message.put("role", "user");
-        message.put("content", VoicePolishRules.prompt(text));
+        message.put("content", VoicePolishRules.prompt(text, context));
         JSONArray messages = new JSONArray();
         messages.put(system);
         messages.put(message);

@@ -458,6 +458,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
     public static final String TOOL_APP_LAUNCH = "app.launch";
+    /** A contact's card, by the lookup key that survives a rename. */
+    public static final String TOOL_CONTACT_OPEN = "contact.open";
     public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
     public static final String TOOL_APP_OPEN_DRAWER = "app.open_drawer";
     public static final String TOOL_APP_OPEN_APP_DRAWER = "app.open_app_drawer";
@@ -1043,6 +1045,17 @@ public final class LauncherToolRegistry {
                 .build(),
             ToolRisk.MEDIUM, false, ToolExecutor.TERMINAL,
             CATEGORY_APPS, R.string.tool_app_launch, R.string.tool_desc_app_launch, null);
+        // The contact twin of app.launch: the palette's Contacts rows supply the key per row, so
+        // the tool carries no palette metadata of its own. The lookup key is the identity a rename
+        // or a namesake cannot move; contact_id only speeds the provider's lookup.
+        add(map, TOOL_CONTACT_OPEN,
+            "Open a contact's card in the Contacts app by lookup key.",
+            schemaObject()
+                .withString("lookup_key", "Contact lookup key", true)
+                .withLong("contact_id", "Contact id, a hint for the lookup",
+                    0, JSON_SAFE_INTEGER_MAX, 0, false)
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
         addUi(map, TOOL_TERMINAL_ACTION_SHEET,
             "Open the terminal action sheet.",
             schemaEmpty(),

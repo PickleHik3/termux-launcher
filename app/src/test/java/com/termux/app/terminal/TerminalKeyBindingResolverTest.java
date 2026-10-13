@@ -314,6 +314,41 @@ public class TerminalKeyBindingResolverTest {
     }
 
     @Test
+    public void toolStrokes_putTheUsersOwnChordBeforeTheDefault() {
+        // A palette row shows the first stroke, so a chord bound from the palette must win the
+        // shortcut column over the built-in one it sits beside.
+        assertEquals("ctrl+alt+m",
+            resolver.getStrokesForTool("terminal.action_sheet", SPLITS_ON).get(0));
+
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "map --label \"Action sheet\" ctrl+alt+shift+k terminal.action_sheet\n",
+            LauncherToolRegistry.getInstance(), true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+
+        List<String> strokes = resolver.getStrokesForTool("terminal.action_sheet", SPLITS_ON);
+        assertEquals("ctrl+alt+shift+k", strokes.get(0));
+        assertTrue(strokes.contains("ctrl+alt+m"));
+    }
+
+    @Test
+    public void argumentStrokes_mapEachContactToItsOwnStroke() {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "map --label Ana ctrl+alt+shift+a contact.open 0r12-3A4B5C contact_id=42\n"
+                + "map ctrl+alt+shift+b contact.open 3189i7d2a9\n",
+            LauncherToolRegistry.getInstance(), true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+
+        Map<String, String> strokes =
+            resolver.getArgumentStrokesForTool("contact.open", "lookup_key", SPLITS_ON);
+        assertEquals("ctrl+alt+shift+a", strokes.get("0r12-3A4B5C"));
+        assertEquals("ctrl+alt+shift+b", strokes.get("3189i7d2a9"));
+    }
+
+    @Test
     public void argumentStrokes_mapEachAppLaunchQueryToItsOwnStroke() {
         // One tool backs many rows, so getStrokesForTool cannot tell the palette which app a
         // stroke launches. Only the argument distinguishes them.

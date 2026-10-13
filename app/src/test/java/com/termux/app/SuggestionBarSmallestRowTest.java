@@ -33,8 +33,8 @@ public class SuggestionBarSmallestRowTest {
     @Test
     public void aRowAsShortAsDockedsSmallestIconStillRenders() {
         float density = 2.625f;
-        int iconPx = DockLayoutPolicy.iconPxForScale(false, DockLayoutPolicy.minUsefulScale(),
-            density);
+        int iconPx = DockLayoutPolicy.iconPxForScale(false, false,
+            DockLayoutPolicy.minUsefulScale(), density);
         assertEquals("the reported box", 55, iconPx);
 
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();

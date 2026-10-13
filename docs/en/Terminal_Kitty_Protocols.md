@@ -288,23 +288,41 @@ writes even while the launcher is off screen. See [LauncherCtl](LauncherCtl.md) 
 ## Extended clipboard (OSC 5522)
 
 `kitten clipboard` works. The terminal implements kitty's
-[clipboard protocol](https://sw.kovidgoyal.net/kitty/clipboard/) for text, on the same Android
-clipboard `OSC 52` uses and under the same rules: a write needs the launcher on screen, and a read
-needs it on screen and *Settings → Terminal → Let programs read the clipboard* on. A refused read
-is answered `status=EPERM`.
+[clipboard protocol](https://sw.kovidgoyal.net/kitty/clipboard/) for text and pictures, on the same
+Android clipboard `OSC 52` uses and under the same rules: a write needs the launcher on screen, and
+a read needs it on screen and *Settings → Terminal → Let programs read the clipboard* on. A refused
+read is answered `status=EPERM`. `CSI ? 5522 $ p` answers `CSI ? 5522 ; 2 $ y` (supported, paste
+events off) or `; 1 $ y` (on), so a program can tell the protocol is there before it uses it.
 
 - **Read** (`type=read`): `text/plain` and `text/plain;charset=utf-8` are answered `OK`, `DATA`
-  packets (3 KiB of text each, under the requested name) and `DONE`. The payload `.` lists the
-  types on offer (both text names, none for an empty clipboard).
-- **Write** (`type=write`, `wdata` chunks, a bare `wdata` to end, optional `walias`): the text is
-  assembled, put on the clipboard, and answered `type=write:status=DONE`. Chunks may split base64
-  groups; bad base64 is `EINVAL`, more than 64 MiB `EFBIG`.
+  packets (3 KiB each, under the requested name) and `DONE`. A picture on the clipboard is offered
+  in its own type (`image/png`, `image/jpeg`, …) and also as `image/png`, re-encoded on request;
+  its text types are offered only when the clip has text beside the picture. The payload `.`
+  lists the types on offer (none for an empty clipboard). A picture is read in the background and
+  may carry up to 32 MiB; a larger one is `EFBIG`, one that cannot be read `EIO`. Every requested
+  type is fetched before `OK`, so a failure is a single status, never half an answer.
+- **Write** (`type=write`, `wdata` chunks, a bare `wdata` to end, optional `walias`): text is
+  assembled and put on the clipboard; `image/*` data (sent under a picture type, or aliased to
+  one) puts that picture on the clipboard instead, with the write's text as a second item when it
+  carried any. Either way the answer is `type=write:status=DONE`. Chunks may split base64 groups;
+  bad base64 is `EINVAL`, more than 64 MiB in all `EFBIG`. Other apps paste the picture through a
+  content link the clipboard grants them; the newest five copied pictures are kept in the app's
+  cache. Pictures do not go into the keyboard's clipboard history.
+- **Paste events** (`CSI ? 5522 h`, off with `l`; saved, restored and reset like any private
+  mode): while on, a paste is not typed into the program. Every way of pasting into the pane
+  instead sends `type=read:status=OK`, one `type=read:status=DATA:mime=Lg==` packet listing the
+  types on offer, and `type=read:status=DONE`, each with `pw=` carrying a single-use password.
+  A read that brings the password back together with a `name=` is answered even with the setting
+  off: the user pasted, which is consent. The password
+  works once, for 60 seconds, and a newer paste replaces it; a read without it, or with a wrong
+  one, is an ordinary read. The launcher still has to be on screen. A picture a keyboard inserts
+  is offered the same way, and the program reads that picture rather than the clipboard.
 - **`id`** is echoed on every answer, stripped to the spec's characters.
-- **Not text**: reading a type other than text is `ENOSYS`; a write that carries only non-text
-  types is `ENOSYS`, and non-text data next to text is dropped. `loc=primary` is `ENOSYS` (Android
-  has no primary selection).
-- **Not implemented**: the `pw`/`name` permission cache (both ignored; the setting is the gate),
-  and the paste-events mode (`CSI ? 5522 h`).
+- **Other types**: reading a type the clipboard does not hold is `ENOSYS`; a write that carries only
+  types other than text and pictures is `ENOSYS`, and such data next to text or a picture is
+  dropped. `loc=primary` is `ENOSYS` (Android has no primary selection).
+- **Not implemented**: the `pw`/`name` permission cache beyond the paste-event password; the
+  setting is the gate for every other read.
 - A refused read and an unset clipboard both reach the terminal as "nothing", so both answer
   `EPERM`; an empty but readable clipboard answers `OK`/`DONE` with no data.
 

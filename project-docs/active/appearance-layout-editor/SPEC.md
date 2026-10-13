@@ -118,9 +118,11 @@ Rules:
   put it back. With wallpaper colours off the terminal wears a scheme file no contrast level
   moves, so the segments are disabled and the label says it needs wallpaper colours (as the
   Settings row does).
-- Moving any control at a Look stop jumps the slider to Custom, seeded from that Look. Sliding
-  from Custom back to a Look applies the Look; the Custom values of the session (saved or not)
-  are kept, so sliding back to Custom restores them. Undo and Discard clear them.
+- Moving to Custom, by the slider or by a control touched at a Look stop, seeds Custom from the
+  Look on screen and writes nothing; the saved Custom is not applied. Sliding from Custom back to
+  a Look applies the Look; the Custom values of the session (saved or not) are kept, so sliding
+  back to Custom within one editor visit restores them. Undo and Discard clear them and restore
+  the state at open.
 - Rim style, tint colour, motion, chip radius, key spacing and glass depth live inside the Look.
   They have no control anywhere. Corners and margins are Layout's (§3.5).
 - **Tint** (amended 2026-10-06) is a Custom control: how much of the Material colour tint a
@@ -356,7 +358,7 @@ replace Bare, Classic and Slate.
 | Mist | Mist | Soft frosted glass, the flagship | blur 25 · opacity 60 · grain 8 · corners 28 · obsidian tint · gradient rim · mist motion · depth medium |
 | Tint | Classic | Tinted, low blur, denser; for loud wallpapers and a dark terminal | blur 6 · opacity 46 · grain 14 · corners 22 · obsidian tint · hairline rim · classic motion · depth subtle |
 | Solid | Slate | Opaque; no blur cost; the "reduce transparency" answer | blur 0 · opacity 92 · grain 0 · corners 14 · scheme tint · hairline rim · classic motion · depth off |
-| Custom | Custom | Whatever the user tuned; seeded from the Look they left | `surface_custom_preset` |
+| Custom | Custom | Whatever the user tuned; seeded from the Look on screen, this visit's Custom values back after a Look; Undo restores the state at open | `surface_custom_preset` (written on Done at Custom, not read by the move) |
 
 - A Look sets the glass: material triple, tint, rim, motion, and the Fancier Glass triple. Undo,
   Discard and the dirty signature cover all of them (today they omit tint, rim, motion and the
@@ -370,7 +372,10 @@ replace Bare, Classic and Slate.
 - **Depth per Look** maps to the Fancier Glass keys bend / edge width / edge light: subtle
   4 / 10 / 18%, medium 9 / 20 / 18%, off 0 / 1 / 0. Fancier Glass is on wherever the device
   supports it (API 33, in-app wallpaper); Lazy mode turns it off with the other effects. The
-  switch and its three sliders leave the UI.
+  switch leaves the UI. Its five knobs returned on 2026-10-12 as the Custom row's **Edge** group
+  (§3.4): Bend, Edge width, Edge light, Shine, Dispersion, behind a Surface | Edge toggle in the
+  heading row with nothing tapped. The tapped elements keep their own sets; the edge knobs are
+  global.
 - Style (docked / floating) is never part of a Look.
 
 ## 5. Layout canvas artwork
@@ -419,7 +424,7 @@ The view is renamed from "miniature" to **layout canvas** in code and docs as it
 | Preset tiles Classic · Mist · Slate · Bare · Custom | Look slider stops Clear · Mist · Tint · Solid · Custom |
 | Material Solid / Glass / Frost toggle | inside the Look |
 | Opacity · Blur · Grain, base and per surface (15 sliders) | Custom row 2: Darkness, Key corners, one shared Blur; grain inside the Look |
-| Fancier Glass switch · Bend · Edge width · Edge light | depth per Look; on where supported; Lazy mode off |
+| Fancier Glass switch · Bend · Edge width · Edge light | depth per Look; on where supported; Lazy mode off. Since 2026-10-12 the five knobs stand in the Custom row's Edge group (§3.4) |
 | Shape Docked / Floating | style glyph toggle in Layout mode, beside Portrait / Landscape |
 | Corners · Margin · side gap · pane gap | Layout mode: one Corners and one Margin slider |
 | Key radius | Custom · keyboard: Key corners |

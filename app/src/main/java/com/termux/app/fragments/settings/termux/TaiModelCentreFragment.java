@@ -1396,18 +1396,27 @@ public class TaiModelCentreFragment extends Fragment
     }
 
     private void setDefault(@NonNull Context context, @NonNull String modelId) {
+        if (!saveDefaultAssistant(context, modelId)) return;
+        loadInstalled(context);
+        rebuild();
+    }
+
+    /**
+     * Makes {@code modelId} the default assistant and says so, unless it is an MNN model this phone
+     * cannot run, which it says instead. Shared with the other screens that host the import flow.
+     */
+    static boolean saveDefaultAssistant(@NonNull Context context, @NonNull String modelId) {
         TaiModelSpec model = new TaiModelStore(context).getInstalledUserModels().get(modelId);
         TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
         if (model != null && TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend) && !capabilities.mnnSupported) {
             String reason = capabilities.mnnUnsupportedReason;
-            AppNotice.show(context, reason == null ? getString(R.string.termux_ai_mnn_runtime_pending) : reason, true);
-            return;
+            AppNotice.show(context, reason == null ? context.getString(R.string.termux_ai_mnn_runtime_pending) : reason, true);
+            return false;
         }
         SharedPreferences preferences = context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE);
         preferences.edit().putString(TaiSettings.KEY_ROLE_DEFAULT_ASSISTANT, modelId).apply();
         AppNotice.show(context, R.string.termux_ai_model_active_saved, false);
-        loadInstalled(context);
-        rebuild();
+        return true;
     }
 
     private void loadModel(@NonNull Context context, @NonNull String modelId) {

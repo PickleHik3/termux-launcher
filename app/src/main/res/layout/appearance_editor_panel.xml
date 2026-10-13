@@ -29,18 +29,21 @@
 
      Appearance rows. Row A: the Look slider, a label centred under each of its five stops (placed
      in code: the stops sit inside the slider's track padding, so equal-width labels would drift
-     off them). Row B (the Custom stop only): a heading row, 48dp tall, then up to five vertical
-     Material 3 sliders (LegendSlider, 40dp track, the legend beside it) in equal columns.
+     off them). Row B (the Custom stop only): a heading row, 48dp tall, then up to six vertical
+     Material 3 sliders (LegendSlider, 28dp track, the legend beside it) in equal columns.
      The heading is the selection's name ("All surfaces" for nothing tapped) and leads the row;
      the buttons the selection has follow it (Keyboard theme; Clock), each 48dp tall and 8dp
-     apart. The terminal has no name there: its two pills (Cursor trail, Terminal effect; a
+     apart. With nothing tapped a two-segment toggle follows the name instead and switches the
+     set between its Surface and Edge groups (Edge only from Android 13). The terminal has no
+     name there: its two pills (Cursor trail, Terminal effect; a
      heading over the chosen option) share the whole row. The sliders are one fixed length, so the sheet is the same height for
-     every selection; Row B is GONE at a Look stop. Sets, top to bottom of each legend:
-       nothing  Blur, Grain, Opacity, Margin, Corner radius
-       keyboard Blur, Grain, Opacity, Key radius, Key spacing   (button: Keyboard theme)
-       dock     Blur, Grain, Opacity, Size, App icons
-       terminal Blur, Grain, Opacity, Contrast                  (pills: Cursor trail, Terminal effect)
-       status   Blur, Grain, Opacity                            (button: Clock)
+     every selection; Row B is GONE at a Look stop. Sets, left to right:
+       nothing  Blur, Grain, Opacity, Tint, Margin, Corner radius   (toggle: Surface)
+                Bend, Edge width, Edge light, Shine, Dispersion      (toggle: Edge)
+       keyboard Blur, Grain, Opacity, Tint, Key radius, Key spacing (button: Keyboard theme)
+       dock     Blur, Grain, Opacity, Tint, Icon size, App icons
+       terminal Blur, Grain, Opacity, Tint, Contrast                (pills: Cursor trail, Terminal effect)
+       status   Blur, Grain, Opacity, Tint                          (button: Clock)
 
      Layout rows (layout editor v2, DECISIONS items 2, 3 and 10). Row A: Orientation (two 48dp
      icon segments), Style (two 48dp icon segments), and eye-off at the end: the only drop target
@@ -57,8 +60,10 @@
        see appearance_page_frame. Widget.Termux.Button.Segment pads all four sides 12dp.)
        Appearance Row A: the slider spans W - 32 (328 / 379 / 501); five LabelMedium words, the
          widest "Custom" ≈ 44, under stops (W - 32 - 2 × track padding) / 4 apart: ≥ 70 at 360.
-       Appearance Row B: five columns, four 12dp gaps: (W - 32 - 48) / 5 = 56 / 66.2 / 88.6, each
-         wider than the 40dp track; fewer columns share the same width equally.
+       Appearance Row B: six columns, five 12dp gaps: (W - 32 - 60) / 6 = 44.7 / 53.2 / 73.5,
+         each wider than the 28dp track; fewer columns share the same width equally. The
+         heading row with nothing tapped: "All surfaces" ≈ 80, 8, then the toggle, each segment
+         12 + 18 check + 4 + word + 12: "Surface" ≈ 98, "Edge" ≈ 79, so ≈ 265 ≤ 328.
        Layout Row A: 96 + 8 + 96 + gap + 48 = 248 + gap; gap 80 / 131 / 253. The 64dp highlight
          is centred on eye-off: 8dp of it stand past the button's end, inside the sheet's 16dp
          padding.
@@ -133,7 +138,7 @@
 
     <!-- Row B: a heading row over the Custom row's vertical sliders. GONE until Look mode is at
          the Custom stop (the global set shows with nothing tapped). Code fills it: the heading,
-         the buttons the selection has, and up to five LegendSliders (AppearanceLooks.controls).
+         the buttons the selection has, and up to six LegendSliders (AppearanceLooks.controls).
          The sheet is one height on every page and stop (AppearancePreviewArea's reserve); where
          that is shorter than Row B (a short phone, Large text) Row B scrolls inside it rather
          than the sheet growing. A slider keeps its own drag (it claims the touch on down), so
@@ -179,6 +184,41 @@
                 android:maxLines="1"
                 android:textAppearance="?attr/textAppearanceLabelLarge"
                 android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <!-- The global set's two groups, Surface and Edge, right after the name: GONE for an
+                 element (AppearanceEditorPanel.setGroups). Text segments painted as Layout's
+                 Orientation and Style toggles are, 40dp tall with no insets so the row stays at
+                 its 48dp, each as wide as its word. -->
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/appearance_editor_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:contentDescription="@string/appearance_editor_group_description"
+                android:visibility="gone"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/appearance_editor_group_surface"
+                    style="@style/Widget.Termux.Button.Segment"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minWidth="0dp"
+                    android:text="@string/appearance_editor_group_surface" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/appearance_editor_group_edge"
+                    style="@style/Widget.Termux.Button.Segment"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minWidth="0dp"
+                    android:text="@string/appearance_editor_group_edge" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
 
             <!-- Pushes a lone door (Keyboard theme, Clock) to the row's end; GONE while the
                  terminal's two pills share the row's width. -->

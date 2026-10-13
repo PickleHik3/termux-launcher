@@ -44,7 +44,7 @@ Send these and they work. Details and limits are in
 | Mouse reporting | A click carries Ctrl, Alt and Shift from the extra-keys row or a hardware keyboard, xterm style |
 | OSC 8 | Clickable links, opened through a Copy / Open strip |
 | OSC 52 | Write, or with `?` read, the Android clipboard. A write needs the launcher on screen; a read also needs *Let programs read the clipboard* on |
-| OSC 5522 | kitty's clipboard protocol, text only, same rules as OSC 52; `kitten clipboard` uses it |
+| OSC 5522 | kitty's clipboard protocol: text and pictures, same rules as OSC 52, and paste events (`CSI ? 5522 h`), where a paste reaches the program as an offer it reads; `kitten clipboard` uses it |
 | OSC 133 A/C/D | Prompt marks; the window chip shows whether the foreground is a command or an idle prompt |
 | OSC 7 `file:///path` | New panes opened from this one start in that folder |
 | OSC 9;4;state;pct | Progress ring on the window chip (ConEmu style) |

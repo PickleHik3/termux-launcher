@@ -16,31 +16,48 @@ import java.util.concurrent.TimeUnit;
  * decisions out; nothing here evicts anything.
  *
  * <p>Tiers, against the budget's floors ({@link TaiLoadBudget#floorBytes}: the hold floor for what
- * stays resident, the lower peak floor for a momentary load, under the same memory limits the gate
- * read; unrestricted, both are {@code 0} and only {@code lowMemory} acts). Free memory is
- * {@link TaiMemInfo}'s: MemAvailable.
+ * stays resident, the lower peak floor for a momentary load; {@link TaiLoadBudget#criticalFloorBytes}
+ * below both, under the same memory limits the gate read; unrestricted, all three are {@code 0} and
+ * only {@code lowMemory} acts). Free memory is {@link TaiMemInfo}'s: MemAvailable.
  *
  * <pre>
- *   lowMemory                         → RELEASE_ALL: cancel in-flight work, unload everything
+ *   lowMemory                         → RELEASE_ALL: stop in-flight work, unload everything
+ *   avail &lt; critical floor            → RELEASE_ALL: the same, before Android has to say so
  *   avail &lt; peak floor                → CHAT: also give up idle chat
  *   avail &lt; hold floor                → AUXILIARY: give up idle embeddings, idle speech output, then idle STT
  *   otherwise                         → NONE
  * </pre>
  *
- * There is no line above the floors, and no {@code onTrimMemory} mapping: the running trim levels
- * are "not notified of this level since API level 34", so on current Android the poll is the only
- * watch, every {@link #POLL_BUSY_MS} while a load or first prefill runs and every
- * {@link #POLL_IDLE_MS} otherwise.
+ * The critical floor is the guard behind the budget: admission plans on a model's typical load, so
+ * a load or a generation that runs past it, or an app opened beside it, is stopped here rather than
+ * left to push the phone into thrashing. How RELEASE_ALL stops the work is {@link #stopFor}'s: a
+ * generation is cancelled and its model unloaded, while a chat model's native init, which nothing
+ * can cancel, ends with the runtime process. That frees every byte at once; the client reports the
+ * runtime gone and the caller falls back (dictation cleanup keeps the text as heard). A stop is not
+ * a crash: the crash marker is cleared, so the next load keeps its window, and
+ * {@link TaiRuntimeHistory#recordPressureStop} keeps the drop so far as a sample and holds automatic
+ * loads of that model on that accelerator back for {@link #PRESSURE_COOLDOWN_MS}
+ * ({@link #heldBackAfterStop}). A process killed by anything else keeps the marker's half-window rule.
+ *
+ * There is no {@code onTrimMemory} mapping: the running trim levels are "not notified of this level
+ * since API level 34", and {@code TRIM_MEMORY_COMPLETE} goes to cached processes, never to this
+ * foreground service, so the poll is the only watch. It runs only while something is resident or a
+ * request is in flight, every {@link #POLL_BUSY_MS} while a model loads, waits for its first token
+ * or generates, and every {@link #POLL_IDLE_MS} otherwise; one poll is a read of
+ * {@code /proc/meminfo} and one {@code MemoryInfo} call.
  *
  * The two eviction tiers give up one resident per evaluation, cheapest first, and the watch looks
  * again on its next tick: MemAvailable is noisy and memory comes back late (§3c of the plan), so
  * closing everything the moment the line is crossed would over-shoot. A busy resident is never
- * touched by either tier; only {@code lowMemory} interrupts work.
+ * touched by either tier; only RELEASE_ALL interrupts work.
  */
 final class TaiPressureWatch {
 
     /** In the order the actions escalate; {@link Enum#compareTo} is meaningful. */
     enum Tier { NONE, AUXILIARY, CHAT, RELEASE_ALL }
+
+    /** How {@link Tier#RELEASE_ALL} stops the work in hand; see {@link #stopFor}. */
+    enum Stop { UNLOAD, EXIT_PROCESS }
 
     /** An embedding interpreter nobody has used for this long is closed. */
     static final long EMBEDDING_IDLE_MS = TimeUnit.MINUTES.toMillis(5);
@@ -63,33 +80,65 @@ final class TaiPressureWatch {
      */
     static final long IDLE_EXIT_MS = TimeUnit.MINUTES.toMillis(10);
 
-    /** How often the watch looks while a load or a first prefill is running: the allocation it guards is fast. */
+    /** How often the watch looks while a model loads, waits for its first token or generates: the allocation it guards is fast. */
     static final long POLL_BUSY_MS = 250L;
     /** How often it looks otherwise; slow enough to be invisible in battery stats. */
     static final long POLL_IDLE_MS = 2_000L;
+    /**
+     * How long after a memory stop an automatic load of the same model on the same accelerator is
+     * held back: long enough that the next dictation phrase or chat request does not reload straight
+     * into the pressure it was stopped for, short enough that the next session tries again.
+     */
+    static final long PRESSURE_COOLDOWN_MS = TimeUnit.MINUTES.toMillis(2);
 
     private TaiPressureWatch() {
     }
 
-    /** The poll interval: {@link #POLL_BUSY_MS} while a load or first prefill runs ({@link TaiLoadMeter#anyActive}), else {@link #POLL_IDLE_MS}. */
-    static long pollIntervalMs(boolean loadOrFirstPrefillRunning) {
-        return loadOrFirstPrefillRunning ? POLL_BUSY_MS : POLL_IDLE_MS;
+    /**
+     * The poll interval: {@link #POLL_BUSY_MS} while a model loads or waits for its first token
+     * ({@link TaiLoadMeter#anyActive}) or generates, else {@link #POLL_IDLE_MS}.
+     */
+    static long pollIntervalMs(boolean loadingOrGenerating) {
+        return loadingOrGenerating ? POLL_BUSY_MS : POLL_IDLE_MS;
     }
 
     /**
      * The tier for one reading of free memory, against the budget's floors
-     * ({@link TaiLoadBudget#floorBytes}, under the memory limits the gate read):
-     * below the hold floor the watch gives up idle auxiliaries; below the lower peak floor it gives
-     * up idle chat too; {@code lowMemory} releases everything. Unknown free memory ({@code <= 0})
-     * selects nothing on its own, and a floor of {@code 0} means that line is unknown.
+     * ({@link TaiLoadBudget#floorBytes} and {@link TaiLoadBudget#criticalFloorBytes}, under the
+     * memory limits the gate read): below the hold floor the watch gives up idle auxiliaries; below
+     * the lower peak floor it gives up idle chat too; below the critical floor, or on
+     * {@code lowMemory}, it stops everything. Unknown free memory ({@code <= 0}) selects nothing on
+     * its own, and a floor of {@code 0} means that line is unknown.
      */
     @NonNull
-    static Tier tier(long availBytes, long holdFloorBytes, long peakFloorBytes, boolean lowMemory) {
+    static Tier tier(long availBytes, long holdFloorBytes, long peakFloorBytes, long criticalFloorBytes,
+                     boolean lowMemory) {
         if (lowMemory) return Tier.RELEASE_ALL;
         if (availBytes <= 0L) return Tier.NONE;
+        if (criticalFloorBytes > 0L && availBytes < criticalFloorBytes) return Tier.RELEASE_ALL;
         if (peakFloorBytes > 0L && availBytes < peakFloorBytes) return Tier.CHAT;
         if (holdFloorBytes > 0L && availBytes < holdFloorBytes) return Tier.AUXILIARY;
         return Tier.NONE;
+    }
+
+    /**
+     * Whether a load is held back by a memory stop at {@code stoppedAtMs} ({@code <= 0}: none): an
+     * automatic one within {@link #PRESSURE_COOLDOWN_MS}; never an explicit one ({@code tai load},
+     * a benchmark), which is the user asking again.
+     */
+    static boolean heldBackAfterStop(long stoppedAtMs, long nowMs, boolean explicit) {
+        return !explicit && stoppedAtMs > 0L && nowMs - stoppedAtMs < PRESSURE_COOLDOWN_MS;
+    }
+
+    /**
+     * How {@link Tier#RELEASE_ALL} stops the work in hand: by cancelling and unloading, unless a chat
+     * model's native init is running ({@link TaiLoadMeter#nativeInitRunning}). A cancel only flags
+     * that init, which goes on allocating until it returns (eleven to nineteen seconds for E4B on
+     * the GPU on pong), so the runtime process exits instead.
+     */
+    @NonNull
+    static Stop stopFor(boolean nativeInitRunning) {
+        return nativeInitRunning ? Stop.EXIT_PROCESS : Stop.UNLOAD;
     }
 
     /**

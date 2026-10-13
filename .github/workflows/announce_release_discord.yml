@@ -11,6 +11,11 @@ name: Announce Release On Discord
 #
 # A pre-release pings the Testers role (members opt in through the server's Onboarding). Nothing
 # else is ever pinged: allowed_mentions names that one role and parses nothing from the notes.
+#
+# The notes are tidied for Discord before posting: HTML comments (maintainer notes GitHub hides) are
+# stripped, a first heading that only repeats the tag is dropped, headings are rescaled so the top
+# level is ## (Discord renders # to ### only; deeper ones become bold lines), and #N links its issue.
+# A manual run with edit_message_id re-renders an existing post in place, so nobody is pinged again.
 
 on:
   release:
@@ -20,6 +25,10 @@ on:
       release_tag:
         description: 'Existing plain release tag to (re)announce, e.g. v1.0.3 or v1.1.0-pre.1'
         required: true
+        type: string
+      edit_message_id:
+        description: 'Optional: ID of this tag''s existing Discord post, to edit it in place instead of posting again'
+        required: false
         type: string
 
 permissions:
@@ -38,6 +47,7 @@ jobs:
           EVENT_TAG: ${{ github.event.release.tag_name }}
           EVENT_BODY: ${{ github.event.release.body }}
           INPUT_TAG: ${{ github.event.inputs.release_tag }}
+          EDIT_MESSAGE_ID: ${{ github.event.inputs.edit_message_id }}
           WEBHOOK_RELEASES: ${{ secrets.DISCORD_WEBHOOK_RELEASES }}
           WEBHOOK_PRERELEASE: ${{ secrets.DISCORD_WEBHOOK_PRERELEASE }}
           # The server's Testers role (Discord role ID; not a secret).
@@ -72,8 +82,33 @@ jobs:
                   if kind == "release" else
                   "⚠️ Pre-release: may break. Install only from these GitHub links, and back up "
                   "your home folder first. It installs over your current build.")
+
+          def tidy(md):
+              md = re.sub(r"<!--.*?-->", "", md, flags=re.S)
+              lines = md.strip().splitlines()
+              # The embed title already names the version.
+              if lines and re.fullmatch(r"#+\s*" + re.escape(tag) + r"\s*", lines[0].strip()):
+                  lines = lines[1:]
+              # Headings outside code fences; a shell comment in a fence is not one.
+              heading, fenced = [], False
+              for line in lines:
+                  if line.lstrip().startswith("```"):
+                      fenced = not fenced
+                  heading.append(None if fenced else re.match(r"(#+)\s+(.*)", line))
+              levels = [len(m.group(1)) for m in heading if m]
+              shift = min(levels) - 2 if levels else 0
+              out = []
+              for line, m in zip(lines, heading):
+                  if m:
+                      level = len(m.group(1)) - shift
+                      line = "#" * level + " " + m.group(2) if level <= 3 else f"**{m.group(2)}**"
+                  out.append(line)
+              md = re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+              return re.sub(r"(?<![\w/&\[])#(\d+)\b",
+                            lambda m: f"[#{m.group(1)}](https://github.com/{repo}/issues/{m.group(1)})", md)
+
           limit = 4096 - 400  # embed description cap, minus the links and note below
-          text = body.strip()
+          text = tidy(body)
           if len(text) > limit:
               text = text[:limit].rsplit("\n", 1)[0] + "\n\n…full notes on GitHub."
           embed = {
@@ -88,9 +123,19 @@ jobs:
           if kind == "pre-release" and testers.isdigit():
               payload["content"] = f"<@&{testers}> {tag} is out, test build below 👇"
               payload["allowed_mentions"] = {"parse": [], "roles": [testers]}
-          req = urllib.request.Request(hook, data=json.dumps(payload).encode(), method="POST",
+          edit_id = (os.environ.get("EDIT_MESSAGE_ID") or "").strip()
+          if edit_id and not edit_id.isdigit():
+              sys.exit(f"edit_message_id must be a Discord message ID, got '{edit_id}'")
+          if edit_id:
+              # A webhook can edit only its own messages; the name it posted under stays.
+              payload.pop("username")
+              url, method = f"{hook}/messages/{edit_id}", "PATCH"
+          else:
+              url, method = hook, "POST"
+          req = urllib.request.Request(url, data=json.dumps(payload).encode(), method=method,
                                        headers={"Content-Type": "application/json",
                                                 "User-Agent": "termux-launcher-release-announcer"})
           with urllib.request.urlopen(req, timeout=20) as resp:
-              print(f"Announced {tag} as a {kind}: HTTP {resp.status}")
+              verb = f"Re-rendered message {edit_id} for" if edit_id else "Announced"
+              print(f"{verb} {tag} as a {kind}: HTTP {resp.status}")
           PY

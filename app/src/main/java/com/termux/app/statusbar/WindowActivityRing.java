@@ -1,49 +1,42 @@
 package com.termux.app.statusbar;
 
 /**
- * Geometry of the progress ring a working window's pill draws where its process glyph normally sits
- * — the way Windows Terminal swaps a tab's icon for a progress ring while the shell in it reports
- * progress. Indeterminate work is an arc that turns; a reported percentage is a ring that fills
- * clockwise from twelve o'clock over a faint track.
+ * Timing and geometry of what a working window's chip shows while its shell works — the way
+ * Windows Terminal swaps a tab's icon for a progress ring while the shell in it reports progress.
+ * Indeterminate work is a breath: the whole chip brightening and dimming in the ring colour. A
+ * reported percentage is a ring that fills clockwise from twelve o'clock over a faint track.
  *
- * <p>Free of Android imports, so every angle here is unit-testable.
+ * <p>Free of Android imports, so every number here is unit-testable.
  */
 public final class WindowActivityRing {
 
-    /** One full turn of the indeterminate arc. Quick enough to read as working, not as a clock. */
-    public static final long SPIN_MS = 1280L;
-
     /**
-     * The indeterminate arc, in degrees. Open enough that the turn is visible at glyph size, closed
-     * enough that the shape still reads as a ring rather than a comma.
+     * The breath: one slow in-and-out of the whole chip, stepped at 4 Hz. A turning arc used to mark
+     * indeterminate work, and redrawing it 30 times a second cost close to half a core on the
+     * device. A change of brightness hides a coarse tick far better than a change of position does,
+     * and a slow breath moves little per step; the dimmest point keeps a quarter of the ring colour,
+     * so the chip never reads as having stopped.
      */
-    public static final float INDETERMINATE_SWEEP_DEG = 270f;
-
-    /** Twelve o'clock, in {@code Canvas.drawArc} degrees (which count clockwise from three). */
-    public static final float START_DEG = -90f;
+    public static final long BREATHE_PERIOD_MS = 3200L;
+    public static final long BREATHE_STEP_MS = 250L;
+    public static final float BREATHE_FLOOR = 0.25f;
 
     private WindowActivityRing() {}
 
-    /** Position in the turn, in [0, 1). */
-    public static float phase(long elapsedMs) {
-        float turns = elapsedMs / (float) SPIN_MS;
-        float phase = turns - (float) Math.floor(turns);
-        return phase < 0f ? phase + 1f : phase;
+    /** How much of the ring colour the chip carries at {@code nowMs}, in [floor, 1]. */
+    public static float breatheLevel(long nowMs) {
+        double turn = Math.floorMod(nowMs, BREATHE_PERIOD_MS) / (double) BREATHE_PERIOD_MS;
+        float wave = (float) (0.5 - 0.5 * Math.cos(2.0 * Math.PI * turn));
+        return BREATHE_FLOOR + (1f - BREATHE_FLOOR) * wave;
     }
 
     /**
-     * How many positions the smooth arc visits per turn, and how often it moves. The arc used to be
-     * driven one step per vsync, which on a 120 Hz panel is 154 redraws of every working pill per
-     * turn for a ring a few pixels wide; 38 stops is past the point where a thin arc reads as
-     * gliding, and lands the tick at about 30 a second. The angle itself stays a pure function of
-     * elapsed time, so a slower tick changes how many positions the arc visits, never its speed.
+     * How long the bar's clock waits before its next redraw of the breathing chips: to the next
+     * step boundary, so every chip steps together. The level is always a pure function of time, so
+     * this only decides when a redraw is worth having. Never 0.
      */
-    public static final int SMOOTH_STEPS = 38;
-    public static final long SMOOTH_TICK_MS = SPIN_MS / SMOOTH_STEPS;
-
-    /** Where the indeterminate arc starts at {@code phase}: one full clockwise turn per cycle. */
-    public static float indeterminateStartDeg(float phase) {
-        return START_DEG + 360f * phase;
+    public static long nextBreatheTickDelayMs(long nowMs) {
+        return BREATHE_STEP_MS - Math.floorMod(nowMs, BREATHE_STEP_MS);
     }
 
     /**
