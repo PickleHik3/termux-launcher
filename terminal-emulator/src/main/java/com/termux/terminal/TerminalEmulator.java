@@ -7,7 +7,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Stack;
 
@@ -340,6 +342,13 @@ public final class TerminalEmulator {
     private static final int DECSET_BIT_DICTATION_MARKS = 1 << 16;
 
     /**
+     * DECSET 5522 - paste events, as in kitty. While it is set a paste is not typed into the
+     * program: it is told with an {@code OSC 5522} paste event which types the clipboard holds,
+     * and reads the one it wants, see {@link #sendPasteEvent(List)}.
+     */
+    private static final int DECSET_BIT_PASTE_EVENTS = 1 << 19;
+
+    /**
      * How long a synchronized update may hold the screen. The hold is a promise the program has to
      * keep, and a program that dies, blocks or simply forgets between "begin" and "end" would
      * otherwise freeze the pane for good; after this long the held frame is delivered and the mode
@@ -460,13 +469,18 @@ public final class TerminalEmulator {
 
     private final KittyClipboard.Handler mKittyClipboardHandler = new KittyClipboard.Handler() {
         @Override
-        public String readText() {
-            return mSession.onReadTextFromClipboard();
+        public void read(boolean pasted, KittyClipboard.ReadCallback callback) {
+            mSession.onReadClipboard(pasted, callback);
         }
 
         @Override
         public void writeText(String text) {
             mSession.onCopyTextToClipboard(text);
+        }
+
+        @Override
+        public void writeData(Map<String, byte[]> images, String text) {
+            mSession.onWriteClipboard(images, text);
         }
 
         @Override
@@ -883,6 +897,8 @@ public final class TerminalEmulator {
                 return DECSET_BIT_IN_BAND_RESIZE_NOTIFICATIONS;
             case 7727:
                 return DECSET_BIT_DICTATION_MARKS;
+            case 5522:
+                return DECSET_BIT_PASTE_EVENTS;
             default:
                 return -1;
         }
@@ -1234,6 +1250,24 @@ public final class TerminalEmulator {
      */
     public boolean isDictationMarksEnabled() {
         return isDecsetInternalBitSet(DECSET_BIT_DICTATION_MARKS);
+    }
+
+    /**
+     * Whether DECSET 5522, paste events, is set: a paste goes to the program as
+     * {@link #sendPasteEvent(List)} instead of {@link #paste(String)}, never both.
+     */
+    public boolean isPasteEventsMode() {
+        return isDecsetInternalBitSet(DECSET_BIT_PASTE_EVENTS);
+    }
+
+    /**
+     * Tell a program in {@link #isPasteEventsMode()} that the user pasted, offering the clipboard
+     * in {@code mimeTypes}. The event carries a single-use password; the program's read that
+     * brings it back is answered as the user's paste rather than as a program reading the
+     * clipboard on its own.
+     */
+    public void sendPasteEvent(List<String> mimeTypes) {
+        mKittyClipboard.pasteEvent(mimeTypes, System.currentTimeMillis(), mKittyClipboardHandler);
     }
 
     public boolean shouldCursorBeVisible() {
@@ -2565,6 +2599,9 @@ public final class TerminalEmulator {
                 break;
             case 7727:
                 // Dictation marks - setting bit is enough, the dictation code reads it.
+                break;
+            case 5522:
+                // Paste events - setting bit is enough, the client's paste reads it.
                 break;
             default:
                 unknownParameter(externalBit);

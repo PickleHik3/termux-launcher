@@ -1,6 +1,7 @@
 # Shipped agent skill — spec draft (2026-09-15)
 
-Base: dev 4ab57586. Status: draft, not agreed.
+Base: dev 4ab57586. Status: superseded (2026-10-12). The store delivers the skills: tlstore items
+of the skill kind, pinned to a launcher tag. The app never writes under `~/.claude` or `~/.agents`.
 
 ## Problem
 

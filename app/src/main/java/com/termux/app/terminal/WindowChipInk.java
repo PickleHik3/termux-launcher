@@ -136,14 +136,10 @@ public final class WindowChipInk {
         @ColorInt public final int restingHalo;
         @ColorInt public final int selectedHalo;
 
-        /** The ring of ground a corner dot is haloed against: the chip it sits on. */
-        @ColorInt public final int dotGround;
-
         Palette(int band, boolean pale, int neutralSeed, int accentSeed,
                 int restingFill, int restingStroke, int selectedFill, int selectedStroke,
                 int restingSurface, int selectedSurface, int restingGround, int selectedGround,
-                int restingLabel, int selectedLabel, int glyph, int restingHalo, int selectedHalo,
-                int dotGround) {
+                int restingLabel, int selectedLabel, int glyph, int restingHalo, int selectedHalo) {
             this.band = band;
             this.pale = pale;
             this.neutralSeed = neutralSeed;
@@ -161,7 +157,6 @@ public final class WindowChipInk {
             this.glyph = glyph;
             this.restingHalo = restingHalo;
             this.selectedHalo = selectedHalo;
-            this.dotGround = dotGround;
         }
 
         /**
@@ -228,8 +223,7 @@ public final class WindowChipInk {
             restingSurface, selectedSurface, restingGround, selectedGround,
             restingLabel, selectedLabel, glyph,
             ChipWatermarkGeometry.haloColor(restingSurface),
-            ChipWatermarkGeometry.haloColor(selectedSurface),
-            restingSurface);
+            ChipWatermarkGeometry.haloColor(selectedSurface));
     }
 
     /**

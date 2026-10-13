@@ -10,10 +10,13 @@ import java.util.Locale;
  * the file plus a tenth for the encoders, which is right for E4B and almost twice the truth for
  * E2B (most of its file is per-layer embeddings the GPU path keeps file-backed). On a phone with
  * 3.5–4 GB free, the seed therefore refused every E2B load — and a load that is never allowed is
- * never measured, so the seed never corrected itself. These figures are pong's worst
- * {@code load_ok mem=} drops of 2026-10-05 (Nothing Phone 2, Adreno 730, LiteRT-LM 1.4): the
- * text and vision variants measured the same, so both read one row. Only the GPU is seeded; the
- * first real load on this phone records its own sample and the history takes over.
+ * never measured, so the seed never corrected itself. These figures are pong's
+ * {@code load_ok mem=} drops (Nothing Phone 2, Adreno 730, LiteRT-LM 1.4): the text and vision
+ * variants measured the same, so both read one row. Like the history they stand in for, a prior is
+ * the typical load, not the worst: E4B at 2048 is the median of three loads on 2026-10-13 (2119,
+ * 2588 and 3188 MB; the worst-case 3166 MB of 2026-10-05 refused cleanup with 3.8 GB free). The other
+ * cells are still the 2026-10-05 worst cases, with no spread measured yet. Only the GPU is seeded;
+ * the first real load on this phone records its own sample and the history takes over.
  */
 final class TaiLoadPriors {
 
@@ -21,7 +24,7 @@ final class TaiLoadPriors {
     /** The windows a row knows, ascending; {@link #ROWS} values are parallel to it, in MiB. */
     private static final int[] WINDOWS = {1024, 2048, 4096};
     private static final long[] E2B_GPU_MIB = {1235L, 1319L, 1477L};
-    private static final long[] E4B_GPU_MIB = {2526L, 3166L, 3292L};
+    private static final long[] E4B_GPU_MIB = {2526L, 2588L, 3292L};
 
     private TaiLoadPriors() {
     }

@@ -2,6 +2,7 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
     <PreferenceCategory app:title="@string/settings_about_help_header">
         <Preference app:key="documentation" app:title="@string/settings_documentation_title" app:summary="@string/settings_documentation_summary" />
+        <Preference app:key="discord" app:title="@string/settings_discord_title" app:summary="@string/settings_discord_summary" />
         <Preference app:key="replay_tour" app:title="@string/tour_replay_title" app:summary="@string/tour_replay_summary" />
         <Preference app:key="report_issue" app:title="@string/settings_send_feedback_title" app:summary="@string/report_issue_preference_summary" />
     </PreferenceCategory>

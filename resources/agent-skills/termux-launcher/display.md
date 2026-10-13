@@ -1,6 +1,6 @@
 # Apps and a browser on the display
 
-Depth: `docs/en/X11_Display.md`.
+Depth: `docs/X11_Display.md`.
 
 There is **no built-in browser and no screenshot route**. If the user wants a page opened, you
 can open a browser for them, but you cannot see what it renders — say so plainly rather than

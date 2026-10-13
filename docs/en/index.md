@@ -67,6 +67,7 @@ On-device AI is optional. Nothing in the terminal or the launcher needs a model,
 
 - [launcherctl](LauncherCtl.md): the shell companion (panes, notifications, clipboard, wallpaper, keyboard, agent status).
 - [LauncherCtl HTTP API](LauncherCtl_API.md): the local OpenAI- and Ollama-compatible endpoint.
+- [Agent skills](Agent_Skills.md): teach Claude Code, Codex and other agents the launcher, and have them read answers aloud.
 - [On-device AI backends](On_Device_AI_Backends.md): LiteRT-LM and MNN internals, model formats, validation.
 - [Settings map](Launcher_Settings.md): every Settings destination and the page that explains it.
 - [Troubleshooting](Launcher_Troubleshooting.md).

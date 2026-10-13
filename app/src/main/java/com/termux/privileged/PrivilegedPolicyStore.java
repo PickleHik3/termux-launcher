@@ -8,7 +8,7 @@ import android.content.SharedPreferences;
  */
 public final class PrivilegedPolicyStore {
 
-    private static final String PREFS_NAME = "termux_privileged_policy";
+    public static final String PREFS_NAME = "termux_privileged_policy";
 
     public static final String KEY_MASTER_ENABLED = "priv_master_enabled";
     public static final String KEY_PREFER_SHIZUKU = "priv_prefer_shizuku";

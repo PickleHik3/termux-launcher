@@ -243,13 +243,23 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     /**
-     * Write data to the shell process.
+     * Held for the whole of one {@link #write} call. The queue gives up its own lock while it waits
+     * for room, so without this a keystroke written on the main thread could land inside a reply a
+     * worker thread is writing (an {@code OSC 5522} picture packet is larger than the queue).
+     */
+    private final Object mWriteLock = new Object();
+
+    /**
+     * Write data to the shell process. One call reaches the process whole, never interleaved with
+     * another call's bytes.
      */
     @Override
     public void write(byte[] data, int offset, int count) {
         if (mShellPid > 0) {
-            mLastWriteUptimeMs = android.os.SystemClock.uptimeMillis();
-            mTerminalToProcessIOQueue.write(data, offset, count);
+            synchronized (mWriteLock) {
+                mLastWriteUptimeMs = android.os.SystemClock.uptimeMillis();
+                mTerminalToProcessIOQueue.write(data, offset, count);
+            }
         }
     }
 
@@ -438,6 +448,16 @@ public final class TerminalSession extends TerminalOutput {
     @Override
     public String onReadTextFromClipboard() {
         return mClient.onReadTextFromClipboard(this);
+    }
+
+    @Override
+    public void onReadClipboard(boolean pasted, KittyClipboard.ReadCallback callback) {
+        mClient.onReadClipboard(this, pasted, callback);
+    }
+
+    @Override
+    public void onWriteClipboard(java.util.Map<String, byte[]> images, String text) {
+        mClient.onWriteClipboard(this, images, text);
     }
 
     @Override

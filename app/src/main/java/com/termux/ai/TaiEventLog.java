@@ -114,6 +114,26 @@ public final class TaiEventLog {
         }
     }
 
+    /**
+     * {@link #log} written before it returns, for a line the process is about to end without: the
+     * runtime watch's exit under memory pressure. Never throws.
+     */
+    static void logNow(
+        @Nullable Context context,
+        @NonNull String event,
+        @Nullable String modelId,
+        @Nullable String backend,
+        @Nullable String accelerator,
+        int contextWindow,
+        long ms,
+        long memBytes,
+        @Nullable String reason
+    ) {
+        if (context == null) return;
+        in(context.getApplicationContext().getFilesDir()).append(formatLine(System.currentTimeMillis(), event, modelId,
+            backend, accelerator, contextWindow, ms, memBytes, reason));
+    }
+
     /** An event with only a reason, for the callers that know no model. */
     public static void log(@Nullable Context context, @NonNull String event, @Nullable String reason) {
         log(context, event, null, null, null, 0, 0L, 0L, reason);

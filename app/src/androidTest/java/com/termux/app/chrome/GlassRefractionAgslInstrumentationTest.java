@@ -19,9 +19,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 /**
- * The glass edge program on a real device compiler: it compiles with the dispersion
- * terms, and Clear's look (bend 28, edge 32, light 85, specular 0, dispersion 40) changes the
- * rim while leaving the middle of the pane as it was.
+ * The glass edge program on a real device compiler: it compiles with the bevel light and the
+ * seven-sample dispersion, Clear's look (bend 28, edge 32, light 85, specular 0, dispersion 40)
+ * changes the rim while leaving the middle of the pane as it was, and the bevel light lands on
+ * the top-left corner and not the top-right.
  */
 @RunWith(AndroidJUnit4.class)
 @SdkSuppress(minSdkVersion = 33)
@@ -44,6 +45,21 @@ public class GlassRefractionAgslInstrumentationTest {
         float middle = meanDiff(plain, clear, W / 2 - 20, H / 2 - 20, W / 2 + 20, H / 2 + 20);
         assertTrue("the rim changes, mean diff " + rim, rim > 4f);
         assertTrue("the middle stays, mean diff " + middle, middle < 2f);
+    }
+
+    @Test
+    public void theBevelLightCatchesOneDiagonalAndNotTheOther() {
+        // Same bend, only the bevel light differs, so any change is the light alone.
+        Bitmap content = checker();
+        Bitmap dark = draw(new GlassRefraction.Look(28, 32, 85, 0, 0), content);
+        Bitmap lit = draw(new GlassRefraction.Look(28, 32, 85, 100, 0), content);
+        float topLeft = meanDiff(dark, lit, 8, 8, 24, 24);
+        float topRight = meanDiff(dark, lit, W - 24, 8, W - 8, 24);
+        float middle = meanDiff(dark, lit, W / 2 - 20, H / 2 - 20, W / 2 + 20, H / 2 + 20);
+        assertTrue("the top-left catches the light, mean diff " + topLeft, topLeft > 20f);
+        assertTrue("the top-right stays dark, mean diff " + topRight + " against " + topLeft,
+            topRight < topLeft / 3f);
+        assertTrue("the middle stays, mean diff " + middle, middle < 1f);
     }
 
     private static Bitmap draw(GlassRefraction.Look look, Bitmap content) {

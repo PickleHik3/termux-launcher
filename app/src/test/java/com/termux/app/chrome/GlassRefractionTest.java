@@ -13,9 +13,12 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
+import java.util.regex.Pattern;
+
 /**
- * The pure half of the glass: how the three knobs become uniforms, and where a surface's rim runs.
- * The program itself compiles only on a phone; nothing here needs one.
+ * The pure half of the glass: how the five knobs become uniforms, and where a surface's rim runs.
+ * The program itself compiles only on a phone; nothing here needs one, though its text is read to
+ * check it declares every uniform the Java side writes.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -60,8 +63,13 @@ public class GlassRefractionTest {
 
     @Test
     public void specularAndDispersionMapToUniformsAndAreClamped() {
+        // uSpec, the bevel light's brightness, and uDisp, the colour split's width at the rim.
         GlassRefraction.Look look = new GlassRefraction.Look(28, 40, 85, 70, 40);
         assertEquals(0.7f * GlassRefraction.Look.MAX_SPEC, look.specular(), 1e-4f);
+        assertEquals("all the way up is the brightest bevel", GlassRefraction.Look.MAX_SPEC,
+            new GlassRefraction.Look(0, 1, 0, 100, 0).specular(), 1e-4f);
+        assertEquals("all the way up is the widest split", GlassRefraction.Look.MAX_DISPERSION_DP * DENSITY,
+            new GlassRefraction.Look(0, 1, 0, 0, 100).dispersionPx(DENSITY), 1e-4f);
         assertEquals(0.4f * GlassRefraction.Look.MAX_DISPERSION_DP * DENSITY,
             look.dispersionPx(DENSITY), 1e-4f);
         assertEquals(GlassRefraction.Look.MAX_SPEC,
@@ -78,6 +86,45 @@ public class GlassRefractionTest {
         assertNotEquals(base, new GlassRefraction.Look(9, 20, 18, 0, 1));
         assertNotEquals(new GlassRefraction.Look(9, 20, 18, 1, 0).hashCode(),
             new GlassRefraction.Look(9, 20, 18, 0, 1).hashCode());
+    }
+
+    @Test
+    public void theBevelLightReachesHalfTheEdgeWidthWithinItsLimits() {
+        assertEquals(10f * DENSITY, GlassRefraction.Look.DEFAULT.bevelPx(DENSITY), 1e-4f);
+        assertEquals(8f * DENSITY, new GlassRefraction.Look(9, 16, 18).bevelPx(DENSITY), 1e-4f);
+        assertEquals("a wide band keeps a thin lip", GlassRefraction.Look.MAX_BEVEL_DP * DENSITY,
+            new GlassRefraction.Look(9, 60, 18).bevelPx(DENSITY), 1e-4f);
+        assertEquals("a narrow band still lights a pixel's worth", GlassRefraction.Look.MIN_BEVEL_DP * DENSITY,
+            new GlassRefraction.Look(9, 1, 18).bevelPx(DENSITY), 1e-4f);
+    }
+
+    @Test
+    public void theBevelLightNeverReachesPastTheBand() {
+        // So the seam reach, which clears the band, clears the bevel light too.
+        float[] densities = {0.75f, 1f, 2f, DENSITY, 4f};
+        for (float density : densities) {
+            for (int edge = 0; edge <= 60; edge++) {
+                GlassRefraction.Look look = new GlassRefraction.Look(9, edge, 18, 100, 0);
+                assertTrue("edge " + edge + "dp at " + density,
+                    look.bevelPx(density) <= look.bandPx(density));
+                assertTrue("edge " + edge + "dp at " + density, look.bevelPx(density) > 0f);
+            }
+        }
+    }
+
+    @Test
+    public void theProgramDeclaresEveryUniformTheJavaSideWrites() {
+        // A uniform the program does not declare throws on the write, and the surface drops to plain.
+        String[] written = {
+            "uFrameScale", "uFrameOffset", "uLocalX", "uLocalY", "uLocalW", "uRectMin", "uRectMax",
+            "uRadius", "uBand", "uStrength", "uRim", "uDisp", "uSpec", "uBevel", "uDensity",
+            "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
+        };
+        for (String name : written) {
+            assertTrue(name + " is declared",
+                Pattern.compile("uniform \\w+ " + name + ";").matcher(GlassRefraction.AGSL).find());
+        }
+        assertTrue(GlassRefraction.AGSL.contains("uniform shader content;"));
     }
 
     @Test

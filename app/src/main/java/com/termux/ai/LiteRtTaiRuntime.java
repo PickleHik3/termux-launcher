@@ -700,9 +700,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                         TaiLoadBudget.Plan cpuPlan = cpuFallbackPlan(modelSpec, cpuOptions);
                         if (!cpuPlan.fits) {
                             throw new BudgetRefusal("GPU initialization failed (" + gpuException.getMessage()
-                                + ") and the CPU fallback does not fit the memory budget: needs "
-                                + cpuPlan.neededFreeBytes() / (1024L * 1024L) + " MB free, "
-                                + cpuPlan.availableBytes / (1024L * 1024L) + " MB available.", gpuException);
+                                + ") and the CPU fallback does not fit the memory budget: " + cpuPlan.needText() + ".",
+                                gpuException);
                         }
                         Backend backend = new Backend.CPU();
                         initializedBackendName = backend.getName();
@@ -1038,7 +1037,11 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         lastLoadDropBytes = -1L;
         if (lastLoadMeter != null) lastLoadMeter.stop();
         lastLoadMeter = null;
-        TaiLoadMeter meter = TaiLoadMeter.start(appContext);
+        // A native init: nothing can cancel it, so the runtime's watch ends the process instead
+        // when memory runs out under it (TaiPressureWatch).
+        TaiLoadMeter meter = TaiLoadMeter.startNativeInit(appContext, new TaiLoadMeter.NativeInit(modelSpec,
+            deviceCapabilities, TaiModelSpec.BACKEND_LITERT_LM, accelerator,
+            options.contextWindow != null ? options.contextWindow : TaiLoadBudget.FLOOR_CONTEXT));
         boolean initialized = false;
         try {
             Engine created = createAndInitializeEngine(modelSpec, modelPath, options, profile, deviceCapabilities, backend);

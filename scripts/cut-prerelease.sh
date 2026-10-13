@@ -136,8 +136,17 @@ worktree_on() { # <dir> <branch> [<start>]
 }
 
 # --- pre: the persistent channel branch, brought level with base plus the named branches ---------
-PRE_WT="$WT_DIR/pre"
-worktree_on "$PRE_WT" pre
+# The worktree that already has pre out (often the main checkout) is used as it is: git keeps a
+# branch in one worktree, and switching a shared checkout away moves other sessions' commits. Its
+# untracked files are its own business; only tracked changes would leak into the drop.
+PRE_WT="$(git worktree list --porcelain | awk '/^worktree /{w=substr($0,10)} $0=="branch refs/heads/pre"{print w}')"
+if [ -n "$PRE_WT" ]; then
+    [ -z "$(git -C "$PRE_WT" status --porcelain --untracked-files=no)" ] \
+        || die "$PRE_WT has pre out with uncommitted changes; commit or stash them there and re-run"
+else
+    PRE_WT="$WT_DIR/pre"
+    worktree_on "$PRE_WT" pre
+fi
 if [ -n "$EDITION_REF" ] && ! git -C "$PRE_WT" merge -q --ff-only origin/pre 2>/dev/null; then
     die "local pre and origin/pre have diverged; reconcile them first"
 fi
@@ -153,6 +162,8 @@ if [[ " ${EDITIONS[*]} " == *" termux "* ]]; then
     echo "pre = $(git -C "$PRE_WT" rev-parse --short HEAD) (base $BASE at $(git rev-parse --short "$BASE")), tag v$VERSION"
 fi
 PRE_HEAD="$(git -C "$PRE_WT" rev-parse HEAD)"
+# Where an edition's tag is cut from: pre's own worktree, or its disposable branch's.
+wt_of() { [ "$1" = termux ] && echo "$PRE_WT" || echo "$WT_DIR/$(branch_of "$1")"; }
 
 # --- the edition builds: disposable branches, each its edition plus pre ---------------------------
 for e in "${EDITIONS[@]}"; do
@@ -173,7 +184,7 @@ if [ "$PUBLISH" -ne 1 ]; then
     echo "Nothing was pushed. Inspect the worktrees, then publish with:"
     echo "  git -C '$PRE_WT' push origin pre"
     for e in "${EDITIONS[@]}"; do
-        wt="$WT_DIR/$(branch_of "$e")"; t="$(tag_of "$e")"
+        wt="$(wt_of "$e")"; t="$(tag_of "$e")"
         echo "  git -C '$wt' push origin '$t'"
         echo "  gh release create '$t' --repo $REPO_SLUG --prerelease --latest=false --title '$t' --notes-file '$PRE_WT/$NOTES'"
         echo "  gh workflow run attach_debug_apks_to_release.yml --repo $REPO_SLUG --ref '$t' -f release_tag='$t'"
@@ -206,7 +217,7 @@ retire_previous() { # <edition> <this drop's tag>
 
 git -C "$PRE_WT" push -q origin pre
 for e in "${EDITIONS[@]}"; do
-    wt="$WT_DIR/$(branch_of "$e")"; t="$(tag_of "$e")"
+    wt="$(wt_of "$e")"; t="$(tag_of "$e")"
     git -C "$wt" push -q origin "$t"
     gh release create "$t" --repo "$REPO_SLUG" --prerelease --latest=false --title "$t" --notes-file "$PRE_WT/$NOTES"
     gh workflow run attach_debug_apks_to_release.yml --repo "$REPO_SLUG" --ref "$t" -f "release_tag=$t"

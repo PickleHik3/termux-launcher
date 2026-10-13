@@ -83,11 +83,27 @@ Known, left as they are: the live-blur fallbacks of the palette, the sheet, the 
 ## 4. Refraction
 
 - **One shader for every glass surface.** It extends today's `GLASS_AGSL` (`TermuxActivity.java:3399-3495`) and samples the shared frame, or the live-recorded backdrop while a video plays. Per pixel it bends the frame near the rim and adds the rim light.
-- **Controls:** none in the UI since 2026-09-30 (appearance-layout-editor SPEC §4): each Look sets bend / edge width / edge light, Fancier Glass is on wherever supported, and Lazy mode turns it off. The keys and accessors remain.
-  - **Bend** (`uStrength`): how strongly the glass bends the image behind it.
+- **Controls (2026-10-12):** the five keys are back in the Appearance editor, as the **Edge** group of
+  the Custom row's global set (appearance-layout-editor SPEC §3.4): a Surface | Edge toggle in the
+  heading row swaps the six surface sliders for Bend, Edge width, Edge light, Shine and Dispersion.
+  Each Look still sets all five; Fancier Glass is on wherever supported, and Lazy mode turns it off.
+  Between 2026-09-30 and then there was no UI for them.
+  - **Bend** (`uStrength`): how far the picture is pulled in at the rim, along the rounded rect's
+    true outward normal, on a quarter-circle profile (the bevel of a thick slab; Kyant0's
+    AndroidLiquidGlass and QmDeve's AndroidLiquidGlassView use the same curve).
   - **Edge width** (`uBand`): how far in from the rim the bending reaches.
-  - **Edge light** (`uRim`): how bright the rim highlight is.
-  - Defaults are to be tuned on pong. The resting look with Fancier Glass on and the default values must be close to the default mode.
+  - **Edge light** (`uRim`): how bright the hairline along the rim is.
+  - **Shine** (`uSpec`, `uBevel`): a bevel light under the rim, lit from the 45° diagonal so the
+    top-left and bottom-right of the rim catch it; reaches half the edge width in (1–12 dp). 0 in
+    every Look. The earlier specular, a band at one brightness all round, read as a double rim and
+    was dropped; this one is directional.
+  - **Dispersion** (`uDisp`): the chromatic split at the rim, seven spectral taps where it is on
+    and the pixel is in the band, one tap everywhere else. The split grows linearly across the
+    band to 16 dp at the rim at 100% (it followed the bevel profile at 6 dp first, which read as
+    nothing on a phone). 0 in every Look: it is the knob that costs battery, and it is the user's
+    to turn up.
+  - The resting look with the shipped Looks changes only by the profile and the normal; Shine and
+    Dispersion are off in all of them.
 - **Idle cost stays at zero.** Nothing redraws at rest, and uniforms change only while something moves.
 
 ## 5. Wallpapers (Fancier Glass only)

@@ -1,14 +1,15 @@
 package com.termux.app.terminal.inappkeyboard.voice;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 /**
  * Rewrites a dictation session's text — punctuation, casing, obvious mis-hearings, filler words —
  * without changing what was said. {@link VoiceSessionCleanup} calls it on its own
- * {@code voice-cleanup} thread, once per session that {@link VoicePolishRules} lets through, after
- * every phrase has reached the panel as heard. An implementation never throws and never blocks
- * past the deadline it is given: on any trouble it hands the raw text back with the reason, and
- * the raw text stays.
+ * {@code voice-cleanup} thread for the sentences {@link VoiceGatedCleanup} flags in each part
+ * {@link VoiceCleanupPlan} hands it: at phrase pauses while the user speaks when
+ * {@link #cleansWhileListening} allows, and for the rest once the session has ended. An implementation never throws and never blocks past the deadline it is given: on any
+ * trouble it hands the raw text back with the reason, and the raw text stays.
  *
  * <p>Today's only implementation is {@link LocalTaiVoiceTextPolisher} (Gemma through the TAI
  * runtime). The seam exists so a bring-your-own-key provider can be added later without the
@@ -60,4 +61,34 @@ public interface VoiceTextPolisher {
      */
     @NonNull
     Result polish(@NonNull String text, long timeoutMs);
+
+    /**
+     * {@link #polish(String, long)} for a part of a dictation that follows {@code context}, the
+     * text before it as already cleaned, which the answer must not repeat ({@code ""} for none). One
+     * that cannot use context cleans the part alone.
+     */
+    @NonNull
+    default Result polish(@NonNull String text, @NonNull String context, long timeoutMs) {
+        return polish(text, timeoutMs);
+    }
+
+    /**
+     * {@link #polish(String, String, long)} for a group of sentences the gate flagged
+     * ({@link VoiceGatedCleanup}): {@code context} is the sentence before it, already cleaned
+     * ({@code ""} for none), and {@code language} the ISO 639 code of the language to write in
+     * ({@code null}: not known). One that cannot use the language cleans the group without it.
+     */
+    @NonNull
+    default Result polish(@NonNull String text, @NonNull String context, @Nullable String language, long timeoutMs) {
+        return polish(text, context, timeoutMs);
+    }
+
+    /**
+     * Whether parts are worth cleaning while the user still speaks, asked once {@link #warm} has
+     * returned: true for a model that answers quickly beside speech-to-text (a remote one, or a
+     * local one on the GPU), false for one on the CPU, which keeps the single pass at the end.
+     */
+    default boolean cleansWhileListening() {
+        return false;
+    }
 }
