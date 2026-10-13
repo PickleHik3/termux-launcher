@@ -858,6 +858,16 @@ public final class SuggestionBarView extends GridLayout
         post(this::reload);
     }
 
+    /**
+     * A row that changed width holds its icons to a different slot ({@link #iconSizePx}), so the
+     * built slots take the new size on the next frame; never from inside this pass.
+     */
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        if (w != oldw) scheduleSlotIconResize();
+    }
+
     public void setMaxButtonCount(int maxButtonCount) {
         this.maxButtonCount = maxButtonCount;
     }
@@ -2384,9 +2394,24 @@ public final class SuggestionBarView extends GridLayout
             .setDuration(120)
             .setInterpolator(new DecelerateInterpolator())
             .setListener(new AnimatorListenerAdapter() {
+                private boolean cancelled;
+
+                @Override
+                public void onAnimationCancel(Animator animation) {
+                    cancelled = true;
+                }
+
                 @Override
                 public void onAnimationEnd(Animator animation) {
                     setListenerSafe(null);
+                    // A cancel is a new touch, scrub or render reaching the row mid-fade, and it
+                    // ends the fade synchronously: clearing here would pull the letter out from
+                    // under a preview that is rendering it. The preview stays and times out anew.
+                    if (cancelled) {
+                        setAlpha(1f);
+                        if (activeAzLetter != null) scheduleAzResetTimeout();
+                        return;
+                    }
                     activeAzLetter = null;
                     activeAzSelection = 0;
                     activeAzPageIndex = 0;
@@ -2642,11 +2667,12 @@ public final class SuggestionBarView extends GridLayout
         boolean noActivePickup = activeLongPressPickupState == null && folderDragHoverIndex < 0;
         return new AppDrawerGestureArbiter.Eligibility(
             listener != null && listener.isAppDrawerEnabled(),
-            // The filtered apps row used to veto the pull-down, forcing a search clear before the
-            // drawer could open. A vertical pull is unambiguous even over filtered results — the
-            // page swipe stays horizontal — so the veto slot is permanently clear.
+            // The filtered apps row and a lingering A–Z preview used to veto the pull-down, forcing
+            // the row back to pinned apps before the drawer could open. A vertical pull is
+            // unambiguous over either — their page swipes stay horizontal, and the A–Z scrub itself
+            // runs in its own view's touch stream — so both veto slots are permanently clear.
             true,
-            activeAzLetter == null,
+            true,
             pull,
             listener != null && !listener.isSurfaceEditorActive(),
             listener != null && !listener.isCommandPaletteOpen(),
@@ -2806,8 +2832,15 @@ public final class SuggestionBarView extends GridLayout
         setRowInteractionActive(false);
         AppDrawerGestureListener listener = appDrawerGestureListener;
         if (listener == null) return;
-        if (cancelled) listener.onDrawerDragCancel();
-        else listener.onDrawerDragEnd(velocityPxPerSec);
+        if (cancelled) {
+            listener.onDrawerDragCancel();
+        } else {
+            // The lift is the last place the finger was. On a busy frame the moves before it arrive
+            // as one late batch, or not at all before the release, and a plane settled from the
+            // last move it was shown springs shut on a pull that went well past halfway.
+            listener.onDrawerDrag(event.getRawY());
+            listener.onDrawerDragEnd(velocityPxPerSec);
+        }
     }
 
     /**
@@ -8459,6 +8492,15 @@ public final class SuggestionBarView extends GridLayout
         // A rail icon is a fixed size on every side: its column has no row height to be a share of.
         if (vertical)
             return railIconSizePx();
+        // Lying down the slots share the row's width, so the icon is held to one slot's share of
+        // it, less a little air: a large size with many apps would otherwise cover its neighbours.
+        return com.termux.app.dock.DockLayoutPolicy.slotFitIconPx(rowIconSizePx(),
+            getWidth() - getPaddingLeft() - getPaddingRight(), Math.max(1, maxButtonCount),
+            screenDensity());
+    }
+
+    /** The row's icon before it is held to its slot: the height the row gives it. */
+    private int rowIconSizePx() {
         // The dock's own answer, whenever it has given one. The row's band is this icon and its
         // air, so the icon is handed over rather than read back out of the band: derived from the
         // band it would be the band less the air less the air again.

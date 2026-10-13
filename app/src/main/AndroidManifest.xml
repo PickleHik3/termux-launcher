@@ -40,6 +40,8 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- The built-in agenda and calendar widgets; asked for when one is placed, never before. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- The palette's contact search; asked for from its own row, never before. Calls go through the dialer. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.SET_WALLPAPER" />

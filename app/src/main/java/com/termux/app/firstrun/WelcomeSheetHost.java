@@ -25,10 +25,10 @@ import java.util.Set;
  * {@link Env}.
  *
  * <p>What is applied when: the weather and the display as their switches move, because the user
- * can see them change behind the sheet; the wallpaper's colours as the sheet is left, because
- * they restyle the whole launcher; and the models as the sheet is left, through the same queue
- * and Wi-Fi rule as the "Models for this phone" card, which the sheet stands in for and so marks
- * as shown.
+ * can see them change behind the sheet; contact access as its switch is turned on, settled by the
+ * system's answer; the wallpaper's colours as the sheet is left, because they restyle the whole
+ * launcher; and the models as the sheet is left, through the same queue and Wi-Fi rule as the
+ * "Models for this phone" card, which the sheet stands in for and so marks as shown.
  */
 public final class WelcomeSheetHost implements FirstBootTour.SetupHost {
 
@@ -58,6 +58,12 @@ public final class WelcomeSheetHost implements FirstBootTour.SetupHost {
 
         /** The weather follows the device: the picked place is dropped and the location asked for. */
         void useMyLocation();
+
+        /** Whether the command palette may read the contacts. */
+        boolean contactsGranted();
+
+        /** Asks the system to let the command palette read the contacts, when it is not granted. */
+        void askForContacts();
 
         boolean displayOffered();
 
@@ -96,6 +102,7 @@ public final class WelcomeSheetHost implements FirstBootTour.SetupHost {
         start.weatherEnabled = mEnv.weatherEnabled();
         start.weatherPlace = mEnv.weatherPlace();
         start.locationGranted = mEnv.locationGranted();
+        start.contactsGranted = mEnv.contactsGranted();
         start.displayOffered = mEnv.displayOffered();
         start.displayOn = mEnv.displayOn();
         start.aiRows = aiRows();
@@ -122,6 +129,14 @@ public final class WelcomeSheetHost implements FirstBootTour.SetupHost {
 
     /** Shows where everything stands now: after a permission answer, and on every resume. */
     public void refresh() {
+        WelcomeSheet sheet = mSheet;
+        if (sheet == null) return;
+        sheet.setContactsGranted(mEnv.contactsGranted());
+        bind();
+    }
+
+    /** Draws the sheet as the model has it, without reading the contacts answer again. */
+    private void bind() {
         WelcomeSheetView view = mView;
         WelcomeSheet sheet = mSheet;
         if (view == null || sheet == null) return;
@@ -206,6 +221,13 @@ public final class WelcomeSheetHost implements FirstBootTour.SetupHost {
             sheet.setOn(row, on);
             if (row == WelcomeSheet.Row.WEATHER) mEnv.setWeatherEnabled(on);
             if (row == WelcomeSheet.Row.DISPLAY) mEnv.setDisplayOn(on);
+            if (row == WelcomeSheet.Row.CONTACTS && on) {
+                mEnv.askForContacts();
+                // The switch holds on while the system asks; its answer's refresh settles it.
+                if (mEnv.contactsGranted()) sheet.setContactsGranted(true);
+                bind();
+                return;
+            }
             refresh();
         }
 

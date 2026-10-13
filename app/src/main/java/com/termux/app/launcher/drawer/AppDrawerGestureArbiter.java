@@ -59,9 +59,9 @@ public final class AppDrawerGestureArbiter {
 
         /** The {@code app_launcher_drawer_enabled} preference. */
         public final boolean drawerEnabled;
-        /** The dock search field holds nothing but whitespace. */
+        /** The dock search field holds nothing but whitespace. The dock always passes true now. */
         public final boolean searchEmpty;
-        /** No A-Z letter is being scrubbed. */
+        /** No A-Z letter is being scrubbed. The dock always passes true now. */
         public final boolean azInactive;
         /** Which way this dock's pull travels; {@link Pull#NONE} means nothing to pull from. */
         @NonNull public final Pull pull;

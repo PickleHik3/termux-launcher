@@ -118,9 +118,11 @@ Rules:
   put it back. With wallpaper colours off the terminal wears a scheme file no contrast level
   moves, so the segments are disabled and the label says it needs wallpaper colours (as the
   Settings row does).
-- Moving any control at a Look stop jumps the slider to Custom, seeded from that Look. Sliding
-  from Custom back to a Look applies the Look; the Custom values of the session (saved or not)
-  are kept, so sliding back to Custom restores them. Undo and Discard clear them.
+- Moving to Custom, by the slider or by a control touched at a Look stop, seeds Custom from the
+  Look on screen and writes nothing; the saved Custom is not applied. Sliding from Custom back to
+  a Look applies the Look; the Custom values of the session (saved or not) are kept, so sliding
+  back to Custom within one editor visit restores them. Undo and Discard clear them and restore
+  the state at open.
 - Rim style, tint colour, motion, chip radius, key spacing and glass depth live inside the Look.
   They have no control anywhere. Corners and margins are Layout's (§3.5).
 - **Tint** (amended 2026-10-06) is a Custom control: how much of the Material colour tint a
@@ -356,7 +358,7 @@ replace Bare, Classic and Slate.
 | Mist | Mist | Soft frosted glass, the flagship | blur 25 · opacity 60 · grain 8 · corners 28 · obsidian tint · gradient rim · mist motion · depth medium |
 | Tint | Classic | Tinted, low blur, denser; for loud wallpapers and a dark terminal | blur 6 · opacity 46 · grain 14 · corners 22 · obsidian tint · hairline rim · classic motion · depth subtle |
 | Solid | Slate | Opaque; no blur cost; the "reduce transparency" answer | blur 0 · opacity 92 · grain 0 · corners 14 · scheme tint · hairline rim · classic motion · depth off |
-| Custom | Custom | Whatever the user tuned; seeded from the Look they left | `surface_custom_preset` |
+| Custom | Custom | Whatever the user tuned; seeded from the Look on screen, this visit's Custom values back after a Look; Undo restores the state at open | `surface_custom_preset` (written on Done at Custom, not read by the move) |
 
 - A Look sets the glass: material triple, tint, rim, motion, and the Fancier Glass triple. Undo,
   Discard and the dirty signature cover all of them (today they omit tint, rim, motion and the

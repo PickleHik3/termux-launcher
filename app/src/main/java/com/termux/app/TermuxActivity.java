@@ -728,6 +728,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int REQUEST_CODE_VOICE_INPUT_MICROPHONE = 4717;
     /** The built-in agenda and calendar widgets asking to read the calendar. */
     private static final int REQUEST_CODE_WIDGET_CALENDAR = 4718;
+    /** The command palette's contact search asking to read the contacts. */
+    public static final int REQUEST_CODE_PALETTE_CONTACTS = 4719;
     /** Whether this process has already asked for the calendar once; see the widget host. */
     private boolean mWidgetCalendarAsked;
     @Nullable private TerminalSession mVoiceTypingTargetSession;
@@ -2611,6 +2613,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class WelcomeSheetEnv implements com.termux.app.firstrun.WelcomeSheetHost.Env {
         /** Whether the sheet has asked for the location once already this showing. */
         private boolean mLocationAsked;
+        /** Whether the sheet has asked for the contacts once already this showing. */
+        private boolean mContactsAsked;
 
         @NonNull @Override public ViewGroup host() {
             return findViewById(android.R.id.content);
@@ -2694,6 +2698,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLocationAsked = true;
             androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
                 new String[] {permission}, REQUEST_CODE_WEATHER_LOCATION);
+        }
+
+        @Override public boolean contactsGranted() {
+            return androidx.core.content.ContextCompat.checkSelfPermission(TermuxActivity.this,
+                android.Manifest.permission.READ_CONTACTS)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        }
+
+        /**
+         * Asked with the palette's own request, so its answer reaches the palette too. Past a
+         * second refusal the system no longer asks, so this app's settings page is where contact
+         * access is turned on.
+         */
+        @Override public void askForContacts() {
+            if (contactsGranted()) return;
+            String permission = android.Manifest.permission.READ_CONTACTS;
+            if (mContactsAsked && !androidx.core.app.ActivityCompat
+                    .shouldShowRequestPermissionRationale(TermuxActivity.this, permission)) {
+                openAppSettingsPage();
+                return;
+            }
+            mContactsAsked = true;
+            androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
+                new String[] {permission}, REQUEST_CODE_PALETTE_CONTACTS);
         }
 
         @Override public boolean displayOffered() {
@@ -5645,14 +5673,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * <p>Written from the insets rather than from the root's measured padding, because this runs on
      * the content view's own insets listener — one dispatch ahead of the root's — and because these
      * are the very numbers the two strips are sized by, so the sheet meets them exactly.
+     *
+     * <p>The camera cutout counts as a bar here. With the status bar hidden the bars report no top
+     * inset, but the root still keeps clear of the cutout, and a drawer bled by the bars alone left
+     * its dim a square-cornered band starting under the cutout, with the wallpaper bright above it
+     * (#69).
      */
     private void applyAppDrawerEdgeBleed(@NonNull WindowInsetsCompat insetsCompat) {
         View host = findViewById(R.id.app_drawer_host);
         if (host == null) return;
         ViewGroup.LayoutParams layoutParams = host.getLayoutParams();
         if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return;
-        int barTop = insetsCompat.getInsets(Type.systemBars()).top;
-        int barBottom = insetsCompat.getInsets(Type.systemBars()).bottom;
+        androidx.core.graphics.Insets edges =
+            insetsCompat.getInsets(Type.systemBars() | Type.displayCutout());
+        int barTop = edges.top;
+        int barBottom = edges.bottom;
         ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) layoutParams;
         if (margins.topMargin == -barTop && margins.bottomMargin == -barBottom) return;
         margins.topMargin = -barTop;
@@ -9958,10 +9993,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mLastStyledDockButtonCount != Integer.MIN_VALUE
             && maxButtons != mLastStyledDockButtonCount) {
-            mLastStyledDockButtonCount = maxButtons;
-            mSuggestionBarView.setMaxButtonCount(maxButtons);
-            mSuggestionBarView.reloadAllApps();
+            applyDockButtonCountNow(maxButtons);
         }
+    }
+
+    /**
+     * Gives the dock {@code count} slots and re-renders it at once. Reloading the catalogue alone
+     * left the old slots standing until something else rendered the row, so a count picked in the
+     * editor showed only after the next swipe.
+     */
+    private void applyDockButtonCountNow(int count) {
+        mLastStyledDockButtonCount = count;
+        mSuggestionBarView.setMaxButtonCount(count);
+        mSuggestionBarView.reloadAllApps();
+        String input = "";
+        if (mTerminalView != null && mSuggestionBarExplicitSearchActive) {
+            input = normalizeSuggestionBarInput(mTerminalView.getCurrentInput());
+        }
+        mSuggestionBarView.reloadWithInput(input, mTerminalView);
+        updateAzOverflowAffordance();
     }
 
     private void applySuggestionBarPreferences() {
@@ -11402,9 +11452,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void applyDockButtonCount(int count) {
             if (mSuggestionBarView == null) return;
-            mLastStyledDockButtonCount = count;
-            mSuggestionBarView.setMaxButtonCount(count);
-            mSuggestionBarView.reloadAllApps();
+            applyDockButtonCountNow(count);
         }
 
         @Override public int statusBarInsetTop() {
@@ -16542,6 +16590,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mWelcomeSheet != null) mWelcomeSheet.refresh();
         } else if (requestCode == REQUEST_CODE_WIDGET_CALENDAR) {
             if (mWidgetPaneController != null) mWidgetPaneController.onCalendarPermissionChanged();
+        } else if (requestCode == REQUEST_CODE_PALETTE_CONTACTS) {
+            // The palette's contact search: its rows rebuild themselves
+            // from the result, granted or not.
+            boolean granted = grantResults.length > 0
+                && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            getCommandPaletteController().onContactsAccessChanged(granted);
+            if (mWelcomeSheet != null) mWelcomeSheet.refresh();
         } else if (requestCode == REQUEST_CODE_VOICE_INPUT_MICROPHONE) {
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {

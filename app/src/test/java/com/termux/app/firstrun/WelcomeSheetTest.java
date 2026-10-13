@@ -20,7 +20,8 @@ import java.util.Map;
 
 /**
  * The setup sheet's rules: which rows it carries, where each switch starts, what the weather switch
- * reveals, and how the AI switch, its ticks and the size in its sentence move together.
+ * reveals, how the contacts switch follows the permission, and how the AI switch, its ticks and
+ * the size in its sentence move together.
  */
 public class WelcomeSheetTest {
 
@@ -62,9 +63,12 @@ public class WelcomeSheetTest {
     @Test public void aFirstLaunchStartsAsTheHandoffSays() {
         WelcomeSheet sheet = WelcomeSheet.from(firstLaunch());
         assertEquals(Arrays.asList(WelcomeSheet.Row.WALLPAPER, WelcomeSheet.Row.WEATHER,
-            WelcomeSheet.Row.DISPLAY, WelcomeSheet.Row.AI), sheet.rows());
+            WelcomeSheet.Row.CONTACTS, WelcomeSheet.Row.DISPLAY, WelcomeSheet.Row.AI),
+            sheet.rows());
         assertTrue(sheet.isOn(WelcomeSheet.Row.WALLPAPER));
         assertFalse("weather with nowhere to be for is off", sheet.isOn(WelcomeSheet.Row.WEATHER));
+        assertFalse("nothing is asked for until the user turns it on",
+            sheet.isOn(WelcomeSheet.Row.CONTACTS));
         assertFalse(sheet.isOn(WelcomeSheet.Row.DISPLAY));
         assertTrue("the policy preselects this phone's models", sheet.isOn(WelcomeSheet.Row.AI));
         assertFalse(sheet.showsWeatherSearch());
@@ -94,11 +98,46 @@ public class WelcomeSheetTest {
         start.displayOn = true;
         start.aiRows = Collections.emptyList();
         WelcomeSheet sheet = WelcomeSheet.from(start);
-        assertEquals(Arrays.asList(WelcomeSheet.Row.WALLPAPER, WelcomeSheet.Row.WEATHER),
-            sheet.rows());
+        assertEquals(Arrays.asList(WelcomeSheet.Row.WALLPAPER, WelcomeSheet.Row.WEATHER,
+            WelcomeSheet.Row.CONTACTS), sheet.rows());
         assertFalse(sheet.isOn(WelcomeSheet.Row.DISPLAY));
         sheet.setOn(WelcomeSheet.Row.AI, true);
         assertFalse(sheet.isOn(WelcomeSheet.Row.AI));
+    }
+
+    @Test public void theContactsSwitchStartsWhereAccessStands() {
+        WelcomeSheet.Start start = firstLaunch();
+        start.contactsGranted = true;
+        WelcomeSheet sheet = WelcomeSheet.from(start);
+        assertTrue(sheet.isOn(WelcomeSheet.Row.CONTACTS));
+        assertTrue(sheet.contactsGranted());
+        start.contactsGranted = false;
+        assertFalse(WelcomeSheet.from(start).isOn(WelcomeSheet.Row.CONTACTS));
+        assertFalse(WelcomeSheet.from(start).contactsGranted());
+    }
+
+    @Test public void theContactsSwitchHoldsOnWhileAskingAndFollowsTheAnswer() {
+        WelcomeSheet sheet = WelcomeSheet.from(firstLaunch());
+        sheet.setOn(WelcomeSheet.Row.CONTACTS, true);
+        assertTrue("held on while the system asks", sheet.isOn(WelcomeSheet.Row.CONTACTS));
+        assertFalse(sheet.contactsGranted());
+        sheet.setContactsGranted(false);
+        assertFalse("a refusal puts it back off", sheet.isOn(WelcomeSheet.Row.CONTACTS));
+        sheet.setOn(WelcomeSheet.Row.CONTACTS, true);
+        sheet.setContactsGranted(true);
+        assertTrue("a grant leaves it on", sheet.isOn(WelcomeSheet.Row.CONTACTS));
+        assertTrue(sheet.contactsGranted());
+    }
+
+    @Test public void grantedContactsCannotBeSwitchedOff() {
+        WelcomeSheet.Start start = firstLaunch();
+        start.contactsGranted = true;
+        WelcomeSheet sheet = WelcomeSheet.from(start);
+        sheet.setOn(WelcomeSheet.Row.CONTACTS, false);
+        assertTrue(sheet.isOn(WelcomeSheet.Row.CONTACTS));
+        // Taken away in the system settings while the sheet was up: the switch follows.
+        sheet.setContactsGranted(false);
+        assertFalse(sheet.isOn(WelcomeSheet.Row.CONTACTS));
     }
 
     @Test public void turningTheWeatherOnRevealsTheSearchAndOffHidesIt() {

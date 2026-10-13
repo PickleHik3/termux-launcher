@@ -251,6 +251,7 @@ public final class WelcomeSheetView extends FrameLayout {
                     toggle.setChecked(sheet.isOn(row));
             }
             bindWeather(sheet, facts);
+            bindContacts(sheet);
             bindAi(sheet, facts);
         } finally {
             mBinding = false;
@@ -391,6 +392,7 @@ public final class WelcomeSheetView extends FrameLayout {
         switch (row) {
             case WALLPAPER: return R.drawable.ic_symbol_palette;
             case WEATHER: return R.drawable.ic_symbol_weather;
+            case CONTACTS: return R.drawable.ic_symbol_person;
             case DISPLAY: return R.drawable.ic_symbol_desktop_windows;
             default: return R.drawable.ic_symbol_ai_star;
         }
@@ -401,6 +403,7 @@ public final class WelcomeSheetView extends FrameLayout {
         switch (row) {
             case WALLPAPER: return R.string.welcome_row_wallpaper_title;
             case WEATHER: return R.string.welcome_row_weather_title;
+            case CONTACTS: return R.string.welcome_row_contacts_title;
             case DISPLAY: return R.string.welcome_row_display_title;
             default: return R.string.welcome_row_ai_title;
         }
@@ -411,6 +414,7 @@ public final class WelcomeSheetView extends FrameLayout {
         switch (row) {
             case WALLPAPER: return R.string.welcome_row_wallpaper_copy;
             case WEATHER: return R.string.welcome_row_weather_copy;
+            case CONTACTS: return R.string.welcome_row_contacts_copy;
             default: return R.string.welcome_row_display_copy;
         }
     }
@@ -491,6 +495,24 @@ public final class WelcomeSheetView extends FrameLayout {
             getContext().getString(R.string.settings_weather_location_current, place));
         // Following the device already, with leave to: nothing to offer.
         setShown(mUseLocation, !place.isEmpty() || !facts.locationGranted);
+    }
+
+    /**
+     * Once access is granted the contacts switch reads on and is not offered: Android gives no way
+     * to take it back from here, so the line says what the user now has instead.
+     */
+    private void bindContacts(@NonNull WelcomeSheet sheet) {
+        MaterialSwitch toggle = mSwitches.get(WelcomeSheet.Row.CONTACTS);
+        TextView sub = mSubtitles.get(WelcomeSheet.Row.CONTACTS);
+        if (toggle == null || sub == null) return;
+        boolean movable = !sheet.contactsGranted();
+        if (toggle.isEnabled() != movable) toggle.setEnabled(movable);
+        if (toggle.getParent() instanceof View) {
+            View line = (View) toggle.getParent();
+            if (line.isEnabled() != movable) line.setEnabled(movable);
+        }
+        setTextIfChanged(sub, getContext().getString(movable ? R.string.welcome_row_contacts_copy
+            : R.string.welcome_row_contacts_copy_granted));
     }
 
     /** Under the AI row: Choose models, and the list it opens. */

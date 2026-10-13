@@ -130,6 +130,8 @@ public final class DockRailScrollView extends ScrollView {
                     if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
                         listener.onDrawerDragCancel();
                     } else {
+                        // Settled from where the finger lifted, not the last move it was shown.
+                        listener.onDrawerDrag(projectOntoPull(event.getRawX()));
                         listener.onDrawerDragEnd(releaseVelocityAlongPull());
                     }
                     endGesture();

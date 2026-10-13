@@ -386,12 +386,14 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
                         Math.max(1, info.minResizeWidth), Math.max(1, info.minResizeHeight));
                     // A provider that names a maximum is asked not to be placed past it, read
                     // against its content size like its minimum is; a maximum under its own
-                    // minimum is ignored.
+                    // minimum is ignored. Maximums arrived in API 31; before it there are none.
+                    int maxWidth = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                        ? info.maxResizeWidth : 0;
+                    int maxHeight = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                        ? info.maxResizeHeight : 0;
                     WidgetGridMetrics.Span maximum = metrics.largestSpanWithin(
-                        info.maxResizeWidth > 0
-                            ? info.maxResizeWidth + padding.left + padding.right : 0,
-                        info.maxResizeHeight > 0
-                            ? info.maxResizeHeight + padding.top + padding.bottom : 0);
+                        maxWidth > 0 ? maxWidth + padding.left + padding.right : 0,
+                        maxHeight > 0 ? maxHeight + padding.top + padding.bottom : 0);
                     int gridColumns = metrics.definition().columns;
                     int gridRows = metrics.definition().rows;
                     columns = Math.min(columns, WidgetGridMetrics.effectiveMaxSpan(
