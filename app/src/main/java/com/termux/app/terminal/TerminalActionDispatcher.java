@@ -174,6 +174,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
     public static final String TOOL_APP_LAUNCH = "app.launch";
+    public static final String TOOL_CONTACT_OPEN = "contact.open";
     public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
     public static final String TOOL_APP_OPEN_DRAWER = "app.open_drawer";
     public static final String TOOL_APP_OPEN_APP_DRAWER = "app.open_app_drawer";
@@ -361,6 +362,7 @@ public final class TerminalActionDispatcher {
             case TOOL_APP_OPEN_APPS_BAR:
             case TOOL_APP_COMMAND_PALETTE:
             case TOOL_APP_LAUNCH:
+            case TOOL_CONTACT_OPEN:
             case TOOL_APP_KEY_INSPECTOR:
             case TOOL_APP_OPEN_APP_DRAWER:
             case TOOL_APP_OPEN_DRAWER:
@@ -1132,6 +1134,21 @@ public final class TerminalActionDispatcher {
                     LauncherUsageStatsStore.getInstance(host.context())
                         .recordLaunch(app.appRef.stableId());
                     return ok().put("package", app.appRef.packageName).put("label", app.label);
+                }
+                case TOOL_CONTACT_OPEN: {
+                    String lookupKey = arguments.optString("lookup_key", "").trim();
+                    if (lookupKey.isEmpty()) return error(400, "bad_request", "Missing 'lookup_key'");
+                    // The palette's Contacts row opens the same card, by the same identity.
+                    android.net.Uri card = CommandPaletteContacts.cardUri(
+                        arguments.optLong("contact_id", -1), lookupKey);
+                    try {
+                        host.context().startActivity(
+                            new android.content.Intent(android.content.Intent.ACTION_VIEW, card));
+                    } catch (android.content.ActivityNotFoundException e) {
+                        return error(404, "not_found",
+                            host.context().getString(com.termux.R.string.palette_contact_open_failed));
+                    }
+                    return ok();
                 }
                 case TOOL_APP_KEY_INSPECTOR:
                     return ok().put("keyInspectorOpen", host.toggleKeyInspector());

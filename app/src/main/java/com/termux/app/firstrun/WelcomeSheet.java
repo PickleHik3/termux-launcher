@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * What the first-run setup sheet shows and decides: four switches, the city search the weather
+ * What the first-run setup sheet shows and decides: five switches, the city search the weather
  * switch reveals, and the models the offline voice and AI switch downloads.
  *
  * <p>The sheet is where the run is offered, so every switch starts where the launcher stands —
@@ -21,12 +21,16 @@ import java.util.Set;
  * switch on, unticking the last one turns it off, and turning the switch on ticks this phone's
  * preselection again. The size in the row's sentence is always the sum of what is ticked.
  *
+ * <p>The contacts switch is the permission itself: on while access is granted, and held on while
+ * the system is asking. Android gives no way to take access back from inside the app, so once
+ * granted the switch stays on and cannot be moved.
+ *
  * <p>Pure, so every rule here is a unit test. The view draws it; the host applies it.
  */
 public final class WelcomeSheet {
 
     /** The sheet's rows, in the order it reads them. */
-    public enum Row { WALLPAPER, WEATHER, DISPLAY, AI }
+    public enum Row { WALLPAPER, WEATHER, CONTACTS, DISPLAY, AI }
 
     /** What the AI row's sentence says about its size. */
     public enum AiSize {
@@ -46,6 +50,8 @@ public final class WelcomeSheet {
         @NonNull public String weatherPlace = "";
         /** Whether the weather may read the device's location. */
         public boolean locationGranted;
+        /** Whether the command palette may read the contacts. */
+        public boolean contactsGranted;
         /** Whether this build carries the Linux display at all, and whether it is on. */
         public boolean displayOffered;
         public boolean displayOn;
@@ -55,6 +61,9 @@ public final class WelcomeSheet {
 
     private boolean mWallpaper;
     private boolean mWeather;
+    private boolean mContactsGranted;
+    /** The contacts switch was turned on and the system is asking. */
+    private boolean mContactsAsking;
     private boolean mDisplay;
     private boolean mAi;
     private boolean mModelsExpanded;
@@ -68,6 +77,7 @@ public final class WelcomeSheet {
         // a picked place nor the location, it shows nothing, and the sheet should not say otherwise.
         mWeather = start.weatherEnabled
             && (!start.weatherPlace.trim().isEmpty() || start.locationGranted);
+        mContactsGranted = start.contactsGranted;
         mDisplayOffered = start.displayOffered;
         mDisplay = start.displayOffered && start.displayOn;
         mAiRows = Collections.unmodifiableList(new ArrayList<>(start.aiRows));
@@ -84,9 +94,10 @@ public final class WelcomeSheet {
     /** The rows this sheet carries: no display row without a display, no AI row without models. */
     @NonNull
     public List<Row> rows() {
-        List<Row> rows = new ArrayList<>(4);
+        List<Row> rows = new ArrayList<>(5);
         rows.add(Row.WALLPAPER);
         rows.add(Row.WEATHER);
+        rows.add(Row.CONTACTS);
         if (mDisplayOffered) rows.add(Row.DISPLAY);
         if (!mAiRows.isEmpty()) rows.add(Row.AI);
         return Collections.unmodifiableList(rows);
@@ -96,6 +107,7 @@ public final class WelcomeSheet {
         switch (row) {
             case WALLPAPER: return mWallpaper;
             case WEATHER: return mWeather;
+            case CONTACTS: return mContactsGranted || mContactsAsking;
             case DISPLAY: return mDisplay;
             default: return mAi;
         }
@@ -104,7 +116,8 @@ public final class WelcomeSheet {
     /**
      * Moves a switch. The AI switch turned on ticks this phone's preselection when nothing is
      * ticked, and opens the list when there is no preselection to tick; turned off, it keeps the
-     * ticks so turning it back on restores them.
+     * ticks so turning it back on restores them. The contacts switch cannot be turned off once
+     * access is granted.
      */
     public void setOn(@NonNull Row row, boolean on) {
         switch (row) {
@@ -113,6 +126,9 @@ public final class WelcomeSheet {
                 break;
             case WEATHER:
                 mWeather = on;
+                break;
+            case CONTACTS:
+                if (!mContactsGranted) mContactsAsking = on;
                 break;
             case DISPLAY:
                 mDisplay = mDisplayOffered && on;
@@ -126,6 +142,17 @@ public final class WelcomeSheet {
                 }
                 break;
         }
+    }
+
+    /** Whether contact access is granted: the contacts switch then reads on and stays put. */
+    public boolean contactsGranted() {
+        return mContactsGranted;
+    }
+
+    /** The system's answer, or where access stands on resume; the switch follows it. */
+    public void setContactsGranted(boolean granted) {
+        mContactsGranted = granted;
+        mContactsAsking = false;
     }
 
     /** Whether the weather row shows its city search and Use my location. */

@@ -514,7 +514,7 @@
     <string name="settings_most_used_page_summary">Adds a page ranked by launcher usage.</string>
     <string name="settings_app_drawer_header">App drawer</string>
     <string name="settings_app_drawer_enabled_title">Swipe down for app drawer</string>
-    <string name="settings_app_drawer_enabled_summary">Swipe down on the pinned apps row to open the full-screen app drawer.</string>
+    <string name="settings_app_drawer_enabled_summary">Swipe down on the apps row to open the full-screen app drawer.</string>
     <string name="settings_app_drawer_view_type_title">Drawer layout</string>
     <string name="settings_app_drawer_view_type_vertical">Vertical</string>
     <string name="settings_app_drawer_view_type_horizontal">Horizontal pages</string>
@@ -2005,7 +2005,7 @@
 
     <!-- Command palette chrome -->
     <string name="action_command_palette">Command palette</string>
-    <string name="palette_search_hint">Type to search</string>
+    <string name="palette_search_hint">Search, or &gt; for actions</string>
     <string name="palette_empty">No matching actions</string>
     <string name="palette_unavailable_splits_disabled">Unavailable: compatibility mode is on</string>
     <string name="palette_category_session">Session</string>
@@ -2033,6 +2033,8 @@
     <string name="palette_keyboard_layout_active">Current layout</string>
     <string name="palette_keyboard_layout_row">Layout: %1$s</string>
     <string name="palette_app_row_subtitle">%1$s · hold to bind a key</string>
+    <string name="palette_row_subtitle_hold_to_bind">%1$s · hold to bind a key</string>
+    <string name="palette_row_hold_to_bind">Hold to bind a key</string>
     <string name="palette_capture_notice">Press a key combination for %1$s · ⏎ save · ⌫ clear · esc cancel</string>
     <string name="palette_capture_placeholder">waiting for a key</string>
     <string name="palette_capture_conflict">Already bound to %1$s · saving replaces it</string>
@@ -2047,6 +2049,12 @@
     <string name="palette_confirm_run">Run</string>
     <string name="palette_action_failed">Could not run %1$s</string>
     <string name="palette_no_match">NO MATCH — ⏎ RUNS \"%1$s\" IN THE SHELL</string>
+    <string name="palette_no_action_match">NO ACTION MATCHES \"%1$s\"</string>
+    <string name="palette_contacts_allow">Search contacts too</string>
+    <string name="palette_contacts_allow_hint">Allow contact access to find people by name or number</string>
+    <string name="palette_category_contacts">Contacts</string>
+    <string name="palette_contact_open_failed">Couldn\'t open this contact</string>
+    <string name="palette_contact_call_failed">Couldn\'t dial this number</string>
     <string name="palette_argument_notice">TYPE A VALUE FOR %1$s, ⏎ TO APPLY</string>
     <string name="palette_meta_awaiting_value">value</string>
     <string name="palette_meta_idle">↓ browse</string>
@@ -2584,6 +2592,9 @@
     <string name="welcome_row_wallpaper_copy">Tint the launcher to match your wallpaper.</string>
     <string name="welcome_row_weather_title">Weather</string>
     <string name="welcome_row_weather_copy">Shown in the status bar, for a city you pick or where you are.</string>
+    <string name="welcome_row_contacts_title">Contacts in search</string>
+    <string name="welcome_row_contacts_copy">Find people by name or number from the command palette, and call them.</string>
+    <string name="welcome_row_contacts_copy_granted">People show up when you search the command palette.</string>
     <string name="welcome_row_display_title">Linux display</string>
     <string name="welcome_row_display_copy">Run desktop Linux apps in a window.</string>
     <string name="welcome_row_ai_title">Offline voice and AI</string>

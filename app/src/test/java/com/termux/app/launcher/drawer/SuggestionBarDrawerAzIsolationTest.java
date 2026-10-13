@@ -32,14 +32,13 @@ import java.util.List;
 /**
  * Two A-Z surfaces now exist and they must never be confused.
  *
- * <p>The dock's own A-Z row writes {@code SuggestionBarView.activeAzLetter}, and B-1's drawer-pull
- * eligibility vetoes a pull-down while that field is set — correctly, because a finger part way
- * through a dock scrub is not asking for the drawer. The drawer's column is a different surface with
- * a different job: it scrolls the drawer's own grid. If it ever wrote that field, or reached any of
- * the dock's A-Z entry points ({@code previewAzLetter}, {@code refreshActiveAzCandidates},
- * {@code getAppsForLetter}, {@code rankForAz}), then scrubbing inside the drawer would veto the
- * gesture that opens it — and the drawer would refuse to open after every scrub, for the rest of
- * the session, with nothing on screen to explain why.
+ * <p>The dock's own A-Z row writes {@code SuggestionBarView.activeAzLetter}, which decides what the
+ * apps row shows. The drawer's column is a different surface with a different job: it scrolls the
+ * drawer's own grid. If it ever wrote that field, or reached any of the dock's A-Z entry points
+ * ({@code previewAzLetter}, {@code refreshActiveAzCandidates}, {@code getAppsForLetter},
+ * {@code rankForAz}), then scrubbing inside the drawer would repaint the dock behind it. The letter
+ * no longer vetoes the drawer pull, but the pull eligibility is still asserted below so that a veto
+ * reintroduced on that field cannot silently lock the drawer after every scrub.
  *
  * <p>The column borrows exactly two things from the dock and neither of them is state: the launcher
  * text colour and the row-haptics preference.

@@ -38,7 +38,8 @@ The Wallpaper tab has a **Lock screen** card and a **Home screen** card.
 ## Look
 
 The Look tab has a slider with five stops: **Clear**, **Mist**, **Tint**, **Solid** and
-**Custom**. Clear is the most see-through and Solid the least.
+**Custom**. Clear is the most see-through and Solid the least. Custom starts from the Look that is
+on screen, so you tune what you see; **Undo** puts back what you opened with.
 
 At **Custom**, vertical sliders appear:
 

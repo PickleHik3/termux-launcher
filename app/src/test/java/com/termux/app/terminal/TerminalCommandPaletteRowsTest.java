@@ -3,12 +3,19 @@ package com.termux.app.terminal;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.launcherctl.LauncherToolRegistry;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -99,6 +106,58 @@ public class TerminalCommandPaletteRowsTest {
         assertEquals("work", entry.arguments.optString("name"));
         // The merged row is ready to run, so it must not ask for the argument again.
         assertNull(entry.argumentName);
+    }
+
+    @Test
+    public void aBoundContactShowsItsChordAndAnUnboundOneShowsNone() {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "map --label Ana ctrl+alt+shift+a contact.open 0r12-ANA contact_id=42\n",
+            registry, true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+
+        List<CommandPaletteContacts.Match> matches = Arrays.asList(
+            new CommandPaletteContacts.Match(
+                new CommandPaletteContacts.Contact("Ana", 42, "0r12-ANA"), "555 0100"),
+            // A namesake is another contact: the chord stays with the key it was bound to.
+            new CommandPaletteContacts.Match(
+                new CommandPaletteContacts.Contact("Ana", 77, "0r12-OTHER"), "555 0199"));
+        List<CommandPaletteFilter.Entry> rows = TerminalCommandPalette.buildContactEntries(
+            RuntimeEnvironment.getApplication(), matches,
+            TerminalCommandPalette.buildContactShortcuts());
+
+        assertEquals("C-A-A", rows.get(0).shortcutLabel());
+        assertEquals("", rows.get(1).shortcutLabel());
+        assertTrue(TerminalCommandPalette.isBindable(rows.get(0)));
+        assertEquals(Arrays.asList("0r12-ANA", "contact_id=42"),
+            TerminalCommandPalette.contactBindingArguments(rows.get(0).arguments));
+    }
+
+    @Test
+    public void isBindable_takesActionsThatRunAsTheyStandAndRefusesTheRest() {
+        assertTrue(TerminalCommandPalette.isBindable(toolRow("pane.equalize", true, null, null)));
+        assertFalse("a disabled action",
+            TerminalCommandPalette.isBindable(toolRow("pane.equalize", false, null, null)));
+        assertFalse("a submenu", TerminalCommandPalette.isBindable(toolRow("pane.layout", true,
+            "layout", Arrays.asList("grid", "stack"))));
+        assertFalse("an argument prompt",
+            TerminalCommandPalette.isBindable(toolRow("session.rename", true, "name", null)));
+        assertFalse("a row that supplies its own value", TerminalCommandPalette.isBindable(
+            TerminalCommandPalette.renameSessionEntry(0, "Rename", "")));
+        assertFalse("the allow row", TerminalCommandPalette.isBindable(
+            TerminalCommandPalette.buildContactsAllowEntry(RuntimeEnvironment.getApplication())));
+    }
+
+    @After
+    public void tearDown() {
+        TerminalKeyBindingResolver.resetForTesting();
+    }
+
+    private static CommandPaletteFilter.Entry toolRow(String tool, boolean enabled,
+                                                      String argumentName, List<String> choices) {
+        return new CommandPaletteFilter.Entry(tool, tool, "", "pane",
+            Collections.<String>emptyList(), enabled, enabled ? null : "Unavailable", false,
+            LauncherToolRegistry.ToolRisk.LOW, null, argumentName, choices);
     }
 
     @Test

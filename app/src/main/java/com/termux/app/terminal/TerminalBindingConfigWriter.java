@@ -18,8 +18,12 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Edits {@link TerminalBindingConfig#FILE_NAME} in place, preserving the user's comments, blank
@@ -112,6 +116,83 @@ public final class TerminalBindingConfigWriter {
             return Edit.failed(lines, "binding file would exceed "
                 + TerminalBindingConfig.MAX_FILE_BYTES + " bytes");
         return new Edit(out, false, out.size() - 1, null);
+    }
+
+    /**
+     * Binds {@code sequence} as {@link #putMapping} does, and takes the action's other chords off
+     * it, so a row bound again moves its chord instead of collecting a second one it would never
+     * show. A chord is taken off only where it is a binding on its own: a step of a multi-line
+     * chain, a conditional line and a modal line are the user's composition and stay. A chord that
+     * also has a built-in default becomes an {@code unmap}, so taking the action off it does not
+     * quietly bring the default back.
+     */
+    @NonNull
+    public static Edit rebind(@NonNull List<String> lines, @NonNull String sequence,
+                              @NonNull String tool, @NonNull List<String> arguments,
+                              @Nullable String label) {
+        String normalized = TerminalKeyBindingResolver.normalizeSequenceSpec(sequence);
+        if (normalized.isEmpty()) return Edit.failed(lines, "empty key sequence");
+        TerminalBindingConfig.Action target =
+            soleAction(formatMapLine(normalized, tool, arguments, label));
+        if (target == null) return putMapping(lines, normalized, tool, arguments, label);
+
+        Map<String, Integer> linesPerSequence = new HashMap<>();
+        for (String line : lines) {
+            String candidate = mapLineSequence(line);
+            if (candidate != null) linesPerSequence.merge(candidate, 1, Integer::sum);
+        }
+        Set<String> defaults = null;
+        List<String> kept = new ArrayList<>(lines.size());
+        for (String line : lines) {
+            String candidate = mapLineSequence(line);
+            if (candidate == null || candidate.equals(normalized)
+                || linesPerSequence.get(candidate) != 1
+                || !sameAction(soleAction(line), target)) {
+                kept.add(line);
+                continue;
+            }
+            if (defaults == null) defaults = defaultSequences();
+            if (defaults.contains(candidate)) kept.add("unmap " + quoteWord(candidate));
+        }
+        return putMapping(kept, normalized, tool, arguments, label);
+    }
+
+    /** The one tool action a root, unconditional {@code map} line runs, or null for anything else. */
+    @Nullable
+    private static TerminalBindingConfig.Action soleAction(@NonNull String line) {
+        TerminalBindingConfig.Result parsed = TerminalBindingConfig.parse(line,
+            LauncherToolRegistry.getInstance(), true);
+        if (!parsed.errors.isEmpty() || parsed.mappings.size() != 1) return null;
+        TerminalBindingConfig.Mapping mapping = parsed.mappings.get(0);
+        if (!mapping.mode.isEmpty() || mapping.actions.size() != 1
+            || mapping.condition != LauncherToolRegistry.BindingCondition.ALWAYS) return null;
+        TerminalBindingConfig.Action action = mapping.actions.get(0);
+        return action.type == TerminalBindingConfig.ActionType.TOOL ? action : null;
+    }
+
+    /** Same tool with the same arguments, however the line spelled them. */
+    private static boolean sameAction(@Nullable TerminalBindingConfig.Action a,
+                                      @NonNull TerminalBindingConfig.Action b) {
+        if (a == null || !a.value.equals(b.value)
+            || a.arguments.length() != b.arguments.length()) return false;
+        java.util.Iterator<String> keys = a.arguments.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (!b.arguments.has(key)
+                || !String.valueOf(a.arguments.opt(key)).equals(String.valueOf(b.arguments.opt(key))))
+                return false;
+        }
+        return true;
+    }
+
+    /** Every root sequence a built-in default binds. */
+    @NonNull
+    private static Set<String> defaultSequences() {
+        Set<String> sequences = new HashSet<>();
+        for (LauncherToolRegistry.ToolMetadata tool : LauncherToolRegistry.getInstance().getUiTools())
+            for (LauncherToolRegistry.Binding binding : tool.defaultBindings)
+                sequences.add(TerminalKeyBindingResolver.normalizeSequenceSpec(binding.stroke));
+        return sequences;
     }
 
     /** Drops every root mapping of {@code sequence}. Comments and blank lines are untouched. */
@@ -244,35 +325,34 @@ public final class TerminalBindingConfigWriter {
     // ------------------------------------------------------------------ IO
 
     /**
-     * Binds {@code sequence} to {@code app.launch query}, then reloads the resolver so the stroke
-     * is live before the palette redraws.
+     * Binds {@code sequence} to {@code tool} with {@code arguments} through {@link #rebind}, then
+     * reloads the resolver so the stroke is live before the palette redraws.
      *
      * <p>Runs synchronously on the calling (main) thread: the file is under 256 KiB, both existing
      * precedents for writing into {@code ~/.termux} do the same, and the palette needs the reload
      * finished before it rebuilds its rows. Possible StrictMode complaint, deliberately accepted.
      *
-     * @param label app name for the keybind legend, since every app chord shares one action id.
+     * @param label the row's name for the keybind legend, since every app or contact chord shares
+     *              one action id.
      * @return null on success, else a human-readable reason.
      */
     @Nullable
-    public static String bindAppLaunch(@NonNull String sequence, @NonNull String query,
-                                       @Nullable String label) {
-        return putMapping(new File(TerminalBindingConfig.FILE_PATH), sequence,
-            LauncherToolRegistry.TOOL_APP_LAUNCH, java.util.Collections.singletonList(query),
-            label);
+    public static String bind(@NonNull String sequence, @NonNull String tool,
+                              @NonNull List<String> arguments, @Nullable String label) {
+        return rebind(new File(TerminalBindingConfig.FILE_PATH), sequence, tool, arguments, label);
     }
 
-    /** As {@link #bindAppLaunch}, against an explicit file. Returns null on success. */
+    /** As {@link #bind}, against an explicit file. Returns null on success. */
     @Nullable
-    static String putMapping(@NonNull File file, @NonNull String sequence, @NonNull String tool,
-                             @NonNull List<String> arguments, @Nullable String label) {
+    static String rebind(@NonNull File file, @NonNull String sequence, @NonNull String tool,
+                         @NonNull List<String> arguments, @Nullable String label) {
         List<String> lines;
         try {
             lines = readLines(file);
         } catch (IOException e) {
             return "cannot read " + file.getName() + ": " + e.getMessage();
         }
-        Edit edit = putMapping(lines, sequence, tool, arguments, label);
+        Edit edit = rebind(lines, sequence, tool, arguments, label);
         if (!edit.ok()) return edit.error;
         try {
             writeLines(file, edit.lines);

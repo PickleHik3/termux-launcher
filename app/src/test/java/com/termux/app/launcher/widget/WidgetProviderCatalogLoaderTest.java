@@ -59,6 +59,21 @@ public class WidgetProviderCatalogLoaderTest {
         assertEquals(1, boundary.iconCalls);
     }
 
+    /**
+     * Maximum sizes arrived in API 31. Reading them on an older release threw NoSuchFieldError on
+     * the catalog worker (#62); there the catalog builds with no maximum.
+     */
+    @Config(sdk = Build.VERSION_CODES.Q)
+    @Test public void catalogBuildsBeforeProvidersCouldNameAMaximum() {
+        FakeBoundary boundary = new FakeBoundary();
+        boundary.providers = Collections.singletonList(info("pkg", "Clock", true));
+        final List<WidgetAppGroup>[] result = new List[1];
+        loader(boundary).load(metrics(400, 600), 0, (g, groups) -> result[0] = groups);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertNotNull(result[0]);
+        assertEquals(1, result[0].get(0).providers.size());
+    }
+
     /** The icon is what the card shows when the provider ships no preview, resolved on bind. */
     @Test public void artworkFallsBackToTheProviderIconAndStaysOutOfTheBuild() {
         FakeBoundary boundary = new FakeBoundary();
