@@ -69,6 +69,9 @@ public final class PaneGlassBackdropView extends View {
      */
     @Nullable private Bitmap mPreviousFrame;
     @Nullable private BitmapShader mPreviousFrameShader;
+    /** A clearer frame of the same rect for the bent edge to show, or null; see {@link #setClearFrame}. */
+    @Nullable private Bitmap mClearFrame;
+    @Nullable private BitmapShader mClearShader;
     private final Paint mPreviousFramePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     @NonNull private final FrameCrossfade mCrossfade = new FrameCrossfade();
     /** The preset's rim over the slab, or null (the hairline look draws none on a pane). */
@@ -318,6 +321,46 @@ public final class PaneGlassBackdropView extends View {
         invalidate();
     }
 
+    /**
+     * A clearer frame of the wallpaper, captured for the very rect the frame was (the cache's
+     * one rect at a lower blur), which the bent edge shows in place of the frost under the look's
+     * clarity — as {@link com.termux.app.chrome.SharedFrameDrawable#setClearFrame} does. Any
+     * resolution; the program is told its pixel size against the frame's. Null, the default,
+     * keeps the frost at the edge, and a plain draw ignores it. Idempotent, so every dress may
+     * restate it.
+     */
+    public void setClearFrame(@Nullable Bitmap clearFrame) {
+        Bitmap live = clearFrame != null && !clearFrame.isRecycled() ? clearFrame : null;
+        if (live == mClearFrame) return;
+        mClearFrame = live;
+        mClearShader = live == null
+            ? null : new BitmapShader(live, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        syncClarity();
+        invalidate();
+    }
+
+    /** The clearer frame this pane draws its edge from, so the blur cache never recycles it under a draw. */
+    @Nullable
+    public Bitmap heldClearFrame() {
+        return mClearFrame;
+    }
+
+    /** Hands the program the clear frame at its pixel size against the frame's, or nothing. */
+    private void syncClarity() {
+        GlassRefraction.Program program = mProgram;
+        if (program == null) return;
+        Bitmap frame = mFrame;
+        Bitmap clear = mClearFrame;
+        BitmapShader clearShader = mClearShader;
+        if (frame == null || clear == null || clearShader == null || clear.isRecycled()) {
+            program.setClarityInput(null, 1f, 1f);
+            return;
+        }
+        program.setClarityInput(clearShader,
+            clear.getWidth() / (float) Math.max(1, frame.getWidth()),
+            clear.getHeight() / (float) Math.max(1, frame.getHeight()));
+    }
+
     /** True while the frame is drawn through the refraction program rather than plain. */
     public boolean refracts() {
         return mProgram != null;
@@ -353,6 +396,7 @@ public final class PaneGlassBackdropView extends View {
         }
         program.setLook(look);
         program.setInput(shader);
+        syncClarity();
         program.applyTo(mFramePaint);
         BitmapShader previousShader = mPreviousFrameShader;
         if (previousShader == null) {

@@ -28,7 +28,8 @@ import java.util.Locale;
  * 128-slot token sequence and an additive causal mask → logits {@code [1, 128, vocab]}), run
  * through {@link Interpreter#runSignature} with inputs bound by name. The mel front end is
  * {@link WhisperMel}, the vocabulary {@link WhisperTokenizer}, the prompt and greedy loop
- * {@link WhisperDecoder}, the pause-based cutting {@link WhisperSegmenter}.
+ * {@link WhisperDecoder}, the language when none is given {@link WhisperLanguageDetection}, the
+ * pause-based cutting {@link WhisperSegmenter}.
  *
  * <p>CPU only, XNNPACK, {@code min(4, cores)} threads: the graphs are dynamic-range int8 with fp32
  * activations, the GPU delegate creates zero kernels for them on pong, and keeping STT off the GPU
@@ -109,17 +110,28 @@ final class WhisperSttRuntime implements SttRuntime {
         return response;
     }
 
-    /**
-     * Transcribes {@code audioFile} (WAV or raw PCM16 16 kHz mono, see {@link WhisperAudio}).
-     * {@code language} is an ISO 639-1 code for the multilingual graphs ({@code .en} graphs always
-     * decode English); {@code biasText} is the vocabulary line placed behind {@code <|startofprev|>},
-     * {@code null} for plain dictation. The audio is cut into pieces at pauses, each piece decoded,
-     * and the texts joined with a space.
-     */
+    /** As {@link #transcribe(TaiModelSpec, File, String, String, String)} with no language hint. */
     @Override
     @NonNull
     public synchronized JSONObject transcribe(@NonNull TaiModelSpec spec, @NonNull File audioFile,
                                               @Nullable String language, @Nullable String biasText) throws JSONException {
+        return transcribe(spec, audioFile, language, null, biasText);
+    }
+
+    /**
+     * Transcribes {@code audioFile} (WAV or raw PCM16 16 kHz mono, see {@link WhisperAudio}).
+     * {@code language} is an ISO 639-1 code for the multilingual graphs ({@code .en} graphs always
+     * decode English); none, or {@code auto}, has the graph detect it on the first piece, with
+     * {@code languageHint} taken instead when the guess is not sure ({@link WhisperLanguageDetection}).
+     * {@code biasText} is the vocabulary line placed behind {@code <|startofprev|>}, {@code null}
+     * for plain dictation. The audio is cut into pieces at pauses, each piece decoded, and the
+     * texts joined with a space.
+     */
+    @Override
+    @NonNull
+    public synchronized JSONObject transcribe(@NonNull TaiModelSpec spec, @NonNull File audioFile,
+                                              @Nullable String language, @Nullable String languageHint,
+                                              @Nullable String biasText) throws JSONException {
         JSONObject refusal = checkFiles(spec);
         if (refusal != null) return refusal;
         float[] audio;
@@ -137,10 +149,19 @@ final class WhisperSttRuntime implements SttRuntime {
         long loadMs = System.currentTimeMillis() - loadStarted;
         WhisperTokenizer vocabulary = tokenizer;
         if (vocabulary == null) return error(500, "stt_load_failed", "Whisper tokenizer is not loaded.");
-        String effectiveLanguage = englishOnly || language == null || language.trim().isEmpty() ? "en" : language.trim().toLowerCase(Locale.ROOT);
+        String requested = WhisperLanguageDetection.normalize(language);
+        String hint = WhisperLanguageDetection.normalize(languageHint);
+        // A hint is advice: one Whisper has no token for is no hint at all.
+        if (hint != null && vocabulary.languageToken(hint) < 0) hint = null;
+        boolean detect = !englishOnly && requested == null && vocabulary.languages().ids.length > 0;
+        // Known now unless the graph is to be asked, which waits for the first piece's features.
+        WhisperLanguageDetection.Choice choice = detect ? null : WhisperLanguageDetection.forced(
+            englishOnly || requested == null ? WhisperLanguageDetection.DEFAULT_LANGUAGE : requested);
+        String promptLanguage = choice != null ? choice.language
+            : hint != null ? hint : WhisperLanguageDetection.DEFAULT_LANGUAGE;
         int[] prompt;
         try {
-            prompt = WhisperDecoder.prompt(vocabulary, effectiveLanguage, biasText);
+            prompt = WhisperDecoder.prompt(vocabulary, promptLanguage, biasText);
         } catch (IllegalArgumentException e) {
             return error(400, "stt_language_unknown", "Whisper has no language token for '" + language + "'.");
         }
@@ -152,7 +173,7 @@ final class WhisperSttRuntime implements SttRuntime {
         List<WhisperSegmenter.Piece> pieces = WhisperSegmenter.pieces(audio, windowSamples);
         StringBuilder text = new StringBuilder();
         JSONArray segments = new JSONArray();
-        long melMs = 0L, encodeMs = 0L, decodeMs = 0L;
+        long melMs = 0L, encodeMs = 0L, detectMs = 0L, decodeMs = 0L;
         int steps = 0;
         residency.setBusy(TaiResidency.Kind.STT, spec.id, true);
         try {
@@ -162,11 +183,19 @@ final class WhisperSttRuntime implements SttRuntime {
                 long t1 = System.nanoTime();
                 encode(mel);
                 long t2 = System.nanoTime();
-                WhisperDecoder.Result result = WhisperDecoder.greedy(this::decodeStep, prompt, sequenceLength, suppression);
+                if (choice == null) {
+                    WhisperLanguageDetection.Guess guess = WhisperLanguageDetection.detect(this::decodeStep, vocabulary, sequenceLength);
+                    choice = WhisperLanguageDetection.choose(guess, hint);
+                    // The same length whatever the language: only the language token changes.
+                    if (!choice.language.equals(promptLanguage)) prompt = WhisperDecoder.prompt(vocabulary, choice.language, biasText);
+                }
                 long t3 = System.nanoTime();
+                WhisperDecoder.Result result = WhisperDecoder.greedy(this::decodeStep, prompt, sequenceLength, suppression);
+                long t4 = System.nanoTime();
                 melMs += (t1 - t0) / 1_000_000L;
                 encodeMs += (t2 - t1) / 1_000_000L;
-                decodeMs += (t3 - t2) / 1_000_000L;
+                detectMs += (t3 - t2) / 1_000_000L;
+                decodeMs += (t4 - t3) / 1_000_000L;
                 steps += result.steps;
                 String segmentText = vocabulary.decode(result.tokens).trim();
                 if (segmentText.isEmpty()) continue;
@@ -186,10 +215,13 @@ final class WhisperSttRuntime implements SttRuntime {
         } finally {
             residency.setBusy(TaiResidency.Kind.STT, spec.id, false);
         }
+        // No piece had speech, so the graph was never asked.
+        if (choice == null) choice = WhisperLanguageDetection.choose(null, hint);
         JSONObject timings = new JSONObject();
         timings.put("loadMs", loadMs);
         timings.put("melMs", melMs);
         timings.put("encodeMs", encodeMs);
+        timings.put("detectMs", detectMs);
         timings.put("decodeMs", decodeMs);
         timings.put("decodeSteps", steps);
         timings.put("pieces", pieces.size());
@@ -197,7 +229,12 @@ final class WhisperSttRuntime implements SttRuntime {
         response.put("ok", true);
         response.put("text", text.toString());
         response.put("model", spec.id);
-        response.put("language", effectiveLanguage);
+        response.put("language", choice.language);
+        response.put(WhisperLanguageDetection.RESPONSE_SOURCE, choice.source);
+        if (choice.guess != null) {
+            response.put(WhisperLanguageDetection.RESPONSE_DETECTED, choice.guess.code);
+            response.put(WhisperLanguageDetection.RESPONSE_PROBABILITY, Math.round(choice.guess.probability * 1000.0) / 1000.0);
+        }
         response.put("duration", audio.length / (double) WhisperMel.SAMPLE_RATE);
         response.put("segments", segments);
         response.put("windowSeconds", frames / WhisperMel.FRAMES_PER_SECOND);

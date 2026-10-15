@@ -11,11 +11,13 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Which language token a multilingual Whisper graph is forced to. The setting's own value wins;
- * {@code auto} takes the in-app keyboard's current text layout when its id names a language
- * ({@code latn_qwertz_de}, {@code cyrl_jcuken_uk}, {@code arab_pc}), then the first system locale;
- * a language Whisper does not know falls back to English, flagged so the caller can say so once.
- * Codes are the ISO 639-1 (a few 639-2) names of Whisper's {@code <|xx|>} tokens.
+ * Which language a multilingual Whisper graph decodes in. The setting's own value is forced;
+ * {@code auto} lets the graph listen for the language ({@code VoiceLanguageLock}) and takes, as
+ * the hint it falls back to while unsure, the in-app keyboard's current text layout when its id
+ * names a language ({@code latn_qwertz_de}, {@code cyrl_jcuken_uk}, {@code arab_pc}), then the
+ * first system locale; a language Whisper does not know falls back to English, flagged so the
+ * caller can say so once. Codes are the ISO 639-1 (a few 639-2) names of Whisper's
+ * {@code <|xx|>} tokens.
  */
 public final class VoiceLanguage {
 
@@ -74,11 +76,48 @@ public final class VoiceLanguage {
         @NonNull public final String code;
         /** Nothing named a language Whisper knows, so {@link #FALLBACK} is being used. */
         public final boolean fallback;
+        /** The setting named the language; otherwise it is Auto's guess from the layout or the locale. */
+        public final boolean explicit;
 
-        Resolution(@NonNull String code, boolean fallback) {
+        Resolution(@NonNull String code, boolean fallback, boolean explicit) {
             this.code = code;
             this.fallback = fallback;
+            this.explicit = explicit;
         }
+    }
+
+    /**
+     * What one dictation sends a speech engine: a language it must use, or a hint it falls back
+     * to while it listens for the language itself. Both null when the engine decides alone (an
+     * {@code .en} graph, Parakeet).
+     */
+    public static final class Choice {
+        public static final Choice NONE = new Choice(null, null);
+
+        @Nullable public final String forced;
+        @Nullable public final String hint;
+
+        Choice(@Nullable String forced, @Nullable String hint) {
+            this.forced = forced;
+            this.hint = hint;
+        }
+
+        /** The setting's language is forced; Auto's guess is only the hint a multilingual Whisper graph falls back to. */
+        @NonNull
+        public static Choice forWhisper(@NonNull Resolution resolution) {
+            return resolution.explicit ? new Choice(resolution.code, null) : new Choice(null, resolution.code);
+        }
+    }
+
+    /**
+     * The language's name in {@code in} ("Spanish", "Spanisch"), for a Whisper code; Whisper's
+     * legacy {@code jw} is Java's {@code jv}. The code itself when Java has no name for it.
+     */
+    @NonNull
+    public static String displayName(@NonNull String code, @Nullable Locale in) {
+        String java = "jw".equals(code) ? "jv" : code;
+        String name = new Locale(java).getDisplayLanguage(in == null ? Locale.getDefault() : in);
+        return name == null || name.isEmpty() ? code : name;
     }
 
     private VoiceLanguage() {
@@ -94,13 +133,13 @@ public final class VoiceLanguage {
                                      @Nullable Locale system) {
         String explicit = setting == null ? "" : setting.trim().toLowerCase(Locale.ROOT);
         if (!explicit.isEmpty() && !AUTO.equals(explicit)) {
-            return isKnown(explicit) ? new Resolution(explicit, false) : new Resolution(FALLBACK, true);
+            return isKnown(explicit) ? new Resolution(explicit, false, true) : new Resolution(FALLBACK, true, true);
         }
         String fromLayout = fromLayoutId(layoutId);
-        if (fromLayout != null) return new Resolution(fromLayout, false);
+        if (fromLayout != null) return new Resolution(fromLayout, false, false);
         String fromLocale = fromLocale(system);
-        if (fromLocale != null) return new Resolution(fromLocale, false);
-        return new Resolution(FALLBACK, true);
+        if (fromLocale != null) return new Resolution(fromLocale, false, false);
+        return new Resolution(FALLBACK, true, false);
     }
 
     public static boolean isKnown(@Nullable String code) {

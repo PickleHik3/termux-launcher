@@ -61,7 +61,21 @@ public final class LegendSlider extends View {
         void onStopTrackingTouch(@NonNull LegendSlider slider);
     }
 
+    /**
+     * The smallest a legend shrinks to, as a share of LabelMedium at the default font scale: a
+     * long legend ("Corner radius · 40 dp") shrinks to fit its track rather than losing its name
+     * to an ellipsis. At a larger font scale the floor stays the default reader's, so the legend
+     * can give back some of the enlargement before it is cut, and never reads smaller than it does
+     * for everyone else.
+     */
     private static final float MIN_TEXT_SCALE = 0.8f;
+    /**
+     * Glyph advances do not scale exactly with the text size, so a legend shrunk in proportion
+     * can still overrun by a fraction of a pixel; it steps down by at least this much, a few
+     * times, until the measured width fits.
+     */
+    private static final float SHRINK_STEP_PX = 0.25f;
+    private static final int SHRINK_PASSES = 8;
     private static final int DISABLED_ALPHA = 97;
     private static final int DISABLED_TRACK_ALPHA = 31;
 
@@ -93,6 +107,8 @@ public final class LegendSlider extends View {
     private final float mLegendGapPx;
     private final float mEndInsetPx;
     private float mBaseTextSizePx;
+    /** The least text size a legend is drawn at: {@link #MIN_TEXT_SCALE} of the unscaled base. */
+    private float mMinTextSizePx;
 
     /** The legend as last drawn, fitted to the column's height. */
     @NonNull private CharSequence mShown = "";
@@ -254,6 +270,8 @@ public final class LegendSlider extends View {
         probe.setTextAppearance(appearance);
         mTextPaint.set(probe.getPaint());
         mBaseTextSizePx = mTextPaint.getTextSize();
+        float fontScale = Math.max(1f, getResources().getConfiguration().fontScale);
+        mMinTextSizePx = mBaseTextSizePx * MIN_TEXT_SCALE / fontScale;
     }
 
     private void resolveColors() {
@@ -382,9 +400,18 @@ public final class LegendSlider extends View {
         mFitRoomPx = room;
         mTextPaint.setTextSize(mBaseTextSizePx);
         float natural = mTextPaint.measureText(legend, 0, legend.length());
-        if (natural > room)
-            mTextPaint.setTextSize(Math.max(mBaseTextSizePx * MIN_TEXT_SCALE,
-                mBaseTextSizePx * room / natural));
+        if (natural > room) {
+            float size = Math.max(mMinTextSizePx, mBaseTextSizePx * room / natural);
+            mTextPaint.setTextSize(size);
+            for (int pass = 0; pass < SHRINK_PASSES && size > mMinTextSizePx; pass++) {
+                float measured = mTextPaint.measureText(legend, 0, legend.length());
+                if (measured <= room)
+                    break;
+                size = Math.max(mMinTextSizePx,
+                    Math.min(size * room / measured, size - SHRINK_STEP_PX));
+                mTextPaint.setTextSize(size);
+            }
+        }
         mShown = fit(legend, room);
         float textWidth = mTextPaint.measureText(mShown, 0, mShown.length());
         Paint.FontMetrics metrics = mTextPaint.getFontMetrics();

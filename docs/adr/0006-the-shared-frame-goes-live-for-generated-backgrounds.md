@@ -6,10 +6,12 @@ amends: 0002 (the frame is no longer always a still; it can be re-blurred as the
 
 # The shared frame goes live for generated backgrounds, and the system keeps the rest pose
 
+> **Superseded:** generated and live backgrounds were removed on 2026-10-06, so the frame is a still again.
+
 ADR 0002 blurred the wallpaper once per radius into a frame 1.5× the screen width and left
 real-time blur as "an experiment for a future live wallpaper". ADR 0004 had every glass surface
 sample that one frame at its live position. Both assumed the frame is a still. Generated backgrounds
-(`project-docs/active/animated-wallpaper/SPEC.md`, issue #41) are AGSL wallpapers drawn by the
+(the animated-wallpaper spec, since deleted; issue #41) are AGSL wallpapers drawn by the
 launcher itself, behind everything, and the glass has to show them moving, blurred and in register.
 
 We decided that the shared frame goes live. While a generated background plays, the wallpaper's

@@ -140,6 +140,7 @@ public final class PaneGlass {
         backdrop.setRim(NO_RIM, style);
         backdrop.setParallax(style.wallpaperParallax());
         backdrop.setRefraction(style.paneGlassRefraction());
+        backdrop.setClearFrame(style.paneGlassClearFrame());
         backdrop.setVisibility(View.VISIBLE);
         backdrop.setVeilSource(terminalPane ? style : null);
         return true;

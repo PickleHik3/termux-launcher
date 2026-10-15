@@ -1429,6 +1429,233 @@ public class TerminalPaneController {
     }
 
     /**
+     * Where a pane opened through the local API goes: split off {@link #from} on {@link #side}
+     * ({@link PanePlacementPolicy#SIDE_UNSET} for the layout's own choice), sized by {@link #size}
+     * (NaN when not given) or by {@link #columns} / {@link #rows} (0 when not given).
+     */
+    public static final class PlacementRequest {
+        @NonNull public final TerminalSession from;
+        public final int side;
+        public final float size;
+        public final int columns;
+        public final int rows;
+
+        public PlacementRequest(@NonNull TerminalSession from, int side, float size,
+                                int columns, int rows) {
+            this.from = from;
+            this.side = side;
+            this.size = size;
+            this.columns = Math.max(0, columns);
+            this.rows = Math.max(0, rows);
+        }
+
+        /** Whether the caller said anything about where or how big, beyond which pane to split. */
+        public boolean isExplicit() {
+            return side >= 0 || !Float.isNaN(size) || columns > 0 || rows > 0;
+        }
+    }
+
+    /**
+     * {@link #addPane}, split off a pane the caller names rather than the focused one, on the side
+     * and at the size it asks for ({@link PanePlacementPolicy} does the arithmetic). The anchor may
+     * be in a window that is not on screen; that window is changed where it is, and is shown only
+     * by the caller. A window under a layout that rebuilds its tree from the pane list (grid,
+     * tall, ...) would re-tile an asked-for direction or size away, so such a request turns that
+     * window's layout off first; dwindle never rebuilds and keeps managing. Naming only the anchor
+     * leaves the layout alone. False, changing nothing, when the shell is already shown, the
+     * anchor is in no window, or it floats.
+     */
+    public boolean addPaneAt(@NonNull TerminalSession session, @NonNull PlacementRequest request,
+                             boolean focus) {
+        for (Window w : mWindows) for (Leaf leaf : allLeavesOf(w)) if (leaf.session == session) return false;
+        Window window = windowOf(request.from);
+        Leaf anchor = window == null ? null : findLeafInWindow(window, request.from);
+        if (anchor == null || window.floating.contains(anchor)) return false;
+        int side = PanePlacementPolicy.resolveSide(request.side, request.columns > 0,
+            request.rows > 0, defaultSplitSide(window, anchor));
+        int[] anchorCells = paneCells(window, anchor);
+        PanePlacementPolicy.Placement placement = PanePlacementPolicy.place(side, request.size,
+            request.columns, request.rows, anchorCells[0], anchorCells[1]);
+        if (request.isExplicit() && window.layoutPolicy != null && !isDwindleManaged(window)) {
+            clearLayoutPolicy(window);
+        }
+        if (window == mActiveWindow) mMaximizedLeaf = null;
+        insertPane(window, anchor, session, placement.orientation, placement.newFirst,
+            placement.newShare, focus);
+        return true;
+    }
+
+    /**
+     * The side a pane split off {@code anchor} takes when nobody said: after it, along the axis
+     * {@link #addPane} would pick — the anchor's longer side under dwindle, the host's otherwise.
+     */
+    private int defaultSplitSide(@NonNull Window window, @NonNull Leaf anchor) {
+        int orientation;
+        if (!isDwindleManaged(window)) {
+            orientation = DwindleTilingPolicy.splitOrientationFor(mHostView.getWidth(), mHostView.getHeight());
+        } else if (window == mActiveWindow) {
+            orientation = dwindleOrientationFor(anchor);
+        } else {
+            // A window off screen has no laid-out frames to measure; its tree says the same.
+            float[] f = paneFraction(window, anchor);
+            orientation = f == null
+                ? DwindleTilingPolicy.splitOrientationFor(mHostView.getWidth(), mHostView.getHeight())
+                : DwindleTilingPolicy.splitOrientationFor((f[2] - f[0]) * mHostView.getWidth(),
+                    (f[3] - f[1]) * mHostView.getHeight());
+        }
+        return orientation == LinearLayout.HORIZONTAL
+            ? DwindleTilingPolicy.SIDE_RIGHT : DwindleTilingPolicy.SIDE_BOTTOM;
+    }
+
+    /**
+     * Give the pane showing {@code session} a new share of a split it sits in: {@code size} (NaN
+     * when not given) of its nearest split, or {@code columns} of its nearest side-by-side split,
+     * or {@code rows} of its nearest stacked one. Like a resize key, it turns off a layout that
+     * would rebuild the tree; dwindle keeps managing. False, changing nothing, for a pane in no
+     * window, a floating one, or one with no split of that kind to resize.
+     */
+    public boolean resizePane(@NonNull TerminalSession session, float size, int columns, int rows) {
+        Window window = windowOf(session);
+        Leaf leaf = window == null ? null : findLeafInWindow(window, session);
+        if (leaf == null || window.floating.contains(leaf)) return false;
+        boolean bySize = !Float.isNaN(size);
+        if (!bySize && columns <= 0 && rows <= 0) return false;
+        int axis = bySize ? -1 : columns > 0 ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL;
+        Node node = leaf;
+        Split target = null;
+        while (node.parent != null) {
+            if (axis < 0 || node.parent.orientation == axis) { target = node.parent; break; }
+            node = node.parent;
+        }
+        if (target == null) return false;
+        int extent = 0;
+        if (!bySize) {
+            // The split's length in cells, scaled up from the pane's own: the pane's terminal
+            // knows its real size, gaps and padding included, better than the host does.
+            float[] paneFrac = paneFraction(window, leaf);
+            float[] splitFrac = fractionIn(window.root, target, new float[]{0f, 0f, 1f, 1f});
+            int[] paneCells = paneCells(window, leaf);
+            int i = axis == LinearLayout.HORIZONTAL ? 0 : 1;
+            if (paneFrac != null && splitFrac != null) {
+                float paneLength = paneFrac[i + 2] - paneFrac[i];
+                float splitLength = splitFrac[i + 2] - splitFrac[i];
+                if (paneLength > 0f) extent = Math.round(paneCells[i] * splitLength / paneLength);
+            }
+        }
+        float share = PanePlacementPolicy.resizeShare(size,
+            axis == LinearLayout.HORIZONTAL ? columns : rows, extent);
+        float total = target.weightA + target.weightB;
+        target.weightA = PanePlacementPolicy.weightAForShare(total, share, node == target.a);
+        target.weightB = total - target.weightA;
+        if (!isDwindleManaged(window)) clearLayoutPolicy(window);
+        if (window == mActiveWindow) render();
+        mHost.onTreesChanged();
+        return true;
+    }
+
+    /**
+     * The pane a split would take now, without splitting: the focused one, or the first tiled pane
+     * while a float is focused ({@link #splitAnchor}). Null with no window on screen.
+     */
+    @Nullable
+    public TerminalSession splitAnchorSession() {
+        if (mActiveWindow == null || mActiveWindow.active == null) return null;
+        Leaf leaf = mActiveWindow.active;
+        if (mActiveWindow.floating.contains(leaf)) leaf = firstLeaf(mActiveWindow.root);
+        return leaf == null ? null : leaf.session;
+    }
+
+    /** Whether the pane showing {@code session} floats above its window's tiled tree. */
+    public boolean isFloating(@Nullable TerminalSession session) {
+        Window window = windowOf(session);
+        if (window == null) return false;
+        for (Leaf leaf : window.floating) if (leaf.session == session) return true;
+        return false;
+    }
+
+    /** A window's retained layout, or null while it is managed by hand. */
+    @Nullable
+    public String layoutPolicyOf(@Nullable Window window) {
+        return window == null ? null : window.layoutPolicy;
+    }
+
+    /**
+     * Where the pane showing {@code session} sits in its window, in cells: {left, top, columns,
+     * rows}, relative to the window's pane area and measured in the cells of the window's first
+     * sized pane. Derived from the tree (or a float's bounds), so it is answered for windows off
+     * screen too and neighbours agree on the divider between them. Null when the pane is in no
+     * window or nothing in its window has been given a size yet.
+     */
+    @Nullable
+    public int[] paneCellGeometry(@Nullable TerminalSession session) {
+        Window window = windowOf(session);
+        Leaf leaf = window == null ? null : findLeafInWindow(window, session);
+        if (leaf == null) return null;
+        float[] fraction = paneFraction(window, leaf);
+        if (fraction == null) return null;
+        int[] area = areaCells(window);
+        return PanePlacementPolicy.cellGeometry(fraction, area[0], area[1]);
+    }
+
+    /** A leaf's bounds as fractions of its window's pane area (left, top, right, bottom). */
+    @Nullable
+    private float[] paneFraction(@NonNull Window window, @NonNull Leaf leaf) {
+        if (window.floating.contains(leaf)) {
+            RectF f = leaf.appliedFloatFrac != null ? leaf.appliedFloatFrac : leaf.floatFrac;
+            return f == null ? null : new float[]{f.left, f.top, f.right, f.bottom};
+        }
+        if (window == mActiveWindow && mMaximizedLeaf == leaf) return new float[]{0f, 0f, 1f, 1f};
+        return fractionIn(window.root, leaf, new float[]{0f, 0f, 1f, 1f});
+    }
+
+    /** {@code target}'s bounds inside {@code node}, which holds {@code bounds}; null when absent. */
+    @Nullable
+    private static float[] fractionIn(@Nullable Node node, @NonNull Node target, @NonNull float[] bounds) {
+        if (node == target) return bounds;
+        if (!(node instanceof Split)) return null;
+        Split split = (Split) node;
+        float[] inA = fractionIn(split.a, target, PanePlacementPolicy.childFraction(
+            bounds, split.orientation, split.weightA, split.weightB, true));
+        if (inA != null) return inA;
+        return fractionIn(split.b, target, PanePlacementPolicy.childFraction(
+            bounds, split.orientation, split.weightA, split.weightB, false));
+    }
+
+    /**
+     * The window's pane area in cells, columns by rows: the host's size over the cell size of the
+     * window's first pane whose terminal has one. {0, 0} until any has.
+     */
+    @NonNull
+    private int[] areaCells(@NonNull Window window) {
+        for (Leaf leaf : allLeavesOf(window)) {
+            TerminalEmulator emulator = leaf.session == null ? null : leaf.session.getEmulator();
+            if (emulator == null || emulator.getCellWidthPixels() <= 0
+                || emulator.getCellHeightPixels() <= 0) continue;
+            return new int[]{
+                PanePlacementPolicy.cellsIn(mHostView.getWidth(), emulator.getCellWidthPixels()),
+                PanePlacementPolicy.cellsIn(mHostView.getHeight(), emulator.getCellHeightPixels())};
+        }
+        return new int[]{0, 0};
+    }
+
+    /**
+     * A pane's size in cells, columns by rows: its terminal's own when it has one, else what the
+     * tree gives it of the window's area; {0, 0} when neither is known.
+     */
+    @NonNull
+    private int[] paneCells(@NonNull Window window, @NonNull Leaf leaf) {
+        TerminalEmulator emulator = leaf.session == null ? null : leaf.session.getEmulator();
+        if (emulator != null && emulator.mColumns > 0 && emulator.mRows > 0) {
+            return new int[]{emulator.mColumns, emulator.mRows};
+        }
+        float[] fraction = paneFraction(window, leaf);
+        int[] area = areaCells(window);
+        int[] geometry = fraction == null ? null
+            : PanePlacementPolicy.cellGeometry(fraction, area[0], area[1]);
+        return geometry == null ? new int[]{0, 0} : new int[]{geometry[2], geometry[3]};
+    }
+
+    /**
      * The tiled leaf a new pane splits off: the focused one, or the tree's first leaf while a float
      * is focused — a floating pane shares no divider, so splitting it would corrupt the tree with a
      * leaf that lives outside it.
@@ -1443,24 +1670,45 @@ public class TerminalPaneController {
 
     private void insertPane(@NonNull Leaf oldLeaf, @NonNull TerminalSession newSession,
                             int orientation, boolean focus) {
+        insertPane(mActiveWindow, oldLeaf, newSession, orientation, false,
+            PanePlacementPolicy.DEFAULT_SHARE, focus);
+    }
+
+    /**
+     * Split {@code oldLeaf} of {@code window} into it and a new pane for {@code newSession}: the
+     * new pane first (left or above) when {@code newFirst}, holding {@code newShare} of the old
+     * pane's length along {@code orientation}. Only the window on screen is rendered and animated;
+     * any other is reshaped where it is and shows the result when it is next shown.
+     */
+    private void insertPane(@NonNull Window window, @NonNull Leaf oldLeaf,
+                            @NonNull TerminalSession newSession, int orientation, boolean newFirst,
+                            float newShare, boolean focus) {
         Leaf newLeaf = new Leaf(newSession);
         newLeaf.fontSize = inheritableFontSize(oldLeaf);
         // The axis is the caller's: an explicit split key says it outright, and the axis-less
         // paths (splitAuto, addPane) have already asked the dwindle rule for it.
         Split split = new Split();
         split.orientation = orientation;
-        split.a = oldLeaf;
-        split.b = newLeaf;
+        split.a = newFirst ? newLeaf : oldLeaf;
+        split.b = newFirst ? oldLeaf : newLeaf;
+        // Weights add up to 2 like every other split's, so an even split stays exactly 1:1.
+        split.weightA = 2f * (newFirst ? newShare : 1f - newShare);
+        split.weightB = 2f - split.weightA;
         split.parent = oldLeaf.parent;
         oldLeaf.parent = split;
         newLeaf.parent = split;
 
         if (split.parent == null) {
-            mActiveWindow.root = split;
+            window.root = split;
         } else {
             if (split.parent.a == oldLeaf) split.parent.a = split; else split.parent.b = split;
         }
-        if (focus) mActiveWindow.active = newLeaf;
+        if (focus) window.active = newLeaf;
+        if (window != mActiveWindow) {
+            reapplyLayoutPolicy(window);
+            mHost.onTreesChanged();
+            return;
+        }
         // Captured before the re-render detaches it: the divider reveal needs the pane's surface
         // as it looked while it still owned the whole region the split is about to share.
         PaneSnapshot revealSnapshot;
@@ -1474,7 +1722,7 @@ public class TerminalPaneController {
             ? boundsInHost(mPaneFrames.get(oldLeaf.session)) : null;
         // A managed window re-tiles around the new pane instead of keeping the binary split that
         // insertion just produced. This is what makes the layout a policy rather than a one-shot.
-        reapplyLayoutPolicy(mActiveWindow);
+        reapplyLayoutPolicy(window);
         render();
         animateSplitReveal(revealSnapshot, revealOrigin, oldLeaf.session, newSession);
         // Splitting resizes the old pane (fewer cols/rows), which reflows its buffer and can

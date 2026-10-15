@@ -97,8 +97,11 @@ public class TermuxApplication extends Application {
         // Fold the old per-surface glass values into Base plus overrides. Must run before anything
         // reads a surface value, because every one of those reads now resolves through the link.
         TermuxAppSharedPreferences surfacePreferences = TermuxAppSharedPreferences.build(context);
-        if (surfacePreferences != null)
+        if (surfacePreferences != null) {
             surfacePreferences.migrateSurfaceInheritance();
+            // An install still on a shipped Look whose values have since moved takes them now.
+            com.termux.app.surfaces.SurfacePresets.readoptMovedLooks(surfacePreferences);
+        }
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);
         // Init app wide shell manager

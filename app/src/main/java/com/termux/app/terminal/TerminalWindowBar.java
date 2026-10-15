@@ -42,8 +42,10 @@ import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalRenderer;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /** One compact app-owned row for the current tmux-style window list. */
 public final class TerminalWindowBar extends HorizontalScrollView {
@@ -119,8 +121,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public final boolean progressError;
         /**
          * What an AI coding agent in this window is doing, rolled up over its panes, or null when
-         * none of them is running one. Drawn as the status dot in front of the label; independent
-         * of every other mark, since an agent can be working in one pane while another rings.
+         * none of them is running one. Not drawn on its own: it drives the ring and the chip's
+         * mark in place of the shell's bell and busy reading, see {@link TerminalWindowBar#markFor}.
          */
         @Nullable public final AgentStatus.State agentState;
         /**
@@ -226,7 +228,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                     doneFailed, agentState, icon);
         }
 
-        /** The rolled-up agent reading for this window's panes; null removes the dot. */
+        /** The rolled-up agent reading for this window's panes; null leaves it to the shell. */
         @NonNull
         public WindowItem withAgentState(@Nullable AgentStatus.State agentState) {
             return agentState == this.agentState ? this
@@ -360,7 +362,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int mGlyphColor;
     private int mUnselectedHaloColor;
     private int mSelectedHaloColor;
-    private int mGroundColor;
     private int mBusyColor;
     private int mAttentionColor;
     private int mDoneColor;
@@ -381,13 +382,13 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private boolean mCreateButtonShown = true;
     @Nullable private ValueAnimator mSelectionAnimator;
     /**
-     * The clock the turning arcs redraw on. A timer rather than a {@link ValueAnimator}: an
-     * animator asks the Choreographer for a callback every vsync for as long as any shell is
-     * working, which on a 120 Hz panel kept the whole launcher drawing at 120 fps for one thin
-     * ring. The arc's angle comes from the clock either way, so the tick only decides how many
-     * positions it visits.
+     * The clock the breathing chips redraw on, at 4 Hz. A timer rather than a {@link
+     * ValueAnimator}: an animator asks the Choreographer for a callback every vsync for as long as
+     * any shell is working, which on a 120 Hz panel kept the whole launcher drawing at 120 fps for
+     * one chip. The breath's level comes from the clock either way, so the tick only decides how
+     * many steps it visits.
      */
-    @Nullable private Runnable mSmoothTick;
+    @Nullable private Runnable mBreathTick;
     /**
      * Window visibility as last reported, rather than read from getWindowVisibility(): the framework
      * dispatches this during attach, and reading it keeps the animator honest without depending on
@@ -872,7 +873,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             if (!force && shown instanceof WindowItem && ((WindowItem) shown).sameActivity(item)
                 && ((WindowItem) shown).label.equals(item.label)) continue;
             if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)) {
-                ((TextView) child).setText(tabText(item));
+                setTitle((TextView) child, item);
             }
             applyChipWatermark((TextView) child, item, i == mSelectedIndex ? 1f : 0f);
             child.setTag(R.id.terminal_window_tab_state, item);
@@ -882,7 +883,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /**
      * The pill's text: the window's title, and nothing else. Every indicator the label used to
-     * spend characters on — the process glyph, the ring, the bell, the tick, the agent dot — is
+     * spend characters on — the process glyph, the ring, the bell, the tick, the agent's reading — is
      * drawn by {@link ChipWatermarkDrawable} behind and around the title instead, so nine
      * characters of a directory are nine characters of a directory.
      *
@@ -894,6 +895,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         String title = titleOf(item.label);
         return TerminalLabelSymbolSpans.apply(
             com.termux.shared.termux.font.NerdFontSpans.span(getContext(), title), mSymbolMaps);
+    }
+
+    /** The pill's text, and the width that text may take. */
+    private void setTitle(@NonNull TextView tab, @NonNull WindowItem item) {
+        tab.setMaxWidth(dp(WHOLE_NAMES.contains(titleOf(item.label)) ? WIDE_CHIP_MAX_DP : 104));
+        tab.setText(tabText(item));
     }
 
     /** The label without the process glyph the factories put in front of it. */
@@ -912,7 +919,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * The one dot the chip carries, on its top-trailing corner.
+     * The one mark the chip wears, as a tint over the whole of it.
      *
      * <p>A pane running an agent is read from the agent, because the agent is the better witness.
      * The generic layer underneath cannot tell a Codex that has finished its turn from one that is
@@ -958,8 +965,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /**
      * Finished in the done colour, everything else in the attention colour. A failure shares that
-     * colour with a window asking for the user and is told apart by being drawn hollow: both are
-     * news you have to act on, and neither should be mistaken for the other.
+     * colour with a window asking for the user and is told apart by edging the chip without
+     * filling it ({@link ChipWatermarkDrawable.Mark#filled}): both are news you have to act on,
+     * and neither should be mistaken for the other.
      */
     private int markColor(@NonNull ChipWatermarkDrawable.Mark mark) {
         return mark == ChipWatermarkDrawable.Mark.DONE ? mDoneColor : mAttentionColor;
@@ -967,9 +975,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /**
      * Everything the chip draws that is not its title: the fill and outline, the process glyph (or
-     * the window's own icon) watermarked behind the text, the ring while a shell works, and the two
-     * corner dots. One drawable per pill, reused — the pills themselves are reused across a
-     * refresh, and a new background on every state change would cost a layout pass each time.
+     * the window's own icon) watermarked behind the text, the ring while a shell works, and the
+     * mark's tint, which outranks the ring. One drawable per pill, reused — the pills themselves
+     * are reused across a refresh, and a new background on every state change would cost a layout
+     * pass each time.
      */
     private void applyChipWatermark(@NonNull TextView tab, @NonNull WindowItem item,
                                     float selection) {
@@ -986,7 +995,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         chip.setActivity(showsRing(item), item.progress,
             item.progressError ? mAttentionColor : mBusyColor, mLazyMode);
         ChipWatermarkDrawable.Mark mark = markFor(item);
-        chip.setMark(mark, markColor(mark), mGroundColor);
+        chip.setMark(mark, markColor(mark));
     }
 
     /**
@@ -1070,15 +1079,17 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * The turning arc is the only mark that needs frames; a percentage ring and every status dot
-     * are as static as the label.
+     * The breath is the only mark that needs frames; a percentage ring and every mark's tint are
+     * as static as the label. A marked chip draws its tint instead of the breath, so a working
+     * window with news costs no frames either.
      */
-    private static boolean needsClock(@NonNull WindowItem item) {
-        return showsRing(item) && item.progress == WindowItem.NO_PERCENTAGE;
+    static boolean needsClock(@NonNull WindowItem item) {
+        return showsRing(item) && item.progress == WindowItem.NO_PERCENTAGE
+            && markFor(item) == ChipWatermarkDrawable.Mark.NONE;
     }
 
     /**
-     * Lazy mode shows a working window as a colour instead of a turning ring: the chip's fill takes
+     * Lazy mode shows a working window as a colour instead of a breathing one: the chip's fill takes
      * a tint of the ring colour and its whole edge turns that colour, drawn once, so nothing redraws
      * for as long as the window stays busy. A stationary arc was tried once and read as a stuck
      * spinner; a changed chip reads as a state. A reported percentage still draws its still ring.
@@ -1093,38 +1104,46 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /**
      * One clock for the whole bar rather than one per pill: setWindows's removeAllViews() then has
-     * nothing to clean up, and every ring turns in phase. It only invalidates the pills that carry
-     * a turning arc; a percentage ring and a bell are as static as the label. It runs on a timer at
-     * about 30 a second, and not at all in lazy mode, where a working chip is a still tint.
+     * nothing to clean up, and every chip breathes in phase. It only invalidates the pills that
+     * breathe; a percentage ring and a bell are as static as the label. It runs on a timer — four
+     * a second, on the breath's own step boundaries, see {@link
+     * WindowActivityRing#nextBreatheTickDelayMs} — and not at all in lazy mode, where a working chip
+     * is a still tint. The turning arc this replaced redrew 30 times a second and cost close to half
+     * a core on the device.
      *
      * <p>Deliberately not folded into mSelectionAnimator. Both only invalidate, so they compose;
      * sharing one animator would stall the activity indication for the length of every window switch.
      */
     private void updateBusyAnimator() {
-        boolean smooth = hasIndeterminateWindow() && mAttached && mWindowVisible && !mLazyMode;
-        if (!smooth && mSmoothTick != null) {
-            removeCallbacks(mSmoothTick);
-            mSmoothTick = null;
+        boolean breathing = hasIndeterminateWindow() && mAttached && mWindowVisible && !mLazyMode;
+        if (!breathing && mBreathTick != null) {
+            removeCallbacks(mBreathTick);
+            mBreathTick = null;
         }
-        if (smooth && mSmoothTick == null) {
-            mSmoothTick = new Runnable() {
+        if (breathing && mBreathTick == null) {
+            mBreathTick = new Runnable() {
                 @Override public void run() {
-                    if (mSmoothTick != this) return;
-                    invalidateTurningRings();
-                    postDelayed(this, WindowActivityRing.SMOOTH_TICK_MS);
+                    if (mBreathTick != this) return;
+                    invalidateBreathingRings();
+                    postDelayed(this, nextRingTickDelayMs());
                 }
             };
-            postDelayed(mSmoothTick, WindowActivityRing.SMOOTH_TICK_MS);
+            postDelayed(mBreathTick, nextRingTickDelayMs());
         }
     }
 
+    /** The wait until the breathing chips next need a redraw: to the next step boundary. */
+    private static long nextRingTickDelayMs() {
+        return WindowActivityRing.nextBreatheTickDelayMs(SystemClock.uptimeMillis());
+    }
+
     /**
-     * For tests: how many times the turning rings have been asked to redraw since the row was
+     * For tests: how many times the breathing chips have been asked to redraw since the row was
      * built. The one number that says whether the ring is on the vsync clock or on its own.
      */
     @androidx.annotation.VisibleForTesting int mRingRedraws;
 
-    private void invalidateTurningRings() {
+    private void invalidateBreathingRings() {
         mRingRedraws++;
         for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
             if (needsClock(mItems.get(i))) mTabs.getChildAt(i).invalidate();
@@ -1160,9 +1179,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     protected void onDetachedFromWindow() {
         mAttached = false;
         cancelScrollAnimation();
-        if (mSmoothTick != null) {
-            removeCallbacks(mSmoothTick);
-            mSmoothTick = null;
+        if (mBreathTick != null) {
+            removeCallbacks(mBreathTick);
+            mBreathTick = null;
         }
         cancelCloseReveal();
         // A × is a four-second offer, not a state: a row that left the window comes back without it.
@@ -1207,10 +1226,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return mTabs.copyCurrentHighlightBounds(output);
     }
 
-    /** For tests: whether a working window's ring is turning right now. */
+    /** For tests: whether a working window's chip is breathing right now. */
     @androidx.annotation.VisibleForTesting
     public boolean isBusyAnimationRunning() {
-        return mSmoothTick != null;
+        return mBreathTick != null;
     }
 
     private TextView createTab(@NonNull WindowItem item, boolean selected) {
@@ -1218,7 +1237,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         TextView tab = new TextView(context);
         tab.setGravity(Gravity.CENTER);
         tab.setMinWidth(0);
-        tab.setMaxWidth(dp(104));
         // A half-dp on each side is visible at modern phone densities without making the compact
         // window row feel loose; the leading side carries the title's nudge past the glyph too.
         tab.setPaddingRelative(dp(3.5f) + dp(ChipWatermarkGeometry.TITLE_NUDGE_DP), 0,
@@ -1230,7 +1248,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         // Bundled symbols face first, symbol_map faces second: both spans land on a shared PUA
         // run, and the later-applied user-configured face wins at draw time — the bundled Nerd
         // Font glyphs only ever fill runs no symbol_map claims.
-        tab.setText(tabText(item));
+        setTitle(tab, item);
         tab.setTag(R.id.terminal_window_tab_state, item);
         tab.setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
         tab.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
@@ -1632,12 +1650,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         int secondary = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorSecondary,
             ContextCompat.getColor(context, R.color.termux_secondary));
-        // Secondary for the ring ("something is happening"), tertiary for done, error for the
+        // Primary for the ring ("something is happening"), tertiary for done, error for the
         // bell and a failed progress report: error is the one Material role that is warm in every
         // generated palette, and a window waiting on the user has to be findable without reading
         // any label. Done and busy are different roles, so a finished chip never reads as one
-        // that is still going.
-        mBusyColor = secondary;
+        // that is still going. Primary rather than secondary because secondary is the palette's
+        // low-chroma role, and once the glass tones it pale it was barely apart from the outline;
+        // the toning keeps hue and chroma, so primary stays a colour.
+        mBusyColor = primary;
         mAttentionColor = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorError,
             ContextCompat.getColor(context, R.color.termux_error));
@@ -1664,11 +1684,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             // the glyph running behind them.
             mUnselectedHaloColor = ChipWatermarkGeometry.haloColor(mUnselectedFillColor);
             mSelectedHaloColor = ChipWatermarkGeometry.haloColor(mSelectedFillColor);
-            // The ground a corner dot is haloed against: the panel the row itself stands on, so a
-            // dot over the watermark still reads as a dot.
-            mGroundColor = ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
-                com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-                ContextCompat.getColor(context, R.color.termux_surface_panel_high)), 255);
         } else {
             // The band was measured, so every colour is derived from what is really under it. The
             // alphas that used to be authored here are gone: 16/255 of termux_secondary over the
@@ -1683,9 +1698,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             mGlyphColor = glass.glyph;
             mUnselectedHaloColor = glass.restingHalo;
             mSelectedHaloColor = glass.selectedHalo;
-            // The dot's halo is the chip it sits on, not the panel the row would stand on if it
-            // stood on a panel: over glass that panel colour is not on screen anywhere.
-            mGroundColor = glass.dotGround;
             // The marks ride the outline and each is the only carrier of its own fact, so they
             // take the outline's tier rather than the label's.
             boolean pale = mChromeInk != null
@@ -2090,8 +2102,18 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     static final int LABEL_MAX_CHARS = 9;
 
+    /**
+     * Programs whose name only reads as itself whole: cut to nine characters, terminal-browser is
+     * "termi…ser", which names nothing. Their chips get {@link #WIDE_CHIP_MAX_DP} to hold it.
+     */
+    private static final Set<String> WHOLE_NAMES = Collections.singleton("terminal-browser");
+
+    /** The widest chip, for a {@link #WHOLE_NAMES} label: sixteen characters at 10.5sp. */
+    private static final int WIDE_CHIP_MAX_DP = 124;
+
     @NonNull
     public static String truncateProcess(@NonNull String process) {
+        if (WHOLE_NAMES.contains(process)) return process;
         return middleEllipsize(process, LABEL_MAX_CHARS);
     }
 

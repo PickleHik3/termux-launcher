@@ -387,6 +387,17 @@ public final class TermuxConstants {
     public static final String TERMUX_LAUNCHER_GITHUB_REPO_URL = "https://github.com/PickleHik3/termux-launcher";
 
     /**
+     * Termux Launcher Discord server invite. It never expires. Questions go to the server's #help
+     * forum, where the TildeBot help bot answers first and people step in when it can't.
+     */
+    public static final String TERMUX_LAUNCHER_DISCORD_URL = "https://discord.gg/sWSCRh7aVR";
+
+    /**
+     * Termux Launcher user guide on the website, the docs people are pointed at for reading.
+     */
+    public static final String TERMUX_LAUNCHER_DOCS_URL = "https://picklehik3.github.io/termux-launcher-site/docs/";
+
+    /**
      * Where the launcher's companion app forks live (Termux:API, Termux:Boot, Termux:Styling). Only
      * these builds share an edition's user id and signature, so links to them point here, never at
      * upstream's repos or F-Droid.

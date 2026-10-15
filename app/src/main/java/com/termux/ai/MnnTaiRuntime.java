@@ -313,7 +313,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
             // MemAvailable is sampled across native init and then on to the first request's first
             // token (see TaiLoadMeter); the load figure is booked below, so a failed load never
             // records one.
-            TaiLoadMeter meter = TaiLoadMeter.start(appContext);
+            String initAccelerator = TaiLoadPreflight.normalizeAccelerator(backendName(options));
+            TaiLoadMeter meter = TaiLoadMeter.startNativeInit(appContext, new TaiLoadMeter.NativeInit(modelSpec,
+                deviceCapabilities, TaiModelSpec.BACKEND_MNN_LLM, initAccelerator == null ? "cpu" : initAccelerator,
+                options.contextWindow != null ? options.contextWindow : TaiLoadBudget.FLOOR_CONTEXT));
             boolean loadedOk = false;
             try {
                 initialized.load(config.getAbsolutePath(), null, mergedConfig, extraConfig);

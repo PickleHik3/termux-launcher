@@ -133,5 +133,7 @@ public final class SettingsLayoutUtils {
     private static final Set<String> ACTION_ROW_KEYS = new java.util.HashSet<>(java.util.Arrays.asList(
         "app_launcher_category_refresh", "gui_apps_copy",
         "tai_welcome_card", "tai_huggingface_token", "tai_endpoint_copy", "tai_share_diagnostics",
-        "tai_runtime_stop", "tai_runtime_unload", "tai_runtime_logs"));
+        "tai_runtime_stop", "tai_runtime_unload", "tai_runtime_logs",
+        "settings_backup_export", "settings_backup_import",
+        "settings_backup_export_models", "settings_backup_import_models"));
 }

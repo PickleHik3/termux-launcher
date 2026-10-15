@@ -125,6 +125,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         void hideInAppKeyboardForEditor();
         boolean isFloatingDock();
         /**
+         * The pinned-apps row shares its container with nothing, so its icons fill the bar
+         * rather than a share of it: the Icon size slider reads its dp off that icon.
+         */
+        boolean isAppsRowAlone();
+        /**
          * Holds the top status bar expanded for the editor, or lets it rest as it is stored: a
          * transient state that animates the bar's height like a fold does but never writes the
          * stored compact/expanded choice. A side-edge bar cannot expand, so there it does nothing.
@@ -145,7 +150,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         /** Rebuilds the terminal palette if the contrast level moved (Legibility drives both). */
         void refreshTerminalPalette();
         /**
-         * Pushes the cursor-trail style and retro terminal effect preferences into the panes
+         * Pushes the cursor-trail on/off and style and retro terminal effect preferences into the panes
          * (the Trail and Effect menus drive both).
          */
         void applyTerminalMotionLook();
@@ -153,6 +158,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         void applyGeometryPreview(boolean commit);
         /** The coalesced glass re-render. */
         void applyGlassPreview();
+        /**
+         * Whether the glass edge is drawn now (Android 13, a wallpaper set from inside the
+         * launcher, Lazy mode off): the global set offers Depth only while it is.
+         */
+        boolean isGlassRefractionActive();
         /**
          * The rect the terminal's own frame is drawn at, in {@code terminal_root_container}'s own
          * unscaled coordinates, as {@code {left, top, right, bottom}}, or null while it cannot be
@@ -263,6 +273,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable private String mEntrySignature;
     /** The Custom values of this session, kept while a Look is showing. */
     @NonNull private final SessionCustom mSessionCustom = new SessionCustom();
+    /**
+     * The last Depth position the user set this session, so a thumb left on a flat stretch of
+     * the curve reads back where it was left ({@link GlassEdgeControls.Edge#depth(int)}). Not
+     * stored: cleared at open, when a Look is picked, and by Undo or Discard.
+     */
+    private int mDepthSet = GlassEdgeControls.NONE;
     private int mEntryStop = AppearanceLooks.CUSTOM_STOP;
     /** The Look slider's stop. */
     private int mStop = AppearanceLooks.CUSTOM_STOP;
@@ -550,6 +566,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntry = AppearanceSnapshot.capture(prefs);
         mEntrySignature = mEntry.signature();
         mSessionCustom.clear();
+        forgetGlassEdgePositions();
         mStop = matchingStop();
         // At the Custom stop as it was left: the slider moves there without writing anything,
         // as a tap on an element at a Look stop does; Undo comes back to it.
@@ -1791,7 +1808,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /**
      * The Custom row: the heading, the buttons the selection has, and its vertical sliders at the
      * stored values. The set is {@link AppearanceLooks#controls}: the global one with nothing
-     * tapped, or the element's own.
+     * tapped, ending in Depth while the glass edge is drawn, or the element's own.
      */
     private void showCustomRow() {
         AppearanceEditorPanel panel = mPanel;
@@ -1802,12 +1819,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // The palette Contrast changes is the Material one; with wallpaper colours off the
         // terminal wears a scheme file, which no contrast level moves (as in Settings).
         boolean palette = prefs.isTerminalDynamicColorsEnabled();
+        // Depth draws nothing while the glass edge is off (below Android 13, no wallpaper set
+        // from the launcher, Lazy mode), so the global set only has it while the edge is drawn.
+        boolean glassEdge = mTarget == null && mHost.isGlassRefractionActive();
         List<AppearanceEditorPanel.SliderState> states = new ArrayList<>();
-        for (Control control : AppearanceLooks.controls(mTarget)) {
+        for (Control control : AppearanceLooks.controls(mTarget, glassEdge)) {
             boolean enabled = control != Control.CONTRAST || palette;
             if (control == Control.ICON_SIZE) {
                 // The icons the dock can give under this Style on this screen, end to end.
-                int[] range = AppearanceLooks.iconSizeRangeDp(mHost.isFloatingDock(), density());
+                int[] range = AppearanceLooks.iconSizeRangeDp(mHost.isFloatingDock(),
+                    mHost.isAppsRowAlone(), density());
                 states.add(new AppearanceEditorPanel.SliderState(control, valueOf(control, prefs),
                     enabled, legendFor(control, enabled), range[0], range[1]));
                 continue;
@@ -1821,7 +1842,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             doors.remove(Door.EFFECT);
         panel.setDoors(doors);
         if (mTarget == Target.TERMINAL)
-            panel.setTerminalLooks(prefs.getTerminalCursorTrailStyle(),
+            panel.setTerminalLooks(prefs.isTerminalCursorTrailEnabled(),
+                prefs.getTerminalCursorTrailStyle(),
                 prefs.getTerminalRetroEffect());
     }
 
@@ -1857,9 +1879,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return AppearanceLooks.keySpacingValueFor(prefs.getInAppKeyboardKeyMarginScale());
             case ICON_SIZE:
                 return AppearanceLooks.iconSizeValueFor(mHost.isFloatingDock(),
-                    dockHeightScale(prefs), density());
+                    mHost.isAppsRowAlone(), dockHeightScale(prefs), density());
             case APP_ICONS:
                 return AppearanceLooks.appIconsValueFor(prefs.getAppLauncherButtonCount());
+            case DEPTH:
+                return glassEdgeOf(prefs).depth(mDepthSet);
             case CONTRAST:
             default:
                 return AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
@@ -1890,6 +1914,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     String.format(Locale.getDefault(), "%.1f", value / 10f));
             case ICON_SIZE: return getString(R.string.appearance_editor_icon_size, value);
             case APP_ICONS: return getString(R.string.appearance_editor_app_icons, value);
+            case DEPTH: return getString(R.string.appearance_editor_depth, value);
             case CONTRAST:
             default:
                 if (!enabled)
@@ -2047,7 +2072,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /**
      * One of the Custom row's sliders moved. Blur, Grain and Opacity are the shared glass with
      * nothing tapped and the element's own values with one tapped; Margin and Corner radius are
-     * Layout mode's own writes; the rest are the element's.
+     * Layout mode's own writes; Depth is the glass edge's, global; the
+     * rest are the element's.
      */
     private void writeControl(@NonNull Control control, int value) {
         switch (control) {
@@ -2074,8 +2100,42 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case ICON_SIZE: writeIconSize(value); break;
             case APP_ICONS: writeAppIcons(value); break;
             case CONTRAST: writeLegibility(value); break;
+            case DEPTH:
+                writeGlassDepth(value);
+                break;
             default: break;
         }
+    }
+
+    /**
+     * The glass's Depth: one value for every glass surface. It writes only the bend and the edge
+     * width ({@link GlassEdgeControls}), so the other stored edge keys keep what they hold. The
+     * panes' pass re-reads the edge at its head and re-dresses them when it moved; the glass pass
+     * then re-dresses the dock, the keyboard, the strip and the status band with it.
+     */
+    private void writeGlassDepth(int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int written = Control.DEPTH.clamp(value);
+        GlassEdgeControls.Edge next = glassEdgeOf(prefs).withDepth(written);
+        prefs.setFancierGlassBendDp(next.bend);
+        prefs.setFancierGlassEdgeWidthDp(next.width);
+        mDepthSet = written;
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
+    }
+
+    private void forgetGlassEdgePositions() {
+        mDepthSet = GlassEdgeControls.NONE;
+    }
+
+    /** The six stored glass edge values. */
+    @NonNull
+    private static GlassEdgeControls.Edge glassEdgeOf(@NonNull TermuxAppSharedPreferences prefs) {
+        return new GlassEdgeControls.Edge(prefs.getFancierGlassBendDp(),
+            prefs.getFancierGlassEdgeWidthDp(), prefs.getFancierGlassEdgeLightPercent(),
+            prefs.getFancierGlassSpecularPercent(), prefs.getFancierGlassDispersionPercent(),
+            prefs.getFancierGlassClarityPercent());
     }
 
     // ------------------------------------------------------------------------------ the slider
@@ -2098,6 +2158,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (leavingCustom)
                 mSessionCustom.leave(into);
             SurfacePresets.apply(into, look);
+            forgetGlassEdgePositions();
             mStop = stop;
             return true;
         }
@@ -2368,10 +2429,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void writeIconSize(int iconDp) {
         TermuxAppSharedPreferences prefs = prefs();
         boolean floating = mHost.isFloatingDock();
-        if (prefs != null && AppearanceLooks.iconSizeValueFor(floating, dockHeightScale(prefs),
-                density()) == iconDp)
+        boolean alone = mHost.isAppsRowAlone();
+        if (prefs != null && AppearanceLooks.iconSizeValueFor(floating, alone,
+                dockHeightScale(prefs), density()) == iconDp)
             return;
-        float scale = AppearanceLooks.dockScaleForIconSize(floating, iconDp, density());
+        float scale = AppearanceLooks.dockScaleForIconSize(floating, alone, iconDp, density());
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null && mSliderDragActive) {
             layout.holdDockHeightScale(scale);
@@ -2433,12 +2495,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
     }
 
-    /** Trail: the cursor-trail style, the same preference Settings writes, applied on the tap. */
+    /**
+     * Trail: Off or a cursor-trail style, the same preferences Settings writes, applied on the tap.
+     * Off only clears the on/off preference and keeps the style; a style also turns the trail on.
+     */
     private void writeTrailStyle(@NonNull String id) {
         TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null || id.equals(prefs.getTerminalCursorTrailStyle()))
+        if (prefs == null)
             return;
-        prefs.setTerminalCursorTrailStyle(id);
+        CursorTrailChoice.Resolved choice = CursorTrailChoice.resolve(id);
+        boolean styleSame = choice.style == null
+            || choice.style.equals(prefs.getTerminalCursorTrailStyle());
+        if (choice.enabled == prefs.isTerminalCursorTrailEnabled() && styleSame)
+            return;
+        if (choice.style != null)
+            prefs.setTerminalCursorTrailStyle(choice.style);
+        prefs.setTerminalCursorTrailEnabled(choice.enabled);
         mHost.applyTerminalMotionLook();
     }
 
@@ -3202,6 +3274,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         mEntry.restore(prefs);
         mSessionCustom.clear();
+        forgetGlassEdgePositions();
         mStop = mEntryStop;
         mTarget = null;
         syncAfterBulkWrite();

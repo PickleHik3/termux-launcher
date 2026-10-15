@@ -18,6 +18,7 @@ import androidx.annotation.VisibleForTesting;
 import com.termux.R;
 import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.TermuxConstants;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,9 +61,10 @@ public final class HelpPanelView extends FrameLayout {
     @VisibleForTesting
     static final String DOCS_BASE = "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/";
     @VisibleForTesting
-    static final String DOCS_INDEX = "https://github.com/PickleHik3/termux-launcher/tree/dev/docs";
+    static final String DOCS_INDEX = TermuxConstants.TERMUX_LAUNCHER_DOCS_URL;
+    /** Questions go to the Discord server, where the help bot answers first. */
     @VisibleForTesting
-    static final String SUPPORT = "https://github.com/PickleHik3/termux-launcher/issues";
+    static final String SUPPORT = TermuxConstants.TERMUX_LAUNCHER_DISCORD_URL;
 
     private final LinearLayout panel;
     private final ScrollView scroll;

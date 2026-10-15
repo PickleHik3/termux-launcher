@@ -1,6 +1,8 @@
 package com.termux.app.terminal.inappkeyboard;
 
 import android.app.Activity;
+import android.content.ClipDescription;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.res.Configuration;
@@ -10,6 +12,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Trace;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
@@ -18,6 +21,7 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.terminal.TerminalClipboard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.view.KeyboardUtils;
@@ -25,6 +29,7 @@ import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +100,14 @@ public final class TermuxInAppKeyboard {
     private final ExecutorService mLayoutExecutor;
     private final TapCorrectionController mTapCorrection;
     private TermuxInAppKeyboardLayoutLoader mLayoutLoader;
+    /**
+     * One loader per non-main text layout the keyboard has reached, keyed by id: the file in
+     * {@code ~/.termux/keyboard/layouts/} over the bundled layout it edits, or a user's own.
+     * Created on first use, so a layout never swapped to costs nothing.
+     */
+    private final Map<String, TermuxInAppKeyboardLayoutLoader> mFileLayoutLoaders = new HashMap<>();
+    /** Tests' error sink for layout files; null shows the user-facing notice. */
+    @Nullable private final TermuxInAppKeyboardLayoutLoader.ErrorReporter mLayoutErrorReporter;
 
     private TerminalKeyEventHandler mKeyEventHandler;
     private Keyboard2View mKeyboardView;
@@ -128,6 +141,32 @@ public final class TermuxInAppKeyboard {
     private boolean mDestroyed;
     private boolean mHeightAdjusting;
     private boolean mExternalTextInputActive;
+    /** Between onStop and onResume: the clipboard is not watched, whatever shows the keys. */
+    private boolean mStopped;
+    /** The clipboard watched while the keys are up, so paste can show a picture is waiting. */
+    @Nullable private ClipboardManager mWatchedClipboard;
+    /** Where the focus listener went; the clipboard can only be read while the window has focus. */
+    @Nullable private ViewTreeObserver mWatchedFocusObserver;
+    /** The last answer of {@link #clipboardHoldsPicture}. */
+    private boolean mClipboardHoldsPicture;
+    /** When the clip was set, wall clock, as last read; 0 for none or an unreadable clipboard. */
+    private long mClipMillis;
+    /** The newest screenshot while the keys are up and may read it; null otherwise. */
+    @Nullable private RecentScreenshot.Shot mScreenshot;
+    /** The screenshot a paste already took, so the key goes back to the clipboard; memory only. */
+    private long mConsumedScreenshotId = PasteOffer.NONE_CONSUMED;
+    /** What the paste key puts in now, handed to every keyboard view made. */
+    @NonNull private PasteOffer mPasteOffer = PasteOffer.CLIPBOARD;
+    private final RecentScreenshot mScreenshots;
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
+    /** Puts the key back to the clipboard once the offered screenshot stops being fresh. */
+    private final Runnable mPasteOfferExpiry = this::updatePasteOffer;
+    private final ClipboardManager.OnPrimaryClipChangedListener mClipChangedListener =
+        this::readClipboardPicture;
+    private final ViewTreeObserver.OnWindowFocusChangeListener mWindowFocusListener = hasFocus -> {
+        if (hasFocus)
+            readClipboardPicture();
+    };
     /** The place on screen carries its own text fields, so it holds the system IME while down. */
     private boolean mPlaceOwnsSystemIme;
     /** Whether that place keeps the IME even with this keyboard on screen for something else. */
@@ -189,6 +228,7 @@ public final class TermuxInAppKeyboard {
         mHost = Objects.requireNonNull(host, "host");
         mPreferences = Objects.requireNonNull(preferences, "preferences");
         mLayoutExecutor = Objects.requireNonNull(layoutExecutor, "layoutExecutor");
+        mLayoutErrorReporter = errorReporter;
 
         Context context = requireContainer().getContext();
         mHardwareKeyboardConnected = () -> KeyboardUtils.isHardKeyboardConnected(context);
@@ -196,6 +236,10 @@ public final class TermuxInAppKeyboard {
             TapCorrectionController.modelFile(context), mLayoutExecutor,
             new Handler(Looper.getMainLooper()));
         mTapCorrection.setEnabled(mPreferences.isInAppKeyboardTapCorrectionEnabled());
+        mScreenshots = new RecentScreenshot(context, mLayoutExecutor, mMainHandler, shot -> {
+            mScreenshot = shot;
+            updatePasteOffer();
+        });
         mExtraKeysStoredValue = mPreferences.getInAppKeyboardExtraKeys();
         mLayoutOptions = buildLayoutOptions(mExtraKeysStoredValue);
         if (layoutFile == null) {
@@ -303,6 +347,7 @@ public final class TermuxInAppKeyboard {
     }
 
     public void onResume() {
+        mStopped = false;
         if (!mEnabled || mDestroyed)
             return;
         if (!mExternalTextInputActive)
@@ -316,6 +361,9 @@ public final class TermuxInAppKeyboard {
 
     /** Cancels gesture and macro state without changing activity-instance visibility. */
     public void onStop() {
+        mStopped = true;
+        unwatchClipboard();
+        unwatchScreenshots();
         resetInputPipeline();
         mTapCorrection.flush();
     }
@@ -325,6 +373,8 @@ public final class TermuxInAppKeyboard {
             return;
         mDestroyed = true;
         mLastHideReason = HideReason.DESTROYED;
+        unwatchClipboard();
+        unwatchScreenshots();
         resetInputPipeline();
         TerminalView terminalView = mHost == null ? null : mHost.getTerminalView();
         if (terminalView != null && mSystemImeFocusListener != null)
@@ -335,6 +385,9 @@ public final class TermuxInAppKeyboard {
             mHost.detachKeyboardView();
         if (mLayoutLoader != null)
             mLayoutLoader.close();
+        for (TermuxInAppKeyboardLayoutLoader loader : mFileLayoutLoaders.values())
+            loader.close();
+        mFileLayoutLoaders.clear();
         mTapCorrection.flush();
         mLayoutExecutor.shutdown();
         destroyKeyPopup();
@@ -1352,6 +1405,8 @@ public final class TermuxInAppKeyboard {
             // the keyboard was off screen is applied on the way back on.
             refreshMaterialPaletteIfSignatureMoved();
             setContainerVisible(true);
+            watchClipboard();
+            watchScreenshots();
             mHost.requestAccessoryGeometrySync();
             recheckLayout();
         } finally {
@@ -1389,6 +1444,7 @@ public final class TermuxInAppKeyboard {
         mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
         mTapCorrection.setLayoutId(mSelectedLayoutId);
         mKeyboardView.setTapResolver(mTapCorrection);
+        mKeyboardView.setPasteShowsPicture(mPasteOffer.showsPicture());
         applyKeyboardToView(getSelectedLayoutData());
         applyCustomColorScheme();
         mHost.attachKeyboardView(mKeyboardView);
@@ -1428,6 +1484,8 @@ public final class TermuxInAppKeyboard {
         mGreekMathKeyboardData = null;
         if (mLayoutLoader != null)
             mLayoutLoader.setLayoutOptions(mLayoutOptions);
+        for (TermuxInAppKeyboardLayoutLoader loader : mFileLayoutLoaders.values())
+            loader.setLayoutOptions(mLayoutOptions);
         if (mKeyboardView != null) {
             resetInputPipeline();
             applyKeyboardToView(getSelectedLayoutData());
@@ -1612,12 +1670,58 @@ public final class TermuxInAppKeyboard {
             }
             requestIntrinsicSizeGeometrySync();
         });
+        // Every ring layout, and the one on screen, rechecks its file too: an edit made in
+        // Settings or in a terminal lands on the same return as the ring itself.
+        for (String id : mLayoutRing)
+            recheckLayoutFile(id);
+        recheckLayoutFile(mActiveTextLayoutId);
+    }
+
+    /**
+     * Rechecks {@code layoutId}'s file — a stat, and a background parse only when it changed —
+     * creating its loader on first use. The launcher layout and the modal pads have their own.
+     */
+    private void recheckLayoutFile(String layoutId) {
+        if (!mEnabled || mDestroyed || layoutId == null || LAYOUT_MAIN.equals(layoutId)
+            || LAYOUT_NUMERIC.equals(layoutId) || LAYOUT_GREEK_MATH.equals(layoutId))
+            return;
+        TermuxInAppKeyboardLayoutLoader loader = mFileLayoutLoaders.get(layoutId);
+        if (loader == null) {
+            LauncherKeyboardLayouts.Layout layout = LauncherKeyboardLayouts.find(
+                requireContainer().getResources(), layoutId);
+            File file = KeyboardLayoutFiles.overrideFile(KeyboardLayoutFiles.defaultHome(),
+                layoutId);
+            if (layout == null || file == null)
+                return;
+            // A user layout has no bundled original; a broken one falls back as layout.xml does.
+            int fallbackResId = layout.xmlResId != 0 ? layout.xmlResId
+                : juloo.keyboard2.R.xml.termux_launcher_qwerty;
+            loader = new TermuxInAppKeyboardLayoutLoader(requireContainer().getContext(), file,
+                fallbackResId, mLayoutExecutor, mHost::runOnMain, mLayoutOptions,
+                mLayoutErrorReporter);
+            mFileLayoutLoaders.put(layoutId, loader);
+        }
+        loader.recheck(data -> {
+            if (mDestroyed || !mEnabled)
+                return;
+            if (LauncherKeyboardLayouts.isUserLayout(layoutId))
+                LauncherKeyboardLayouts.rememberUserLabel(layoutId, data.name);
+            if (layoutId.equals(mSelectedLayoutId)) {
+                resetInputPipeline();
+                applyKeyboardToView(formed(data));
+                requestIntrinsicSizeGeometrySync();
+            }
+        });
     }
 
     private void selectLayout(String layoutId) {
         if (!mEnabled || mDestroyed)
             return;
         String normalizedId = normalizeLayoutId(layoutId);
+        // A layout reached for the first time — a palette row or a binding outside the ring —
+        // gets its loader now, so an edited file replaces the bundled one a frame later.
+        if (!mFileLayoutLoaders.containsKey(normalizedId))
+            recheckLayoutFile(normalizedId);
         KeyboardData data = getLayoutData(normalizedId);
         if (data == null)
             return;
@@ -1880,6 +1984,17 @@ public final class TermuxInAppKeyboard {
                     mMainKeyboardData = loadBundledLayout(juloo.keyboard2.R.xml.termux_launcher_qwerty);
                 return mMainKeyboardData;
             default:
+                TermuxInAppKeyboardLayoutLoader loader = mFileLayoutLoaders.get(layoutId);
+                KeyboardData fromFile = loader == null ? null : loader.getLastKnownGood();
+                // Reached before its background parse landed: read the file now rather than
+                // flash the layout it falls back to.
+                if (fromFile == null && loader != null) {
+                    fromFile = loader.loadFileNow();
+                    if (fromFile != null && LauncherKeyboardLayouts.isUserLayout(layoutId))
+                        LauncherKeyboardLayouts.rememberUserLabel(layoutId, fromFile.name);
+                }
+                if (fromFile != null)
+                    return fromFile;
                 return getBundledTextLayoutData(layoutId);
         }
     }
@@ -1935,9 +2050,140 @@ public final class TermuxInAppKeyboard {
     }
 
     private void setContainerVisible(boolean visible) {
+        if (!visible) {
+            unwatchClipboard();
+            unwatchScreenshots();
+        }
         if (mHost != null) {
             mHost.setKeyboardContainerVisible(visible);
         }
+    }
+
+    /**
+     * Watches the clipboard while the keys are up, so the paste glyph says when a paste will
+     * insert a picture. The clipboard is only readable while the window has focus, and coming
+     * back to the launcher resumes it before focus returns, so focus coming back reads it again.
+     */
+    private void watchClipboard() {
+        if (mWatchedClipboard != null || mStopped || mHost == null)
+            return;
+        View container = requireContainer();
+        ClipboardManager clipboard =
+            (ClipboardManager) container.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null)
+            return;
+        clipboard.addPrimaryClipChangedListener(mClipChangedListener);
+        mWatchedClipboard = clipboard;
+        ViewTreeObserver observer = container.getViewTreeObserver();
+        observer.addOnWindowFocusChangeListener(mWindowFocusListener);
+        mWatchedFocusObserver = observer;
+        readClipboardPicture();
+    }
+
+    private void unwatchClipboard() {
+        if (mWatchedClipboard != null) {
+            mWatchedClipboard.removePrimaryClipChangedListener(mClipChangedListener);
+            mWatchedClipboard = null;
+        }
+        if (mWatchedFocusObserver != null) {
+            // An observer taken before the container was attached is merged into the window's on
+            // attach and dies, so the listener is looked for in the container's current one too.
+            if (mWatchedFocusObserver.isAlive())
+                mWatchedFocusObserver.removeOnWindowFocusChangeListener(mWindowFocusListener);
+            View container = mHost == null ? null : mHost.getKeyboardContainer();
+            ViewTreeObserver current = container == null ? null : container.getViewTreeObserver();
+            if (current != null && current != mWatchedFocusObserver && current.isAlive())
+                current.removeOnWindowFocusChangeListener(mWindowFocusListener);
+            mWatchedFocusObserver = null;
+        }
+    }
+
+    private void readClipboardPicture() {
+        ClipboardManager clipboard = mWatchedClipboard;
+        if (clipboard == null)
+            return;
+        ClipDescription description;
+        try {
+            description = clipboard.getPrimaryClipDescription();
+        } catch (RuntimeException e) {
+            // A clipboard service that throws is no reason for the home screen to fall over.
+            description = null;
+        }
+        mClipboardHoldsPicture = clipboardHoldsPicture(description);
+        mClipMillis = description == null ? 0 : description.getTimestamp();
+        updatePasteOffer();
+    }
+
+    /**
+     * Follows the newest screenshot while the keys are up, so paste can offer one taken after the
+     * last copy. Down, the paste key is the clipboard's alone.
+     */
+    private void watchScreenshots() {
+        if (mStopped || mHost == null)
+            return;
+        mScreenshots.start();
+    }
+
+    private void unwatchScreenshots() {
+        mScreenshots.stop();
+        if (mScreenshot != null) {
+            mScreenshot = null;
+            updatePasteOffer();
+        }
+    }
+
+    /** Settles what paste puts in from what is known now, and shows it on the key. */
+    private void updatePasteOffer() {
+        long now = System.currentTimeMillis();
+        mPasteOffer = PasteOffer.decide(mClipMillis, mClipboardHoldsPicture, mScreenshot,
+            mConsumedScreenshotId, now);
+        mMainHandler.removeCallbacks(mPasteOfferExpiry);
+        if (mPasteOffer == PasteOffer.SCREENSHOT && mScreenshot != null)
+            mMainHandler.postDelayed(mPasteOfferExpiry, PasteOffer.millisUntilStale(mScreenshot, now));
+        Keyboard2View view = mKeyboardView;
+        if (view != null)
+            view.setPasteShowsPicture(mPasteOffer.showsPicture());
+    }
+
+    /**
+     * The screenshot the keyboard's paste puts in instead of the clipboard, or null to paste the
+     * clipboard. A screenshot is taken once: the key then goes back to the clipboard until a newer
+     * one is taken. The clipboard is read again first, as a copy made just before this paste (the
+     * clipboard panel's) has not been heard of yet and must win.
+     */
+    @Nullable
+    public RecentScreenshot.Shot takeScreenshotToPaste() {
+        if (!isVisible())
+            return null;
+        readClipboardPicture();
+        RecentScreenshot.Shot shot = mScreenshot;
+        if (mPasteOffer != PasteOffer.SCREENSHOT || shot == null)
+            return null;
+        mConsumedScreenshotId = shot.id;
+        updatePasteOffer();
+        return shot;
+    }
+
+    /** What the paste key puts in now; for tests. */
+    @NonNull
+    PasteOffer getPasteOffer() {
+        return mPasteOffer;
+    }
+
+    /**
+     * Whether the clip [description] describes pastes as a picture, from the description alone:
+     * reading the clip itself shows the system's "pasted" notice. Any concrete picture type counts,
+     * as it does for paste, which takes the picture even when a caption rides along as text. Null,
+     * which is what an unfocused launcher is given, holds nothing.
+     */
+    static boolean clipboardHoldsPicture(@Nullable ClipDescription description) {
+        if (description == null)
+            return false;
+        int count = description.getMimeTypeCount();
+        List<String> types = new ArrayList<>(count);
+        for (int i = 0; i < count; i++)
+            types.add(description.getMimeType(i));
+        return TerminalClipboard.pictureType(types) != null;
     }
 
     private View requireContainer() {

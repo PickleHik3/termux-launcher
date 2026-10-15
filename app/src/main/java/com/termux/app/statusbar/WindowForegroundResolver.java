@@ -407,10 +407,13 @@ public final class WindowForegroundResolver {
      * rewrites argv to put the interpreter first, so {@code codex} (a {@code #!/usr/bin/env node}
      * script) reports as plain {@code node} — same pill, same icon, for every such tool. Shells are
      * deliberately excluded: their own glyph already names them, and a shell's argv is at least as
-     * often {@code -c "..."} as a script path.
+     * often {@code -c "..."} as a script path. Electron counts too: an app run on a shared Electron
+     * (tlstore's terminal-browser execs Termux's {@code electron} with its own
+     * {@code terminal-browser/cli/dist/main.js}) is named by its script, not by the runtime.
      */
     private static final Set<String> INTERPRETERS = new HashSet<>(Arrays.asList(
-        "node", "nodejs", "bun", "deno", "python", "python3", "python2", "ruby", "perl", "php"));
+        "node", "nodejs", "bun", "deno", "python", "python3", "python2", "ruby", "perl", "php",
+        "electron"));
 
     /**
      * The one interpreter flag confidently parseable without knowing the rest of the command line:

@@ -15,15 +15,24 @@ import android.graphics.drawable.Drawable;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.launcher.icon.ArtworkFootprint;
+import com.termux.app.launcher.icon.DrawablePixels;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.PinnedIconOverride;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 public final class LauncherIconResolver {
     private static final int COMPOSE_SIZE_PX = 192;
+    /**
+     * How many of a pack's mapped drawables its scale is measured over: enough that a few odd
+     * glyphs do not move the median, few enough to measure in tens of milliseconds.
+     */
+    private static final int PACK_SAMPLE_SIZE = 16;
 
     // Guarded by the synchronized composeUnmappedIcon() method; result bitmaps remain per call.
     private final Paint composePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -34,10 +43,22 @@ public final class LauncherIconResolver {
     public static final class ResolvedIcon {
         @Nullable public final Drawable drawable;
         public final boolean iconPackArtwork;
+        /**
+         * A stand-in: the main thread asked while a pack this icon comes from was still being
+         * parsed in the background ({@link IconPackRepository#lookupIconPack}), so this is the
+         * icon it falls back to. Show it, never keep it: the surfaces are told to draw again when
+         * the pack lands.
+         */
+        public final boolean provisional;
 
         ResolvedIcon(@Nullable Drawable drawable, boolean iconPackArtwork) {
+            this(drawable, iconPackArtwork, false);
+        }
+
+        public ResolvedIcon(@Nullable Drawable drawable, boolean iconPackArtwork, boolean provisional) {
             this.drawable = drawable;
             this.iconPackArtwork = iconPackArtwork;
+            this.provisional = provisional;
         }
     }
     public interface SystemIconLoader {
@@ -107,20 +128,23 @@ public final class LauncherIconResolver {
         @Nullable PinnedIconOverride override,
         @Nullable Drawable systemFallback
     ) {
-        Drawable icon = loadOverride(override);
-        if (icon != null) return new ResolvedIcon(icon, true);
+        ResolvedIcon picked = overrideArtwork(override);
+        if (picked != null) return picked;
 
         if (configRepository != null) {
-            icon = loadOverride(configRepository.loadAppIconOverride(ref));
-            if (icon != null) return new ResolvedIcon(icon, true);
+            picked = overrideArtwork(configRepository.loadAppIconOverride(ref));
+            if (picked != null) return picked;
         }
 
+        boolean provisional = false;
         if (preferences != null) {
-            icon = loadFromPack(preferences.getAppLauncherIconPackPackage(), ref, systemFallback);
-            if (icon != null) return new ResolvedIcon(icon, true);
+            ResolvedIcon fromPack = fromPack(preferences.getAppLauncherIconPackPackage(), ref, systemFallback);
+            if (fromPack != null && !fromPack.provisional) return fromPack;
+            provisional = fromPack != null;
         }
 
-        return new ResolvedIcon(systemFallback != null ? systemFallback : loadSystemIcon(ref), false);
+        return new ResolvedIcon(systemFallback != null ? systemFallback : loadSystemIcon(ref), false,
+            provisional);
     }
 
     @Nullable
@@ -139,9 +163,10 @@ public final class LauncherIconResolver {
         @Nullable PinnedIconOverride override,
         @Nullable Drawable globalIcon
     ) {
-        Drawable icon = loadOverride(override);
-        if (icon != null) return icon;
+        ResolvedIcon picked = overrideArtwork(override);
+        if (picked != null) return picked.drawable;
 
+        Drawable icon;
         if (preferences != null) {
             String pinnedPack = preferences.getAppLauncherPinnedIconPackPackage();
             if (pinnedPack != null && !pinnedPack.trim().isEmpty()) {
@@ -160,20 +185,27 @@ public final class LauncherIconResolver {
         @Nullable Drawable globalIcon,
         boolean globalIconPackArtwork
     ) {
-        Drawable icon = loadOverride(override);
-        if (icon != null) return new ResolvedIcon(icon, true);
+        ResolvedIcon picked = overrideArtwork(override);
+        if (picked != null) return picked;
+        boolean provisional = false;
         if (preferences != null) {
             String pinnedPack = preferences.getAppLauncherPinnedIconPackPackage();
             if (pinnedPack != null && !pinnedPack.trim().isEmpty()) {
-                icon = loadFromPack(pinnedPack, ref, globalIcon);
-                if (icon != null) return new ResolvedIcon(icon, true);
+                ResolvedIcon fromPack = fromPack(pinnedPack, ref, globalIcon);
+                if (fromPack != null && !fromPack.provisional) return fromPack;
+                provisional = fromPack != null;
             }
         }
-        if (globalIcon != null) return new ResolvedIcon(globalIcon, globalIconPackArtwork);
-        return resolveDetailed(ref, null, null);
+        if (globalIcon != null) return new ResolvedIcon(globalIcon, globalIconPackArtwork, provisional);
+        ResolvedIcon global = resolveDetailed(ref, null, null);
+        return provisional && !global.provisional
+            ? new ResolvedIcon(global.drawable, global.iconPackArtwork, true) : global;
     }
 
-    /** Clears the icon-pack repository, which every surface shares: parsed packs and resources. */
+    /**
+     * Clears the icon-pack repository, which every surface shares: the resources go, and each
+     * parsed pack is kept only until its installed version is checked again.
+     */
     public void clearCache() {
         iconPackRepository.clearCache();
     }
@@ -183,9 +215,15 @@ public final class LauncherIconResolver {
      * finds it cached. Slow: call it off the main thread.
      */
     public void warmPack(@Nullable String packageName) {
-        iconPackRepository.loadIconPack(packageName);
+        IconPack pack = iconPackRepository.loadIconPack(packageName);
+        if (pack != null) packScale(pack);
     }
 
+    /**
+     * The drawable an override names, as the pack ships it, which is all a check that the
+     * override still exists needs. Resolving one for an icon goes through
+     * {@link #overrideArtwork}, which draws it at its pack's scale.
+     */
     @Nullable
     public Drawable loadOverride(@Nullable PinnedIconOverride override) {
         if (override == null || !override.isValid()) return null;
@@ -210,23 +248,106 @@ public final class LauncherIconResolver {
 
     @Nullable
     public Drawable loadFromPack(@Nullable String packageName, @NonNull AppRef ref) {
-        return loadFromPack(packageName, ref, null);
+        ResolvedIcon fromPack = fromPack(packageName, ref, null);
+        return fromPack == null ? null : fromPack.drawable;
     }
 
+    /**
+     * {@code ref}'s icon from {@code packageName}: the pack's own drawing, or the system icon
+     * composed on the pack's plates; null when the pack has neither for it, or is not installed.
+     * While the pack is being parsed for the main thread, a provisional answer with no drawing,
+     * which the caller fills with its own fallback.
+     */
     @Nullable
-    private Drawable loadFromPack(
+    private ResolvedIcon fromPack(
         @Nullable String packageName,
         @NonNull AppRef ref,
         @Nullable Drawable systemFallback
     ) {
-        IconPack pack = iconPackRepository.loadIconPack(packageName);
+        IconPackRepository.Lookup lookup = iconPackRepository.lookupIconPack(packageName);
+        if (lookup.pending) return new ResolvedIcon(null, false, true);
+        Drawable drawn = drawFromPack(lookup.pack, ref, systemFallback);
+        return drawn == null ? null : new ResolvedIcon(drawn, true);
+    }
+
+    @Nullable
+    private Drawable drawFromPack(
+        @Nullable IconPack pack,
+        @NonNull AppRef ref,
+        @Nullable Drawable systemFallback
+    ) {
         if (pack == null) return null;
         String drawableName = pack.drawableForComponent(ref.packageName, ref.activityName, Calendar.getInstance().get(Calendar.DAY_OF_MONTH));
         if (drawableName != null) {
-            Drawable mapped = loadDrawableFromPack(pack.info.packageName, drawableName);
+            Drawable mapped = packArtwork(pack,
+                loadDrawableFromPack(pack.info.packageName, drawableName));
             if (mapped != null) return mapped;
         }
+        // A composed icon is the system icon drawn at the pack's own scale on its own back plate,
+        // which is the size the pack asked for; it is not rescaled.
         return composeUnmappedIcon(pack, ref, systemFallback);
+    }
+
+    /**
+     * An override's drawable, drawn at the scale of the pack it was picked from; provisional, at
+     * the drawable's own scale, while that pack is being parsed for the main thread.
+     */
+    @Nullable
+    private ResolvedIcon overrideArtwork(@Nullable PinnedIconOverride override) {
+        Drawable drawable = loadOverride(override);
+        if (drawable == null) return null;
+        IconPackRepository.Lookup lookup = iconPackRepository.lookupIconPack(override.iconPackPackage);
+        return new ResolvedIcon(packArtwork(lookup.pack, drawable), true, lookup.pending);
+    }
+
+    /**
+     * One of a pack's own drawables, drawn at the pack's scale ({@link #packScale}) about the
+     * centre of its box. Every surface draws every source into the same box, and pack PNGs
+     * usually carry a transparent margin, so a pack icon came out smaller than the stock one
+     * beside it at every size. One scale for the whole pack keeps the sizes and the placement its
+     * designer gave its glyphs relative to one another. That scale is set by the pack's typical
+     * icon, so an icon whose own drawing reaches further (a round icon in a pack whose sample
+     * was decided by squares) is held to its box ({@link ArtworkFootprint#iconScale}), measured
+     * from what it draws: it is never cut. Done here, when the icon is resolved, so every surface
+     * showing it benefits and no frame pays for it.
+     */
+    @Nullable
+    private Drawable packArtwork(@Nullable IconPack pack, @Nullable Drawable drawable) {
+        if (drawable == null || pack == null) return drawable;
+        float packScale = packScale(pack);
+        if (packScale <= 1f) return drawable;
+        float scale = ArtworkFootprint.iconScale(packScale, DrawablePixels.stockIconExtent(),
+            DrawablePixels.drawnCentredExtent(drawable));
+        return DrawablePixels.scaleAboutCentre(context.getResources(), drawable, scale);
+    }
+
+    /**
+     * How much {@code pack}'s drawables are enlarged: the median visible extent over a sample of
+     * its mapped icons, taken to a stock icon's ({@link ArtworkFootprint#packScale}). Measured once
+     * per parsed pack and kept on it, so an upgraded or reloaded pack is measured afresh. The
+     * measure loads and draws up to {@link #PACK_SAMPLE_SIZE} of the pack's drawables, on whichever
+     * thread first resolves an icon from the pack: the catalogue's worker for the global pack, the
+     * Icons mode's warm-up for a newly chosen one ({@link #warmPack}). A pinned-only pack, or an
+     * override's pack, that nothing warmed is measured on the main thread the first time the dock
+     * binds it, where the pack is already parsed today.
+     */
+    private float packScale(@NonNull IconPack pack) {
+        float known = pack.footprintScale();
+        if (known > 0f) return known;
+        List<String> names = new ArrayList<>(new LinkedHashSet<>(pack.componentDrawables().values()));
+        int[] sample = ArtworkFootprint.sampleIndices(names.size(), PACK_SAMPLE_SIZE);
+        float[] extents = new float[sample.length];
+        int measured = 0;
+        for (int index : sample) {
+            Drawable drawable = loadDrawableFromPack(pack.info.packageName, names.get(index));
+            if (drawable == null) continue;
+            float extent = DrawablePixels.visibleExtent(drawable);
+            if (extent > 0f) extents[measured++] = extent;
+        }
+        float scale = ArtworkFootprint.packScale(DrawablePixels.stockIconExtent(),
+            ArtworkFootprint.median(extents, measured));
+        pack.setFootprintScale(scale);
+        return scale;
     }
 
     @Nullable

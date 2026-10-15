@@ -3,12 +3,14 @@ package com.termux.app.chrome;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.os.Build;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -97,6 +99,65 @@ public class WallpaperFrostPainterOffDockTest {
             SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST, 20f));
         assertSame(drawable, SharedFrameDrawable.of(frost.getDrawable()));
         assertNull(drawable.refractionLook());
+    }
+
+    /** A look with every edge knob at a plain value and {@code clarity} percent of edge clarity. */
+    private static GlassRefraction.Look lookWithClarity(int clarity) {
+        return new GlassRefraction.Look(6, 14, 24, 0, 0, clarity);
+    }
+
+    @Test
+    public void aLookWithClarityHandsTheFrostTheCachesClearFrame() {
+        surfaces.dockBlurRadiusDp = 14;
+        surfaces.look = lookWithClarity(70);
+        ImageView frost = sheet(300, 40);
+
+        assertTrue(chrome.frost().applyOffDockSheet(frost,
+            SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK, 20f));
+
+        SharedFrameDrawable drawable = SharedFrameDrawable.of(frost.getDrawable());
+        assertNotNull(drawable);
+        Bitmap clear = drawable.clearFrame();
+        assertNotNull("the bent edge gets a clearer picture of the same rect", clear);
+        assertSame(chrome.blurCache().obtain(GlassRefraction.CLARITY_RADIUS_DP, wallpaperFrame),
+            clear);
+        assertNotSame("not the frost itself", drawable.frame(), clear);
+        assertTrue("the clear frame counts as on screen, so the cache keeps it",
+            drawable.shows(clear));
+
+        // An unchanged pass keeps the very same frame; no clarity takes it away again.
+        assertTrue(chrome.frost().applyOffDockSheet(frost,
+            SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK, 20f));
+        assertSame(clear, drawable.clearFrame());
+        surfaces.look = lookWithClarity(0);
+        assertTrue(chrome.frost().applyOffDockSheet(frost,
+            SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK, 20f));
+        assertSame(drawable, SharedFrameDrawable.of(frost.getDrawable()));
+        assertNull(drawable.clearFrame());
+    }
+
+    @Test
+    public void noLookOrAFrostAlreadyThatClearTakesNoClearFrame() {
+        surfaces.dockBlurRadiusDp = 14;
+        surfaces.look = null;
+        ImageView frost = sheet(300, 40);
+        assertTrue(chrome.frost().applyOffDockSheet(frost,
+            SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK, 20f));
+        assertNull("the default mode draws no edge at all",
+            SharedFrameDrawable.of(frost.getDrawable()).clearFrame());
+
+        surfaces.dockBlurRadiusDp = GlassRefraction.CLARITY_RADIUS_DP;
+        surfaces.look = lookWithClarity(70);
+        ImageView sharp = sheet(300, 40);
+        assertTrue(chrome.frost().applyOffDockSheet(sharp,
+            SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST, 20f));
+        assertNull("a frost as clear as the clear frame has nothing clearer to show",
+            SharedFrameDrawable.of(sharp.getDrawable()).clearFrame());
+
+        assertTrue(WallpaperFrostPainter.wantsClearFrame(lookWithClarity(1),
+            GlassRefraction.CLARITY_RADIUS_DP + 1));
+        assertFalse(WallpaperFrostPainter.wantsClearFrame(lookWithClarity(0), 25));
+        assertFalse(WallpaperFrostPainter.wantsClearFrame(null, 25));
     }
 
     @Test

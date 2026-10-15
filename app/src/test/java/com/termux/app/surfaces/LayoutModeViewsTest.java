@@ -385,7 +385,7 @@ public class LayoutModeViewsTest {
         assertEquals(java.util.Arrays.asList(AppearanceLooks.Door.TRAIL,
             AppearanceLooks.Door.EFFECT), panel.shownDoors());
         assertFalse("the terminal's pills take the name's place", panel.isRow2NameShown());
-        panel.setTerminalLooks("default", "crt_amber");
+        panel.setTerminalLooks(true, "default", "crt_amber");
         View trail = panel.view().findViewById(R.id.appearance_editor_trail);
         View effect = panel.view().findViewById(R.id.appearance_editor_effect);
         TextView trailValue = panel.view().findViewById(R.id.appearance_editor_trail_value);

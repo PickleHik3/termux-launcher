@@ -14,7 +14,6 @@ import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.TaiSpeechModels;
 import com.termux.app.TermuxActivity;
@@ -28,24 +27,15 @@ import com.termux.app.place.PlaceOrientation;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys;
 import com.termux.app.terminal.inappkeyboard.TapCorrectionController;
 import com.termux.app.terminal.inappkeyboard.TapModelStore;
-import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader;
-import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.Set;
-
-import juloo.keyboard2.KeyboardData;
 
 /**
  * Standalone settings page for the built-in terminal keyboard: input method, layouts, typing, and
@@ -154,12 +144,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             });
         }
 
-        Preference customLayout = findPreference("in_app_keyboard_custom_layout");
-        if (customLayout != null) customLayout.setOnPreferenceClickListener(preference -> {
-            validateCustomLayout();
-            return true;
-        });
-
         SegmentedPillPreference voiceEngine = findPreference(KEY_VOICE_ENGINE);
         if (voiceEngine != null) {
             voiceEngine.setOnPreferenceChangeListener((preference, newValue) -> {
@@ -236,38 +220,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         else
             preference.setSummary(getResources().getQuantityString(
                 R.plurals.settings_keyboard_tap_correction_reset_summary, taps, taps));
-    }
-
-    private void validateCustomLayout() {
-        Context context = getContext();
-        if (context == null) return;
-        File file = new File(TermuxConstants.TERMUX_DATA_HOME_DIR_PATH,
-            "keyboard/layout.xml");
-        if (!file.isFile()) {
-            AppNotice.show(context, R.string.settings_custom_layout_missing, true);
-            return;
-        }
-        new Thread(() -> {
-            boolean valid = false;
-            try (FileInputStream input = new FileInputStream(file);
-                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-                byte[] buffer = new byte[8192];
-                int total = 0, read;
-                while ((read = input.read(buffer)) != -1) {
-                    total += read;
-                    if (total > TermuxInAppKeyboardLayoutLoader.MAX_LAYOUT_BYTES)
-                        throw new IOException("layout too large");
-                    output.write(buffer, 0, read);
-                }
-                KeyboardData.load_string_exn(
-                    new String(output.toByteArray(), StandardCharsets.UTF_8));
-                valid = true;
-            } catch (Exception ignored) {}
-            final int message = valid ? R.string.settings_custom_layout_valid
-                : R.string.settings_custom_layout_invalid;
-            if (isAdded() && getActivity() != null) getActivity().runOnUiThread(() ->
-                AppNotice.show(context, message, true));
-        }, "keyboard-layout-validation").start();
     }
 
     private void updateBuiltInKeyboardRows(boolean enabled) {

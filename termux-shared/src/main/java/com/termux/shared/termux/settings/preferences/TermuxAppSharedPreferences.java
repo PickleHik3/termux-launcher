@@ -682,19 +682,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             snapshot == null ? "" : snapshot, false);
     }
 
-    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_APPEARANCE_EDITOR_LAST_GROUP}. */
-    @NonNull
-    public String getAppearanceEditorLastGroup() {
-        return SharedPreferenceUtils.getString(mSharedPreferences,
-            TermuxPreferenceConstants.TERMUX_APP.KEY_APPEARANCE_EDITOR_LAST_GROUP,
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_APPEARANCE_EDITOR_LAST_GROUP, true);
-    }
-
-    public void setAppearanceEditorLastGroup(@NonNull String group) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TermuxPreferenceConstants.TERMUX_APP.KEY_APPEARANCE_EDITOR_LAST_GROUP, group, false);
-    }
-
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS}. The switch alone; whether it takes effect is the chrome's call. */
     public boolean isFancierGlassEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
@@ -769,6 +756,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION,
             DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_DISPERSION,
                 TERMUX_APP.MAX_FANCIER_GLASS_DISPERSION), false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_CLARITY}. Clamped, a percentage. */
+    public int getFancierGlassClarityPercent() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_FANCIER_GLASS_CLARITY, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_CLARITY),
+            TERMUX_APP.MIN_FANCIER_GLASS_CLARITY, TERMUX_APP.MAX_FANCIER_GLASS_CLARITY);
+    }
+
+    public void setFancierGlassClarityPercent(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_CLARITY,
+            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_CLARITY,
+                TERMUX_APP.MAX_FANCIER_GLASS_CLARITY), false);
     }
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_SHOW_KEY_HINTS}. */
@@ -2908,12 +2908,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             // by moving the DEFAULT_* constants: an install that went through this branch under an
             // earlier build never stored these keys, and a changed constant would restyle it.
             // Every surface stays linked to Base, so the editor shows Clear selected; the material,
-            // tint, rim, motion, edge light, specular and dispersion are already Clear's defaults.
+            // tint, rim, motion and specular are already Clear's defaults. The edge (26/26/50/0/35/100)
+            // is written whole: its defaults are what an install that never stored the keys has
+            // always read, and stay.
             setSurfaceBaseValue(SurfaceProperty.BLUR, FRESH_INSTALL_BASE_BLUR);
             setSurfaceBaseValue(SurfaceProperty.OPACITY, FRESH_INSTALL_BASE_OPACITY);
             setSurfaceBaseValue(SurfaceProperty.GRAIN, FRESH_INSTALL_BASE_GRAIN);
             setFancierGlassBendDp(FRESH_INSTALL_GLASS_BEND);
             setFancierGlassEdgeWidthDp(FRESH_INSTALL_GLASS_EDGE_WIDTH);
+            setFancierGlassEdgeLightPercent(FRESH_INSTALL_GLASS_EDGE_LIGHT);
+            setFancierGlassDispersionPercent(FRESH_INSTALL_GLASS_DISPERSION);
+            setFancierGlassClarityPercent(FRESH_INSTALL_GLASS_CLARITY);
             // The Layout margin writes both of these; the pane gap matches it at this size.
             setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, FRESH_INSTALL_MARGIN);
             setTerminalPaneGap(FRESH_INSTALL_MARGIN);
@@ -2939,12 +2944,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED, true, true);
     }
 
-    /** The Clear look's numbers and the margin a fresh install opens with. */
+    /**
+     * The Clear look's numbers and the margin a fresh install opens with. The app module's
+     * SurfacePresets holds Clear itself, out of reach here; a test there checks that a fresh
+     * store matches it.
+     */
     private static final int FRESH_INSTALL_BASE_BLUR = 4;
     private static final int FRESH_INSTALL_BASE_OPACITY = 10;
     private static final int FRESH_INSTALL_BASE_GRAIN = 4;
-    private static final int FRESH_INSTALL_GLASS_BEND = 4;
-    private static final int FRESH_INSTALL_GLASS_EDGE_WIDTH = 10;
+    private static final int FRESH_INSTALL_GLASS_BEND = 27;
+    private static final int FRESH_INSTALL_GLASS_EDGE_WIDTH = 18;
+    private static final int FRESH_INSTALL_GLASS_EDGE_LIGHT = 10;
+    private static final int FRESH_INSTALL_GLASS_DISPERSION = 40;
+    private static final int FRESH_INSTALL_GLASS_CLARITY = 76;
     private static final int FRESH_INSTALL_MARGIN = 8;
 
     /**
