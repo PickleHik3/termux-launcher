@@ -77,6 +77,12 @@ public class IconPackPageTest {
             return v == null ? "" : v;
         }
 
+        boolean savedPinnedOnly = true;
+
+        @Override public boolean pinnedOnlySaved() { return savedPinnedOnly; }
+
+        @Override public void savePinnedOnly(boolean on) { savedPinnedOnly = on; }
+
         @Override public void apply(@NonNull String key, @NonNull String value) {
             writes.add(key + "=" + value);
             events.add("write " + key + "=" + value);
@@ -182,7 +188,7 @@ public class IconPackPageTest {
     public void tappingATileAppliesToThePinnedKeyWhileOn() {
         IconPackPage page = open();
         page.tilesView().getChildAt(2).performClick();
-        assertEquals(Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.beta"), mBackend.writes);
+        assertEquals(Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.beta", IconPackChoices.KEY_GLOBAL + "="), mBackend.writes);
         assertEquals("pack.beta", page.selectedPack());
         assertTrue(page.tilesView().getChildAt(2).isSelected());
         assertEquals(1, selectedCount(page));
@@ -215,7 +221,8 @@ public class IconPackPageTest {
         mBackend.prefs.put(IconPackChoices.KEY_GLOBAL, "pack.alpha");
         IconPackPage page = open();
         page.pinnedOnlySwitch().performClick();
-        assertEquals(Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.alpha"), mBackend.writes);
+        assertEquals(Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.alpha", IconPackChoices.KEY_GLOBAL + "="), mBackend.writes);
+        assertEquals("", mBackend.current(IconPackChoices.KEY_GLOBAL));
         assertEquals("System", label(page.tilesView().getChildAt(0)));
     }
 
@@ -223,7 +230,8 @@ public class IconPackPageTest {
     public void aTapParsesThePackBeforeItWritesTheChoice() {
         IconPackPage page = open();
         page.tilesView().getChildAt(1).performClick();
-        assertEquals(Arrays.asList("warm pack.alpha", "write " + IconPackChoices.KEY_PINNED + "=pack.alpha"),
+        assertEquals(Arrays.asList("warm pack.alpha", "write " + IconPackChoices.KEY_PINNED + "=pack.alpha",
+                "write " + IconPackChoices.KEY_GLOBAL + "="),
             mBackend.events);
     }
 
@@ -232,7 +240,7 @@ public class IconPackPageTest {
         mBackend.prefs.put(IconPackChoices.KEY_PINNED, "pack.beta");
         IconPackPage page = open();
         page.tilesView().getChildAt(0).performClick();
-        assertEquals(Arrays.asList("write " + IconPackChoices.KEY_PINNED + "="), mBackend.events);
+        assertEquals(Arrays.asList("write " + IconPackChoices.KEY_GLOBAL + "=", "write " + IconPackChoices.KEY_PINNED + "="), mBackend.events);
     }
 
     @Test
@@ -243,7 +251,7 @@ public class IconPackPageTest {
         assertTrue("ringed before the parse", page.tilesView().getChildAt(2).isSelected());
         assertTrue("nothing written while it parses", mBackend.writes.isEmpty());
         runBackground();
-        assertEquals(Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.beta"), mBackend.writes);
+        assertEquals(Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.beta", IconPackChoices.KEY_GLOBAL + "="), mBackend.writes);
     }
 
     @Test
@@ -256,9 +264,54 @@ public class IconPackPageTest {
         runBackground();
         assertEquals("only the last tap parses", Arrays.asList("pack.long"), mBackend.warmed);
         assertEquals("and only the last is written",
-            Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.long"), mBackend.writes);
+            Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.long", IconPackChoices.KEY_GLOBAL + "="), mBackend.writes);
         assertEquals("pack.long", page.selectedPack());
         assertEquals(1, mApplied);
+    }
+
+    @Test
+    public void systemWhileOnClearsAPackLeftBehindInGlobal() {
+        // The stuck state: a whole-launcher pack behind a pinned one, so System kept that pack.
+        mBackend.prefs.put(IconPackChoices.KEY_PINNED, "pack.beta");
+        mBackend.prefs.put(IconPackChoices.KEY_GLOBAL, "pack.alpha");
+        IconPackPage page = open();
+        page.tilesView().getChildAt(0).performClick();
+        assertEquals("", mBackend.current(IconPackChoices.KEY_GLOBAL));
+        assertEquals("", mBackend.current(IconPackChoices.KEY_PINNED));
+    }
+
+    @Test
+    public void defaultWhileOffClearsBoth() {
+        mBackend.prefs.put(IconPackChoices.KEY_GLOBAL, "pack.alpha");
+        IconPackPage page = open();
+        page.tilesView().getChildAt(0).performClick();
+        assertEquals("", mBackend.current(IconPackChoices.KEY_GLOBAL));
+        assertEquals("", mBackend.current(IconPackChoices.KEY_PINNED));
+    }
+
+    @Test
+    public void theSwitchKeepsItsPositionAfterSystemClearsBothKeys() {
+        IconPackPage page = open();
+        page.pinnedOnlySwitch().performClick();
+        assertFalse(page.pinnedOnlySwitch().isChecked());
+        page.tilesView().getChildAt(0).performClick();
+        page.release();
+
+        IconPackPage reopened = open();
+        assertFalse("still off after System", reopened.pinnedOnlySwitch().isChecked());
+        reopened.tilesView().getChildAt(1).performClick();
+        assertEquals("pack.alpha", mBackend.current(IconPackChoices.KEY_GLOBAL));
+        assertEquals("", mBackend.current(IconPackChoices.KEY_PINNED));
+    }
+
+    @Test
+    public void switchingOffThenOnLeavesThePackOnlyInPinned() {
+        mBackend.prefs.put(IconPackChoices.KEY_PINNED, "pack.beta");
+        IconPackPage page = open();
+        page.pinnedOnlySwitch().performClick();
+        page.pinnedOnlySwitch().performClick();
+        assertEquals("pack.beta", mBackend.current(IconPackChoices.KEY_PINNED));
+        assertEquals("", mBackend.current(IconPackChoices.KEY_GLOBAL));
     }
 
     @Test
@@ -267,9 +320,9 @@ public class IconPackPageTest {
         mHoldBackground = true;
         page.tilesView().getChildAt(1).performClick();
         page.release();
-        assertEquals(Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.alpha"), mBackend.writes);
+        assertEquals(Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.alpha", IconPackChoices.KEY_GLOBAL + "="), mBackend.writes);
         runBackground();
-        assertEquals("the late parse writes nothing more", 1, mBackend.writes.size());
+        assertEquals("the late parse writes nothing more", 2, mBackend.writes.size());
     }
 
     /**

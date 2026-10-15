@@ -104,8 +104,13 @@ public final class PinnedAppsEditor {
     private List<LauncherAppEntry> allApps = new ArrayList<>();
     private final Map<String, LauncherAppEntry> appByStableId = new LinkedHashMap<>();
 
-    private final Set<String> selectedIds = new LinkedHashSet<>();
+    /**
+     * The pins as Done will save them, and the only record of what is pinned: the order list,
+     * the ticks in the apps list and the most-used chips are all drawn from it.
+     */
     private final List<PinnedItem> orderedSelected = new ArrayList<>();
+    /** Redraws the ticks and chips after the order list drops a row; set once the sheet is built. */
+    @Nullable private Runnable refreshChecklist;
 
     private final boolean[] folderMode = new boolean[] {false};
 
@@ -154,11 +159,11 @@ public final class PinnedAppsEditor {
         for (LauncherAppEntry entry : allApps) {
             appByStableId.put(entry.appRef.stableId(), entry);
         }
-        selectedIds.clear();
         orderedSelected.clear();
+        Set<String> seen = new LinkedHashSet<>();
         for (PinnedItem item : repository.loadPinnedItems()) {
             String stable = stableIdForPinnedItem(item);
-            if (stable == null || !selectedIds.add(stable)) continue;
+            if (stable == null || !seen.add(stable)) continue;
             orderedSelected.add(clonePinnedItem(item));
         }
     }
@@ -265,20 +270,24 @@ public final class PinnedAppsEditor {
             v.getParent().requestDisallowInterceptTouchEvent(true);
             return false;
         });
+        final Runnable[] refreshAll = new Runnable[1];
         listView.setOnItemClickListener((parent, view, position, id) -> {
             if (position < 0 || position >= filtered.size()) return;
             toggleApp(filtered.get(position));
-            appsAdapter.notifyDataSetChanged();
-            orderAdapter.notifyDataSetChanged();
+            refreshAll[0].run();
         });
         root.addView(listView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(250)));
 
-        // Build most-used chips now that toggle/refresh hooks exist.
-        final Runnable[] refreshAll = new Runnable[1];
-        refreshAll[0] = () -> {
+        // Every change to the pins redraws every view of them. A row removed from the order list
+        // animates out on its own, so it refreshes only the ticks and chips; anything else
+        // rebinds the order list too.
+        refreshChecklist = () -> {
             appsAdapter.notifyDataSetChanged();
-            orderAdapter.notifyDataSetChanged();
             rebuildMostUsedChips(mostUsedRow, mostUsed, refreshAll[0]);
+        };
+        refreshAll[0] = () -> {
+            orderAdapter.notifyDataSetChanged();
+            refreshChecklist.run();
         };
         rebuildMostUsedChips(mostUsedRow, mostUsed, refreshAll[0]);
 
@@ -358,7 +367,7 @@ public final class PinnedAppsEditor {
     private void rebuildMostUsedChips(@NonNull LinearLayout row, @NonNull List<LauncherAppEntry> mostUsed, @NonNull Runnable refreshAll) {
         row.removeAllViews();
         for (LauncherAppEntry entry : mostUsed) {
-            boolean pinned = selectedIds.contains(entry.appRef.stableId());
+            boolean pinned = isPinned(entry);
             Chip chip = new Chip(context);
             chip.setChipDrawable(ChipDrawable.createFromAttributes(context, null, 0,
                 com.google.android.material.R.style.Widget_Material3_Chip_Filter));
@@ -388,23 +397,28 @@ public final class PinnedAppsEditor {
     // ---- selection / persistence ------------------------------------------
 
     private void toggleApp(@NonNull LauncherAppEntry entry) {
-        String stable = entry.appRef.stableId();
-        if (selectedIds.contains(stable)) {
-            selectedIds.remove(stable);
-            removePinnedByStableId(orderedSelected, stable);
+        if (isPinned(entry)) {
+            removePinnedByStableId(orderedSelected, entry.appRef.stableId());
         } else {
-            selectedIds.add(stable);
             orderedSelected.add(new PinnedAppItem(entry.appRef.copy()));
         }
         persistImmediate();
     }
 
     private void removeAt(int pos, @NonNull PinnedOrderAdapter adapter) {
-        String stable = stableIdForPinnedItem(orderedSelected.get(pos));
         orderedSelected.remove(pos);
-        if (stable != null) selectedIds.remove(stable);
         adapter.notifyItemRemoved(pos);
+        if (refreshChecklist != null) refreshChecklist.run();
         persistImmediate();
+    }
+
+    /** Whether the app is one of the pins Done will save — what its tick and chip show. */
+    private boolean isPinned(@NonNull LauncherAppEntry entry) {
+        String stable = entry.appRef.stableId();
+        for (PinnedItem item : orderedSelected) {
+            if (stable.equals(stableIdForPinnedItem(item))) return true;
+        }
+        return false;
     }
 
     private void persistImmediate() {
@@ -445,7 +459,7 @@ public final class PinnedAppsEditor {
     private List<LauncherAppEntry> computeMostUsed() {
         List<LauncherAppEntry> candidates = new ArrayList<>();
         for (LauncherAppEntry entry : allApps) {
-            if (!selectedIds.contains(entry.appRef.stableId())) candidates.add(entry);
+            if (!isPinned(entry)) candidates.add(entry);
         }
         List<LauncherAppEntry> ranked = usageStats.rankForAz(candidates);
         if (ranked.size() > MOST_USED_COUNT) {
@@ -488,7 +502,7 @@ public final class PinnedAppsEditor {
             MaterialCheckBox check = (MaterialCheckBox) row.getChildAt(2);
             icon.setImageDrawable(LauncherAppDataProvider.artworkFor(context, entry));
             label.setText(entry.label);
-            check.setChecked(selectedIds.contains(entry.appRef.stableId()));
+            check.setChecked(isPinned(entry));
             row.setBackground(check.isChecked() ? M3.surface(context,
                 com.google.android.material.R.attr.shapeAppearanceCornerMedium,
                 M3.color(context, com.google.android.material.R.attr.colorSecondaryContainer,

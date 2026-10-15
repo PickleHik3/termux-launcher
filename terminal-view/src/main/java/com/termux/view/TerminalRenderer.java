@@ -18,6 +18,7 @@ import com.termux.terminal.TerminalBuffer;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalRow;
 import com.termux.terminal.TextStyle;
+import com.termux.terminal.WcWidth;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -377,6 +378,19 @@ public final class TerminalRenderer {
      * {@link #sharesFacesWith}.
      */
     private final FallbackFontResolver mFallbackResolver;
+
+    /**
+     * What a code point inside a text sizing block draws from, as {@link #blockRunEnd} compares it:
+     * the same resolution a plain cell gets, as one instance so the block path allocates nothing.
+     */
+    private final BlockFaces mBlockFaces = new BlockFaces() {
+        @Nullable
+        @Override
+        public Object faceOf(int codePoint, boolean bold, boolean italic) {
+            final SymbolMap map = symbolMapWithGlyphFor(codePoint);
+            return map != null ? map : fallbackTypefaceFor(codePoint, bold, italic);
+        }
+    };
 
     /** Scratch paint for coverage probes, so they cannot disturb the drawing paint's state. */
     private final Paint mCoveragePaint = new Paint();
@@ -1091,9 +1105,10 @@ public final class TerminalRenderer {
      * <p>The three passes are kept apart exactly as the direct path keeps them: every row's
      * backgrounds and cursor block first, then every row's glyphs, then every row's images, so
      * overhanging ink is never covered by the next row's fill and an image still lands over the
-     * cells it covers. Each node spans the whole view and is recorded in the same
-     * coordinates the direct path draws in, so nothing about where a row lands, how its cell edges
-     * snap, or how far its glyphs may reach depends on which path drew it.
+     * cells it covers. Each node spans the whole view and is recorded as the first row would be,
+     * then moved down to its own row by a whole number of line heights, so it lands on exactly the
+     * pixels the direct path draws it on: nothing about where a row lands, how its cell edges snap,
+     * or how far its glyphs may reach depends on which path drew it.
      */
     private boolean drawRowsThroughNodes(TerminalEmulator mEmulator, Canvas canvas,
                                          TerminalBuffer screen, int[] palette, int topRow,
@@ -1142,8 +1157,10 @@ public final class TerminalRenderer {
         mRowCache.beginFrame(mEmulator, mEmulator.mRows, columns, topRow, extraRows,
             horizontalOffset, transparentBackground, transparentOverlayColor, reverseVideo,
             boldWithBright, palette, viewWidth, viewHeight, visibleRows);
-        // Sizing the nodes after the cache, so a pane that lost rows drops their recordings here.
+        // Sizing the nodes after the cache, so a pane that lost rows drops their recordings here,
+        // and moving them as the cache moved the rows' states, so a scrolled row keeps its own.
         nodes.resize(visibleRows);
+        nodes.shift(mRowCache.lastShift());
         final int cursorColor = palette[TextStyle.COLOR_INDEX_CURSOR];
         final long placementGeneration = mEmulator.getKittyPlacementGeneration();
         mImageGenerationSource = mEmulator;
@@ -1207,7 +1224,13 @@ public final class TerminalRenderer {
             background.setClipToBounds(false);
             glyphs.setClipToBounds(false);
             images.setClipToBounds(false);
-            final float heightOffset = mFontLineSpacingAndAscent + (index + 1) * mFontLineSpacing;
+            // Each row is recorded as if it were the first and moved to its index when drawn, so
+            // after a scroll a row still on screen replays its recording at its new place.
+            final float rowTop = index * (float) mFontLineSpacing;
+            background.setTranslationY(rowTop);
+            glyphs.setTranslationY(rowTop);
+            images.setTranslationY(rowTop);
+            final float heightOffset = mFontLineSpacingAndAscent + mFontLineSpacing;
             if (carriesAnImage) {
                 // The pixels a placeholder or a bitmap cell draws from are replaced without any
                 // input the cache compares moving, so this node is re-recorded whenever the
@@ -1247,9 +1270,9 @@ public final class TerminalRenderer {
                 drawRowGlyphs(mEmulator, into, lineObject, palette, heightOffset, columns, cursorX,
                     span.columns, cursorVisible, cursorShape, selx1, selx2, boldWithBright,
                     reverseVideo, horizontalOffset, true, mUrlUnderlines.segmentsFor(index));
-                // The block a row heads reaches down over the rows beneath it. Nodes are recorded
-                // in the view's own coordinates and never clipped to their row, so the tall layer
-                // D4 asks for is this one node — which is why the whole group was dirtied above.
+                // The block a row heads reaches down over the rows beneath it. Nodes are never
+                // clipped to their row and are moved whole to it, so the tall layer D4 asks for is
+                // this one node — which is why the whole group was dirtied above.
                 drawRowTextBlocks(into, screen, lineObject, palette, heightOffset, row, topRow,
                     columns, cursorX, span.columns, cursorShape, selection, boldWithBright,
                     reverseVideo, horizontalOffset);
@@ -1734,29 +1757,42 @@ public final class TerminalRenderer {
             block.fractionDenominator, block.demoted);
         canvas.save();
         final String previousFeatures = mTextPaint.getFontFeatureSettings();
-        final String runFeatures = mFontFeatures.forRun(bold, italic, false);
-        final boolean changedFeatures = !sameString(previousFeatures, runFeatures);
         try {
             canvas.clipRect(blockLeft, blockTop, blockLeft + blockWidth, blockBottom);
-            configureFont(bold, italic, null, null, null);
-            if (changedFeatures) mTextPaint.setFontFeatureSettings(runFeatures);
-            mTextPaint.setTextSize(mTextSize * sizeScale);
             try {
-                final float advance = mTextPaint.measureText(text);
                 final float boxHeight = TextBlockGeometry.boxHeight(mFontLineSpacing, sizeScale);
                 final float boxTop = TextBlockGeometry.alignedTop(blockTop, blockHeight, boxHeight,
                     block.verticalAlign);
+                final float baseline = TextBlockGeometry.baseline(boxTop, mFontLineSpacing,
+                    mFontBaselineDescent, sizeScale);
                 mTextPaint.setUnderlineText(false);
                 mTextPaint.setStrikeThruText(false);
                 mTextPaint.setColor(foreColor);
-                canvas.drawText(text,
-                    TextBlockGeometry.alignedLeft(blockLeft, blockWidth, advance,
-                        block.horizontalAlign),
-                    TextBlockGeometry.baseline(boxTop, mFontLineSpacing, mFontBaselineDescent,
-                        sizeScale), mTextPaint);
+                // The text is split into runs that resolve to one face each — symbol_map, the
+                // fallback chain, or the primary face — exactly as plain cells resolve, so an icon
+                // in a block draws from the face it would draw from at normal size. The first pass
+                // measures each run with its own face, for the h alignment; the second draws them
+                // left to right from where that alignment puts the first. Both passes split the
+                // text the same way, a wide icon's run reaching over the blanks it spreads into.
+                float advance = 0f;
+                for (int start = 0, glyphEnd, end; start < text.length(); start = end) {
+                    glyphEnd = blockRunEnd(text, start, bold, italic, mBlockFaces);
+                    end = blockSymbolExpansionEnd(text, start, glyphEnd, bold, italic, sizeScale);
+                    advance += blockRun(canvas, false, text, start, glyphEnd, end, bold, italic,
+                        sizeScale, 0f, boxTop, boxHeight, baseline);
+                }
+                float x = TextBlockGeometry.alignedLeft(blockLeft, blockWidth, advance,
+                    block.horizontalAlign);
+                for (int start = 0, glyphEnd, end; start < text.length(); start = end) {
+                    glyphEnd = blockRunEnd(text, start, bold, italic, mBlockFaces);
+                    end = blockSymbolExpansionEnd(text, start, glyphEnd, bold, italic, sizeScale);
+                    x += blockRun(canvas, true, text, start, glyphEnd, end, bold, italic,
+                        sizeScale, x, boxTop, boxHeight, baseline);
+                }
             } finally {
                 mTextPaint.setTextSize(mTextSize);
-                if (changedFeatures) mTextPaint.setFontFeatureSettings(previousFeatures);
+                if (!sameString(mTextPaint.getFontFeatureSettings(), previousFeatures))
+                    mTextPaint.setFontFeatureSettings(previousFeatures);
             }
             // Decorations run along the block's own bottom edge rather than the anchor row's, so a
             // link or an underlined heading is marked once, under all of it.
@@ -1784,6 +1820,155 @@ public final class TerminalRenderer {
         } finally {
             canvas.restore();
         }
+    }
+
+    /**
+     * What a code point of a text sizing block draws from: a {@link SymbolMap}, a fallback
+     * {@link Typeface}, or null for the primary face. Two code points share a run only when the
+     * answers are the same object.
+     */
+    interface BlockFaces {
+        @Nullable
+        Object faceOf(int codePoint, boolean bold, boolean italic);
+    }
+
+    /**
+     * Where the face run of a block's text that starts at {@code start} ends (exclusive). A
+     * zero-width code point — a combining mark, a joiner, a variation selector — stays with the
+     * code point before it, which is the rule plain cells follow: resolution is on the base code
+     * point, never on a continuation of its cluster.
+     */
+    static int blockRunEnd(String text, int start, boolean bold, boolean italic,
+                           BlockFaces faces) {
+        final int first = text.codePointAt(start);
+        final Object face = faces.faceOf(first, bold, italic);
+        int index = start + Character.charCount(first);
+        while (index < text.length()) {
+            final int codePoint = text.codePointAt(index);
+            if (WcWidth.width(codePoint) > 0 && faces.faceOf(codePoint, bold, italic) != face)
+                break;
+            index += Character.charCount(codePoint);
+        }
+        return index;
+    }
+
+    /**
+     * Where a block's symbol run {@code [start, end)} ends once it spreads across the blanks
+     * after it, as a plain cell's private-use icon does (kitty's fonts.c): a run that is one
+     * private-use code point of one wcwidth column, whose own glyph is wider than one cell at the
+     * block's drawn size, takes up to {@link #symbolExpansionColumns} minus one of the expansion
+     * blanks right after it. Any other run, or an icon with no blank after it, ends where it did.
+     * The caller decides the run draws from a symbol map before asking.
+     *
+     * @param advance   the icon's own advance at the block's drawn size
+     * @param cellWidth one cell at the block's drawn size
+     * @param cap       the {@code narrow_symbols} ceiling for the icon's code point
+     */
+    static int blockExpansionEnd(String text, int start, int end, float advance,
+                                 float cellWidth, int cap) {
+        if (!isExpandableBlockSymbol(text, start, end)) return end;
+        final int wanted = symbolExpansionColumns(advance, cellWidth, cap);
+        int index = end;
+        for (int columns = 1; columns < wanted && index < text.length()
+            && isExpansionBlank(text.charAt(index)); columns++) {
+            index++;
+        }
+        return index;
+    }
+
+    /** Whether {@code [start, end)} is one private-use code point of one wcwidth column. */
+    static boolean isExpandableBlockSymbol(String text, int start, int end) {
+        final int codePoint = text.codePointAt(start);
+        return start + Character.charCount(codePoint) == end && isPrivateUse(codePoint)
+            && WcWidth.width(codePoint) == 1;
+    }
+
+    /**
+     * {@link #blockExpansionEnd} for a face run of a block, measuring the icon on its symbol face
+     * at the block's drawn size against a cell at that size. A run that is not a lone symbol-mapped
+     * private-use icon is returned unchanged without measuring anything.
+     */
+    private int blockSymbolExpansionEnd(String text, int start, int end, boolean bold,
+                                        boolean italic, float sizeScale) {
+        if (!isExpandableBlockSymbol(text, start, end) || end >= text.length()
+            || !isExpansionBlank(text.charAt(end))) return end;
+        final int codePoint = text.codePointAt(start);
+        final SymbolMap symbolMap = symbolMapWithGlyphFor(codePoint);
+        if (symbolMap == null || symbolMap.typeface == null) return end;
+        configureFont(bold, italic, symbolMap.typeface, null, symbolVariationsOf(symbolMap));
+        final String runFeatures = symbolFeaturesOf(symbolMap);
+        if (!sameString(mTextPaint.getFontFeatureSettings(), runFeatures))
+            mTextPaint.setFontFeatureSettings(runFeatures);
+        mTextPaint.setTextSize(mTextSize * sizeScale);
+        return blockExpansionEnd(text, start, end, mTextPaint.measureText(text, start, end),
+            mFontWidth * sizeScale, mSymbolExpansion.maxColumnsFor(codePoint));
+    }
+
+    /** How many wcwidth columns the code points in {@code [start, end)} of a block take. */
+    static int blockRunColumns(String text, int start, int end) {
+        int columns = 0;
+        for (int index = start; index < end; ) {
+            final int codePoint = text.codePointAt(index);
+            columns += Math.max(0, WcWidth.width(codePoint));
+            index += Character.charCount(codePoint);
+        }
+        return columns;
+    }
+
+    /**
+     * Measure, or draw at {@code x}, one face run of a block, and return how far it advances.
+     *
+     * <p>Primary and fallback runs draw at the block's size on its baseline, as the whole block
+     * used to. A symbol run mirrors the plain-cell fit (see {@link #drawTextRunConfigured}) against
+     * the block's scaled cells instead of one cell: scaled uniformly until its advance and line box
+     * fit its columns at the drawn size and the box's height, and centred in both, so an icon sits
+     * in its {@code s} by {@code s} cells the way a letter of the block does. It advances by the
+     * cells it owns, not by its own glyph advance.
+     *
+     * <p>A symbol run spread by {@link #blockExpansionEnd} owns the blanks in
+     * {@code [glyphEnd, end)} as well: they widen its box by a column each and are not drawn, and
+     * the icon is measured, fitted and centred from {@code [start, glyphEnd)} alone. Every other
+     * run has {@code glyphEnd == end}.
+     */
+    private float blockRun(Canvas canvas, boolean draw, String text, int start, int glyphEnd,
+                           int end, boolean bold, boolean italic, float sizeScale, float x,
+                           float boxTop, float boxHeight, float baseline) {
+        final int codePoint = text.codePointAt(start);
+        final SymbolMap symbolMap = symbolMapWithGlyphFor(codePoint);
+        final Typeface symbolTypeface = symbolMap == null ? null : symbolMap.typeface;
+        if (symbolTypeface != null && !draw)
+            return TextBlockGeometry.symbolBoxWidth(blockRunColumns(text, start, end),
+                mFontWidth, sizeScale);
+        final Typeface fallbackTypeface = symbolTypeface == null
+            ? fallbackTypefaceFor(codePoint, bold, italic) : null;
+        configureFont(bold, italic, symbolTypeface, fallbackTypeface,
+            symbolVariationsOf(symbolMap));
+        final String runFeatures = symbolTypeface != null ? symbolFeaturesOf(symbolMap)
+            : mFontFeatures.forRun(bold, italic, false);
+        if (!sameString(mTextPaint.getFontFeatureSettings(), runFeatures))
+            mTextPaint.setFontFeatureSettings(runFeatures);
+        final float textSize = mTextSize * sizeScale;
+        mTextPaint.setTextSize(textSize);
+        float advance = mTextPaint.measureText(text, start, glyphEnd);
+        if (symbolTypeface == null) {
+            if (draw) canvas.drawText(text, start, glyphEnd, x, baseline, mTextPaint);
+            return advance;
+        }
+        final float boxWidth = TextBlockGeometry.symbolBoxWidth(
+            blockRunColumns(text, start, end), mFontWidth, sizeScale);
+        mTextPaint.getFontMetrics(mSymbolFontMetrics);
+        float ascent = mSymbolFontMetrics.ascent;
+        float lineBox = mSymbolFontMetrics.descent - ascent;
+        final float fit = TextBlockGeometry.symbolFitScale(advance, lineBox, boxWidth, boxHeight);
+        if (fit != 1f) {
+            mTextPaint.setTextSize(textSize * fit);
+            advance *= fit;
+            lineBox *= fit;
+            ascent *= fit;
+        }
+        canvas.drawText(text, start, glyphEnd, TextBlockGeometry.centredLeft(x, boxWidth, advance),
+            TextBlockGeometry.centredBaseline(boxTop, boxHeight, lineBox, ascent), mTextPaint);
+        return boxWidth;
     }
 
     /**
