@@ -10,7 +10,7 @@ name and in the package manager the shell uses. Pick one and keep its add-ons fr
 
 | Edition | Android package | Use it when |
 |---|---|---|
-| Termux (recommended) | `com.termux` | You want the official Termux package repositories. It replaces a standard Termux install. |
+| Termux (recommended) | `com.termux` | You want the official Termux package repositories. It replaces a standard Termux install (see [Coming from Termux](#coming-from-termux)). |
 | Nix | `com.termux.launcher.nix` | You want it beside standard Termux, with packages from Nix. See [Nix: beginner's guide](Nix_Getting_Started.md). |
 | VAJ (demo) | `io.vaj.tl` | You want it beside standard Termux with `pkg`, from a small APT repository that carries few packages. |
 
@@ -37,6 +37,35 @@ forks. The F-Droid add-ons do not pair with any edition.
 
 An update stops the app, so save work in running shells first. Never uninstall as an update step
 unless you have a backup: Android deletes the app's private data on uninstall.
+
+## Coming from Termux
+
+The Termux edition can take over an existing Termux install, depending on where that install came
+from:
+
+- **Termux from GitHub** (the `termux/termux-app` releases page): install the Termux edition APK
+  over it. Your home directory and packages stay.
+- **Termux from F-Droid or Google Play**: Android refuses the install, because those builds are
+  signed with a different key. Move over with a backup instead:
+
+  ```sh
+  termux-setup-storage
+  termux-backup /sdcard/termux-backup.tar.gz
+  ```
+
+  Uninstall Termux, install the Termux edition, then in the launcher's terminal:
+
+  ```sh
+  termux-setup-storage
+  termux-restore /sdcard/termux-backup.tar.gz
+  ```
+
+Either way, replace your add-ons with the matching builds from this project's forks.
+
+The switch is one way. Termux Launcher carries a higher version number than official Termux, so
+Android will not install official Termux over it, even the GitHub build. To go back, take a backup
+the same way, uninstall the launcher, install Termux and restore. The launcher's own settings do
+not carry over.
 
 ## First launch
 
