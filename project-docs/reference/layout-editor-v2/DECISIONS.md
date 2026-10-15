@@ -1,6 +1,6 @@
 # Layout editor v2: decisions (2026-10-02)
 
-The developer settled these on 2026-10-02 (grilling rounds 1–4, `.lavish/layout-editor-v2/round-4.html`). Where they disagree with `README.md` in this folder, the decisions here win. Where they disagree with `project-docs/active/appearance-layout-editor/SPEC.md`, they replace those parts of the spec.
+The developer settled these on 2026-10-02 (grilling rounds 1–4, `.lavish/layout-editor-v2/round-4.html`). Where they disagree with `README.md` in this folder, the decisions here win. Where they disagree with `project-docs/reference/launcher/appearance-layout-editor/SPEC.md`, they replace those parts of the spec.
 
 ## Layout mode
 

@@ -48,6 +48,7 @@ final class AppearanceSnapshot {
     private final int mEdgeLight;
     private final int mSpecular;
     private final int mDispersion;
+    private final int mClarity;
     private final int mKeyboardBlurRaw;
     private final int mKeyOpacity;
     /** The stored radius, or NaN when the key is absent and the style's default applies. */
@@ -60,6 +61,7 @@ final class AppearanceSnapshot {
     private final boolean mSoft;
     private final String mContrast;
     private final String mTrailStyle;
+    private final boolean mTrailEnabled;
     private final String mRetroEffect;
     private final String mClockStyle;
     private final String mClockAlignment;
@@ -94,6 +96,7 @@ final class AppearanceSnapshot {
         mEdgeLight = prefs.getFancierGlassEdgeLightPercent();
         mSpecular = prefs.getFancierGlassSpecularPercent();
         mDispersion = prefs.getFancierGlassDispersionPercent();
+        mClarity = prefs.getFancierGlassClarityPercent();
         mKeyboardBlurRaw = prefs.getInAppKeyboardBlurRadiusRaw();
         mKeyOpacity = prefs.getInAppKeyboardKeyOpacity();
         mKeyRadiusRaw = rawKeyRadius(prefs);
@@ -103,6 +106,7 @@ final class AppearanceSnapshot {
         mSoft = SoftWallpaper.isOn(prefs);
         mContrast = prefs.getTerminalContrastLevel().value;
         mTrailStyle = prefs.getTerminalCursorTrailStyle();
+        mTrailEnabled = prefs.isTerminalCursorTrailEnabled();
         mRetroEffect = prefs.getTerminalRetroEffect();
         mClockStyle = prefs.getTopPaneClockStyle();
         mClockAlignment = prefs.getTopPaneClockAlignment();
@@ -142,6 +146,7 @@ final class AppearanceSnapshot {
         prefs.setFancierGlassEdgeLightPercent(mEdgeLight);
         prefs.setFancierGlassSpecularPercent(mSpecular);
         prefs.setFancierGlassDispersionPercent(mDispersion);
+        prefs.setFancierGlassClarityPercent(mClarity);
         prefs.setInAppKeyboardBlurRadiusRaw(mKeyboardBlurRaw);
         prefs.setInAppKeyboardKeyOpacity(mKeyOpacity);
         restoreKeyRadius(prefs, mKeyRadiusRaw);
@@ -151,6 +156,7 @@ final class AppearanceSnapshot {
         SoftWallpaper.set(prefs, mSoft);
         prefs.setTerminalContrastLevel(mContrast);
         prefs.setTerminalCursorTrailStyle(mTrailStyle);
+        prefs.setTerminalCursorTrailEnabled(mTrailEnabled);
         prefs.setTerminalRetroEffect(mRetroEffect);
         prefs.setTopPaneClockStyle(mClockStyle);
         prefs.setTopPaneClockAlignment(mClockAlignment);
@@ -170,10 +176,11 @@ final class AppearanceSnapshot {
             .append('|').append(mTint).append('|').append(mRim).append('|').append(mMotion)
             .append('|').append(mBend).append('|').append(mEdgeWidth).append('|').append(mEdgeLight)
             .append('|').append(mSpecular).append('|').append(mDispersion)
+            .append('|').append(mClarity)
             .append('|').append(mKeyboardBlurRaw).append('|').append(mKeyOpacity)
             .append('|').append(mKeyRadiusRaw).append('|').append(mKeySpacingRaw)
             .append('|').append(mDockButtonCount).append('|').append(mDim).append('|').append(mSoft)
-            .append('|').append(mContrast).append('|').append(mTrailStyle)
+            .append('|').append(mContrast).append('|').append(mTrailStyle).append('|').append(mTrailEnabled)
             .append('|').append(mRetroEffect).append('|').append(mClockStyle)
             .append('|').append(mClockAlignment)
             .toString();

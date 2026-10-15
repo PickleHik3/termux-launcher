@@ -44,7 +44,7 @@ Send these and they work. Details and limits are in
 | Mouse reporting | A click carries Ctrl, Alt and Shift from the extra-keys row or a hardware keyboard, xterm style |
 | OSC 8 | Clickable links, opened through a Copy / Open strip |
 | OSC 52 | Write, or with `?` read, the Android clipboard. A write needs the launcher on screen; a read also needs *Let programs read the clipboard* on |
-| OSC 5522 | kitty's clipboard protocol, text only, same rules as OSC 52; `kitten clipboard` uses it |
+| OSC 5522 | kitty's clipboard protocol: text and pictures, same rules as OSC 52, and paste events (`CSI ? 5522 h`), where a paste reaches the program as an offer it reads; `kitten clipboard` uses it |
 | OSC 133 A/C/D | Prompt marks; the window chip shows whether the foreground is a command or an idle prompt |
 | OSC 7 `file:///path` | New panes opened from this one start in that folder |
 | OSC 9;4;state;pct | Progress ring on the window chip (ConEmu style) |
@@ -53,6 +53,7 @@ Send these and they work. Details and limits are in
 | Private mode 2026 | Synchronized output: hold redraws, paint once |
 | Private mode 2048 | In-band resize reports with cell and pixel sizes |
 | Private mode 2031 | Dark/light theme change notifications |
+| Private mode 5523 | Touch reports: every finger goes to the program as raw down, move, up and cancel events with pixel positions, and the terminal does nothing else with it |
 | `CSI # P` / `# Q` / `# R` | Push, pop, report the colour palette |
 | OSC 66 | Kitty text sizing: text drawn 2 to 7 times larger across as many rows, a forced cell width, and fractions for sub- and superscripts |
 | DECSCUSR, SGR 4:3 curly and coloured underlines, focus events, bracketed paste, XTWINOPS 14/16 | As in kitty |

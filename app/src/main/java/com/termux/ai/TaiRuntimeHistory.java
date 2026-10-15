@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -393,10 +394,111 @@ public final class TaiRuntimeHistory {
         });
     }
 
+    // ---- Memory stops ----------------------------------------------------------------------------
+    //
+    // The runtime's watch ends a native load that takes the phone under the critical floor
+    // (TaiPressureWatch). That is not a crash: the crash marker is cleared, so the next load is not
+    // held to half the window, and what the watch saw instead goes here: the drop so far, a lower
+    // bound on the load's cost, as a sample when it says more than the plan already does, and a
+    // record that holds automatic loads of that model on that accelerator back for a while, so a
+    // stop cannot loop straight into the same reload.
+
+    private static final String PRESSURE_PREFIX = "pressure|";
+
+    /**
+     * Keeps what the watch learned when it ended a native load of {@code model} on
+     * {@code accelerator} at {@code window} tokens for memory: {@code dropBytes}, the MemAvailable
+     * drop up to the stop, joins the ring when {@link #guardSampleAdds} says it tells the plan
+     * something; and a stop record, read back by {@link #pressureStop}, is stamped now.
+     */
+    public static void recordPressureStop(
+        @NonNull Context context,
+        @NonNull TaiModelSpec model,
+        @NonNull TaiDeviceCapabilities device,
+        @NonNull String backend,
+        @NonNull String accelerator,
+        int window,
+        long dropBytes,
+        long availBytes
+    ) {
+        final long version = appVersionCode(context);
+        final String key = loadKey(model, TaiResidency.fileBytes(model), device, version, backend, accelerator);
+        withLock(context, history -> {
+            try {
+                long now = System.currentTimeMillis();
+                pruneMeasured(history, now, version);
+                JSONObject entry = history.optJSONObject(key);
+                List<Sample> samples = entrySamples(entry);
+                if (guardSampleAdds(samples, window, dropBytes, now)) {
+                    if (entry == null) entry = new JSONObject();
+                    entry.put("modelId", model.id);
+                    entry.put("device", deviceKey(device));
+                    entry.put("backend", backend);
+                    entry.put("accelerator", normalizeAccelerator(accelerator));
+                    entry.put("modality", modalityOf(model.id));
+                    appendSample(entry, new Sample(window, dropBytes, 0, guardSamplePhase(samples, now), now), now, version);
+                    history.put(key, entry);
+                }
+                JSONObject stop = new JSONObject();
+                stop.put("modelId", model.id);
+                stop.put("device", deviceKey(device));
+                stop.put("backend", backend);
+                stop.put("accelerator", normalizeAccelerator(accelerator));
+                stop.put("contextWindow", window);
+                stop.put("dropBytes", Math.max(0L, dropBytes));
+                stop.put("availBytes", Math.max(0L, availBytes));
+                stop.put("stoppedAtMs", now);
+                stop.put("updatedAtMs", now);
+                history.put(pressureKey(model.id, device), stop);
+                return true;
+            } catch (JSONException ignored) {
+                return false;
+            }
+        });
+    }
+
+    /** The last memory stop of {@code model} on this device ({@link #recordPressureStop}), or {@code null}. */
+    @Nullable
+    public static JSONObject pressureStop(@NonNull Context context, @NonNull TaiModelSpec model,
+                                          @NonNull TaiDeviceCapabilities device) {
+        return history(context).optJSONObject(pressureKey(model.id, device));
+    }
+
+    @NonNull
+    private static String pressureKey(@NonNull String modelId, @NonNull TaiDeviceCapabilities device) {
+        return PRESSURE_PREFIX + TaiModelVariants.baseModelId(modelId) + "|" + deviceKey(device);
+    }
+
+    /**
+     * Whether a stopped load's drop belongs in the ring: it is a lower bound, so only when it is
+     * above what the ring already plans for that window ({@link #lookup}), or the ring has nothing.
+     * A load squeezed out by another app may have taken little; that says nothing about its cost
+     * and must not pull the plan down.
+     */
+    static boolean guardSampleAdds(@NonNull List<Sample> samples, int window, long dropBytes, long nowMs) {
+        if (dropBytes <= 0L) return false;
+        long planned = lookup(samples, window, 0L, nowMs);
+        return planned <= 0L || dropBytes > planned;
+    }
+
+    /**
+     * The phase a stopped load's drop is booked as: the one {@link #lookup} plans on for the key, so
+     * the sample counts. A lower bound on the load is one on its first prefill too, which only adds.
+     */
+    @NonNull
+    static String guardSamplePhase(@NonNull List<Sample> samples, long nowMs) {
+        for (Sample sample : samples) {
+            if (nowMs - sample.timestampMs <= SAMPLE_TTL_MS && PHASE_FIRST_PREFILL.equals(sample.phase)) {
+                return PHASE_FIRST_PREFILL;
+            }
+        }
+        return PHASE_LOAD;
+    }
+
     /**
      * The measured drop to plan a load of {@code contextWindow} tokens on, or {@code 0} when nothing
      * usable was measured; see {@link #lookup}. No seed slope is known here, so a window above every
-     * sample is planned at the largest sample; the budget's history hook passes its own.
+     * sample is planned at the top window's typical sample; the budget's history hook passes its own.
      */
     public static long measuredLoadBytes(
         @NonNull Context context,
@@ -464,12 +566,16 @@ public final class TaiRuntimeHistory {
      * The drop to plan on for a load of {@code window} tokens, from the live samples (younger than
      * {@link #SAMPLE_TTL_MS}); {@code 0} means none, and the caller uses its seed. Only
      * {@link #PHASE_FIRST_PREFILL} samples count when the key has any, since the first request is
-     * where a load's real cost lands; otherwise the {@link #PHASE_LOAD} ones. In order:
+     * where a load's real cost lands; otherwise the {@link #PHASE_LOAD} ones. Each window is read
+     * as its {@link #typical} sample, not its largest: identical E4B GPU loads at 2048 on pong
+     * measured 2.1, 2.6 and 3.2 GB (the kernel reclaims cache while the load runs), and planning on
+     * the largest refused E4B with 3.8–4.1 GB free, where the typical load leaves over a gigabyte.
+     * A load that runs past the plan is the runtime watch's to stop ({@link TaiPressureWatch}). In order:
      * <ol>
-     *   <li>the largest sample at the smallest measured window at or above {@code window}: a larger
+     *   <li>the typical sample at the smallest measured window at or above {@code window}: a larger
      *       window is an upper bound for a smaller one;</li>
-     *   <li>with two or more windows, all below, a line fitted through each window's largest sample,
-     *       evaluated at {@code window} (never below the largest sample);</li>
+     *   <li>with two or more windows, all below, a line fitted through each window's typical sample,
+     *       evaluated at {@code window} (never below the top window's);</li>
      *   <li>with one window, below: that sample plus {@code seedSlopeBytes} for each extra token;</li>
      * </ol>
      */
@@ -479,22 +585,25 @@ public final class TaiRuntimeHistory {
             if (nowMs - sample.timestampMs <= SAMPLE_TTL_MS && PHASE_FIRST_PREFILL.equals(sample.phase)) prefill = true;
         }
         String wanted = prefill ? PHASE_FIRST_PREFILL : PHASE_LOAD;
-        TreeMap<Integer, Long> maxima = new TreeMap<>();
+        TreeMap<Integer, List<Long>> byWindow = new TreeMap<>();
         for (Sample sample : samples) {
             if (nowMs - sample.timestampMs > SAMPLE_TTL_MS || !wanted.equals(sample.phase) || sample.dropBytes <= 0L) continue;
-            Long best = maxima.get(sample.window);
-            if (best == null || sample.dropBytes > best) maxima.put(sample.window, sample.dropBytes);
+            List<Long> drops = byWindow.get(sample.window);
+            if (drops == null) byWindow.put(sample.window, drops = new ArrayList<>());
+            drops.add(sample.dropBytes);
         }
-        if (maxima.isEmpty()) return 0L;
+        if (byWindow.isEmpty()) return 0L;
+        TreeMap<Integer, Long> perWindow = new TreeMap<>();
+        for (Map.Entry<Integer, List<Long>> entry : byWindow.entrySet()) perWindow.put(entry.getKey(), typical(entry.getValue()));
         int w = Math.max(0, window);
-        Integer above = maxima.ceilingKey(w);
-        if (above != null) return maxima.get(above);
-        Map.Entry<Integer, Long> top = maxima.lastEntry();
+        Integer above = perWindow.ceilingKey(w);
+        if (above != null) return perWindow.get(above);
+        Map.Entry<Integer, Long> top = perWindow.lastEntry();
         long beyond = (long) (w - top.getKey());
-        if (maxima.size() >= 2) {
-            double n = maxima.size();
+        if (perWindow.size() >= 2) {
+            double n = perWindow.size();
             double sx = 0, sy = 0, sxx = 0, sxy = 0;
-            for (Map.Entry<Integer, Long> e : maxima.entrySet()) {
+            for (Map.Entry<Integer, Long> e : perWindow.entrySet()) {
                 double x = e.getKey();
                 double y = e.getValue();
                 sx += x;
@@ -507,6 +616,17 @@ public final class TaiRuntimeHistory {
             if (slope > 0.0) return Math.max(top.getValue(), Math.round(fixed + slope * w));
         }
         return top.getValue() + Math.max(0L, seedSlopeBytes) * beyond;
+    }
+
+    /**
+     * The typical drop among one window's samples: the median, the upper one of an even count, so
+     * two samples plan on the larger and a single one on itself. The ring holds the last
+     * {@link #RING_SIZE}, so this is the typical recent load.
+     */
+    static long typical(@NonNull List<Long> drops) {
+        List<Long> sorted = new ArrayList<>(drops);
+        Collections.sort(sorted);
+        return sorted.get(sorted.size() / 2);
     }
 
     /** The samples a record holds, oldest first; unreadable or missing ones are skipped, never thrown. */

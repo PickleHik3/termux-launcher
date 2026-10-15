@@ -1,6 +1,7 @@
 package com.termux.terminal;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 /**
  * A client which receives callbacks from events triggered by feeding input to a {@link TerminalEmulator}.
@@ -44,6 +45,25 @@ public abstract class TerminalOutput {
      */
     public String onReadTextFromClipboard() {
         return null;
+    }
+
+    /**
+     * Read the clipboard for an {@code OSC 5522} read and answer {@code callback} exactly once,
+     * with what it holds or null when the read is refused; see {@link KittyClipboard.Handler#read}
+     * for {@code pasted} and the threading. The default offers the text
+     * {@link #onReadTextFromClipboard()} answers, at once.
+     */
+    public void onReadClipboard(boolean pasted, KittyClipboard.ReadCallback callback) {
+        String text = onReadTextFromClipboard();
+        callback.onOffer(text == null ? null : ClipboardOffer.ofText(text));
+    }
+
+    /**
+     * Put the pictures of a finished {@code OSC 5522} write on the clipboard, by MIME type, with
+     * the write's text or null. The default has nowhere to put a picture and keeps the text.
+     */
+    public void onWriteClipboard(Map<String, byte[]> images, String text) {
+        if (text != null) onCopyTextToClipboard(text);
     }
 
     /**

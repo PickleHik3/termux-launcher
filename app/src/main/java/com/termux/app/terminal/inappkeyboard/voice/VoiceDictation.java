@@ -11,6 +11,13 @@ import androidx.annotation.Nullable;
  * transcribing or cleaning up — is remembered and carried out the moment the text settles, so
  * the user never has to press twice.
  *
+ * <p>The user may also edit the text by hand on the card ({@link #beginEdit}, {@link #commitEdit}).
+ * That edit wins over everything still to come for this dictation: a pending press is dropped,
+ * the cleanup and the command formatter are skipped ({@link #isByHand}), and phrases that were
+ * still transcribing join the end of the edited text. Undo stays a two-state toggle: after an
+ * edit it switches between the text as it stood before the edit and the edit, and an earlier
+ * cleanup's undo is folded into that (the pre-edit text may itself be the cleaned one).
+ *
  * <p>Pure and main-thread only; the host owns the microphone, the cleanup and the panel.
  */
 public final class VoiceDictation {
@@ -41,10 +48,22 @@ public final class VoiceDictation {
     private Phase phase = Phase.IDLE;
     @Nullable private Use pending;
     @Nullable private String result;
-    /** The cleanup's text when one was accepted (the model's, or the command formatter's); undo goes back from it. */
-    @Nullable private String cleaned;
-    /** Undo has put the text back as it went into the cleanup; {@link #toggleUndo} again redoes it. */
+    /**
+     * The undo pair: {@link #after} is the cleanup's text (the model's, or the command
+     * formatter's) or the user's edit; {@link #before} is what undo goes back to, the text as it
+     * went into the cleanup or as it stood before the edit. Both null while there is nothing to
+     * undo.
+     */
+    @Nullable private String before;
+    @Nullable private String after;
+    /** The pair is an edit by hand rather than a cleanup. */
+    private boolean pairIsEdit;
+    /** Undo has put {@link #before} back; {@link #toggleUndo} again redoes it. */
     private boolean undone;
+    /** The user has opened the editor on this dictation: no cleanup or formatter may replace the text. */
+    private boolean byHand;
+    /** An edit kept before the text settled; late phrases join onto it, and it is the text once settled. */
+    @Nullable private String handText;
 
     /**
      * The microphone has opened. {@code base} is text already waiting in the panel that the new
@@ -56,8 +75,7 @@ public final class VoiceDictation {
         phase = Phase.LISTENING;
         pending = null;
         result = null;
-        cleaned = null;
-        undone = false;
+        forgetEdits();
     }
 
     /**
@@ -72,6 +90,7 @@ public final class VoiceDictation {
         if (phase != Phase.LISTENING && phase != Phase.FINISHING) return "";
         String piece = VoiceTextSanitizer.join(raw.length() > 0, VoiceTextSanitizer.clean(transcript.trim()));
         raw.append(piece);
+        if (handText != null) handText = VoiceEditModel.joinOnto(handText, piece);
         return piece;
     }
 
@@ -98,20 +117,35 @@ public final class VoiceDictation {
      */
     @Nullable
     public Use onSettled(@NonNull String text) {
-        cleaned = null;
-        undone = false;
+        String hand = handText;
+        handText = null;
+        if (hand != null) {
+            // Edited before it settled: the edit is the text, and undo goes back to it as heard.
+            setPair(text, hand, true);
+            return settle(hand);
+        }
+        setPair(null, null, false);
         return settle(text);
     }
 
     /**
      * The text is final as {@code cleanedText}, a cleanup of {@link #raw()} that undo can take
-     * back. Returns what {@link #onSettled} does.
+     * back. Returns what {@link #onSettled} does. A dictation the user has edited by hand takes no
+     * cleanup: it settles as {@link #onSettled} on what was heard, the edit kept.
      */
     @Nullable
     public Use onCleaned(@NonNull String cleanedText) {
-        cleaned = cleanedText;
-        undone = false;
+        if (byHand) return onSettled(raw.toString());
+        setPair(raw.toString(), cleanedText, false);
         return settle(cleanedText);
+    }
+
+    private void setPair(@Nullable String from, @Nullable String to, boolean edit) {
+        boolean pair = from != null && to != null && !from.equals(to);
+        before = pair ? from : null;
+        after = pair ? to : null;
+        pairIsEdit = pair && edit;
+        undone = false;
     }
 
     @Nullable
@@ -123,9 +157,14 @@ public final class VoiceDictation {
         return early;
     }
 
-    /** Whether the waiting text is a cleanup that undo (or, once undone, redo) can switch. */
+    /** Whether the waiting text is a cleanup or an edit that undo (or, once undone, redo) can switch. */
     public boolean canUndo() {
-        return cleaned != null && phase == Phase.WAITING;
+        return before != null && after != null && phase == Phase.WAITING;
+    }
+
+    /** Whether what undo switches is an edit by hand rather than a cleanup. */
+    public boolean isEditPair() {
+        return pairIsEdit && before != null;
     }
 
     /** Whether undo has put the text back as it went into the cleanup. */
@@ -135,16 +174,98 @@ public final class VoiceDictation {
 
     /**
      * Undo, or redo after an undo: the waiting text goes back to what went into the cleanup (as
-     * heard, or as carried on from), or forward to the cleaned text again. ✓, Copy and a resumed
-     * dictation all take the text as it now stands.
+     * heard, or as carried on from) or to the text before the edit, or forward to the cleaned or
+     * edited text again. ✓, Copy and a resumed dictation all take the text as it now stands.
      *
-     * @return false when there is no cleanup to switch
+     * @return false when there is nothing to switch
      */
     public boolean toggleUndo() {
         if (!canUndo()) return false;
         undone = !undone;
-        result = undone ? raw.toString() : cleaned;
+        result = undone ? before : after;
         return true;
+    }
+
+    // ------------------------------------------------------------------ editing by hand
+
+    /** Whether the text can be opened in the editor: while it is being heard, finished or waits; not once used. */
+    public boolean canEdit() {
+        return phase == Phase.LISTENING || phase == Phase.FINISHING || phase == Phase.WAITING;
+    }
+
+    /**
+     * The user has opened the editor: from now on this dictation is theirs. A press waiting for
+     * the text is dropped (they changed their mind by editing), and no cleanup or formatter may
+     * replace the text ({@link #isByHand}).
+     *
+     * @return false when the text cannot be edited ({@link #canEdit})
+     */
+    public boolean beginEdit() {
+        if (!canEdit()) return false;
+        byHand = true;
+        pending = null;
+        return true;
+    }
+
+    /** Whether the user has opened the editor on this dictation since it started. */
+    public boolean isByHand() {
+        return byHand;
+    }
+
+    /** The text the editor opens on and shows: an edit not yet settled, the waiting text, or what has been heard. */
+    @NonNull
+    public String editText() {
+        if (handText != null) return handText;
+        if (result != null) return result;
+        return raw.toString();
+    }
+
+    /**
+     * The editor has closed on {@code text}. While the text waits it becomes the text, and undo
+     * switches between it and the text before it; before the text has settled it is kept and
+     * becomes the text when it does ({@link #onSettled}).
+     *
+     * @return true when the text changed
+     */
+    public boolean commitEdit(@NonNull String text) {
+        switch (phase) {
+            case WAITING: {
+                String current = result == null ? "" : result;
+                if (text.equals(current)) return false;
+                setPair(current, text, true);
+                result = text;
+                return true;
+            }
+            case LISTENING:
+            case FINISHING:
+                if (text.equals(editText())) return false;
+                handText = text;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * What undo would go back to from an edit, for the panel to show the pair: the text as heard
+     * while an edit waits for the text to settle, the text before the edit once it has; {@code null}
+     * when the text is not an edit.
+     */
+    @Nullable
+    public String editedFrom() {
+        if (handText != null) return raw.toString();
+        return isEditPair() ? before : null;
+    }
+
+    /**
+     * What the cleanup took in, while the text the editor opens on ({@link #editText}) is that
+     * cleanup's answer, so the editor can keep its marks; {@code null} when the text is anything
+     * else: as heard, undone, or an edit.
+     */
+    @Nullable
+    public String cleanedFrom() {
+        if (handText != null || pairIsEdit || undone || before == null || after == null) return null;
+        return after.equals(result) ? before : null;
     }
 
     /**
@@ -189,7 +310,7 @@ public final class VoiceDictation {
             case WAITING:
                 return result == null ? raw.toString() : result;
             case FINISHING:
-                return raw.toString();
+                return handText != null ? handText : raw.toString();
             default:
                 return "";
         }
@@ -206,7 +327,15 @@ public final class VoiceDictation {
         phase = Phase.IDLE;
         pending = null;
         result = null;
-        cleaned = null;
+        forgetEdits();
+    }
+
+    private void forgetEdits() {
+        before = null;
+        after = null;
+        pairIsEdit = false;
         undone = false;
+        byHand = false;
+        handText = null;
     }
 }

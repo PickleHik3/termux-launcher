@@ -88,6 +88,7 @@ public final class ProcessGlyphs {
         put(0xF0C7C, "rg", "ripgrep", "fzf", "grep", "fd", "find"); // nf-md-file_search
 
         // --- network and media ---
+        put(0xF059F, "terminal-browser", "w3m", "lynx", "links", "elinks", "browsh", "carbonyl"); // nf-md-web
         put(0xF01DA, "curl", "wget", "aria2c", "yt-dlp", "youtube-dl"); // nf-md-download
         put(0xF0381, "mpv", "ffmpeg", "ffplay", "vlc");        // nf-md-movie
         put(0xE7C4, "sqlite3", "sqlite");                      // nf-dev-sqlite

@@ -65,6 +65,8 @@ public final class LauncherAppDataProvider {
     private final List<WeakReference<IconArtworkListener>> artworkListeners = new ArrayList<>();
     private final LauncherHiddenAppsStore hiddenAppsStore;
     private boolean loaded;
+    /** The catalogue in force holds an entry resolved from a stand-in. See {@link #onIconPackLanded}. */
+    private boolean catalogueHasStandIns;
     private boolean loading;
     private boolean refreshing;
     private int refreshGeneration;
@@ -77,8 +79,37 @@ public final class LauncherAppDataProvider {
         this.iconStore = new LauncherIconStore(
             this.context.getResources(),
             DockIconCache.memoryClassMb(this.context),
-            ref -> com.termux.app.x11.X11Apps.isLinuxApp(ref)
-                ? linuxAppIcon(ref) : iconResolver.resolveDetailed(ref, null, null).drawable);
+            new LauncherIconStore.ArtworkLoader() {
+                @Nullable @Override
+                public Drawable load(@NonNull AppRef ref) {
+                    return loadArtwork(ref).drawable;
+                }
+
+                @NonNull @Override
+                public LauncherIconStore.Artwork loadArtwork(@NonNull AppRef ref) {
+                    if (com.termux.app.x11.X11Apps.isLinuxApp(ref))
+                        return LauncherIconStore.Artwork.kept(linuxAppIcon(ref));
+                    LauncherIconResolver.ResolvedIcon resolved = iconResolver.resolveDetailed(ref, null, null);
+                    return resolved.provisional ? LauncherIconStore.Artwork.standIn(resolved.drawable)
+                        : LauncherIconStore.Artwork.kept(resolved.drawable);
+                }
+            });
+        // A pack the main thread drew stand-ins for has been parsed: every surface draws again.
+        this.iconPackRepository.setPackLandedListener(this::onIconPackLanded);
+    }
+
+    /**
+     * Runs on the parse thread when a pack the main thread was told is pending lands. Nothing
+     * kept a stand-in, so redrawing is all it takes; a catalogue built on the main thread in that
+     * window (a blocking load) carries stand-in entries and is rebuilt first.
+     */
+    private void onIconPackLanded() {
+        boolean rebuild;
+        synchronized (this) {
+            rebuild = loaded && catalogueHasStandIns;
+        }
+        if (rebuild) refreshAsync(null, this::notifyIconArtworkInvalidated);
+        else mainHandler.post(this::notifyIconArtworkInvalidated);
     }
 
     /**
@@ -421,6 +452,7 @@ public final class LauncherAppDataProvider {
         cacheLetterBuckets(snapshot.letterBuckets);
         cachedLastUpdateByPackage.clear();
         cachedLastUpdateByPackage.putAll(snapshot.lastUpdateByPackage);
+        catalogueHasStandIns = snapshot.hasStandIns;
         loaded = true;
         loading = false;
         refreshing = false;
@@ -595,8 +627,10 @@ public final class LauncherAppDataProvider {
                 LauncherIconResolver.ResolvedIcon resolvedIcon = iconResolver.resolveDetailed(ref, null, null);
                 // Resolved on this worker, so the first paint is as warm as it ever was — but the
                 // pixels go to the budgeted store rather than onto the entry, which would keep one
-                // icon per installed app alive for the life of the process.
-                iconStore.prime(ref, resolvedIcon.drawable);
+                // icon per installed app alive for the life of the process. A stand-in (only a
+                // load on the main thread gets one) is not kept.
+                if (resolvedIcon.provisional) snapshot.hasStandIns = true;
+                else iconStore.prime(ref, resolvedIcon.drawable);
                 int category = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                     && info.applicationInfo != null
                     ? gameNormalizedCategory(info.applicationInfo)
@@ -746,7 +780,8 @@ public final class LauncherAppDataProvider {
                 // Resolve icon-pack and per-app choices for the exact profile, while keeping the
                 // LauncherApps-provided profile icon as the system fallback.
                 LauncherIconResolver.ResolvedIcon resolvedIcon = iconResolver.resolveDetailed(ref, null, icon);
-                iconStore.prime(ref, resolvedIcon.drawable);
+                if (resolvedIcon.provisional) snapshot.hasStandIns = true;
+                else iconStore.prime(ref, resolvedIcon.drawable);
                 EntryMetadata metadata = readProfileMetadata(activity, Build.VERSION.SDK_INT);
                 addEntry(snapshot, packageManager, defaultComponentsByPackage,
                     new LauncherAppEntry(ref, label, null, resolvedIcon.iconPackArtwork,
@@ -938,5 +973,7 @@ public final class LauncherAppDataProvider {
         final Map<String, LauncherAppEntry> defaultByPackage = new HashMap<>();
         final Map<Character, List<LauncherAppEntry>> letterBuckets = new HashMap<>();
         final Map<String, Long> lastUpdateByPackage = new HashMap<>();
+        /** An entry was resolved from a stand-in: only a load on the main thread gets one. */
+        boolean hasStandIns;
     }
 }

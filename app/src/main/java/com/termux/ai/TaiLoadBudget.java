@@ -25,11 +25,15 @@ import java.util.List;
  * turns a freeze into a working model, so the budget spends it.
  *
  * <p><b>The estimate.</b> When {@link TaiRuntimeHistory} holds measured drops for this model
- * file, accelerator and modality, the estimate is the largest drop recorded at the smallest
- * measured window at or above the wanted one, plus 10% ({@code "measured"}); with samples only
- * below it, a fit or the seed slope carries them up. Otherwise it is a seed from the model file
- * ({@code "ratio"}): a fixed part plus a per-token part (the KV cache), per accelerator, split
- * into what the kernel can reclaim and what it cannot. Fitted on pong, erring high:
+ * file, accelerator and modality, the estimate is the typical recent drop (the median of the
+ * ring) at the smallest measured window at or above the wanted one, plus 10% ({@code "measured"});
+ * with samples only below it, a fit or the seed slope carries them up. It used to be the largest
+ * drop, which on pong sat at the worst of a 2.1–3.2 GB spread for E4B on the GPU at 2048 and
+ * refused it with 3.8–4.1 GB free. A load that runs past a typical estimate is stopped by the
+ * runtime's watch at {@link #CRITICAL_FLOOR_BYTES}, not refused up front. Otherwise the estimate
+ * is a seed from the model file ({@code "ratio"}): a fixed part plus a per-token part (the KV
+ * cache), per accelerator, split into what the kernel can reclaim and what it cannot. With no
+ * measurement to go on it errs high; fitted on pong:
  * <ul>
  *   <li>LiteRT GPU holds about three quarters of the file resident (weights uploaded to GPU
  *       buffers, which are ordinary RAM on a phone), none of it reclaimable. Measured: 2.4–4.2 GB
@@ -59,8 +63,15 @@ import java.util.List;
  *       first accelerator tried at the floor window, and Android closes background apps to make
  *       room.</li>
  * </ul>
- * Neither mode adds a margin to the estimate beyond a measured one's 10% headroom. Android's own
- * low-memory signal (the runtime's watch) and the preflight's low-memory block apply in both.
+ * Neither mode adds a margin to the estimate beyond a measured one's 10% headroom. The
+ * preflight's low-memory block applies in both.
+ *
+ * <p><b>The guard.</b> Admission plans on the typical load, so the runtime's watch
+ * ({@link TaiPressureWatch}, polled in {@code :tai_runtime} only while something is resident, fast
+ * while a model loads or generates) stops the model when MemAvailable falls under
+ * {@link #CRITICAL_FLOOR_BYTES} or Android reports low memory: a generation is cancelled and the
+ * model unloaded, and a native load, which cannot be interrupted, ends with the runtime process.
+ * Unrestricted keeps only Android's signal.
  *
  * <p><b>The ladder.</b> At each step — first the requested accelerator at the wanted window, then
  * halving down to a 4k floor, then the next accelerator at the floor only — a load that fits with
@@ -77,7 +88,9 @@ import java.util.List;
  * Gallery default GPU to 4096; an explicit window above that is honoured, subject to the budget.
  * An automatic LiteRT CPU load is capped at the floor too, because its runtime buffers are
  * allocated at the first prefill. A load whose process was killed last time is not repeated as it
- * was: that accelerator is held to half the window it died at.
+ * was: that accelerator is held to half the window it died at. A load the runtime's watch stopped
+ * for memory is not a crash: its accelerator is skipped for a short cooldown on automatic loads
+ * ({@link Request#withHeldBack}), and its window is left alone.
  *
  * <p>Pure on purpose: no Android, so the numbers above are pinned by {@code TaiLoadBudgetTest}.
  */
@@ -99,11 +112,19 @@ public final class TaiLoadBudget {
     public static final long PEAK_FLOOR_BYTES = 512L * MIB;
     /** Relaxed hold floor: what a load that stays resident keeps free, a quarter gigabyte above the peak floor. */
     public static final long HOLD_FLOOR_BYTES = 768L * MIB;
+    /**
+     * Relaxed critical floor: where the runtime's watch stops a model that is loading or generating
+     * ({@link TaiPressureWatch}). Under the peak floor, so idle residents are given up first; and one
+     * fast poll ({@link TaiPressureWatch#POLL_BUSY_MS}) at the fastest load pong has shown — 5.7 to
+     * 1.4 GB in twelve seconds, about 90 MB a poll — still stops it above Android's own low-memory
+     * line there (315 MB), where the system starts killing apps to make room.
+     */
+    public static final long CRITICAL_FLOOR_BYTES = 448L * MIB;
     /** How long the runtime lets a momentary load live, counted from its start, before it unloads it itself. */
     public static final long MOMENTARY_DEADLINE_MS = 3L * 60L * 1000L;
     /** A LiteRT file larger than this is not taken to the CPU as a fallback accelerator. */
     public static final long LITERT_CPU_FALLBACK_MAX_FILE_BYTES = 3L * GIB;
-    /** Added to the largest measured drop before it is used as the estimate. */
+    /** Added to the typical measured drop before it is used as the estimate. */
     public static final int MEASURED_HEADROOM_PERCENT = 10;
     /** File bytes per context token of KV cache. */
     static final long FILE_BYTES_PER_TOKEN_DIVISOR = 19_000L;
@@ -173,6 +194,24 @@ public final class TaiLoadBudget {
         return momentary ? PEAK_FLOOR_BYTES : HOLD_FLOOR_BYTES;
     }
 
+    /**
+     * Where the runtime's watch stops a busy model: {@link #CRITICAL_FLOOR_BYTES} with relaxed
+     * limits; {@code 0} unrestricted, which leaves the watch only Android's low-memory signal.
+     */
+    public static long criticalFloorBytes(@NonNull Conditions conditions) {
+        return conditions.mode == MemoryMode.UNRESTRICTED ? 0L : CRITICAL_FLOOR_BYTES;
+    }
+
+    /**
+     * The comparison a plan made, as the event log and refusals quote it, in MiB:
+     * {@code "needs 3482 MB + 768 MB floor = 4250 MB free, 4138 MB available"}.
+     */
+    @NonNull
+    public static String needText(long estimatedBytes, long reserveBytes, long availableBytes) {
+        return "needs " + estimatedBytes / MIB + " MB + " + reserveBytes / MIB + " MB floor = "
+            + (estimatedBytes + reserveBytes) / MIB + " MB free, " + availableBytes / MIB + " MB available";
+    }
+
     /** The cost of one load: what it adds to memory pressure, what it maps reclaimably, and where the figure came from. */
     public static final class Estimate {
         /** Bytes the load takes away from MemAvailable for as long as it is resident. */
@@ -188,10 +227,10 @@ public final class TaiLoadBudget {
             this.source = source;
         }
 
-        /** A recorded worst case plus its headroom. */
+        /** A typical recorded drop plus its headroom. */
         @NonNull
-        public static Estimate measured(long worstMeasuredBytes) {
-            return new Estimate(worstMeasuredBytes + worstMeasuredBytes * MEASURED_HEADROOM_PERCENT / 100L, 0L, SOURCE_MEASURED);
+        public static Estimate measured(long typicalMeasuredBytes) {
+            return new Estimate(typicalMeasuredBytes + typicalMeasuredBytes * MEASURED_HEADROOM_PERCENT / 100L, 0L, SOURCE_MEASURED);
         }
 
         @NonNull
@@ -204,7 +243,7 @@ public final class TaiLoadBudget {
         }
     }
 
-    /** The estimate for a load: the measured worst case when history has one for this accelerator and window, else the seed. */
+    /** The estimate for a load: the typical measured drop when history has one for this accelerator and window, else the seed. */
     @NonNull
     public static Estimate estimate(@NonNull String backend, @NonNull String accelerator, long fileBytes,
                                     boolean encoders, int contextTokens, @NonNull History history) {
@@ -338,6 +377,12 @@ public final class TaiLoadBudget {
         final long kvBytesPerToken;
         /** The device has no GPU path, so the other accelerator needs no measurement to be tried. */
         final boolean gpuless;
+        /**
+         * An accelerator this load may not use: a memory stop of this model on it is recent
+         * ({@link TaiPressureWatch#heldBackAfterStop}). Skipped like one a load died on, but not
+         * counted as one: the next accelerator still needs its own measured reason.
+         */
+        @Nullable final String heldBackAccelerator;
 
         /**
          * @param accelerators       in the order to try them; one entry when the caller chose
@@ -377,14 +422,15 @@ public final class TaiLoadBudget {
                        @NonNull History history, @NonNull List<TaiResidency.Entry> evictable, boolean momentary) {
             this(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
                 crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
-                Conditions.RELAXED, 0L, false);
+                Conditions.RELAXED, 0L, false, null);
         }
 
         private Request(@NonNull String backend, long fileBytes, boolean encoders, long physicalBytes,
                         long availableBytes, @NonNull List<String> accelerators, int capContext,
                         @Nullable String crashedAccelerator, int crashedContext, boolean explicitContext,
                         @NonNull History history, @NonNull List<TaiResidency.Entry> evictable,
-                        boolean momentary, @NonNull Conditions conditions, long kvBytesPerToken, boolean gpuless) {
+                        boolean momentary, @NonNull Conditions conditions, long kvBytesPerToken, boolean gpuless,
+                        @Nullable String heldBackAccelerator) {
             this.momentary = momentary;
             this.backend = backend;
             this.fileBytes = fileBytes;
@@ -401,6 +447,7 @@ public final class TaiLoadBudget {
             this.conditions = conditions;
             this.kvBytesPerToken = kvBytesPerToken;
             this.gpuless = gpuless;
+            this.heldBackAccelerator = heldBackAccelerator;
         }
 
         /** This request with the memory limits the caller read ({@link TaiMemInfo#conditions}), which set the floors. */
@@ -408,7 +455,7 @@ public final class TaiLoadBudget {
         public Request withConditions(@NonNull Conditions newConditions) {
             return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
                 crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
-                newConditions, kvBytesPerToken, gpuless);
+                newConditions, kvBytesPerToken, gpuless, heldBackAccelerator);
         }
 
         /** This request with an MNN model's architecture KV bytes per token ({@code 0}: unknown). */
@@ -416,7 +463,7 @@ public final class TaiLoadBudget {
         public Request withKvBytesPerToken(long newKvBytesPerToken) {
             return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
                 crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
-                conditions, newKvBytesPerToken, gpuless);
+                conditions, newKvBytesPerToken, gpuless, heldBackAccelerator);
         }
 
         /** This request with whether the device lacks a GPU path, which lets the other accelerator be tried unmeasured. */
@@ -424,13 +471,25 @@ public final class TaiLoadBudget {
         public Request withGpuless(boolean newGpuless) {
             return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
                 crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
-                conditions, kvBytesPerToken, newGpuless);
+                conditions, kvBytesPerToken, newGpuless, heldBackAccelerator);
+        }
+
+        /** This request with {@code accelerator} held back after a memory stop; {@code null} holds nothing back. */
+        @NonNull
+        public Request withHeldBack(@Nullable String accelerator) {
+            return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
+                crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
+                conditions, kvBytesPerToken, gpuless, accelerator);
         }
     }
 
     public static final class Plan {
         public final boolean fits;
-        /** The accelerator to load with; the first one tried when nothing fits. */
+        /**
+         * The accelerator to load with. For a refusal, the one whose need it reports: of the
+         * accelerators the ladder tried, the one that needed least at the floor window; the first
+         * listed when none could be tried.
+         */
         @Nullable public final String accelerator;
         /** The window the plan chose; for a refusal, the smallest window it tried. */
         public final int contextWindow;
@@ -476,6 +535,12 @@ public final class TaiLoadBudget {
             return estimatedBytes + reserveBytes;
         }
 
+        /** {@link TaiLoadBudget#needText} for this plan: the estimate, the floor and what was free. */
+        @NonNull
+        public String needText() {
+            return TaiLoadBudget.needText(estimatedBytes, reserveBytes, availableBytes);
+        }
+
         /** Bytes the chosen evictions give back. */
         public long evictedBytes() {
             long total = 0L;
@@ -507,8 +572,14 @@ public final class TaiLoadBudget {
         boolean previousCrashed = false;
         // The first accelerator the ladder actually tried: where an unrestricted load goes when nothing fits.
         String firstTried = null;
+        // Of the rungs refused at the floor, the one that needed least: what a refusal reports. Only
+        // rungs the ladder tried count. Quoting one it skipped (E4B's CPU seed, which the 3 GB rule
+        // never lets it reach) told the user a figure that was never the one compared.
+        String refusedAccelerator = null;
+        Estimate refusedEstimate = null;
         for (int i = 0; i < r.accelerators.size(); i++) {
             String accelerator = r.accelerators.get(i);
+            if (accelerator.equals(r.heldBackAccelerator)) continue;
             if (i > 0 && !otherAcceleratorAllowed(r, accelerator, floor, refusedNeed, previousCrashed)) continue;
             previousCrashed = false;
             int limit = i == 0 ? cap : floor;
@@ -539,6 +610,10 @@ public final class TaiLoadBudget {
                 }
                 if (context == floor) {
                     refusedNeed = need;
+                    if (refusedEstimate == null || need < refusedEstimate.nonReclaimableBytes) {
+                        refusedAccelerator = accelerator;
+                        refusedEstimate = estimate;
+                    }
                     break;
                 }
             }
@@ -550,9 +625,12 @@ public final class TaiLoadBudget {
             Estimate estimate = estimate(r.backend, firstTried, r.fileBytes, r.encoders, floor, r.history, r.kvBytesPerToken);
             return new Plan(true, firstTried, floor, estimate, r.availableBytes, reserve, true, allIdle(r.evictable), true);
         }
-        Estimate smallest = first == null ? Estimate.ratio(0L, 0L)
-            : estimate(r.backend, cheapest(r), r.fileBytes, r.encoders, floor, r.history, r.kvBytesPerToken);
-        return new Plan(false, first, floor, smallest, r.availableBytes, reserve, true, none);
+        if (refusedEstimate != null) {
+            return new Plan(false, refusedAccelerator, floor, refusedEstimate, r.availableBytes, reserve, true, none);
+        }
+        Estimate untried = first == null ? Estimate.ratio(0L, 0L)
+            : estimate(r.backend, first, r.fileBytes, r.encoders, floor, r.history, r.kvBytesPerToken);
+        return new Plan(false, first, floor, untried, r.availableBytes, reserve, true, none);
     }
 
     /**
@@ -632,22 +710,6 @@ public final class TaiLoadBudget {
             if (!entry.busy && entry.kind != TaiResidency.Kind.RUNTIME) idle.add(entry);
         }
         return idle;
-    }
-
-    /** The accelerator whose floor load costs least, for telling the user how much would be needed. */
-    @NonNull
-    private static String cheapest(@NonNull Request r) {
-        String best = r.accelerators.get(0);
-        long bestBytes = Long.MAX_VALUE;
-        for (String accelerator : r.accelerators) {
-            long bytes = estimate(r.backend, accelerator, r.fileBytes, r.encoders, floor(r.capContext), r.history,
-                r.kvBytesPerToken).nonReclaimableBytes;
-            if (bytes < bestBytes) {
-                bestBytes = bytes;
-                best = accelerator;
-            }
-        }
-        return best;
     }
 
     /** Standard phone RAM sizes, in GiB; a device is the smallest one its usable RAM fits under. */

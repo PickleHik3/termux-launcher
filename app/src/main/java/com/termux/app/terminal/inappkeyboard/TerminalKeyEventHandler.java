@@ -261,8 +261,10 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
                 mHostActions.copySelection();
                 break;
             case PASTE:
-            case PASTE_PLAIN:
                 mHostActions.paste();
+                break;
+            case PASTE_PLAIN:
+                mHostActions.pasteClipboard();
                 break;
             case CUT:
                 if (mHostActions.prepareCut())

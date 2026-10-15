@@ -86,6 +86,11 @@ each layout by name once the cycle holds more than one.
 
 **Settings → Keyboard → Layouts → Keyboard extra keys** adds optional keys (copy, paste, F11 and
 F12, dead keys and more) to the keyboard's own layout. It does not touch the extra-keys row.
+While the clipboard holds a picture, the paste key shows a photo instead, and pasting puts in the
+picture as a file. A screenshot taken in the last half hour, after your last copy, is offered the
+same way: paste puts it in once, then the key goes back to the clipboard. Paste with a modifier
+(plain paste) always takes the clipboard. Offering screenshots needs the storage permission
+(**Settings → Permissions & services → Files and media**, or `termux-setup-storage`).
 
 ## Docked, floating or split
 

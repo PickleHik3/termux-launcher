@@ -613,9 +613,91 @@ final class TaiImportFlow {
         showSummary();
     }
 
+    /**
+     * A picked folder: models saved by Export AI models come straight back, since each folder's
+     * manifest already says what the summary card would ask; any other folder is a model package.
+     */
     void onFolderSelected(@Nullable Uri uri) {
         Context context = host.context();
         if (uri == null || context == null) return;
+        Context app = context.getApplicationContext();
+        host.executor().execute(() -> {
+            List<TaiModelImporter.ExportedModel> saved =
+                new TaiModelImporter(app, new TaiModelStore(app)).exportedModels(uri);
+            host.handler().post(() -> {
+                if (host.context() == null) return;
+                if (saved.isEmpty()) showFolderSummary(uri);
+                else addSaved(uri, saved);
+            });
+        });
+    }
+
+    /** Adds each saved model under its own id and record, then says in one line how it went. */
+    private void addSaved(@NonNull Uri tree, @NonNull List<TaiModelImporter.ExportedModel> saved) {
+        Context context = host.context();
+        if (context == null) return;
+        Context app = context.getApplicationContext();
+        Progress progress = progress(context,
+            context.getResources().getQuantityString(R.plurals.tai_import_saved_adding, saved.size(), saved.size()),
+            context.getString(R.string.termux_ai_import_progress_starting));
+        boolean[] cancelled = {false};
+        progress.dialog.setButton(DialogInterface.BUTTON_NEGATIVE, context.getString(android.R.string.cancel),
+            (d, w) -> cancelled[0] = true);
+        progress.dialog.setCancelable(false);
+        progress.dialog.show();
+        TaiModelImporter.ProgressListener listener = (copied, total) -> {
+            host.handler().post(() -> progress.update(host.context(), copied, total));
+            return !cancelled[0];
+        };
+        host.executor().execute(() -> {
+            TaiModelImporter importer = new TaiModelImporter(app, new TaiModelStore(app));
+            long[] running = {0L, 0L};
+            for (TaiModelImporter.ExportedModel model : saved) running[1] += model.manifest.bytes;
+            int[] counts = new int[3];
+            for (TaiModelImporter.ExportedModel model : saved) {
+                if (cancelled[0]) break;
+                long before = running[0];
+                JSONObject result;
+                try {
+                    result = importer.importExportedModel(tree, model, listener, running);
+                } catch (JSONException | RuntimeException e) {
+                    result = null;
+                }
+                if (result != null && result.optBoolean("ok", false)) counts[SAVED_ADDED]++;
+                else if (result != null && "model_exists".equals(result.optString("error"))) counts[SAVED_PRESENT]++;
+                else if (result == null || !TaiModelImporter.REASON_CANCELLED.equals(result.optString("reason"))) counts[SAVED_FAILED]++;
+                // A model already here or refused copies less than its size; the bar moves past it.
+                running[0] = before + model.manifest.bytes;
+            }
+            host.handler().post(() -> {
+                progress.dialog.dismiss();
+                host.modelsChanged();
+                Context current = host.context();
+                if (current == null) return;
+                String message = savedOutcome(current.getResources(), counts[SAVED_ADDED], counts[SAVED_PRESENT], counts[SAVED_FAILED]);
+                if (message.isEmpty()) AppNotice.show(current, R.string.termux_ai_import_cancelled, false);
+                else AppNotice.show(current, message, counts[SAVED_FAILED] > 0);
+            });
+        });
+    }
+
+    private static final int SAVED_ADDED = 0;
+    private static final int SAVED_PRESENT = 1;
+    private static final int SAVED_FAILED = 2;
+
+    /** "2 models added. 1 was already here.": each count that is not zero, in that order; "" when all are. */
+    @NonNull
+    static String savedOutcome(@NonNull android.content.res.Resources resources, int added, int present, int failed) {
+        List<String> parts = new ArrayList<>();
+        if (added > 0) parts.add(resources.getQuantityString(R.plurals.tai_import_saved_added, added, added));
+        if (present > 0) parts.add(resources.getQuantityString(R.plurals.tai_import_saved_present, present, present));
+        if (failed > 0) parts.add(resources.getQuantityString(R.plurals.tai_import_saved_failed, failed, failed));
+        return android.text.TextUtils.join(" ", parts);
+    }
+
+    private void showFolderSummary(@NonNull Uri uri) {
+        Context context = host.context();
+        if (context == null) return;
         draft = new Draft();
         draft.source = Source.FOLDER;
         draft.folder = uri;

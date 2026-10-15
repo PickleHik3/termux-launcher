@@ -181,3 +181,17 @@ to [custom keybindings](Custom_Keybindings.md).
 **Settings → Terminal → Sessions and panes → Let programs and agents control panes** ("Programs you
 run can open, switch and close panes on their own.") is on by default. It lets a program open its
 own panes with `launcherctl pane`; see [LauncherCtl](LauncherCtl.md).
+
+A program decides where its pane goes and how big it is: beside or below the pane it runs in (or
+another one it names), at a share of that pane or a number of columns or rows, and it can resize
+that pane later. A new pane starts in the folder the program runs in. A program can look up the
+pane it runs in (its window and size) to choose a sensible place, and wait for a pane of its own to
+show a given line of output instead of checking again and again. It can also open a full-size
+window of its own, bring any window to the front and close the windows it opened. It can type into,
+read, wait on, resize and close only the panes and windows it opened itself, never yours. Placing a pane by direction or size in a window that uses an automatic
+layout (grid, tall, ...) switches that window to manual splits, so the new pane stays where it was
+put.
+
+```sh
+launcherctl pane open --direction right --size 0.4 --no-focus -- htop
+```

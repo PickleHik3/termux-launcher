@@ -88,7 +88,7 @@ jobs:
             exit_on_error "Release notes are empty for '$RELEASE_VERSION_NAME'. Add changelog/release notes before attaching APKs."
           fi
 
-          # GitHub's Pre-release flag is reserved for the pre-release channel (AGENTS.md, "The
+          # GitHub's Pre-release flag is reserved for the pre-release channel (docs/agents/releasing.md, "The
           # pre-release channel"): a <edition->vX.Y.Z-pre.N tag must carry it; a stable tag must
           # not carry it on any edition (editions use --latest=false).
           RELEASE_IS_PRERELEASE="$(gh release view "$RELEASE_VERSION_NAME" --json isPrerelease --jq '.isPrerelease')"

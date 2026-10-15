@@ -311,6 +311,19 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     }
 
     /**
+     * {@link #openCommandPane(List, String, String, boolean)}, split off the pane {@code placement}
+     * names, on the side and at the size it asks for (see
+     * {@link TerminalPaneController#addPaneAt}); a null {@code placement} is the plain call. With
+     * {@code focus}, a pane placed in a window that is not on screen brings that window up.
+     */
+    @Nullable default TerminalSession openCommandPane(@NonNull List<String> command,
+                                                      @Nullable String cwd, @Nullable String title,
+                                                      boolean focus,
+                                                      @Nullable TerminalPaneController.PlacementRequest placement) {
+        return placement == null ? openCommandPane(command, cwd, title, focus) : null;
+    }
+
+    /**
      * Open a NEW full-size window (not a split) running {@code command} through the user's login
      * shell, the way tapping the window strip's + does — or null when none can be opened (no
      * session, terminal limit reached, service not ready, split panes disabled by compatibility

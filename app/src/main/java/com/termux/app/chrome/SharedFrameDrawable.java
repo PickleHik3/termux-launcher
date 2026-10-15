@@ -65,6 +65,12 @@ public final class SharedFrameDrawable extends Drawable {
     @Nullable private Bitmap mPreviousFrame;
     @Nullable private BitmapShader mPreviousShader;
     private int mAlpha = 255;
+    /** A clearer frame of the same rect for the bent edge to show, or null; see {@link #setClearFrame}. */
+    @Nullable private Bitmap mClearFrame;
+    @Nullable private BitmapShader mClearShader;
+    /** A finger on this surface, in its own coordinates; see {@link #setTouch}. */
+    private boolean mTouchOn;
+    private float mTouchX, mTouchY, mTouchRadiusPx, mTouchIntensity;
 
     /** Fancier Glass, or null for the plain draw. */
     @Nullable private GlassRefraction.Look mLook;
@@ -150,6 +156,83 @@ public final class SharedFrameDrawable extends Drawable {
         return mProgram != null;
     }
 
+    /**
+     * A clearer frame of the wallpaper, captured for the very rect the frame was (the cache's
+     * one rect at a lower blur), which the bent edge shows in place of the frost under the look's
+     * clarity. It may be held at any resolution; the program is told its pixel size against the
+     * frame's. Null, the default, keeps the frost at the edge. Plain draws ignore it. The frame
+     * counts as on screen ({@link #shows}) while it is set.
+     */
+    public void setClearFrame(@Nullable Bitmap clearFrame) {
+        if (clearFrame == mClearFrame) return;
+        mClearFrame = clearFrame;
+        mClearShader = clearFrame == null ? null
+            : new BitmapShader(clearFrame, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        syncClarity();
+        invalidateSelf();
+    }
+
+    /** The clearer frame last set, or null. */
+    @Nullable
+    public Bitmap clearFrame() {
+        return mClearFrame;
+    }
+
+    /** Hands the program the clear frame at its pixel size against the frame's, or nothing. */
+    private void syncClarity() {
+        GlassRefraction.Program program = mProgram;
+        if (program == null) return;
+        Bitmap frame = mFrame;
+        Bitmap clear = mClearFrame;
+        BitmapShader clearShader = mClearShader;
+        if (frame == null || clear == null || clearShader == null || clear.isRecycled()) {
+            program.setClarityInput(null, 1f, 1f);
+            return;
+        }
+        program.setClarityInput(clearShader,
+            clear.getWidth() / (float) Math.max(1, frame.getWidth()),
+            clear.getHeight() / (float) Math.max(1, frame.getHeight()));
+    }
+
+    /**
+     * A finger resting on this surface at {@code (x, y)} in its own coordinates (the view's), its
+     * light reaching {@code radiusPx}, at {@code intensity} 0..1. The caller animates the fade
+     * and restates the position on every move; a plain draw, and a phone without the program,
+     * ignore it. See {@link GlassRefraction.Program#setTouch}.
+     */
+    public void setTouch(float x, float y, float radiusPx, float intensity) {
+        if (mTouchOn && mTouchX == x && mTouchY == y && mTouchRadiusPx == radiusPx
+            && mTouchIntensity == intensity) return;
+        mTouchOn = true;
+        mTouchX = x;
+        mTouchY = y;
+        mTouchRadiusPx = radiusPx;
+        mTouchIntensity = intensity;
+        GlassRefraction.Program program = mProgram;
+        if (program == null) return;
+        program.setTouch(x, y, radiusPx, intensity);
+        invalidateSelf();
+    }
+
+    /** No finger on this surface. */
+    public void clearTouch() {
+        if (!mTouchOn) return;
+        mTouchOn = false;
+        mTouchIntensity = 0f;
+        GlassRefraction.Program program = mProgram;
+        if (program == null) return;
+        program.clearTouch();
+        invalidateSelf();
+    }
+
+    /** The touch state as the program should carry it, after the program was set or replaced. */
+    private void syncTouch() {
+        GlassRefraction.Program program = mProgram;
+        if (program == null) return;
+        if (mTouchOn) program.setTouch(mTouchX, mTouchY, mTouchRadiusPx, mTouchIntensity);
+        else program.clearTouch();
+    }
+
     /** The look, rim radius and seams last handed to {@link #setRefraction}, read back by tests. */
     @VisibleForTesting
     @Nullable
@@ -195,6 +278,8 @@ public final class SharedFrameDrawable extends Drawable {
         }
         program.setLook(look);
         program.setInput(shader);
+        syncClarity();
+        syncTouch();
         program.applyTo(mPaint);
         syncRimRect();
         BitmapShader previousShader = mPreviousShader;
@@ -249,7 +334,7 @@ public final class SharedFrameDrawable extends Drawable {
     /** True while {@code bitmap} is on screen through this drawable: the frame, or one still fading out. */
     public boolean shows(@Nullable Bitmap bitmap) {
         if (bitmap == null) return false;
-        if (bitmap == mFrame) return true;
+        if (bitmap == mFrame || bitmap == mClearFrame) return true;
         return bitmap == mPreviousFrame && !mCrossfade.isFinished();
     }
 

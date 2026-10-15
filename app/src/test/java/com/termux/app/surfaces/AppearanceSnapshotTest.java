@@ -127,10 +127,12 @@ public class AppearanceSnapshotTest {
         preferences.setFancierGlassSpecularPercent(70);
         assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
         preferences.setFancierGlassDispersionPercent(40);
+        preferences.setFancierGlassClarityPercent(65);
         entry.restore(preferences);
 
         assertEquals(0, preferences.getFancierGlassSpecularPercent());
         assertEquals(0, preferences.getFancierGlassDispersionPercent());
+        assertEquals(0, preferences.getFancierGlassClarityPercent());
         assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
     }
 

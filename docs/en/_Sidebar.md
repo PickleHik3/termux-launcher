@@ -49,6 +49,7 @@
 
 - [launcherctl](LauncherCtl.md)
 - [LauncherCtl HTTP API](LauncherCtl_API.md)
+- [Agent skills](Agent_Skills.md)
 - [On-device AI backends](On_Device_AI_Backends.md)
 - [Settings map](Launcher_Settings.md)
 - [Troubleshooting](Launcher_Troubleshooting.md)

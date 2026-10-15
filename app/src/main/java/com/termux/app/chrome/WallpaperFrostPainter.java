@@ -282,6 +282,7 @@ public final class WallpaperFrostPainter {
         Rect frameRect = mBlurCache.frameRectRef();
         if (frame == null) {
             if (installed != null && installed.frameRect().equals(frameRect)) {
+                clarify(installed, blurRadiusDp, wallpaperFrame);
                 show(frost, rectKey, targetRect);
                 return true;
             }
@@ -290,6 +291,7 @@ public final class WallpaperFrostPainter {
         }
         if (installed != null && installed.frame() == frame
             && mLedger.frostRadiusDp(radiusKey) == blurRadiusDp) {
+            clarify(installed, blurRadiusDp, wallpaperFrame);
             show(frost, rectKey, targetRect);
             return true;
         }
@@ -307,6 +309,7 @@ public final class WallpaperFrostPainter {
             refract(installed, cornerRadiusPx, seams);
             frost.setImageDrawable(installed);
         }
+        clarify(installed, blurRadiusDp, wallpaperFrame);
         frost.setColorFilter(GlassFilters.frost());
         mLedger.setFrostRadiusDp(radiusKey, blurRadiusDp);
         show(frost, rectKey, targetRect);
@@ -317,6 +320,32 @@ public final class WallpaperFrostPainter {
     private void refract(@NonNull SharedFrameDrawable frost, float cornerRadiusPx, int seams) {
         frost.setRefraction(mSurfaces.fancierGlassLook(),
             mSurfaces.context().getResources().getDisplayMetrics().density, cornerRadiusPx, seams);
+    }
+
+    /**
+     * The clearer frame Fancier Glass's edge clarity shows through the bend
+     * ({@link SharedFrameDrawable#setClearFrame}), or none. Wanted only while the look asks for
+     * clarity and the surface's own frost is blurrier than the clear frame would be; a surface
+     * already that clear has nothing clearer to show. The frame is the cache's one rect at
+     * {@link GlassRefraction#CLARITY_RADIUS_DP}, so it lines up with the frost wherever it is
+     * sampled. Null while that blur is still in flight: the edge shows the frost until it lands,
+     * and the landing asks for the pass that hands it over. Restated on every pass like the look;
+     * an unchanged answer is one identity compare on the drawable and redraws nothing.
+     */
+    private void clarify(@NonNull SharedFrameDrawable frost, int blurRadiusDp,
+                         @NonNull View wallpaperFrame) {
+        frost.setClearFrame(wantsClearFrame(mSurfaces.fancierGlassLook(), blurRadiusDp)
+            ? mBlurCache.obtain(GlassRefraction.CLARITY_RADIUS_DP, wallpaperFrame) : null);
+    }
+
+    /**
+     * True when a surface frosted at {@code blurRadiusDp} under {@code look} takes a clear frame.
+     * The one rule for every surface that shows one: the frosts here, the keyboard host and the
+     * under-keyboard card, and the pane slabs.
+     */
+    public static boolean wantsClearFrame(@Nullable GlassRefraction.Look look, int blurRadiusDp) {
+        return look != null && look.clarityPercent > 0
+            && blurRadiusDp > GlassRefraction.CLARITY_RADIUS_DP;
     }
 
     /**

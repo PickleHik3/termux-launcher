@@ -111,4 +111,19 @@ public class LauncherKeyboardLayoutsTest {
         assertEquals(LauncherKeyboardLayouts.LAYOUT_MAIN,
             LauncherKeyboardLayouts.joinSelection(Collections.<String>emptyList()));
     }
+
+    @Test
+    public void userLabelsAreKnownOnceRemembered() {
+        String id = LauncherKeyboardLayouts.USER_PREFIX + "zed-test";
+        LauncherKeyboardLayouts.rememberUserLabel(id, null);
+        List<String> ring = Arrays.asList(LauncherKeyboardLayouts.LAYOUT_MAIN, id);
+        assertTrue(LauncherKeyboardLayouts.userLabelsKnown(
+            Collections.singletonList(LauncherKeyboardLayouts.LAYOUT_MAIN)));
+        assertFalse("an unread user layout would draw as its id",
+            LauncherKeyboardLayouts.userLabelsKnown(ring));
+        LauncherKeyboardLayouts.rememberUserLabel(id, "Zed");
+        assertTrue(LauncherKeyboardLayouts.userLabelsKnown(ring));
+        assertEquals("Zed", LauncherKeyboardLayouts.labelFor(resources, id));
+        LauncherKeyboardLayouts.rememberUserLabel(id, null);
+    }
 }

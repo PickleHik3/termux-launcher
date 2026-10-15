@@ -58,6 +58,40 @@ public final class LauncherIconStore {
      */
     public interface ArtworkLoader {
         @Nullable Drawable load(@NonNull AppRef ref);
+
+        /** {@link #load}, saying whether the result may be kept. By default it may. */
+        @NonNull
+        default Artwork loadArtwork(@NonNull AppRef ref) {
+            return Artwork.kept(load(ref));
+        }
+    }
+
+    /** Raw artwork and whether it may be kept. */
+    public static final class Artwork {
+        private static final Artwork NONE = new Artwork(null, false);
+
+        @Nullable public final Drawable drawable;
+        /**
+         * A stand-in, drawn while the icon pack it should come from is still being read: shown,
+         * never kept by the store or by anything rendered from it. The surfaces are told to draw
+         * again once the pack lands.
+         */
+        public final boolean provisional;
+
+        private Artwork(@Nullable Drawable drawable, boolean provisional) {
+            this.drawable = drawable;
+            this.provisional = provisional;
+        }
+
+        @NonNull
+        public static Artwork kept(@Nullable Drawable drawable) {
+            return drawable == null ? NONE : new Artwork(drawable, false);
+        }
+
+        @NonNull
+        public static Artwork standIn(@Nullable Drawable drawable) {
+            return new Artwork(drawable, true);
+        }
     }
 
     @NonNull private final Resources resources;
@@ -96,9 +130,15 @@ public final class LauncherIconStore {
      */
     @Nullable
     public Drawable artwork(@Nullable LauncherAppEntry entry) {
-        if (entry == null) return null;
-        if (entry.icon != null) return entry.icon;
-        return artwork(entry.appRef);
+        return artworkDetailed(entry).drawable;
+    }
+
+    /** {@link #artwork(LauncherAppEntry)}, saying whether it is a stand-in not to be kept. */
+    @NonNull
+    public Artwork artworkDetailed(@Nullable LauncherAppEntry entry) {
+        if (entry == null) return Artwork.NONE;
+        if (entry.icon != null) return Artwork.kept(entry.icon);
+        return load(entry.appRef);
     }
 
     /**
@@ -132,17 +172,23 @@ public final class LauncherIconStore {
     /** The held or freshly loaded artwork for one app. */
     @Nullable
     public Drawable artwork(@Nullable AppRef ref) {
-        if (ref == null) return null;
+        return ref == null ? null : load(ref).drawable;
+    }
+
+    @NonNull
+    private Artwork load(@NonNull AppRef ref) {
         int startEpoch = epoch;
         String identity = iconPackIdentity;
         String key = artworkKey(ref, identity);
         Drawable held = cache.get(key);
-        if (held != null) return held;
-        Drawable loaded = shrink(loader.load(ref));
-        if (loaded != null && startEpoch == epoch && identity.equals(iconPackIdentity)) {
-            cache.put(key, loaded);
+        if (held != null) return Artwork.kept(held);
+        Artwork loaded = loader.loadArtwork(ref);
+        Drawable retained = shrink(loaded.drawable);
+        if (loaded.provisional) return Artwork.standIn(retained);
+        if (retained != null && startEpoch == epoch && identity.equals(iconPackIdentity)) {
+            cache.put(key, retained);
         }
-        return loaded;
+        return Artwork.kept(retained);
     }
 
     /**
