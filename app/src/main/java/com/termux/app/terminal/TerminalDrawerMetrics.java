@@ -25,6 +25,13 @@ public final class TerminalDrawerMetrics {
      * cap — at the earlier 78% the drawer read as a page that had replaced the terminal.
      */
     public static final float AREA_WIDTH_SHARE = 0.45f;
+    /**
+     * The most of the terminal a drawer may take however large the text is. A larger font scale
+     * widens the drawer in step with its text (both limits above grow by it), but past this share it
+     * would read as a page that had replaced the terminal again, and the strip beside it is what a
+     * tap closes it from. Beyond this the rows wrap to a second line instead.
+     */
+    public static final float MAX_AREA_WIDTH_SHARE = 0.65f;
 
     /** The scrim over the rest of the terminal area, as an alpha. */
     public static final int SCRIM_ALPHA = 71;   // 28% of 255
@@ -46,12 +53,21 @@ public final class TerminalDrawerMetrics {
         }
     }
 
-    /** How wide a drawer is over a terminal area this wide. */
-    public static int widthPx(int areaWidthPx, float density) {
+    /**
+     * How wide a drawer is over a terminal area this wide, at this font scale.
+     *
+     * <p>The drawer's text is in sp while its width was in dp, so at a 1.5× font scale the same
+     * rows held two thirds of the words. Both limits grow with the font scale instead, so the rows
+     * keep the room they have at 1.0 until {@link #MAX_AREA_WIDTH_SHARE} stops them. A scale below
+     * 1.0 keeps the 1.0 width: smaller text never needs a narrower panel.
+     */
+    public static int widthPx(int areaWidthPx, float density, float fontScale) {
         if (areaWidthPx <= 0) return 0;
         float safeDensity = density > 0f ? density : 1f;
-        return Math.max(1, Math.min(Math.round(MAX_WIDTH_DP * safeDensity),
-            Math.round(areaWidthPx * AREA_WIDTH_SHARE)));
+        float scale = fontScale > 1f ? fontScale : 1f;
+        float share = Math.min(AREA_WIDTH_SHARE * scale, MAX_AREA_WIDTH_SHARE);
+        return Math.max(1, Math.min(Math.round(MAX_WIDTH_DP * scale * safeDensity),
+            Math.round(areaWidthPx * share)));
     }
 
     /**
@@ -63,8 +79,8 @@ public final class TerminalDrawerMetrics {
      */
     @NonNull
     public static Bounds place(int areaLeft, int areaTop, int areaWidth, int areaHeight,
-                               boolean rtl, float density) {
-        int width = widthPx(areaWidth, density);
+                               boolean rtl, float density, float fontScale) {
+        int width = widthPx(areaWidth, density, fontScale);
         int left = rtl ? areaLeft + areaWidth - width : areaLeft;
         return new Bounds(left, areaTop, width, Math.max(0, areaHeight));
     }
@@ -108,6 +124,15 @@ public final class TerminalDrawerMetrics {
      */
     public static float trailingRadiusPx(float terminalRadiusPx, int widthPx, int heightPx) {
         return PaneShape.radiusForBounds(terminalRadiusPx, widthPx, heightPx);
+    }
+
+    /**
+     * The radius the scrim over the whole terminal area draws with: the terminal frame's own, so its
+     * corners sit on the frame's arcs instead of poking past them, capped the way any pane of that
+     * size is capped.
+     */
+    public static float scrimRadiusPx(float terminalRadiusPx, int areaWidthPx, int areaHeightPx) {
+        return PaneShape.radiusForBounds(terminalRadiusPx, areaWidthPx, areaHeightPx);
     }
 
     /**

@@ -146,6 +146,11 @@ public class SharedPreferenceUtils {
         try {
             return sharedPreferences.getInt(key, def);
         } catch (ClassCastException e) {
+            // A list row once stored its entry value as a string: read it as the number it names.
+            try {
+                return Integer.parseInt(sharedPreferences.getString(key, "").trim());
+            } catch (ClassCastException | NumberFormatException ignored) {
+            }
             Logger.logStackTraceWithMessage(LOG_TAG, "Error getting int value for the \"" + key + "\" key from shared preferences. Returning default value \"" + def + "\".", e);
             return def;
         }

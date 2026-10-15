@@ -61,6 +61,34 @@ final class TerminalRowNodes {
         mImages = images;
     }
 
+    /**
+     * Move every row's nodes {@code shift} places, exactly as {@link RowRenderCache#lastShift} moved
+     * the rows' states: a row still on screen keeps its recordings at its new index, and the rows
+     * that came into view take the nodes of those that left, to be recorded over.
+     */
+    void shift(int shift) {
+        if (shift == 0) return;
+        mBackgrounds = shifted(mBackgrounds, shift);
+        mGlyphs = shifted(mGlyphs, shift);
+        mImages = shifted(mImages, shift);
+    }
+
+    private static RenderNode[] shifted(RenderNode[] previous, int shift) {
+        final int rows = previous.length;
+        final RenderNode[] shifted = new RenderNode[rows];
+        int spare = 0;
+        for (int i = 0; i < rows; i++) {
+            final int source = RowRenderCache.shiftedSource(i, shift, rows);
+            if (source >= 0) {
+                shifted[i] = previous[source];
+                continue;
+            }
+            while (RowRenderCache.survivesShift(spare, shift, rows)) spare++;
+            shifted[i] = previous[spare++];
+        }
+        return shifted;
+    }
+
     RenderNode background(int row) {
         return mBackgrounds[row];
     }

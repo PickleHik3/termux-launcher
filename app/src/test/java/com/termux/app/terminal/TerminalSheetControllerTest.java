@@ -355,6 +355,35 @@ public class TerminalSheetControllerTest {
         assertEquals("both leave together", 0, stack.getChildCount());
     }
 
+    /**
+     * The scrim wears the terminal frame's corners, so it never darkens the notches outside the
+     * frame's arcs — and follows the area when it changes size, as it does when the keyboard rises.
+     */
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void aDrawerScrimFollowsTheTerminalCorners() {
+        FakeSheetHost host = new FakeSheetHost();
+        host.terminalCornerRadiusPx = 30f;
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("", new TextView(host.context()), true, null, null, false,
+            TerminalSheetController.Placement.terminalLeading());
+
+        ViewGroup stack = host.findView(R.id.terminal_sheet_stack);
+        Drawable background = stack.getChildAt(0).getBackground();
+        assertTrue("a shape, not a square colour",
+            background instanceof android.graphics.drawable.GradientDrawable);
+        android.graphics.drawable.GradientDrawable shape =
+            (android.graphics.drawable.GradientDrawable) background;
+        assertEquals("the terminal's own radius", 30f, shape.getCornerRadius(), 0.001f);
+
+        // A short area — the keyboard up over a split — caps the corners the way a pane's are.
+        host.terminalRect.set(8, 40, 392, 100);
+        host.plane.getViewTreeObserver().dispatchOnGlobalLayout();
+        assertEquals(PaneShape.radiusForBounds(30f, 384, 60), shape.getCornerRadius(), 0.001f);
+        assertEquals(20f, shape.getCornerRadius(), 0.001f);
+    }
+
     /** In a right-to-left layout the leading edge is the other one, and so is the drawer. */
     @Test
     public void aDrawerFollowsTheLayoutDirection() {

@@ -21,8 +21,15 @@ import java.util.Arrays;
  * stops updating, and the inputs are small: a row's used text, its widths, one style long per
  * column, the two side tables, and the slice of screen-wide state that lands on this row — where
  * the cursor is, what the selection covers. Anything wider than one row (the emulator itself, the
- * geometry, the palette, the scroll position) invalidates every row at once, which is what
- * {@link #beginFrame} decides.
+ * geometry, the palette) invalidates every row at once, which is what {@link #beginFrame} decides.
+ *
+ * <p>A scroll is not one of those. Each row is recorded in its own coordinates and placed at its
+ * index when drawn, so a row that is still on screen after the top row moved by {@code k} keeps
+ * its recording: {@link #beginFrame} moves every row's state {@code k} places along
+ * ({@link #lastShift} tells the node store to do the same), and only the rows that came into view
+ * — which have no state — are recorded. Rows carrying a text sizing record are the exception: the
+ * first visible row draws a block anchored above the screen, so which row that is decides what
+ * such a row draws, and they are all recorded again after a shift.
  *
  * <p>Two kinds of row draw from image state this class cannot see: a row carrying a bitmap, and a
  * row carrying a kitty placeholder, whose text is stable while the image under it is replaced.
@@ -116,6 +123,9 @@ final class RowRenderCache {
     /** Whether the frame {@link #beginFrame} opened has to record every row. */
     private boolean mAllDirty = true;
 
+    /** How many places the last {@link #beginFrame} moved every row's state; see {@link #lastShift}. */
+    private int mLastShift;
+
     @Nullable private Object mEmulator;
     private int mEmulatorRows = -1;
     private int mColumns = -1;
@@ -152,6 +162,33 @@ final class RowRenderCache {
         mInvalidated = true;
     }
 
+    /**
+     * How many places the last {@link #beginFrame} moved every row: the row at index {@code i} now
+     * holds what index {@code i + shift} held before. Zero when nothing moved, or when every row is
+     * being recorded again anyway.
+     */
+    int lastShift() {
+        return mLastShift;
+    }
+
+    /**
+     * Where the row now at {@code index} was before a shift, or -1 when it was not on screen. Shared
+     * with the node store so the recordings move exactly as the states do.
+     */
+    static int shiftedSource(int index, int shift, int previousRows) {
+        final int source = index + shift;
+        return source >= 0 && source < previousRows ? source : -1;
+    }
+
+    /**
+     * Whether the row that was at {@code index} before a shift is still on screen after it, so its
+     * recording is still drawn and must not be thrown away.
+     */
+    static boolean survivesShift(int index, int shift, int rows) {
+        final int target = index - shift;
+        return target >= 0 && target < rows;
+    }
+
     /** How many visible rows the last {@link #beginFrame} was told about. */
     int visibleRows() {
         return mVisibleRows;
@@ -171,7 +208,6 @@ final class RowRenderCache {
             || mEmulator != emulator
             || mEmulatorRows != emulatorRows
             || mColumns != columns
-            || mTopRow != topRow
             || mExtraRows != extraRows
             // Compared bitwise, so that a NaN offset is only equal to the NaN before it.
             || Float.floatToRawIntBits(mHorizontalOffset)
@@ -184,6 +220,12 @@ final class RowRenderCache {
             || mViewHeight != viewHeight
             || mVisibleRows != visibleRows;
         if (paletteMoved(palette)) dirty = true;
+        // A scroll by fewer rows than are visible keeps the rows still on screen; any other top row
+        // change, or one that comes with anything above, records every row.
+        final int shift = mTopRow == Integer.MIN_VALUE ? 0 : topRow - mTopRow;
+        if (shift != 0 && (dirty || Math.abs(shift) >= mRows.length)) dirty = true;
+        mLastShift = dirty ? 0 : shift;
+        if (mLastShift != 0) shiftRows(mLastShift);
         mInvalidated = false;
         mEmulator = emulator;
         mEmulatorRows = emulatorRows;
@@ -375,6 +417,34 @@ final class RowRenderCache {
             }
         }
         return moved;
+    }
+
+    /**
+     * Move every row's state {@code shift} places, so a row still on screen finds its own state at
+     * its new index. The places left empty take the states of the rows that went out of view, which
+     * are reused to spare the allocation and marked unrecorded so they are recorded from scratch.
+     */
+    private void shiftRows(int shift) {
+        final Row[] previous = mRows;
+        final int rows = previous.length;
+        final Row[] shifted = new Row[rows];
+        int spare = 0;
+        for (int i = 0; i < rows; i++) {
+            final int source = shiftedSource(i, shift, rows);
+            if (source >= 0) {
+                shifted[i] = previous[source];
+                continue;
+            }
+            while (survivesShift(spare, shift, rows)) spare++;
+            final Row reused = previous[spare++];
+            reused.recorded = false;
+            shifted[i] = reused;
+        }
+        // Which row is first decides what a row carrying a text sizing record draws.
+        for (Row state : shifted)
+            if (state.hasTextSizes || state.blockRowsAbove != 0 || state.blockRowsBelow != 0)
+                state.recorded = false;
+        mRows = shifted;
     }
 
     private void resize(int visibleRows) {

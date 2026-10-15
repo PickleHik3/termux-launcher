@@ -194,6 +194,14 @@ compatible with AGP 8.13.2; the code targets Java 11.
 - `scripts/dev-install.sh` — strips the bootstraps from the arm64 staging APK and installs it as
   an upgrade over an existing install (a fresh install from it has no bootstrap). Target the device
   with `DEVICE=<serial>`; `BUILD_TYPE=debug` installs the debug APK instead.
+- **Installing on pong** (only when the developer asks): pong runs release builds.
+  `BUILD_TYPE=release DEVICE=<pong> scripts/dev-install.sh` builds one versioned
+  `<versionName>+dev.<sha>` from HEAD and installs it. Do not `adb install` the release
+  APK by hand: a local release build has no ABI splits (one ~100 MB universal APK with every
+  bootstrap) and is **unsigned** unless the CI's `TERMUX_RELEASE_*` variables are set, which
+  fails as `INSTALL_PARSE_FAILED_NO_CERTIFICATES`. The script keeps only arm64-v8a, drops the
+  bootstraps (an update never needs them), signs with the test key every build shares, installs
+  with `--no-incremental` and checks the launcher came back up.
 - `adb -s <serial> shell run-as <pkg> …` reads and edits the app's files on a debug or staging
   build.
 

@@ -515,7 +515,7 @@ public final class TaiModelStore {
         String displayName = modelId;
         String roleHint = "Downloaded model";
         String license = "User accepted provider terms externally";
-        long sizeBytes = localModelSize(new File(path));
+        long sizeBytes = installedSize(modelId, new File(path));
         String backend = TaiModelSpec.inferBackend(path);
         String format = TaiModelSpec.inferFormat(path);
         String architecture = null;
@@ -680,7 +680,7 @@ public final class TaiModelStore {
                 spec.toolMode
             );
         }
-        long localSize = spec.localPath == null ? 0L : localModelSize(new File(spec.localPath));
+        long localSize = spec.localPath == null ? 0L : installedSize(migratedId, new File(spec.localPath));
         LinkedHashSet<String> endpointCapabilities = TaiModelSpec.endpointCapabilitiesFor(
             entry.modelId, entry.backend, entry.format, entry.sourceCapabilities, spec.localPath);
         return new TaiModelSpec(
@@ -706,6 +706,20 @@ public final class TaiModelStore {
             endpointCapabilities,
             TaiModelSpec.toolModeFor(entry.backend, endpointCapabilities)
         );
+    }
+
+    /**
+     * Bytes a model occupies. A package whose files sit in {@code tai/models/<id>/} (the main
+     * artifact plus sidecars, as KittenTTS has) counts the whole folder, not just the main file
+     * the spec's path names, so a fresh download and a restore read the same figure.
+     */
+    long installedSize(@NonNull String modelId, @NonNull File path) {
+        File parent = path.getParentFile();
+        if (path.isFile() && parent != null && parent.isDirectory() && modelId.equals(parent.getName())
+            && getModelsDirectory().equals(parent.getParentFile())) {
+            return localModelSize(parent);
+        }
+        return localModelSize(path);
     }
 
     private long localModelSize(@NonNull File file) {

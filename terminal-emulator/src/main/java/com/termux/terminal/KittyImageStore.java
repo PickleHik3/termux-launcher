@@ -128,15 +128,51 @@ final class KittyImageStore {
         }
     }
 
+    /**
+     * The picture an image id keeps showing while the transmission that replaced it decodes.
+     *
+     * <p>A program playing video through Unicode placeholders retransmits one id a dozen times a
+     * second while its placeholder cells stay put. The replacement is reserved the moment its bytes
+     * arrive, and its pixels land a decode later; without a stand-in, every draw in between finds
+     * the id with no pixels and blanks the cells, which on screen is a flicker at the frame rate.
+     * kitty decodes synchronously and never shows that gap. The stand-in is the previous frame
+     * with the placements it was drawn through, so it draws exactly what was on screen; it is
+     * charged to {@link #totalBytes} while held and released when the new pixels commit, when the
+     * transmission fails, or when the id is deleted. An id holds at most one.</p>
+     */
+    static final class StandIn {
+        final Bitmap bitmap;
+        final int byteCount;
+        final List<VirtualPlacement> placements;
+
+        StandIn(Bitmap bitmap, int byteCount, List<VirtualPlacement> placements) {
+            this.bitmap = bitmap;
+            this.byteCount = byteCount;
+            this.placements = placements;
+        }
+    }
+
+    /** Stamps for {@link Entry#lineage}; taken on the update thread, like the pixel stamps. */
+    private static long lineageSequence;
+
     static final class Entry {
         final long id;
         final long number;
         final int width;
         final int height;
+        /**
+         * Shared by an image and every transmission that replaced it under the same id with no
+         * delete in between: a run of frames of one picture. A superseded frame's late pixels may
+         * stand in for a newer frame of the same lineage, never for an image transmitted after a
+         * delete.
+         */
+        final long lineage;
         /** Null while the decode is in flight or after it failed. */
         Bitmap bitmap;
         boolean completed;
         int byteCount;
+        /** What placeholders draw until this transmission's pixels land; see {@link StandIn}. */
+        StandIn standIn;
 
         /** Invisible placement prototypes referenced by U+10EEEE cells. */
         final List<VirtualPlacement> virtualPlacements = new ArrayList<>();
@@ -168,12 +204,13 @@ final class KittyImageStore {
         /** Which pixels a placeholder for this image draws from; see {@link #notePixelsChanged}. */
         long pixelGeneration;
 
-        Entry(long id, long number, int width, int height, int byteCount) {
+        Entry(long id, long number, int width, int height, int byteCount, long lineage) {
             this.id = id;
             this.number = number;
             this.width = width;
             this.height = height;
             this.byteCount = byteCount;
+            this.lineage = lineage;
             notePixelsChanged(this);
         }
     }
@@ -206,6 +243,8 @@ final class KittyImageStore {
 
     private final Map<Long, Entry> images = new LinkedHashMap<>();
     private final Map<Long, Long> latestIdByNumber = new HashMap<>();
+    /** Pictures deleted inside a synchronized update; see {@link #holdPictureForReplacement}. */
+    private final Map<Long, StandIn> heldPictures = new HashMap<>();
     private long totalBytes;
     private final FrameBudget frameBudget;
 
@@ -247,17 +286,50 @@ final class KittyImageStore {
         return newTotal > MAX_STORED_BYTES || newCount > MAX_STORED_IMAGES;
     }
 
-    /** Record an accepted transmission before its decode finishes, replacing any previous image with this id. */
+    /**
+     * Record an accepted transmission before its decode finishes, replacing any previous image with
+     * this id. The replaced image's picture stays up as the new entry's {@link StandIn} until the
+     * new pixels land, when there is headroom for it: the stand-in never costs a transmission its
+     * place, only the frame without a gap.
+     */
     void reserve(long id, long number, int width, int height, int byteCount) {
+        Entry replaced = images.get(id);
+        StandIn held = heldPictures.remove(id);
+        StandIn standIn = replaced == null ? null : shownPicture(replaced);
+        if (standIn == null) standIn = held;
         remove(id);
-        images.put(id, new Entry(id, number, width, height, byteCount));
+        Entry entry = new Entry(id, number, width, height, byteCount,
+            replaced == null ? ++lineageSequence : replaced.lineage);
+        images.put(id, entry);
         if (number != 0) latestIdByNumber.put(number, id);
         totalBytes += byteCount;
+        if (standIn != null && totalBytes + standIn.byteCount <= MAX_STORED_BYTES) {
+            entry.standIn = standIn;
+            totalBytes += standIn.byteCount;
+        }
+    }
+
+    /**
+     * What a placeholder for this entry draws right now, as a stand-in for its replacement, or null
+     * when it draws nothing — no pixels yet and no stand-in of its own, or no virtual placement to
+     * draw them through. Classic placements need none: they hold their own bitmap.
+     */
+    private static StandIn shownPicture(Entry entry) {
+        if (entry.bitmap == null) return entry.standIn;
+        if (entry.virtualPlacements.isEmpty()) return null;
+        // A copy: a delete queued behind the replacement still removes the old entry's placements.
+        List<VirtualPlacement> placements = new ArrayList<>(entry.virtualPlacements);
+        Bitmap shown = frameBitmap(entry, entry.currentFrame + 1);
+        if (shown == null || entry.currentFrame == 0) {
+            return new StandIn(entry.bitmap, entry.byteCount, placements);
+        }
+        return new StandIn(shown, entry.frames.get(entry.currentFrame - 1).byteCount, placements);
     }
 
     /**
      * Attach the decoded bitmap to its reservation. Returns false when the reservation is gone —
      * deleted or replaced while the decode ran — in which case the caller still owns the bitmap.
+     * The stand-in goes in the same step, so no draw sees the id between the two pictures.
      */
     boolean complete(long id, Bitmap bitmap, int byteCount) {
         Entry entry = images.get(id);
@@ -266,8 +338,61 @@ final class KittyImageStore {
         entry.completed = true;
         totalBytes += byteCount - entry.byteCount;
         entry.byteCount = byteCount;
+        releaseStandIn(entry);
         notePixelsChanged(entry);
         return true;
+    }
+
+    /**
+     * Hand the pixels of a superseded transmission to the reservation that replaced it, as its
+     * stand-in. A sender that outpaces the decoder replaces each frame before it lands; without
+     * this, every late frame is thrown away and the picture freezes on the last one that made it,
+     * where with it the picture moves at the rate the decoder keeps up with. Returns false —
+     * leaving the bitmap with the caller — when the id now holds a different picture (deleted and
+     * transmitted again), its newer pixels have already landed, or there is no headroom.
+     */
+    boolean offerStandIn(long id, Entry superseded, Bitmap bitmap, int byteCount) {
+        Entry current = images.get(id);
+        if (current == null || superseded == null || current == superseded || current.completed
+            || current.lineage != superseded.lineage || superseded.virtualPlacements.isEmpty())
+            return false;
+        long delta = byteCount - (current.standIn == null ? 0 : current.standIn.byteCount);
+        if (totalBytes + delta > MAX_STORED_BYTES) return false;
+        // The previous stand-in is dropped, never recycled, like every stored bitmap.
+        current.standIn = new StandIn(bitmap, byteCount, new ArrayList<>(superseded.virtualPlacements));
+        totalBytes += delta;
+        notePixelsChanged(current);
+        return true;
+    }
+
+    /**
+     * Remember what this image shows as it is deleted inside a synchronized update, for a
+     * transmission under the same id later in that update to stand in with. Nothing is drawn while
+     * the update holds the screen, so the delete was never seen: delete-then-retransmit in one
+     * update is a replacement, and should look like one. The caller forgets these when the hold
+     * ends ({@link #forgetHeldPictures}), so a deletion the screen did show is never undone. Not
+     * charged to the byte quota while held: the pictures were charged a moment ago and live no
+     * longer than the update; one a reservation takes is charged from then on.
+     */
+    void holdPictureForReplacement(Entry entry) {
+        StandIn picture = entry == null ? null : shownPicture(entry);
+        if (picture != null) heldPictures.put(entry.id, picture);
+    }
+
+    void forgetHeldPictures() {
+        heldPictures.clear();
+    }
+
+    /**
+     * Stop showing the stand-in, if this entry is still the stored one and holds one. A delete
+     * calls this alongside removing the virtual placements: an id told to stop displaying must not
+     * keep its previous frame up until the next one lands.
+     */
+    void releaseStandIn(Entry entry) {
+        if (entry == null || entry.standIn == null || images.get(entry.id) != entry) return;
+        totalBytes -= entry.standIn.byteCount;
+        entry.standIn = null;
+        notePixelsChanged(entry);
     }
 
     /** Drop a failed transmission's reservation so its budget is released. */
@@ -306,7 +431,11 @@ final class KittyImageStore {
 
     /** Find an exact virtual placement, or the first one when the placeholder carries no id. */
     static VirtualPlacement virtualPlacement(Entry entry, long placementId) {
-        for (VirtualPlacement placement : entry.virtualPlacements) {
+        return virtualPlacement(entry.virtualPlacements, placementId);
+    }
+
+    static VirtualPlacement virtualPlacement(List<VirtualPlacement> placements, long placementId) {
+        for (VirtualPlacement placement : placements) {
             if (placementId == 0 || placement.placementId == placementId) return placement;
         }
         return null;
@@ -329,6 +458,10 @@ final class KittyImageStore {
         Entry removed = images.remove(id);
         if (removed == null) return;
         totalBytes -= removed.byteCount;
+        if (removed.standIn != null) {
+            totalBytes -= removed.standIn.byteCount;
+            removed.standIn = null;
+        }
         for (Frame frame : removed.frames) spendFrameBytes(-frame.byteCount);
         // Stored bitmaps are dropped, never recycled: a placement rasterization on the decode
         // worker may still be reading one, and the garbage collector reclaims them safely.
@@ -358,6 +491,7 @@ final class KittyImageStore {
 
     void clear() {
         images.clear();
+        heldPictures.clear();
         latestIdByNumber.clear();
         totalBytes = 0;
         spendFrameBytes(-totalFrameBytes);

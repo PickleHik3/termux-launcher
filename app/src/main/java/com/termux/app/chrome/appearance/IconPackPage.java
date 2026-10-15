@@ -86,6 +86,11 @@ public final class IconPackPage {
         /** Stores {@code value} for {@code key} and has the launcher's artwork follow, restyling nothing. */
         void apply(@NonNull String key, @NonNull String value);
 
+        /** Where the switch was left; consulted only when no pack is stored in either key. */
+        default boolean pinnedOnlySaved() { return true; }
+
+        default void savePinnedOnly(boolean on) {}
+
         @NonNull
         static Backend real(@NonNull Context context) {
             final Context app = context.getApplicationContext();
@@ -115,6 +120,14 @@ public final class IconPackPage {
 
                 @Override public void apply(@NonNull String key, @NonNull String value) {
                     IconPackChoices.applyLive(app, TermuxAppSharedPreferences.build(app, false), key, value);
+                }
+
+                @Override public boolean pinnedOnlySaved() {
+                    return TermuxAppSharedPreferences.build(app, false).isAppLauncherIconPackPinnedOnly();
+                }
+
+                @Override public void savePinnedOnly(boolean on) {
+                    TermuxAppSharedPreferences.build(app, false).setAppLauncherIconPackPinnedOnly(on);
                 }
             };
         }
@@ -196,6 +209,7 @@ public final class IconPackPage {
         pinnedOnly.setOnCheckedChangeListener((button, checked) -> {
             if (checked == pinnedOnlyOn) return;
             pinnedOnlyOn = checked;
+            backend.savePinnedOnly(checked);
             commitChoice();
             showTiles();
         });
@@ -298,21 +312,28 @@ public final class IconPackPage {
         return pinnedOnly;
     }
 
-    /** ON when the pinned key is set, else OFF when the global one is, else ON (nothing is set). */
+    /** ON when the pinned key is set, else OFF when the global one is, else the saved position (nothing is set). */
     private void readChoice() {
         // A tap still waiting for its parse is the choice in force: the stored one is behind it.
         if (writePending) return;
         String pinnedPack = backend.current(IconPackChoices.KEY_PINNED);
         String globalPack = backend.current(IconPackChoices.KEY_GLOBAL);
-        pinnedOnlyOn = !pinnedPack.isEmpty() || globalPack.isEmpty();
+        pinnedOnlyOn = !pinnedPack.isEmpty() || (globalPack.isEmpty() && backend.pinnedOnlySaved());
         selected = pinnedOnlyOn ? pinnedPack : globalPack;
     }
 
     /** Stores {@link #selected} under the key the switch names and tells the host. */
     private void writeChoice() {
         writePending = false;
-        if (pinnedOnlyOn) {
+        backend.savePinnedOnly(pinnedOnlyOn);
+        // One pack, in one key: the switch says where it applies, and the other key is cleared so
+        // no pack stays behind it. System (or Default) clears both: stock icons everywhere.
+        if (selected.isEmpty()) {
+            backend.apply(IconPackChoices.KEY_GLOBAL, "");
+            backend.apply(IconPackChoices.KEY_PINNED, "");
+        } else if (pinnedOnlyOn) {
             backend.apply(IconPackChoices.KEY_PINNED, selected);
+            backend.apply(IconPackChoices.KEY_GLOBAL, "");
         } else {
             backend.apply(IconPackChoices.KEY_GLOBAL, selected);
             backend.apply(IconPackChoices.KEY_PINNED, "");

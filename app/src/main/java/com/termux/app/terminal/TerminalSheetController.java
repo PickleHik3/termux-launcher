@@ -746,7 +746,8 @@ public final class TerminalSheetController
     private TerminalDrawerMetrics.Bounds leadingBounds() {
         terminalAreaInPlane(mAreaBounds);
         return TerminalDrawerMetrics.place(mAreaBounds.left, mAreaBounds.top, mAreaBounds.width(),
-            mAreaBounds.height(), isRtl(), mDensity);
+            mAreaBounds.height(), isRtl(), mDensity,
+            mHost.context().getResources().getConfiguration().fontScale);
     }
 
     /** How much of the plane's bottom the in-app keyboard is taking. */
@@ -962,12 +963,20 @@ public final class TerminalSheetController
      * <p>A full-screen scrim would put the dock, the status row and the keys behind glass as well,
      * and none of them is what the drawer is covering. Tapping it closes, like tapping anywhere
      * else outside the card does.
+     *
+     * <p>It wears the terminal's own corners: a square scrim over a rounded frame darkens the
+     * wallpaper in the four notches outside the frame's arcs, so its corners poke past the outline.
+     * The radius is set with the bounds in {@link #applyScrimParams}, which runs again whenever the
+     * area moves.
      */
     @NonNull
     private View buildScrim() {
         View scrim = new View(mStackHost.getContext());
-        scrim.setBackgroundColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+        android.graphics.drawable.GradientDrawable shape =
+            new android.graphics.drawable.GradientDrawable();
+        shape.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
             android.graphics.Color.BLACK, Math.round(mHost.glassMotion().backdropDim * 255f)));
+        scrim.setBackground(shape);
         scrim.setClickable(true);
         scrim.setOnClickListener(view -> dismiss());
         applyScrimParams(scrim);
@@ -982,6 +991,15 @@ public final class TerminalSheetController
         terminalAreaInPlane(mAreaBounds);
         setFrameBounds(scrim, mAreaBounds.left, mAreaBounds.top,
             mAreaBounds.width(), mAreaBounds.height());
+        if (scrim.getBackground() instanceof android.graphics.drawable.GradientDrawable) {
+            android.graphics.drawable.GradientDrawable shape =
+                (android.graphics.drawable.GradientDrawable) scrim.getBackground();
+            float radius = TerminalDrawerMetrics.scrimRadiusPx(mHost.terminalCornerRadiusPx(),
+                mAreaBounds.width(), mAreaBounds.height());
+            // Compared first: this runs from the plane's layout listener, and a redundant set
+            // would invalidate the scrim on every pass.
+            if (shape.getCornerRadius() != radius) shape.setCornerRadius(radius);
+        }
     }
 
     private void applyLeadingParams(@NonNull View card,

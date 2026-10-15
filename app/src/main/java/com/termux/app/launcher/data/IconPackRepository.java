@@ -52,18 +52,23 @@ public final class IconPackRepository {
     /** Parsed packs kept: the global one and the pinned one, no more (a parse is names, not pixels). */
     private static final int MAX_PARSED_PACKS = 2;
     /**
-     * Guards both maps below. A pack is parsed on whichever thread asks first (the icon store's,
-     * the main thread's, or the Icons mode's warm-up), so the maps are shared; the parse itself
-     * runs outside the lock.
+     * The parsed packs, shared by every thread that resolves icons (the icon store's, the main
+     * thread's, the Icons mode's warm-up): a pack is parsed once, and a thread asking while
+     * another parses it waits for that parse. See {@link ParsedIconPackCache}.
      */
-    private final Object lock = new Object();
-    private final Map<String, IconPack> parsedPacks = new LinkedHashMap<String, IconPack>(4, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, IconPack> eldest) {
-            return size() > MAX_PARSED_PACKS;
+    private final ParsedIconPackCache parsedPacks =
+        new ParsedIconPackCache(MAX_PARSED_PACKS, CACHE_VERSION_RECHECK_MS);
+    private final ParsedIconPackCache.Source parseSource = new ParsedIconPackCache.Source() {
+        @Nullable @Override
+        public IconPackInfo installed(@NonNull String packageName) {
+            return buildInfo(packageName, isThemedPackage(packageName));
+        }
+
+        @Nullable @Override
+        public IconPack parse(@NonNull IconPackInfo info) {
+            return parseIconPack(info);
         }
     };
-    private final Map<String, Long> lastVersionChecks = new LinkedHashMap<>();
     /** Resources kept per pack APK in use: the global, the pinned and a picked icon's pack or two. */
     private static final int MAX_PACK_RESOURCES = 4;
     private final IconPackResourcesCache<Resources> packResources =
@@ -74,8 +79,8 @@ public final class IconPackRepository {
     /**
      * The process-wide repository every icon surface shares (the catalogue, the dock's pinned
      * icons, the notification cards), so a pack's appfilter is parsed once and its resources
-     * loaded once rather than once per surface. Thread-safe: the maps are guarded by one lock and
-     * the resources cache by its own.
+     * loaded once rather than once per surface. Thread-safe: the parsed packs and the resources
+     * cache each guard themselves.
      */
     @NonNull
     public static IconPackRepository getInstance(@NonNull Context context) {
@@ -137,30 +142,20 @@ public final class IconPackRepository {
         return packIdentity(globalPackPackage) + "/" + packIdentity(pinnedPackPackage);
     }
 
+    /**
+     * {@code packageName}'s parsed pack, or null when it is not installed or cannot be read. Slow
+     * the first time and after an upgrade: the parse runs on the calling thread, and a thread
+     * asking while another parses the same pack waits for it.
+     */
     @Nullable
     public IconPack loadIconPack(@Nullable String packageName) {
         if (packageName == null || packageName.trim().isEmpty()) return null;
-        IconPack cached;
-        Long checkedAt;
-        synchronized (lock) {
-            cached = parsedPacks.get(packageName);
-            checkedAt = lastVersionChecks.get(packageName);
-        }
-        long now = SystemClock.elapsedRealtime();
-        if (checkedAt != null && now - checkedAt < CACHE_VERSION_RECHECK_MS) {
-            return cached;
-        }
-        IconPackInfo info = buildInfo(packageName, isThemedPackage(packageName));
-        synchronized (lock) {
-            lastVersionChecks.put(packageName, now);
-            if (info == null) {
-                parsedPacks.remove(packageName);
-                return null;
-            }
-            if (cached != null && cached.info.versionCode == info.versionCode) return cached;
-            parsedPacks.remove(packageName);
-        }
+        return parsedPacks.get(packageName, SystemClock.elapsedRealtime(), parseSource);
+    }
 
+    @Nullable
+    private IconPack parseIconPack(@NonNull IconPackInfo info) {
+        String packageName = info.packageName;
         XmlResourceParser appfilterRes = null;
         XmlResourceParser drawableRes = null;
         InputStream appfilterStream = null;
@@ -200,11 +195,7 @@ public final class IconPackRepository {
                 if (drawableStream != null) drawable = newPullParser(drawableStream);
             }
 
-            IconPack pack = IconPackXmlParser.parse(info, appfilter, drawable);
-            synchronized (lock) {
-                parsedPacks.put(packageName, pack);
-            }
-            return pack;
+            return IconPackXmlParser.parse(info, appfilter, drawable);
         } catch (Exception ignored) {
             return null;
         } finally {
@@ -216,10 +207,7 @@ public final class IconPackRepository {
     }
 
     public void clearCache() {
-        synchronized (lock) {
-            parsedPacks.clear();
-            lastVersionChecks.clear();
-        }
+        parsedPacks.clear();
         packResources.clear();
     }
 

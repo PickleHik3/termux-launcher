@@ -295,6 +295,32 @@ public final class TerminalView extends View {
 
     private boolean mSmoothSettleActive;
 
+    /** A finger drag is moving the transcript by pixels; ends when the finger lifts. */
+    private boolean mSmoothDragActive;
+
+    /**
+     * Counts every redraw that may have changed what the grid shows, which is every invalidate but
+     * the smooth scroll's own (see {@link #invalidate()}). The scroll cache keys on it.
+     */
+    private long mContentGeneration;
+
+    /** Set only around the smooth scroll's own invalidates, which move the grid but not its rows. */
+    private boolean mScrollPositionInvalidate;
+
+    /** Whether the cached grid of a smooth scroll still matches; see {@link ScrollRenderCache}. */
+    private final ScrollRenderCache mScrollRenderCache = new ScrollRenderCache();
+
+    /** The cached grid itself, API 29 and up only; null outside a smooth scroll. */
+    @Nullable
+    private ScrollRenderCache.Node mScrollGridNode;
+
+    /** The renderer that recorded {@link #mScrollGridNode}: a replaced renderer's rows are gone. */
+    @Nullable
+    private TerminalRenderer mScrollGridRenderer;
+
+    /** Mirrors {@link TerminalRenderer#setRowCacheBypassed}: a frozen copy is drawing this view. */
+    private boolean mRowCacheBypassed;
+
     private static final int SCROLL_SETTLE_DURATION_MS = 120;
 
     /**
@@ -533,6 +559,10 @@ public final class TerminalView extends View {
                 mScrollXRemainder = 0.0f;
                 if (mScroller.isFinished())
                     settleScrollOffset();
+                // A fling or a settle carries the cached grid on; a drag that stopped on a row
+                // boundary leaves nothing moving, and so nothing for the cache to serve.
+                if (!mSmoothFlingActive && !mSmoothSettleActive)
+                    retireScrollCache();
                 mTapLink = null;
                 if (mTouchMouseDragReported)
                     return true;
@@ -614,10 +644,11 @@ public final class TerminalView extends View {
                     if (axis == SCROLL_AXIS_VERTICAL) distanceX = 0f;
                     if (isSmoothScrollAllowed()) {
                         abortSmoothScroll();
+                        mSmoothDragActive = true;
                         float before = getScrollPixelPosition();
                         setScrollPixelPosition(before + distanceY);
                         mScrollDelivery.pixelsScrolled(before, getScrollPixelPosition());
-                        invalidate();
+                        invalidateScrollPosition();
                     } else {
                         distanceY += mScrollRemainder;
                         int deltaRows = (int) (distanceY / mRenderer.mFontLineSpacing);
@@ -1163,6 +1194,7 @@ public final class TerminalView extends View {
 
     /** See {@link TerminalRenderer#setRowCacheBypassed}: for a frozen copy of this view. */
     public void setRowCacheBypassed(boolean bypassed) {
+        mRowCacheBypassed = bypassed;
         if (mRenderer != null) mRenderer.setRowCacheBypassed(bypassed);
     }
 
@@ -1990,8 +2022,60 @@ public final class TerminalView extends View {
         }
         mTopRow = newTopRow;
         mScrollOffsetPixels = offset;
-        if (!awakenScrollBars())
+        invalidateScrollPosition();
+    }
+
+    /**
+     * Redraw for a move of the smooth scroll alone. The grid's rows are what they were, so this is
+     * the one invalidate that leaves the scroll cache's recording valid. The scrollbar is woken
+     * without its own invalidate, which would arrive later, outside the flag, and count as content.
+     */
+    private void invalidateScrollPosition() {
+        awakenScrollBars(ViewConfiguration.getScrollDefaultDelay(), false);
+        mScrollPositionInvalidate = true;
+        try {
             invalidate();
+        } finally {
+            mScrollPositionInvalidate = false;
+        }
+    }
+
+    /**
+     * Every redraw but the smooth scroll's own may change what the grid shows - output, the cursor
+     * blink, a text size or colour change, the framework's own - so it moves the generation the
+     * scroll cache's recording is keyed on. {@code postInvalidate} and
+     * {@code postInvalidateOnAnimation} arrive here too.
+     */
+    @Override
+    public void invalidate() {
+        if (!mScrollPositionInvalidate) mContentGeneration++;
+        super.invalidate();
+    }
+
+    /** Whether the transcript is being moved by pixels right now: a drag, a fling or a settle. */
+    private boolean isSmoothScrollMoving() {
+        return (mSmoothDragActive || mSmoothFlingActive || mSmoothSettleActive)
+            && isSmoothScrollAllowed();
+    }
+
+    /**
+     * The smooth scroll the cached grid served is over. The recording is freed by the next frame,
+     * which draws live: the frame on screen still draws it, so freeing it here would blank the grid
+     * for any frame shown before this view records again.
+     */
+    private void retireScrollCache() {
+        mScrollRenderCache.forget();
+        if (mScrollGridNode != null) invalidate();
+    }
+
+    /** Free the cached grid now; only once no display list of this view draws it any more. */
+    private void discardScrollCache() {
+        mScrollRenderCache.forget();
+        mScrollGridRenderer = null;
+        if (mScrollGridNode != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) mScrollGridNode.discard();
+            mScrollGridNode = null;
+        }
     }
 
     /**
@@ -2009,9 +2093,11 @@ public final class TerminalView extends View {
     /** Drop any fractional offset, for the cases where the row position is set from elsewhere. */
     private void clearScrollOffset() {
         abortSmoothScroll();
+        mSmoothDragActive = false;
+        retireScrollCache();
         if (mScrollOffsetPixels != 0f) {
             mScrollOffsetPixels = 0f;
-            invalidate();
+            invalidateScrollPosition();
         }
     }
 
@@ -2020,6 +2106,7 @@ public final class TerminalView extends View {
             mSmoothFlingActive = false;
             mSmoothSettleActive = false;
             mScroller.abortAnimation();
+            retireScrollCache();
         }
     }
 
@@ -2036,7 +2123,8 @@ public final class TerminalView extends View {
         to = Math.max(getScrollPixelMinimum(), Math.min(0, to));
         if (from == to) {
             mScrollOffsetPixels = 0f;
-            invalidate();
+            invalidateScrollPosition();
+            retireScrollCache();
             return;
         }
         mSmoothSettleActive = true;
@@ -2067,9 +2155,11 @@ public final class TerminalView extends View {
             mSmoothSettleActive = false;
             if (wasFling) {
                 settleScrollOffset();
+                if (!mSmoothSettleActive) retireScrollCache();
             } else {
                 mScrollOffsetPixels = 0f;
-                invalidate();
+                invalidateScrollPosition();
+                retireScrollCache();
             }
         }
     };
@@ -2327,6 +2417,10 @@ public final class TerminalView extends View {
         if (mEmulator == null)
             return true;
         final int action = event.getAction();
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
+            mSmoothDragActive = false;
+        if (action == MotionEvent.ACTION_CANCEL && !mSmoothFlingActive && !mSmoothSettleActive)
+            retireScrollCache();
         if (action == MotionEvent.ACTION_DOWN) {
             mTouchDownX = event.getX();
             mTouchDownY = event.getY();
@@ -2816,6 +2910,7 @@ public final class TerminalView extends View {
      */
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        retireScrollCache();
         if (mTerminalSizeUpdatesPaused) {
             mTerminalSizeUpdatePending = true;
             invalidate();
@@ -3298,7 +3393,20 @@ public final class TerminalView extends View {
                 canvas.clipRect(0f, fillClipTop - drawOffset, getWidth(), getHeight() - drawOffset);
                 canvas.translate(0f, -fillRows * (float) mRenderer.mFontLineSpacing);
             }
-            mRenderer.render(mEmulator, canvas, drawTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor, getHorizontalContentOffset(), extraRows);
+            // Between row crossings a smooth scroll only moves the grid, so it is drawn from a
+            // recording made at zero translation; the translation above stays outside it.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && ScrollRenderCache.applies(canvas.isHardwareAccelerated(), Build.VERSION.SDK_INT,
+                    isSmoothScrollMoving(), mTravelActive, fillRows,
+                    isSelectingText() || !selectorsAtRest(sel), mRowCacheBypassed)) {
+                drawGridThroughScrollCache(canvas, drawTopRow, sel, extraRows);
+            } else {
+                // This frame's recording no longer draws the cached grid, so it can go. A software
+                // canvas is someone's copy of this view, not its display list, which may still.
+                if (mScrollGridNode != null && canvas.isHardwareAccelerated())
+                    discardScrollCache();
+                mRenderer.render(mEmulator, canvas, drawTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor, getHorizontalContentOffset(), extraRows);
+            }
             if (mFindOverlay != null) {
                 mRenderer.renderFindOverlay(mEmulator, canvas, drawTopRow, mFindOverlay,
                     getHorizontalContentOffset(), extraRows);
@@ -3318,6 +3426,53 @@ public final class TerminalView extends View {
             renderTextSelection();
             long drawEndNanos = SystemClock.elapsedRealtimeNanos();
             mRenderMetrics.recordDraw(drawStartNanos, drawEndNanos, mFrameBudgetNanos);
+        }
+    }
+
+    private static boolean selectorsAtRest(int[] sel) {
+        return sel[0] == -1 && sel[1] == -1 && sel[2] == -1 && sel[3] == -1;
+    }
+
+    /**
+     * Draw the grid from the smooth scroll's recording, recording it first when the top row, the
+     * content or the frame's geometry moved since. The recording is the same render call the live
+     * path makes, into a canvas of the same size, so a replayed frame is the frame it would have
+     * drawn.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private void drawGridThroughScrollCache(Canvas canvas, int drawTopRow, int[] sel, int extraRows) {
+        final int width = canvas.getWidth();
+        final int height = canvas.getHeight();
+        final float horizontalOffset = getHorizontalContentOffset();
+        final long generation = mContentGeneration;
+        if (mScrollGridNode == null) mScrollGridNode = new ScrollRenderCache.Node();
+        if (mScrollGridRenderer != mRenderer || !mScrollRenderCache.canReuse(drawTopRow,
+            extraRows, width, height, horizontalOffset, mUseTransparentFrameClear,
+            mTransparentFrameOverlayColor, generation)) {
+            android.os.Trace.beginSection("Terminal.scrollCache.record");
+            try {
+                Canvas into = mScrollGridNode.beginRecording(width, height);
+                try {
+                    mRenderer.render(mEmulator, into, drawTopRow, sel[0], sel[1], sel[2], sel[3],
+                        mUseTransparentFrameClear, mTransparentFrameOverlayColor, horizontalOffset,
+                        extraRows);
+                } finally {
+                    mScrollGridNode.endRecording();
+                }
+            } finally {
+                android.os.Trace.endSection();
+            }
+            // Keyed on the generation from before the render: anything the render itself
+            // invalidated is redrawn by the next frame.
+            mScrollRenderCache.remember(drawTopRow, extraRows, width, height, horizontalOffset,
+                mUseTransparentFrameClear, mTransparentFrameOverlayColor, generation);
+            mScrollGridRenderer = mRenderer;
+        }
+        android.os.Trace.beginSection("Terminal.scrollCache.draw");
+        try {
+            mScrollGridNode.draw(canvas);
+        } finally {
+            android.os.Trace.endSection();
         }
     }
 
@@ -4394,6 +4549,8 @@ public final class TerminalView extends View {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        // Detaching drops this view's display list, so nothing draws the cached grid any more.
+        discardScrollCache();
         cancelHoldTimers();
         mHoldGesture.reset();
         releaseHoldDownEvent();

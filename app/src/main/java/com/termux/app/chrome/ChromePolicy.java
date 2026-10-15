@@ -147,6 +147,11 @@ public final class ChromePolicy {
     public static void applyWallpaperModePreferences(@NonNull TermuxAppSharedPreferences preferences,
                                                      boolean enabled) {
         if (enabled) {
+            // Already in wallpaper mode: a new wallpaper applied over the old one, not a switch
+            // into the mode. The live values are the user's Look as it stands; the remembered
+            // ones are from the last time the mode was off (or the install's first values) and
+            // would put a stale blur and opacity over a Look picked since. Nothing to restore.
+            if (preferences.isUseSystemWallpaperEnabled()) return;
             preferences.setUseSystemWallpaperEnabled(true);
             int terminal = preferences.getWallpaperEnabledTerminalBackgroundOpacity();
             int appBar = preferences.getWallpaperEnabledAppBarOpacity();

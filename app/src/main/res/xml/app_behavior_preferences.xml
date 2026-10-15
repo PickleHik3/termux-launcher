@@ -10,6 +10,11 @@
             app:title="@string/settings_behavior_idle_title"
             app:summary="@string/settings_behavior_idle_summary"
             app:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="low_memory_preset"
+            app:title="@string/settings_behavior_low_memory_title"
+            app:summary="@string/settings_behavior_low_memory_summary"
+            app:defaultValue="false" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_behavior_vibration_header">

@@ -662,10 +662,13 @@ final class KittyGraphicsProtocol {
                     return;
                 }
                 // A delete that raced the decode wins, and so does a later transmission under the
-                // same id; the transmission still succeeded.
-                if (store.get(effectiveId) != reservation
-                    || !store.complete(effectiveId, result, result.getAllocationByteCount()))
-                    result.recycle();
+                // same id, which may still show these pixels until its own land; the transmission
+                // succeeded either way.
+                int bytes = result.getAllocationByteCount();
+                boolean kept = store.get(effectiveId) == reservation
+                    ? store.complete(effectiveId, result, bytes)
+                    : store.offerStandIn(effectiveId, reservation, result, bytes);
+                if (!kept) result.recycle();
                 reply(command, "OK", false, false, effectiveId);
             });
         });
@@ -903,6 +906,12 @@ final class KittyGraphicsProtocol {
         if (entry == null || out == null) return false;
         KittyImageStore.VirtualPlacement placement = KittyImageStore.virtualPlacement(entry, placementId);
         Bitmap bitmap = KittyImageStore.frameBitmap(entry, entry.currentFrame + 1);
+        if (bitmap == null && entry.standIn != null) {
+            // A retransmission still decoding: draw the picture it replaces, through the
+            // placements that picture was drawn with, until its own pixels land.
+            placement = KittyImageStore.virtualPlacement(entry.standIn.placements, placementId);
+            bitmap = entry.standIn.bitmap;
+        }
         if (placement == null || bitmap == null) return false;
         // The renderer is about to draw this image through a placeholder cell, which is the only
         // moment a virtually-placed image is provably on a screen. Marking it here rather than at
@@ -1328,6 +1337,8 @@ final class KittyGraphicsProtocol {
         windowGraceDeadline = 0;
         for (KittyImageStore.Entry entry : store.entries()) {
             if (entry.bitmap != null && !entry.bitmap.isRecycled()) entry.bitmap.recycle();
+            Bitmap standIn = entry.standIn == null ? null : entry.standIn.bitmap;
+            if (standIn != null && !standIn.isRecycled()) standIn.recycle();
             for (KittyImageStore.Frame frame : entry.frames) {
                 if (frame.bitmap != null && !frame.bitmap.isRecycled()) frame.bitmap.recycle();
             }
@@ -1480,8 +1491,12 @@ final class KittyGraphicsProtocol {
                 }
                 if (id != 0) {
                     KittyImageStore.Entry entry = store.get(id);
-                    if (entry != null)
+                    if (entry != null) {
+                        if (command.placementId == 0 && emulator.isScreenUpdateHeld())
+                            store.holdPictureForReplacement(entry);
                         KittyImageStore.removeVirtualPlacements(entry, command.placementId);
+                        store.releaseStandIn(entry);
+                    }
                     changeLayer(() -> {
                         emulator.deleteKittyPlacements((placement, row) ->
                             placement.imageId == id
@@ -1651,6 +1666,7 @@ final class KittyGraphicsProtocol {
      * now, when that is already so.
      */
     void endSynchronizedWindow() {
+        store.forgetHeldPictures();
         windowGraceDeadline = 0;
         if (window == null) return;
         window.sealed = true;
@@ -1668,6 +1684,9 @@ final class KittyGraphicsProtocol {
      * picture stays on screen, never none.
      */
     void synchronizedHoldEnded() {
+        // The screen draws again from here, so a picture deleted under the hold has now been seen
+        // gone and must not come back as a stand-in.
+        store.forgetHeldPictures();
         if (window == null) return;
         if (windowGraceDeadline == 0) {
             if (!streamOpen && upload == null) {
@@ -1708,6 +1727,7 @@ final class KittyGraphicsProtocol {
     private void releaseLayerSteps() {
         List<LayerStep> steps = new ArrayList<>(layerSteps);
         layerSteps.clear();
+        store.forgetHeldPictures();
         window = null;
         windowGraceDeadline = 0;
         for (LayerStep step : steps) {

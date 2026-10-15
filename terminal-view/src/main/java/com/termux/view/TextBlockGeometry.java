@@ -143,6 +143,37 @@ final class TextBlockGeometry {
     }
 
     /**
+     * The width a symbol run owns inside a block: its wcwidth columns, each one cell wide at the
+     * drawn size. At {@code s=2} a one-column icon owns two cells, as a letter would.
+     */
+    static float symbolBoxWidth(int columns, float fontWidth, float sizeScale) {
+        return Math.max(1, columns) * fontWidth * sizeScale;
+    }
+
+    /**
+     * The uniform scale that brings a symbol run's measured advance and line box inside its box,
+     * up or down, as the plain-cell path fits an icon into its cells. An axis the face measured
+     * nothing on does not constrain the fit.
+     */
+    static float symbolFitScale(float advance, float lineBox, float boxWidth, float boxHeight) {
+        return Math.min(advance > 0f ? boxWidth / advance : 1f,
+            lineBox > 0f ? boxHeight / lineBox : 1f);
+    }
+
+    /** Where a fitted symbol run starts so that its advance sits centred in its box. */
+    static float centredLeft(float boxLeft, float boxWidth, float advance) {
+        return boxLeft + (boxWidth - advance) / 2f;
+    }
+
+    /**
+     * The baseline that centres a fitted symbol run's line box in its box vertically, from the
+     * fitted line box and ascent (negative, as {@code Paint.FontMetrics} reports it).
+     */
+    static float centredBaseline(float boxTop, float boxHeight, float lineBox, float ascent) {
+        return boxTop + (boxHeight - lineBox) / 2f - ascent;
+    }
+
+    /**
      * The cursor rectangle to paint on one row of a block, as {@code left, top, right, bottom}.
      *
      * <p>D2: the cursor grows to cover the whole block. A block cursor fills it, so every row it

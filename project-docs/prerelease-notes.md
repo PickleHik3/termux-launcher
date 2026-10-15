@@ -8,7 +8,7 @@ release-notes voice (one line per item, what you can now do, no mechanism).
 -->
 # Pre-release channel
 
-Latest stable: v1.0.5.
+Latest stable: v1.0.6.
 
 ## Experimental
 <!-- What is on pre and not yet on dev, one line each; name the pull request or branch it came from. -->

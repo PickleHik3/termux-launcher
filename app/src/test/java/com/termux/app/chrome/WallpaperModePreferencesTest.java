@@ -62,4 +62,26 @@ public class WallpaperModePreferencesTest {
         assertEquals(63, preferences.getAppBarOpacity());
         assertEquals(19, preferences.getExtraKeysBlurRadius());
     }
+
+    @Test
+    public void enablingWhileAlreadyEnabledKeepsTheLookAsItStands() {
+        // Applying a new wallpaper while wallpaper mode is on re-states "enabled". The Look picked
+        // since the mode last came on (Mist's blur 25 and opacity 60 here) must survive it; the
+        // remembered values are older and would otherwise land over it.
+        preferences.setUseSystemWallpaperEnabled(true);
+        preferences.setWallpaperEnabledTerminalBackgroundOpacity(10);
+        preferences.setWallpaperEnabledAppBarOpacity(10);
+        preferences.setWallpaperEnabledExtraKeysBlurRadius(4);
+        preferences.setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR, 25);
+        preferences.setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 60);
+
+        ChromePolicy.applyWallpaperModePreferences(preferences, true);
+
+        assertTrue(preferences.isUseSystemWallpaperEnabled());
+        assertEquals(25, preferences.getSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR));
+        assertEquals(60, preferences.getSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY));
+        assertEquals(25, preferences.getExtraKeysBlurRadius());
+        assertEquals(60, preferences.getAppBarOpacity());
+        assertEquals(60, preferences.getTerminalBackgroundOpacity());
+    }
 }
