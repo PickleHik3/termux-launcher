@@ -764,6 +764,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.place.LayoutVariant mAppliedPlaceVariant;
     /** Always on as last applied to the widget grid; null until the first pass reads it. */
     @Nullable private Boolean mAppliedHomeAlwaysOn;
+    /** Always on's notice, held while the editor that turned it on is still up. */
+    private final com.termux.app.place.HomeAlwaysOnNotice mAlwaysOnNotice =
+        new com.termux.app.place.HomeAlwaysOnNotice();
     /** The shared arrangement and each place's memory; built on the preferences when first asked. */
     @Nullable private PlaceLayoutStore mPlaceLayoutStore;
     /** The first-boot tour: the cards drawn over the real chrome, and the run behind them. */
@@ -11742,6 +11745,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void hideInAppKeyboardForEditor() {
+            // At the session's end, Home with always on keeps it: it is the keyboard Home wants.
+            PlaceLayoutStore store = placeLayoutStore();
+            if (!mSurfaceEditor.isActive() && store != null
+                && com.termux.app.place.HomeChromePolicy.editorEndKeepsKeyboard(mLastWallPage,
+                    store.isHomeKeyboardAlwaysOn()))
+                return;
             if (mInAppKeyboard != null)
                 mInAppKeyboard.hide(
                     com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
@@ -13867,6 +13876,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else {
             widgets.restoreGridRows();
             store.setHomeKeyboardRows(0);
+            mAlwaysOnNotice.withdraw();
         }
         if (mWidgetPaneController != null) mWidgetPaneController.redraw();
         return true;
@@ -13884,7 +13894,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             text = getResources().getQuantityString(R.plurals.home_always_on_moved,
                 report.movedCount(), report.movedCount());
         }
-        showToast(text, false);
+        // Turned on from the Layout editor, it waits for the editor to close (onClosed), so it
+        // never stands over the editor's controls.
+        String now = mAlwaysOnNotice.offer(text, mSurfaceEditor.isActive());
+        if (now != null) showToast(now, false);
     }
 
     /** The three sizes as last applied, so a place or a turn that moves one is noticed. */
@@ -18381,6 +18394,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onClosed() {
             mOverviewRestore = null;
+            // Always on turned on in the editor: the keyboard Home wants is up now, whatever the
+            // editor did with the one it raised, and the notice the editor held back follows on
+            // the arrangement after the close.
+            if (com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage)
+                && wantsKeyboardOnEnter(mLastWallPage))
+                applyPlaceKeyboard(mLastWallPage);
+            String notice = mAlwaysOnNotice.onEditorClosed();
+            if (notice != null) {
+                if (mTermuxActivityRootView != null)
+                    mTermuxActivityRootView.post(() -> showToast(notice, false));
+                else
+                    showToast(notice, false);
+            }
         }
 
         /** In the default preferences, as Settings keeps its own place, so a killed launcher keeps it. */
