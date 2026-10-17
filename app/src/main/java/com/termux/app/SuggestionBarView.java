@@ -748,7 +748,11 @@ public final class SuggestionBarView extends GridLayout
         attachNotificationBadgeListener();
         // Renders parked while the window was away, for cells still waiting on them.
         iconBinder.resumeAll();
-        if (configRepository != null) configRepository.addListener(configListener);
+        if (configRepository != null) {
+            configRepository.addListener(configListener);
+            // The listener was off while the row was away: catch up on any pin written meanwhile.
+            syncPinnedItemsWithStore();
+        }
         LauncherAppDataProvider.getInstance(getContext()).addIconArtworkListener(iconArtworkListener);
         // A catalogue swap can land on a detached row; re-render on the way back in, since the
         // views still hold whatever drawables they were last bound with.
@@ -1288,8 +1292,39 @@ public final class SuggestionBarView extends GridLayout
         this.configRepository = configRepository;
         if (this.configRepository != null) {
             this.configRepository.addListener(configListener);
-            this.pinnedItems = this.configRepository.loadPinnedItems();
+            syncPinnedItemsWithStore();
         }
+    }
+
+    /**
+     * Re-reads the pins from the store and asks for a render when they differ from what the row
+     * holds. The store is the row's only source of truth, but the row hears about writes through
+     * a listener it drops while detached, and the first render can come before the store is
+     * handed over; either way a render of the old list (an empty one shows the "pin your apps"
+     * hint) would otherwise stand until something unrelated re-rendered the row.
+     */
+    private void syncPinnedItemsWithStore() {
+        if (configRepository == null) return;
+        List<PinnedItem> stored = configRepository.loadPinnedItems();
+        boolean changed = !pinsFingerprint(stored).equals(pinsFingerprint(pinnedItems));
+        pinnedItems = stored;
+        if (changed) scheduleCatalogRefreshRender();
+    }
+
+    /** What the row draws from a pin list: its refs and folders in order. */
+    @NonNull
+    static String pinsFingerprint(@Nullable List<PinnedItem> items) {
+        if (items == null) return "";
+        StringBuilder out = new StringBuilder();
+        for (PinnedItem item : items) {
+            if (item instanceof PinnedAppItem) {
+                out.append(((PinnedAppItem) item).appRef.stableId());
+            } else if (item instanceof PinnedFolderItem) {
+                out.append(buildFolderRenderKey((PinnedFolderItem) item));
+            }
+            out.append('\n');
+        }
+        return out.toString();
     }
 
     @NonNull
@@ -1402,6 +1437,9 @@ public final class SuggestionBarView extends GridLayout
                 pendingCatalogRefreshRender = false;
                 post(() -> reloadWithInput(lastInput, lastTerminalView));
             }
+            // A render dropped while hidden is otherwise re-issued only by a layout pass, and
+            // coming back into view need not lay the row out again.
+            if (renderLostWhileUnstable) post(this::reissueLostRender);
             scheduleStableDrawReleaseIfPossible();
             return;
         }
@@ -1678,8 +1716,10 @@ public final class SuggestionBarView extends GridLayout
             return;
         }
 
-        pinnedItems = cleaned;
-        configRepository.savePinnedItems(pinnedItems);
+        configRepository.savePinnedItems(cleaned);
+        // Read back rather than keep `cleaned`: a write that did not land leaves the store as it
+        // was, and the row must not draw a dock the store does not hold.
+        pinnedItems = configRepository.loadPinnedItems();
         pinnedPageIndex = DockPagingModel.clampPage(pinnedPageIndex, getPinnedPagesCount());
     }
 
@@ -3038,6 +3078,12 @@ public final class SuggestionBarView extends GridLayout
             renderStartCol = 0;
         }
 
+        if (!azPreview && TextUtils.isEmpty(lastInput.trim())
+            && (pinnedItems == null || pinnedItems.isEmpty()) && configRepository != null) {
+            // An empty list here draws the "pin your apps" hint, so it must be the store's answer,
+            // not a copy the row failed to refresh.
+            pinnedItems = configRepository.loadPinnedItems();
+        }
         boolean pinnedSurface = !azPreview && TextUtils.isEmpty(lastInput.trim()) && pinnedItems != null && !pinnedItems.isEmpty();
         if (pinnedSurface) {
             pinnedItemsPerPage = computePinnedItemsPerPage();
