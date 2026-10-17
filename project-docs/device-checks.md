@@ -109,6 +109,21 @@ under twenty items; past that, the oldest are re-judged first.
   Paused), its summary wrapping rather than clipping, and dims with the switch off · emulator,
   `font_scale 1.3`, force-stop after the change.
 
+### Wall rework: device-checker pass of 482a9f612 (emulator, 2026-10-18 09:45)
+Seen (owed on pong only): Ctrl+Alt+F floats a one-pane row window onto Home, docks it back and
+floats it again with no toast; Close on a Home float does not crash; the Terminal pin stays through
+`exit` and force-stop (the store holds launcher:entry); the handle menu's title reads the full
+name; two Home pages (corner tab's plus), a float pinned to page 2 with chip "home · 2", the seam
+from page 2 to window 1, the home press to page 1 with the float left on page 2; landscape and
+back keep a float's shape per orientation; the drawer lists the float ("Float · page 2" under its
+window row), its tap restores, the footer reads Home then Save sessions… and Home goes to page 1.
+Failed (fixes in flight): always on cannot be put away after Done (the Home tray shows no keyboard
+element) and the one widget stretched from 805 to 1363 px; the always-on notice's pill runs off the
+right edge; in landscape the dock's Terminal icon covers the float chip; Linux apps are not listed
+(palette, launcherctl launch 404) and a hand-started display's Stop does not stop it.
+Not driven: the Display entry, a real app on the display, the rail dock, page swipes with a float
+showing.
+
 ### Wall rework: device-checker pass of 651ea9d7f (emulator, 2026-10-18 09:10)
 Seen (owed on pong only): #81 migration per usage mode (terminal → Start in = workspace and a cold
 launch lands on window 1; home and display → home; old keys gone; version 1); the Start in row

@@ -116,3 +116,12 @@ ad -s emu runas com.termux 'launcherctl pane list'
   `adb -s emulator-5554 logcat -d -b crash`.
 - Injected swipes release with zero velocity: use 600–800 ms for page drags; a side-border hold is
   `input motionevent DOWN x y`, a 500 ms pause, then MOVE and UP.
+- Export `AD_RUNAS_PRELUDE` in every bash call; a new call loses it and `launcherctl` reports
+  "inaccessible". `launcherctl` is also unavailable while no window exists.
+- Ctrl+Alt+F over adb needs a prior tap on the terminal for focus.
+- Home's corner tab: long press at 1040,175 on the free page; its plus (804,198) adds a page, and a
+  long press on an empty cell then offers Remove page.
+- The sessions drawer opens from the list key at 990,1700 in the Workspace's key row (the grid key
+  at 810,1700 opens a split). In the drawer: the chevron at 102,542 expands a session, Home at
+  118,1245, the session's Float row under it.
+- The display's controls appear from a long press at 1030,262 on the display window; power at 604,285.
