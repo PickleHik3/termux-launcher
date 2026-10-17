@@ -109,6 +109,18 @@ under twenty items; past that, the oldest are re-judged first.
   Paused), its summary wrapping rather than clipping, and dims with the switch off · emulator,
   `font_scale 1.3`, force-stop after the change.
 
+### Wall rework: emulator pass of 2026-10-18, morning (debug builds up to b0b725895)
+Also seen by the orchestrator, so owed on pong only: the three-button titlebar (Move window handle,
+Minimise, Maximise, Close) on a Home float; a full-size Home float shrinking above the keyboard
+with its cursor in view; the status bar overlaying Home (canvas band and grid keep their bounds
+with and without the bar); `exit` in the only window sliding Home in with no shell behind it and
+the Home swipe then stopping; the Terminal pin surviving that exit and a force-stop; the Terminal
+entry's tap on an empty row opening window 1 and sliding to the Workspace; the palette gesture
+(up swipe on the page's free area) opening the Home palette with the keyboard, and Back closing
+both. Not seen: the handle's long-press menu, a float lifted by the keyboard, Ctrl+Alt+F back
+from the row, the page pin across a swipe, the drawer's float rows, the migration from each usage
+mode, launcherctl window open on an empty row.
+
 ### Wall rework: emulator pass of 2026-10-18 (debug builds up to 47e7893ae, tl16, 420 dpi)
 Seen, by the orchestrator, so these parts of the items below are done on the emulator and owe pong
 only: home press lands on Home page 1; Home at rest shows no status row, extra keys or slab, the
