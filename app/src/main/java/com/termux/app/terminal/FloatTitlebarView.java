@@ -21,8 +21,8 @@ import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
-import com.termux.app.chrome.GlassInk;
-import com.termux.app.chrome.OnGlass;
+import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.ChromeShade;
 
 /**
  * The titlebar of a float: one glass strip along its top carrying the drag handle and the buttons
@@ -64,6 +64,8 @@ public final class FloatTitlebarView extends FrameLayout {
     private boolean mMaximised;
     private boolean mFocused;
     private int mInk;
+    /** The chrome's polarity {@link #mInk} was resolved on; a wallpaper change can move it. */
+    @Nullable private ChromeInk.Polarity mInkPolarity;
 
     public FloatTitlebarView(@NonNull Context context, boolean hasMinimiseTarget,
                              @NonNull Listener listener) {
@@ -225,6 +227,9 @@ public final class FloatTitlebarView extends FrameLayout {
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
+        // The chrome re-votes its polarity on a wallpaper, palette or mode change without telling
+        // the floats; the strip follows it on the next frame, as the dock's rim does.
+        if (ChromeShade.polarity() != mInkPolarity) updateInk(mGlass.getVisibility() == VISIBLE);
         super.dispatchDraw(canvas);
         // The handle: a grip bar centred in the span the buttons leave, when it fits there.
         int buttons = 0;
@@ -268,15 +273,20 @@ public final class FloatTitlebarView extends FrameLayout {
     }
 
     /**
-     * The glyphs' colour: the theme's on-surface ink, made legible on the strip's own surface (the
-     * glass tint, or the panel), and a step quieter on an unfocused float so focus stays readable.
+     * The glyphs' colour, {@link FloatTitlebarPolicy#glyphInk}: on glass the window bar's label ink
+     * on the chrome's polarity, on the panel the on-surface ink made legible on it.
      */
     private void updateInk(boolean glass) {
+        mInkPolarity = ChromeShade.polarity();
         int surface = glass && mStyle != null ? mStyle.paneGlassTintColor() : panelColour();
-        int seed = MaterialColors.getColor(getContext(),
+        int onSurface = MaterialColors.getColor(getContext(),
             com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(getContext(), R.color.termux_on_surface));
-        int ink = GlassInk.legible(surface, seed, OnGlass.TARGET_LARGE_TEXT, mFocused ? 255 : 170);
+        int surfaceBase = MaterialColors.getColor(getContext(),
+            com.termux.shared.R.attr.termuxColorSurfaceBase,
+            ContextCompat.getColor(getContext(), R.color.termux_surface_base));
+        int ink = FloatTitlebarPolicy.glyphInk(glass, mInkPolarity, onSurface, surfaceBase,
+            surface, mFocused);
         if (ink == mInk) return;
         mInk = ink;
         ColorStateList tint = ColorStateList.valueOf(ink);

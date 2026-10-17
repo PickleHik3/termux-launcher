@@ -2,8 +2,13 @@ package com.termux.app.terminal;
 
 import android.graphics.RectF;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.GlassInk;
+import com.termux.app.chrome.OnGlass;
 
 /**
  * What a float's titlebar offers and what its buttons do to the float's shape. Pure, so the button
@@ -63,6 +68,32 @@ public final class FloatTitlebarPolicy {
     public static int buttonSlotPx(int stripWidthPx, int count, int preferredPx) {
         if (count <= 0 || stripWidthPx <= 0) return 0;
         return Math.max(0, Math.min(preferredPx, stripWidthPx / count));
+    }
+
+    /**
+     * The colour the strip's glyphs and grip are drawn in.
+     *
+     * <p>On glass it is the ink the window bar's chip labels use: the theme's neutral on the
+     * chrome's one polarity ({@link WindowChipInk#neutralSeed}, the paler of {@code onSurface} and
+     * {@code surfaceBase} under pale ink), at full alpha on a focused float and an unfocused one
+     * alike. The strip's own tint is not what the eye sees under it, the wallpaper through it is,
+     * and {@code polarity} is what has measured that: solved against the tint alone, the glyphs came
+     * out near black over a dark wallpaper and read as disabled.
+     *
+     * <p>On the plain panel, or before any polarity is published, the strip is its own opaque
+     * surface ({@code stripSurface}) and the ink is {@code onSurface} made legible on it, a step
+     * quieter on an unfocused float so focus stays readable.
+     */
+    @ColorInt
+    public static int glyphInk(boolean glass, @Nullable ChromeInk.Polarity polarity,
+                               @ColorInt int onSurface, @ColorInt int surfaceBase,
+                               @ColorInt int stripSurface, boolean focused) {
+        if (glass && polarity != null) {
+            return OnGlass.withAlpha(WindowChipInk.neutralSeed(onSurface, surfaceBase,
+                polarity == ChromeInk.Polarity.PALE_INK), 255);
+        }
+        return GlassInk.legible(stripSurface, onSurface, OnGlass.TARGET_LARGE_TEXT,
+            focused ? 255 : 170);
     }
 
     /** True while {@code restoreFrac} holds the shape Maximise will restore. */
