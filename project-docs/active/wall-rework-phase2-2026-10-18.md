@@ -11,6 +11,8 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    capsule at the top centre. A continuous status swipe sizes the bar by where the finger lets go;
    a quick swipe steps one form; the bar folds to the capsule after a short idle; the capsule is
    Minimal mode's default form. Everywhere on the wall (Home with floats, the Workspace).
+   Status 2026-10-18: merged at 1458207d8 + d3f2fa8e7 (StatusBarFormPolicy, fold motion, gesture,
+   view); seen on the emulator; ink fix and the Minimal-mode bar owed.
 2. **Style, Corners and Margin on Home** as Home's own settings (today global).
 3. **Parallax between Home pages and windows** (the wallpaper pans with the wall).
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.

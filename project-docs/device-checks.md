@@ -458,6 +458,19 @@ Not seen: everything else listed under the sections below.
 - The Terminal pin leaving the first dock slot after an upgrade or cold boot was seen twice on
   the emulator and not reproduced since (install -r and a reboot kept it, store included); watch.
 
+### Wall rework phase two: slice 1, the capsule status bar (feat/wall-rework-phase2)
+- 2026-10-18 · d3f2fa8e7 · emulator: Home with a float folds to the capsule after idle ("Status
+  bar folded: Home, 5:19 PM" at the top centre, titlebar clear below); window 1 on the Workspace
+  folds the same ("terminal in home, 5:23 PM"); a tap opens compact; a slow 90 dp drag down
+  reaches expanded (bar 136–375); a quick flick up from expanded went to the capsule, not one
+  step to compact (judge: the flick was 72 dp, past compact's stop). Capsule ink reads too dark
+  on a dark wallpaper (fix in flight).
+- Owed: the capsule under Minimal mode (MinimalMode.apply still hides the bar); a notification
+  arriving while folded (dots, and the fold cancelled); the idle fold from expanded resizing the
+  Workspace terminals, by hand on pong, to judge whether it should stop at compact instead.
+- Emulator note: the pin store emptied between two cold boots while another session used the
+  emulator for a "Look reset" check; not attributed.
+
 ## Developer
 
 - 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" · With the switch
