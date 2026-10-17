@@ -429,6 +429,17 @@ public final class TermuxPreferenceConstants {
         /** Set once the Style migration has renamed the style values and dropped the retired keys. */
         public static final String KEY_LAYOUT_STYLE_MIGRATED = "layout_style_migrated";
 
+        /**
+         * Home's own Style, Corners and Margin (ADR 0008): what the Home pages' chrome wears, apart
+         * from the Workspace's {@link #KEY_APP_LAUNCHER_DOCK_STYLE},
+         * {@link #KEY_SURFACE_BASE_CORNER_RADIUS} and {@link #KEY_SURFACE_BASE_SIDE_GAP}, in the same
+         * stored forms. While one is unset it reads the Workspace's value, so an upgrade changes
+         * nothing on screen; the first write to it pins it.
+         */
+        public static final String KEY_HOME_LAYOUT_STYLE = "home_layout_style";
+        public static final String KEY_HOME_SURFACE_CORNER_RADIUS = "home_surface_corner_radius";
+        public static final String KEY_HOME_SURFACE_SIDE_GAP = "home_surface_side_gap";
+
         /** Custom capsule corner radius in dp, or -1 to follow the selected dock style. */
         public static final String KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS =
             "app_launcher_dock_corner_radius";

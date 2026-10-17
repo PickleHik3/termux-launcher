@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
 import org.junit.Test;
 
@@ -222,5 +223,35 @@ public class HomeChromePolicyTest {
         assertFalse(HomeChromePolicy.editorEndKeepsKeyboard(WINDOW, true));
         assertFalse(HomeChromePolicy.editorEndKeepsKeyboard(WINDOW, false));
         assertFalse(HomeChromePolicy.editorEndKeepsKeyboard(PaneWallPage.DISPLAY, true));
+    }
+
+    private static final WallHalfShape WORKSPACE_SHAPE = WallHalfShape.of(LayoutStyle.DOCKED, 24, 12);
+    private static final WallHalfShape HOME_SHAPE = WallHalfShape.of(LayoutStyle.FLOATING, 32, 20);
+
+    /** Slice 2: Style, Corners and Margin are Home's own on a Home page, the Workspace's on a window. */
+    @Test
+    public void aHomePageWearsHomesShapeAndAWindowTheWorkspacesWhateverMinimalModeSays() {
+        assertTrue(HomeChromePolicy.wearsHomeShape(HOME));
+        assertFalse(HomeChromePolicy.wearsHomeShape(WINDOW));
+        assertFalse(HomeChromePolicy.wearsHomeShape(PaneWallPage.DISPLAY));
+        assertEquals(HOME_SHAPE, HomeChromePolicy.shape(HOME, WORKSPACE_SHAPE, HOME_SHAPE));
+        assertEquals(WORKSPACE_SHAPE, HomeChromePolicy.shape(WINDOW, WORKSPACE_SHAPE, HOME_SHAPE));
+        assertEquals(WORKSPACE_SHAPE,
+            HomeChromePolicy.shape(PaneWallPage.DISPLAY, WORKSPACE_SHAPE, HOME_SHAPE));
+    }
+
+    @Test
+    public void onlyACrossingBetweenHalvesThatDifferRedressesTheChrome() {
+        assertTrue(HomeChromePolicy.shapeChanges(HOME, WINDOW, WORKSPACE_SHAPE, HOME_SHAPE));
+        assertTrue(HomeChromePolicy.shapeChanges(WINDOW, HOME, WORKSPACE_SHAPE, HOME_SHAPE));
+        assertFalse("window to window", HomeChromePolicy.shapeChanges(WINDOW,
+            PaneWallPage.DISPLAY, WORKSPACE_SHAPE, HOME_SHAPE));
+        assertFalse("home to home", HomeChromePolicy.shapeChanges(HOME, HOME, WORKSPACE_SHAPE,
+            HOME_SHAPE));
+        WallHalfShape seeded = WallHalfShape.of(LayoutStyle.DOCKED, 24, 12);
+        assertFalse("a Home that still follows the Workspace changes nothing",
+            HomeChromePolicy.shapeChanges(HOME, WINDOW, WORKSPACE_SHAPE, seeded));
+        assertTrue("one value apart is enough", HomeChromePolicy.shapeChanges(HOME, WINDOW,
+            WORKSPACE_SHAPE, WallHalfShape.of(LayoutStyle.DOCKED, 24, 13)));
     }
 }
