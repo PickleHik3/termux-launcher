@@ -149,4 +149,29 @@ public class HomeChromePolicyTest {
         PlaceChromeTravel.Frame window = PlaceChromeTravel.at(row, WINDOW, 0f, 1000, states);
         assertEquals(1f, window.statusReveal, 0f);
     }
+
+    @Test
+    public void theStatusBarOverlaysAHomePageAndTakesItsBandOnAWindow() {
+        assertTrue(HomeChromePolicy.statusOverlays(HOME));
+        assertFalse(HomeChromePolicy.statusOverlays(WINDOW));
+    }
+
+    @Test
+    public void theGridKeepsItsTopWhenTheFloatsBringTheBarDown() {
+        PlaceLayout home = new PlaceLayout(PlaceLayout.Edge.TOP, PlaceLayout.RowPlacement.BOTTOM,
+            true, PlaceLayout.Edge.BOTTOM, PlaceLayout.RowPlacement.HIDDEN,
+            PlaceLayout.KeyboardMode.RESIZE, PlaceLayout.KeyboardForm.DOCKED, 4, 5)
+            .withSlot(Element.STATUS, Slot.hiddenFrom(PlaceLayout.Edge.TOP, 0));
+        EdgeStackPolicy.Metrics metrics = EdgeStackPolicy.Metrics.builder()
+            .status(120, 200).apps(150, 90).az(40, 60).extraKeys(80, 100).build();
+        PlaceLayout withBar = HomeChromePolicy.withFloatStatusBar(home, PlaceLayout.Edge.TOP, true);
+        boolean overlays = HomeChromePolicy.statusOverlays(HOME);
+        int gridTopWithout = EdgeStackPolicy.contentInsets(home, metrics).top
+            - EdgeStackPolicy.topOverlapPx(home, metrics, overlays);
+        int gridTopWith = EdgeStackPolicy.contentInsets(withBar, metrics).top
+            - EdgeStackPolicy.topOverlapPx(withBar, metrics, overlays);
+        assertEquals(gridTopWithout, gridTopWith);
+        // The floats' room starts at the bar's edge, under the whole top stack.
+        assertEquals(120, EdgeStackPolicy.stackThicknessPx(withBar, PlaceLayout.Edge.TOP, metrics));
+    }
 }

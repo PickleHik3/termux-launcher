@@ -770,4 +770,44 @@ public class EdgeStackPolicyTest {
             default: throw new AssertionError("no row placement for " + slot);
         }
     }
+
+    // ------------------------------------------------------------------ the bar overlaying Home
+
+    @Test
+    public void anOverlayingBarOnTheTopHandsBackExactlyItsBand() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertEquals(STATUS_ROW_BAR, EdgeStackPolicy.topOverlapPx(layout, metrics(), true));
+        // The content's top, with the canvas reaching up by the overlap, is where it is with no bar.
+        int top = EdgeStackPolicy.contentInsets(layout, metrics()).top
+            - EdgeStackPolicy.topOverlapPx(layout, metrics(), true);
+        PlaceLayout noBar = layout.withSlot(Element.STATUS, Slot.hiddenFrom(Edge.TOP, 0));
+        assertEquals(EdgeStackPolicy.contentInsets(noBar, metrics()).top, top);
+    }
+
+    @Test
+    public void aBarThatDoesNotOverlayTakesItsBandAsAlways() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertEquals(0, EdgeStackPolicy.topOverlapPx(layout, metrics(), false));
+    }
+
+    @Test
+    public void nothingOverlaysTheTopWhileTheBarStandsElsewhereOrIsHidden() {
+        PlaceLayout bottom = layout(Edge.BOTTOM, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertEquals(0, EdgeStackPolicy.topOverlapPx(bottom, metrics(), true));
+        PlaceLayout hidden = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM).withSlot(Element.STATUS, Slot.hiddenFrom(Edge.TOP, 0));
+        assertEquals(0, EdgeStackPolicy.topOverlapPx(hidden, metrics(), true));
+    }
+
+    @Test
+    public void otherTopBandsKeepTheirRoomBesideAnOverlayingBar() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.TOP,
+            RowPlacement.BOTTOM);
+        assertEquals(STATUS_ROW_BAR + AZ_ROW_HEIGHT,
+            EdgeStackPolicy.stackThicknessPx(layout, Edge.TOP, metrics()));
+        assertEquals(STATUS_ROW_BAR, EdgeStackPolicy.topOverlapPx(layout, metrics(), true));
+    }
 }
