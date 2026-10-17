@@ -114,11 +114,22 @@ public final class TerminalCommandPaletteController
         {LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_INCREASE, "A", "font"},
         {LauncherToolRegistry.TOOL_SESSION_NEW, "＋", "new"},
     };
-    private static final List<String> DEFAULT_KEYCAP_TOOLS;
-    static {
-        List<String> tools = new ArrayList<>(DEFAULT_KEYCAPS.length);
-        for (String[] fallback : DEFAULT_KEYCAPS) tools.add(fallback[0]);
-        DEFAULT_KEYCAP_TOOLS = java.util.Collections.unmodifiableList(tools);
+    /** The Home palette's fallback strip: the terminal defaults are all terminal-only there. */
+    private static final String[][] HOME_KEYCAPS = {
+        {CommandPaletteHomeSet.TOOL_OPEN_TERMINAL_HERE, "❯", "term"},
+        {CommandPaletteHomeSet.TOOL_GO_TO_WORKSPACE, "→", "work"},
+        {CommandPaletteHomeSet.TOOL_ADD_WIDGET, "＋", "widget"},
+        {LauncherToolRegistry.TOOL_APPEARANCE_SET_WALLPAPER, "◩", "wall"},
+        {LauncherToolRegistry.TOOL_APP_OPEN_SETTINGS, "⚙", "set"},
+    };
+    private static final List<String> DEFAULT_KEYCAP_TOOLS = toolsOf(DEFAULT_KEYCAPS);
+    private static final List<String> HOME_KEYCAP_TOOLS = toolsOf(HOME_KEYCAPS);
+
+    @NonNull
+    private static List<String> toolsOf(@NonNull String[][] keycaps) {
+        List<String> tools = new ArrayList<>(keycaps.length);
+        for (String[] fallback : keycaps) tools.add(fallback[0]);
+        return java.util.Collections.unmodifiableList(tools);
     }
     /** The glyph for the keyboard's own rows (its types and layouts), as the kbd default has. */
     private static final String KEYBOARD_GLYPH = "⌨";
@@ -253,6 +264,10 @@ public final class TerminalCommandPaletteController
     private boolean mListRevealed;
     @Nullable private CommandPaletteFilter.Entry mPendingEntry;
     private String mCrumb = "";
+    /** Where this show was summoned; decides the row set and what ⏎ with no match does. */
+    @NonNull private CommandPaletteContext mContext = CommandPaletteContext.TERMINAL;
+    /** Runs the Home actions that need the wall; does nothing until the wall installs one. */
+    @NonNull private CommandPaletteHomeHost mHomeHost = CommandPaletteHomeHost.NONE;
 
     public TerminalCommandPaletteController(@NonNull TermuxActivity activity) {
         this(activity, ClipboardText.forContext(activity));
@@ -299,14 +314,42 @@ public final class TerminalCommandPaletteController
 
     /** Opens the palette, or collapses it when the same invocation arrives while it is up. */
     public void toggle() {
+        toggle(CommandPaletteContext.TERMINAL);
+    }
+
+    /** As {@link #toggle()}, opening with the row set for {@code where}. */
+    public void toggle(@NonNull CommandPaletteContext where) {
         if (mOpen) {
             collapse();
             return;
         }
-        show();
+        show(where);
+    }
+
+    /** Installs what runs the Home actions that need the wall; null puts back the no-op. */
+    public void setHomeHost(@Nullable CommandPaletteHomeHost host) {
+        mHomeHost = host == null ? CommandPaletteHomeHost.NONE : host;
+    }
+
+    /**
+     * A key typed on Home with the palette shut and the keyboard up, after the bound keys have had
+     * their turn: opens the Home palette with {@code text} as its query.
+     *
+     * @return whether the palette took the text; false leaves it to the caller
+     */
+    public boolean openHomeWithTypedText(@NonNull String text) {
+        if (!CommandPaletteHomeSet.opensOnTyped(mOpen, text)) return false;
+        show(CommandPaletteContext.HOME);
+        if (!mOpen) return false;
+        appendText(text);
+        return true;
     }
 
     public void show() {
+        show(CommandPaletteContext.TERMINAL);
+    }
+
+    public void show(@NonNull CommandPaletteContext where) {
         if (!bindViews()) return;
         // Two full-screen glass surfaces must never stack: the palette is transient and summonable
         // over anything, so the drawer is the one that yields. Immediate rather than animated —
@@ -315,9 +358,18 @@ public final class TerminalCommandPaletteController
         // Same rule for the sheet plane, which owns the same interceptor slot: the palette is the
         // one surface summonable over anything, so the modal sheets are the ones that yield.
         mActivity.getTerminalSheetController().dismissAll();
+        mContext = where;
         mEntries.clear();
-        mEntries.addAll(TerminalCommandPalette.buildEntries(mActivity));
-        mEntries.addAll(TerminalCommandPalette.buildSessionEntries(mActivity));
+        if (where == CommandPaletteContext.HOME) {
+            mEntries.addAll(CommandPaletteHomeSet.orderedForHome(
+                TerminalCommandPalette.buildEntries(mActivity, where),
+                CommandPaletteHomeSet.jumpEntries(mActivity,
+                    mActivity.getSessionBrowserSessions(), mHomeHost),
+                TerminalCommandPalette.buildSessionEntries(mActivity)));
+        } else {
+            mEntries.addAll(TerminalCommandPalette.buildEntries(mActivity));
+            mEntries.addAll(TerminalCommandPalette.buildSessionEntries(mActivity));
+        }
         mEntries.addAll(TerminalCommandPalette.buildKeyboardLayoutEntries(mActivity));
         mEntries.addAll(TerminalCommandPalette.buildKeyboardFormEntries(mActivity));
         if (mEntries.isEmpty()) {
@@ -744,12 +796,32 @@ public final class TerminalCommandPaletteController
      */
     @NonNull
     private List<CommandPaletteFilter.Entry> browseEntries(boolean actionsOnly) {
+        if (mContext == CommandPaletteContext.HOME) {
+            // Home reads Home actions, then Apps and Linux apps, then the jump rows and the rest.
+            List<CommandPaletteFilter.Entry> entries = new ArrayList<>(mEntries.size() + 16);
+            for (CommandPaletteFilter.Entry entry : mEntries)
+                if (CommandPaletteHomeSet.CATEGORY_HOME.equals(entry.category)) entries.add(entry);
+            if (!actionsOnly) {
+                for (TerminalCommandPalette.AppSection section : HOME_APP_SECTIONS)
+                    entries.addAll(TerminalCommandPalette.buildAppEntries(mActivity, mAppProvider,
+                        mAppUsageStats, "", mAppShortcuts, mRowIcons, null, section));
+            }
+            for (CommandPaletteFilter.Entry entry : mEntries)
+                if (!CommandPaletteHomeSet.CATEGORY_HOME.equals(entry.category)) entries.add(entry);
+            return entries;
+        }
         List<CommandPaletteFilter.Entry> entries = new ArrayList<>(mEntries);
         if (!actionsOnly)
             entries.addAll(TerminalCommandPalette.buildAppEntries(mActivity, mAppProvider,
                 mAppUsageStats, "", mAppShortcuts, mRowIcons, null));
         return entries;
     }
+
+    /** Home's two app sections; the terminal palette keeps one Apps section holding both. */
+    private static final TerminalCommandPalette.AppSection[] HOME_APP_SECTIONS = {
+        TerminalCommandPalette.AppSection.ANDROID, TerminalCommandPalette.AppSection.LINUX};
+    private static final TerminalCommandPalette.AppSection[] TERMINAL_APP_SECTIONS = {
+        TerminalCommandPalette.AppSection.ALL};
 
     /**
      * One list for a search: the matching actions, apps and contacts gathered here, ordered by
@@ -762,11 +834,16 @@ public final class TerminalCommandPaletteController
             CommandPaletteRanking.actionCandidates(mEntries, query.text);
         if (!query.actionsOnly) {
             Map<String, Integer> appScores = new HashMap<>();
-            for (CommandPaletteFilter.Entry app : TerminalCommandPalette.buildAppEntries(mActivity,
-                mAppProvider, mAppUsageStats, query.text, mAppShortcuts, mRowIcons, appScores)) {
-                Integer score = app.iconKey == null ? null : appScores.get(app.iconKey);
-                if (score != null && score > 0) candidates.add(new CommandPaletteRanking.Candidate(
-                    app, CommandPaletteRanking.Source.APP, score));
+            for (TerminalCommandPalette.AppSection section
+                : mContext == CommandPaletteContext.HOME ? HOME_APP_SECTIONS : TERMINAL_APP_SECTIONS) {
+                for (CommandPaletteFilter.Entry app : TerminalCommandPalette.buildAppEntries(
+                    mActivity, mAppProvider, mAppUsageStats, query.text, mAppShortcuts, mRowIcons,
+                    appScores, section)) {
+                    Integer score = app.iconKey == null ? null : appScores.get(app.iconKey);
+                    if (score != null && score > 0) candidates.add(
+                        new CommandPaletteRanking.Candidate(app, CommandPaletteRanking.Source.APP,
+                            score));
+                }
             }
             if (mContactsAccess) {
                 List<CommandPaletteContacts.Match> matches =
@@ -791,7 +868,7 @@ public final class TerminalCommandPaletteController
             && !isContactsAllow(entry);
         String description = entry.enabled ? entry.subtitle : entry.disabledReason;
         // Every row a hold can bind says so, the way app rows already do in their own subtitle.
-        if (entry.enabled && !LauncherToolRegistry.CATEGORY_APPS.equals(entry.category)
+        if (entry.enabled && !entry.isAppRow()
             && TerminalCommandPalette.isBindable(entry)) {
             description = description == null || description.isEmpty()
                 ? mActivity.getString(R.string.palette_row_hold_to_bind)
@@ -885,7 +962,8 @@ public final class TerminalCommandPaletteController
     private void rebuildKeycaps(boolean onlyIfChanged) {
         StripResolver resolver = new StripResolver();
         List<String> keys = CommandPaletteStrip.pickKeys(mRowUsage, resolver::canResolve,
-            DEFAULT_KEYCAP_TOOLS, CommandPaletteView.KEYCAP_COUNT);
+            mContext == CommandPaletteContext.HOME ? HOME_KEYCAP_TOOLS : DEFAULT_KEYCAP_TOOLS,
+            CommandPaletteView.KEYCAP_COUNT);
         if (mContactsLoaded) mStripContacts.clear();
         List<CommandPaletteView.Keycap> caps = new ArrayList<>(keys.size());
         List<CommandPaletteFilter.Entry> entries = new ArrayList<>(keys.size());
@@ -1043,8 +1121,8 @@ public final class TerminalCommandPaletteController
 
     @NonNull
     private static String glyphFor(@NonNull String toolName) {
-        for (String[] fallback : DEFAULT_KEYCAPS)
-            if (fallback[0].equals(toolName)) return fallback[1];
+        String[] fallback = keycapFor(toolName);
+        if (fallback != null) return fallback[1];
         if (toolName.startsWith("keyboard.")) return KEYBOARD_GLYPH;
         return "▸";
     }
@@ -1052,9 +1130,18 @@ public final class TerminalCommandPaletteController
     /** A bare tool's cap label: a default's own, else the tool's verb. */
     @NonNull
     private static String bareLabel(@NonNull String toolName) {
+        String[] fallback = keycapFor(toolName);
+        return fallback != null ? fallback[2] : shortLabel(toolName);
+    }
+
+    /** The fallback chip, terminal or Home, that names this tool, or null. */
+    @Nullable
+    private static String[] keycapFor(@NonNull String toolName) {
         for (String[] fallback : DEFAULT_KEYCAPS)
-            if (fallback[0].equals(toolName)) return fallback[2];
-        return shortLabel(toolName);
+            if (fallback[0].equals(toolName)) return fallback;
+        for (String[] fallback : HOME_KEYCAPS)
+            if (fallback[0].equals(toolName)) return fallback;
+        return null;
     }
 
     /** Short cap label: the tool's own verb, e.g. {@code pane.split_vertical} → {@code split}. */
@@ -1447,13 +1534,16 @@ public final class TerminalCommandPaletteController
         }
         String tool;
         List<String> arguments;
-        if (LauncherToolRegistry.CATEGORY_APPS.equals(pending.category)) {
+        if (pending.isAppRow()) {
             String stableId = pending.arguments == null
                 ? "" : pending.arguments.optString("query", "");
             tool = LauncherToolRegistry.TOOL_APP_LAUNCH;
+            // Every Linux app shares one package, so its binding always names the app itself.
+            boolean linux = CommandPaletteHomeSet.CATEGORY_LINUX_APPS.equals(pending.category);
             arguments = stableId.isEmpty() ? java.util.Collections.<String>emptyList()
                 : java.util.Collections.singletonList(CommandPaletteAppShortcuts
-                    .bindingArgumentFor(stableId, defaultStableIdForPackage(stableId)));
+                    .bindingArgumentFor(stableId,
+                        linux ? null : defaultStableIdForPackage(stableId)));
         } else if (TerminalCommandPalette.CATEGORY_CONTACTS.equals(pending.category)) {
             tool = LauncherToolRegistry.TOOL_CONTACT_OPEN;
             arguments = TerminalCommandPalette.contactBindingArguments(pending.arguments);
@@ -1598,6 +1688,8 @@ public final class TerminalCommandPaletteController
         rememberPick();
         playTick();
         collapse();
+        // Home's own rows need the wall, which the dispatcher does not reach.
+        if (CommandPaletteHomeSet.runHostAction(entry, mHomeHost)) return;
         JSONObject result = TerminalActionDispatcher.getInstance().execute(entry.toolName,
             entry.arguments == null ? new JSONObject() : entry.arguments);
         if (!result.optBoolean("ok", false)) {
@@ -1605,7 +1697,12 @@ public final class TerminalCommandPaletteController
                 mActivity.getString(R.string.palette_action_failed, entry.title));
             Logger.logWarn(LOG_TAG, "Palette action " + entry.toolName + " failed: " + message);
             AppNotice.show(mActivity, message, false);
+            return;
         }
+        // A window's jump row on Home switches to that window, then goes to it.
+        if (mContext == CommandPaletteContext.HOME
+            && CommandPaletteHomeSet.CATEGORY_WINDOWS.equals(entry.category))
+            mHomeHost.goToWorkspace();
     }
 
     /**
@@ -1678,6 +1775,8 @@ public final class TerminalCommandPaletteController
         if (mMode == Mode.LIST && CommandPaletteRanking.Query.parse(mQuery).actionsOnly) return;
         String command = mQuery.trim();
         collapse();
+        // Home has no shell in front of the user to hand the query to.
+        if (mContext == CommandPaletteContext.HOME) return;
         if (command.isEmpty()) return;
         com.termux.terminal.TerminalSession session = mActivity.getCurrentSession();
         if (session == null) {
