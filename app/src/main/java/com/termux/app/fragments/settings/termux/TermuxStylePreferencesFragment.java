@@ -634,6 +634,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_use_case_mode":
                 applyUseCaseMode(value);
                 break;
+            case "app_launcher_start_in":
+                // Read at the next cold start only; nothing on screen changes.
+                mPreferences.setLauncherStartIn(value);
+                break;
             case "app_launcher_drawer_view_type":
                 mPreferences.setAppLauncherDrawerViewType(value);
                 scheduleAppDrawerSync();
@@ -687,6 +691,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mKeyboardLook.getString(key, defValue);
             case "app_launcher_use_case_mode":
                 return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
+            case "app_launcher_start_in":
+                return mPreferences.getLauncherStartIn();
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
             case "app_launcher_builtin_widget_style":

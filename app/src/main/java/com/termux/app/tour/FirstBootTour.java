@@ -115,8 +115,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         void onSkipTheTour();
     }
 
-    /** The place the run is taught on: the wall's own home page. */
-    public static final String HOME_PLACE = com.termux.app.wall.PaneWallPolicy.homePage().name();
+    /**
+     * The page the run is taught on: the Workspace's window, as before the wall rework (the home
+     * press lands on Home now, but the tour teaches the terminal).
+     */
+    public static final String HOME_PLACE = com.termux.app.wall.PaneWallPage.TERMINAL.name();
 
     @NonNull private final Activity mActivity;
     @NonNull private final TourController mController;

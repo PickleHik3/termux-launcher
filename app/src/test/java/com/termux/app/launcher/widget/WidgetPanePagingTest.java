@@ -34,7 +34,7 @@ public class WidgetPanePagingTest {
         assertEquals(0, fixture.controller.currentPage());
     }
 
-    @Test public void renderShowsOnlyTheCurrentPagesCellsAndFullCloseResetsToPageZero() {
+    @Test public void renderShowsOnlyTheCurrentPagesCellsAndLeavingHomeWaitsOnTheLastPage() {
         Fixture fixture = new Fixture();
         assertEquals(1, fixture.repository.addPage());
         assertTrue(fixture.repository.putRecord(record(1, new WidgetCellRect(0, 0, 1, 1), 0)));
@@ -49,8 +49,13 @@ public class WidgetPanePagingTest {
         assertNotNull(fixture.pane.grid().cellForId(2));
         assertNull(fixture.pane.grid().cellForId(1));
 
+        fixture.controller.setCurrentPage(0);
         fixture.controller.onWallPageShown(false);
-        assertEquals("the page always reopens on page 0", 0, fixture.controller.currentPage());
+        assertEquals("Home waits on its last page, next to the seam", 1,
+            fixture.controller.currentPage());
+        fixture.controller.showHomePage(0);
+        assertEquals("the home press turns it to page 1", 0, fixture.controller.homePageIndex());
+        assertEquals(2, fixture.controller.homePageCount());
     }
 
     @Test public void menuAddWidgetOpensPickerAndNewWidgetsLandOnTheVisiblePage() {

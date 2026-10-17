@@ -291,8 +291,14 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_X11_RUNTIME_BADGE = "termux";
 
-        /** The place the pane wall last rested on; the home screen comes back to it. */
+        /** The place the pane wall last rested on; read by nothing since Start in (ADR 0008). */
         public static final String KEY_WALL_LAST_PAGE = "wall_last_page";
+
+        /** Start in: the page a cold start shows, Home page 1 or the Workspace (ADR 0008). */
+        public static final String KEY_LAUNCHER_START_IN = "app_launcher_start_in";
+        public static final String LAUNCHER_START_IN_HOME = "home";
+        public static final String LAUNCHER_START_IN_WORKSPACE = "workspace";
+        public static final String DEFAULT_LAUNCHER_START_IN = LAUNCHER_START_IN_HOME;
 
         /**
          * Defines the key for the usage mode the user picked: the terminal alone, the terminal

@@ -1302,6 +1302,22 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             value == null ? "" : value, false);
     }
 
+    /** Start in: {@code home} (Home page 1, the default) or {@code workspace}. */
+    @NonNull
+    public String getLauncherStartIn() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHER_START_IN, TERMUX_APP.DEFAULT_LAUNCHER_START_IN, true);
+        return TERMUX_APP.LAUNCHER_START_IN_WORKSPACE.equals(value)
+            ? TERMUX_APP.LAUNCHER_START_IN_WORKSPACE : TERMUX_APP.LAUNCHER_START_IN_HOME;
+    }
+
+    public void setLauncherStartIn(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_LAUNCHER_START_IN,
+            TERMUX_APP.LAUNCHER_START_IN_WORKSPACE.equals(value)
+                ? TERMUX_APP.LAUNCHER_START_IN_WORKSPACE : TERMUX_APP.LAUNCHER_START_IN_HOME,
+            false);
+    }
+
     /** Whether the user has ever set the display's text size; unset reads as the default 0. */
     public boolean hasX11DisplayDpi() {
         return mSharedPreferences != null && mSharedPreferences.contains(TERMUX_APP.KEY_X11_DISPLAY_DPI);

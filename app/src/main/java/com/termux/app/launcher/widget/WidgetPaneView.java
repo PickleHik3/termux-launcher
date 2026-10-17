@@ -43,6 +43,25 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     /**
+     * The seam out of Home into the rest of the wall's row (ADR 0008): a plain swipe forward on
+     * the last Home page carries on into the first window instead of resisting. The pane asks
+     * whether the row goes on, then hands the drag over to the wall, in screen coordinates, since
+     * this view slides with the wall while the finger drives it.
+     */
+    public interface Seam {
+        /** Whether a forward swipe on the last Home page leaves Home: the row has a page after it. */
+        boolean canLeaveForward();
+        /** The swipe is the wall's from here. */
+        void begin();
+        /** The finger has travelled {@code dxPx} on screen since it went down, positive right. */
+        void drag(float dxPx);
+        /** The finger let go at {@code velocityPxPerSec}, positive right. */
+        void end(float velocityPxPerSec);
+        /** The stream was cancelled. */
+        void cancel();
+    }
+
+    /**
      * Where the finger carrying a widget out of the picker is, and where it let go.
      *
      * <p>The picker is a sheet over this pane, so a widget dragged out of it starts its life as a
@@ -77,6 +96,12 @@ public final class WidgetPaneView extends FrameLayout {
     private boolean pagingTracking;
     private boolean pagingDragging;
     private float pagingDownX, pagingDownY;
+    /** The seam out of Home, if the wall gave one, and whether the swipe under way is its. */
+    @Nullable private Seam seam;
+    private boolean seamDragging;
+    /** Where the finger went down on screen, and its speed on screen, for the seam's drag. */
+    private float pagingDownRawX;
+    @Nullable private VelocityTracker seamVelocity;
     private boolean pageCommitPending;
     private int pageCommitDirection;
     private float pageCommitDragX;
@@ -134,6 +159,11 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     private WidgetPickerAdapter.Listener providerListener;
+    /** The wall's seam: a forward swipe on the last Home page carries on into the row. */
+    public void setSeam(@Nullable Seam value) {
+        seam = value;
+    }
+
     public void setListener(@NonNull Listener value,
                             @NonNull WidgetPickerAdapter.Listener providers) {
         listener = value; providerListener = providers;
@@ -341,9 +371,12 @@ public final class WidgetPaneView extends FrameLayout {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 pagingDragging = false;
-                pagingTracking = pageCount > 1 && !picker.isOpen() && !widgetEditActive()
-                    && !insideNestedScrollingChild(this, event);
+                seamDragging = false;
+                // One page still tracks when the seam is open: its forward swipe is the wall's.
+                pagingTracking = (pageCount > 1 || seamOpen()) && !picker.isOpen()
+                    && !widgetEditActive() && !insideNestedScrollingChild(this, event);
                 pagingDownX = event.getX(); pagingDownY = event.getY();
+                pagingDownRawX = event.getRawX();
                 if (pagingTracking) {
                     if (pagingVelocity == null) pagingVelocity = VelocityTracker.obtain();
                     pagingVelocity.clear();
@@ -364,6 +397,19 @@ public final class WidgetPaneView extends FrameLayout {
                 if (Math.abs(dy) > touchSlop && Math.abs(dy) >= Math.abs(dx)) {
                     pagingTracking = false; // vertical belongs to the pane pull gesture
                 } else if (Math.abs(dx) > touchSlop && Math.abs(dx) > Math.abs(dy)) {
+                    if (com.termux.app.wall.WallRow.swipeLeavesHome(currentPage, pageCount,
+                            dx < 0 ? 1 : -1, seamOpen())) {
+                        // Forward off the last Home page: the swipe goes on into the row.
+                        pagingDragging = true;
+                        seamDragging = true;
+                        beginSeamDrag(event);
+                        return true;
+                    }
+                    if (pageCount <= 1) {
+                        // Nothing to page and no seam this way: the swipe is not Home's.
+                        pagingTracking = false;
+                        break;
+                    }
                     pagingDragging = true;
                     return true;
                 }
@@ -383,6 +429,7 @@ public final class WidgetPaneView extends FrameLayout {
 
     @Override public boolean onTouchEvent(@NonNull MotionEvent event) {
         if (!pagingDragging) return false;
+        if (seamDragging) return onSeamTouch(event);
         if (pagingVelocity != null) pagingVelocity.addMovement(event);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_MOVE:
@@ -399,6 +446,58 @@ public final class WidgetPaneView extends FrameLayout {
             default:
                 return true;
         }
+    }
+
+    private boolean seamOpen() {
+        return seam != null && seam.canLeaveForward();
+    }
+
+    private void beginSeamDrag(@NonNull MotionEvent event) {
+        if (seamVelocity == null) seamVelocity = VelocityTracker.obtain();
+        seamVelocity.clear();
+        addSeamMovement(event);
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        if (seam != null) seam.begin();
+    }
+
+    /** The seam's drag, read on screen: this view moves with the wall the finger is driving. */
+    private boolean onSeamTouch(@NonNull MotionEvent event) {
+        addSeamMovement(event);
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                if (seam != null) seam.drag(event.getRawX() - pagingDownRawX);
+                return true;
+            case MotionEvent.ACTION_UP: {
+                float velocityX = 0f;
+                if (seamVelocity != null) {
+                    seamVelocity.computeCurrentVelocity(1000);
+                    velocityX = seamVelocity.getXVelocity();
+                }
+                endSeamDrag();
+                if (seam != null) seam.end(velocityX);
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                endSeamDrag();
+                if (seam != null) seam.cancel();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private void endSeamDrag() {
+        pagingDragging = false;
+        pagingTracking = false;
+        seamDragging = false;
+    }
+
+    private void addSeamMovement(@NonNull MotionEvent event) {
+        if (seamVelocity == null) return;
+        MotionEvent screen = MotionEvent.obtain(event);
+        screen.setLocation(event.getRawX(), event.getRawY());
+        seamVelocity.addMovement(screen);
+        screen.recycle();
     }
 
     private float resistedDrag(float dx) {
@@ -483,6 +582,7 @@ public final class WidgetPaneView extends FrameLayout {
 
     @Override protected void onDetachedFromWindow() {
         if (pagingVelocity != null) { pagingVelocity.recycle(); pagingVelocity = null; }
+        if (seamVelocity != null) { seamVelocity.recycle(); seamVelocity = null; }
         super.onDetachedFromWindow();
     }
 

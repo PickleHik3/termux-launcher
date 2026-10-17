@@ -60,11 +60,11 @@ public class PaneWallLayoutTest {
     }
 
     @Test
-    public void aJumpAcrossTheRingBringsThePageInFromTheSideItSitsOn() {
-        // Widgets, Terminal, Display make a ring. From Display, Widgets is the place to the
-        // right, so a jump straight to it starts with the wall a whole width to the right - the
-        // page slides in from the right edge; from Widgets, Display is the place to the left and
-        // comes in from the left. The same sides a swipe reaches them from.
+    public void aJumpAlongTheRowBringsThePageInFromTheSideItSitsOn() {
+        // Home, the Workspace and the Display page are a line (ADR 0008). From Display, Home is
+        // two pages to the left, so a jump straight to it starts with the wall two widths to the
+        // left of its rest - the pages slide in from the left; from Home, Display is two pages to
+        // the right. The same sides a swipe reaches them from.
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         wall.setReducedMotion(false);
         wall.goTo(PaneWallPage.DISPLAY, false);
@@ -72,15 +72,15 @@ public class PaneWallLayoutTest {
 
         wall.goTo(PaneWallPage.WIDGETS, true);
         assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
-        assertEquals("Widgets starts a width to the right and slides in from there",
-            WIDTH, wall.offsetPx(), EPS);
+        assertEquals("Home starts two widths to the left and slides in from there",
+            -2 * WIDTH, wall.offsetPx(), EPS);
         wall.goTo(PaneWallPage.DISPLAY, false);
         assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
 
         wall.goTo(PaneWallPage.WIDGETS, false);
         wall.goTo(PaneWallPage.DISPLAY, true);
-        assertEquals("Display starts a width to the left and slides in from there",
-            -WIDTH, wall.offsetPx(), EPS);
+        assertEquals("Display starts two widths to the right and slides in from there",
+            2 * WIDTH, wall.offsetPx(), EPS);
 
         // Between neighbours the side is the plain one: from the terminal, Widgets is to the left
         // and Display to the right.
@@ -289,34 +289,56 @@ public class PaneWallLayoutTest {
     }
 
     @Test
-    public void threePagesWrapSoTheOuterPageHasANeighbourOnBothSides() {
+    public void aDragTowardAnotherWindowKeepsTheNextViewOutOfSight() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        wall.goTo(PaneWallPage.DISPLAY, false);
-        // From the rightmost place the Widgets page waits on the right, the shorter way round.
-        assertEquals(WIDTH, widgets.getTranslationX(), EPS);
-        assertEquals(-WIDTH, terminal.getTranslationX(), EPS);
+        // Window 2 of 3: one more window on each side, inside the Workspace's view.
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean hasInnerPage(PaneWallPage page, int steps) {
+                return page == PaneWallPage.TERMINAL;
+            }
+        });
+        wall.goTo(PaneWallPage.TERMINAL, false);
         wall.beginDrag();
-        wall.dragTo(-200f);
-        assertEquals("the wrapped page slides in one to one, no rubber band",
-            WIDTH - 200f, widgets.getTranslationX(), EPS);
-        assertEquals(View.VISIBLE, widgets.getVisibility());
-        wall.endDrag(-10_000f);
-        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
-        assertEquals(0f, widgets.getTranslationX(), EPS);
+        wall.dragTo(-300f);
+        assertEquals("the drag moves one to one toward the next window", -300f,
+            terminal.getTranslationX(), EPS);
+        assertEquals("the Display page waits beyond the window coming in", 2 * WIDTH - 300f,
+            display.getTranslationX(), EPS);
+        wall.dragTo(300f);
+        assertEquals("and Home beyond the window before", -2 * WIDTH + 300f,
+            widgets.getTranslationX(), EPS);
+        wall.cancelDrag();
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
     }
 
     @Test
-    public void aPageChangeAcrossTheRingSlidesTheShortWayRound() {
+    public void threePagesAreALineSoTheOuterPageResists() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.goTo(PaneWallPage.DISPLAY, false);
+        // From the rightmost page, Home waits two widths to the left: the row does not wrap.
+        assertEquals(-2 * WIDTH, widgets.getTranslationX(), EPS);
+        assertEquals(-WIDTH, terminal.getTranslationX(), EPS);
+        wall.beginDrag();
+        wall.dragTo(-200f);
+        assertEquals("a drag past the row's end rubber-bands",
+            -200f * PaneWallPolicy.EDGE_RESISTANCE, display.getTranslationX(), EPS);
+        wall.endDrag(-10_000f);
+        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(0f, display.getTranslationX(), EPS);
+    }
+
+    @Test
+    public void aPageChangeAlongTheRowSlidesThroughThePagesBetween() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         wall.setReducedMotion(false);
         wall.goTo(PaneWallPage.WIDGETS, false);
         assertEquals(0f, widgets.getTranslationX(), EPS);
 
-        // Widgets -> Display: one step to the left on the ring, so the Display page starts one
-        // width to the left and the Widgets page slides off to the right.
+        // Home -> Display: two steps to the right on the line, so the Display page starts two
+        // widths to the right and Home slides off to the left, past the Workspace.
         wall.goTo(PaneWallPage.DISPLAY, true);
         assertTrue(wall.isMoving());
-        assertEquals(-WIDTH, display.getTranslationX(), EPS);
+        assertEquals(2 * WIDTH, display.getTranslationX(), EPS);
         assertEquals(0f, widgets.getTranslationX(), EPS);
     }
 

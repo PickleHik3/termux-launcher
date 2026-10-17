@@ -78,8 +78,8 @@ public final class WallParallax {
      * widths: positive means the pages sit to the right of where they will land, so what is
      * coming into view is the place to the current one's left. The picture interpolates between
      * the current place's position and that neighbour's by the fraction of a width travelled. The
-     * neighbour is the wall's own — on a ring, past the Display place comes Home — so a wrap
-     * sweeps the picture back across its whole span over the slide, and a drag that turns into
+     * neighbour is the wall's own — the row is a line, so past either end the picture stays at
+     * its edge — and a drag that turns into
      * a committed slide (the wall's {@code goTo} re-bases the offset against the new current page)
      * lands on the same value from either side, with no jump.</p>
      *

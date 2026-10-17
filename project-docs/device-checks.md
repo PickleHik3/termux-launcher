@@ -124,6 +124,31 @@ under twenty items; past that, the oldest are re-judged first.
 - 2026-10-17 · commit "feat(panes): a glass titlebar on every float" · A tap just under the strip
   lands on the pane's first row (no move starts), and a hold-and-drag on that row still reaches
   the program · emulator.
+### Wall rework #77 row
+- 2026-10-17 · commit "feat(wall): one row …" · The seam both ways: with three windows and the
+  current one the third, a plain swipe left on the last Home page slides window 1 in (not window
+  3); a border drag right on window 1 slides the last Home page in · emulator, two Home pages.
+- 2026-10-17 · same commit · Window to window by the border drag: the departing window carries on
+  from where the finger left it and the next one arrives from the side with no jump back at the
+  release, glass on and off; Home or the Display page never shows during a drag toward another
+  window; glow, grabber, plank tilt and sink look as before · emulator.
+- 2026-10-17 · same commit · A Home page pages by a plain swipe anywhere, its side borders do not
+  glow or page, and the swipe on the last Home page stops (rubber-bands) when there is no window
+  and no Display page (only reachable while no terminal session exists, see the hand-over note) ·
+  emulator.
+- 2026-10-17 · same commit · Home press: from a window → Home page 1 (slides); from Home page 2 →
+  Home page 1, overlays closed; from another app (open an app, press Home) → the page that was in
+  front, window or Home page, unmoved · emulator.
+- 2026-10-17 · same commit · Last window closed (`exit` in the only window of the only session):
+  the last Home page slides in; a fresh shell is started behind it and the seam reaches it ·
+  emulator.
+- 2026-10-17 · same commit · Start in: Settings shows the row under Launcher mode with the same
+  look; Workspace + force-stop + launch opens on the Workspace with one shell window; Home (default)
+  opens on Home page 1; a rotation keeps Home page 2, or the window, where it was · emulator.
+- 2026-10-17 · same commit · Chrome with the first window during the seam slide, and parallax:
+  the wallpaper pans across Home → Workspace → Display as before. Not built in this slice: Home
+  still wears the status bar, extra keys, corner tabs and its frame (needs the Home layout, #78),
+  and Home pages and window steps do not pan the wallpaper · emulator, record what shows.
 
 ## Developer
 
