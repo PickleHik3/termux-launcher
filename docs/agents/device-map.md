@@ -125,3 +125,10 @@ ad -s emu runas com.termux 'launcherctl pane list'
   at 810,1700 opens a split). In the drawer: the chevron at 102,542 expands a session, Home at
   118,1245, the session's Float row under it.
 - The display's controls appear from a long press at 1030,262 on the display window; power at 604,285.
+- Layout editor on Home: Done at 993,221; the tray's eye at 970,1726; the Keyboard chip at 864,1873.
+  Dragging a canvas block needs `input motionevent DOWN`, a 1.2 s hold, MOVE steps and UP;
+  `ad swipe` does not drag it.
+- The prefix's gtk3 desktop files ship with `NoDisplay=true`, so they are not Linux apps in the
+  drawer or the palette and `launcherctl launch gtk3-demo` answers 404 until that flag is false.
+- Display stop: long press 1030,262 on the display window, power at 604,285, confirm Stop at
+  841,1420. The display's chip sits at about 298,177 in the window bar.

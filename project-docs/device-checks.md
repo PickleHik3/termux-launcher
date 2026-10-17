@@ -109,6 +109,19 @@ under twenty items; past that, the oldest are re-judged first.
   Paused), its summary wrapping rather than clipping, and dims with the switch off · emulator,
   `font_scale 1.3`, force-stop after the change.
 
+### Wall rework: device-checker pass of 2a4f5741a (emulator, 2026-10-18 10:15)
+Seen (owed on pong only): the always-on notice fits the screen and the widget keeps its height;
+the keyboard block stands on Home's canvas and can be put away; in landscape the side dock starts
+below the floats' bar; a Linux app (gtk3-demo with NoDisplay=false) listed in the palette, launched
+from it and by launcherctl, drawn in the display window; Display and Terminal listed as apps; the
+Display row opens the bare display; Stop (with its confirm) kills the server and the display leaves
+the row twice; the Terminal pin after `exit`; a float's Close; the palette swipe and Back.
+Failed (fixes in flight): after Done with the keyboard element shown, the keyboard did not rise in
+the same process (only after a cold start); a drop on the tray strip does nothing (only the eye
+button takes the block); the notice shows over the editor's controls; after a display session the
+palette takes no typing until a relaunch; a bare "e" once opened the sessions drawer.
+Not driven: the empty-query Linux apps section of the palette; the other gtk3 apps.
+
 ### Wall rework: device-checker pass of 482a9f612 (emulator, 2026-10-18 09:45)
 Seen (owed on pong only): Ctrl+Alt+F floats a one-pane row window onto Home, docks it back and
 floats it again with no toast; Close on a Home float does not crash; the Terminal pin stays through
