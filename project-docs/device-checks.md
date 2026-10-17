@@ -218,8 +218,17 @@ Not seen: everything else listed under the sections below.
   emulator.
 - 2026-10-17 · same commit · With the Workspace empty, the Terminal entry (drawer and dock) opens
   one window and slides to it; its long press too opens one, not two · emulator.
-- 2026-10-17 · same commit · Start in = Workspace, force-stop, launch: opens on the Workspace
-  with one shell window; Start in = Home on a fresh install still gets Welcome and the first-boot
+- 2026-10-17 · commit "fix(launcher): the Terminal entry always resolves for the dock" · With
+  the Terminal entry pinned (pin it by hand if the once-only pin was spent), `exit` in the only
+  window of the only session: the pin is still on the dock; tap it → one window, the Workspace
+  slides in; force-stop and launch → the pin is still there · emulator.
+- 2026-10-17 · commit "feat(launcherctl): window.open and pane.open start the Workspace when it
+  is empty" · With the row empty (after the `exit` above), `launcherctl window open --title fresh
+  -- sh` opens one window titled fresh and slides to it; `launcherctl pane open -- sh` likewise;
+  `window list` then lists one window; launcher in the background (another app in front): the
+  open still answers ok and the window is there on return · emulator.
+- 2026-10-17 · commit "feat(wall): the Workspace may be empty" · Start in = Workspace,
+  force-stop, launch: opens on the Workspace with one shell window; Start in = Home on a fresh install still gets Welcome and the first-boot
   tour with their shell · emulator.
 - 2026-10-17 · same commit · A Home float with an empty row: open one on Home after the last
   window closed, type in it, close it; the row stays empty and Home stays put, no shell starts;
