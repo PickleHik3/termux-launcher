@@ -24,6 +24,31 @@ public class WidgetGridMetricsTest {
         assertEquals(content.right, last.right); assertEquals(content.bottom, last.bottom);
     }
 
+    /**
+     * Always on takes two rows of a five-row grid: the grid's cells keep the height they had and
+     * the grid ends two rows sooner, so a widget keeps its size instead of stretching over the
+     * body (devcheck: a 3-row clock grew from 805 to 1363 px).
+     */
+    @Test public void reservedRowsKeepTheCellsTheirHeight() {
+        Rect body = new Rect(0, 0, 1080, 2200);
+        WidgetGridMetrics full = new WidgetGridMetrics(body, 0, 16, 21,
+            new WidgetGridDefinition(5, 4), false);
+        WidgetGridMetrics shrunk = new WidgetGridMetrics(body, 0, 16, 21,
+            new WidgetGridDefinition(3, 4), false, 2);
+        WidgetCellRect clock = new WidgetCellRect(0, 0, 2, 3);
+        assertEquals(full.boundsFor(clock), shrunk.boundsFor(clock));
+        assertEquals(full.boundsFor(new WidgetCellRect(3, 2, 4, 3)),
+            shrunk.boundsFor(new WidgetCellRect(3, 2, 4, 3)));
+        assertTrue("the shrunk grid ends above the body's bottom",
+            shrunk.boundsFor(new WidgetCellRect(0, 2, 1, 3)).bottom
+                < full.boundsFor(new WidgetCellRect(0, 4, 1, 5)).bottom);
+        WidgetGridMetrics stretched = new WidgetGridMetrics(body, 0, 16, 21,
+            new WidgetGridDefinition(3, 4), false);
+        assertTrue("without the reserve the same rows stretch",
+            stretched.boundsFor(clock).height() > full.boundsFor(clock).height());
+        assertNotEquals(stretched, shrunk);
+    }
+
     @Test public void adjacentCellsDoNotSharePaintedPixels() {
         WidgetGridMetrics metrics = new WidgetGridMetrics(new Rect(0, 0, 401, 601),
             0, 0, 3, new WidgetGridDefinition(6, 4), false);

@@ -199,6 +199,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         rememberWall();
         WidgetGridCaps caps = gridCaps();
         appliedCaps = caps;
+        // The rows given away stay part of the grid's height, so the cells keep their size.
+        pane.grid().setReservedRows(keyboardRows);
         widgets.applyGrid(caps.clampRows(rows) - keyboardRows, caps.clampColumns(columns));
     }
 
