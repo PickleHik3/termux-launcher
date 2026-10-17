@@ -700,8 +700,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the tour — any more than the settle it stands in for would be twice.
      */
     private boolean mQuietKeyboardChange;
-    /** Whether the arrangement last applied was a minimal one, so a change is applied once. */
-    private boolean mAppliedChromeMinimal;
+    /**
+     * The layout the arrangement was last applied for (normal, minimal or Home), so a change of
+     * minimal mode or of the half the wall rests in is applied once.
+     */
+    @Nullable private com.termux.app.place.LayoutVariant mAppliedChromeVariant;
+    /** The variant the arrangement pass last laid out, so a keyboard element is compared within one. */
+    @Nullable private com.termux.app.place.LayoutVariant mAppliedPlaceVariant;
+    /** Always on as last applied to the widget grid; null until the first pass reads it. */
+    @Nullable private Boolean mAppliedHomeAlwaysOn;
     /** The shared arrangement and each place's memory; built on the preferences when first asked. */
     @Nullable private PlaceLayoutStore mPlaceLayoutStore;
     /** The first-boot tour: the cards drawn over the real chrome, and the run behind them. */
@@ -12624,8 +12631,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (base == null || base.getSharedPreferences() == null)
             return base;
         mPlaceLayoutStore = new PlaceLayoutStore(base);
+        // The sizes are the layout's the chrome stands in: the Home layout's on a Home page.
         base.setPlaceSizes(new PlaceSizePreferences(
-            () -> mPlaceLayoutStore, this::currentPlaceOrientation));
+            () -> mPlaceLayoutStore == null ? null
+                : mPlaceLayoutStore.forVariant(chromeVariant()),
+            this::currentPlaceOrientation));
         return base;
     }
 
@@ -12638,14 +12648,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyWidgetGridPreference() {
         if (mWidgetHostController == null) return;
         PlaceLayout layout = placeLayout(currentPlaceOrientation());
+        // The rows always on gave the keyboard stay given on every pass (HomeChromePolicy).
+        PlaceLayoutStore store = placeLayoutStore();
+        int keyboardRows = store != null && store.isHomeKeyboardAlwaysOn()
+            ? store.homeKeyboardRows() : 0;
         boolean moved = mWidgetHostController.repository().applyOrientation(
-            currentPlaceOrientation().storageValue(), layout.widgetRows, layout.widgetColumns);
+            currentPlaceOrientation().storageValue(), layout.widgetRows - keyboardRows,
+            layout.widgetColumns);
         // The stored count is the user's; the wall holds what fits of it, and the pane works that
         // out again whenever the wall changes size.
         if (mWidgetPaneController != null) {
-            mWidgetPaneController.applyWantedGrid(layout.widgetRows, layout.widgetColumns);
+            mWidgetPaneController.applyWantedGrid(layout.widgetRows, layout.widgetColumns,
+                keyboardRows);
         } else {
-            mWidgetHostController.applyGrid(layout.widgetRows, layout.widgetColumns);
+            mWidgetHostController.applyGrid(layout.widgetRows - keyboardRows,
+                layout.widgetColumns);
         }
         // The grid is unchanged on a turn of the screen that only swapped the layouts, so the
         // host's own redraw does not fire; the pane is asked to draw itself again here instead.
@@ -12696,8 +12713,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private PlaceLayout currentPlaceLayout() {
-        // Minimal mode is a layout of its own, which placeLayout resolves while it is on. It is
-        // one preference for every place, so a slide never crosses into or out of it.
+        // Minimal mode is a layout of its own, which placeLayout resolves while it is on, and Home
+        // has one of its own too (chromeVariant): a slide between the halves changes the layout
+        // once, at settle.
         return placeLayout(currentPlaceOrientation());
     }
 
@@ -12705,6 +12723,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean isMinimalMode() {
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && store.isMinimal();
+    }
+
+    /**
+     * The layout the chrome on screen is arranged by (HomeChromePolicy): the Home layout while the
+     * wall rests on a Home page, the Workspace's otherwise. Read off the page the chrome is
+     * committed to, so a slide changes it once, at settle (syncWallKeyboard).
+     */
+    @NonNull
+    private com.termux.app.place.LayoutVariant chromeVariant() {
+        return com.termux.app.place.HomeChromePolicy.variant(mLastWallPage, isMinimalMode());
     }
 
     /**
@@ -12735,8 +12763,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private PlaceLayout placeLayout(@NonNull PlaceOrientation orientation) {
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return NO_PREFERENCES_PLACE_LAYOUT;
-        com.termux.app.place.LayoutVariant variant =
-            com.termux.app.place.LayoutVariant.of(isMinimalMode());
+        com.termux.app.place.LayoutVariant variant = chromeVariant();
         if (mCachedPlaceLayout == null
             || mCachedPlaceLayoutOrientation != orientation
             || mCachedPlaceLayoutVariant != variant
@@ -13640,11 +13667,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout previous = mAppliedPlaceLayout;
         boolean arrangementChanged = !layout.equals(previous);
         mAppliedPlaceLayout = layout;
+        com.termux.app.place.LayoutVariant variant = chromeVariant();
+        boolean sameVariant = variant == mAppliedPlaceVariant;
+        mAppliedPlaceVariant = variant;
         // The keyboard element put away in the Layout editor is the keyboard switched off: it
         // goes down here, on the same pass every other element leaves on. Shown again, it waits
         // for the next tap rather than rising behind the editor's sheet; the palette's own
-        // Keyboard on/off raises it itself, before this pass ever sees the change.
-        if (previous != null && previous.keyboardShown && !layout.keyboardShown
+        // Keyboard on/off raises it itself, before this pass ever sees the change. Compared
+        // within one layout: the Home layout's element is always on, not the switch.
+        if (sameVariant && previous != null && previous.keyboardShown && !layout.keyboardShown
             && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
             mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                 .HideReason.KEYBOARD_ACTION);
@@ -13667,6 +13698,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // appearance pass owns the same number but does not necessarily run on this one.
         applySideStackFrameInset(hasDockedFrameCard() ? 0 : terminalFrameInsetPx(true));
         applyStatusBarEdge(layout);
+        boolean alwaysOnChanged = syncHomeKeyboardAlwaysOn();
         applyWidgetGridPreference();
         boolean columnChanged = syncPinnedAppsHost();
         columnChanged |= syncExtraKeysHost();
@@ -13683,6 +13715,60 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
         if (sizesMoved) applySizedSurfaces();
+        // Always on brings the keyboard up on Home, or takes it down, once the grid has its rows.
+        if (alwaysOnChanged && com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage))
+            applyPlaceKeyboard(mLastWallPage);
+    }
+
+    /**
+     * Always on (the Home layout's keyboard element shown): turned on, the widget grid gives the
+     * keyboard the rows it covers, through the repository's shrink that keeps the wall as it stood,
+     * and a one-line notice says what moved; put away again, that wall is put back if nothing was
+     * edited meanwhile. Only a change is acted on, so the first pass after a start reads the state
+     * the grid was saved in and moves nothing.
+     *
+     * @return whether always on changed on this pass
+     */
+    private boolean syncHomeKeyboardAlwaysOn() {
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null || mWidgetHostController == null) return false;
+        boolean on = store.isHomeKeyboardAlwaysOn();
+        Boolean applied = mAppliedHomeAlwaysOn;
+        mAppliedHomeAlwaysOn = on;
+        if (applied == null || applied == on) return false;
+        com.termux.app.launcher.widget.LauncherWidgetRepository widgets =
+            mWidgetHostController.repository();
+        if (on) {
+            int rows = com.termux.app.place.HomeChromePolicy.keyboardRows(
+                Math.max(0, mKeyboardGeometry.desiredHeightPx()),
+                mWidgetPaneController == null ? 0 : mWidgetPaneController.gridHeightPx(),
+                widgets.gridDefinition().rows);
+            com.termux.app.launcher.widget.WidgetReflowReport report =
+                rows > 0 ? widgets.shrinkGridRows(rows) : null;
+            store.setHomeKeyboardRows(report == null ? 0 : rows);
+            showAlwaysOnNotice(report);
+        } else {
+            widgets.restoreGridRows();
+            store.setHomeKeyboardRows(0);
+        }
+        if (mWidgetPaneController != null) mWidgetPaneController.redraw();
+        return true;
+    }
+
+    /** The one line always on says about the grid: what moved, or that nothing could. */
+    private void showAlwaysOnNotice(
+            @Nullable com.termux.app.launcher.widget.WidgetReflowReport report) {
+        String text;
+        if (report == null) {
+            text = getString(R.string.home_always_on_no_rows);
+        } else if (report.isEmpty()) {
+            text = getString(R.string.home_always_on_nothing_moved);
+        } else {
+            text = getResources().getQuantityString(R.plurals.home_always_on_moved,
+                report.movedCount(), report.movedCount(), report.shrunkCount(),
+                report.pageChangeCount());
+        }
+        showToast(text, false);
     }
 
     /** The three sizes as last applied, so a place or a turn that moves one is noticed. */
@@ -14031,6 +14117,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             accessoryStackContainer,
             accessoryBottomMarginPx
         );
+        // On a Home page the dock floats with the keyboard: the grid keeps its whole height.
+        keyboardOverlapPx = KeyboardOverlayPolicy.overlapPx(
+            com.termux.app.place.HomeChromePolicy.dockOverlays(mLastWallPage), combinedHeight,
+            accessoryBottomMarginPx, keyboardOverlapPx);
         // While the wall travels with chrome pre-rolled, the content keeps exactly the room it
         // was committed with: whatever the stack grew by for the slide, the content reaches under
         // it by the same amount, so nothing the terminal is measured from moves until settle.
@@ -18669,14 +18759,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull com.termux.app.wall.PaneWallPage place) {
         boolean keyboardUp = place == mLastWallPage ? committedKeyboardVisible()
             : wantsKeyboardOnEnter(place);
+        // A Home page has no status bar: the window's fades on the way there (HomeChromePolicy).
+        if (!com.termux.app.place.HomeChromePolicy.statusShownAtRest(place))
+            return keyboardUp ? REST_HOME_KEYBOARD_UP : REST_HOME_KEYBOARD_DOWN;
         return keyboardUp ? REST_KEYBOARD_UP : REST_KEYBOARD_DOWN;
     }
 
-    /** The two rests a place can have (the Rest is immutable), so a slide frame allocates neither. */
+    /** The rests a page can have (the Rest is immutable), so a slide frame allocates none. */
     private static final com.termux.app.place.PlaceChromeTravel.Rest REST_KEYBOARD_UP =
         new com.termux.app.place.PlaceChromeTravel.Rest(true, false);
     private static final com.termux.app.place.PlaceChromeTravel.Rest REST_KEYBOARD_DOWN =
         new com.termux.app.place.PlaceChromeTravel.Rest(false, false);
+    private static final com.termux.app.place.PlaceChromeTravel.Rest REST_HOME_KEYBOARD_UP =
+        new com.termux.app.place.PlaceChromeTravel.Rest(true, false, false);
+    private static final com.termux.app.place.PlaceChromeTravel.Rest REST_HOME_KEYBOARD_DOWN =
+        new com.termux.app.place.PlaceChromeTravel.Rest(false, false, false);
     /** {@link #chromeRestOf} as the travel asks it, bound once rather than per frame. */
     private final com.termux.app.place.PlaceChromeTravel.States mChromeRestStates = this::chromeRestOf;
 
@@ -18762,7 +18859,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                         boolean toolbarShown, boolean keyboardShown) {
         int flushPadding = place == com.termux.app.wall.PaneWallPage.TERMINAL
             && place == mLastWallPage && !keyboardShown ? mAppliedTerminalFlushPaddingPx : 0;
-        return KeyboardOverlayPolicy.restReservationPx(mAppliedDockContentHeightPx, flushPadding,
+        return KeyboardOverlayPolicy.restReservationPx(
+            com.termux.app.place.HomeChromePolicy.dockOverlays(place),
+            mAppliedDockContentHeightPx, flushPadding,
             keyboardShown, KeyboardOverlayPolicy.overlays(place, currentPlaceLayout()),
             Math.max(0, mKeyboardGeometry.desiredHeightPx()),
             resolveAccessoryStackBottomMarginPx(toolbarShown, keyboardShown));
@@ -19007,9 +19106,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * changed since it was last applied.
      */
     private void syncChromeArrangement() {
-        boolean minimal = isMinimalMode();
-        if (minimal == mAppliedChromeMinimal) return;
-        mAppliedChromeMinimal = minimal;
+        com.termux.app.place.LayoutVariant variant = chromeVariant();
+        if (variant == mAppliedChromeVariant) return;
+        mAppliedChromeVariant = variant;
         syncPlaceLayout();
         applyMinimalStatusChrome();
     }
@@ -19025,6 +19124,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * works as it does in the normal layout.
      */
     void setMinimalMode(boolean minimal) {
+        // Home has no minimal mode: the Workspace's flag is not changed from a Home page.
+        if (!com.termux.app.place.HomeChromePolicy.minimalModeApplies(mLastWallPage)) return;
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null || store.isMinimal() == minimal) return;
         com.termux.app.wall.PaneWallPage place = mLastWallPage;
@@ -19114,8 +19215,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Whether the place wants its keyboard up as the wall lands on it. */
     private boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) {
         PlaceLayoutStore store = placeLayoutStore();
-        return store != null && com.termux.app.place.MinimalMode.keyboardOnEnter(
-            store.wasKeyboardOpen(place), store.isMinimal());
+        return store != null && com.termux.app.place.HomeChromePolicy.keyboardOnEnter(place,
+            store.wasKeyboardOpen(place), store.isMinimal(), store.isHomeKeyboardAlwaysOn());
     }
 
     /** Whether the wall rests on the Display place. */
@@ -19595,8 +19696,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Minimal mode is remembered across launches. The arrangement reads it through
         // currentPlaceLayout on its own; the bar is told once here, and every change after this
         // goes through syncChromeArrangement.
-        if (isMinimalMode() != mAppliedChromeMinimal) {
-            mAppliedChromeMinimal = isMinimalMode();
+        if (chromeVariant() != mAppliedChromeVariant) {
+            mAppliedChromeVariant = chromeVariant();
             applyMinimalStatusChrome();
         }
     }

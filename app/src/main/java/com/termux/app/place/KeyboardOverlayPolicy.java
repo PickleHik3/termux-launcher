@@ -42,11 +42,24 @@ public final class KeyboardOverlayPolicy {
      * <p>Applied as a negative bottom margin on the content root, this hands back exactly the room
      * the keyboard took, so the content keeps the bounds it has with the keyboard closed and the
      * stack — the keyboard and the dock rows riding on top of it — draws over it. The dock's own
-     * rows still take their room from the content, in overlay mode as in resize mode.
+     * rows still take their room from the content, in overlay mode as in resize mode, except on a
+     * Home page ({@link #overlapPx}).
      */
     public static int contentOverlapPx(boolean overlays, boolean keyboardShown,
                                        int keyboardHeightPx) {
         return overlays && keyboardShown ? Math.max(0, keyboardHeightPx) : 0;
+    }
+
+    /**
+     * How far the content root reaches past the top of the accessory stack once the dock is
+     * counted too: on a Home page ({@link HomeChromePolicy#dockOverlays}) the whole stack and the
+     * margin under it, so the widget grid keeps its full height and the dock and the keyboard draw
+     * over it; everywhere else the keyboard's share alone, as {@link #contentOverlapPx} says.
+     */
+    public static int overlapPx(boolean dockOverlays, int stackHeightPx, int stackBottomMarginPx,
+                                int keyboardOverlapPx) {
+        if (!dockOverlays) return Math.max(0, keyboardOverlapPx);
+        return Math.max(0, stackHeightPx) + Math.max(0, stackBottomMarginPx);
     }
 
     /**
@@ -71,6 +84,19 @@ public final class KeyboardOverlayPolicy {
     public static int restReservationPx(int dockContentPx, int flushPaddingPx,
                                         boolean keyboardShown, boolean keyboardOverlays,
                                         int keyboardPx, int bottomMarginPx) {
+        return restReservationPx(false, dockContentPx, flushPaddingPx, keyboardShown,
+            keyboardOverlays, keyboardPx, bottomMarginPx);
+    }
+
+    /**
+     * The same, for a page whose dock may float over the content: a Home page's chrome takes no
+     * room at all, keyboard up or down.
+     */
+    public static int restReservationPx(boolean dockOverlays, int dockContentPx,
+                                        int flushPaddingPx, boolean keyboardShown,
+                                        boolean keyboardOverlays, int keyboardPx,
+                                        int bottomMarginPx) {
+        if (dockOverlays) return 0;
         int keyboard = keyboardShown ? Math.max(0, keyboardPx) : 0;
         int stackPx = Math.max(0, dockContentPx) + Math.max(0, flushPaddingPx) + keyboard;
         return contentReservationPx(stackPx, bottomMarginPx,

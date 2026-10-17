@@ -150,6 +150,37 @@ under twenty items; past that, the oldest are re-judged first.
   still wears the status bar, extra keys, corner tabs and its frame (needs the Home layout, #78),
   and Home pages and window steps do not pan the wallpaper · emulator, record what shows.
 
+### Wall rework #78 Home layout
+- 2026-10-17 · commit "feat(home): Home pages wear the Home layout …" · A Home page shows no
+  frame (no slab, no rim line, with pane glass on and off), no launcher status bar, no extra keys,
+  and no corner tab at rest; Android's system bar shows at the top (fullscreen property off) and
+  nothing of the launcher's own bar or its glass strip is left behind it · emulator, both
+  orientations.
+- 2026-10-17 · same commit · Dock on the bottom row: the keyboard swipe on a Home page raises the
+  keyboard and the dock rides up on it, the glass blur showing during the ride, and settles back
+  when it closes; the widget grid does not move or re-cut either way. With a row set Under the
+  keyboard in the Home layout, that row stays on the bottom edge and the keyboard rises out above
+  it · emulator.
+- 2026-10-17 · same commit · Layout editor opened on a Home page (Home's corner tab has no Layout
+  button; open it with `am start` and the layout-editor extra naming the widgets page, or the
+  palette once #78 slice B lands): only the pinned apps, the A–Z index and the keyboard are on the
+  canvas and in the tray; moves there leave the Workspace layout alone. Opened on a window: the full
+  set, as before, normal or minimal · emulator.
+- 2026-10-17 · same commit · Minimal mode: Home's corner tab (hold a corner) has no minimal
+  button; with minimal on in the Workspace, sliding to Home shows the Home layout, and back on a
+  window minimal is still on · emulator.
+- 2026-10-17 · same commit · Always on: bring the keyboard chip out of the tray in the Layout
+  editor on Home: the keyboard comes up, the grid loses the rows it covers on every Home page and a
+  one-line notice says what moved (or that nothing did); the keyboard stays up paging Home and
+  coming back from a window. Put it away again: the keyboard goes down and the widgets come back
+  where they were if nothing was edited meanwhile; Discard in the editor does the same · emulator,
+  with widgets in the bottom rows.
+- 2026-10-17 · same commit · The seam slide: from the last Home page to the first window and back,
+  the window's status bar fades out on the way to Home and is on the window when it lands, the
+  window's frame and extra keys come with it, and no frame of the slide flashes the status bar on
+  Home or leaves a band of wallpaper between the grid and the dock · emulator, record what shows
+  (the status bar and extra keys switch at settle in this slice, see the hand-over).
+
 ## Developer
 
 - 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" · With the switch

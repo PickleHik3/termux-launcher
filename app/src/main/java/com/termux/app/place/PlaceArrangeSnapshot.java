@@ -113,7 +113,8 @@ public final class PlaceArrangeSnapshot {
         List<Entry> entries = new ArrayList<>();
         for (PlaceOrientation orientation : PlaceOrientation.values())
             entries.add(new Entry(layout, orientation));
-        return new PlaceArrangeSnapshot(variant, entries, places.isKeyboardShown());
+        // The variant's own keyboard element: the Home layout's is always on, not the switch.
+        return new PlaceArrangeSnapshot(variant, entries, layout.isKeyboardShown());
     }
 
     /** The variant this snapshot was taken of, and restores onto. */
@@ -126,7 +127,7 @@ public final class PlaceArrangeSnapshot {
     public void restore(@NonNull PlaceLayoutStore places) {
         PlaceLayoutStore layout = places.forVariant(mVariant);
         for (Entry entry : mEntries) entry.restore(layout);
-        places.setKeyboardShown(mKeyboardShown);
+        layout.setKeyboardShown(mKeyboardShown);
     }
 
     /** The whole arrangement as one string, for the editor's unsaved-changes comparison. */
