@@ -2640,7 +2640,7 @@ public class TerminalPaneController {
     public Window openHomeFloat(@NonNull TerminalSession shell, int page) {
         Leaf leaf = new Leaf(shell);
         leaf.fontSize = inheritableFontSize(mActiveWindow == null ? null : mActiveWindow.active);
-        leaf.floatFrac = HomeFloatPolicy.birthFrac();
+        leaf.floatFrac = homeFloatBirthFrac(Math.max(0, page));
         Window w = new Window(leaf);
         w.root = null;
         w.floating.add(leaf);
@@ -2654,6 +2654,25 @@ public class TerminalPaneController {
         mHost.onTreesChanged();
         mHost.onHomeFloatsChanged();
         return w;
+    }
+
+    /**
+     * The shape a float born on Home page {@code page} takes: full-size on a page that shows no
+     * float, else cascaded off the topmost one shown there by its titlebar's band, so a second
+     * float never hides the first one's titlebar. Read before the new float joins the floats.
+     */
+    @NonNull
+    private RectF homeFloatBirthFrac(int page) {
+        RectF under = null;
+        for (int i = mHomeFloats.size() - 1; i >= 0 && under == null; i--) {
+            Window other = mHomeFloats.get(i);
+            if (other.active != null && HomeFloatPolicy.shownOn(other.homePage, other.minimised, page))
+                under = other.active.floatFrac;
+        }
+        Rect room = homeFloatRoom();
+        return HomeFloatPolicy.cascadeFrac(under, room.width(), room.height(),
+            dp(HomeFloatPolicy.CASCADE_STEP_RIGHT_DP), titlebarBandPx(), dp(FLOAT_MIN_WIDTH_DP),
+            dp(FLOAT_MIN_HEIGHT_DP));
     }
 
     /** How many Home floats there are, open or minimised, across every page. */
@@ -2815,7 +2834,7 @@ public class TerminalPaneController {
         }
         w.root = null;
         leaf.parent = null;
-        leaf.floatFrac = HomeFloatPolicy.birthFrac();
+        leaf.floatFrac = homeFloatBirthFrac(Math.max(0, page));
         leaf.floatRestoreFrac = null;
         w.floating.add(leaf);
         w.active = leaf;

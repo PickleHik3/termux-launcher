@@ -25,6 +25,42 @@ public final class HomeFloatPolicy {
         return FloatTitlebarPolicy.fullRoom();
     }
 
+    /** The small step right a float born over another takes, beside the step down its titlebar sets. */
+    public static final int CASCADE_STEP_RIGHT_DP = 16;
+
+    /**
+     * The shape a new Home float is born with, as fractions of a room {@code roomWidthPx} by
+     * {@code roomHeightPx}: full-size ({@link #birthFrac}) on a page that shows no float, else
+     * cascaded off {@code under}, the topmost float shown there. The cascade keeps {@code under}'s
+     * size and steps {@code stepDownPx} down (the titlebar's band, so the titlebar under it stays in
+     * sight) and {@code stepRightPx} right, clamped to the room: a float that runs past the room's
+     * right or bottom edge ends there, and one that would then be smaller than
+     * {@code minWidthPx} by {@code minHeightPx} slides back toward the room's top-left at that size.
+     * A room not measured yet (zero size) gives the full-size birth.
+     */
+    @NonNull
+    public static RectF cascadeFrac(@Nullable RectF under, int roomWidthPx, int roomHeightPx,
+                                    int stepRightPx, int stepDownPx, int minWidthPx,
+                                    int minHeightPx) {
+        if (under == null || roomWidthPx <= 0 || roomHeightPx <= 0) return birthFrac();
+        float[] x = cascadeSpan(under.left * roomWidthPx, under.right * roomWidthPx, roomWidthPx,
+            stepRightPx, minWidthPx);
+        float[] y = cascadeSpan(under.top * roomHeightPx, under.bottom * roomHeightPx, roomHeightPx,
+            stepDownPx, minHeightPx);
+        return new RectF(x[0] / roomWidthPx, y[0] / roomHeightPx, x[1] / roomWidthPx,
+            y[1] / roomHeightPx);
+    }
+
+    /** One axis of {@link #cascadeFrac}, in pixels: the span {@code [start, end)} stepped on and clamped. */
+    @NonNull
+    private static float[] cascadeSpan(float start, float end, int roomPx, int stepPx, int minPx) {
+        float min = Math.max(1, Math.min(minPx, roomPx));
+        float size = Math.max(min, Math.min(roomPx, end - start));
+        float from = Math.max(0f, Math.min(start + Math.max(0, stepPx), roomPx - min));
+        float to = Math.max(from + min, Math.min(roomPx, from + size));
+        return new float[]{from, to};
+    }
+
     /**
      * The room Home floats are laid out in, in the float layer's own pixels: the layer's width, and
      * its height between {@code topPx} (what the status bar covers) and {@code bottomPx} from its

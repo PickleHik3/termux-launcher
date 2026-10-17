@@ -126,6 +126,59 @@ public class HomeFloatTest {
         assertSame(first, mController.homeFloats().get(1));
     }
 
+    @Test
+    public void aSecondFloatOnAPageCascadesSoTheFirstTitlebarStaysInSight() {
+        TerminalPaneController.Window first = mController.openHomeFloat(terminal(), 0);
+        TerminalPaneController.Window second = mController.openHomeFloat(terminal(), 0);
+        FrameLayout.LayoutParams under = (FrameLayout.LayoutParams) containerOf(first).getLayoutParams();
+        FrameLayout.LayoutParams over = (FrameLayout.LayoutParams) containerOf(second).getLayoutParams();
+        float density = context().getResources().getDisplayMetrics().density;
+        int band = Math.round(density * (FloatTitlebarPolicy.HEIGHT_DP + FloatTitlebarPolicy.GAP_DP));
+        int step = Math.round(density * HomeFloatPolicy.CASCADE_STEP_RIGHT_DP);
+        assertEquals("one titlebar band down", under.topMargin + band, over.topMargin, 1);
+        assertEquals("a small step right", under.leftMargin + step, over.leftMargin, 1);
+        assertEquals("ends at the room's bottom", DOCK_TOP, over.topMargin + over.height, 1);
+        assertEquals("ends at the room's right", LAYER_WIDTH, over.leftMargin + over.width, 1);
+    }
+
+    @Test
+    public void aFloatOnAnotherPageOrOverAMinimisedOneIsBornFullSize() {
+        TerminalPaneController.Window first = mController.openHomeFloat(terminal(), 0);
+        TerminalPaneController.Window elsewhere = mController.openHomeFloat(terminal(), 1);
+        mController.minimiseHomeFloat(first);
+        TerminalPaneController.Window again = mController.openHomeFloat(terminal(), 0);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) containerOf(again).getLayoutParams();
+        assertEquals(ROOM_TOP, params.topMargin);
+        assertEquals(0, params.leftMargin);
+        assertNotNull(elsewhere);
+    }
+
+    @Test
+    public void cascadeKeepsTheSizeAndClampsToTheRoom() {
+        assertEquals("nothing under it: full size", HomeFloatPolicy.birthFrac(),
+            HomeFloatPolicy.cascadeFrac(null, 600, 800, 16, 35, 120, 90));
+        assertEquals("a room not measured yet: full size", HomeFloatPolicy.birthFrac(),
+            HomeFloatPolicy.cascadeFrac(new RectF(0f, 0f, .5f, .5f), 0, 0, 16, 35, 120, 90));
+
+        RectF small = HomeFloatPolicy.cascadeFrac(new RectF(.1f, .1f, .5f, .5f), 600, 800,
+            16, 35, 120, 90);
+        assertEquals((60 + 16) / 600f, small.left, 1e-4f);
+        assertEquals((80 + 35) / 800f, small.top, 1e-4f);
+        assertEquals("the size is kept", .4f, small.width(), 1e-4f);
+        assertEquals(.4f, small.height(), 1e-4f);
+
+        RectF full = HomeFloatPolicy.cascadeFrac(HomeFloatPolicy.birthFrac(), 600, 800,
+            16, 35, 120, 90);
+        assertEquals(new RectF(16 / 600f, 35 / 800f, 1f, 1f), full);
+
+        RectF corner = HomeFloatPolicy.cascadeFrac(new RectF(.9f, .95f, 1f, 1f), 600, 800,
+            16, 35, 120, 90);
+        assertEquals("slides back to keep its least size", 1f, corner.right, 1e-4f);
+        assertEquals(1f, corner.bottom, 1e-4f);
+        assertEquals(120 / 600f, corner.width(), 1e-4f);
+        assertEquals(90 / 800f, corner.height(), 1e-4f);
+    }
+
     // --- Pinned to its page ---
 
     @Test
@@ -381,6 +434,8 @@ public class HomeFloatTest {
     public void onlyTheFocusedFloatShrinksForTheKeyboard() {
         TerminalPaneController.Window first = mController.openHomeFloat(terminal(), 0);
         TerminalPaneController.Window second = mController.openHomeFloat(terminal(), 0);
+        // Born cascaded off the first; maximised, it fills the room as the first does.
+        titlebarOf(containerOf(second)).buttonFor(FloatTitlebarPolicy.ACTION_MAXIMISE).performClick();
         layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
         mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 400);
         assertEquals(400 - ROOM_TOP, containerOf(second).getLayoutParams().height);
