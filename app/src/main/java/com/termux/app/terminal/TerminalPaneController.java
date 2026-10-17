@@ -407,6 +407,8 @@ public class TerminalPaneController {
     private int mHomeRoomTopOnScreenPx = Integer.MIN_VALUE;
     private int mHomeDockTopOnScreenPx = Integer.MAX_VALUE;
     private int mHomeKeyboardTopOnScreenPx = -1;
+    /** Home's Margin in px: the air the floats' room keeps inside what covers the layer. */
+    private int mHomeFloatMarginPx;
     private final PaneInteractionOverlay mInteractionOverlay;
     /** Ghosts of closed panes and the cursor's flight between panes; above everything. */
     private final PaneMotionOverlayView mMotionOverlay;
@@ -2858,12 +2860,25 @@ public class TerminalPaneController {
      */
     public void setHomeFloatObstructions(int roomTopOnScreenPx, int dockTopOnScreenPx,
                                          int keyboardTopOnScreenPx) {
+        setHomeFloatObstructions(roomTopOnScreenPx, dockTopOnScreenPx, keyboardTopOnScreenPx,
+            mHomeFloatMarginPx);
+    }
+
+    /**
+     * The same, with Home's Margin in px ({@code marginPx}): the air the room keeps inside the
+     * layer's sides, below the status bar and above the dock ({@link HomeFloatPolicy#room}). A
+     * float's shape is fractions of the room, so a new Margin re-lays every float at once.
+     */
+    public void setHomeFloatObstructions(int roomTopOnScreenPx, int dockTopOnScreenPx,
+                                         int keyboardTopOnScreenPx, int marginPx) {
+        int margin = Math.max(0, marginPx);
         boolean roomMoved = roomTopOnScreenPx != mHomeRoomTopOnScreenPx
-            || dockTopOnScreenPx != mHomeDockTopOnScreenPx;
+            || dockTopOnScreenPx != mHomeDockTopOnScreenPx || margin != mHomeFloatMarginPx;
         boolean keyboardMoved = keyboardTopOnScreenPx != mHomeKeyboardTopOnScreenPx;
         mHomeRoomTopOnScreenPx = roomTopOnScreenPx;
         mHomeDockTopOnScreenPx = dockTopOnScreenPx;
         mHomeKeyboardTopOnScreenPx = keyboardTopOnScreenPx;
+        mHomeFloatMarginPx = margin;
         if (roomMoved) relayHomeFloats();
         else if (keyboardMoved) applyHomeFloatLift();
     }
@@ -2921,7 +2936,7 @@ public class TerminalPaneController {
             : mHomeRoomTopOnScreenPx - onScreen[1];
         int bottom = mHomeDockTopOnScreenPx == Integer.MAX_VALUE ? 0
             : onScreen[1] + height - mHomeDockTopOnScreenPx;
-        return HomeFloatPolicy.room(layer.getWidth(), height, top, bottom);
+        return HomeFloatPolicy.room(layer.getWidth(), height, top, bottom, mHomeFloatMarginPx);
     }
 
     /**

@@ -21367,7 +21367,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             roomTop = Math.max(roomTop, columnTop + EdgeStackPolicy.stackThicknessPx(
                 currentPlaceLayout(), PlaceLayout.Edge.TOP, buildEdgeStackMetrics()));
         }
-        mPaneController.setHomeFloatObstructions(roomTop, dockTop, keyboardTop);
+        // The floats breathe Home's Margin inside all that, the same air as the widget grid's
+        // rim: Home's own, read explicitly, since floats are laid out while a window is in front.
+        mPaneController.setHomeFloatObstructions(roomTop, dockTop, keyboardTop,
+            Math.round(dpToPx(homeMarginDp())));
     }
 
     /** Linux apps tapped in the drawer run on the display; this is what runs them. */
