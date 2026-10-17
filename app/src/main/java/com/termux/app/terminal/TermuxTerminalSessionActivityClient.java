@@ -907,7 +907,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         int index = service.killTermuxSession(finishedSession);
         int size = service.getTermuxSessionsSize();
         if (size == 0) {
-            mHost.finishActivityIfNotFinishing();
+            // The home screen does not close with its last shell: the Workspace is simply empty.
+            mHost.rebuildDrawerSessions();
         } else {
             if (index >= size) {
                 index = size - 1;

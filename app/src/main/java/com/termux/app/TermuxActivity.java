@@ -1449,6 +1449,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int SUGGESTION_BAR_MAX_INPUT_CHARS = 10;
     private static final long EMPTY_SESSION_RECOVERY_DEBOUNCE_MS = 1500L;
     private static volatile boolean sPendingStyleReloadRecreateActivity = true;
+    /**
+     * This process has started its first shell. The Workspace may be empty after that (ADR 0008):
+     * an empty session list then means the user closed everything, and an activity coming back
+     * (recreation, a second launch) starts nothing behind Home. A fresh process is a cold start
+     * and gets its shell as always — the bootstrap, the Welcome flow and the first-boot tour ride
+     * on it.
+     */
+    private static volatile boolean sFirstShellStarted;
 
     private boolean mSeamlessStatusBackgroundActive;
     private int mLastStatusBarInsetTop;
@@ -2089,7 +2097,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPendingLaunchIntent = null;
             startBootstrapAndSession(pendingIntent);
         }
-        maybeRecoverFromEmptySession("onStart");
 
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onStart();
@@ -2379,7 +2386,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onResume();
         refreshLauncherIconsIfPreferencesChanged();
-        maybeRecoverFromEmptySession("onResume");
         if (!transientPause) {
             // If compatibility mode was just enabled, drop any active split back to a single pane.
             if (!isSplitPanesEnabled())
@@ -9067,7 +9073,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherTransitionController.maybeHandleGestureContract(intent, mSuggestionBarView);
         }
         setIntent(null);
-        if (mTermuxService.isTermuxSessionsEmpty()) {
+        if (mTermuxService.isTermuxSessionsEmpty()
+            && !com.termux.app.wall.WallRow.startsShellOnConnect(true, sFirstShellStarted,
+                asksForSession(intent))) {
+            // The Workspace was emptied on purpose: Home stays, and nothing starts behind it.
+            Logger.logDebug(LOG_TAG, "No sessions after the first shell: the Workspace stays empty");
+        } else if (mTermuxService.isTermuxSessionsEmpty()) {
             if (mIsVisible) {
                 if (!recoverEmptyVisibleSessionInPlace(intent, "service-connected")) {
                     startBootstrapAndSession(intent);
@@ -9151,14 +9162,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bootstrapReturned[0] = true;
     }
 
-    private void maybeRecoverFromEmptySession(@NonNull String source) {
-        if (!mIsVisible || mTermuxService == null || mTermuxTerminalSessionActivityClient == null) {
-            return;
-        }
-        if (!mTermuxService.isTermuxSessionsEmpty()) {
-            return;
-        }
-        recoverEmptyVisibleSessionInPlace(null, source);
+    /** A launch that names a shell of its own: the New session shortcut, or a failsafe one. */
+    private static boolean asksForSession(@Nullable Intent intent) {
+        if (intent == null) return false;
+        return Intent.ACTION_RUN.equals(intent.getAction())
+            || intent.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
     }
 
     private boolean shouldRecoverEmptySessionInPlace() {
@@ -17826,9 +17834,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The row's last window is gone: the last Home page slides in (see
                 // showNextSessionAfterClose).
                 if (mPaneWallController != null) mPaneWallController.goToLastHomePage(isVisible());
-                if (getTermuxTerminalSessionClient() != null) {
-                    getTermuxTerminalSessionClient().addNewSession(false, null);
-                }
             }
         }
         rebuildDrawerSessions();
@@ -18607,6 +18612,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mTermuxService != null)
             mTermuxService.setVisibleSessionCount(mDrawerSessions.size());
+        if (!mDrawerSessions.isEmpty()) sFirstShellStarted = true;
         // The wall's row follows the windows: the Workspace is on it while there is one.
         if (mPaneWallController != null) mPaneWallController.refreshPages();
         // The one funnel every structural change to the sessions and their windows already takes,
@@ -20734,7 +20740,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean openTerminalEntry(boolean newWindow) {
         if (mPaneWallController == null) return false;
         closeAppDrawerForLinuxLaunch();
-        if (newWindow || !isWorkspaceOnRow()) createNewWindow();
+        if (!isWorkspaceOnRow()) {
+            // An empty Workspace: one fresh shell, its session's only window (any mode).
+            if (getTermuxTerminalSessionClient() != null)
+                getTermuxTerminalSessionClient().addNewSession(false, null);
+        } else if (newWindow) {
+            createNewWindow();
+        }
         mPaneWallController.refreshPages();
         mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
         return true;
@@ -23638,10 +23650,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         animateTerminalArrival(steps > 0 ? 1 : -1, true, duration, remaining);
     }
 
-    /** Whether the Workspace is on the wall's row: the terminal has a session to show. */
+    /**
+     * Whether the Workspace is on the wall's row: the current session has a window. Home floats
+     * are shells too but never in the row, so the service's session list does not decide this.
+     */
     private boolean isWorkspaceOnRow() {
         // Before the service is bound nothing is known, and the terminal is assumed, as before.
-        return mTermuxService == null || !mTermuxService.isTermuxSessionsEmpty();
+        return com.termux.app.wall.WallRow.hasWorkspace(mTermuxService != null,
+            mCurrentWSession == null ? 0 : mCurrentWSession.windows.size());
     }
 
     /** How many Home pages or windows the wall's view of that kind holds. */
@@ -24412,7 +24428,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildDrawerSessions();
     }
 
-    /** After a session closes, show another session, or spawn a fresh one if none remain. */
+    /** After a session closes, show another session, or Home's last page if none remain. */
     private void showNextSessionAfterClose() {
         if (!mWSessions.isEmpty()) {
             mCurrentWSession = mWSessions.get(0);
@@ -24421,13 +24437,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // the same travel its creation played, reversed. Callers capture the departure.
             animateTerminalSessionLifecycleArrival(-1);
         } else {
-            // The row's last window is gone: the last Home page slides in. The terminal still
-            // starts a fresh session behind it, as it always has, so the Workspace is there to go
-            // back to.
+            // The row's last window is gone: the last Home page slides in and the Workspace is
+            // gone with it. No shell starts behind Home; the Terminal entry opens the next one.
             if (mPaneWallController != null) mPaneWallController.goToLastHomePage(isVisible());
-            if (getTermuxTerminalSessionClient() != null) {
-                getTermuxTerminalSessionClient().addNewSession(false, null);
-            }
         }
     }
 
@@ -24437,8 +24449,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * exiting takes its chip with it — and the session's selection follows
      * {@link com.termux.app.terminal.WindowCloseFocus}: unchanged when the emptied window was
      * elsewhere in the strip, a neighbour when it was the one shown. A session losing its last
-     * window goes with it; if that was the current session, the next one is shown or a fresh empty
-     * home is started, as when a session is closed by hand.
+     * window goes with it; if that was the current session, the next one is shown or Home's last
+     * page slides in, as when a session is closed by hand.
      */
     void onWindowEmptied(com.termux.app.terminal.TerminalPaneController.Window w) {
         WSession ws = wsessionOwning(w);

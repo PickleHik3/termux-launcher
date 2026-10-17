@@ -40,7 +40,7 @@ public class FirstSessionRestyleTest {
 
         int start = activity.indexOf("private void startBootstrapAndSession(");
         String bootstrap = activity.substring(start,
-            activity.indexOf("private void maybeRecoverFromEmptySession", start));
+            activity.indexOf("private static boolean asksForSession", start));
         // Only an asynchronous answer (an install) wants the restyle; the synchronous fast path
         // for an existing prefix does not.
         assertTrue(bootstrap.contains("if (bootstrapReturned[0]) mFirstSessionRestyleWanted = true;"));
