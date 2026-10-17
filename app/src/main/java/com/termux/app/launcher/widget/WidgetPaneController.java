@@ -6,7 +6,6 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
-import android.widget.PopupWindow;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -57,10 +56,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         /** True while the widgets page is glass, so built-in cards go translucent with a rim. */
         default boolean isWidgetSurfaceGlass() { return false; }
-        /** Whether the long-press menu offers Terminal: a Home float on the page on screen. */
-        default boolean offersHomeFloat() { return false; }
-        /** Terminal was chosen from the long-press menu: open a Home float on the page on screen. */
-        default void openHomeFloat() { }
+        /**
+         * A long press on the page's free area: the host puts up Home's long-press sheet, whose
+         * rows act on the page on screen. The raw point is where the finger rested.
+         */
+        default void onHomeLongPressed(float rawX, float rawY) { }
         /**
          * The palette gesture on the page's free area let go: up opens the palette with the
          * keyboard, down puts them away (spec §5.1).
@@ -79,7 +79,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private boolean awaitingExternal;
     private int currentPage;
     private boolean editorFocusActive;
-    @Nullable private PopupWindow paneMenu;
 
     public WidgetPaneController(@NonNull WidgetPaneView pane,
                                 @NonNull LauncherWidgetHostController widgets,
@@ -122,7 +121,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 if (edit != null && edit.appWidgetId == appWidgetId) endMoveDrag(canceled);
             }
             @Override public void onEmptySpaceLongPressed(float rawX, float rawY) {
-                showPaneMenu(rawX, rawY);
+                host.onHomeLongPressed(rawX, rawY);
             }
             @Override public void onWidgetEditorFocusChanged(View editor) {
                 relayEditorFocus(editor);
@@ -260,7 +259,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     @NonNull public BuiltinWidgetHost builtins() { return builtins; }
     public void onStop() {
         abortCarry(true);
-        catalog.cancel(); pane.picker().closeImmediate(); dismissPaneMenu();
+        catalog.cancel(); pane.picker().closeImmediate();
     }
     public void onPackageOrProfileChanged() {
         catalog.invalidate();
@@ -283,7 +282,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         // Sizes reach the providers only while the wall rests here; see WidgetGridView.
         pane.grid().setPageAtRest(shown);
         if (shown) return;
-        dismissPaneMenu();
         // Home waits on its last page while the wall is elsewhere: that is the page next to the
         // seam, the one a border drag back off the first window arrives on (ADR 0008). The home
         // press turns it to page 1 itself (showHomePage).
@@ -311,7 +309,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.setSeam(seam);
     }
     public boolean onBackPressed() {
-        if (paneMenu != null && paneMenu.isShowing()) { dismissPaneMenu(); return true; }
         if (pane.widgetEditActive()) { exitEditMode(); return true; }
         return pane.onBackPressed();
     }
@@ -319,7 +316,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         builtins.destroy();
         abortCarry(false);
         pane.removeCallbacks(edgeFlip);
-        widgets.setListener(null); catalog.cancel(); dismissPaneMenu();
+        widgets.setListener(null); catalog.cancel();
     }
 
     int currentPage() { return currentPage; }
@@ -336,36 +333,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
     }
 
-    /** Empty-surface long-press menu; the policy decides which rows this state offers. */
-    private void showPaneMenu(float rawX, float rawY) {
-        dismissPaneMenu();
-        List<WidgetPaneMenuPolicy.Item> items = WidgetPaneMenuPolicy.itemsFor(
-            widgets.capability() == LauncherWidgetHostController.Capability.AVAILABLE,
-            widgets.repository().pageCount(),
-            widgets.repository().recordsOnPage(currentPage).isEmpty(), host.offersHomeFloat());
-        if (items.isEmpty()) return;
-        paneMenu = WidgetPaneMenu.show(pane, items, rawX, rawY, this::onMenuItemSelected);
-    }
-
-    private void dismissPaneMenu() {
-        if (paneMenu != null) {
-            if (paneMenu.isShowing()) paneMenu.dismiss();
-            paneMenu = null;
-        }
-    }
-
-    void onMenuItemSelected(@NonNull WidgetPaneMenuPolicy.Item item) {
-        dismissPaneMenu();
-        switch (item) {
-            case ADD_WIDGET: openPicker(); break;
-            case EDIT_WIDGETS: menuEditWidgets(); break;
-            case REMOVE_PAGE: menuRemovePage(); break;
-            case TERMINAL: host.openHomeFloat(); break;
-        }
-    }
-
     /**
-     * The Widgets page's edit pencil: the same entry the long-press menu's Edit widgets takes,
+     * The Widgets page's edit pencil, and Home's long-press sheet's Edit pages: one entry,
      * with the same gestures and the same ways out.
      */
     public boolean editWidgets() {
@@ -400,6 +369,16 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         currentPage = appended;
         render();
+    }
+
+    /** Whether the Home page on screen holds no widget. */
+    public boolean currentPageEmpty() {
+        return widgets.repository().recordsOnPage(currentPage).isEmpty();
+    }
+
+    /** Home's long-press sheet's Remove page: the page on screen goes, if it may. */
+    public void removeCurrentPage() {
+        menuRemovePage();
     }
 
     void menuRemovePage() {

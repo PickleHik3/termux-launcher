@@ -10,9 +10,20 @@
 <resources>
     <string name="widget_add">Add widget</string>
     <string name="widget_empty_hint">Long-press to add widgets</string>
-    <string name="widget_menu_edit_widgets">Edit widgets</string>
-    <string name="widget_menu_remove_page">Remove page</string>
-    <string name="widget_menu_terminal">Terminal</string>
+    <!-- Home's long-press sheet (HomeActionsSheet). -->
+    <string name="home_actions_title">Termux Launcher</string>
+    <string name="home_actions_close">Close</string>
+    <string name="home_actions_terminal">Terminal</string>
+    <string name="home_actions_add_widget">Add a widget</string>
+    <string name="home_actions_add_page">Add a page</string>
+    <string name="home_actions_edit_pages">Edit pages</string>
+    <string name="home_actions_layout">Layout</string>
+    <string name="home_actions_remove_page">Remove page</string>
+    <string name="home_actions_wallpaper">Wallpaper</string>
+    <string name="home_actions_look">Look</string>
+    <string name="home_actions_launcher_settings">Launcher settings</string>
+    <string name="home_actions_set_default_home">Set as default home app</string>
+    <string name="home_actions_help">Help</string>
     <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
     <string name="widget_remove_failed">Widget couldn\'t be removed</string>
     <string name="widget_add_busy">Finish adding the current widget first</string>
