@@ -159,24 +159,25 @@ Cloning starts a fresh shell in the current pane's folder. It does not copy the 
 the shell's state, the scrollback or the layout. Ending the last session starts a fresh one, so the
 terminal is never empty.
 
-## Workspaces
+## Saved sessions
 
-A workspace saves the sessions, windows, pane layout and split sizes, floating panes, focus,
-titles and each pane's folder, so you can rebuild them later.
+Saved sessions keep the sessions, windows, pane layout and split sizes, floating panes, focus,
+titles and each pane's folder, so you can rebuild them later. A Home float is saved as an ordinary
+window for now, and loads back into the Workspace.
 
-- **Save**: at the bottom of the **Live** tab tap **Save as workspace…**, type a name and save.
+- **Save**: at the bottom of the **Live** tab tap **Save sessions…**, type a name and save.
   Tick **Also save what is running** to record the program in each busy pane. Saving over a name
   asks first. **Save workspace** in the palette opens the same field.
-- **Load**: on the **Saved** tab tap a workspace, then **Add to current** or **Replace**. If it
-  recorded programs, **Also start what was running** decides whether they run again. **Load
+- **Load**: on the **Saved sessions** tab tap a name, then **Add to current** or **Replace**. If
+  it recorded programs, **Also start what was running** decides whether they run again. **Load
   workspace** in the palette opens this tab.
-- **Delete**: tap **⋯** on a saved workspace, then **Delete**. Running sessions are not affected.
+- **Delete**: tap **⋯** on saved sessions, then **Delete**. Running sessions are not affected.
 
-A workspace rebuilds structure, not processes. Each recorded program starts again from the
+Loading rebuilds structure, not processes. Each recorded program starts again from the
 beginning in your normal shell. **Replace** builds the new terminals before removing the old ones,
 but it still ends the old shells. Review a hand-edited file before letting it start programs.
 
-Workspaces are files at `~/.termux/workspaces/<name>.json`. A name is up to 64 characters, starts
+Saved sessions are files at `~/.termux/workspaces/<name>.json`. A name is up to 64 characters, starts
 with a letter or digit, and may contain letters, digits, spaces, `_`, `-` and `.`. The
 `workspace.save`, `workspace.load`, `workspace.list` and `workspace.delete` actions are available
 to [custom keybindings](Custom_Keybindings.md).

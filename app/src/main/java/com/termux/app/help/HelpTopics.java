@@ -472,7 +472,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_workspace_step1, R.string.help_topic_workspace_step2)
             .related("windows", "panes").terms("workspace", "session")
             .aliases(R.string.help_topic_workspace_aliases)
-            .doc("Panes_Windows_And_Sessions.md#workspaces"));
+            .doc("Panes_Windows_And_Sessions.md#saved-sessions"));
 
         // 6. Make it yours.
         b.add(topic("appearance_editor", Group.YOURS, R.string.help_topic_appearance_title,
