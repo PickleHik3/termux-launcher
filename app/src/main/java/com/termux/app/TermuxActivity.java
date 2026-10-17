@@ -15812,6 +15812,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 closeAppDrawerImmediate();
             }
         });
+        registry.register(() -> {
+            // Back over a focused Home float with the keyboard up closes the keyboard first (the
+            // float grows back); the float keeps focus, and the next press falls through as before.
+            // Home's always-on keyboard is not the float's to close.
+            if (!isWidgetsPageShowing() || mPaneController == null
+                || mPaneController.focusedHomeFloat() == null || mInAppKeyboard == null
+                || !mInAppKeyboard.isVisible()
+                || wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) return false;
+            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .HideReason.USER_EVENT);
+            return true;
+        });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
                 // Icons to Overview, an editor to Overview (after its unsaved-changes question),
