@@ -11815,6 +11815,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return currentPlaceLayout();
         }
 
+        @NonNull @Override public com.termux.app.wall.PaneWallPage pageOnScreen() {
+            // The same page the Layout editor's session opens on for an unnamed place.
+            return currentWallPlace();
+        }
+
         @Nullable @Override public com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard inAppKeyboard() {
             return mInAppKeyboard;
         }
