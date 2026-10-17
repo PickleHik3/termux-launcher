@@ -10,8 +10,8 @@ import androidx.annotation.Nullable;
 import com.termux.app.terminal.PaneSurfaceStyle;
 
 /**
- * Owns the wall: its row of pages (Home pages, then the Workspace's windows, then the Display
- * page while the display is on; ADR 0008), which page is in front, and every way in and out of
+ * Owns the wall: its row of pages (Home pages, then the Workspace's windows, then the display
+ * window while a display is up; ADR 0008), which page is in front, and every way in and out of
  * them. The activity hands it the layout and the answers it cannot work out for itself — whether
  * the current session has a window, how many Home pages and windows there are and which is in
  * front — and nothing else needs to know the wall exists.
@@ -27,8 +27,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          * it always; the usage mode is not asked.
          */
         default boolean hasWindow() { return true; }
-        /** The embedded display is built into this edition and switched on. */
-        boolean isDisplayEnabled();
+        /**
+         * A display is up, so its window is on the row: running, or asked for and starting.
+         * Nothing switches it on (ADR 0008).
+         */
+        boolean isDisplayUp();
         /**
          * How many pages of its own kind {@code page} holds: the Home pages, the current
          * session's windows; 1 for the Display page.
@@ -157,10 +160,20 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mWall.setPageView(PaneWallPage.TERMINAL, paneHost);
     }
 
-    /** Re-read what decides the row: whether there is a window, and whether the display is on. */
+    /**
+     * Re-read what decides the row: whether there is a window, and whether a display is up. A
+     * page that leaves while the wall rests on it hands the wall to the page on its left, turned
+     * to its last: the last window when the display goes down, the last Home page when the last
+     * window closes.
+     */
     public void refreshPages() {
         mWall.setReducedMotion(mHost.reducedMotion());
-        mWall.setPages(PaneWallPolicy.rowPages(mHost.hasWindow(), mHost.isDisplayEnabled()));
+        PaneWallPage before = mWall.currentPage();
+        mWall.setPages(PaneWallPolicy.rowPages(mHost.hasWindow(), mHost.isDisplayUp()));
+        PaneWallPage after = mWall.currentPage();
+        if (after != before && !mWall.pages().contains(before)) {
+            mHost.showInnerPage(after, Math.max(0, mHost.innerCount(after) - 1));
+        }
         if (mWorkspacePending && mWall.pages().contains(PaneWallPage.TERMINAL)) {
             mWorkspacePending = false;
             mWall.goTo(PaneWallPage.TERMINAL, false);

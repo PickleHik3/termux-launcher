@@ -492,13 +492,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 // The pane is built once per activity, so it has to come back on a recreate.
                 scheduleTermuxActivityStylingSync(true);
                 break;
-            case "x11_display_enabled":
-                // The Display page's own store routes here too, so this is the one path. The
-                // launcher attaches or tears the page down itself when it comes back to the
-                // front — and asks before a running server is stopped — so no recreate.
-                if (com.termux.app.x11.X11DisplaySwitch.write(mContext, mPreferences, value))
-                    scheduleTermuxActivityStylingSync(false);
-                break;
             case "app_haptics_enabled":
                 mPreferences.setAppHapticsEnabled(value);
                 break;
@@ -547,8 +540,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherDrawerSearchAndroidKeyboardEnabled();
             case "app_launcher_widget_pane_enabled":
                 return mPreferences.isAppLauncherWidgetPaneEnabled();
-            case "x11_display_enabled":
-                return mPreferences.isX11DisplayEnabled();
             case "app_haptics_enabled":
                 return mPreferences.isAppHapticsEnabled();
             case "app_launcher_row_haptics":
@@ -631,9 +622,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_az_lock_method":
                 mPreferences.setAppLauncherAzLockMethod(value);
                 break;
-            case "app_launcher_use_case_mode":
-                applyUseCaseMode(value);
-                break;
             case "app_launcher_start_in":
                 // Read at the next cold start only; nothing on screen changes.
                 mPreferences.setLauncherStartIn(value);
@@ -689,8 +677,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getAppLauncherAzLockMethod();
             case "in_app_keyboard_theme":
                 return mKeyboardLook.getString(key, defValue);
-            case "app_launcher_use_case_mode":
-                return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
             case "app_launcher_start_in":
                 return mPreferences.getLauncherStartIn();
             case "app_launcher_drawer_view_type":
@@ -706,27 +692,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             default:
                 return defValue;
         }
-    }
-
-    /**
-     * The usage mode preset. It flips the drawer, both dock rows, the widget pane and the display
-     * at once, so every surface is rebuilt against the new state by a recreate rather than
-     * restyled in place; the display's own follow-ups run here because the preset wrote its
-     * switch directly, and a terminal-only install lets go of the app catalogue it no longer
-     * draws from.
-     */
-    private void applyUseCaseMode(String mode) {
-        boolean displayBefore = mPreferences.isX11DisplayEnabled();
-        if (!com.termux.app.launcher.LauncherUseCaseMode.applyMode(mPreferences, mode)) return;
-        boolean displayAfter = mPreferences.isX11DisplayEnabled();
-        if (displayBefore != displayAfter) {
-            com.termux.app.x11.X11DisplaySwitch.onWritten(mContext, mPreferences, displayAfter);
-        }
-        if (com.termux.app.launcher.LauncherUseCaseMode.MODE_TERMINAL.equals(mode)) {
-            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext)
-                .invalidateIconArtwork();
-        }
-        scheduleTermuxActivityStylingSync(true);
     }
 
     private void writeTermuxPropertyToProperties(@NonNull String propertyKey, @NonNull String propertyValue) {

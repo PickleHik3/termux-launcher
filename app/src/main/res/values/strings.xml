@@ -391,6 +391,10 @@
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
     <string name="termux_x11_app_launch_failed">This app could not be opened.</string>
     <string name="termux_x11_app_gone">That app is no longer installed.</string>
+    <!-- The launcher's own drawer entries, listed with the Linux apps (ADR 0008). -->
+    <string name="launcher_entry_terminal">Terminal</string>
+    <string name="launcher_entry_display">Display</string>
+    <string name="launcher_entry_new_window">New window</string>
     <string name="termux_x11_session_failed">This desktop could not be opened.</string>
     <string name="termux_x11_session_replace">Stop %1$s and open %2$s instead?</string>
     <string name="termux_x11_session_replace_confirm">Open</string>

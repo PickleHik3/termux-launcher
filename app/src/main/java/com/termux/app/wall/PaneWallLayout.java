@@ -432,11 +432,11 @@ public final class PaneWallLayout extends ViewGroup {
         List<PaneWallPage> resolved = new ArrayList<>(pages);
         if (resolved.isEmpty()) resolved.add(PaneWallPolicy.homePage());
         if (resolved.equals(mPages)) return;
+        List<PaneWallPage> before = mPages;
         mPages = Collections.unmodifiableList(resolved);
         if (!mPages.contains(mCurrent)) {
-            // A page taken away while it showed hands the wall to Home, or to whatever is left.
-            mCurrent = mPages.contains(PaneWallPolicy.homePage())
-                ? PaneWallPolicy.homePage() : mPages.get(0);
+            // A page taken away while it showed hands the wall to its neighbour on the left.
+            mCurrent = PaneWallPolicy.pageAfterRemoval(before, mPages, mCurrent);
             notifyPageChanged();
         }
         applyPagePositions();

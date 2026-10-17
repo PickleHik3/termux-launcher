@@ -89,6 +89,8 @@ public final class LauncherAppDataProvider {
                 public LauncherIconStore.Artwork loadArtwork(@NonNull AppRef ref) {
                     if (com.termux.app.x11.X11Apps.isLinuxApp(ref))
                         return LauncherIconStore.Artwork.kept(linuxAppIcon(ref));
+                    if (com.termux.app.launcher.LauncherEntries.isEntry(ref))
+                        return LauncherIconStore.Artwork.kept(launcherEntryIcon(ref));
                     LauncherIconResolver.ResolvedIcon resolved = iconResolver.resolveDetailed(ref, null, null);
                     return resolved.provisional ? LauncherIconStore.Artwork.standIn(resolved.drawable)
                         : LauncherIconStore.Artwork.kept(resolved.drawable);
@@ -149,17 +151,59 @@ public final class LauncherAppDataProvider {
         return androidx.core.content.ContextCompat.getDrawable(context, com.termux.R.drawable.ic_symbol_terminal);
     }
 
+    /** The mark the launcher's own entries wear: a prompt for Terminal, a screen for Display. */
+    @Nullable
+    private Drawable launcherEntryIcon(@NonNull AppRef ref) {
+        int icon = com.termux.app.launcher.LauncherEntries.DISPLAY.equals(
+            com.termux.app.launcher.LauncherEntries.idOf(ref))
+            ? com.termux.R.drawable.ic_symbol_desktop_windows : com.termux.R.drawable.ic_symbol_terminal;
+        return androidx.core.content.ContextCompat.getDrawable(context, icon);
+    }
+
     /**
-     * The Linux apps in the prefix and in every installed distro container, when the display is
-     * switched on and the user wants them listed. They
-     * are catalogue entries like any other — ranked, pinnable, searchable — under the reserved
-     * package {@link com.termux.app.x11.X11Apps#PACKAGE}; a tap runs them on the display.
+     * The launcher's own entries, listed with the Linux apps (ADR 0008): Terminal always, and
+     * Display wherever Linux apps are listed — a build with the server and Show Linux apps in
+     * drawer on.
+     */
+    private void addLauncherEntries(@NonNull Snapshot snapshot) {
+        addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.terminal(),
+            context.getString(com.termux.R.string.launcher_entry_terminal));
+        if (!com.termux.BuildConfig.X11_SERVER) return;
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
+        if (prefs == null || !prefs.isX11DrawerAppsEnabled()) return;
+        addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.display(),
+            context.getString(com.termux.R.string.launcher_entry_display));
+    }
+
+    private void addLauncherEntry(@NonNull Snapshot snapshot, @NonNull AppRef ref,
+                                  @NonNull String label) {
+        if (snapshot.byId.containsKey(ref.stableId())) return;
+        iconStore.prime(ref, launcherEntryIcon(ref));
+        LauncherAppEntry entry = new LauncherAppEntry(ref, label, null, false,
+            ApplicationInfo.CATEGORY_UNDEFINED, 0L);
+        snapshot.apps.add(entry);
+        snapshot.byId.put(ref.stableId(), entry);
+        char key = normalizeLetter(label.isEmpty() ? '#' : label.charAt(0));
+        List<LauncherAppEntry> bucket = snapshot.letterBuckets.get(key);
+        if (bucket == null) {
+            bucket = new ArrayList<>();
+            snapshot.letterBuckets.put(key, bucket);
+        }
+        bucket.add(entry);
+    }
+
+    /**
+     * The Linux apps in the prefix and in every installed distro container, when the user wants
+     * them listed (Show Linux apps in drawer); nothing else decides it. They are catalogue entries
+     * like any other — ranked, pinnable, searchable — under the reserved package
+     * {@link com.termux.app.x11.X11Apps#PACKAGE}; a tap runs them on the display, opening a
+     * display window if none is up.
      */
     private void addLinuxApps(@NonNull Snapshot snapshot) {
         linuxAppsById = Collections.emptyMap();
         if (!com.termux.BuildConfig.X11_SERVER) return;
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
-        if (prefs == null || !prefs.isX11DisplayEnabled() || !prefs.isX11DrawerAppsEnabled()) return;
+        if (prefs == null || !prefs.isX11DrawerAppsEnabled()) return;
         Map<String, com.termux.app.x11.LinuxAppCatalog.LinuxApp> byId = new HashMap<>();
         for (com.termux.app.x11.LinuxAppCatalog.LinuxApp app
                 : com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots())) {
@@ -665,6 +709,7 @@ public final class LauncherAppDataProvider {
         addProfileApps(snapshot, packageManager, defaultComponentsByPackage,
             previousById, changedPackages);
         addLinuxApps(snapshot);
+        addLauncherEntries(snapshot);
         return snapshot;
     }
 
