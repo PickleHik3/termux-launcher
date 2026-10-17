@@ -145,10 +145,16 @@ badge in the status bar, the **Sessions** key on the extra-keys row, **Sessions*
 sessions** in the palette, or `Ctrl+Alt+Shift+S`.
 
 - The **Live** tab lists sessions with their window and pane counts. Tap a session to switch to
-  it; tap **›** to list its windows and tap one to go there.
+  it; tap **›** to list its windows and tap one to go there. A Home float is marked **Float**, with
+  its Home page when there is one ("Float · page 2"); tapping it pages Home there and brings the
+  float to front.
+- While a display is running, **Displays** follows the sessions: one row per display, with the
+  app windows open on it listed underneath. Tap the display to go to it, or an app window to raise
+  it.
 - Tap **⋯** on a session for **Clone with CWD**, **Rename** and **End** ("End this session?",
   **End** or **Keep**).
 - Tap **+** for a new session; hold **+** for a named one.
+- **Home** at the bottom of either tab goes to the first Home page.
 
 `Ctrl+Alt+Up` / `Ctrl+Alt+Down` step through sessions, `Ctrl+Alt+Shift+1` to `9` jump to one, and
 `Ctrl+Alt+Shift+R` renames the current one. The palette also lists every session twice, once to
@@ -159,24 +165,25 @@ Cloning starts a fresh shell in the current pane's folder. It does not copy the 
 the shell's state, the scrollback or the layout. Ending the last session starts a fresh one, so the
 terminal is never empty.
 
-## Workspaces
+## Saved sessions
 
-A workspace saves the sessions, windows, pane layout and split sizes, floating panes, focus,
-titles and each pane's folder, so you can rebuild them later.
+Saved sessions keep the sessions, windows, pane layout and split sizes, floating panes, focus,
+titles and each pane's folder, so you can rebuild them later. A Home float is saved as an ordinary
+window for now, and loads back into the Workspace.
 
-- **Save**: at the bottom of the **Live** tab tap **Save as workspace…**, type a name and save.
+- **Save**: at the bottom of the **Live** tab tap **Save sessions…**, type a name and save.
   Tick **Also save what is running** to record the program in each busy pane. Saving over a name
   asks first. **Save workspace** in the palette opens the same field.
-- **Load**: on the **Saved** tab tap a workspace, then **Add to current** or **Replace**. If it
-  recorded programs, **Also start what was running** decides whether they run again. **Load
+- **Load**: on the **Saved sessions** tab tap a name, then **Add to current** or **Replace**. If
+  it recorded programs, **Also start what was running** decides whether they run again. **Load
   workspace** in the palette opens this tab.
-- **Delete**: tap **⋯** on a saved workspace, then **Delete**. Running sessions are not affected.
+- **Delete**: tap **⋯** on saved sessions, then **Delete**. Running sessions are not affected.
 
-A workspace rebuilds structure, not processes. Each recorded program starts again from the
+Loading rebuilds structure, not processes. Each recorded program starts again from the
 beginning in your normal shell. **Replace** builds the new terminals before removing the old ones,
 but it still ends the old shells. Review a hand-edited file before letting it start programs.
 
-Workspaces are files at `~/.termux/workspaces/<name>.json`. A name is up to 64 characters, starts
+Saved sessions are files at `~/.termux/workspaces/<name>.json`. A name is up to 64 characters, starts
 with a letter or digit, and may contain letters, digits, spaces, `_`, `-` and `.`. The
 `workspace.save`, `workspace.load`, `workspace.list` and `workspace.delete` actions are available
 to [custom keybindings](Custom_Keybindings.md).
