@@ -1,18 +1,18 @@
 # Widgets
 
-Home is the place to the left of the terminal. It holds a grid of widgets on one or more pages:
-Android home-screen widgets and the launcher's own. This page covers adding, arranging and sizing
-them.
+Home is the launcher half of the wall, to the left of the Workspace. It holds a grid of widgets on
+one or more Home pages: Android home-screen widgets and the launcher's own. This page covers adding,
+arranging and sizing them, and the keyboard on Home.
 
-To get there, swipe right along the page's top or bottom border, or tap the house icon peeking in
-from the status bar.
-The widget page is switched on and off with **Settings → Apps → Home widgets** ("Show a widget page
-beside the terminal.").
+The home button always brings you to Home page 1. From the Workspace you can also tap **Home** at
+the bottom of the sessions drawer, or drag right from the first window's border.
 
 ## Add a widget
 
 1. **Hold an empty cell** on the page (an empty page says "Long-press to add widgets"). The menu
-   offers **Add widget**, **Edit widgets** and **Remove page**.
+   offers **Add widget**, **Wallpaper** and **Terminal**, which opens a terminal floating over this
+   page (see [Home floats](Panes_Windows_And_Sessions.md#home-floats)). **Edit widgets** joins them
+   when the page has widgets, and **Remove page** when the page is empty and not the only one.
 2. Tap **Add widget**. The picker lists the launcher's own widgets first, under **Termux
    Launcher**, then the widgets of your other apps. Each card shows its size in cells.
 3. **Tap** a card to place the widget on the page you are on, at the size shown.
@@ -74,7 +74,8 @@ tap on any of them picks it up to move or resize.
 
 ## Pages
 
-- Swipe sideways inside the grid to move between pages.
+- Swipe sideways anywhere on a Home page to move between pages. Past the last page, the swipe
+  carries on to the Workspace's first window when one is open.
 - **Add page** on the corner tab adds one.
 - **Remove page** is in the empty-cell menu.
 
@@ -82,10 +83,10 @@ tap on any of them picks it up to move or resize.
 
 The grid size is set per orientation, in whole cells, and is capped at what the screen fits.
 
-- **From the page.** Hold a corner of the Widgets page and tap **Edit widgets**. While you edit,
+- **From the page.** Hold a corner of a Home page and tap **Edit widgets**. While you edit,
   the tab reads the size as columns × rows. Tap it for **Columns** and **Rows** wheels; the widgets
   rearrange as you turn them. Tap the tick (**Keep changes**) or the cross (**Discard changes**).
-- **From Layout.** In Appearance → **Layout** on Home, drag the round handle on the corner of the
+- **From Layout.** In Appearance → **Layout** on a Home page, drag the round handle on the corner of the
   first cell. It snaps to whole cells: dragging out makes the cells bigger and fewer. See
   [Layout and full screen](Layout_And_Full_Screen.md).
 
@@ -93,6 +94,18 @@ Widgets that no longer fit a smaller grid move to free space or to a new page; n
 
 ## The keyboard on Home
 
-Nothing on Home takes terminal typing, so Home always comes back with the keyboard down. If you
-raise it (swipe up from the bottom border) it opens over the page, so the widgets keep their
-places. A text field inside a widget opens the Android keyboard.
+Home does not keep the keyboard up. Swipe up from the bottom edge to open the command palette and
+the keyboard together, over the page, so the widgets keep their places. Both close on **Esc**, on a
+tap outside them, or once the action you picked is done. The gesture can be changed in Settings. A
+text field inside a widget opens the Android keyboard.
+
+### Keyboard always on
+
+To keep the keyboard up on Home, open Appearance → **Layout** on a Home page and bring the keyboard
+out of the tray. Every Home page gives the keyboard the rows it covers: a widget that no longer fits
+shrinks, or moves to the first free spot on its page or to a new page, and a one-line notice says
+what moved. While it is on, typing a key opens the command palette with that key already typed,
+unless the key is bound to an app, a contact or an action.
+
+Put the keyboard away again and the widgets go back where they were. If you changed the widgets in
+between, they stay as you left them and the regained rows are left empty for you to fill.

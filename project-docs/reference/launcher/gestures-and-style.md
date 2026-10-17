@@ -1,14 +1,15 @@
 # Gestures and Style
 
-The full behaviour of the border drag, the keyboard and status swipes, minimal mode and the
-chrome Style, as built. `docs/GLOSSARY.md` holds the short definitions and points here. Keep the
-two in step: a change in behaviour updates this file, and the glossary only if the short definition
-stops being true.
+The full behaviour of the border drag, Home's swipe and the seam, the keyboard and status swipes,
+the status bar on Home, minimal mode and the chrome Style, as built (Home floats, the bar on Home
+and the palette gesture as agreed in `project-docs/active/wall-rework-2026-10-17.md`).
+`docs/GLOSSARY.md` holds the short definitions and points here. Keep the two in step: a change in
+behaviour updates this file, and the glossary only if the short definition stops being true.
 
 ## Border drag
 
-The one finger gesture that pages the wall, on every place and in every mode, on the current
-page's border — the frame line on any of its four sides and the air between it and the next thing
+The one finger gesture that pages the wall from a window, terminal or display, in every mode, on the
+current window's border — the frame line on any of its four sides and the air between it and the next thing
 out (the status bar, the dock or keyboard, the screen's edge), less the corner squares. On the top
 and bottom borders, out in that air, it is a plain sideways swipe: past the touch slop the wall is
 claimed at once and follows the finger from there. On the left and right borders, which share
@@ -24,8 +25,8 @@ the boxes by the grabber pills, and on the left and right borders, a sideways dr
 stays the page's (a scroll, a selection, a program's own drag); a second finger always gives the
 border up. A swipe from Android's own strip at the very top of the screen is never taken. The border
 is always drawn while the
-border preference is on (the slab's rim on glass, the plain stroke otherwise), on the terminal,
-the Widgets page and the Display page alike, so the gesture has a line to find. A finger that
+border preference is on (the slab's rim on glass, the plain stroke otherwise), on terminal and
+display windows alike, so the gesture has a line to find. A finger that
 lands where it can page lights that edge at once, in the accent the grabbers use: full at the
 touch on the top and bottom air, where a swipe pages at once, and brightening until the hold takes
 on the sides and inside the page. The glow stays full through the drag and fades if the press is
@@ -33,14 +34,28 @@ given up or handed to a grabber (full and gone at once when motion is reduced). 
 or by swipe, sinks
 the page away from the user until the finger lets go, in every mode unless motion is reduced;
 where the extra glass is active (see **Fancier Glass**) the page held and the page arriving both tip
-like planks toward the finger, as if it pressed its weight into them, and lie flat as the settle lands; the Display place does
+like planks toward the finger, as if it pressed its weight into them, and lie flat as the settle lands; a display window does
 too, on a still copy of its picture that stands in for the motion. The release's settle carries on at the finger's speed. The status bar does
 not page; its own drag is the fold across it.
 
+## Home pages and the seam
+
+A Home page has no border, no slab and no rim, so there is no border drag on it. It pages by a
+plain sideways swipe anywhere on the page, as any launcher does, inside the widget grid. Parallax
+runs across the whole row. A forward swipe on the last Home page crosses the seam to the first
+window when the Workspace has one, and stops there when it has none; a swipe back never leaves
+Home. From the first window the border drag back returns to the last Home page. The seam is
+continuous but never silent: the Workspace's chrome (status bar, extra keys, corner tabs, borders)
+arrives with the first window, and the window's status bar fades on the way back to Home.
+
+The home press while a window is in front lands on Home page 1, and while a Home page is in front
+it also goes to page 1, closing the keyboard and the palette and leaving floats where they are. A
+return from another app moves nothing. Closing the last window slides the last Home page in.
+
 ## Keyboard swipe
 
-The one way to the keyboard every place and every mode shares: a swipe that sets off up or down
-from the current page's bottom border — the frame line and the air below it down to the dock or
+The one way to the keyboard in the Workspace, in every mode: a swipe that sets off up or down
+from the current window's bottom border — the frame line and the air below it down to the dock or
 keyboard, less the corner squares — before the border drag's hold. It also starts near the grabber
 pill, one row into the page; only the swipe is taken there, so a tap, long press or sideways drag
 on that row stays the page's. Up opens the keyboard, down closes it; opening turns a keyboard
@@ -49,16 +64,27 @@ or down than across; a sideways start from the border's air is the border drag, 
 pages. The border's glow, lit at the touch, hands over to the grabber when the swipe is claimed. A docked keyboard follows the finger and the release finishes it past a third of the way or on a
 flick, and takes it back otherwise; a floating keyboard, Android's, and one switched off answer
 the release alone. A small **grabber** pill on the bottom border marks it.
-The keyboard itself carries no swipe of its own.
+The keyboard itself carries no swipe of its own. The Workspace remembers whether the keyboard was
+up.
+
+On a Home page the same swipe up from the bottom edge is the **palette gesture** (configurable,
+this by default): it opens the command palette and the keyboard together as one overlay, and both
+close on Esc, on focus loss (a tap outside) or when a palette action completes. Home remembers no
+keyboard state. The keyboard is an overlay on Home and never changes the grid; a dock on the bottom
+edge rides up with it and settles back when it closes, unless it stands under the keyboard. The
+keyboard stays up on Home only when the Home layout's keyboard element is shown (**always on**):
+the grid then gives up the rows the keyboard covers on every page, behind a snapshot that is
+replayed when always on goes off, unless the widgets were edited since.
 
 ## Minimal mode
 
-A second saved layout and nothing more, which starts with only each place's content: by default the
-status bar, the apps bar, the A–Z index, the extra keys and the keyboard go away, and the widgets,
+A second saved Workspace layout and nothing more, which starts with only each window's content: by
+default the status bar, the apps bar, the A–Z index, the extra keys and the keyboard go away, and
 the panes or the display take the room in either orientation. It changes no behaviour: a split
-shows all its panes and the bars it keeps answer the same gestures as in the normal layout. One mode for every place, not a state
-of one: turned on and off only from the corner tab's minimal button, which every place carries, and
-remembered until turned off; paging never leaves it. It has a layout of its own, the **minimal
+shows all its panes and the bars it keeps answer the same gestures as in the normal layout. One mode for every window, not a state
+of one: turned on and off only from the corner tab's minimal button, which every window carries, and
+remembered until turned off; paging never leaves it. Home has no minimal mode: a Home page wears
+the Home layout whatever the mode, and its corner tab has no minimal button. It has a layout of its own, the **minimal
 layout**, beside the normal one, in the same element model: the Layout editor opened while the mode
 is on edits it, and it says "Minimal layout", so users choose which elements minimal keeps. It
 starts as the normal layout with every element put away. The keyboard can still be raised while it
@@ -66,7 +92,7 @@ is on, by the keyboard swipe or a tap. Paging is the border drag, as everywhere.
 
 ## Status swipe
 
-The keyboard swipe's mirror on the current page's top border: a swipe that sets off down or up
+The keyboard swipe's mirror on the current window's top border: a swipe that sets off down or up
 from it — the frame line and the air above it up to the status bar — before the border drag's
 hold. Like the keyboard swipe it also starts near its grabber pill, one row into the page, and
 only the swipe is taken there; from the border's air a sideways start is the border drag instead. Down unfolds the status bar, up folds it: the bar's own
@@ -76,9 +102,19 @@ the status bar stands along the top and can unfold, minimal mode included; a bar
 or put away leaves the top border to paging. A press in the phone's own strip at the top of the screen is
 never taken, so the notification shade still pulls down.
 
+## The status bar on Home
+
+Home has no launcher status bar at rest; Android's own bar shows, as on any launcher. When the
+first Home float opens, the bar slides down from the top in its compact form, and it stays while
+any float is open or minimised; it slides up when the last float closes. On Home its chips are the
+floats only, across all pages, each carrying its page's dot: a tap pages Home to that float and
+restores it. Workspace windows are not chips on Home. Minimising a float unfolds a folded bar to
+compact for the landing. The compact and open forms are the Workspace's.
+
 ## Style
 
-How the chrome is shaped as a whole: **Docked** or **Floating**. It covers the status bar, the
+How the Workspace's chrome is shaped as a whole: **Docked** or **Floating**; Style, Corners and
+Margin do not apply to Home. It covers the status bar, the
 dock's elements, the keyboard and the pane's opening, and one shape decides the fill, the
 selection outline and the lifted copy in the Layout editor. In **Floating** each piece is a
 rounded card with air around it: the status bar is always its own card, apps, A–Z index and extra

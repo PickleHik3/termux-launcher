@@ -281,3 +281,23 @@ basename, then foreground process, then terminal title/CWD fallback. The strip s
 surface's Material color, opacity, blur, square/capsule style, and collapse behavior. It disappears
 in single-pane compatibility mode. This supersedes the historical “no persistent visual list” note
 immediately above; that note remains only as round-3 chronology.
+
+## Windows on the wall, floats and the titlebar (ADR 0008, 2026-10-17)
+
+The session › window › pane-tree model above is unchanged by the wall rework; what changed is
+where a window shows. The windows are the Workspace's pages: one row, the current session's windows
+in order, then the display windows, paged by the border drag, with a new window landing right after
+the current one. A window can instead be a **Home float**: a real window of the current session
+drawn in a float layer over one Home page, never in the row, so chips, the drawer, the Ctrl+Alt
+shortcuts and Saved sessions all see it. Saved sessions load a float back as a tiled window until
+they record the float flag (phase two). Spec: `project-docs/active/wall-rework-2026-10-17.md` §4, §6.
+
+Every float wears one glass **titlebar** (`FloatTitlebarView`, `FloatTitlebarPolicy`): the drag
+handle plus Dock, Maximise and Close, and Minimise where the host has a target for it (the
+scratchpad hides as its toggle does; a Home float flies into its chip in the status bar). It
+replaces the floating pane's move corner and pill; the resize corner stays at the bottom-right
+(`TerminalPaneController`). The strip sits above the pane's content, so it never covers the first
+row, samples the shared frame like the pane's own glass, and wears the active rim when the float is
+focused. Maximise remembers the earlier fractions and a second tap restores them. Dock on a window's
+floating pane tiles it back; on a Home float it moves the window into the row after the current
+one and slides to the Workspace.

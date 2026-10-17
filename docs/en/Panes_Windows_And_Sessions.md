@@ -1,22 +1,23 @@
 # Panes, windows and sessions
 
 The terminal runs several shells at once without tmux. This page covers splitting it into panes,
-grouping panes into windows and windows into sessions, arranging them, and saving the whole set as
-a workspace.
+grouping panes into windows and windows into sessions, arranging them, floating them over Home, and
+saving the whole set to load again later.
 
 ## How it fits together
 
 ```text
 Session
-└── Window
+└── Window   (a page of the Workspace, or a Home float)
     ├── Pane   (one shell)
     ├── Pane
     └── Floating pane
 ```
 
 - A **pane** is one shell. Panes split in either direction, as deep as you like.
-- A **window** is one set of panes. Only the current window is on screen; the window chips in the
-  status bar switch between them.
+- A **window** is one set of panes. The **Workspace**, to the right of Home, shows the windows one
+  at a time in a row; a window can also float over a Home page as a
+  [Home float](#home-floats).
 - A **session** holds windows. The numbered badge in the status bar is the current session.
 
 Switching away from a pane, window or session leaves its shells running. Closing one ends them.
@@ -43,6 +44,13 @@ goes to the shell when there is no pane that way. The full list is in
 
 ## Windows
 
+The Workspace is one row: the current session's windows in order, then any
+[display window](X11_Display.md). A new window opens right after the one you are on. Switching
+session swaps the terminal windows and leaves the display windows where they are. Closing the last
+window slides Home back in.
+
+- Drag sideways from a window's border to move to the next or previous window. Dragging right from
+  the first window goes back to the last Home page.
 - Tap a window chip in the status bar to switch to it; tap `+` to make a new one.
 - `Ctrl+Alt+C` makes a window, `Ctrl+Alt+[` / `Ctrl+Alt+]` or `Ctrl+Alt+Left` / `Ctrl+Alt+Right`
   step through them, `Ctrl+Alt+1` to `9` jump to one, and `Ctrl+Alt+X` closes the current window
@@ -120,6 +128,31 @@ you drag stay where you put them.
 **Settings → Terminal → Sessions and panes → Automatic tiling** ("Split the current pane when
 opening a new one.") starts every new window under `dwindle`. The lone pane's corner tab switches
 it too.
+
+## Home floats
+
+A terminal opened from Home floats over the Home page instead of taking you to the Workspace. Open
+one with **Terminal** in a Home page's long-press menu, **New float here** on the Terminal entry,
+or **Open terminal here** in the command palette on Home. It is a window of the current session,
+so the window chips, the sessions drawer and the shortcuts all see it.
+
+- It opens full size, between the status bar and the dock, takes focus and brings the keyboard up.
+- It stays on the Home page it was opened on and moves with that page. Open as many as you like;
+  tap one to bring it to the front. The focused float wears the active rim.
+- Drag its **titlebar** to move it and its bottom-right corner to resize it. Each float remembers
+  its size and spot in each orientation until the launcher restarts.
+- The titlebar's buttons: **Minimise** tucks the float into its chip in the status bar,
+  **Maximise** fills the room and becomes **Restore size**, **Close** closes it and its shell, and
+  **Dock** moves it into the Workspace as a window right after the current one and takes you there.
+- The keyboard opens over a float and never resizes it: the focused float lifts so the cursor's line
+  stays above the keyboard, and settles back when it closes. A tap on the page outside any float
+  puts the keyboard away, as does minimising or closing the focused float.
+- While a float is open or minimised, the status bar slides down onto Home. Its chips are your
+  floats, from every page, each marked with its page's dot; tap one to go to its page and bring it
+  back. The bar slides away again when the last float closes.
+
+A float does not keep the Workspace open, and the Workspace's windows are not chips on Home: the
+Terminal entry takes you to them.
 
 ## Floating panes
 
