@@ -61,6 +61,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         default boolean offersHomeFloat() { return false; }
         /** Terminal was chosen from the long-press menu: open a Home float on the page on screen. */
         default void openHomeFloat() { }
+        /**
+         * The palette gesture on the page's free area let go: up opens the palette with the
+         * keyboard, down puts them away (spec §5.1).
+         */
+        default void onHomePaletteSwipe(boolean up) { }
         /** The activity-side services the built-in widgets need; null keeps them inert. */
         @Nullable default BuiltinWidgetServices.Host builtinWidgetHost() { return null; }
     }
@@ -128,6 +133,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             @Override public void onWidgetEditCommit() { commitEditSession(); }
             @Override public void onWidgetEditDiscard() { discardEditSession(); }
             @Override public void onWidgetAddPage() { menuAddPage(); }
+            @Override public void onFreeAreaVerticalSwipe(boolean up) {
+                host.onHomePaletteSwipe(up);
+            }
         }, new WidgetPickerAdapter.Listener() {
             @Override public void onProviderSelected(@NonNull WidgetProviderItem item) {
                 selectProvider(item);
