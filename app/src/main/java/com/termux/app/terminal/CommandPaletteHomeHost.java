@@ -44,4 +44,17 @@ public interface CommandPaletteHomeHost {
     default int homeFloatPage(long windowId) {
         return UNKNOWN_PAGE;
     }
+
+    /** Whether a Home page is in view. */
+    default boolean isOnHome() {
+        return false;
+    }
+
+    /** Whether the Home layout keeps the keyboard up (always on). */
+    default boolean isKeyboardAlwaysOn() {
+        return false;
+    }
+
+    /** Puts away the keyboard the Home palette raised, as its overlay closes. */
+    default void lowerKeyboard() { }
 }

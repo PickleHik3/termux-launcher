@@ -268,6 +268,8 @@ public final class TerminalCommandPaletteController
     @NonNull private CommandPaletteContext mContext = CommandPaletteContext.TERMINAL;
     /** Runs the Home actions that need the wall; does nothing until the wall installs one. */
     @NonNull private CommandPaletteHomeHost mHomeHost = CommandPaletteHomeHost.NONE;
+    /** The palette gesture's pairing with the keyboard it raised on Home. */
+    private final CommandPaletteHomeOverlay mHomeOverlay = new CommandPaletteHomeOverlay();
 
     public TerminalCommandPaletteController(@NonNull TermuxActivity activity) {
         this(activity, ClipboardText.forContext(activity));
@@ -343,6 +345,37 @@ public final class TerminalCommandPaletteController
         if (!mOpen) return false;
         appendText(text);
         return true;
+    }
+
+    /**
+     * The typed-key door on Home: {@link #openHomeWithTypedText} when the Home rules let a key
+     * open the palette (always on, nothing open, no Home float holding the typing). The caller
+     * offers the key to the bound keys first.
+     */
+    public boolean offerHomeTypedText(@Nullable String text, boolean floatHasFocus) {
+        if (!CommandPaletteHomeOverlay.typingOpens(mHomeHost.isOnHome(),
+            mHomeHost.isKeyboardAlwaysOn(), mOpen, floatHasFocus, text)) return false;
+        return openHomeWithTypedText(text);
+    }
+
+    /**
+     * The palette gesture on Home: the Home palette opens with the keyboard as one overlay, and
+     * the keyboard goes down again with the palette ({@link CommandPaletteHomeOverlay}). The
+     * caller has raised the keyboard; {@code keyboardWasUp} says whether it was up before.
+     */
+    public void showHomeOverlay(boolean keyboardWasUp) {
+        // Already up: the pairing it opened with stands.
+        if (mOpen) return;
+        mHomeOverlay.opened(keyboardWasUp);
+        show(CommandPaletteContext.HOME);
+        // A palette that could not open must not leave its keyboard behind.
+        if (!mOpen) endHomeOverlay();
+    }
+
+    /** The palette closed: the keyboard the Home overlay raised goes down with it. */
+    private void endHomeOverlay() {
+        if (mHomeOverlay.closed(mHomeHost.isOnHome(), mHomeHost.isKeyboardAlwaysOn()))
+            mHomeHost.lowerKeyboard();
     }
 
     public void show() {
@@ -457,6 +490,7 @@ public final class TerminalCommandPaletteController
         if (mView != null) mView.setCaretBlinking(false);
         mProgress.target = 0f;
         kick();
+        endHomeOverlay();
     }
 
     /** Drops the overlay without animating, for pause, configuration change and destroy. */
@@ -470,6 +504,7 @@ public final class TerminalCommandPaletteController
         mProgress.reset(0f);
         if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);
         if (mHost != null) mHost.setVisibility(View.INVISIBLE);
+        endHomeOverlay();
     }
 
     /** Re-resolves roles after a theme, wallpaper-color or configuration change. */

@@ -79,6 +79,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         default void onBorderKeyboardSwipe(boolean open) { }
         /**
+         * Whether the keyboard swipe is armed on the page in view. Always on the Workspace; on a
+         * Home page it is the palette gesture, which Settings can turn off.
+         */
+        default boolean isBorderKeyboardSwipeEnabled() { return true; }
+        /**
          * The keyboard swipe was claimed, going up ({@code opening}) or down, and the keyboard is
          * to follow the finger: the keyboard's height in px the finger drives it over, or 0 where
          * it cannot follow, and the swipe then asks through {@link #onBorderKeyboardSwipe} on
@@ -545,7 +550,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     @Override
     public boolean isBorderKeyboardSwipeEnabled() {
-        return true;
+        return mHost.isBorderKeyboardSwipeEnabled();
     }
 
     @Override
