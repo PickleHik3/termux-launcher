@@ -492,6 +492,14 @@ Not seen: everything else listed under the sections below.
   the smaller room; a float sized smaller earlier keeps its fraction of the room. Margin 0dp: the
   widgets sit flush to the page's edge, a widget's edit chip still inside the pane. Margin over a
   window leaves Home's rim and floats alone · emulator.
+- Re-check owed after the 2026-10-18 fixes (9980f4a6d, 1477dfcc8): the air from the screen's edge
+  to the first widget cell is 1 × Home's Margin (plus the 2dp cell gutter) at 8 and at 48dp, and
+  the column cap at 48dp on tl16 is 5; a cold start into Home with Home Floating and the
+  Workspace Docked shows Home Floating with its Margin on the first frame; a widget's content is
+  whole after a Margin change and Undo (Clock's "PM" and date); the editor opened from a window's
+  own corner toolbar after a Home widget edit session says no "· Home" (note which toolbar came
+  out: Home's has a pencil and a plus); Appearance from a corner toolbar with a Home float open
+  opens (not fixed; record which toolbar it was and whether the Overview opened behind the float).
 
 ## Developer
 

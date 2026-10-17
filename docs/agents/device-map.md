@@ -150,3 +150,22 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - A blind end-user review: `ad codex "<goal>" -c model_reasoning_effort=medium`, one area per run
   (Home, Workspace, floats, Settings), 6–35 min each; the goal text and answers of the 2026-10-18
   run are in the session scratchpad `codex-review/` and under ~/reports/wall-rework-2026-10-18/blind/.
+
+## Wall rework phase two (feat/wall-rework-phase2, 2026-10-18)
+
+- Home's long-press sheet (a long press on a free cell) has Terminal, Add a widget, Add a page,
+  Edit pages, Layout, Wallpaper and Look; Layout opens the Appearance editor in Layout mode.
+- The corner long-press toolbar hangs off the page's corner, not the screen's. On a window it is
+  the window's (Appearance, minimal, tiling, settings, help); on Home it is Home's (pencil, plus,
+  palette, help), whose palette is the button described "Appearance" and opens the Overview. A
+  window's corner moves in with the Workspace's Margin. Home's page reaches the screen's edges
+  since 9980f4a6d, so its corner squares sit at the screen's corners whatever the Margin.
+- A Home float drawn over most of a Home page looks like a window. Which toolbar a corner hold
+  brings out (above) tells them apart.
+- Widget grid size: enter edit mode (long press a widget), tap the "4 × 5" chip, then the column
+  wheel.
+- The Margin slider drags relatively: aim from the thumb, read the label after each drag and
+  correct.
+- The Appearance editor reopens on the page it was last left on.
+- Read the log with `adb shell logcat -d` rather than `ad logcat`. `ad -s emu stop PKG`
+  force-stops a package.

@@ -24,6 +24,18 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    take it as the rim, so a wide Margin lowers them (the rim follows a drag, the caps settle on
    release). Upgrade moves the rim to the seeded 12dp, accepted; on a 386dp phone that lowers the
    column cap from six to five. Unit tests green; emulator pass owed.
+   Status 2026-10-18 (emulator pass on slices 2 and 2b): found the rim at about twice the Margin
+   (the Home page stood in the chrome's opening, a Margin in, and the rim added another), the
+   cold start's first frame in the Workspace's shape until the first settle, a Clock widget cut
+   off after a Margin change and Undo, "· Home" in the editor over what looked like a window
+   after a widget edit session, and Appearance not opening from a corner toolbar with a Home float
+   open. Fixed: the Home page reaches the wall's edges and the rim is the whole Margin
+   (PaneWallPolicy.pageInsetPx); the first frame wears the opening page's chrome
+   (WallRow.openingKind seeds the committed page). Not fixed, causes not found from the code: the
+   Clock clipping (a rim change and its Undo do reach the provider in a unit test; the stale size
+   is larger than the cell), and the "· Home" and Appearance reports, where the toolbar described
+   (pencil, plus, palette, ?) is Home's own, so the wall was resting on a Home page, probably one
+   covered by a float. Re-check owed (device-checks, slice 2).
 3. **Parallax between Home pages and windows** (the wallpaper pans with the wall).
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.
 5. **Window reorder** by drag in the window bar; consume/expel of panes into and out of columns.
