@@ -36,6 +36,16 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    is larger than the cell), and the "· Home" and Appearance reports, where the toolbar described
    (pencil, plus, palette, ?) is Home's own, so the wall was resting on a Home page, probably one
    covered by a float. Re-check owed (device-checks, slice 2).
+   Status 2026-10-18 (emulator round 2): A, B and D pass. C and E fixed. C, the Clock drawn for
+   an earlier size after Undo or a Style change: the cells passed through several sizes in one
+   editor session and nothing re-told the provider at the end. Now the session's end tells every
+   widget whose cell moved its size again, once the wall rests on Home
+   (`WidgetGridView.resyncSizes`). A Style change moves the cells through the chrome, not the rim:
+   the status bar's height and the dock's bottom gap differ under Floating. E, the editor from a
+   window opening on Layout · Home: the surface brought back the Layout page last left over Home,
+   with its place, and the layout session held the wall on Home. The Home float played no part.
+   A remembered place now comes back only on the half the wall rests on
+   (`HomeChromePolicy.restoredEditorPlace`). Re-check owed (device-checks, slice 2).
 3. **Parallax between Home pages and windows** (the wallpaper pans with the wall).
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.
 5. **Window reorder** by drag in the window bar; consume/expel of panes into and out of columns.

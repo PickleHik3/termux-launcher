@@ -169,3 +169,14 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - The Appearance editor reopens on the page it was last left on.
 - Read the log with `adb shell logcat -d` rather than `ad logcat`. `ad -s emu stop PKG`
   force-stops a package.
+- After `am force-stop com.termux` on the emulator the app is back within about 3 s, because it
+  is the default home. A true cold start needs the stock home set first, or a launch from the
+  app's icon.
+- A Home page shows a house-icon status pill, the widget grid and the pin dock. A window shows a
+  terminal-icon pill and the extra keys.
+- The corner toolbar comes out on a long press at (40,262). Its palette button is at (84,284).
+- The Home editor's Margin slider spans about x 600–1010 at y 1916, and it drags relatively.
+- In widget edit mode the "5 × 5" chip is at (706,178), keep at (828,178) and discard at
+  (927,178).
+- In the editor, Back steps through the pages and Done closes it. A Layout page left over Home
+  and brought back from a window opens on the window's own place (590ff4c8b).

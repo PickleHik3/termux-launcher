@@ -500,6 +500,13 @@ Not seen: everything else listed under the sections below.
   own corner toolbar after a Home widget edit session says no "· Home" (note which toolbar came
   out: Home's has a pencil and a plus); Appearance from a corner toolbar with a Home float open
   opens (not fixed; record which toolbar it was and whether the Overview opened behind the float).
+- Re-check owed after the round 2 fixes (C 31173137b, E 590ff4c8b): a Clock widget's content is
+  whole ("PM" and the full date) after a Margin drag and Undo, then Done; and after a Home Style
+  change to Floating, then Done, with no restart. With a Home float open, slide to a window and
+  open Appearance from its corner toolbar's palette, right after a Layout session over Home: the
+  editor is the Workspace's (no "· Home", no Home grid in the preview, no blank preview while the
+  wall moves). A cold start with Start in = Workspace opens in the Workspace. Use a true cold
+  start: set the stock home first or launch from the icon (see the device map) · emulator.
 
 ## Developer
 
