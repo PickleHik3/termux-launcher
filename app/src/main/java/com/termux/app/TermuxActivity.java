@@ -13806,8 +13806,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             text = getString(R.string.home_always_on_nothing_moved);
         } else {
             text = getResources().getQuantityString(R.plurals.home_always_on_moved,
-                report.movedCount(), report.movedCount(), report.shrunkCount(),
-                report.pageChangeCount());
+                report.movedCount(), report.movedCount());
         }
         showToast(text, false);
     }
