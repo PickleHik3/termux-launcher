@@ -472,6 +472,31 @@ public class HomeFloatTest {
     }
 
     @Test
+    public void aFloatShrunkForTheKeyboardKeepsItsOwnTop() {
+        // The emulator's numbers: a room from 220 to 2100, the keyboard's top at 1400, a float
+        // cascaded 92px down off a full-size one, so its titlebar sits at 312.
+        Rect room = new Rect(0, 220, 1080, 2100);
+        assertEquals("the titlebar stays put, the bottom meets the keyboard",
+            new Rect(42, 312, 1080, 1400),
+            HomeFloatPolicy.keyboardShrunk(new Rect(42, 312, 1080, 2100), room, 1400, 300));
+        assertEquals("a float at the room's top ends at the keyboard, as today",
+            new Rect(0, 220, 1080, 1400),
+            HomeFloatPolicy.keyboardShrunk(new Rect(room), room, 1400, 300));
+        assertEquals("the minimum height holds",
+            new Rect(42, 1200, 1080, 1500),
+            HomeFloatPolicy.keyboardShrunk(new Rect(42, 1200, 1080, 2100), room, 1400, 300));
+        assertEquals("never grown past the height it had",
+            new Rect(42, 1300, 1080, 1500),
+            HomeFloatPolicy.keyboardShrunk(new Rect(42, 1300, 1080, 1500), room, 1400, 300));
+        assertEquals("keyboard down", new Rect(42, 312, 1080, 2100),
+            HomeFloatPolicy.keyboardShrunk(new Rect(42, 312, 1080, 2100), room, -1, 300));
+        assertEquals("a keyboard below the float changes nothing", new Rect(42, 312, 1080, 1000),
+            HomeFloatPolicy.keyboardShrunk(new Rect(42, 312, 1080, 1000), room, 1400, 300));
+        assertEquals("never inverted", new Rect(0, 220, 1080, 221),
+            HomeFloatPolicy.keyboardShrunk(new Rect(room), room, 20, 0));
+    }
+
+    @Test
     public void reframeKeepsThePixelsAFloatShows() {
         Rect shrunk = new Rect(0, 80, 600, 400);
         Rect room = new Rect(0, 80, 600, 880);

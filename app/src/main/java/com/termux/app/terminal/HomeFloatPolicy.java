@@ -113,6 +113,26 @@ public final class HomeFloatPolicy {
     }
 
     /**
+     * Where a float laid out at {@code floatPx} (the layer's pixels, inside {@code room}) sits while
+     * it shrinks above the keyboard, whose top is {@code keyboardTopPx} (negative while the keyboard
+     * is down): it keeps its own top edge, so its titlebar stays where it was, and only its bottom
+     * comes up to the keyboard's top, never so far that it is shorter than {@code minHeightPx} (or
+     * than it already was). A float whose top is the room's top ends at the keyboard as
+     * {@link #keyboardRoom} lays it out; a keyboard below the float changes nothing.
+     */
+    @NonNull
+    public static Rect keyboardShrunk(@NonNull Rect floatPx, @NonNull Rect room, int keyboardTopPx,
+                                      int minHeightPx) {
+        int bottom = Math.min(floatPx.bottom, room.bottom);
+        if (keyboardTopPx < 0 || keyboardTopPx >= bottom) {
+            return new Rect(floatPx.left, floatPx.top, floatPx.right, bottom);
+        }
+        int keep = Math.max(1, Math.min(Math.max(0, minHeightPx), floatPx.height()));
+        return new Rect(floatPx.left, floatPx.top, floatPx.right,
+            Math.max(floatPx.top + keep, keyboardTopPx));
+    }
+
+    /**
      * {@code frac}, fractions of {@code from}, as fractions of {@code to}: the same pixels. A drag
      * on a float shrunk above the keyboard starts from what it shows, in its whole room's terms.
      */
