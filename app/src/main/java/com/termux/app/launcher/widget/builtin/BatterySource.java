@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.BatteryManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
@@ -17,8 +19,10 @@ import java.util.List;
 /**
  * The battery as the Battery and System widgets read it: one sticky {@code ACTION_BATTERY_CHANGED}
  * receiver for the whole process, registered while at least one widget holds the source and
- * dropped with the last. Each broadcast becomes an immutable {@link State} and lands in the hourly
- * {@link BatteryHistoryStore}. Main thread only.
+ * dropped a turn after the last lets go ({@link SourceLease}), so a widget that rebuilds keeps
+ * the one receiver rather than registering a new one in the system server. Each broadcast
+ * becomes an immutable {@link State} and lands in the hourly {@link BatteryHistoryStore}. Main
+ * thread only.
  */
 public final class BatterySource {
     /** One reading of the battery. Unknown values are -1, {@link Integer#MIN_VALUE} or NaN. */
@@ -65,7 +69,7 @@ public final class BatterySource {
     @NonNull private final Context context;
     @NonNull private final BatteryHistoryStore history;
     private final List<Listener> listeners = new ArrayList<>();
-    private boolean registered;
+    @NonNull private final SourceLease lease;
     @Nullable private State latest;
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
@@ -75,31 +79,38 @@ public final class BatterySource {
     private BatterySource(@NonNull Context context) {
         this.context = context;
         history = new BatteryHistoryStore(context);
+        lease = new SourceLease(SourceLease.on(new Handler(Looper.getMainLooper())),
+            new SourceLease.Registration() {
+                @Override public boolean open() {
+                    Intent sticky;
+                    try {
+                        sticky = context.registerReceiver(receiver,
+                            new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                    } catch (RuntimeException ignored) {
+                        // Without the broadcast the widgets keep their unknown state.
+                        return false;
+                    }
+                    // Registered from here on, whatever the first reading does: the close pairs it.
+                    if (sticky != null) accept(sticky);
+                    return true;
+                }
+
+                @Override public void close() {
+                    try { context.unregisterReceiver(receiver); } catch (RuntimeException ignored) { }
+                }
+            });
     }
 
     /** Hears every reading while held; told the latest one at once when there is one. */
     @MainThread public void acquire(@NonNull Listener listener) {
         if (!listeners.contains(listener)) listeners.add(listener);
-        if (!registered) {
-            try {
-                Intent sticky = context.registerReceiver(receiver,
-                    new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-                registered = true;
-                if (sticky != null) accept(sticky);
-            } catch (RuntimeException ignored) {
-                // Without the broadcast the widgets keep their unknown state.
-            }
-        } else if (latest != null) {
-            listener.onBatteryChanged(latest);
-        }
+        // A fresh registration hands every listener the sticky reading; a kept one replays it.
+        if (!lease.ensureOpen() && latest != null) listener.onBatteryChanged(latest);
     }
 
     @MainThread public void release(@NonNull Listener listener) {
         listeners.remove(listener);
-        if (listeners.isEmpty() && registered) {
-            try { context.unregisterReceiver(receiver); } catch (RuntimeException ignored) { }
-            registered = false;
-        }
+        if (listeners.isEmpty()) lease.closeSoon();
     }
 
     /** The last reading, or null before the first broadcast. */
