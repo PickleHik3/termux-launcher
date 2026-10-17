@@ -20673,8 +20673,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mX11Display.destroy();
             mX11Display = null;
         }
-        if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(null);
+        // Whoever owns typing now — an open palette or sheet keeps its claim — not nobody.
+        restoreInAppKeyboardTypingClaim();
         hideDisplaySystemKeyboard();
+        releaseDisplayFocus(mPaneWallController.displayPage());
         mPaneWallController.detachDisplayPage();
         syncDisplayEnvironment();
         syncDisplayKeyboardRoute();
@@ -20786,12 +20788,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncDisplayPageAttachment(@NonNull com.termux.app.wall.PaneWallPage page) {
         com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
             ? null : mPaneWallController.displayPage();
+        // Off its window the display's view must neither keep the keys nor take them back.
+        if (page != com.termux.app.wall.PaneWallPage.DISPLAY) releaseDisplayFocus(display);
         if (mX11Display == null || display == null) return;
         if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
             // The arrival itself: nothing about starting or stopping a display happened, but the
             // message may be stale if a package landed in the prefix while the wall rested
             // elsewhere.
             refreshDisplayEmptyStateReadiness();
+            com.termux.app.x11.DisplayViewFocus.admit(display.display());
             mX11Display.attachView(display.display());
             display.display().requestFocus();
             // A place that asked for the keyboard as it arrived asked for it itself, so the
@@ -20805,12 +20810,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else {
             mX11Display.detachView();
             mX11Display.onDisplayPlaceLeft();
-            if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(null);
+            restoreInAppKeyboardTypingClaim();
             // The phone's keyboard belongs to the place it was raised on; it goes down with it,
             // and the launcher's keyboard takes its suppression back for the terminal.
             hideDisplaySystemKeyboard();
             syncDisplayKeyboardRoute();
         }
+    }
+
+    /**
+     * The display window left the screen or is going: the keys go back to the active terminal
+     * pane — quietly, so no system keyboard comes up for it — and the display's view stops being
+     * able to take them (DisplayViewFocus). Without it the palette and the terminal stay deaf
+     * after a display session until the app restarts.
+     */
+    private void releaseDisplayFocus(@Nullable com.termux.app.x11.X11PaneFrame frame) {
+        if (frame == null) return;
+        com.termux.x11.LorieView view;
+        try {
+            view = frame.display();
+        } catch (IllegalStateException notInflated) {
+            return;
+        }
+        com.termux.app.x11.DisplayViewFocus.release(view,
+            focused -> focused instanceof TerminalView,
+            () -> {
+                if (mInAppKeyboard == null || !mInAppKeyboard.isExternalTextInputActive())
+                    returnFocusToTerminalQuietly();
+            });
     }
 
     /**
