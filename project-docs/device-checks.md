@@ -109,6 +109,23 @@ under twenty items; past that, the oldest are re-judged first.
   Paused), its summary wrapping rather than clipping, and dims with the switch off · emulator,
   `font_scale 1.3`, force-stop after the change.
 
+### Wall rework: device-checker pass of 651ea9d7f (emulator, 2026-10-18 09:10)
+Seen (owed on pong only): #81 migration per usage mode (terminal → Start in = workspace and a cold
+launch lands on window 1; home and display → home; old keys gone; version 1); the Start in row
+under search and its choice standing a force-stop; no Display switch under Settings › Display;
+`exit` in the only window with the empty row and the Terminal entry and `launcherctl window open`
+opening a window; a Home float from Home's long press with chip, Minimise/Maximise/Close, the
+handle menu with Dock and Dock making window 2; Minimise to chip and chip restore; Maximise reading
+Restore size; a small float lifting over the keyboard and a full-size one sitting on it; the palette
+gesture, its Home set and a completed action closing both; always on through the Layout editor
+(reached by intent) keeping the keyboard up through Done and a window round trip.
+Failed (fixes in flight): Close on a Home float crashed (IndexOutOfBounds in WSession.currentWindow
+via removeHomeFloat); Ctrl+Alt+F on a one-pane window toasted "Index 1 out of bounds" and floated
+nothing; the pinned Terminal entry vanished from the dock after `exit` while the store still held
+it; the handle menu's title truncates ("ho…"); the always-on notice clips at the right edge.
+Not driven: the display items (no Linux app was installed), two Home pages (page pin, seam from
+page 2, chip page numbers), rotation, the drawer's float rows, large text and dark theme.
+
 ### Wall rework: emulator pass of 2026-10-18, morning (debug builds up to b0b725895)
 Also seen by the orchestrator, so owed on pong only: the three-button titlebar (Move window handle,
 Minimise, Maximise, Close) on a Home float; a full-size Home float shrinking above the keyboard

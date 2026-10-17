@@ -96,3 +96,23 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - `-s emulator-5554` does not resolve until the emulator is up: `ad -s emu emu start` first.
 - The Appearance editor reopens on its last page; the Icon pack page's switch is `icon_pack_pinned_only` (about 935,2030).
 - The only AVD is tl16 (API 36); there is none for API 29/30.
+
+## The wall rework (feat/wall-rework, 2026-10-18)
+
+- Home's palette gesture: `ad swipe 540 1700 540 900 700` (an up swipe on the page's free area).
+  A Home float opens from `ad long 540 1000` then the Terminal row (about 414,1058); on a
+  full-size float Close is about 1006,283 and Minimise about 796,283.
+- The Terminal entry's menu is a long press at 76,2190 on the dock (New float here / New window).
+  The dock's edit sheet is a long press at 540,2180; the Terminal entry is under MOST USED there.
+- Layout editor on Home without the corner tab:
+  `am start -n com.termux/.app.TermuxActivity --ez com.termux.app.extra.LAYOUT_EDITOR true --es com.termux.app.extra.LAYOUT_EDITOR_PLACE widgets`.
+  Its tray chips are Status bar, Extra keys, Keyboard; the keyboard chip toggles always on.
+- Ctrl+Alt+F over adb: `adb shell input keycombination 113 57 34` (C=31, V=47, H=36).
+- Migration seeding: force-stop, then `sed -i` through `ad runas` on
+  `/data/data/com.termux/shared_prefs/com.termux_preferences.xml` (insert before `</map>`:
+  `app_launcher_use_case_mode`, remove `app_launcher_start_in`, set `wall_migration_version` to 0),
+  then `ad launch` for a cold start (`am start` into a live instance does not re-land).
+- Always run `ad logcat` and `ad crash` under `timeout`; they follow forever. A crash is read with
+  `adb -s emulator-5554 logcat -d -b crash`.
+- Injected swipes release with zero velocity: use 600–800 ms for page drags; a side-border hold is
+  `input motionevent DOWN x y`, a 500 ms pause, then MOVE and UP.
