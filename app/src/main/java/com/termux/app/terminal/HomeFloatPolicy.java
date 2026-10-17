@@ -39,6 +39,17 @@ public final class HomeFloatPolicy {
         return new Rect(0, top, width, bottom);
     }
 
+    /**
+     * How far the focused float rises over the keyboard: what its cursor row asks
+     * ({@code wantedPx}), but never past the room's top, so the titlebar stays below the status
+     * bar with its buttons in reach. {@code floatTopPx} and {@code roomTopPx} are the float's
+     * laid-out top and the room's top in the layer's pixels. A float already at the room's top,
+     * as one born full-size is, is not lifted: its cursor row may stay under the keyboard.
+     */
+    public static int liftPx(int wantedPx, int floatTopPx, int roomTopPx) {
+        return Math.max(0, Math.min(wantedPx, floatTopPx - roomTopPx));
+    }
+
     /** Whether Home page {@code page} shows a float pinned to {@code floatPage}. */
     public static boolean shownOn(int floatPage, boolean minimised, int page) {
         return !minimised && floatPage >= 0 && floatPage == page;
