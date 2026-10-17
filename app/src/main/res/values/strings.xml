@@ -186,7 +186,7 @@
     </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_wallpaper_parallax_title">Wallpaper parallax</string>
-    <string name="settings_wallpaper_parallax_summary">The wallpaper pans a little as the places slide. Needs a wallpaper set through the launcher\'s picker; off in landscape and with animations off.</string>
+    <string name="settings_wallpaper_parallax_summary">The wallpaper pans a little as the pages and windows of the wall slide. Needs a wallpaper set through the launcher\'s picker; off in landscape and with animations off.</string>
     <string name="settings_adaptive_glass_title">Adaptive glass</string>
     <string name="settings_adaptive_glass_summary">Edges catch the wallpaper\'s own light.</string>
     <string name="settings_wallpaper_alignment_title">Wallpaper alignment</string>
@@ -2083,7 +2083,7 @@
     <string name="palette_category_pane">Pane</string>
     <string name="settings_keyboard_shapes_header">Floating and split</string>
     <string name="settings_keyboard_form_title">Keyboard type</string>
-    <string name="settings_keyboard_form_summary">Docked, floating or split, on every place.</string>
+    <string name="settings_keyboard_form_summary">Docked, floating or split, on Home and in the Workspace.</string>
     <string name="settings_keyboard_floating_width_title">Floating keyboard width</string>
     <string name="settings_keyboard_floating_width_summary">Percent of the screen width. Set separately for portrait and landscape.</string>
     <string name="settings_keyboard_floating_height_title">Floating keyboard height</string>
@@ -2337,7 +2337,7 @@
     <string name="tool_desc_appearance_surface_editor">Tune the dock, keyboard, status bar, and terminal surfaces.</string>
     <string name="tool_desc_app_open_settings">Open the launcher settings screen.</string>
     <string name="tool_app_open_help">Help</string>
-    <string name="tool_desc_app_open_help">Open help for the place you are on.</string>
+    <string name="tool_desc_app_open_help">Open help for where you are: Home or the Workspace.</string>
     <string name="tool_desc_app_open_look_and_feel">Open the look and feel settings.</string>
     <string name="tool_desc_app_open_apps_bar">Open the apps bar settings.</string>
     <string name="tool_desc_app_command_palette">Open the searchable command palette.</string>
@@ -2778,7 +2778,7 @@
     <string name="help_topic_az_purpose">The A–Z index picks an app by its first letter.</string>
     <string name="help_topic_az_action">Slide along it, then drag up to the app you want.</string>
     <string name="help_topic_az_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
-    <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows which place you are on.</string>
+    <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows whether you are on Home or in the Workspace.</string>
     <string name="help_topic_status_action">Swipe down from the page\'s top border, or drag the bar down, to expand it.</string>
     <string name="help_topic_status_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_stats_purpose">The status widgets show how the phone is doing.</string>
@@ -2824,7 +2824,7 @@
     <string name="help_show_gesture">Show gesture</string>
     <string name="help_try_it">Try it</string>
     <string name="help_settings_title">Help</string>
-    <string name="help_settings_summary">Open help for the place you are on.</string>
+    <string name="help_settings_summary">Open help for where you are: Home or the Workspace.</string>
     <string name="help_topic_stats_title">Status widgets</string>
     <string name="help_topic_corners_title">Pane corners</string>
     <string name="help_topic_keys_title">Extra keys</string>
@@ -3033,7 +3033,7 @@
     <string name="help_topic_pinned_reveal">A card appears when a notification matches one of your rules.</string>
     <string name="help_topic_pinned_aliases">pinned notification, essential notifications, notification card, card, mute, dismiss, rule</string>
     <string name="help_topic_kswipe_title">Keyboard swipe</string>
-    <string name="help_topic_kswipe_summary">One swipe opens or closes the keyboard on every place.</string>
+    <string name="help_topic_kswipe_summary">One swipe opens or closes the keyboard on Home and in the Workspace.</string>
     <string name="help_topic_kswipe_action">Swipe up from the bottom border to open the keyboard, and down to put it away.</string>
     <string name="help_topic_kswipe_step1">It turns a keyboard that was switched off back on.</string>
     <string name="help_topic_kswipe_step2">The small pill on the border marks where to start.</string>
