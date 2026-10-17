@@ -15746,6 +15746,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             }
         });
+        // Last, so every surface above has had the stroke: on Home with always on, a typed
+        // character no binding took opens the palette with it (spec §5.2). Code points only — a
+        // key event reaches here as one after the bindings have passed it by.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            @Override public boolean onBack() { return false; }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return false;
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                if (ctrlDown || !isWidgetsPageShowing() || !Character.isValidCodePoint(codePoint))
+                    return false;
+                boolean floatFocused = mPaneController != null
+                    && mPaneController.focusedHomeFloat() != null;
+                return getCommandPaletteController().offerHomeTypedText(
+                    new String(Character.toChars(codePoint)), floatFocused);
+            }
+        });
         return registry;
     }
 
@@ -19321,12 +19338,74 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * when that goes the way the swipe asked.
      */
     private void applyBorderKeyboardSwipe(boolean open) {
+        applyBorderKeyboardSwipe(open, committedKeyboardVisible());
+    }
+
+    /** As above, told whether the keyboard was up as the swipe began. */
+    private void applyBorderKeyboardSwipe(boolean open, boolean keyboardWasUp) {
+        if (isWidgetsPageShowing() && applyHomeKeyboardSwipe(open, keyboardWasUp)) return;
         com.termux.app.terminal.TerminalHost host = terminalHost();
         if (open ? host.showInAppKeyboard(false) : host.hideInAppKeyboard(false)) return;
         TermuxTerminalViewClient client = mTermuxTerminalViewClient;
         if (client == null) return;
         boolean up = isImeVisible();
         if (open ? (client.isKeyboardTurnedOff() || !up) : up) client.onToggleSoftKeyboardRequest();
+    }
+
+    /**
+     * The keyboard swipe on a Home page (spec §5.1). Up is the palette gesture: the Home palette
+     * opens with the keyboard as one overlay, and the palette's close takes the keyboard it raised
+     * down again ({@code TerminalCommandPaletteController.showHomeOverlay}). Down closes an open
+     * palette, and with it its keyboard; always on keeps the keyboard up.
+     *
+     * @return whether the swipe was spent here; false leaves it to the plain keyboard swipe
+     */
+    private boolean applyHomeKeyboardSwipe(boolean open, boolean keyboardWasUp) {
+        com.termux.app.terminal.TerminalCommandPaletteController palette =
+            getCommandPaletteController();
+        if (!open) {
+            if (palette.isOpen()) {
+                palette.collapse();
+                return true;
+            }
+            return isHomeKeyboardAlwaysOn();
+        }
+        if (palette.isOpen() || !isHomePaletteGestureEnabled()) return true;
+        if (keyboardWasUp || !terminalHost().showInAppKeyboard(false)) {
+            // Nothing raised (already up, or no in-app keyboard to raise): the palette alone.
+            palette.showHomeOverlay(true);
+            return true;
+        }
+        // A keyboard raised just now is laid out by the next frame; the palette sprouts from its
+        // space bar, so it opens once the keyboard stands where it will be.
+        View decor = getWindow().getDecorView();
+        decor.post(() -> {
+            if (isWidgetsPageShowing()) palette.showHomeOverlay(false);
+            else if (mInAppKeyboard != null && mInAppKeyboard.isVisible()
+                && !isHomeKeyboardAlwaysOn()) {
+                // The wall moved away before the palette could open: nothing to pair with.
+                lowerHomePaletteKeyboard();
+            }
+        });
+        return true;
+    }
+
+    /** Whether the Home layout keeps the keyboard up on Home (always on). */
+    private boolean isHomeKeyboardAlwaysOn() {
+        PlaceLayoutStore store = placeLayoutStore();
+        return store != null && store.isHomeKeyboardAlwaysOn();
+    }
+
+    /** Whether the keyboard swipe up on a Home page opens the palette (Settings). */
+    private boolean isHomePaletteGestureEnabled() {
+        return mPreferences == null || mPreferences.isHomePaletteGestureEnabled();
+    }
+
+    /** The keyboard the Home palette raised goes down with it. */
+    private void lowerHomePaletteKeyboard() {
+        if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) return;
+        mInAppKeyboard.hide(
+            com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
     }
 
     // ---- The keyboard swipe under the finger (wall/KeyboardReveal) --------------------------
@@ -19369,6 +19448,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || displayTakesSystemKeyboard() || isDisplayTouchpadFrame()) return 0;
         boolean up = committedKeyboardVisible();
         if (opening == up) return 0;
+        // On Home the finger raises the palette gesture's keyboard only; a down swipe that closes
+        // the palette, or meets always on, is decided on release (applyHomeKeyboardSwipe).
+        if (isWidgetsPageShowing() && (opening ? !isHomePaletteGestureEnabled()
+            : isCommandPaletteOpen() || isHomeKeyboardAlwaysOn())) return 0;
         mKeyboardSwipeTravel = true;
         mKeyboardSwipeFromOpen = up;
         // The room the content has now, read before anything moves; the other end is read once
@@ -19491,7 +19574,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The pre-rolled keyboard, up already, becomes the one the person asked for; the
                 // display's policy hears it here, since the keyboard itself saw no change to
                 // report.
-                applyBorderKeyboardSwipe(open);
+                applyBorderKeyboardSwipe(open, mKeyboardSwipeFromOpen);
                 if (open && mX11Display != null && !mRaisingDisplayFrameKeyboard)
                     mX11Display.onUserKeyboardIntent(true);
             } else if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
@@ -19569,6 +19652,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onBorderKeyboardSwipe(boolean open) {
                     applyBorderKeyboardSwipe(open);
+                }
+                // On Home the swipe is the palette gesture: off in Settings, it is armed only
+                // to put away a keyboard that is up.
+                @Override public boolean isBorderKeyboardSwipeEnabled() {
+                    return !isWidgetsPageShowing() || isHomePaletteGestureEnabled()
+                        || committedKeyboardVisible();
                 }
                 // The keyboard swipe tied to the finger: the reveal the wall's slide already
                 // draws the keyboard through, driven by the finger instead of the wall.
@@ -24716,6 +24805,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.terminal.TerminalPaneController.Window window = homeFloatById(windowId);
             return window == null ? UNKNOWN_PAGE : window.homePage();
         }
+
+        @Override public boolean isOnHome() { return isWidgetsPageShowing(); }
+
+        @Override public boolean isKeyboardAlwaysOn() { return isHomeKeyboardAlwaysOn(); }
+
+        @Override public void lowerKeyboard() { lowerHomePaletteKeyboard(); }
     }
 
     @Nullable
