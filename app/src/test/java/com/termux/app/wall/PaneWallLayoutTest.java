@@ -190,7 +190,7 @@ public class PaneWallLayoutTest {
     }
 
     @Test
-    public void theTerminalPagesMarginsAreEveryPagesMargins() {
+    public void theTerminalPagesMarginsAreEveryFramedPagesMargins() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         // The activity writes the surface editor's frame insets into the pane host's margins,
         // and checks they are margin params first — a plain ViewGroup's are not.
@@ -208,8 +208,8 @@ public class PaneWallLayoutTest {
         // The pages still sit one full wall width apart, frame and all.
         assertEquals(-WIDTH, widgets.getTranslationX(), EPS);
         assertEquals(WIDTH, display.getTranslationX(), EPS);
-        PaneWallPage[] pages = {PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY};
-        View[] views = {widgets, terminal, display};
+        PaneWallPage[] pages = {PaneWallPage.TERMINAL, PaneWallPage.DISPLAY};
+        View[] views = {terminal, display};
         for (int i = 0; i < pages.length; i++) {
             showAndLayOut(pages[i]);
             View page = views[i];
@@ -218,10 +218,17 @@ public class PaneWallLayoutTest {
             assertEquals(WIDTH - 24, page.getRight());
             assertEquals(HEIGHT - 30, page.getBottom());
         }
+        // A Home page has no frame: it reaches the wall's edges, and its grid's rim is the
+        // Margin, so the opening's Margin is not paid twice.
+        showAndLayOut(PaneWallPage.WIDGETS);
+        assertEquals(0, widgets.getLeft());
+        assertEquals(0, widgets.getTop());
+        assertEquals(WIDTH, widgets.getRight());
+        assertEquals(HEIGHT, widgets.getBottom());
     }
 
     @Test
-    public void theOtherPagesStandAtTheFrameWhileTheTerminalKeepsItsBordersAir() {
+    public void theDisplayStandsAtTheFrameAndHomeAtTheWallsEdge() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         android.view.ViewGroup.MarginLayoutParams margins =
             (android.view.ViewGroup.MarginLayoutParams) terminal.getLayoutParams();
@@ -237,13 +244,15 @@ public class PaneWallLayoutTest {
         assertEquals(27, terminal.getLeft());
         assertEquals(13, terminal.getTop());
         showAndLayOut(PaneWallPage.WIDGETS);
-        assertEquals(24, widgets.getLeft());
-        assertEquals(10, widgets.getTop());
-        assertEquals(WIDTH - 24, widgets.getRight());
-        assertEquals(HEIGHT - 30, widgets.getBottom());
+        assertEquals("Home stands at the wall's edge, not at the frame", 0, widgets.getLeft());
+        assertEquals(0, widgets.getTop());
+        assertEquals(WIDTH, widgets.getRight());
+        assertEquals(HEIGHT, widgets.getBottom());
         showAndLayOut(PaneWallPage.DISPLAY);
         assertEquals(24, display.getLeft());
+        assertEquals(10, display.getTop());
         assertEquals(WIDTH - 24, display.getRight());
+        assertEquals(HEIGHT - 30, display.getBottom());
     }
 
     @Test

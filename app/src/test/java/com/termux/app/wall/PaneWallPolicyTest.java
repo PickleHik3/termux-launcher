@@ -335,4 +335,25 @@ public class PaneWallPolicyTest {
         assertEquals(PaneWallPage.TERMINAL,
             PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "terminal"));
     }
+    @Test
+    public void aHomePageStandsAtTheWallsEdgeAndItsRimIsTheWholeMargin() {
+        // Margin 48 at 1x, and 3px of the terminal border's own air inside the terminal's margin.
+        int margin = 48 + 3;
+        assertEquals("a window keeps its whole margin", margin,
+            PaneWallPolicy.pageInsetPx(PaneWallPage.TERMINAL, margin, 3));
+        assertEquals("the Display page stands at the opening", 48,
+            PaneWallPolicy.pageInsetPx(PaneWallPage.DISPLAY, margin, 3));
+        assertEquals("a Home page has no frame", 0,
+            PaneWallPolicy.pageInsetPx(PaneWallPage.WIDGETS, margin, 3));
+        assertEquals("a view that is no page keeps the opening", 48,
+            PaneWallPolicy.pageInsetPx(null, margin, 3));
+        assertEquals("air wider than the margin leaves none", 0,
+            PaneWallPolicy.pageInsetPx(PaneWallPage.DISPLAY, 2, 3));
+
+        // The air from the screen's edge to Home's first cell: the page's inset plus the grid's
+        // rim, which is Home's Margin. One Margin, as the dock's cards keep.
+        int homeMarginDp = 48;
+        assertEquals(homeMarginDp,
+            PaneWallPolicy.pageInsetPx(PaneWallPage.WIDGETS, homeMarginDp, 0) + homeMarginDp);
+    }
 }

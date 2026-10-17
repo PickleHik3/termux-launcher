@@ -113,4 +113,17 @@ public class WidgetGridCapsTest {
         assertEquals(TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
             GridSizeWheelPolicy.columns(caps).minimum());
     }
+    /**
+     * The emulator's 411 dp portrait wall at a 48 dp Margin (2026-10-18 check). The Home page
+     * reaches the wall's edges and the rim is the whole Margin, so the caps are worked out on the
+     * width the cells really get: 411 - 2 x 48 = 315 dp of cells and gaps, five columns of 55 dp
+     * with four 8 dp gaps. The page used to stand in the opening's Margin too, a grid 96 dp
+     * narrower, whose caps lost a column it had room for on screen.
+     */
+    @Test
+    public void aWideMarginIsPaidOnceOnTheEmulatorsWall() {
+        assertEquals(5, WidgetGridCaps.forWall(411f, 760f, 48f).maxColumns);
+        assertEquals("the double inset's caps", 3,
+            WidgetGridCaps.forWall(411f - 2f * 48f, 760f, 48f).maxColumns);
+    }
 }

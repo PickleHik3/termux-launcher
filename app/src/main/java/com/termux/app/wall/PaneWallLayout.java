@@ -2195,8 +2195,9 @@ public final class PaneWallLayout extends ViewGroup {
 
     /**
      * Air the terminal page keeps inside its own margins for the line drawn around it (the
-     * terminal border's stroke and gap). Every other page's card stands at the frame itself, which
-     * is the shape model's opening, so it sits that much further out than the terminal's content.
+     * terminal border's stroke and gap). The Display page's card stands at the frame itself, which
+     * is the shape model's opening, so it sits that much further out than the terminal's content;
+     * a Home page has no frame and stands at the wall's edge ({@link PaneWallPolicy#pageInsetPx}).
      */
     private int mTerminalFrameAirPx;
 
@@ -2208,10 +2209,22 @@ public final class PaneWallLayout extends ViewGroup {
         requestLayout();
     }
 
-    /** The air a page's frame keeps from the wall's edge on one side: the margin, less the terminal's own air. */
+    /**
+     * The air a page keeps from the wall's edge on one side (PaneWallPolicy#pageInsetPx): a window
+     * its margin, the Display page the opening (the margin less the terminal's own air), and a
+     * Home page none, since it has no frame and its grid's rim is Home's Margin.
+     */
     private int frameMarginPx(@NonNull View child, int marginPx) {
-        return child == mPageViews.get(PaneWallPage.TERMINAL)
-            ? marginPx : Math.max(0, marginPx - mTerminalFrameAirPx);
+        return PaneWallPolicy.pageInsetPx(pageOf(child), marginPx, mTerminalFrameAirPx);
+    }
+
+    /** The page {@code child} is registered as, or null for a view that is no page. */
+    @Nullable
+    private PaneWallPage pageOf(@NonNull View child) {
+        for (Map.Entry<PaneWallPage, View> entry : mPageViews.entrySet()) {
+            if (entry.getValue() == child) return entry.getKey();
+        }
+        return null;
     }
 
     @Override

@@ -111,6 +111,25 @@ public final class PaneWallPolicy {
     }
 
     /**
+     * How far {@code page} stands in from the wall's edge on one side, in px, from the terminal
+     * page's margin there ({@code terminalMarginPx}, the chrome shape's opening plus the terminal
+     * border's own air) and that air ({@code terminalFrameAirPx}). A window keeps its whole
+     * margin. The Display page stands at the opening itself, the margin less the air. A Home page
+     * has no frame (HomeChromePolicy#bordersShown), so it stands at none: it reaches the wall's
+     * edge and its content keeps Home's Margin as its own rim, the widget grid's, which makes the
+     * air from the screen's edge to the first cell exactly one Margin, as the dock's cards and the
+     * Home floats' room have it. Standing it in the opening as well had the grid's rim inside the
+     * opening's Margin: two Margins of air, and the caps worked out on a grid a Margin narrower.
+     * {@code null} is a page the wall does not know, kept at the opening as before.
+     */
+    public static int pageInsetPx(@Nullable PaneWallPage page, int terminalMarginPx,
+                                  int terminalFrameAirPx) {
+        if (page == PaneWallPage.TERMINAL) return terminalMarginPx;
+        if (page == homePage()) return 0;
+        return Math.max(0, terminalMarginPx - Math.max(0, terminalFrameAirPx));
+    }
+
+    /**
      * Whether the wall wraps. It used to, with three places; the row is a line now, Home pages on
      * the left and the Workspace on the right, so it never does. Kept so the arithmetic below
      * reads the same for a line of any length.
