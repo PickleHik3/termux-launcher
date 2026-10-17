@@ -433,8 +433,10 @@ Not seen: everything else listed under the sections below.
   y 2116); titlebar glyphs pale on dark glass; a second float opens 92 px lower and 42 px right
   of the first (keyboard down); the Home layout editor's tray shows one Keyboard chip under a
   badge of 1.
-- Still owed on the emulator: the second float keeps its own top while the keyboard is up (fix in
-  flight), the drawer's "Saved sessions" tab in full (fix merged at 802536634, not yet seen).
+- Seen at 2fd474abb: the second float keeps its own top while the keyboard is up (titlebars at
+  y 220 and 312 in both states); the Terminal entry survives an upgrade install (the catalogue
+  prune no longer drops the launcher's entries). The drawer's "Saved sessions" tab reads in full at
+  b5b19ef99 (the drawer's row is 153dp; the tab takes the rest of it after Live).
 - Judged not defects: status-lens neighbour icons half past the screen edge (#46); the drawer's
   glass showing the pane under it, the Workspace key-row ink, the corner tab staying after Back,
   the pin editor's bottom row under the gesture inset and the Settings nits (retention labels,
