@@ -111,6 +111,9 @@ under twenty items; past that, the oldest are re-judged first.
 
 ## Developer
 
+- 2026-10-17 · commit "feat(motd): a rounded welcome card in the wallpaper's colours" · On a fresh
+  session the card reads well over a light wallpaper as well as a dark one, and tapping "Tap to
+  read the docs" opens the guide · pong, release build.
 - 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" · With the switch
   on, the edge reads as light, not an outline. Also record whether floating panels still stand
   apart from a white wallpaper: that is Round 5's gate · pong, release build.
