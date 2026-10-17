@@ -8,12 +8,16 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.util.TypedValue;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.ChromeShade;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.Date;
@@ -35,6 +39,17 @@ final class StatusBarCapsuleDrawing {
     private final Paint mGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mClockPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final RectF mStrokeRect = new RectF();
+    /** The theme's neutrals and panel, read on {@link #refreshColors}. */
+    @ColorInt private int mOnSurface;
+    @ColorInt private int mSurfaceBase;
+    @ColorInt private int mPanel;
+    /** What the ink was last resolved from; {@link #syncInk} re-resolves when any of it moves. */
+    private boolean mGlass;
+    @Nullable private ChromeInk.Polarity mPolarity;
+    @ColorInt private int mBand;
+    private boolean mInkResolved;
     @NonNull private StatusBarFormPolicy.Content mContent =
         StatusBarFormPolicy.content(false, null, 0, 0);
     @NonNull private String mClock = "";
@@ -47,19 +62,50 @@ final class StatusBarCapsuleDrawing {
         mClockPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         mClockPaint.setTextSize(sp(CLOCK_SP));
         mClockPaint.setFontFeatureSettings("tnum");
+        mStrokePaint.setStyle(Paint.Style.STROKE);
+        mStrokePaint.setStrokeWidth(Math.round(mDensity));
         refreshColors();
         refreshClock();
     }
 
-    /** The theme's ink: the glyph and the dots in the accent, the clock on the surface. */
+    /** Re-reads the theme's neutrals and re-resolves the ink (a theme or mode change). */
     void refreshColors() {
-        int accent = MaterialColors.getColor(mContext, com.termux.shared.R.attr.termuxColorPrimary,
-            ContextCompat.getColor(mContext, R.color.termux_primary));
-        int onSurface = MaterialColors.getColor(mContext,
-            com.termux.shared.R.attr.termuxColorOnSurface, 0xFFFFFFFF);
-        mGlyphPaint.setColor(accent);
-        mDotPaint.setColor(accent);
-        mClockPaint.setColor(onSurface);
+        mOnSurface = MaterialColors.getColor(mContext,
+            com.termux.shared.R.attr.termuxColorOnSurface,
+            ContextCompat.getColor(mContext, R.color.termux_on_surface));
+        mSurfaceBase = MaterialColors.getColor(mContext,
+            com.termux.shared.R.attr.termuxColorSurfaceBase,
+            ContextCompat.getColor(mContext, R.color.termux_surface_base));
+        mPanel = MaterialColors.getColor(mContext,
+            com.termux.shared.R.attr.termuxColorSurfacePanel,
+            ContextCompat.getColor(mContext, R.color.termux_surface_panel));
+        mInkResolved = false;
+        syncInk(mGlass, mBand);
+    }
+
+    /**
+     * The ink and the outline, {@link StatusBarFormPolicy#capsuleInk} and
+     * {@link StatusBarFormPolicy#capsuleStroke}, re-resolved only when the chrome's polarity, the
+     * glass or the measured band moved. {@code band} is the window chips' measured band, or
+     * {@code 0} when nothing has measured it. Answers whether anything changed.
+     */
+    boolean syncInk(boolean glass, @ColorInt int band) {
+        ChromeInk.Polarity polarity = ChromeShade.polarity();
+        if (mInkResolved && glass == mGlass && polarity == mPolarity && band == mBand) return false;
+        mInkResolved = true;
+        mGlass = glass;
+        mPolarity = polarity;
+        mBand = band;
+        int nominal = ChromeShade.nominalGlass();
+        int surface = glass && nominal != Color.TRANSPARENT ? nominal : mPanel;
+        int ink = StatusBarFormPolicy.capsuleInk(glass, polarity, mOnSurface, mSurfaceBase,
+            surface);
+        mGlyphPaint.setColor(ink);
+        mClockPaint.setColor(ink);
+        mDotPaint.setColor(ink);
+        mStrokePaint.setColor(StatusBarFormPolicy.capsuleStroke(glass, polarity, mOnSurface,
+            mSurfaceBase, band != 0 ? band : surface, ink));
+        return true;
     }
 
     /** Re-reads the time; answers whether the text changed. */
@@ -100,10 +146,25 @@ final class StatusBarCapsuleDrawing {
         return StatusBarFormPolicy.capsuleRadiusPx(mDensity, Math.round(bounds.height()));
     }
 
-    /** Paints the content laid out in {@code bounds} at {@code alpha}. */
-    void draw(@NonNull Canvas canvas, @NonNull RectF bounds, float alpha) {
+    /**
+     * Paints the outline round {@code bounds} (corners {@code radius}) and the content laid out
+     * in it, both at {@code alpha}.
+     */
+    void draw(@NonNull Canvas canvas, @NonNull RectF bounds, float radius, float alpha) {
         if (alpha <= 0f) return;
         int a = Math.round(255 * Math.min(1f, alpha));
+
+        // Inset by half the line, so the clip the pill is drawn in keeps all of it.
+        float half = mStrokePaint.getStrokeWidth() / 2f;
+        mStrokeRect.set(bounds);
+        mStrokeRect.inset(half, half);
+        int strokeColor = mStrokePaint.getColor();
+        mStrokePaint.setColor(ColorUtils.setAlphaComponent(strokeColor,
+            Math.round(Color.alpha(strokeColor) * a / 255f)));
+        float strokeRadius = Math.max(0f, radius - half);
+        canvas.drawRoundRect(mStrokeRect, strokeRadius, strokeRadius, mStrokePaint);
+        mStrokePaint.setColor(strokeColor);
+
         float padding = StatusBarFormPolicy.CAPSULE_PADDING_DP * mDensity;
         float gap = StatusBarFormPolicy.CAPSULE_GAP_DP * mDensity;
         float centerY = bounds.centerY();

@@ -1,9 +1,14 @@
 package com.termux.app.statusbar;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.OnGlass;
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.terminal.FloatTitlebarPolicy;
+import com.termux.app.terminal.WindowChipInk;
 
 /**
  * The status bar's three forms and the rules that move it between them (phase two of the wall
@@ -24,6 +29,9 @@ import com.termux.app.place.PlaceLayout.Edge;
  *   <li><b>Content</b>: the house on Home, else the current window's glyph; the clock always;
  *       one dot per pinned notification or attention cue, up to {@link #MAX_DOTS}.</li>
  * </ul>
+ *
+ * <p><b>Ink</b>: the glyph, the clock and the dots are one ink, {@link #capsuleInk}, and the pill
+ * is the bar's own glass drawn in, outlined in {@link #capsuleStroke}.
  *
  * <p>The capsule only stands on a bar along the top or the bottom: a column down a side stays
  * compact, as it already never expands. The code's other "capsule" — the Floating style's
@@ -325,5 +333,47 @@ public final class StatusBarFormPolicy {
     /** Its corner radius: 18 dp, or half a thinner capsule. */
     public static float capsuleRadiusPx(float density, int capsuleHeightPx) {
         return Math.min(CAPSULE_RADIUS_DP * density, capsuleHeightPx / 2f);
+    }
+
+    /** How strong the outline is on the plain panel, out of 255: a resting chip's idle rim. */
+    public static final int PLAIN_STROKE_ALPHA = 70;
+
+    /**
+     * The capsule's ink, for its glyph, its clock and its dots alike: a Home float's titlebar rule
+     * ({@link FloatTitlebarPolicy#glyphInk}, as on a focused float), so the two slabs Home stacks
+     * at the top of the screen read in one ink.
+     *
+     * <p>On glass, once the chrome's polarity is published, it is the window bar's chip label ink:
+     * the theme's neutral on that polarity ({@link WindowChipInk#neutralSeed}) at full alpha. The
+     * pill's tint is not what the eye sees under it, the wallpaper through it is, and solved
+     * against the tint alone the capsule came out near black over a dark wallpaper. On the plain
+     * panel, or before any polarity is published, it is {@code onSurface} made legible on
+     * {@code surface}.
+     */
+    @ColorInt
+    public static int capsuleInk(boolean glass, @Nullable ChromeInk.Polarity polarity,
+                                 @ColorInt int onSurface, @ColorInt int surfaceBase,
+                                 @ColorInt int surface) {
+        return FloatTitlebarPolicy.glyphInk(glass, polarity, onSurface, surfaceBase, surface, true);
+    }
+
+    /**
+     * The pill's outline. On glass, once the polarity is published, it is a resting window chip's
+     * outline ({@link WindowChipInk.Palette#restingStroke}): the polarity's neutral walked, in the
+     * polarity's direction only, until it clears {@link OnGlass#TARGET_LARGE_TEXT} on {@code band},
+     * the band the chips measured (or the glass's nominal surface before they have). On the plain
+     * panel, or unmeasured, it is {@code ink} at a resting chip's idle {@link #PLAIN_STROKE_ALPHA}.
+     */
+    @ColorInt
+    public static int capsuleStroke(boolean glass, @Nullable ChromeInk.Polarity polarity,
+                                    @ColorInt int onSurface, @ColorInt int surfaceBase,
+                                    @ColorInt int band, @ColorInt int ink) {
+        if (glass && polarity != null) {
+            boolean pale = polarity == ChromeInk.Polarity.PALE_INK;
+            return WindowChipInk.towardPolarity(OnGlass.opaque(band),
+                WindowChipInk.neutralSeed(onSurface, surfaceBase, pale), pale,
+                OnGlass.TARGET_LARGE_TEXT);
+        }
+        return OnGlass.withAlpha(ink, PLAIN_STROKE_ALPHA);
     }
 }

@@ -122,6 +122,8 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private boolean mPinnedKnown;
     private int mPinnedCount;
     @Nullable private StatusBarWindowColumn mWindowColumn;
+    /** The bar's glass layer: whether it has a drawable says glass or the plain panel. */
+    @Nullable private View mGlassBackground;
     @Nullable private StatusBarLensView mLens;
     /** Home or the window on screen, as the last content pass saw it; a change is a window change. */
     @Nullable private String mWindowKey;
@@ -180,6 +182,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
             mWindowColumn = (StatusBarWindowColumn) column;
             mWindowColumn.setWindowsObserver(this::refreshCapsuleContent);
         }
+        mGlassBackground = findViewById(R.id.terminal_window_bar_background);
         View lens = findViewById(R.id.terminal_status_lens);
         if (lens instanceof StatusBarLensView) {
             mLens = (StatusBarLensView) lens;
@@ -405,7 +408,9 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         mCapsuleClip.addRoundRect(mCapsuleNow, radius, radius, android.graphics.Path.Direction.CW);
         canvas.clipPath(mCapsuleClip);
         super.dispatchDraw(canvas);
-        mCapsule.draw(canvas, mCapsuleNow, StatusBarFoldMotion.capsuleContentAlpha(progress));
+        syncCapsuleInk();
+        mCapsule.draw(canvas, mCapsuleNow, radius,
+            StatusBarFoldMotion.capsuleContentAlpha(progress));
         canvas.restoreToCount(saved);
     }
 
@@ -427,6 +432,18 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         boolean more = super.drawChild(canvas, child, drawingTime);
         canvas.restoreToCount(layer);
         return more;
+    }
+
+    /**
+     * The capsule's ink follows the chrome's polarity, whether the bar is glass, and the band the
+     * window chips measured ({@link StatusBarFormPolicy#capsuleInk}); a cheap compare per frame.
+     */
+    private void syncCapsuleInk() {
+        boolean glass = mGlassBackground != null && mGlassBackground.getVisibility() == VISIBLE
+            && mGlassBackground.getBackground() != null;
+        com.termux.app.terminal.WindowChipInk.Palette chips =
+            mWindowColumn != null ? mWindowColumn.glassPalette() : null;
+        mCapsule.syncInk(glass, chips != null ? chips.band : 0);
     }
 
     private static boolean isGlassLayer(@NonNull View child) {
