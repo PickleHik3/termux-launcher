@@ -1,5 +1,65 @@
 # Glass controls: why Tint is dead after Clear or Mist, one parameter space, and safe new knobs (2026-10-16)
 
+**Status (2026-10-17): built in phase B** on `feat/glass-controls-unify`, with the developer's
+decisions overriding sections 4.3 and 5 where they differ: Tint is the accent amount (4.1) with
+the hue as a menu pill (rank 4); the ink check measures the tinted base and the Shade (4.2); no
+control is hidden or greyed by another's value (4.3 not built; Depth and the Edge pill appear only
+where the device and wallpaper can draw the edge, as Depth always did; Contrast no longer greys); Glass replaces Blur and Grain on its own curve
+(`blur = R(4 + 32 t^1.5)`, `grain = R(2 + 6 t)`, not the material curves of rank 2); Shade is a
+flat theme-aware layer, not the K-2 film (rank 1); Vibrancy is baked into the shared frame
+(rank 3); Dispersion is Off, Glint 40, Prism 80 (rank 5); the gathered edge's gain follows the
+cover over it, capped at 2.25 (pass 2). Pass 2 (2026-10-17) also set light-glass Mist to Opacity 35
+(dark stays 60; the shipped Mist carries its opacity by glass and follows a theme change), made a
+Hue pick at Tint 0 raise the Tint to 40, and had the A-Z letters, the extra keys and the in-app
+keyboard's legends choose their ink on the measured glass face they stand on. Margin and Corner radius left the Look page's Custom row (approved;
+seven columns fit 360dp at the 36dp floor, eight do not). Shade is black or white by each surface's
+own tint, is counted in the ink vote, and is held back where it alone would break a band's target. 4.4 (clarity follows blur) is not built.
+
+**Pass 3 (2026-10-17): Tint reaches the glass behind clear Looks.** On pong, Tint 0 against 100 on
+Clear was barely perceptible: the amount coloured only the face, which Clear shows at 10%. Two
+changes. (1) The scale was stretched: amount a blends the ink a × 1.0 toward the container, and the
+wash grows to the Tint Look's 0.14 at a = 0.35 and holds there (more wash pulls dark glass toward
+the pale primary, which is milk). The Tint Look ships at 35 and draws exactly the old blend; every
+stored amount (base, per-surface cells, saved Custom, older blobs) is scaled by 35/100 in glass
+controls format 2 / SurfacePresets format 6 (`GlassLook.amountForLegacyPercent`). The Hue pick's
+raise stays 40, now just past the Tint Look. (2) `GlassFrameTint` bakes the amount into the shared
+blurred frame next to Vibrancy, one `ColorMatrix` pass per change, never radius 0:
+`out = (1 - s) in + s Y(in) (1 + v)`, `v` the accent's deviation from its own luminance capped at
+0.6 (luminance-weighted, so it sums to zero: luminance holds before clipping), on the more
+colourful of the hue's container and role colour, and `s = 0.42 × amount × max(0, 1 - opacity/45)`,
+so nothing at opacity 45 and up (the Tint Look's 46 is unchanged). It follows Base's Tint, hue and
+Opacity, as Vibrancy does: a surface with its own Tint or Opacity keeps its own face but shares the
+frame. A Tint or Opacity drag holds the re-bake for its release. Calc (M3 baseline purple): on Clear
+at Tint 100 a mid-grey wallpaper's face moves about 20 CIE76 units dark, 17 light, luma within 7
+levels; at Tint 40 about 8. Not measured on a screen yet (`device-checks.md`).
+
+**Pass 4 (2026-10-17): Edge is a slider, Shade is gone, the keyboard gets Keys.** The developer's
+verdict on pong: Glint and Prism could not be told apart, and Shade "does not affect the terminal,
+and it's complicating to the end user". (1) The Edge pill (Off/Glint/Prism) became an **Edge
+slider**, 0 to 100, in the global set's fourth column (Shade's), shown with Depth only where the
+edge is drawn. It writes `fancier_glass_dispersion` itself, so stored 0/40/80 are slider
+positions; Clear ships 40, the rest 0. `uDisp` is unchanged (40 is Glint's 0.02, 100 is 0.08).
+Up to 40 the program draws exactly what it drew (the corner split on the gathered light, faded by
+clarity, and the sampled corner split; the bit-exact tests stand). Past 40 a **bold edge** is added
+to the light's split all the way round, not only at the corners: `rimBold = (uDisp - Glint) /
+(0.08 - Glint) × 3.5 dp` (`Look.BOLD_SPLIT_DP`), never faded by clarity, so Clear and the frosted
+Looks wear it alike; 3.5 dp at 100 is about nine px on pong. Red's light stands that much further
+in at its outline strength and blue's drops out at the outline, so the edge reads as a warm band;
+every channel stays under its headroom (`heldK`). The light's reach and the seam reach grow by
+`rimBold`, so the tail has no step and seams show no line. No new pass, no new sample (calc: at the
+top edge's middle and a quarter along, Edge 100's split is over four times Edge 40's on Clear and
+Mist; unit tests, not a screen). (2) **Shade** is removed: the slider, `GlassShade`, the layer
+under every tint, the ink's Shade vote and `heldShade`, the prefs key and accessors, the snapshot
+field. Glass controls format 3 drops `surface_glass_shade` in the migration's one edit, and a saved
+look sheds it on read, so anything that had Shade draws as Shade 0. The ink check measures the
+tinted base alone again; the gathered light's cover is the tint alone. (3) The keyboard's card
+gains **Keys** (the cap opacity, `in_app_keyboard_key_opacity`, -1 for the theme's), and the
+legends are chosen on the caps as the view draws them at that opacity (`createGlass(…, keyOpacity)`;
+at 0 on the glass face itself), since the view replaces every unpressed cap's alpha. The Hue pill
+stays. Device checks owed in `device-checks.md`.
+
+The rest of this note is the research as written.
+
 Read-only research for the developer's report: "in the Appearance editor, Clear or Mist, then Custom: the Tint
 slider does nothing; it only works after the Tint Look." No code changed, nothing built or run on a device.
 Builds on `glass-refraction-controls-2026-10-15.md` and `glass-refraction-references-2026-10-15.md` (not

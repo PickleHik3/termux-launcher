@@ -245,6 +245,32 @@ sets how deep the bend is. Lazy mode, battery saver and reduced motion override 
 and `project-docs/active/fancier-glass/SPEC.md`.
 _Avoid_: glass mode, refraction mode
 
+**Glass** (the slider):
+Look › Custom's first slider, clear to frosted: it moves a surface's blur and grain together along
+one curve (`surfaces/GlassControls`). Clear sits at 20, Tint at 40, Mist at 75; Solid has no frost
+and sits off it. Storage keeps blur and grain; the slider reads them back.
+_Avoid_: frost (the blurred picture itself), material (the older family macro)
+
+**Edge** (the slider):
+Look › Custom's colour split along the glass edge, shown with Depth where the edge is drawn
+(Android 13+): 0 no fringe, 40 Glint (Clear's corner glint), 100 a bold coloured edge about
+3.5 dp wide all round. It is the stored dispersion (`fancier_glass_dispersion`). Clear ships 40,
+the other Looks 0. It replaced the Off/Glint/Prism pill (2026-10-17).
+_Avoid_: Prism (the retired third step), edge light (the gathered light itself, which is fixed)
+
+Shade, a dimmer layer under the tint, was retired on 2026-10-17; a stored value is dropped.
+
+**Tint amount**:
+What Look › Custom's Tint slider sets since phase B: how much accent colour is mixed into the
+Look's own colour, 0 to 100, from any Look. 100 is the Tint Look's Material blend. The **Hue** pill
+picks which accent (primary, secondary, tertiary).
+_Avoid_: tint strength (the old meaning, a share of the Look's tint family)
+
+**Vibrancy**:
+Look › Custom's saturation of what the glass shows, 0.7x to 1.5x: baked once into the shared frame
+the glass samples, never into the bare wallpaper. 1.0x in every Look.
+_Avoid_: saturation of the wallpaper
+
 **Lazy mode**:
 The Battery setting that stops the launcher animating while nobody is watching: the clock swaps its
 digits instead of folding them, a working window's rim holds lit, and the status readings are sampled

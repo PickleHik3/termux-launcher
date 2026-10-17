@@ -83,36 +83,38 @@ public class AppearanceLooksTest {
     /** The Custom row's sets, legend order, per selection (appearance final pass, section 5). */
     @Test
     public void eachSelectionHasItsSliderSet() {
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
-            Control.MARGIN, Control.CORNER_RADIUS), AppearanceLooks.controls(null));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
-            Control.KEY_RADIUS, Control.KEY_SPACING), AppearanceLooks.controls(Target.KEYBOARD));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
+            Control.VIBRANCY), AppearanceLooks.controls(null));
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
+            Control.KEY_OPACITY, Control.KEY_RADIUS, Control.KEY_SPACING),
+            AppearanceLooks.controls(Target.KEYBOARD));
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
             Control.ICON_SIZE, Control.APP_ICONS), AppearanceLooks.controls(Target.DOCK));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
             Control.CONTRAST), AppearanceLooks.controls(Target.TERMINAL));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT),
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT),
             AppearanceLooks.controls(Target.STATUS));
         for (Target target : Target.values()) {
             assertTrue(target.name(), AppearanceLooks.controls(target).size()
                 <= AppearanceLooks.MAX_CONTROLS);
-            assertEquals("glass first, so the same columns stay under the thumb", Control.BLUR,
+            assertEquals("glass first, so the same columns stay under the thumb", Control.GLASS,
                 AppearanceLooks.controls(target).get(0));
         }
         assertEquals(AppearanceLooks.MAX_CONTROLS, AppearanceLooks.controls(null, true).size());
     }
 
     /**
-     * Depth is the global set's last slider while the glass edge is drawn, and absent otherwise;
-     * the one-argument form is the set without it.
+     * Edge (in the column Shade left, after Tint) and Depth (last) are the global set's while the
+     * glass edge is drawn, and absent otherwise; the one-argument form is the set without them.
+     * Six columns, the most any set has.
      */
     @Test
     public void depthEndsTheGlobalSetOnlyWithTheGlassEdge() {
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
-            Control.MARGIN, Control.CORNER_RADIUS, Control.DEPTH),
-            AppearanceLooks.controls(null, true));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
-            Control.MARGIN, Control.CORNER_RADIUS), AppearanceLooks.controls(null, false));
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT, Control.EDGE,
+            Control.VIBRANCY, Control.DEPTH), AppearanceLooks.controls(null, true));
+        assertEquals(AppearanceLooks.MAX_CONTROLS, AppearanceLooks.controls(null, true).size());
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
+            Control.VIBRANCY), AppearanceLooks.controls(null, false));
         assertEquals(AppearanceLooks.controls(null, false), AppearanceLooks.controls(null));
     }
 
@@ -136,10 +138,13 @@ public class AppearanceLooksTest {
         assertEquals(1, Control.DEPTH.step);
     }
 
-    /** The buttons above the sliders: Keyboard theme, Trail and Effect, Clock; none elsewhere. */
+    /**
+     * The buttons above the sliders: Keyboard theme, Trail and Effect, Clock; the global set's
+     * Tint colour; none on the dock.
+     */
     @Test
     public void eachSelectionHasItsButtons() {
-        assertTrue(AppearanceLooks.doors(null).isEmpty());
+        assertEquals(Collections.singletonList(Door.TINT_HUE), AppearanceLooks.doors(null));
         assertTrue(AppearanceLooks.doors(Target.DOCK).isEmpty());
         assertEquals(Collections.singletonList(Door.KEYBOARD_THEME),
             AppearanceLooks.doors(Target.KEYBOARD));
@@ -151,9 +156,12 @@ public class AppearanceLooksTest {
     /** Each control's range is the stored value's own, and its value round-trips. */
     @Test
     public void controlRangesAreTheStoredRanges() {
-        assertEquals(AppearanceLooks.BLUR_MAX_DP, Control.BLUR.max);
-        assertEquals(AppearanceLooks.CORNERS_MAX_DP, Control.CORNER_RADIUS.max);
-        assertEquals(AppearanceLooks.MARGIN_MAX_DP, Control.MARGIN.max);
+        assertEquals(0, Control.GLASS.min);
+        assertEquals(100, Control.GLASS.max);
+        assertEquals("0.7x", 70, Control.VIBRANCY.min);
+        assertEquals("1.5x", 150, Control.VIBRANCY.max);
+        assertEquals("Edge: no fringe", 0, Control.EDGE.min);
+        assertEquals("Edge: the bold edge", 100, Control.EDGE.max);
         assertEquals(AppearanceLooks.KEY_CORNERS_MAX_DP, Control.KEY_RADIUS.max);
         assertEquals(3, Control.APP_ICONS.min);
         assertEquals(10, Control.APP_ICONS.max);

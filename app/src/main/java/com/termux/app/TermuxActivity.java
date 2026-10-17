@@ -1542,6 +1542,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return isRoundedDockStyle();
         }
 
+        @Override public void onWindowBarFrostEdge(boolean drawsEdge) {
+            if (drawsEdge == mWindowBarFrostDrawsEdge) return;
+            mWindowBarFrostDrawsEdge = drawsEdge;
+            // The bar's glass is dressed from this, so it is re-dressed now, not on the next pass.
+            refreshTerminalWindowBar();
+        }
+
         @Override public boolean statusBarOnDockPlank() {
             // Under a joined Docked frame the bar is on the frame's glass, which is as good as
             // the plank's: it wears no frost of its own.
@@ -1578,10 +1585,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look fancierGlassLook() {
             return mFancierGlassLook;
-        }
-
-        @Override public boolean adaptiveGlass() {
-            return mAdaptiveGlass;
         }
 
         @Override public float planeGlassCornerRadiusPx() {
@@ -1659,6 +1662,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void updateTerminalGlassFrost() {
             TermuxActivity.this.updateTerminalGlassFrost();
+        }
+
+        @Override public void rejudgeBandInks(
+                @NonNull java.util.Set<com.termux.app.chrome.GlassBackdropCache.Band> bands) {
+            if (bands.contains(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD))
+                rejudgeKeyboardGlassFaces();
         }
 
         @Override public boolean isBlurHealthy(@NonNull ChromeSpec spec) {
@@ -2879,6 +2888,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean mFirstLayoutRedressed;
 
+    /**
+     * Mist's opacity depends on whether its glass is light (SurfacePresets.followGlassTheme): on
+     * the pass a theme, scheme or wallpaper-mode change runs through, a store on the shipped Mist
+     * takes this glass's value. A write is re-dressed whole after this pass, as a Look is.
+     */
+    private void followLooksGlassTheme() {
+        if (mPreferences == null) return;
+        boolean light = com.termux.app.chrome.GlassLook.isLightGlass(resolveAccessoryGlassBaseColor());
+        if (com.termux.app.surfaces.SurfacePresets.followGlassTheme(mPreferences, light))
+            getWindow().getDecorView().post(this::redressChromeFromState);
+    }
+
     private void redressChromeFromState() {
         if (mPreferences == null || mChrome == null) return;
         mAppliedPaneStyleKey = null;
@@ -3414,8 +3435,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // reset that runs just before leaves a transparent colour drawable and hides the view, and
         // taking that for the glass left the gutter bare from the second pass on.
         List<Object> key = Arrays.asList(frame, blurRadiusDp, mPreferences.getAppBarOpacity(),
-            mPreferences.getDockGlassGrain(), mFancierGlassLook, mPreferences.getDockTintStrength(),
-            mAdaptiveGlass);
+            mPreferences.getDockGlassGrain(), mFancierGlassLook, mPreferences.getDockTintStrength());
         if (mFrameGutterShown && mFrameGutterDrawable != null
                 && body.getBackground() == mFrameGutterDrawable && key.equals(mFrameGutterKey)) {
             body.setVisibility(View.VISIBLE);
@@ -3432,10 +3452,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             blurRadiusDp, mPreferences.getAppBarOpacity() / 100f,
             mPreferences.getDockGlassGrain(), 0f, mFancierGlassLook).withRim(false)
             .withTintStrength(mPreferences.getDockTintStrength())
-            // Every edge of this sheet is the screen's own. The hairline there is a hair of shade
-            // nobody sees; the gathered light, which every side takes a share of, would run a
-            // glow round the screen, so with Adaptive glass all four are seams.
-            .withSeams(mAdaptiveGlass ? com.termux.app.chrome.ChromeEdgeRule.ALL : 0);
+            // Every edge of this sheet is the screen's own. The gathered light, which every side
+            // takes a share of, would run a glow round the screen, so all four are seams.
+            .withSeams(com.termux.app.chrome.ChromeEdgeRule.ALL);
         mFrameGutterDrawable =
             com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop);
         body.setBackground(mFrameGutterDrawable);
@@ -3581,10 +3600,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mFancierGlassLook;
             }
 
-            @Override public boolean adaptiveGlass() {
-                return mAdaptiveGlass;
-            }
-
             @Override @Nullable public Bitmap paneGlassClearFrame() {
                 // Asked of the look the slabs actually draw: the joined frame's insert keeps no
                 // bend and so no clarity, and holds no clear frame for it.
@@ -3616,18 +3631,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public int paneGlassTintColor() {
                 // Under both Styles the pane is the frame's glass until Darkness is raised: the
                 // Docked insert reads as a window by the hairline round its opening, not by tone.
-                return shouldShowTerminalOverlaySurface()
-                    ? mChrome.glass().look(mPreferences != null
+                if (!shouldShowTerminalOverlaySurface()) return Color.TRANSPARENT;
+                return mChrome.glass().look(mPreferences != null
                         ? mPreferences.getTerminalTintStrength()
                         : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
-                        .flatTint(resolveTerminalSurfaceColor())
-                    : Color.TRANSPARENT;
+                    .flatTint(resolveTerminalSurfaceColor());
             }
 
             @Override public int paneGlassVeil(@NonNull Rect rootRect) {
                 // The terminal pane band (appearance-layout-editor SPEC §2): the scheme's default
-                // foreground and its dim, veiled toward the terminal's own background.
-                if (mChrome == null) return Color.TRANSPARENT;
+                // foreground and its dim, veiled toward the terminal's own background. Off the
+                // wallpaper the text stands on the palette's own background (terminalTextGround)
+                // and nothing is measured; a pane with no slab is asked too (PaneGlass), so the
+                // ground follows its tint under every Look.
+                if (mChrome == null || !shouldUseWallpaperPassthroughMode()) return Color.TRANSPARENT;
                 int foreground = com.termux.terminal.TerminalColors.COLOR_SCHEME
                     .mDefaultColors[com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND];
                 return mChrome.ink().terminalPane(rootRect, paneGlassTintColor(),
@@ -3637,7 +3654,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public boolean paneGlassRimWanted() {
-                return true; // every look wears the dock's gradient rim
+                // Every look wears the dock's gradient rim; over a slab whose program draws its
+                // own edge, the pane's border yields to that edge (PaneRim.SlabEdge).
+                return true;
             }
 
             @Override public boolean paneOpeningLine() {
@@ -3805,12 +3824,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncFancierGlassLook() {
         com.termux.app.chrome.GlassRefraction.Look look = currentFancierGlassLook();
-        // Adaptive glass rides on the look: no look, no program to draw the gathered edge.
-        boolean adaptive = look != null && mPreferences != null
-            && mPreferences.isFancierGlassAdaptiveEnabled();
-        if (java.util.Objects.equals(look, mFancierGlassLook) && adaptive == mAdaptiveGlass) return;
+        if (java.util.Objects.equals(look, mFancierGlassLook)) return;
         mFancierGlassLook = look;
-        mAdaptiveGlass = adaptive;
         mChrome.ledger().markAllBackdropsDirty();
         mAppliedPaneStyleKey = null;
     }
@@ -4229,6 +4244,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private com.termux.app.chrome.GlassRefraction.Program mNavStripRefraction;
 
+    /**
+     * Whether the dock's backdrop is on screen with a refraction effect installed right now, so
+     * its program's gathered light is the dock's edge; see {@link #setDockProgramEdge}.
+     */
+    private boolean mDockProgramEdge;
+
     /** Where the dock host's origin sits in its backdrop's pixels, for mapping a pressed key into it. */
     private float mGlassOriginLeft, mGlassOriginTop;
 
@@ -4240,19 +4261,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private com.termux.app.chrome.GlassRefraction.Look mFancierGlassLook;
 
-    /**
-     * Adaptive glass as it stands this instant: its switch, while {@link #mFancierGlassLook} is
-     * set. Every glass outline then gathers the wallpaper's light in place of the hairline and
-     * the gradient rim. Re-read with the look ({@link #syncFancierGlassLook}).
-     */
-    private boolean mAdaptiveGlass;
-
     // --- Active extra-key lens state (drives the per-key refraction in the backdrop shader). ---
     private boolean mKeyLensActive = false;
     private float mKeyLensIntensity = 0f;            // 0..1 fade
     private float mKeyLensCx, mKeyLensCy;            // centre in backdrop fragCoord space
     private float mKeyLensHx, mKeyLensHy;            // half extents
     private float mKeyLensRadius;                    // corner radius
+    /**
+     * What the dock's and the strip's tint cover of their backdrops, as their last dress passes
+     * worked it out ({@link #dockGlassCover}); -1 before the first. A change re-dresses the
+     * backdrop, so its edge follows an opacity change.
+     */
+    private float mDockGlassCover = -1f;
+    private float mNavStripGlassCover = -1f;
+
+    /** What the dock material's tint covers of the frost under it, 0..1. */
+    private float dockGlassCover() {
+        if (mPreferences == null) return 0f;
+        return mPreferences.getAppBarOpacity() / 100f;
+    }
+
     // Last dock-glass params, so the lens can rebuild the backdrop effect without recapturing.
     private boolean mGlassParamsValid = false;
     private float mGlassBlurPx, mGlassCapLeft, mGlassCapTop, mGlassCapRight, mGlassCapBottom, mGlassRadiusPx;
@@ -4296,10 +4324,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The view's own pixels are the content here, so the aim is identity.
             program.setAim(1f, 1f, 0f, 0f);
             program.setRect(capLeft, capTop, capRight, capBottom, radiusPx);
-            // The user's knobs while Fancier Glass is on; the numbers this dock always ran with
-            // otherwise, so the default mode's dock and strip are pixel for pixel what they were.
-            program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook));
-            program.setGathered(mAdaptiveGlass);
+            // The user's knobs while Fancier Glass is on, the numbers this dock always ran with
+            // otherwise; either way its gathered edge is raised by what the dock's tint covers
+            // of it, the one rule every glass surface's edge follows. The cover is the one
+            // the last dress pass worked out, so a key's lens rebuilding this per frame reads no
+            // preference.
+            program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook)
+                .withCover(Math.max(0f, navStrip ? mNavStripGlassCover : mDockGlassCover)));
             // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
             if (!navStrip && mKeyLensActive && mKeyLensIntensity > 0f) {
                 program.setLens(mKeyLensCx, mKeyLensCy, mKeyLensHx, mKeyLensHy, mKeyLensRadius,
@@ -5592,13 +5623,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx,
                                        boolean ownsInnerEdge, boolean innerRim) {
+        if (surface.getId() == R.id.accessory_surface_host) {
+            mDockShapeCut = true;
+            mDockShapeCapsule = capsule;
+            mDockShapeHeightPx = surfaceHeightPx;
+        }
         if (!capsule) {
             // Docked, the dock is a slice of the one frame. The model says which of its edges
             // face the opening (the only ones that wear the rim) and what its clip is; its
             // corners are square except a screen corner it stands on.
             List<com.termux.app.place.ChromeShape.PieceId> ids = dockPieceIds(
                 ownsInnerEdge && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec()));
-            int strokeEdges = innerRim ? chromeRimEdges(
+            // The program's gathered light is the dock's edge wherever it runs; the rim under the
+            // glass would be a second one.
+            int strokeEdges = innerRim && !dockGlassDrawsEdge() ? chromeRimEdges(
                 ids.toArray(new com.termux.app.place.ChromeShape.PieceId[0]))
                 : com.termux.app.chrome.ChromeEdgeRule.NONE;
             surface.setBackground(mChrome.glass().rimUnderGlass(0f, strokeEdges));
@@ -5622,9 +5660,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        // Barely-there containing stroke; the AGSL shader draws the dark glass contour + bevel at the
-        // edge, so a visible outline here would read as a drawn border ("inside rim") over the glass.
-        Drawable outline = mChrome.glass().rimUnderGlass(resolveDockCapsuleCornerRadiusPx(surfaceHeightPx));
+        // Barely-there containing stroke; where the program runs, its gathered light is the edge
+        // and the capsule keeps only the outline it clips to, or the two would read as a double
+        // line ("inside rim") over the glass.
+        float capsuleRadiusPx = resolveDockCapsuleCornerRadiusPx(surfaceHeightPx);
+        Drawable outline = dockGlassDrawsEdge()
+            ? mChrome.glass().outlineOnly(capsuleRadiusPx)
+            : mChrome.glass().rimUnderGlass(capsuleRadiusPx);
         surface.setBackground(outline);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             surface.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
@@ -5861,6 +5903,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && !frameStandsDown();
     }
 
+    /**
+     * Whether the dock's own glass draws its outline: its backdrop is up with a refraction effect
+     * installed ({@link #buildGlassRefractionEffect}), whose gathered light is then the dock's
+     * edge, so the host lays no {@code rimUnderGlass} under it. What is installed, not the rule
+     * that would install it: a backdrop gone while a blur is in flight, an effect that threw or a
+     * driver that refused the program all leave the rim.
+     */
+    private boolean dockGlassDrawsEdge() {
+        return mDockProgramEdge;
+    }
+
+    /**
+     * Records whether the dock's backdrop now draws its edge, and re-cuts the host's shape when
+     * that moved: the shape is set early in a pass, before the effect is built, so the pass that
+     * installs or drops the effect re-dresses it at once rather than one pass late.
+     */
+    private void setDockProgramEdge(boolean drawsEdge) {
+        if (mDockProgramEdge == drawsEdge) return;
+        mDockProgramEdge = drawsEdge;
+        View host = findViewById(R.id.accessory_surface_host);
+        if (host != null && mDockShapeCut)
+            applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
+    }
+
+    /** The dock host's shape as last cut, so {@link #setDockProgramEdge} can re-cut it alone. */
+    private boolean mDockShapeCut;
+    private boolean mDockShapeCapsule;
+    private int mDockShapeHeightPx;
+
     private void clearAccessoryRenderEffectBackdrop() {
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         if (backdrop == null) {
@@ -5873,6 +5944,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.setVisibility(View.GONE);
         mGlassParamsValid = false; // no live backdrop shader -> key lens falls back to the bubble border
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.ACCESSORY);
+        setDockProgramEdge(false);
     }
 
     /**
@@ -6550,7 +6622,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * tint, built by {@link com.termux.app.chrome.GlassStack}) so the wrap-content keyboard
      * measurement is never affected by extra sibling views.
      */
+    /** Whether this surface pass asked the keyboard band about its glass. */
+    private boolean mKeyboardBandAskedThisPass;
+
+    /**
+     * The keyboard host's material for {@code state}, then the keys' legends re-chosen against the
+     * faces that material draws, row by row (ChromeInk#bandFaces): measured where the host wears
+     * the keyboard band's glass this pass, the theme's glass base where it does not (Solid, the
+     * joined frame, a floating card, the keyboard down).
+     */
     private void applyInAppKeyboardSurfaceState(@NonNull ChromeSpec state) {
+        mKeyboardBandAskedThisPass = false;
+        applyInAppKeyboardHostMaterial(state);
+        TermuxInAppKeyboard keyboard = mInAppKeyboard;
+        if (keyboard == null || mChrome == null) return;
+        if (!mKeyboardBandAskedThisPass) {
+            keyboard.setGlassFaces(new int[0]);
+            return;
+        }
+        pushKeyboardGlassFaces(keyboard);
+    }
+
+    /** The keyboard band's faces and the legend tone chosen on its bare face, to the keyboard. */
+    private void pushKeyboardGlassFaces(@NonNull TermuxInAppKeyboard keyboard) {
+        com.termux.app.chrome.ChromeInk ink = mChrome.ink();
+        int[] faces = ink.bandFaces(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD);
+        keyboard.setGlassFaces(faces,
+            ink.bandTone(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD));
+    }
+
+    /**
+     * The keyboard's own blurred frame has landed after its rows were read off a stand-in (a Glass
+     * edit, a held drag's release): the faces are measured again on it and the legends re-chosen,
+     * the keyboard repainting only if an ink moved ({@link TermuxInAppKeyboard#setGlassFaces}).
+     * Only where the last pass measured the keyboard's band; the editor's live preview is this
+     * same keyboard. The veil, if it moves with them, asks for its own apply.
+     */
+    private void rejudgeKeyboardGlassFaces() {
+        TermuxInAppKeyboard keyboard = mInAppKeyboard;
+        if (keyboard == null || mChrome == null || !mKeyboardBandAskedThisPass) return;
+        pushKeyboardGlassFaces(keyboard);
+    }
+
+    private void applyInAppKeyboardHostMaterial(@NonNull ChromeSpec state) {
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
         if (surfaceHost == null) {
             return;
@@ -6800,10 +6914,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Asks the keyboard band (appearance-layout-editor SPEC §2) what the host's glass has to become
-     * for a letter key's label to read on its cap, and names the band for the surface to draw
-     * that veil. Measured at the host's laid-out rect, which ignores the stack's travel and the
-     * editor's scale alike; null, and no veil, before the host is laid out or the keyboard view
-     * exists. The veil lands on the next build when this one changes it.
+     * for a letter key's and a function key's label to read on their caps, and names the band for
+     * the surface to draw that veil. Measured at the host's laid-out rect, which ignores the
+     * stack's travel and the editor's scale alike; null, and no veil, before the host is laid out
+     * or the keyboard view exists. The veil lands on the next build when this one changes it.
      */
     @Nullable
     private com.termux.app.chrome.GlassBackdropCache.Band noteInAppKeyboardBand(
@@ -6815,8 +6929,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(surfaceHost, origin, new int[2]);
         Rect host = new Rect(origin[0], origin[1],
             origin[0] + surfaceHost.getWidth(), origin[1] + surfaceHost.getHeight());
-        mChrome.ink().onFixedInk(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD, host,
-            inks[0], inks[0], inks[1], com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        // The letter legend on its cap and the function legend (Ctrl, Alt, Fn) on its thinner
+        // chip, each over the row of the host where it reads worst. Asked as either tone (each
+        // side's extreme, the function legend as drawn secondary), never as the legends drawn
+        // now: the tone is chosen on the bare face and a veil bought only for that tone, so a
+        // dark legend left from a brighter face cannot buy a milky veil that keeps it dark.
+        int pale = android.graphics.Color.WHITE;
+        int dark = android.graphics.Color.BLACK;
+        mChrome.ink().onFixedInkEitherTone(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
+            host, dark, pale, inks[1],
+            com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory.secondaryOf(dark),
+            com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory.secondaryOf(pale),
+            inks[3], com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        mKeyboardBandAskedThisPass = true;
         return com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD;
     }
 
@@ -7020,7 +7145,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
+        float stripCover = dockGlassCover();
         if (!mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) &&
+            stripCover == mNavStripGlassCover &&
             mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) == stripRadiusDp &&
             mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) == usingManagedWallpaperSource &&
             mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, targetRect) &&
@@ -7053,6 +7180,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mWallpaperParallax, com.termux.app.chrome.GlassAnchor.screen(backdrop)));
         }
         backdrop.invalidate();
+        mNavStripGlassCover = stripCover;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Use the SAME AGSL glass refraction the content dock/keyboard backdrop uses (API 33+),
@@ -7073,7 +7201,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 capsuleOverlay ? 0 : com.termux.app.chrome.ChromeEdgeRule.TOP);
             float reachPx = com.termux.app.chrome.GlassRefraction.seamReachPx(
                 com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook),
-                getResources().getDisplayMetrics().density, 0f, mAdaptiveGlass);
+                getResources().getDisplayMetrics().density, 0f);
             float[] rect = new float[4];
             com.termux.app.chrome.GlassRefraction.rimRect(rect, 0f, 0f,
                 Math.max(1, targetRect.width()), Math.max(1, targetRect.height()), reachPx,
@@ -7227,8 +7355,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Set by the managed path when its read is in flight: draw nothing, a sync follows. */
     private boolean mManagedWallpaperPending;
 
+    /**
+     * The managed wallpaper's capture for {@code targetRect}: the geometry and the decoded file
+     * are read here, on the main thread, and the full-size draw is handed to the blur worker. It
+     * used to allocate and draw the full-size frame right here on every miss, a software draw of
+     * the whole frame per radius on the main thread.
+     */
     @Nullable
-    private Bitmap createManagedWallpaperBackdropBitmapForRect(@NonNull Rect targetRect, @NonNull View wallpaperFrame) {
+    private com.termux.app.chrome.WallpaperBlurCache.FrameCapture beginManagedWallpaperCapture(
+            @NonNull Rect targetRect) {
         File sourceFile = getManagedWallpaperExactFile();
         // The capture rect, not the decor's: with parallax the frame is as wide as the picture,
         // so the cover draw below is the whole picture at 1:1; without it, the picture's centre.
@@ -7250,42 +7385,60 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (sourceBitmap == null) {
             return null;
         }
+        final Rect target = new Rect(targetRect);
+        final Rect frame = new Rect(frameRect);
+        final float zoom = systemWallpaperRenderZoom();
+        // Lent to the worker: a new file landing (or onDestroy) clears the source on this thread,
+        // and must not recycle the picture while the worker is still drawing from it. The cache
+        // gives the loan back exactly once: after the draw, or when no job will ever draw it (the
+        // capture dropped first, its job rejected, or the worker shut down with it queued).
+        mManagedWallpaperSource.lend(sourceBitmap);
+        return com.termux.app.chrome.WallpaperBlurCache.FrameCapture.deferred(
+            () -> drawManagedWallpaperBackdrop(sourceBitmap, target, frame, zoom),
+            () -> runOnUiThread(() -> mManagedWallpaperSource.release(sourceBitmap)));
+    }
 
-        {
-            int targetWidth = Math.max(1, targetRect.width());
-            int targetHeight = Math.max(1, targetRect.height());
+    /**
+     * Any thread: the managed picture drawn into {@code targetRect} at full size, from geometry
+     * the caller read on the main thread. Null when the picture was recycled before the draw.
+     */
+    @Nullable
+    private static Bitmap drawManagedWallpaperBackdrop(@NonNull Bitmap sourceBitmap,
+                                                       @NonNull Rect targetRect,
+                                                       @NonNull Rect frameRect, float zoom) {
+        if (sourceBitmap.isRecycled()) return null;
+        int targetWidth = Math.max(1, targetRect.width());
+        int targetHeight = Math.max(1, targetRect.height());
 
-            Bitmap bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            int frameWidth = Math.max(1, frameRect.width());
-            int frameHeight = Math.max(1, frameRect.height());
-            int sourceWidth = Math.max(1, sourceBitmap.getWidth());
-            int sourceHeight = Math.max(1, sourceBitmap.getHeight());
-            float scale = Math.max((float) frameWidth / sourceWidth, (float) frameHeight / sourceHeight);
-            float drawWidth = sourceWidth * scale;
-            float drawHeight = sourceHeight * scale;
-            float translateX = frameRect.left + ((frameWidth - drawWidth) / 2f) - targetRect.left;
-            float translateY = frameRect.top + ((frameHeight - drawHeight) / 2f) - targetRect.top;
+        Bitmap bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        int frameWidth = Math.max(1, frameRect.width());
+        int frameHeight = Math.max(1, frameRect.height());
+        int sourceWidth = Math.max(1, sourceBitmap.getWidth());
+        int sourceHeight = Math.max(1, sourceBitmap.getHeight());
+        float scale = Math.max((float) frameWidth / sourceWidth, (float) frameHeight / sourceHeight);
+        float drawWidth = sourceWidth * scale;
+        float drawHeight = sourceHeight * scale;
+        float translateX = frameRect.left + ((frameWidth - drawWidth) / 2f) - targetRect.left;
+        float translateY = frameRect.top + ((frameHeight - drawHeight) / 2f) - targetRect.top;
 
-            Matrix shaderMatrix = new Matrix();
-            shaderMatrix.setScale(scale, scale);
-            shaderMatrix.postTranslate(translateX, translateY);
-            float zoom = systemWallpaperRenderZoom();
-            if (zoom != 1f) {
-                // Same render-zoom compensation as the system-drawable path, in this bitmap's
-                // local coordinates (the target rect's origin is already subtracted above).
-                shaderMatrix.postScale(zoom, zoom,
-                    frameRect.exactCenterX() - targetRect.left,
-                    frameRect.exactCenterY() - targetRect.top);
-            }
-
-            BitmapShader shader = new BitmapShader(sourceBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-            shader.setLocalMatrix(shaderMatrix);
-            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-            paint.setShader(shader);
-            canvas.drawRect(0f, 0f, targetWidth, targetHeight, paint);
-            return bitmap;
+        Matrix shaderMatrix = new Matrix();
+        shaderMatrix.setScale(scale, scale);
+        shaderMatrix.postTranslate(translateX, translateY);
+        if (zoom != 1f) {
+            // Same render-zoom compensation as the system-drawable path, in this bitmap's
+            // local coordinates (the target rect's origin is already subtracted above).
+            shaderMatrix.postScale(zoom, zoom,
+                frameRect.exactCenterX() - targetRect.left,
+                frameRect.exactCenterY() - targetRect.top);
         }
+
+        BitmapShader shader = new BitmapShader(sourceBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        shader.setLocalMatrix(shaderMatrix);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        paint.setShader(shader);
+        canvas.drawRect(0f, 0f, targetWidth, targetHeight, paint);
+        return bitmap;
     }
 
     /**
@@ -7417,18 +7570,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The blur cache's capture, split across threads: the managed source answers from its own
-     * decode (or says it is reading), and for the system wallpaper only the geometry is read here,
-     * on the main thread — the decode itself is handed back as a job for the blur worker. Reading
-     * the system wallpaper was a ~46 ms decode per miss on the main thread (Pong, 2026-09-09).
+     * The blur cache's capture, split across threads: for both sources only the geometry is read
+     * here, on the main thread — the managed source answers from its own decode (or says it is
+     * reading), and the full-size draw from it, like the system wallpaper's decode, is handed back
+     * as a job for the blur worker. Reading the system wallpaper was a ~46 ms decode per miss on
+     * the main thread (Pong, 2026-09-09).
      */
     @Nullable
     private com.termux.app.chrome.WallpaperBlurCache.FrameCapture beginWallpaperFrameCapture(
             @NonNull Rect targetRect, @NonNull View wallpaperFrame) {
         if (shouldUseManagedWallpaperBlurSource()) {
-            Bitmap managedBackdrop = createManagedWallpaperBackdropBitmapForRect(targetRect, wallpaperFrame);
-            if (managedBackdrop != null) {
-                return com.termux.app.chrome.WallpaperBlurCache.FrameCapture.ready(managedBackdrop);
+            com.termux.app.chrome.WallpaperBlurCache.FrameCapture managed =
+                beginManagedWallpaperCapture(targetRect);
+            if (managed != null) {
+                return managed;
             }
             // While the file is being read there is nothing to draw yet; the system drawable
             // would be the same picture decoded again, on this thread, for a frame about to be
@@ -7611,7 +7766,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             seamOverscanPx);
         com.termux.app.chrome.SharedFrameDrawable installed =
             com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable());
+        float dockCover = dockGlassCover();
         if (!mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY) &&
+            dockCover == mDockGlassCover &&
             mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.ACCESSORY) == state.blurRadiusDp &&
             mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.ACCESSORY) == usingManagedWallpaperSource &&
             mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.ACCESSORY, backdropTargetRect) &&
@@ -7633,11 +7790,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 backdrop.setImageDrawable(null);
                 backdrop.setVisibility(View.GONE);
                 mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
+                setDockProgramEdge(false);
             }
             return;
         }
 
         installAccessoryBackdropFrame(backdrop, installed, frame, frameRect, state.blurRadiusDp);
+        mDockGlassCover = dockCover;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // The capsule sits inside the (horizontally overscanned) backdrop bitmap: left/right are
             // inset by the overscan, top/bottom span the full height. Hand that rect to the shader so
@@ -7660,7 +7819,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.chrome.GlassRefraction.rimRect(capRect, capLeft, 0f, capRight, capBottom,
                 com.termux.app.chrome.GlassRefraction.seamReachPx(
                     com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook),
-                    getResources().getDisplayMetrics().density, radiusPx, mAdaptiveGlass),
+                    getResources().getDisplayMetrics().density, radiusPx),
                 dockSeams);
             RenderEffect glass = buildGlassRefractionEffect(0f, capRect[0], capRect[1], capRect[2],
                 capRect[3], radiusPx);
@@ -7679,6 +7838,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Content-aware light scatter — the frost that makes the blur read as glass, not plastic.
         backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity() : 100));
         backdrop.setVisibility(View.VISIBLE);
+        // Below Android 13 there is no effect to install, and the dock keeps its rim.
+        setDockProgramEdge(mGlassParamsValid);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, state.blurRadiusDp,
             usingManagedWallpaperSource, backdropTargetRect);
         // The keyboard-local cover is deliberately retained until this expanded surface is ready.
@@ -7743,6 +7904,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyChromeSpec(@NonNull ChromeSpec state) {
         Trace.beginSection("Chrome.applyChromeSpec");
         try {
+            followLooksGlassTheme();
             syncFancierGlassLook();
             syncFrameStandDown();
             doApplyChromeSpec(state);
@@ -7900,6 +8062,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncAzBarHosts();
         syncOffDockPlank(currentPlaceLayout());
         refreshOffDockGlass();
+        syncDockGlassInks(state.barAlpha);
 
         configureAccessoryTopEdgeFx(true, state.barAlpha);
         applyDecorNavBarSurfaceState(state);
@@ -11154,6 +11317,54 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
+    /** The extra keys' label ink as last chosen on the dock's face; transparent before. */
+    @androidx.annotation.ColorInt private int mExtraKeysInk = Color.TRANSPARENT;
+    @NonNull private final Rect mExtraKeysInkRect = new Rect();
+    @NonNull private final int[] mExtraKeysInkLocation = new int[2];
+
+    /**
+     * On the pass that re-glazes the dock: the A&ndash;Z strip and the extra keys are told the
+     * glass they stand on (the dock's material at {@code dockOpacity}, its Tint and hue), so
+     * their ink is chosen on that face rather than on the wallpaper or the theme. The letters are
+     * re-synced only when their face moved; the extra keys re-chosen only when their ink changed.
+     */
+    private void syncDockGlassInks(float dockOpacity) {
+        if (mChrome == null) return;
+        // The pull tab keeps a floor under the dock's opacity (refreshAzTabGlass); every other
+        // home of the letters (the dock, the plank, their own capsule) wears the dock's own.
+        float azOpacity = mAzScrubRowView != null && mAzScrubRowView == mAzTabRowView
+            ? Math.max(dockOpacity, AzTabPolicy.MIN_GLASS_OPACITY) : dockOpacity;
+        if (mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.AZ_STRIP, azOpacity))
+            syncAzScrubLettersAndTint();
+        syncExtraKeysInk(dockOpacity);
+    }
+
+    /**
+     * The extra keys' labels on the dock's face: the theme's on-surface colour where it reads
+     * there, else the nearest tone of it that does on the other side (GlassInk#faceInk). A key
+     * repaints only when its ink changed.
+     */
+    private void syncExtraKeysInk(float dockOpacity) {
+        ExtraKeysView keys = mExtraKeysView;
+        if (keys == null || keys.getWidth() <= 0 || keys.getHeight() <= 0) return;
+        mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
+        keys.getLocationOnScreen(mExtraKeysInkLocation);
+        mExtraKeysInkRect.set(mExtraKeysInkLocation[0], mExtraKeysInkLocation[1],
+            mExtraKeysInkLocation[0] + keys.getWidth(), mExtraKeysInkLocation[1] + keys.getHeight());
+        int face = mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mExtraKeysInkRect);
+        int theme = ThemeUtils.getSystemAttrColor(keys.getContext(),
+            ExtraKeysView.ATTR_BUTTON_TEXT_COLOR, ExtraKeysView.DEFAULT_BUTTON_TEXT_COLOR);
+        int ink = GlassInk.faceInk(face, theme,
+            mChrome.ink().target(OnGlass.TARGET_BODY_TEXT));
+        mExtraKeysInk = ink;
+        // Each page compared on its own: a page rebuilt since (its theme colour back) is caught.
+        for (ExtraKeysView view : mExtraKeysViews) {
+            if (view == null || view.getButtonTextColor() == ink) continue;
+            view.setButtonTextColor(ink);
+            view.refreshKeyStyles();
+        }
+    }
+
     /**
      * What the launcher's own painted things are standing on, measured: the A&ndash;Z letters, the
      * gesture orb, the edge bloom, the page ticks, the drawer's A&ndash;Z rope and the app-launch
@@ -11795,6 +12006,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // rebuilds the dock's whole app row.
             applySuggestionBarSurfaceStyling();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        }
+
+        @Override public void holdGlassFrameBakes(boolean held) {
+            if (mChrome != null) mChrome.blurCache().holdFrameBakes(held);
+        }
+
+        @Override public void retainGlassCapture(boolean retain) {
+            if (mChrome != null) mChrome.blurCache().retainCapture(retain);
         }
 
         @Override public boolean isGlassRefractionActive() {
@@ -14712,8 +14931,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        ChromePolicy.applyWallpaperModePreferences(preferences, enabled);
-        requestTermuxActivityStylingOnNextResume(context, true);
+        // Recreate only when the mode switched: the window theme changes with it. A wallpaper
+        // applied while the mode is already on (the picker's Apply, `launcherctl wallpaper set`)
+        // re-styles in place; a recreate there closed an open Look editor and dropped a running
+        // X11 display pane.
+        boolean modeSwitched = ChromePolicy.applyWallpaperModePreferences(preferences, enabled);
+        requestTermuxActivityStylingOnNextResume(context, modeSwitched);
     }
 
 
@@ -17182,6 +17405,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         while (mExtraKeysViews.size() <= page) mExtraKeysViews.add(null);
         mExtraKeysViews.set(page, extraKeysView);
         if (page == 0) mExtraKeysView = extraKeysView;
+        if (extraKeysView != null && mExtraKeysInk != Color.TRANSPARENT
+                && extraKeysView.getButtonTextColor() != mExtraKeysInk) {
+            extraKeysView.setButtonTextColor(mExtraKeysInk);
+            extraKeysView.refreshKeyStyles();
+        }
         applyExtraKeysFeedbackAccent(extraKeysView);
         applyExtraKeysPlaceEligibility(extraKeysView);
     }
@@ -22059,6 +22287,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         doRefreshTerminalWindowBar();
     }
 
+    /**
+     * Whether the window bar's frost is on screen drawn through the program, as the last top-pane
+     * frost pass reported it ({@code onWindowBarFrostEdge}); the bar's stroke stands down while
+     * it is.
+     */
+    private boolean mWindowBarFrostDrawsEdge;
+
     /** Depth of {@link #batchWindowBarRefresh}; while above zero a refresh is only noted. */
     private int mWindowBarRefreshBatchDepth;
     private boolean mWindowBarRefreshPending;
@@ -22172,7 +22407,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : mChrome.glass().statusBarSurface(opacity,
                         capsuleStatusBar || isStatusBarVertical() || !stripContinues
                             ? 0f : terminalWindowGlassStatusFraction(host), 1f, barStroke,
-                        com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR));
+                        com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR,
+                        // While the bar's frost draws the gathered light along the same outline,
+                        // as the last frost pass found it, the bar lays no stroke beside it.
+                        mWindowBarFrostDrawsEdge));
         }
         applyStatusBarStyle(host);
         applyTerminalWindowBarBackdropInsets();
@@ -25089,9 +25327,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public static void requestTermuxActivityStylingOnNextResume(Context context, boolean recreateActivity) {
+        // A recreate already owed stays owed: a later in-place request must not cancel it.
+        recreateActivity = pendingRecreateAfterRequest(sPendingStyleReloadOnNextResume,
+            sPendingStyleReloadRecreateActivity, recreateActivity);
         sPendingStyleReloadRecreateActivity = recreateActivity;
         sPendingStyleReloadOnNextResume = true;
         updateTermuxActivityStyling(context, recreateActivity);
+    }
+
+    /** Whether the owed next-resume reload recreates after one more request is added to it. */
+    @VisibleForTesting
+    public static boolean pendingRecreateAfterRequest(boolean reloadPending, boolean recreatePending,
+                                                      boolean recreateRequested) {
+        return recreateRequested || (reloadPending && recreatePending);
     }
 
     public static void requestAppDrawerReloadOnNextResume(Context context) {

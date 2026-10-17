@@ -22,7 +22,6 @@ import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
-import com.termux.app.chrome.FancierGlassPolicy;
 import com.termux.app.chrome.WallpaperBackdropPolicy;
 import com.termux.app.chrome.WallpaperPictureReader;
 import com.termux.app.notice.AppNotice;
@@ -98,7 +97,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureDynamicColorsHint();
         updateKeyboardLookEnabled(context);
         configureWallpaperAlignment(context);
-        gateAdaptiveGlass(context);
     }
 
     @Override
@@ -116,29 +114,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureDynamicColorsHint();
         if (context != null) updateKeyboardLookEnabled(context);
         if (context != null) updateWallpaperAlignmentVisibility(context);
-        if (context != null) gateAdaptiveGlass(context);
-    }
-
-    /**
-     * Adaptive glass is offered only where the glass it changes is drawn: hidden below Android
-     * 13, and shown but greyed out, with the summary saying why, until the wallpaper on screen is
-     * one set from inside the launcher ({@link FancierGlassPolicy}). The stored switch is left
-     * alone either way, and this is re-read on every resume, so a wallpaper changed elsewhere is
-     * picked up on return.
-     */
-    private void gateAdaptiveGlass(@NonNull Context context) {
-        SwitchPreferenceCompat toggle = findPreference("fancier_glass_adaptive");
-        if (toggle == null) return;
-        if (!FancierGlassPolicy.offered(Build.VERSION.SDK_INT)) {
-            toggle.setVisible(false);
-            return;
-        }
-        boolean flippable = FancierGlassPolicy.flippable(Build.VERSION.SDK_INT,
-            WallpaperPictureReader.managedPictureOnScreen(context,
-                TermuxAppSharedPreferences.build(context, false)));
-        toggle.setEnabled(flippable);
-        toggle.setSummary(flippable ? R.string.settings_adaptive_glass_summary
-            : R.string.settings_fancier_glass_hint);
     }
 
     /**
@@ -441,12 +416,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setWallpaperParallaxEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "fancier_glass_adaptive":
-                // The styling reload re-reads it beside the Fancier Glass look and re-dresses
-                // every glass surface; no recreate needed.
-                mPreferences.setFancierGlassAdaptiveEnabled(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
             case "terminal_dynamic_colors_enabled":
                 // This switch is the whole palette decision: on, the terminal and the chrome both
                 // take the wallpaper; off, both take the scheme. Either way the chrome palette
@@ -525,8 +494,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isUseSystemWallpaperEnabled();
             case "wallpaper_parallax":
                 return mPreferences.isWallpaperParallaxEnabled();
-            case "fancier_glass_adaptive":
-                return mPreferences.isFancierGlassAdaptiveEnabled();
             case "terminal_dynamic_colors_enabled":
                 return mPreferences.isTerminalDynamicColorsEnabled();
             case "app_launcher_bw_icons":

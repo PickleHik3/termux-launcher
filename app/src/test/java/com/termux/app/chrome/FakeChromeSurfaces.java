@@ -41,8 +41,6 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     boolean blurHealthy = true;
     /** Fancier Glass as the Activity would answer it; null is the default mode. */
     @Nullable GlassRefraction.Look look;
-    /** {@link #adaptiveGlass()}: Adaptive glass's gathered edge, off as on a fresh install. */
-    boolean adaptive;
     @NonNull ChromeSpec spec = new ChromeSpec(true, false, 0, true, true, false, true, 1f, 12);
 
     /**
@@ -61,6 +59,8 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     int terminalGlassFrostUpdates;
     int captureCount;
     int cacheClearedCallbacks;
+    /** What the last top-pane frost pass told the window bar; null before any. */
+    @Nullable Boolean windowBarEdge;
     @NonNull final List<Bitmap> inUse = new ArrayList<>();
 
     @NonNull
@@ -190,8 +190,8 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     }
 
     @Override
-    public boolean adaptiveGlass() {
-        return adaptive;
+    public void onWindowBarFrostEdge(boolean drawsEdge) {
+        windowBarEdge = drawsEdge;
     }
 
     @Override

@@ -159,6 +159,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         /** The coalesced glass re-render. */
         void applyGlassPreview();
         /**
+         * Holds the Tint amount's frame tint for a drag's release while {@code held}: the blurred
+         * frames keep the tint they were baked with, so a Tint or Opacity drag re-bakes them
+         * once, on release, not on every tick.
+         */
+        default void holdGlassFrameBakes(boolean held) {}
+        /**
+         * Keeps the unblurred wallpaper capture while the editor is open, so each re-bake a
+         * release causes blurs it again instead of reading the wallpaper again.
+         */
+        default void retainGlassCapture(boolean retain) {}
+        /**
          * Whether the glass edge is drawn now (Android 13, a wallpaper set from inside the
          * launcher, Lazy mode off): the global set offers Depth only while it is.
          */
@@ -273,6 +284,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable private String mEntrySignature;
     /** The Custom values of this session, kept while a Look is showing. */
     @NonNull private final SessionCustom mSessionCustom = new SessionCustom();
+    /** The saved Custom blob at open, which Undo and Discard put back; null while closed. */
+    @Nullable private String mEntryCustom;
     /**
      * The last Depth position the user set this session, so a thumb left on a flat stretch of
      * the curve reads back where it was left ({@link GlassEdgeControls.Edge#depth(int)}). Not
@@ -550,8 +563,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (rootContainer == null || content == null)
             return;
         final int token = ++mPresentToken;
-        // Where the person left this page, when the surface remembers it: the Custom stop and
-        // the selection (Look), the place (Layout), the row's scroll (Icons).
+        // Where the person left this page, when the surface remembers it: the selection (Look,
+        // at the Custom stop only), the place (Layout), the row's scroll (Icons).
         AppearanceReturnState restore = mRestore;
         mRestore = null;
         if (restore != null && restore.editorMode() != mode)
@@ -559,19 +572,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (restore != null && layoutMode && place == null)
             place = placeNamed(restore.place);
         mOpen = true;
+        mHost.retainGlassCapture(true);
         // No Look drag is under way at an open: a preview left behind by one that never saw its
         // lift (a recreated activity) must not stand between the launcher and its stored look.
         if (mLookDrag == null)
             SharedPreferencesPreview.clear();
         mEntry = AppearanceSnapshot.capture(prefs);
         mEntrySignature = mEntry.signature();
+        mEntryCustom = prefs.getSurfaceCustomPreset();
         mSessionCustom.clear();
         forgetGlassEdgePositions();
+        // The stop the live look stands on, whatever the last visit left the slider at. A Custom
+        // the user made is not a Look, so it opens at Custom by itself. A Custom left as a tap
+        // seeded it over a Look (a tap at Clear, then Done) is that Look: opening there at Custom
+        // would show the Look's values as Custom and leave the slider nowhere to move to, so the
+        // saved Custom could not come back. At the Look, a move to Custom applies it.
         mStop = matchingStop();
-        // At the Custom stop as it was left: the slider moves there without writing anything,
-        // as a tap on an element at a Look stop does; Undo comes back to it.
-        if (restore != null && restore.custom)
-            mStop = AppearanceLooks.CUSTOM_STOP;
         mEntryStop = mStop;
         mTarget = null;
         mRestoreTarget = restore == null ? null : targetNamed(restore.target);
@@ -1246,7 +1262,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return AppearanceLooks.CUSTOM_STOP;
-        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+        for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
             if (SurfacePresets.matches(prefs, preset))
                 return AppearanceLooks.stopForPresetId(preset.id);
         }
@@ -1808,7 +1824,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /**
      * The Custom row: the heading, the buttons the selection has, and its vertical sliders at the
      * stored values. The set is {@link AppearanceLooks#controls}: the global one with nothing
-     * tapped, ending in Depth while the glass edge is drawn, or the element's own.
+     * tapped, with Edge and Depth while the glass edge is drawn, or the element's own.
      */
     private void showCustomRow() {
         AppearanceEditorPanel panel = mPanel;
@@ -1816,15 +1832,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (panel == null || prefs == null)
             return;
         panel.showRow2(mTarget == null ? R.string.appearance_editor_target_all : nameOf(mTarget));
-        // The palette Contrast changes is the Material one; with wallpaper colours off the
-        // terminal wears a scheme file, which no contrast level moves (as in Settings).
-        boolean palette = prefs.isTerminalDynamicColorsEnabled();
-        // Depth draws nothing while the glass edge is off (below Android 13, no wallpaper set
-        // from the launcher, Lazy mode), so the global set only has it while the edge is drawn.
+        // Edge and Depth draw nothing while the glass edge is off (below Android 13, no wallpaper
+        // set from the launcher, Lazy mode), so the global set only has them while it is drawn.
         boolean glassEdge = mTarget == null && mHost.isGlassRefractionActive();
         List<AppearanceEditorPanel.SliderState> states = new ArrayList<>();
         for (Control control : AppearanceLooks.controls(mTarget, glassEdge)) {
-            boolean enabled = control != Control.CONTRAST || palette;
+            // Every control stays live whatever the others say (developer, 2026-10-17).
+            boolean enabled = true;
             if (control == Control.ICON_SIZE) {
                 // The icons the dock can give under this Style on this screen, end to end.
                 int[] range = AppearanceLooks.iconSizeRangeDp(mHost.isFloatingDock(),
@@ -1845,18 +1859,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             panel.setTerminalLooks(prefs.isTerminalCursorTrailEnabled(),
                 prefs.getTerminalCursorTrailStyle(),
                 prefs.getTerminalRetroEffect());
+        if (mTarget == null)
+            panel.setGlassLooks(prefs.getSurfaceGlassTintHue());
     }
+
 
     /** What a control's slider stands at now, in the control's own units. */
     private int valueOf(@NonNull Control control, @NonNull TermuxAppSharedPreferences prefs) {
         switch (control) {
-            case BLUR:
-                return AppearanceLooks.blurDp(mTarget == null
-                    ? prefs.getSurfaceBaseValue(SurfaceProperty.BLUR) : blurOf(prefs, mTarget));
-            case GRAIN:
-                return AppearanceLooks.grainPercent(mTarget == null
-                    ? prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN)
-                    : grainOf(prefs, mTarget.slot));
+            case GLASS:
+                // Where it was left, while the blur and grain are still that position's.
+                return mTarget == null
+                    ? GlassControls.readBack(prefs.getSurfaceGlassPosition(null),
+                        prefs.getSurfaceBaseValue(SurfaceProperty.BLUR),
+                        prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN))
+                    : GlassControls.readBack(prefs.getSurfaceGlassPosition(mTarget.slot),
+                        blurOf(prefs, mTarget), grainOf(prefs, mTarget.slot));
+            case VIBRANCY:
+                return Control.VIBRANCY.clamp(mHeldVibrancy != NO_HELD_VIBRANCY
+                    ? mHeldVibrancy : prefs.getSurfaceGlassVibrancy());
             case OPACITY:
                 return AppearanceLooks.opacityPercent(mTarget == null
                     ? prefs.getSurfaceBaseValue(SurfaceProperty.OPACITY)
@@ -1865,13 +1886,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return AppearanceLooks.tintPercent(mTarget == null
                     ? prefs.getSurfaceBaseValue(SurfaceProperty.TINT)
                     : tintOf(prefs, mTarget.slot));
-            case MARGIN:
-                return AppearanceLooks.marginValueFor(mHost.isFloatingDock(),
-                    prefs.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP),
-                    prefs.getTerminalPaneGap());
-            case CORNER_RADIUS:
-                return AppearanceLooks.cornersDp(
-                    prefs.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+            case KEY_OPACITY:
+                return keyOpacityValue(prefs);
             case KEY_RADIUS:
                 return AppearanceLooks.keyCornersValueFor(
                     prefs.getInAppKeyboardKeyCornerRadiusDp());
@@ -1882,6 +1898,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     mHost.isAppsRowAlone(), dockHeightScale(prefs), density());
             case APP_ICONS:
                 return AppearanceLooks.appIconsValueFor(prefs.getAppLauncherButtonCount());
+            case EDGE:
+                return Control.EDGE.clamp(prefs.getFancierGlassDispersionPercent());
             case DEPTH:
                 return glassEdgeOf(prefs).depth(mDepthSet);
             case CONTRAST:
@@ -1902,18 +1920,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @NonNull
     private String legendText(@NonNull Control control, int value, boolean enabled) {
         switch (control) {
-            case BLUR: return getString(R.string.appearance_editor_blur, value);
-            case GRAIN: return getString(R.string.appearance_editor_grain, value);
+            case GLASS: return getString(R.string.appearance_editor_glass, value);
             case OPACITY: return getString(R.string.appearance_editor_opacity, value);
             case TINT: return getString(R.string.appearance_editor_tint, value);
-            case MARGIN: return getString(R.string.appearance_editor_margin, value);
-            case CORNER_RADIUS: return getString(R.string.appearance_editor_corners, value);
+            case VIBRANCY:
+                return getString(R.string.appearance_editor_vibrancy,
+                    String.format(Locale.getDefault(), "%.2f", value / 100f));
+            case KEY_OPACITY: return getString(R.string.appearance_editor_key_opacity, value);
             case KEY_RADIUS: return getString(R.string.appearance_editor_key_corners, value);
             case KEY_SPACING:
                 return getString(R.string.appearance_editor_key_spacing,
                     String.format(Locale.getDefault(), "%.1f", value / 10f));
             case ICON_SIZE: return getString(R.string.appearance_editor_icon_size, value);
             case APP_ICONS: return getString(R.string.appearance_editor_app_icons, value);
+            case EDGE: return getString(R.string.appearance_editor_edge, value);
             case DEPTH: return getString(R.string.appearance_editor_depth, value);
             case CONTRAST:
             default:
@@ -2064,42 +2084,50 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (mTarget == Target.TERMINAL) writeRetroEffect(id);
         }
 
+        @Override public void onTintHue(@NonNull String id) {
+            if (mTarget == null) writeTintHue(id);
+        }
+
         @Override public void onSliderReleased() {
             endDrag();
         }
     }
 
     /**
-     * One of the Custom row's sliders moved. Blur, Grain and Opacity are the shared glass with
-     * nothing tapped and the element's own values with one tapped; Margin and Corner radius are
-     * Layout mode's own writes; Depth is the glass edge's, global; the
-     * rest are the element's.
+     * One of the Custom row's sliders moved. Glass, Opacity and Tint are the shared glass with
+     * nothing tapped and the element's own values with one tapped; Vibrancy, Edge and Depth are
+     * global; the rest are the element's.
      */
     private void writeControl(@NonNull Control control, int value) {
         switch (control) {
-            case BLUR:
-                if (mTarget == null) writeBlur(value);
-                else writeElement(mTarget, SurfaceProperty.BLUR, value);
+            case GLASS:
+                // The radius moves a dp at a time: held, the frames stand in for it until the
+                // release bakes the one radius it settled on.
+                holdFrameBakesForDrag();
+                writeGlass(value);
                 break;
-            case GRAIN:
-                if (mTarget == null) writeGlobal(SurfaceProperty.GRAIN, value);
-                else writeElement(mTarget, SurfaceProperty.GRAIN, value);
+            case VIBRANCY:
+                writeVibrancy(value);
                 break;
             case OPACITY:
+                holdFrameBakesForDrag();
                 if (mTarget == null) writeGlobal(SurfaceProperty.OPACITY, value);
                 else writeElement(mTarget, SurfaceProperty.OPACITY, value);
                 break;
             case TINT:
+                holdFrameBakesForDrag();
                 if (mTarget == null) writeGlobal(SurfaceProperty.TINT, value);
                 else writeElement(mTarget, SurfaceProperty.TINT, value);
                 break;
-            case MARGIN: writeMargin(value); break;
-            case CORNER_RADIUS: writeCorners(value); break;
+            case KEY_OPACITY: writeKeyOpacity(value); break;
             case KEY_RADIUS: writeKeyCorners(value); break;
             case KEY_SPACING: writeKeySpacing(value); break;
             case ICON_SIZE: writeIconSize(value); break;
             case APP_ICONS: writeAppIcons(value); break;
             case CONTRAST: writeLegibility(value); break;
+            case EDGE:
+                writeGlassEdge(value);
+                break;
             case DEPTH:
                 writeGlassDepth(value);
                 break;
@@ -2129,6 +2157,103 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mDepthSet = GlassEdgeControls.NONE;
     }
 
+    /**
+     * Glass: blur and grain together along {@link GlassControls}' curve, as the shared glass with
+     * nothing tapped (every surface re-attached, as Blur always did) or the tapped element's own.
+     */
+    private void writeGlass(int value) {
+        int glass = Control.GLASS.clamp(value);
+        int blur = GlassControls.blurForGlass(glass);
+        int grain = GlassControls.grainForGlass(glass);
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs != null)
+            prefs.setSurfaceGlassPosition(mTarget == null ? null : mTarget.slot, glass);
+        if (mTarget == null) {
+            writeBlur(blur);
+            writeGlobal(SurfaceProperty.GRAIN, grain);
+        } else {
+            writeElement(mTarget, SurfaceProperty.BLUR, blur);
+            writeElement(mTarget, SurfaceProperty.GRAIN, grain);
+        }
+    }
+
+    /** True while a slider drag holds the frame tint's re-bake for its release. */
+    private boolean mFrameBakesHeld;
+
+    /**
+     * Tint and Opacity move the frame tint behind clear glass ({@code GlassFrameTint}), and each
+     * new value re-bakes every blurred frame: a drag holds that for its release, as Vibrancy's
+     * does, while the face follows every tick. Glass moves the blur radius, and the hold covers
+     * that too: no capture or blur per tick, one on release.
+     */
+    private void holdFrameBakesForDrag() {
+        if (!defersHeavyPasses() || mFrameBakesHeld)
+            return;
+        mFrameBakesHeld = true;
+        mHost.holdGlassFrameBakes(true);
+    }
+
+    /** Lets a held frame tint bake: once, on the glass pass this asks for. */
+    private void releaseFrameBakes() {
+        if (!mFrameBakesHeld)
+            return;
+        mFrameBakesHeld = false;
+        mHost.holdGlassFrameBakes(false);
+        requestPreview(SurfaceEditorProperties.PREVIEW_BLUR);
+    }
+
+    /** No Vibrancy held for a drag's release. */
+    private static final int NO_HELD_VIBRANCY = Integer.MIN_VALUE;
+    /**
+     * The Vibrancy a slider drag stands at, written on release: every value re-bakes the blurred
+     * frames, which is the work a drag can least afford, so a drag bakes once.
+     */
+    private int mHeldVibrancy = NO_HELD_VIBRANCY;
+
+    private void writeVibrancy(int value) {
+        int clamped = Control.VIBRANCY.clamp(value);
+        if (mSliderDragActive) {
+            mHeldVibrancy = clamped;
+            return;
+        }
+        mHeldVibrancy = NO_HELD_VIBRANCY;
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        prefs.setSurfaceGlassVibrancy(clamped);
+        requestPreview(SurfaceEditorProperties.PREVIEW_BLUR
+            | SurfaceEditorProperties.PREVIEW_SURFACES);
+    }
+
+    /**
+     * The Tint colour pill: which accent the Tint amount mixes in, global. A pick at Tint 0 also
+     * raises the shared Tint so the hue shows ({@link GlobalGlass#writeTintHue}), and the Tint
+     * column follows.
+     */
+    private void writeTintHue(@NonNull String id) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int tint = GlobalGlass.writeTintHue(prefs, id);
+        AppearanceEditorPanel panel = mPanel;
+        if (panel != null)
+            panel.setSliderValue(Control.TINT, AppearanceLooks.tintPercent(tint));
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD);
+    }
+
+    /**
+     * The Edge slider: the stored dispersion itself, global like Depth. The panes' pass re-reads
+     * the edge and re-dresses every glass surface with it, as Depth's does.
+     */
+    private void writeGlassEdge(int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        prefs.setFancierGlassDispersionPercent(Control.EDGE.clamp(value));
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
+    }
+
     /** The six stored glass edge values. */
     @NonNull
     private static GlassEdgeControls.Edge glassEdgeOf(@NonNull TermuxAppSharedPreferences prefs) {
@@ -2142,22 +2267,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * The Look slider landed on a stop: its values written into {@code into}, which is the store
-     * itself, or a drag's batch over it. A Look applies at once; leaving Custom keeps the Custom
-     * values of this session, so returning to Custom brings them back even when Done has not
-     * saved them. With none kept, Custom writes nothing: the Look on screen is its seed. The
-     * caller restates the launcher; false when the slider was already there and nothing was
-     * written.
+     * itself, or a drag's batch over it. A Look applies at once and resets every surface to it;
+     * leaving a Custom the user touched keeps it for this visit and stores it as the saved Custom,
+     * so returning to Custom brings it back, in this visit and in every later one. With none kept
+     * this visit, Custom applies the saved Custom whole; with none saved either it writes
+     * nothing: the Look on screen is its seed. The caller restates the launcher; false when the
+     * slider was already there and nothing was written.
      */
     private boolean moveToStop(@NonNull TermuxAppSharedPreferences into, int stop) {
         if (stop == mStop)
             return false;
         boolean leavingCustom = AppearanceLooks.isCustomStop(mStop);
-        SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(), stop);
+        SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(into),
+            stop);
         mTarget = null;
         if (look != null) {
             if (leavingCustom)
                 mSessionCustom.leave(into);
-            SurfacePresets.apply(into, look);
+            // Every surface back on the Look, its Keys and Glass positions included.
+            SurfacePresets.applyLook(into, look);
             forgetGlassEdgePositions();
             mStop = stop;
             return true;
@@ -2168,34 +2296,67 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The Custom values of one editor visit. Leaving Custom for a Look always keeps what is on
-     * screen, so comparing against a Look never loses work; returning to Custom puts it back.
-     * With nothing kept the move to Custom writes nothing: the Look on screen is Custom's seed.
-     * The saved Custom is never read here. Cleared at open and by Undo.
+     * The Custom values of one editor visit, and the saved Custom behind them. Leaving a touched
+     * Custom for a Look keeps what is on screen and stores it as the saved Custom
+     * ({@link SurfacePresets#saveCustom}), so comparing against a Look never loses work and the
+     * next visit finds it too; returning to Custom puts the kept values back. With nothing kept the
+     * move to Custom applies the saved Custom whole ({@link SurfacePresets#applyCustom}), and with
+     * none saved it writes nothing: the Look on screen is Custom's seed. Cleared at open and by
+     * Undo, which also puts the saved Custom back as it was at open.
      */
     static final class SessionCustom {
         @Nullable private AppearanceSnapshot mKept;
         /**
-         * What the last move to Custom seeded it with, while nothing was kept. Custom left exactly
-         * as seeded is not this visit's work, so the next move to Custom seeds from the Look on
-         * screen again (Clear → Custom → Mist → Custom reads as Mist, not Clear).
+         * What Custom stood at when the slider (or a tap at a Look) moved there, while nothing was
+         * kept: the Look on screen, or the saved Custom just applied. Custom left exactly as it was
+         * is not this visit's work, so it is neither kept nor saved, and the next move to Custom
+         * starts over (Clear → Custom → Mist → Custom reads as Mist, not Clear, when nothing is
+         * saved).
          */
         @Nullable private String mSeedSignature;
 
-        /** The slider leaves Custom: the values in {@code live} are this visit's Custom, unless untouched. */
+        /**
+         * The slider leaves Custom: the values in {@code live} are this visit's Custom, and the
+         * saved one, unless untouched.
+         */
         void leave(@NonNull TermuxAppSharedPreferences live) {
             AppearanceSnapshot now = AppearanceSnapshot.capture(live);
             mKept = now.signature().equals(mSeedSignature) ? null : now;
             mSeedSignature = null;
+            if (mKept != null)
+                SurfacePresets.saveCustom(live);
         }
 
-        /** The slider returns to Custom: the kept values come back, or nothing is written. */
+        /**
+         * The slider returns to Custom: the kept values come back, else the saved Custom, else
+         * nothing is written.
+         */
         void enter(@NonNull TermuxAppSharedPreferences into) {
             AppearanceSnapshot kept = mKept;
-            if (kept != null)
+            if (kept != null) {
                 kept.restore(into);
-            else
-                mSeedSignature = AppearanceSnapshot.signatureOf(into);
+                return;
+            }
+            SurfacePresets.Preset saved = SurfacePresets.custom(into);
+            if (saved != null)
+                SurfacePresets.applyCustom(into, saved);
+            mSeedSignature = AppearanceSnapshot.signatureOf(into);
+        }
+
+        /**
+         * The editor stands at Custom over a Look without writing (a tap at a Look stop): what
+         * is on screen is the seed. Values kept
+         * earlier this visit are already the saved Custom, so a seed left untouched gives them
+         * back on the next move to Custom.
+         */
+        void seed(@NonNull TermuxAppSharedPreferences live) {
+            mSeedSignature = AppearanceSnapshot.signatureOf(live);
+        }
+
+        /** Whether {@code live} is Custom as the user changed it, not as it was seeded. */
+        boolean isTouched(@NonNull TermuxAppSharedPreferences live) {
+            return mSeedSignature == null
+                || !mSeedSignature.equals(AppearanceSnapshot.signatureOf(live));
         }
 
         void clear() {
@@ -2297,16 +2458,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** The tint strength a surface draws with now, in percent. */
+    /** The tint amount a surface draws with now, in percent. */
     private static int tintOf(@NonNull TermuxAppSharedPreferences prefs, @Nullable SurfaceSlot slot) {
         if (slot == null)
-            return AppearanceLooks.TINT_MAX;
+            return 0;
         switch (slot) {
             case STATUS: return AppearanceLooks.tintPercent(prefs.getStatusBarTintStrength());
             case CANVAS: return AppearanceLooks.tintPercent(prefs.getTerminalTintStrength());
             case KEYBOARD: return AppearanceLooks.tintPercent(prefs.getInAppKeyboardTintStrength());
             case DOCK: return AppearanceLooks.tintPercent(prefs.getDockTintStrength());
-            default: return AppearanceLooks.TINT_MAX;
+            default: return 0;
         }
     }
 
@@ -2524,6 +2685,36 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** Key radius: the key caps' radius, and nothing else; Layout mode's (DECISIONS item 6). */
+    /**
+     * Where Keys stands: the stored cap opacity, or, while the theme owns it (stored -1), the
+     * opacity the theme's caps are drawn at, so the first touch moves from what is on screen.
+     */
+    private int keyOpacityValue(@NonNull TermuxAppSharedPreferences prefs) {
+        int stored = prefs.getInAppKeyboardKeyOpacity();
+        if (stored >= 0)
+            return Control.KEY_OPACITY.clamp(stored);
+        TermuxInAppKeyboard keyboard = keyboard();
+        return Control.KEY_OPACITY.clamp(keyboard != null
+            ? keyboard.getEffectiveKeyOpacityPercent() : Control.KEY_OPACITY.max);
+    }
+
+    /**
+     * Keys: the in-app keyboard's cap opacity, stored as it is (0 to 100 percent). The keyboard
+     * repaints its caps at once and re-chooses the legends on them as drawn; the band's ink and
+     * veil follow on the keyboard pass.
+     */
+    private void writeKeyOpacity(int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int opacity = Control.KEY_OPACITY.clamp(value);
+        prefs.setInAppKeyboardKeyOpacity(opacity);
+        TermuxInAppKeyboard keyboard = keyboard();
+        if (keyboard != null)
+            keyboard.previewSurfaceEditorKeyOpacity(opacity);
+        requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
+    }
+
     private void writeKeyCorners(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -2637,8 +2828,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         if (!scene().offersSurface(target.slot))
             return;
-        if (!AppearanceLooks.isCustomStop(mStop))
+        if (!AppearanceLooks.isCustomStop(mStop)) {
             mStop = AppearanceLooks.CUSTOM_STOP;
+            TermuxAppSharedPreferences prefs = prefs();
+            if (prefs != null)
+                mSessionCustom.seed(prefs);
+        }
         mTarget = target;
         afterSelection();
     }
@@ -3273,6 +3468,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null || mEntry == null)
             return;
         mEntry.restore(prefs);
+        // The saved Custom as it was at open: a Custom left during the visit stored it.
+        if (mEntryCustom != null)
+            prefs.setSurfaceCustomPreset(mEntryCustom);
         mSessionCustom.clear();
         forgetGlassEdgePositions();
         mStop = mEntryStop;
@@ -3280,10 +3478,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         syncAfterBulkWrite();
     }
 
-    /** Saves the look: at the Custom stop it is also stored as the saved Custom. */
+    /**
+     * Saves the look: at a Custom the user changed it is also stored as the saved Custom. A Custom
+     * left as seeded (a tap at Clear, then Done) is a Look, and must not replace the saved one.
+     */
     private void commitLook() {
         TermuxAppSharedPreferences prefs = prefs();
-        if (prefs != null && AppearanceLooks.isCustomStop(mStop))
+        if (prefs != null && AppearanceLooks.isCustomStop(mStop)
+            && mSessionCustom.isTouched(prefs))
             SurfacePresets.saveCustom(prefs);
     }
 
@@ -3382,10 +3584,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // The bar goes back to its stored shape as the editor leaves, from the same moment.
         mHost.setTopStatusBarExpandedForEditor(false, true);
         mOpen = false;
+        mHost.retainGlassCapture(false);
         mFramed = false;
         mPresentToken++;
         mSliderDragActive = false;
         mEntry = null;
+        mEntryCustom = null;
         mEntrySignature = null;
         mTarget = null;
         mRestoreTarget = null;
@@ -3555,6 +3759,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private void endDrag() {
         mSliderDragActive = false;
+        if (mHeldVibrancy != NO_HELD_VIBRANCY)
+            writeVibrancy(mHeldVibrancy);
+        releaseFrameBakes();
         settleLookDrag();
         if (mDockSizeHeld) {
             mDockSizeHeld = false;

@@ -13,10 +13,15 @@ Latest stable: v1.0.6.
 ## New in this drop
 <!-- Only what this drop adds over the one before it; replace the whole list at every drop. -->
 
+- Look › Custom's Tint adds your accent colour from any Look, Clear and Mist included, and Hue picks primary, secondary or tertiary.
+- Look › Custom's Glass slider runs the glass from clear to frosted in one move, in place of Blur and Grain; a new Vibrancy slider makes what shows through the glass more or less colourful, and Edge runs the glass edge from no fringe to a bold coloured edge. Margin and Corner radius are on the Layout page only.
+- Look › Custom's keyboard card has a Keys slider for how solid the keys are, from clear to opaque; the key labels stay readable at every setting.
+- Glass edges show the same outline on frosted and solid glass as on clear glass.
+- Clear, Mist and Tint sit on the Glass slider's curve now, so Clear is a touch blurrier with finer grain and Tint has much less grain; an install on a Look keeps that Look.
 - Glass edges bend the wallpaper in a narrow ring right at the edge, meet the wallpaper outside without a seam, and carry a faint line of light along the top instead of a milky band; the Looks were re-tuned to match.
 - Look › Custom's Depth slider is the last of the shared sliders, and each Look sits exactly on it; the rest of the edge comes with the Look.
 - Pressing a pinned app on a glass dock, or a glass card in a sheet, lights the glass under your finger for a moment.
-- Settings › Theme & fonts › Adaptive glass, off by default: glass edges catch the wallpaper's own light instead of a white line, brightest at the top left.
+- Glass edges catch the wallpaper's own light instead of a white line, brightest at the top left, and keep the wallpaper's colour over a pale sky; each surface wears one edge, not a line on top of it.
 - The herdr theme template goes see-through over the launcher glass, with its sidebar, text and accents in your wallpaper's colours.
 - Settings › Keyboard › Adaptive touch accuracy now learns the space bar too: aim for space and land at the bottom of the row above, and it types a space once it has learned your taps. Swipes and Ctrl or Alt shortcuts always keep the key under your finger, and Settings shows whether it is learning, active or paused.
 - Settings › Keyboard › Layouts lets you edit, reset and create keyboard layouts; a layout's row slides its buttons open beneath it, and a new layout shows at once on its first swap.
@@ -40,7 +45,7 @@ These may change or be dropped before they reach a stable release.
 - Settings › Backup & restore saves your launcher settings and config files to one file, and your downloaded AI models to a folder, and restores both on this phone or a new one (#40). <!-- stays: P1, P2 -->
 - Glass edges draw as a hairline of light over a narrow bend that meets the wallpaper without a seam, and Look › Custom has a Depth slider after the shared sliders, shown where glass edges are drawn, that tunes how thick the glass edge looks. Corners is now called Corner radius (#63, #75). <!-- stays: P1 -->
 - Pressing a pinned app on a glass dock, or a glass card in a sheet, lights the glass under your finger for a moment (#75). <!-- stays: P1, P2 -->
-- Settings › Theme & fonts › Adaptive glass, off by default: glass edges catch the wallpaper's own light instead of a white line, brightest at the top left (glass plan 2026-10-16, Round 1). <!-- stays: P1, P2 -->
+- Glass edges catch the wallpaper's own light instead of a white line, brightest at the top left, on every glass surface on Android 13 and up (glass plan 2026-10-16, Round 1, always on). <!-- stays: P1, P2 -->
 - Scripts and agents in a pane can place, size, inspect, wait on and close panes and windows through launcherctl: `pane open --from --direction --size`, `pane resize`, `pane wait`, `window list|focus|close`, and `launcherctl <group> --help` (#66). <!-- stays: P1 -->
 - Pictures travel through the terminal clipboard: programs that speak kitty's clipboard protocol (OSC 5522) can read a picture from Android's clipboard and copy one to it, pasting a picture into a shell or an agent pastes it as a file path under `$PREFIX/tmp/clipboard`, and pictures inserted from the keyboard land the same way (#61). <!-- stays: P1 -->
 - A screenshot you just took can be pasted from the keyboard's paste key, which shows a photo while it or a copied picture is waiting; plain paste (paste with a modifier) keeps the clipboard. Screenshots need the storage permission (Settings › Permissions & services › Files and media, or `termux-setup-storage`). <!-- stays: P2 -->

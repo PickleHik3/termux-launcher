@@ -237,7 +237,7 @@ public class LayoutModeViewsTest {
                 value -> control.name()));
         }
         panel.setSliders(states);
-        LegendSlider blur = panel.sliderFor(AppearanceLooks.Control.BLUR);
+        LegendSlider blur = panel.sliderFor(AppearanceLooks.Control.GLASS);
         assertNotNull(blur);
         assertTrue(panel.isRow2Shown());
         assertEquals(View.VISIBLE, row2.getVisibility());
@@ -351,17 +351,17 @@ public class LayoutModeViewsTest {
             R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
         java.util.List<AppearanceEditorPanel.SliderState> states = new java.util.ArrayList<>();
-        states.add(new AppearanceEditorPanel.SliderState(AppearanceLooks.Control.BLUR, 4, true,
-            value -> "Blur"));
+        states.add(new AppearanceEditorPanel.SliderState(AppearanceLooks.Control.GLASS, 4, true,
+            value -> "Glass"));
         states.add(new AppearanceEditorPanel.SliderState(AppearanceLooks.Control.CONTRAST, 1,
             false, value -> "Contrast"));
         panel.showRow2(R.string.appearance_editor_target_terminal);
         panel.setSliders(states);
-        assertTrue(panel.sliderFor(AppearanceLooks.Control.BLUR).isEnabled());
+        assertTrue(panel.sliderFor(AppearanceLooks.Control.GLASS).isEnabled());
         assertFalse(panel.sliderFor(AppearanceLooks.Control.CONTRAST).isEnabled());
         panel.hideRow2();
         panel.showRow2(R.string.appearance_editor_target_terminal);
-        assertTrue(panel.sliderFor(AppearanceLooks.Control.BLUR).isEnabled());
+        assertTrue(panel.sliderFor(AppearanceLooks.Control.GLASS).isEnabled());
         assertFalse(panel.sliderFor(AppearanceLooks.Control.CONTRAST).isEnabled());
     }
 
@@ -391,7 +391,23 @@ public class LayoutModeViewsTest {
         TextView trailValue = panel.view().findViewById(R.id.appearance_editor_trail_value);
         assertEquals("Cursor trail, " + trailValue.getText(), trail.getContentDescription().toString());
         assertTrue(effect.getContentDescription().toString().startsWith("Terminal effect, "));
+        // The global set's pill is the same first card, headed and described as its own; the
+        // Edge is a slider now, so the second card is not shown.
         panel.setDoors(AppearanceLooks.doors(null));
+        assertEquals(java.util.Collections.singletonList(AppearanceLooks.Door.TINT_HUE),
+            panel.shownDoors());
+        assertTrue("the global set's pill stands beside its name", panel.isRow2NameShown());
+        panel.setGlassLooks("tertiary");
+        TextView trailTitle = panel.view().findViewById(R.id.appearance_editor_trail_title);
+        TextView effectTitle = panel.view().findViewById(R.id.appearance_editor_effect_title);
+        assertEquals("Hue", trailTitle.getText().toString());
+        assertEquals("Tertiary", trailValue.getText().toString());
+        assertEquals("Tint colour, Tertiary", trail.getContentDescription().toString());
+        // Back on the terminal, the cards are its own again.
+        panel.setDoors(AppearanceLooks.doors(AppearanceLooks.Target.TERMINAL));
+        assertEquals("Cursor trail", trailTitle.getText().toString());
+        assertEquals("Terminal effect", effectTitle.getText().toString());
+        panel.setDoors(AppearanceLooks.doors(AppearanceLooks.Target.DOCK));
         assertTrue(panel.shownDoors().isEmpty());
         assertTrue(panel.isRow2NameShown());
     }

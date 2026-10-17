@@ -11,9 +11,10 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  * Bend is {@code floor(0.30 t)} and the width follows it, {@code R(2 bend / 3)}, so the bend is
  * always one and a half bands, as the references draw it, and Clear, Mist and Tint (27/18, 24/16,
  * 21/14) sit at 90, 80 and 70. Moving it writes only those two keys, so a saved Custom never
- * loses a value it does not touch. The edge light, specular, dispersion and clarity are on no
- * slider: each Look carries its own, a Custom keeps whatever it has, and the glass draws its rim
- * light as fixed material whatever the light and specular say. {@code R(v)} is
+ * loses a value it does not touch. Dispersion is the Edge slider's own key; the edge light,
+ * specular and clarity are on no slider: each Look carries its own, a Custom keeps whatever it
+ * has, and the glass draws its rim light as fixed material whatever the light and specular say.
+ * {@code R(v)} is
  * {@code floor(v + 0.5)}; both curves are done here in integers so they never land a hair off.</p>
  *
  * <p>Depth reads the stored pair back as the position whose curve output is nearest: squared

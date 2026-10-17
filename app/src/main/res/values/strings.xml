@@ -186,8 +186,6 @@
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_wallpaper_parallax_title">Wallpaper parallax</string>
     <string name="settings_wallpaper_parallax_summary">The wallpaper pans a little as the places slide. Needs a wallpaper set through the launcher\'s picker; off in landscape and with animations off.</string>
-    <string name="settings_adaptive_glass_title">Adaptive glass</string>
-    <string name="settings_adaptive_glass_summary">Edges catch the wallpaper\'s own light.</string>
     <string name="settings_wallpaper_alignment_title">Wallpaper alignment</string>
     <string name="settings_wallpaper_alignment_summary">Line up the wallpaper behind the launcher surfaces with the one on your screen.</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>
@@ -688,9 +686,6 @@
     <string name="settings_fancier_glass_header">Fancier Glass</string>
     <string name="settings_fancier_glass_title">Fancier Glass</string>
     <string name="settings_fancier_glass_summary">Bends the wallpaper at glass edges. Set the wallpaper with the in-app wallpaper picker.</string>
-    <!-- Shown as the summary while the switch is disabled: only a wallpaper picked from inside the
-         launcher can be read exactly enough to bend. -->
-    <string name="settings_fancier_glass_hint">Off: the wallpaper was not set with the in-app wallpaper picker.</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
     <!-- Brief confirmation of the binding that just ran: stroke, then the action's name. -->
     <string name="terminal_key_binding_ran">%1$s · %2$s</string>
