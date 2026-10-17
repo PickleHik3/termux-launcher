@@ -24301,7 +24301,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable TerminalSession openCommandWindow(@NonNull java.util.List<String> command,
                                                 @Nullable String cwd, @Nullable String title,
                                                 boolean focus) {
-        if (!isSplitPanesEnabled() || mPaneController == null || mCurrentWSession == null) return null;
+        if (!isSplitPanesEnabled() || mPaneController == null) return null;
         TerminalSession shell = createCommandShell(command, cwd, title, false);
         if (shell == null) return null;
         boolean seeded = seedWindowSize(shell);
@@ -24314,6 +24314,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return null;
         }
         com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell, title);
+        if (mCurrentWSession == null) {
+            // An empty Workspace (ADR 0008): the window starts a session of its own, as the
+            // Terminal entry does, and the Workspace comes back onto the row with it.
+            WSession ws = new WSession();
+            ws.windows.add(w);
+            ws.current = 0;
+            ws.name = TerminalNamePolicy.normalizeSession(shell.mSessionName);
+            mWSessions.add(ws);
+            mCurrentWSession = ws;
+            mPaneController.showWindow(w);
+            rebuildDrawerSessions();
+            if (mPaneWallController != null && focus) {
+                mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+            }
+            return shell;
+        }
         // Right after the current window, so related windows sit together (ADR 0008).
         int at = com.termux.app.wall.WallRow.insertionIndex(mCurrentWSession.current,
             mCurrentWSession.windows.size());
@@ -25414,8 +25430,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @NonNull java.util.List<String> command, @Nullable String cwd,
                 @Nullable String title, boolean focus,
                 @Nullable com.termux.app.terminal.TerminalPaneController.PlacementRequest placement) {
-            if (!isSplitPanesEnabled() || mPaneController == null
-                || mPaneController.getActiveSession() == null) return null;
+            if (!isSplitPanesEnabled() || mPaneController == null) return null;
+            if (mCurrentWSession == null && placement == null) {
+                // An empty Workspace has no pane to split: the pane opens as the first window of
+                // a fresh session, which is what a split of nothing amounts to.
+                return TermuxActivity.this.openCommandWindow(command, cwd, title, focus);
+            }
+            if (mPaneController.getActiveSession() == null) return null;
             TerminalSession shell = createCommandShell(command, cwd, title);
             if (shell == null) return null;
             // A split only gets its real size from the layout pass addPane's render() triggers,
