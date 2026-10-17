@@ -3307,4 +3307,13 @@
         <item quantity="one">%1$d couldn\'t be added.</item>
         <item quantity="other">%1$d couldn\'t be added.</item>
     </plurals>
+
+    <!-- The status bar folded to its capsule: what it shows, spoken (window or Home, then the time). -->
+    <string name="status_bar_capsule_description">Status bar folded: %1$s, %2$s</string>
+    <string name="status_bar_capsule_home">Home</string>
+    <string name="status_bar_capsule_open">Open status bar</string>
+    <plurals name="status_bar_capsule_alerts">
+        <item quantity="one">%1$d alert</item>
+        <item quantity="other">%1$d alerts</item>
+    </plurals>
 </resources>
