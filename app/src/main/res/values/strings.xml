@@ -309,6 +309,17 @@
         <item>home</item>
         <item>workspace</item>
     </string-array>
+    <string name="settings_home_palette_gesture_title">Palette gesture on Home</string>
+    <string name="settings_home_palette_gesture_swipe_up">Swipe up from the bottom edge</string>
+    <string name="settings_home_palette_gesture_off">Off</string>
+    <string-array name="settings_home_palette_gesture_entries" translatable="false">
+        <item>@string/settings_home_palette_gesture_swipe_up</item>
+        <item>@string/settings_home_palette_gesture_off</item>
+    </string-array>
+    <string-array name="settings_home_palette_gesture_values" translatable="false">
+        <item>swipe_up</item>
+        <item>off</item>
+    </string-array>
     <string name="settings_use_as_still_home_title">Termux Launcher is still your home screen</string>
     <string name="settings_use_as_still_home_message">Pressing Home keeps opening the terminal. You can choose another home app now, or keep it this way.</string>
     <string name="settings_use_as_choose_home">Choose another home app</string>

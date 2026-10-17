@@ -626,6 +626,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 // Read at the next cold start only; nothing on screen changes.
                 mPreferences.setLauncherStartIn(value);
                 break;
+            case "app_launcher_home_palette_gesture":
+                // Read at each swipe; nothing on screen changes.
+                mPreferences.setHomePaletteGesture(value);
+                break;
             case "app_launcher_drawer_view_type":
                 mPreferences.setAppLauncherDrawerViewType(value);
                 scheduleAppDrawerSync();
@@ -679,6 +683,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mKeyboardLook.getString(key, defValue);
             case "app_launcher_start_in":
                 return mPreferences.getLauncherStartIn();
+            case "app_launcher_home_palette_gesture":
+                return mPreferences.getHomePaletteGesture();
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
             case "app_launcher_builtin_widget_style":

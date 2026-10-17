@@ -1295,6 +1295,27 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             false);
     }
 
+    /** The palette gesture on Home: {@code swipe_up} (the default) or {@code off}. */
+    @NonNull
+    public String getHomePaletteGesture() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_HOME_PALETTE_GESTURE, TERMUX_APP.DEFAULT_HOME_PALETTE_GESTURE, true);
+        return TERMUX_APP.HOME_PALETTE_GESTURE_OFF.equals(value)
+            ? TERMUX_APP.HOME_PALETTE_GESTURE_OFF : TERMUX_APP.HOME_PALETTE_GESTURE_SWIPE_UP;
+    }
+
+    public void setHomePaletteGesture(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_HOME_PALETTE_GESTURE,
+            TERMUX_APP.HOME_PALETTE_GESTURE_OFF.equals(value)
+                ? TERMUX_APP.HOME_PALETTE_GESTURE_OFF : TERMUX_APP.HOME_PALETTE_GESTURE_SWIPE_UP,
+            false);
+    }
+
+    /** Whether the keyboard swipe up on a Home page opens the palette. */
+    public boolean isHomePaletteGestureEnabled() {
+        return !TERMUX_APP.HOME_PALETTE_GESTURE_OFF.equals(getHomePaletteGesture());
+    }
+
     /** Whether the user has ever set the display's text size; unset reads as the default 0. */
     public boolean hasX11DisplayDpi() {
         return mSharedPreferences != null && mSharedPreferences.contains(TERMUX_APP.KEY_X11_DISPLAY_DPI);

@@ -303,6 +303,16 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_LAUNCHER_START_IN = LAUNCHER_START_IN_HOME;
 
         /**
+         * The palette gesture on Home: the keyboard swipe up from a Home page's bottom edge opens
+         * the command palette with the keyboard ({@code swipe_up}, the default), or nothing
+         * ({@code off}).
+         */
+        public static final String KEY_HOME_PALETTE_GESTURE = "app_launcher_home_palette_gesture";
+        public static final String HOME_PALETTE_GESTURE_SWIPE_UP = "swipe_up";
+        public static final String HOME_PALETTE_GESTURE_OFF = "off";
+        public static final String DEFAULT_HOME_PALETTE_GESTURE = HOME_PALETTE_GESTURE_SWIPE_UP;
+
+        /**
          * The retired usage mode: the terminal alone, the terminal with the home screen, or both
          * with the Linux display; {@link #APP_LAUNCHER_USE_CASE_MODE_LAUNCHER} is what the older
          * two-way switch wrote. Read once by {@code WallReworkMigration}, which maps it to Start in
