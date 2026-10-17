@@ -65,21 +65,43 @@ public final class PaneWallPolicy {
     /**
      * The wall's row, by the kind of page that stands in each stretch of it (ADR 0008): the Home
      * pages first, always there; then the Workspace's windows, only while the current session
-     * has one; then, for now, the Display page while the display is on. A Home page and a window
-     * are each one entry here however many of them there are: the Home pages page inside the
-     * widget grid and the windows inside the terminal ({@link WallRow}), and the wall only slides
-     * between the stretches.
+     * has one; then the display window while a display is up. A Home page and a window are each
+     * one entry here however many of them there are: the Home pages page inside the widget grid
+     * and the windows inside the terminal ({@link WallRow}), and the wall only slides between the
+     * stretches.
      *
-     * @param hasWindow      the current session has at least one window
-     * @param displayEnabled the embedded display is built into this edition and switched on
+     * @param hasWindow the current session has at least one window
+     * @param displayUp a display is up: running, or asked for and starting. Nothing switches it
+     *                  on; it comes and goes with the display itself.
      */
     @NonNull
-    public static List<PaneWallPage> rowPages(boolean hasWindow, boolean displayEnabled) {
+    public static List<PaneWallPage> rowPages(boolean hasWindow, boolean displayUp) {
         List<PaneWallPage> pages = new ArrayList<>(3);
         pages.add(PaneWallPage.WIDGETS);
         if (hasWindow) pages.add(PaneWallPage.TERMINAL);
-        if (displayEnabled) pages.add(PaneWallPage.DISPLAY);
+        if (displayUp) pages.add(PaneWallPage.DISPLAY);
         return Collections.unmodifiableList(pages);
+    }
+
+    /**
+     * Where the wall goes when the page it rests on leaves the row: the nearest page to its left
+     * that is still there. The display going down lands on the windows, or on Home when there is
+     * no window; the last window closing lands on Home. A page the old row did not have hands
+     * over to Home.
+     *
+     * @param before the row as it was
+     * @param after  the row as it is now
+     * @param gone   the page the wall rested on, no longer in {@code after}
+     */
+    @NonNull
+    public static PaneWallPage pageAfterRemoval(@NonNull List<PaneWallPage> before,
+                                                @NonNull List<PaneWallPage> after,
+                                                @NonNull PaneWallPage gone) {
+        for (int i = before.indexOf(gone) - 1; i >= 0; i--) {
+            if (after.contains(before.get(i))) return before.get(i);
+        }
+        if (after.contains(homePage())) return homePage();
+        return after.isEmpty() ? homePage() : after.get(0);
     }
 
     /** The stretch the home press lands on, and where a page taken away hands the wall: Home. */

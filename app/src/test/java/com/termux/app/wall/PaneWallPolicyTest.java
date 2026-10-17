@@ -61,6 +61,23 @@ public class PaneWallPolicyTest {
     }
 
     @Test
+    public void aPageThatLeavesHandsTheWallToItsLeftNeighbour() {
+        List<PaneWallPage> full = PaneWallPolicy.rowPages(true, true);
+        assertEquals("the display going down lands on the windows", PaneWallPage.TERMINAL,
+            PaneWallPolicy.pageAfterRemoval(full, PaneWallPolicy.rowPages(true, false),
+                PaneWallPage.DISPLAY));
+        assertEquals("with no window it lands on Home", PaneWallPage.WIDGETS,
+            PaneWallPolicy.pageAfterRemoval(PaneWallPolicy.rowPages(false, true),
+                PaneWallPolicy.rowPages(false, false), PaneWallPage.DISPLAY));
+        assertEquals("the display and the windows going at once land on Home",
+            PaneWallPage.WIDGETS, PaneWallPolicy.pageAfterRemoval(full,
+                PaneWallPolicy.rowPages(false, false), PaneWallPage.DISPLAY));
+        assertEquals("the last window closing lands on Home", PaneWallPage.WIDGETS,
+            PaneWallPolicy.pageAfterRemoval(full, PaneWallPolicy.rowPages(false, true),
+                PaneWallPage.TERMINAL));
+    }
+
+    @Test
     public void theSeamFromHomeStopsWithoutAWindow() {
         assertTrue(PaneWallPolicy.hasNeighbour(PaneWallPolicy.rowPages(true, false),
             PaneWallPage.WIDGETS, 1));

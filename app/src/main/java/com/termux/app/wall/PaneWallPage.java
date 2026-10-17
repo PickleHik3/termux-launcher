@@ -11,7 +11,7 @@ public enum PaneWallPage {
     WIDGETS,
     /** The Workspace's windows: the current session's, one page each. */
     TERMINAL,
-    /** The embedded X11 display, the last page while the display is on. */
+    /** The display window: the embedded X11 display, last on the row while a display is up. */
     DISPLAY;
 
     /** The name {@code wall.go} and {@code launcherctl} use. */

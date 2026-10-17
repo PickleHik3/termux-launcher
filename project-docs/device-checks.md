@@ -181,6 +181,32 @@ under twenty items; past that, the oldest are re-judged first.
   Home or leaves a band of wallpaper between the grid and the dock · emulator, record what shows
   (the status bar and extra keys switch at settle in this slice, see the hand-over).
 
+### Wall rework #77 display
+- 2026-10-17 · commit "feat(x11): the display opens on demand …" · With no display running, tap a
+  Linux app (xeyes) in the drawer: the display starts, the wall slides to the display window, the
+  app shows on it, and back on a terminal window the status bar has a Display chip after the
+  window chips; tapping the chip goes to the display · emulator, x86_64 build with xkeyboard-config.
+- 2026-10-17 · same commit · Display under Linux Apps in the drawer, with no display running:
+  opens the bare display (the Start command), the window on the row. Without xkeyboard-config the
+  window shows the install offer instead; swiping away from it takes the window off the row ·
+  emulator.
+- 2026-10-17 · same commit · Long-press Stop on the display: the apps close, the display window
+  leaves the row and the wall lands on the last terminal window (on the last Home page when there
+  is none); the Display chip goes; the screen glyph in the status bar reads quieter and a tap on
+  it starts the display again · emulator.
+- 2026-10-17 · same commit · `termux-x11 :0 &` then `DISPLAY=:0 xeyes &` from a shell, with no
+  display window open: the window appears on the row (the wall does not move to it) · emulator.
+- 2026-10-17 · same commit · The Terminal entry: on the dock after the first launch of this build
+  (once; remove it and relaunch, it stays removed); tap from Home goes to the window last shown,
+  or opens a window when there is none; long press shows New window, which opens one after the
+  current window and slides to it · emulator.
+- 2026-10-17 · same commit · Settings: the root page has no Use as row (Start in sits under the
+  search box) and Settings → Display has no Display switch at its top; both pages otherwise look
+  exactly as before · emulator, screenshot both against the previous build.
+- 2026-10-17 · same commit · A `Terminal=true` Linux app (htop's desktop file) opens a new terminal
+  window right after the current one, not a pane; a second tap while it runs brings that window
+  back · emulator.
+
 ## Developer
 
 - 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" · With the switch

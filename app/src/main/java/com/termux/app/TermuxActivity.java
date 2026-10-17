@@ -630,6 +630,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.launcher.LauncherAppLauncher.LinuxAppRunner mLinuxAppRunnerHook;
     /** Same, for {@code Terminal=true} Linux apps (D5) — taken out again on destroy. */
     @Nullable private com.termux.app.launcher.LauncherAppLauncher.TerminalAppRunner mTerminalAppRunnerHook;
+    /** Same, for the launcher's own Terminal and Display entries — taken out again on destroy. */
+    @Nullable private com.termux.app.launcher.LauncherAppLauncher.EntryRunner mEntryRunnerHook;
+    /** Hears a display that announced itself with no window open; taken out again on destroy. */
+    @Nullable private com.termux.app.x11.X11DisplayReceiver.UnclaimedListener mUnclaimedDisplayListener;
+    /**
+     * A display was asked for (the Display entry, a Linux app, the screen glyph) and has not come
+     * up yet: its window is on the row while it starts. Cleared when it runs — the running display
+     * holds the window from then on — and when the wall leaves the window before it does.
+     */
+    private boolean mDisplayRequested;
     /** The apps open on the display, shown as the window chips while the Display place is up. */
     @Nullable private com.termux.app.x11.X11WindowList mX11Windows;
     @NonNull private java.util.List<com.termux.app.x11.X11WindowList.Window> mDisplayWindows =
@@ -1742,9 +1752,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIsInvalidState = true;
             return;
         }
-        // The older two-way mode value is mapped once here, before anything reads it.
-        com.termux.app.launcher.LauncherUseCaseMode.migrateIfNeeded(mPreferences,
-            com.termux.BuildConfig.X11_SERVER);
         // Built after the preferences, and only while the Widgets place is on the wall, so a
         // terminal-only install never registers an app widget host at all — no binding, no
         // listening, no widget providers reconciled — and neither does a pane switched on under
@@ -1956,21 +1963,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } catch (android.content.ActivityNotFoundException notFound) {
             Logger.logStackTraceWithMessage(LOG_TAG, "no settings page for this package", notFound);
         }
-    }
-
-    /**
-     * The Linux display switch, wherever it is moved from. On takes the same path the Display
-     * place's own button and the Settings switch take, so the pref, the defaults pass and the page
-     * state all agree with what the user would get either other way; off tears the page and the
-     * server connection down the same way a switch moved in Settings does.
-     */
-    private void setEmbeddedDisplayEnabled(boolean enabled) {
-        if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return;
-        if (enabled) {
-            turnOnEmbeddedDisplay();
-            return;
-        }
-        turnOffEmbeddedDisplay();
     }
 
     /**
@@ -2366,15 +2358,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (sPendingStyleReloadOnNextResume) {
             boolean recreateActivity = consumePendingStyleReloadRecreateActivity();
-            // A display switched off in Settings is torn down before the reload, and a server
-            // running on it is asked about first; the reload — and any recreate it carries —
-            // waits for that answer rather than rebuilding under the question.
-            Runnable reload = () -> reloadActivityStyling(recreateActivity);
-            if (!reconcileEmbeddedDisplay(reload)) reload.run();
+            reloadActivityStyling(recreateActivity);
             return;
         }
-        // The display can have been switched on or off by another path while we were away.
-        reconcileEmbeddedDisplay(null);
+        // A display started from a shell while we were away announced itself to nobody.
+        claimKeptDisplay();
         if (sPendingAppDrawerReloadOnNextResume) {
             sPendingAppDrawerReloadOnNextResume = false;
             if (mAppDrawerController != null) mAppDrawerController.onPreferencesReloaded();
@@ -2597,16 +2585,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 View decor = getWindow().getDecorView();
                 decor.post(this::maybeOfferTaiWelcomeCard);
             });
-            // Between lessons the home screen is put back the way every lesson starts, and a
-            // terminal-only install has no other place to drag the border to.
+            // Between lessons the home screen is put back the way every lesson starts.
             mFirstBootTour.setHomeHost(new FirstBootTour.HomeHost() {
                 @Override public void resetHome() {
                     resetHomeForTour();
                 }
 
                 @Override public boolean hasOnePlace() {
-                    return mPreferences != null
-                        && com.termux.app.launcher.LauncherUseCaseMode.isTerminalOnly(mPreferences);
+                    // Home is always on the wall (ADR 0008): there is no terminal-only install.
+                    return false;
                 }
             });
             mFirstBootTour.setSetupHost(welcomeSheet());
@@ -2772,17 +2759,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 new String[] {permission}, REQUEST_CODE_PALETTE_CONTACTS);
         }
 
+        // The display has no switch any more (ADR 0008): it opens on demand, so the welcome
+        // sheet has no Display row to offer.
         @Override public boolean displayOffered() {
-            return com.termux.BuildConfig.X11_SERVER;
+            return false;
         }
 
         @Override public boolean displayOn() {
-            return isX11DisplayEnabled();
+            return false;
         }
 
-        @Override public void setDisplayOn(boolean on) {
-            setEmbeddedDisplayEnabled(on);
-        }
+        @Override public void setDisplayOn(boolean on) { }
 
         @Override public void onPlaceSearchFocusChanged(@NonNull EditText field, boolean focused) {
             if (focused) {
@@ -8927,6 +8914,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.launcher.LauncherAppLauncher.clearTerminalAppRunner(mTerminalAppRunnerHook);
             mTerminalAppRunnerHook = null;
         }
+        if (mEntryRunnerHook != null) {
+            com.termux.app.launcher.LauncherAppLauncher.clearEntryRunner(mEntryRunnerHook);
+            mEntryRunnerHook = null;
+        }
+        if (mUnclaimedDisplayListener != null) {
+            com.termux.app.x11.X11DisplayReceiver.clearUnclaimedListener(mUnclaimedDisplayListener);
+            mUnclaimedDisplayListener = null;
+        }
         clearAccessoryRenderEffectBackdrop();
         removeDecorNavBarSurfaceOverlay();
         if (mSuggestionBarView != null) {
@@ -9586,7 +9581,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     public java.util.List<com.termux.app.wall.PaneWallPage> availableWallPages() {
         if (mPaneWallController != null) return mPaneWallController.pages();
-        return com.termux.app.wall.PaneWallPolicy.rowPages(true, isX11DisplayEnabled());
+        return com.termux.app.wall.PaneWallPolicy.rowPages(true, isDisplayUp());
     }
 
     /**
@@ -19495,9 +19490,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         dropTerminalDepartureSnapshot();
                     }
                 }
-                // The Display place is on the wall only while the display is switched on: off,
-                // nothing of it is built, and the wall is the places that are left.
-                @Override public boolean isDisplayEnabled() { return isX11DisplayEnabled(); }
+                // The display window is on the row while a display is up (ADR 0008).
+                @Override public boolean isDisplayUp() { return TermuxActivity.this.isDisplayUp(); }
                 // The plank (PlankTilt) is a Fancier Glass motion: the look as the last apply
                 // resolved it, with nothing telling the phone to hold still.
                 @Override public boolean isPlankTiltEnabled() {
@@ -19587,6 +19581,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         syncDisplayPageAttachment(page);
                     } finally {
                         Trace.endSection();
+                    }
+                    // A display window left before its display came up goes, once the wall has
+                    // finished settling rather than inside it.
+                    if (page != com.termux.app.wall.PaneWallPage.DISPLAY && mDisplayRequested) {
+                        mPaneWallController.wall().post(() -> {
+                            if (mPaneWallController == null || mPaneWallController.wall().isMoving())
+                                return;
+                            dropUnstartedDisplay(mPaneWallController.currentPage());
+                        });
                     }
                     dismissHelpOverlay();
                     if (mFirstBootTour != null) mFirstBootTour.onPlaceSettled(page.name());
@@ -19688,8 +19691,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isWidgetsPageWanted()) {
             attachWidgetsPage();
         }
-        if (isX11DisplayEnabled()) attachDisplayPage();
+        // The display window opens on demand (ADR 0008); a display already up — announced to the
+        // activity this one replaces — is taken at once.
+        if (com.termux.app.x11.X11DisplayReceiver.hasKeptAnnouncement()) attachDisplayPage();
         installLinuxAppRunner();
+        installLauncherEntryRunner();
         mAppliedPaneStyleKey = null;
         mPaneWallController.applyStyle(paneSurfaceStyle());
         // Where the wall starts is decided in landWall(), once the widget grid can be turned.
@@ -19800,11 +19806,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bindPlaceBadge(sessions);
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
         if (lens != null) {
-            // A server can outlive its place — it is left running when the display is switched
-            // off — but the bar shows a display only where the wall has one.
-            boolean displayOnWall = mPaneWallController != null && mPaneWallController.pages()
-                .contains(com.termux.app.wall.PaneWallPage.DISPLAY);
-            lens.setDisplayRunning(displayOnWall && isEmbeddedDisplayRunning());
+            // The screen glyph is always there on a build with the display; it reads quieter
+            // until a display runs, and a tap on it then starts one.
+            lens.setDisplayRunning(isEmbeddedDisplayRunning());
             lens.setDisplayGlyph(displayRuntimeGlyph());
             // The row may have said what colour each place is before this view existed.
             lens.setPlaceAccents(mPlaceAccents);
@@ -20032,7 +20036,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
         com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
         com.termux.app.statusbar.StatusBarLensView lens = hotView(R.id.terminal_status_lens);
-        if (lens != null) lens.setWallState(pages, current, offsetPx, width);
+        if (lens != null) lens.setWallState(lensPages(pages), current, offsetPx, width);
+    }
+
+    /** The row {@link #lensPages} last answered for, and its answer; read on every wall frame. */
+    @Nullable private java.util.List<com.termux.app.wall.PaneWallPage> mLensPagesFor;
+    @Nullable private java.util.List<com.termux.app.wall.PaneWallPage> mLensPages;
+
+    /**
+     * The marks the status bar draws: the row's pages, and the screen glyph at its end on a build
+     * with the display even while no display is up, so a tap on it can start one (ADR 0008).
+     * Worked out once per row, not per frame.
+     */
+    @NonNull
+    private java.util.List<com.termux.app.wall.PaneWallPage> lensPages(
+            @NonNull java.util.List<com.termux.app.wall.PaneWallPage> pages) {
+        if (pages == mLensPagesFor && mLensPages != null) return mLensPages;
+        java.util.List<com.termux.app.wall.PaneWallPage> marks = pages;
+        if (isX11DisplayEnabled() && !pages.contains(com.termux.app.wall.PaneWallPage.DISPLAY)) {
+            marks = new java.util.ArrayList<>(pages);
+            marks.add(com.termux.app.wall.PaneWallPage.DISPLAY);
+        }
+        mLensPagesFor = pages;
+        mLensPages = marks;
+        return marks;
     }
 
     /** The badge at the start of the status row is the terminal session's; it shows nowhere else. */
@@ -20214,20 +20241,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The embedded Linux display. Off by default, and never on in a build made without the
-     * server; there is no Display page while it is off.
+     * The build carries the embedded Linux display. Nothing switches it on (ADR 0008): a display
+     * comes up on demand and its window is on the row while it is ({@link #isDisplayUp}).
      */
     public boolean isX11DisplayEnabled() {
-        return com.termux.BuildConfig.X11_SERVER && mPreferences != null
-            && mPreferences.isX11DisplayEnabled();
+        return com.termux.BuildConfig.X11_SERVER && mPreferences != null;
     }
 
     /**
-     * Put the Display place on the wall. Only while the Linux display is switched on: the page
-     * inflates the X view, whose native side loads the server library and allocates a context,
-     * so an install with the display off never builds any of it and the wall is the places that
-     * are left. Switching the display off takes the page away again
-     * ({@link #tearDownEmbeddedDisplay}).
+     * A display is up, so its window is on the row: one runs, or one was asked for and is
+     * starting ({@link #mDisplayRequested}). Read by the wall on every refresh of its row.
+     */
+    private boolean isDisplayUp() {
+        return isX11DisplayEnabled() && mPaneWallController != null
+            && mPaneWallController.displayPage() != null
+            && (mDisplayRequested || isEmbeddedDisplayRunning());
+    }
+
+    /**
+     * Build the display window: the page that inflates the X view, whose native side loads the
+     * server library and allocates a context, and the server connection behind it. Built only when
+     * a display is wanted or one announced itself, so an install that never runs one never builds
+     * any of it; the page goes again when the display does ({@link #tearDownEmbeddedDisplay}).
+     * Whether it is on the row is {@link #isDisplayUp}'s to say.
      */
     private void attachDisplayPage() {
         if (mPaneWallController == null || !isX11DisplayEnabled()) return;
@@ -20253,13 +20289,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
             }
             @Override public void startDisplay() { startEmbeddedDisplay(); }
-            @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
+            @Override public void turnOnDisplay() { startEmbeddedDisplay(); }
             @Override public void installKeyboardData(@NonNull java.util.List<String> command) {
                 runKeyboardDataInstall(command);
             }
             @Override public void toggleDisplayPower() {
-                if (!isX11DisplayEnabled()) turnOnEmbeddedDisplay();
-                else if (isEmbeddedDisplayRunning()) confirmStopEmbeddedDisplay();
+                if (isEmbeddedDisplayRunning()) confirmStopEmbeddedDisplay();
                 else startEmbeddedDisplay();
             }
             @Override public void openDisplaySettings() {
@@ -20277,8 +20312,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         page.applyEnabled(true);
-        // An install that switched the display on before the phone defaults existed gets them
-        // here, once, the same way a fresh Turn on does.
+        // The phone defaults (text size, touch mode) go in the first time a display is used.
         com.termux.app.x11.X11Defaults.applyOnce(this);
         createX11DisplayController();
     }
@@ -20295,81 +20329,88 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyExtraKeysPlaceEligibility();
     }
 
-    /**
-     * The display switched on while the launcher is up: the page goes on the wall and the server
-     * connection behind it is built, whichever path moved the switch.
-     */
+    /** The display window is wanted: its page and the server connection built, if they are not. */
     private void attachEmbeddedDisplay() {
         if (mPaneWallController == null || !isX11DisplayEnabled()) return;
-        refreshLinuxApps(true);
         if (mPaneWallController.displayPage() == null) attachDisplayPage();
         else createX11DisplayController();
+    }
+
+    /**
+     * The row re-read after the display came up or went down, and the chrome that names the
+     * row's pages with it when the row changed. A display going down while its window is in front
+     * hands the wall to the last window, or to the last Home page when there is none.
+     */
+    private void syncDisplayOnRow() {
+        if (mPaneWallController == null) return;
+        java.util.List<com.termux.app.wall.PaneWallPage> before = mPaneWallController.pages();
+        mPaneWallController.refreshPages();
+        if (before.equals(mPaneWallController.pages())) return;
         onWallPlacesChanged();
+        // The display's chip comes and goes with its window.
+        refreshTerminalWindowBar();
     }
 
     /**
-     * Brings the wall in line with the display switch: the page attached while the switch is on,
-     * gone while it is off. Called on every resume — Settings moves the switch while this
-     * activity is stopped — and by every path that moves it here.
-     *
-     * <p>Taking the page down while a server runs on it is asked about first, because the server
-     * is never stopped silently. While the question is up nothing is torn down; {@code then} runs
-     * once it is answered, whichever way.
-     *
-     * @return true when a question is up and {@code then} has been kept for after it
+     * Open the display window and bring it in front: the Display entry, the screen glyph with no
+     * display up, Go to Display, and every Linux app tapped in the drawer come here. With no
+     * display running one is asked for, so the window is on the row while it starts and says what
+     * it is waiting for; {@code start} starts it here (a Linux app's runner starts it itself, with
+     * the app queued behind it). A display missing its keyboard layouts is not started: the window
+     * offers to install them instead.
      */
-    private boolean reconcileEmbeddedDisplay(@Nullable Runnable then) {
-        if (mPaneWallController == null || mPreferences == null) return false;
-        boolean wanted = isX11DisplayEnabled();
-        boolean attached = mPaneWallController.displayPage() != null;
-        if (wanted == attached) return false;
-        if (wanted) {
-            attachEmbeddedDisplay();
-            return false;
+    private void openDisplayWindow(boolean start) {
+        if (mPaneWallController == null || !isX11DisplayEnabled()) return;
+        attachEmbeddedDisplay();
+        if (mPaneWallController.displayPage() == null) return;
+        if (!isEmbeddedDisplayRunning()) {
+            mDisplayRequested = true;
+            if (start && com.termux.app.x11.X11CliInstaller.hasKeyboardData()) {
+                startEmbeddedDisplay();
+            }
         }
-        if (isEmbeddedDisplayRunning()) {
-            askBeforeTearingDownEmbeddedDisplay(then);
-            return true;
-        }
+        syncDisplayOnRow();
+        closeAppDrawerForLinuxLaunch();
+        // A Linux app can be launched (via launcherctl) while this Activity is stopped. Animating
+        // a wall transition nobody can see would just spend real frames on an invisible window
+        // (the same reasoning as TerminalWindowBar's animateSelectionSlide); animate only when
+        // visible, otherwise land on the page directly so it is simply where the user finds it.
+        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, isVisible());
+    }
+
+    /**
+     * A display announced itself with no window open — started from a shell, by Start with the
+     * launcher, or before this activity existed: build the window, and the controller takes the
+     * kept announcement and reports the display running, which puts the window on the row.
+     */
+    private void claimKeptDisplay() {
+        if (mPaneWallController == null || !isX11DisplayEnabled()) return;
+        if (mPaneWallController.displayPage() != null) return;
+        if (!com.termux.app.x11.X11DisplayReceiver.hasKeptAnnouncement()) return;
+        attachEmbeddedDisplay();
+    }
+
+    /**
+     * The wall came to rest away from a display window whose display never came up (it would not
+     * start, or it waits for its keyboard layouts): the ask lapses and the window goes, so a
+     * window with nothing on it does not stay on the row.
+     */
+    private void dropUnstartedDisplay(@NonNull com.termux.app.wall.PaneWallPage page) {
+        if (page == com.termux.app.wall.PaneWallPage.DISPLAY || !mDisplayRequested
+            || isEmbeddedDisplayRunning()) return;
+        mDisplayRequested = false;
         tearDownEmbeddedDisplay();
-        return false;
-    }
-
-    /** What waits for the server to stop before the display is torn down; see the ask below. */
-    @Nullable private Runnable mDisplayTearDownAfterStop;
-
-    /**
-     * The display was switched off with a server running on it. Stop closes the apps and the
-     * server, and the teardown follows the server going; Leave it running only takes the page
-     * away, and the server keeps its clients the way it always has when the page went.
-     */
-    private void askBeforeTearingDownEmbeddedDisplay(@Nullable Runnable then) {
-        new MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.termux_wall_display_stop_title)
-            .setMessage(R.string.termux_wall_display_stop_message)
-            .setNegativeButton(R.string.termux_wall_display_leave_running, (dialog, which) -> {
-                tearDownEmbeddedDisplay();
-                if (then != null) then.run();
-            })
-            .setPositiveButton(R.string.termux_wall_display_stop_confirm, (dialog, which) -> {
-                mDisplayTearDownAfterStop = then == null ? () -> { } : then;
-                stopEmbeddedDisplay();
-            })
-            .setOnCancelListener(dialog -> {
-                tearDownEmbeddedDisplay();
-                if (then != null) then.run();
-            })
-            .show();
     }
 
     /**
-     * Takes the display off the wall: the server connection is let go of, the page and the X
-     * view behind it are removed — which frees the view's native context — and the chrome that
-     * read the place is brought up to date. The server itself, if one runs, is left alone.
+     * Takes the display window off the wall: the server connection is let go of, the page and
+     * the X view behind it are removed — which frees the view's native context — and the chrome
+     * that read the row is brought up to date. The server itself, if one runs, is left alone.
+     * Runs when the display stops, and when a display that never came up is left.
      */
     private void tearDownEmbeddedDisplay() {
         if (mPaneWallController == null || mPaneWallController.displayPage() == null) return;
-        mDisplayTearDownAfterStop = null;
+        mDisplayRequested = false;
         if (mDisplayStop != null) {
             mDisplayStop.abandon();
             mDisplayStop = null;
@@ -20377,6 +20418,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncDisplayWindowList(false);
         if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(false);
         if (mX11Display != null) {
+            // Destroying the controller reports it stopped; nothing is to hear that now.
+            mX11Display.setListener(null);
             mX11Display.detachView();
             mX11Display.onDisplayPlaceLeft();
             mX11Display.destroy();
@@ -20387,15 +20430,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneWallController.detachDisplayPage();
         syncDisplayEnvironment();
         syncDisplayKeyboardRoute();
-        refreshLinuxApps(true);
         onWallPlacesChanged();
-    }
-
-    /** The display switched off from here — the first-run card's row. */
-    private void turnOffEmbeddedDisplay() {
-        if (mPreferences == null) return;
-        if (!com.termux.app.x11.X11DisplaySwitch.write(this, mPreferences, false)) return;
-        reconcileEmbeddedDisplay(null);
     }
 
     /**
@@ -20490,7 +20525,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.TERMINAL) {
             return;
         }
-        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, isVisible());
+        // The window went when the wall left it for the install; it comes back offering Start.
+        openDisplayWindow(false);
     }
 
     /**
@@ -20544,15 +20580,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Re-list the Linux apps — the prefix's and every container's — in the drawer when their
-     * desktop files changed, a distro was installed or removed, or, forced,
-     * when the display was just switched on or off, which decides whether they are listed at all.
+     * desktop files changed or a distro was installed or removed; forced, whatever the files say.
      */
     private void refreshLinuxApps(boolean force) {
         if (!com.termux.BuildConfig.X11_SERVER) return;
-        // The drawer lists Linux apps only while the display is on, so with it off there is
-        // nothing to re-read on every resume; the forced call that follows the switch itself is
-        // what drops them from the drawer.
-        if (!force && !isX11DisplayEnabled()) return;
         long signature = com.termux.app.x11.LinuxAppCatalog.signature(
             com.termux.app.x11.LinuxAppCatalog.roots());
         if (!force && signature == mLinuxAppsSignature) return;
@@ -20593,13 +20624,65 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isAppDrawerOpen()) mAppDrawerController.close(false);
     }
 
+    /**
+     * The launcher's own drawer entries (ADR 0008): Terminal goes to the Workspace, Display opens
+     * the bare display. Terminal is pinned to the dock the first time a build with it runs.
+     */
+    private void installLauncherEntryRunner() {
+        mEntryRunnerHook = new com.termux.app.launcher.LauncherAppLauncher.EntryRunner() {
+            @Override public boolean open(@NonNull String entryId) {
+                if (com.termux.app.launcher.LauncherEntries.DISPLAY.equals(entryId)) {
+                    if (!isX11DisplayEnabled()) return false;
+                    openDisplayWindow(true);
+                    return true;
+                }
+                return com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)
+                    && openTerminalEntry(false);
+            }
+            @Override public boolean openAlternate(@NonNull String entryId) {
+                // Home floats are not built yet; until they are, the long press is a new window.
+                return com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)
+                    && openTerminalEntry(true);
+            }
+        };
+        com.termux.app.launcher.LauncherAppLauncher.setEntryRunner(mEntryRunnerHook);
+        if (mPreferences != null) {
+            com.termux.app.launcher.data.TerminalEntryPin.pinOnce(
+                mPreferences.getSharedPreferences(),
+                com.termux.app.launcher.data.LauncherConfigRepository.getInstance(this));
+        }
+    }
+
+    /**
+     * The Terminal entry: the Workspace at the window last shown, or a new window when there is
+     * none or one was asked for ({@code newWindow}, the long press). A new window lands right
+     * after the current one.
+     */
+    private boolean openTerminalEntry(boolean newWindow) {
+        if (mPaneWallController == null) return false;
+        closeAppDrawerForLinuxLaunch();
+        if (newWindow || !isWorkspaceOnRow()) createNewWindow();
+        mPaneWallController.refreshPages();
+        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+        return true;
+    }
+
     /** Linux apps tapped in the drawer run on the display; this is what runs them. */
     private void installLinuxAppRunner() {
         if (!com.termux.BuildConfig.X11_SERVER) return;
+        // A display that announces itself with no window open opens one (ADR 0008).
+        mUnclaimedDisplayListener = this::claimKeptDisplay;
+        com.termux.app.x11.X11DisplayReceiver.setUnclaimedListener(mUnclaimedDisplayListener);
+        // The display's commands go in the prefix on every start, so a display can be started
+        // from any shell; off the main thread, because it is disk I/O on the home screen's way up.
+        com.termux.app.x11.X11CliInstaller.installAsync(this, result -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (result == com.termux.app.x11.X11CliInstaller.Result.FOREIGN_COMMAND) {
+                showToast(getString(R.string.termux_x11_command_taken), true);
+            }
+        });
         mLinuxApps = new com.termux.app.x11.X11LinuxAppRunner(this,
             new com.termux.app.x11.X11LinuxAppRunner.Host() {
-                @Override public boolean isDisplayEnabled() { return isX11DisplayEnabled(); }
-                @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
                 @Override public boolean isDisplayRunning() { return isEmbeddedDisplayRunning(); }
                 @Override public void startDisplay() { startEmbeddedDisplay(); }
                 @Override public boolean runScript(@NonNull String script,
@@ -20619,17 +20702,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTermuxService.notifyOnAppShellExit(shell, onExit::onExit);
                     return true;
                 }
-                @Override public void showDisplayPlace() {
-                    closeAppDrawerForLinuxLaunch();
-                    if (mPaneWallController != null) {
-                        // A Linux app can now be launched (via launcherctl) while this Activity is
-                        // stopped. Animating a wall transition nobody can see would just spend real
-                        // frames on an invisible window (the same reasoning as
-                        // TerminalWindowBar's animateSelectionSlide); animate only when visible,
-                        // otherwise land on the page directly so it is simply where the user finds
-                        // it on return.
-                        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, isVisible());
-                    }
+                @Override public void showDisplayWindow() {
+                    // The runner starts the display itself, with the app queued behind it.
+                    openDisplayWindow(false);
                 }
                 @Override public void showNotice(@NonNull String message) { showToast(message, true); }
                 @Override public void askBeforeReplacingSession(@NonNull String message,
@@ -20669,18 +20744,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     refreshLinuxApps(true);
                     return false;
                 }
-                // A terminal app is a pane, not the display: no showDisplayPlace, no
-                // X11LinuxAppRunner. Bring the terminal into view first, the way the display's
-                // own runner brings the Display place into view before running an app on it.
+                // A terminal app is a terminal window, not the display: no display window, no
+                // X11LinuxAppRunner. It opens right after the current window (ADR 0008), and the
+                // wall follows it to the Workspace — after the run, since with no window yet
+                // there is no Workspace on the row to go to before it.
                 closeAppDrawerForLinuxLaunch();
-                if (mPaneWallController != null) {
-                    mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
-                }
                 // No WindowForegroundResolver here: it needs the privileged backend only because
                 // it scans every process on the system, not because reading this app's own pane
                 // shell needs one, and it is async/cache-only besides. LinuxTerminalAppRunner
                 // reads /proc/<pid>/stat for this exact pid directly instead — see its class doc.
-                return com.termux.app.x11.LinuxTerminalAppRunner.run(app);
+                boolean ran = com.termux.app.x11.LinuxTerminalAppRunner.run(app);
+                if (ran && mPaneWallController != null) {
+                    mPaneWallController.refreshPages();
+                    mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+                }
+                return ran;
             }
         };
         com.termux.app.launcher.LauncherAppLauncher.setTerminalAppRunner(mTerminalAppRunnerHook);
@@ -20741,18 +20819,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * "Turn on", from the first-run card, a Linux app tapped in the drawer or the page's own
-     * button: the setting flips and the Display place comes onto the wall with a live connection.
-     */
-    private void turnOnEmbeddedDisplay() {
-        if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return;
-        com.termux.app.x11.X11DisplaySwitch.write(this, mPreferences, true);
-        attachEmbeddedDisplay();
-    }
-
-    /**
-     * Wire the connection to a server started from a shell. Nothing here starts one: a display
-     * exists because someone typed {@code termux-x11 :0}.
+     * Wire the connection to a display server. Nothing here starts one: a display exists because
+     * something asked for it ({@link #openDisplayWindow}) or someone typed {@code termux-x11 :0}.
      */
     private void createX11DisplayController() {
         if (mPaneWallController == null || mX11Display != null) return;
@@ -20815,37 +20883,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         mX11Display.host().setLorieView(page.display());
-        mX11Display.setListener(running -> {
-            // The display was switched off with a server running, and the user chose to stop
-            // it: the server has gone now, so the page follows it.
-            if (!running && mDisplayTearDownAfterStop != null) {
-                Runnable then = mDisplayTearDownAfterStop;
-                tearDownEmbeddedDisplay();
-                then.run();
-                return;
-            }
-            com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
-                ? null : mPaneWallController.displayPage();
-            if (frame != null) frame.applyRunning(running);
-            syncPlaceBar();
-            syncDisplayTouchpad();
-            syncDisplayEnvironment();
-            if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(running);
-            syncDisplayWindowList(running);
-            // A display that stopped has nothing left to type into.
-            if (!running) hideDisplaySystemKeyboard();
-            syncDisplayKeyboardRoute();
-        });
+        com.termux.app.x11.X11DisplayHostController controller = mX11Display;
+        controller.setListener(this::onEmbeddedDisplayRunningChanged);
+        // A kept announcement can have reported the display running while the controller was
+        // built, before anything listened: told once the build has finished.
+        if (controller.isRunning()) {
+            mPaneWallController.wall().post(() -> {
+                if (mX11Display == controller && controller.isRunning()) {
+                    onEmbeddedDisplayRunningChanged(true);
+                }
+            });
+        }
         syncDisplayEnvironment();
-        // The prefix commands go in with the feature, and are re-checked on every start — off
-        // the main thread, because it is disk I/O on the home screen's way up.
-        com.termux.app.x11.X11CliInstaller.installAsync(this, result -> {
-            if (isFinishing() || isDestroyed()) return;
-            if (result == com.termux.app.x11.X11CliInstaller.Result.FOREIGN_COMMAND) {
-                showToast(getString(R.string.termux_x11_command_taken), true);
-            }
-        });
-        // The tool store CLI goes in the same way, on every start.
+        // The tool store CLI goes in the same way the display's commands do, on every start.
         com.termux.app.store.TlstoreInstaller.installAsync(this, result -> {
             Logger.logDebug(LOG_TAG, "tlstore install: " + result);
             if (result.kind == com.termux.app.store.TlstoreInstaller.Result.Kind.FOREIGN_COMMAND) {
@@ -20859,6 +20909,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && !mPaneWallController.wall().isMoving()) {
             syncDisplayPageAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
         }
+    }
+
+    /**
+     * A display came up or went down. Up, it holds its window on the row from now on; down, and
+     * not asked for again, its window goes (ADR 0008) — the wall, if it was on it, lands on the
+     * last window or the last Home page.
+     */
+    private void onEmbeddedDisplayRunningChanged(boolean running) {
+        if (running) mDisplayRequested = false;
+        if (!running && !mDisplayRequested) {
+            tearDownEmbeddedDisplay();
+            syncPlaceBar();
+            return;
+        }
+        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+            ? null : mPaneWallController.displayPage();
+        if (frame != null) frame.applyRunning(running);
+        syncPlaceBar();
+        syncDisplayTouchpad();
+        syncDisplayEnvironment();
+        if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(running);
+        syncDisplayWindowList(running);
+        // A display that stopped has nothing left to type into.
+        if (!running) hideDisplaySystemKeyboard();
+        syncDisplayKeyboardRoute();
+        syncDisplayOnRow();
     }
 
     /** Follow the display's apps while a display runs; forget them when it stops. */
@@ -21638,6 +21714,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             return;
         }
+        // The display's chip, after the terminal windows: the wall goes to the display window.
+        if (mCurrentWSession != null && index == mCurrentWSession.windows.size() && isDisplayUp()
+                && mPaneWallController != null) {
+            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, true);
+            return;
+        }
         if (mPaneController == null || mCurrentWSession == null
             || index < 0 || index >= mCurrentWSession.windows.size()) return;
         showWindowFromBar(index);
@@ -21751,9 +21833,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
         if (lens != null) {
-            // A tap on a peeking place icon slides the wall to the place it stands for.
+            // A tap on a peeking place icon slides the wall to the place it stands for; the screen
+            // glyph with no display up opens one, as the Display entry does.
             lens.setListener(page -> {
-                if (mPaneWallController != null) mPaneWallController.goTo(page, true);
+                if (mPaneWallController == null) return;
+                if (page == com.termux.app.wall.PaneWallPage.DISPLAY
+                        && !mPaneWallController.pages().contains(page)) {
+                    openDisplayWindow(true);
+                    return;
+                }
+                mPaneWallController.goTo(page, true);
             });
             View slotView = findViewById(R.id.terminal_top_widget_area);
             if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
@@ -22374,14 +22463,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR)
                     .withAgentState(agentState));
             }
+            // The display window is a window of the Workspace too (ADR 0008): its chip stands
+            // after the terminal windows while a display is up, where its page stands on the row.
+            if (isDisplayUp()) {
+                String display = getString(R.string.launcher_entry_display);
+                items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(display, display));
+            }
         }
         bar.setWindows(items, selected);
         // The row is rebuilt whenever anything about a window changes, so the count is the edge
-        // the tour reads: one more chip is the +, one fewer is a chip's ×. Only on the terminal,
-        // though — the Display place fills the same row with its apps and the Widgets place empties
-        // it, and neither of those counts is a window opening or closing.
+        // the tour reads: one more chip is the +, one fewer is a chip's ×. Only the terminal
+        // windows, though — the Display place fills the same row with its apps and the Widgets
+        // place empties it, and neither of those counts, nor the display's own chip, is a window
+        // opening or closing.
         if (mFirstBootTour != null)
-            mFirstBootTour.onWindowCountSettled(terminalWindows ? items.size() : -1);
+            mFirstBootTour.onWindowCountSettled(terminalWindows && mCurrentWSession != null
+                ? mCurrentWSession.windows.size() : -1);
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setWindows(items, selected);
@@ -24677,6 +24774,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean goToWallPage(@NonNull String page) {
+            // Go to Display with no display up opens one, as the screen glyph does.
+            if ("display".equalsIgnoreCase(page.trim()) && mPaneWallController != null
+                    && !mPaneWallController.pages().contains(
+                        com.termux.app.wall.PaneWallPage.DISPLAY)
+                    && isX11DisplayEnabled()) {
+                openDisplayWindow(true);
+                return true;
+            }
             return mPaneWallController != null && mPaneWallController.goTo(page);
         }
 

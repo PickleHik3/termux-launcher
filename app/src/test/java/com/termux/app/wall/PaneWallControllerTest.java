@@ -26,7 +26,7 @@ import java.util.Collections;
 
 /**
  * The controller's jobs on the wall's row (ADR 0008): which pages exist (Home always, the
- * Workspace while there is a window, the Display page while the display is on), the seam both
+ * Workspace while there is a window, the display window while a display is up), the seam both
  * ways, where the home press and a cold start land, and keeping the row position across an
  * activity recreate.
  */
@@ -49,7 +49,7 @@ public class PaneWallControllerTest {
 
         @Override public boolean reducedMotion() { return true; }
         @Override public boolean hasWindow() { return hasWindow; }
-        @Override public boolean isDisplayEnabled() { return display; }
+        @Override public boolean isDisplayUp() { return display; }
         @Override public int innerCount(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? homePages
                 : page == PaneWallPage.TERMINAL ? (hasWindow ? windows : 0) : 1;
@@ -141,18 +141,45 @@ public class PaneWallControllerTest {
         assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
     }
 
-    @Test public void thePageTakenAwayWhileShowingHandsTheWallToHome() {
+    @Test public void theDisplayGoingDownLandsOnTheLastWindow() {
+        host.current = 0;
         assertTrue(controller.goTo(PaneWallPage.DISPLAY, false));
         host.display = false;
         controller.refreshPages();
-        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
+        assertEquals("the window next to where the display stood", 2, host.current);
+    }
 
-        // The last window closing does the same: the Workspace goes, Home comes.
+    @Test public void theDisplayGoingDownWithNoWindowLandsOnTheLastHomePage() {
+        host.hasWindow = false;
+        controller.refreshPages();
+        assertTrue(controller.goTo(PaneWallPage.DISPLAY, false));
+        host.homePage = 0;
+        host.display = false;
+        controller.refreshPages();
+        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        assertEquals(2, host.homePage);
+    }
+
+    @Test public void theLastWindowClosingLandsOnTheLastHomePage() {
+        host.display = false;
+        controller.refreshPages();
         controller.goTo(PaneWallPage.TERMINAL, false);
+        host.homePage = 0;
         host.hasWindow = false;
         controller.refreshPages();
         assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        assertEquals(2, host.homePage);
         assertFalse(controller.isTerminalShowing());
+    }
+
+    @Test public void aPageLeavingElsewhereLeavesTheWallWhereItIs() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        host.current = 1;
+        host.display = false;
+        controller.refreshPages();
+        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
+        assertEquals(1, host.current);
     }
 
     @Test public void theSeamLeavesHomeOnlyWhenTheRowGoesOn() {
