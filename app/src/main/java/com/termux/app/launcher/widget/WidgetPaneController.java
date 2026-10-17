@@ -371,6 +371,16 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         render();
     }
 
+    /** Whether the Home page on screen holds no widget. */
+    public boolean currentPageEmpty() {
+        return widgets.repository().recordsOnPage(currentPage).isEmpty();
+    }
+
+    /** Home's long-press sheet's Remove page: the page on screen goes, if it may. */
+    public void removeCurrentPage() {
+        menuRemovePage();
+    }
+
     void menuRemovePage() {
         if (!widgets.repository().removePage(currentPage)) return;
         currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));

@@ -30,6 +30,8 @@ public final class HomeActionsSheetPolicy {
         EDIT_PAGES(Group.PAGE),
         /** The Layout editor on Home. */
         LAYOUT(Group.PAGE),
+        /** Takes the page on screen away; only an empty page, and never the last one. */
+        REMOVE_PAGE(Group.PAGE),
         WALLPAPER(Group.LAUNCHER),
         /** The Appearance editor's Look page. */
         LOOK(Group.LAUNCHER),
@@ -48,24 +50,27 @@ public final class HomeActionsSheetPolicy {
     private HomeActionsSheetPolicy() {}
 
     /**
-     * The sheet's rows for this state.
+     * The sheet's rows for this state. Terminal is always first: a Home float opens on the page
+     * whether or not the Workspace has a session.
      *
-     * @param isDefaultHome   the launcher is the phone's home app, so Set as default home is not
-     *                        offered
-     * @param hasPages        the Home pages are there to act on (a terminal-only install has none),
-     *                        so the page's widget, page, editor and Layout rows are offered
-     * @param terminalOffered a Home float can open on the page (the host has the panes for it)
+     * @param isDefaultHome the launcher is the phone's home app, so Set as default home is not
+     *                      offered
+     * @param hasPages      the Home pages are there to act on (a terminal-only install has none),
+     *                      so the page's widget, page, editor and Layout rows are offered
+     * @param pageEmpty     the Home page on screen holds no widget
+     * @param pageCount     how many Home pages there are; Remove page needs more than one
      */
     @NonNull
     public static List<Item> itemsFor(boolean isDefaultHome, boolean hasPages,
-                                      boolean terminalOffered) {
+                                      boolean pageEmpty, int pageCount) {
         ArrayList<Item> items = new ArrayList<>();
-        if (terminalOffered) items.add(Item.TERMINAL);
+        items.add(Item.TERMINAL);
         if (hasPages) {
             items.add(Item.ADD_WIDGET);
             items.add(Item.ADD_PAGE);
             items.add(Item.EDIT_PAGES);
             items.add(Item.LAYOUT);
+            if (pageEmpty && pageCount > 1) items.add(Item.REMOVE_PAGE);
         }
         items.add(Item.WALLPAPER);
         items.add(Item.LOOK);

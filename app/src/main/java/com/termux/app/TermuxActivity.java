@@ -21152,9 +21152,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mHomeActionsRawX = rawX;
         mHomeActionsRawY = rawY;
+        boolean hasPages = mWidgetPaneController != null;
         mHomeActionsSheet.open(com.termux.app.launcher.home.HomeActionsSheetPolicy.itemsFor(
-            isDefaultHomeApp(), mWidgetPaneController != null,
-            mPaneController != null && isSplitPanesEnabled()));
+            isDefaultHomeApp(), hasPages,
+            hasPages && mWidgetPaneController.currentPageEmpty(),
+            hasPages ? mWidgetPaneController.homePageCount() : 0));
     }
 
     /** Each row runs what the corner tab, the palette and Settings already run for it. */
@@ -21182,6 +21184,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 break;
             }
             case LAYOUT: openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS); break;
+            case REMOVE_PAGE:
+                if (mWidgetPaneController != null) mWidgetPaneController.removeCurrentPage();
+                break;
             case WALLPAPER:
                 openAppearanceSurface(
                     com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);

@@ -18,6 +18,7 @@
     <string name="home_actions_add_page">Add a page</string>
     <string name="home_actions_edit_pages">Edit pages</string>
     <string name="home_actions_layout">Layout</string>
+    <string name="home_actions_remove_page">Remove page</string>
     <string name="home_actions_wallpaper">Wallpaper</string>
     <string name="home_actions_look">Look</string>
     <string name="home_actions_launcher_settings">Launcher settings</string>
