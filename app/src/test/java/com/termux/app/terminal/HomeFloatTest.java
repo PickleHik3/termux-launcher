@@ -344,6 +344,63 @@ public class HomeFloatTest {
     }
 
     @Test
+    public void onHomeTheBarShowsTheFloatsChipsExactlyWhileFloatsExist() {
+        // The bar came onto Home with the first float but its chips stayed hidden, so a minimised
+        // float had nothing to be tapped back from.
+        assertTrue(HomeChromePolicy.windowChipsShown(PaneWallPage.WIDGETS, true));
+        assertFalse("no float, no chips on Home",
+            HomeChromePolicy.windowChipsShown(PaneWallPage.WIDGETS, false));
+        assertTrue(HomeChromePolicy.windowChipsShown(PaneWallPage.TERMINAL, false));
+        assertTrue(HomeChromePolicy.windowChipsShown(PaneWallPage.DISPLAY, false));
+        for (boolean floats : new boolean[] {false, true}) {
+            assertEquals("the chips show wherever the bar rests on Home",
+                HomeChromePolicy.statusShownAtRest(PaneWallPage.WIDGETS, floats),
+                HomeChromePolicy.windowChipsShown(PaneWallPage.WIDGETS, floats));
+        }
+    }
+
+    // --- The float's shell gets its size ---
+
+    @Test
+    public void aFloatOpenedWhileTheGridIsHeldIsSizedWhenTheHoldEnds() {
+        // The status bar coming onto Home and the keyboard rising hold the grid while the float
+        // is laid out for the first time; a size discarded at the end of the hold leaves the
+        // shell without an emulator, and the pane draws solid black.
+        mController.beginHostSurfaceResize();
+        TerminalSession shell = terminal();
+        mController.openHomeFloat(shell, 0);
+        TerminalView view = mController.getViewForSession(shell);
+        assertNotNull(view);
+        int[] sized = {0};
+        view.setSizeUpdateObserverForTests(v -> sized[0]++);
+        layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
+        assertTrue("laid out", view.getWidth() > 0 && view.getHeight() > 0);
+        assertEquals("held while the grid is held", 0, sized[0]);
+
+        mController.finishHostSurfaceResizeKeepingBottom();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertTrue("the float's shell is sized once the hold ends", sized[0] > 0);
+    }
+
+    @Test
+    public void aFloatLaidOutDuringAHoldTakenAfterItOpenedIsSizedWhenTheHoldEnds() {
+        TerminalSession shell = terminal();
+        mController.openHomeFloat(shell, 0);
+        TerminalView view = mController.getViewForSession(shell);
+        assertNotNull(view);
+        int[] sized = {0};
+        view.setSizeUpdateObserverForTests(v -> sized[0]++);
+        // The keyboard rises right after the float opens, before the float's first layout.
+        mController.beginHostSurfaceResize();
+        layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
+        assertEquals(0, sized[0]);
+
+        mController.finishHostSurfaceResizeKeepingBottom();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertTrue("the float's shell is sized once the hold ends", sized[0] > 0);
+    }
+
+    @Test
     public void aFloatsChipCarriesItsPage() {
         TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("~", "home")
             .withHomeFloat(1, "Home float, page 2");

@@ -19825,8 +19825,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // badge and the chips agree, so the row reads as one thing rather than three.
         Integer placeAccent = accent;
         // The row's badge is the terminal session's and shows nowhere else; the chips are the
-        // terminal's windows or the display's apps, and the Widgets place has none: its widgets
-        // speak for themselves.
+        // terminal's windows or the display's apps, and on the Widgets place the Home floats,
+        // while there is one: without a float its widgets speak for themselves.
         com.termux.app.statusbar.SessionsIndicatorView sessions =
             findViewById(R.id.terminal_sessions_indicator);
         if (sessions != null) {
@@ -19834,7 +19834,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             sessions.setVisibility(page == com.termux.app.wall.PaneWallPage.TERMINAL
                 ? View.VISIBLE : View.GONE);
         }
-        boolean windowsShown = page != com.termux.app.wall.PaneWallPage.WIDGETS;
+        // On Home the chips are the Home floats; the bar comes onto Home only to carry them.
+        boolean windowsShown = com.termux.app.place.HomeChromePolicy.windowChipsShown(page,
+            mPaneController != null && mPaneController.homeFloatCount() > 0);
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) {
             // The chips are drawn on glass, so they ask the chrome what they are standing on
