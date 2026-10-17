@@ -1821,6 +1821,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastLaunchWasLauncherEntry = isLauncherHomeIntent(getIntent());
         setTermuxTerminalViewAndClients();
         createWidgetPaneController();
+        attachHomeFloatLayer();
         landWall();
         setTerminalWindowBar();
         setTerminalToolbarView(savedInstanceState);
@@ -14112,6 +14113,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             accessoryStackContainer,
             accessoryBottomMarginPx
         );
+        // Home floats are laid out between the status bar and the dock, and lifted over the
+        // keyboard: they hear the stack's rows from this pass.
+        mHomeFloatDockPx = dockContentHeightPx + terminalFlushPaddingPx;
+        mHomeFloatStackPx = combinedHeight;
+        mHomeFloatKeyboardShown = state.keyboardShown;
+        syncHomeFloatObstructions();
         // On a Home page the dock floats with the keyboard: the grid keeps its whole height.
         keyboardOverlapPx = KeyboardOverlayPolicy.overlapPx(
             com.termux.app.place.HomeChromePolicy.dockOverlays(mLastWallPage), combinedHeight,
@@ -19667,6 +19674,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             && page != com.termux.app.wall.PaneWallPage.WIDGETS) {
                             mWidgetPaneController.onWallPageLeaving();
                         }
+                        // Leaving Home, a focused Home float gives the keyboard back to the window.
+                        if (mPaneController != null
+                            && page != com.termux.app.wall.PaneWallPage.WIDGETS) {
+                            mPaneController.releaseHomeFloatFocus();
+                        }
                         // Only the bar is re-dressed at release, beside the cheap put-aways above:
                         // it is the pager, and it names the place the wall has committed to. The
                         // rest waits for the settle (syncPlaceState).
@@ -20640,9 +20652,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     && openTerminalEntry(false);
             }
             @Override public boolean openAlternate(@NonNull String entryId) {
-                // Home floats are not built yet; until they are, the long press is a new window.
                 return com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)
                     && openTerminalEntry(true);
+            }
+            @Override public boolean openHomeFloat(@NonNull String entryId) {
+                return com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)
+                    && openHomeFloatHere();
             }
         };
         com.termux.app.launcher.LauncherAppLauncher.setEntryRunner(mEntryRunnerHook);
@@ -20665,6 +20680,83 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneWallController.refreshPages();
         mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
         return true;
+    }
+
+    /**
+     * The float layer Home floats are drawn in, pinned to the Home pages; built once the pane
+     * controller and the Home view both exist.
+     */
+    private void attachHomeFloatLayer() {
+        if (mPaneController == null || mPaneController.homeFloatLayer() != null) return;
+        View view = findViewById(R.id.widget_pane);
+        if (!(view instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
+        com.termux.app.terminal.HomeFloatLayer layer =
+            new com.termux.app.terminal.HomeFloatLayer(this);
+        ((com.termux.app.launcher.widget.WidgetPaneView) view).setPagePinnedLayer(layer);
+        mPaneController.setHomeFloatLayer(layer);
+        syncHomeFloatObstructions();
+    }
+
+    /**
+     * Terminal on Home (its long-press menu, the Terminal entry's New float here, the palette's
+     * Open terminal here): a Home float on the Home page in view, born full-size between the status
+     * bar and the dock, focused, with the keyboard overlay up. It is a window of the current
+     * session but not of the row: the Workspace neither gains it nor is needed for it.
+     */
+    boolean openHomeFloatHere() {
+        if (mPaneController == null || mPaneWallController == null || !isSplitPanesEnabled())
+            return false;
+        attachHomeFloatLayer();
+        if (mPaneController.homeFloatLayer() == null) return false;
+        closeAppDrawerForLinuxLaunch();
+        TerminalSession current = getCurrentSession();
+        TerminalSession shell = createShellForCwd(current != null ? current.getCwd() : null);
+        if (shell == null) return false;
+        int page = mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
+        if (mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.WIDGETS)
+            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
+        syncHomeFloatObstructions();
+        runWithoutNotices(() -> mPaneController.openHomeFloat(shell, page));
+        if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .ShowReason.KEYBOARD_ACTION);
+        }
+        return true;
+    }
+
+    /** The dock's, the stack's and the margin's heights as the last geometry pass laid them. */
+    private int mHomeFloatDockPx, mHomeFloatStackPx;
+    private boolean mHomeFloatKeyboardShown;
+
+    /**
+     * Tells the float layer what covers it, in screen pixels: the status bar (or the system bar)
+     * above, the dock below, and the keyboard with the dock riding on it while it is up. The
+     * stack's bottom edge is where it stands on screen; its rows are this pass's heights.
+     */
+    private void syncHomeFloatObstructions() {
+        if (mPaneController == null || mPaneController.homeFloatLayer() == null) return;
+        View stack = findViewById(R.id.accessory_stack_container);
+        View root = findViewById(R.id.activity_termux_root_view);
+        if (stack == null || root == null) return;
+        int[] at = new int[2];
+        stack.getLocationOnScreen(at);
+        int stackBottom = Math.round(at[1] - stack.getTranslationY()) + stack.getHeight();
+        int dockTop = stackBottom - Math.max(0, mHomeFloatDockPx);
+        int keyboardTop = mHomeFloatKeyboardShown ? stackBottom - Math.max(0, mHomeFloatStackPx) : -1;
+        root.getLocationOnScreen(at);
+        int roomTop = at[1];
+        androidx.core.view.WindowInsetsCompat insets =
+            androidx.core.view.ViewCompat.getRootWindowInsets(root);
+        if (insets != null) {
+            roomTop += insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
+        }
+        View bar = findViewById(R.id.terminal_window_bar_host);
+        if (bar != null && bar.isShown()) {
+            bar.getLocationOnScreen(at);
+            roomTop = Math.max(roomTop, at[1] + bar.getHeight());
+        }
+        mPaneController.setHomeFloatObstructions(roomTop, dockTop, keyboardTop);
     }
 
     /** Linux apps tapped in the drawer run on the display; this is what runs them. */
@@ -21651,6 +21743,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 // The widgets page is a pane: glass when the terminal panes are glass.
                 @Override public boolean isWidgetSurfaceGlass() { return isTerminalPaneGlassActive(); }
+                @Override public boolean offersHomeFloat() {
+                    return mPaneController != null && isSplitPanesEnabled();
+                }
+                @Override public void openHomeFloat() { openHomeFloatHere(); }
                 @Override @NonNull
                 public com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host builtinWidgetHost() {
                     return new com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host() {
@@ -24283,6 +24379,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildDrawerSessions();
     }
 
+    /** Home floats came, went, were minimised or restored: what shows them follows. */
+    private void onHomeFloatsChangedInActivity() {
+        refreshTerminalWindowBar();
+        refreshSessionsDrawer();
+    }
+
     /** Collapse every window back to single panes (used when entering compatibility mode). */
     public void collapseAllSplits() {
         if (mPaneController == null) return;
@@ -24425,6 +24527,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onTreesChanged() {
             rebuildDrawerSessions();
+        }
+
+        @Override public void onHomeFloatsChanged() {
+            onHomeFloatsChangedInActivity();
+        }
+
+        @Override public void onHomeFloatFocusReleased() {
+            // A press on Home beside the floats, or the focused float minimised or closed: the
+            // keyboard it raised goes with it, unless Home keeps one always on.
+            if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS && mInAppKeyboard != null
+                && mInAppKeyboard.isVisible()
+                && !wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) {
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                    .HideReason.USER_EVENT);
+            }
         }
 
         @Override public void onPanesRendered() {

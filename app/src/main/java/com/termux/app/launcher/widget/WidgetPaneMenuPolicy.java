@@ -7,7 +7,7 @@ import java.util.List;
 
 /** Pure item policy for the pane's empty-surface long-press menu. */
 public final class WidgetPaneMenuPolicy {
-    public enum Item { ADD_WIDGET, EDIT_WIDGETS, REMOVE_PAGE }
+    public enum Item { ADD_WIDGET, EDIT_WIDGETS, REMOVE_PAGE, TERMINAL }
 
     private WidgetPaneMenuPolicy() {}
 
@@ -19,11 +19,23 @@ public final class WidgetPaneMenuPolicy {
     @NonNull
     public static List<Item> itemsFor(boolean widgetsAvailable, int pageCount,
                                       boolean currentPageEmpty) {
+        return itemsFor(widgetsAvailable, pageCount, currentPageEmpty, false);
+    }
+
+    /**
+     * The same, with Terminal last when the host can open a Home float on the page: it opens one
+     * whether or not the device can host widgets.
+     */
+    @NonNull
+    public static List<Item> itemsFor(boolean widgetsAvailable, int pageCount,
+                                      boolean currentPageEmpty, boolean terminalOffered) {
         ArrayList<Item> items = new ArrayList<>();
-        if (!widgetsAvailable) return items;
-        items.add(Item.ADD_WIDGET);
-        if (!currentPageEmpty) items.add(Item.EDIT_WIDGETS);
-        if (currentPageEmpty && pageCount > 1) items.add(Item.REMOVE_PAGE);
+        if (widgetsAvailable) {
+            items.add(Item.ADD_WIDGET);
+            if (!currentPageEmpty) items.add(Item.EDIT_WIDGETS);
+            if (currentPageEmpty && pageCount > 1) items.add(Item.REMOVE_PAGE);
+        }
+        if (terminalOffered) items.add(Item.TERMINAL);
         return items;
     }
 }

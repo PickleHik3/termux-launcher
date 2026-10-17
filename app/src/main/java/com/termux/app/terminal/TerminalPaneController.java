@@ -10,6 +10,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Paint;
+import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Bundle;
@@ -44,6 +45,7 @@ import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.haptics.Haptics;
+import com.termux.app.place.KeyboardOverlayPolicy;
 import com.termux.app.wall.PaneControlsView;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalEmulator;
@@ -223,6 +225,25 @@ public class TerminalPaneController {
         default boolean shouldTerminalTakeFocus() {
             return true;
         }
+        /**
+         * Home floats came or went, were minimised or restored: the status bar on Home, its chips
+         * and the drawer follow.
+         */
+        default void onHomeFloatsChanged() {}
+        /**
+         * The focused Home float gave focus back to Home: minimised, closed, or a press on Home
+         * beside it. The keyboard it raised closes with it.
+         */
+        default void onHomeFloatFocusReleased() {}
+        /** Where {@code window}'s chip is on screen, for Minimise's flight; false when none is. */
+        default boolean homeFloatChipOnScreen(@NonNull Window window, @NonNull Rect out) {
+            return false;
+        }
+        /**
+         * Dock on a Home float: {@code window} is a tiled window now and belongs in the
+         * Workspace's row, right after the current window, and the Workspace slides in.
+         */
+        default void onHomeFloatDocked(@NonNull Window window) {}
     }
 
     /** Supplies durable metadata for a pane while its tree is being snapshotted. */
@@ -266,6 +287,8 @@ public class TerminalPaneController {
          * changing — so zooming one pane can't move any other.
          */
         int fontSize;
+        /** This float's size and spot in each orientation, while the process lives. */
+        @Nullable HomeFloatPolicy.ShapeMemory shapeMemory;
         Leaf(TerminalSession session) { this.session = session; }
     }
 
@@ -307,7 +330,24 @@ public class TerminalPaneController {
          * user dragged in this window; 0 until then, meaning {@link #FOCUS_GROW_SHARE}.
          */
         float focusShareH, focusShareV;
+        /**
+         * The Home page this window floats over, counting from 0, while it is a <b>Home float</b>;
+         * {@link HomeFloatPolicy#NOT_HOME_FLOAT} while it is in the Workspace's row. A Home float
+         * has no tiled tree: its one pane is its only float.
+         */
+        int homePage = HomeFloatPolicy.NOT_HOME_FLOAT;
+        /** A Home float tucked into its chip in the status bar. */
+        boolean minimised;
         Window(Leaf leaf) { root = leaf; active = leaf; }
+
+        /** Whether this window is a Home float rather than a window of the Workspace's row. */
+        public boolean isHomeFloat() { return homePage >= 0; }
+
+        /** The Home page a Home float is pinned to, or {@link HomeFloatPolicy#NOT_HOME_FLOAT}. */
+        public int homePage() { return homePage; }
+
+        /** Whether a Home float is tucked into its chip. */
+        public boolean isMinimised() { return minimised; }
     }
 
     private final Host mHost;
@@ -340,6 +380,22 @@ public class TerminalPaneController {
     @Nullable private Runnable mFinishKeyResizeRunnable;
     /** Floating chrome containers of the rendered window, rebuilt on every render. */
     private final Map<Leaf, FloatingPaneContainer> mFloatContainers = new HashMap<>();
+    /**
+     * Home floats, in z-order on Home (last on top), across every page. Each is also in
+     * {@link #mWindows}, so a shell, the drawer and the shortcuts find it as a window; none is in
+     * the Workspace's row, which the host keeps.
+     */
+    private final List<Window> mHomeFloats = new ArrayList<>();
+    /** Each Home float's container in the float layer; never touched by {@link #render()}. */
+    private final Map<Leaf, FloatingPaneContainer> mHomeFloatContainers = new HashMap<>();
+    /** Where Home floats are drawn, over the Home pages; null until the host gives one. */
+    @Nullable private HomeFloatLayer mHomeFloatLayer;
+    /** The Home float holding focus, whose pane takes the keyboard; null while Home or a window has it. */
+    @Nullable private Window mFocusedHomeFloat;
+    /** What covers the float layer, on screen: the status bar's bottom, the dock's top, the keyboard's top. */
+    private int mHomeRoomTopOnScreenPx = Integer.MIN_VALUE;
+    private int mHomeDockTopOnScreenPx = Integer.MAX_VALUE;
+    private int mHomeKeyboardTopOnScreenPx = -1;
     private final PaneInteractionOverlay mInteractionOverlay;
     /** Ghosts of closed panes and the cursor's flight between panes; above everything. */
     private final PaneMotionOverlayView mMotionOverlay;
@@ -380,6 +436,9 @@ public class TerminalPaneController {
         new TerminalView.CursorTrailListener() {
             @Override public void onCursorMayHaveMoved(@NonNull TerminalView view) {
                 if (view == getActivePaneView()) mMotionOverlay.requestCursorTrailFrame();
+                // The focused Home float rides above the keyboard with its cursor's row.
+                if (mFocusedHomeFloat != null && mHomeKeyboardTopOnScreenPx >= 0
+                    && view == getActivePaneView()) applyHomeFloatLift();
             }
 
             @Override public void onCursorTrailSnap(@NonNull TerminalView view) {
@@ -1072,6 +1131,12 @@ public class TerminalPaneController {
     /** Make {@code w} the visible window and render its pane tree. */
     public void showWindow(Window w) {
         if (w == null) return;
+        // A Home float is drawn over its Home page, never in the pane host: showing one is
+        // focusing it there.
+        if (w.isHomeFloat()) {
+            focusHomeFloat(w);
+            return;
+        }
         // A different window is different content: a cursor flight or ghost captured against the
         // outgoing one would finish over panes it never belonged to. The focusSession() that
         // follows a window switch is also refused a flight — its geometry belongs to a tree that
@@ -1130,6 +1195,14 @@ public class TerminalPaneController {
             detachPaneView(leaf.session);
         }
         mWindows.remove(w);
+        if (mHomeFloats.remove(w)) {
+            if (mFocusedHomeFloat == w) {
+                mFocusedHomeFloat = null;
+                mHost.onActivePaneChanged();
+                mHost.onHomeFloatFocusReleased();
+            }
+            mHost.onHomeFloatsChanged();
+        }
         if (mActiveWindow == w) {
             mActiveWindow = null;
             mMaximizedLeaf = null;
@@ -1140,6 +1213,9 @@ public class TerminalPaneController {
     // --- Queries ---
 
     @Nullable public TerminalSession getActiveSession() {
+        // A focused Home float takes the keyboard: it is the pane typing reaches.
+        Window focusedFloat = mFocusedHomeFloat;
+        if (focusedFloat != null && focusedFloat.active != null) return focusedFloat.active.session;
         return mActiveWindow != null && mActiveWindow.active != null ? mActiveWindow.active.session : null;
     }
 
@@ -1341,9 +1417,19 @@ public class TerminalPaneController {
 
     /** Focus the pane showing {@code session} within the active window. */
     public void focusSession(TerminalSession session) {
+        Window homeFloat = homeFloatOf(session);
+        if (homeFloat != null) {
+            focusHomeFloat(homeFloat);
+            return;
+        }
         if (mActiveWindow == null) return;
         Leaf leaf = findLeafInWindow(mActiveWindow, session);
         if (leaf != null) {
+            // A pane of the window taken: Home's floats give the keyboard back.
+            if (mFocusedHomeFloat != null) {
+                mFocusedHomeFloat = null;
+                applyHomeFloatLift();
+            }
             TerminalSession previous = mActiveWindow.active != null
                 ? mActiveWindow.active.session : null;
             flyCursorBetweenPanes(previous, session);
@@ -1363,6 +1449,8 @@ public class TerminalPaneController {
         List<TerminalSession> dropped = new ArrayList<>();
         mMaximizedLeaf = null;
         for (Window w : mWindows) {
+            // A Home float is one pane already, and floats where it is.
+            if (w.isHomeFloat()) continue;
             TerminalSession keep = w.active != null ? w.active.session : firstLeaf(w.root).session;
             for (Leaf leaf : allLeavesOf(w)) {
                 if (leaf.session == keep) continue;
@@ -1765,6 +1853,11 @@ public class TerminalPaneController {
             if (owningLeaf != null) break;
         }
         if (owningLeaf == null) return FINISHED_UNKNOWN;
+        if (owner.isHomeFloat()) {
+            // A Home float is its one pane: it goes, and nothing in the Workspace moves.
+            removeHomeFloat(owner);
+            return FINISHED_PANE;
+        }
         if (mMaximizedLeaf == owningLeaf) mMaximizedLeaf = null;
         // Captured before any of the branches below detach the view: the ghost needs the bounds
         // the pane still has.
@@ -2287,6 +2380,17 @@ public class TerminalPaneController {
 
     /** What a float's titlebar button does to it. */
     private void onTitlebarAction(@NonNull Leaf leaf, int action) {
+        Window homeFloat = homeFloatOf(leaf.session);
+        if (homeFloat != null) {
+            switch (action) {
+                case FloatTitlebarPolicy.ACTION_MINIMISE: minimiseHomeFloat(homeFloat); break;
+                case FloatTitlebarPolicy.ACTION_MAXIMISE: toggleFloatMaximised(leaf); break;
+                case FloatTitlebarPolicy.ACTION_DOCK: dockHomeFloat(homeFloat); break;
+                case FloatTitlebarPolicy.ACTION_CLOSE: leaf.session.finishIfRunning(); break;
+                default: break;
+            }
+            return;
+        }
         switch (action) {
             case FloatTitlebarPolicy.ACTION_MINIMISE: minimiseFloat(leaf); break;
             case FloatTitlebarPolicy.ACTION_MAXIMISE: toggleFloatMaximised(leaf); break;
@@ -2297,11 +2401,11 @@ public class TerminalPaneController {
     }
 
     /**
-     * Whether {@code leaf}'s titlebar has somewhere for Minimise to go. Only the scratchpad does:
-     * it hides, as its toggle does. A window's floating pane gets Minimise with Home floats.
+     * Whether {@code leaf}'s titlebar has somewhere for Minimise to go: a Home float goes into its
+     * chip, and the scratchpad hides, as its toggle does. A window's floating pane has nowhere.
      */
-    private static boolean hasMinimiseTarget(@NonNull Leaf leaf) {
-        return isScratchpadLeaf(leaf);
+    private boolean hasMinimiseTarget(@NonNull Leaf leaf) {
+        return isScratchpadLeaf(leaf) || homeFloatOf(leaf.session) != null;
     }
 
     /** Close a float from its titlebar: its shell ends, as closing a pane's does. */
@@ -2323,7 +2427,8 @@ public class TerminalPaneController {
      * float stays a float: chrome, focus and its place in the z-order are untouched.
      */
     void toggleFloatMaximised(@NonNull Leaf leaf) {
-        Window window = mActiveWindow;
+        Window window = homeFloatOf(leaf.session);
+        if (window == null) window = mActiveWindow;
         if (window == null || !window.floating.contains(leaf)) return;
         // From what is on screen when the float is currently clamped, as a drag would.
         RectF current = leaf.appliedFloatFrac != null ? leaf.appliedFloatFrac
@@ -2332,7 +2437,7 @@ public class TerminalPaneController {
             FloatTitlebarPolicy.toggleMaximise(current, leaf.floatRestoreFrac);
         leaf.floatFrac = toggle.frac;
         leaf.floatRestoreFrac = toggle.restoreFrac;
-        FloatingPaneContainer container = mFloatContainers.get(leaf);
+        FloatingPaneContainer container = containerOf(leaf);
         if (container != null) {
             container.onMaximisedChanged();
             applyFloatBounds(leaf, container);
@@ -2360,6 +2465,480 @@ public class TerminalPaneController {
     public int activeFloatingPaneCount() {
         return mActiveWindow == null ? 0 : mActiveWindow.floating.size();
     }
+
+    // ------------------------------------------------------------------ Home floats
+
+    /** How long Minimise's flight into the chip takes. */
+    private static final long HOME_FLOAT_MINIMISE_MS = 240L;
+
+    /**
+     * Where Home floats are drawn: a layer the host pins to the Home pages, so a float is carried
+     * with its page and slides with Home across the seam. Floats opened before it existed are put
+     * in it now.
+     */
+    public void setHomeFloatLayer(@Nullable HomeFloatLayer layer) {
+        if (mHomeFloatLayer == layer) return;
+        if (mHomeFloatLayer != null) {
+            mHomeFloatLayer.setListener(null);
+            for (Window w : mHomeFloats) if (w.active != null) removeFloatContainer(w.active);
+        }
+        mHomeFloatLayer = layer;
+        if (layer == null) return;
+        layer.setListener(new HomeFloatLayer.Listener() {
+            @Override public void onHomePageShown(int page) {
+                applyHomeFloatPage();
+            }
+
+            @Override public void onPressBesideFloats() {
+                releaseHomeFloatFocus();
+            }
+        });
+        // Fractions only become pixels against the live room: a turn or a resize re-lays them.
+        layer.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if ((r - l) != (or - ol) || (b - t) != (ob - ot)) relayHomeFloats();
+        });
+        for (Window w : mHomeFloats) attachHomeFloatContainer(w);
+        applyHomeFloatPage();
+    }
+
+    @Nullable
+    public HomeFloatLayer homeFloatLayer() {
+        return mHomeFloatLayer;
+    }
+
+    /**
+     * Opens a Home float around {@code shell} on Home page {@code page}: a window of its own whose
+     * one pane floats over that page, born full-size, raised and focused. It is never in the
+     * Workspace's row and never keeps the Workspace alive; the host keeps the row and only hears
+     * that the floats changed.
+     */
+    @NonNull
+    public Window openHomeFloat(@NonNull TerminalSession shell, int page) {
+        Leaf leaf = new Leaf(shell);
+        leaf.fontSize = inheritableFontSize(mActiveWindow == null ? null : mActiveWindow.active);
+        leaf.floatFrac = HomeFloatPolicy.birthFrac();
+        Window w = new Window(leaf);
+        w.root = null;
+        w.floating.add(leaf);
+        w.homePage = Math.max(0, page);
+        mWindows.add(w);
+        mHomeFloats.add(w);
+        mPendingFloatEntryLeaf = leaf;
+        attachHomeFloatContainer(w);
+        if (mPendingFloatEntryLeaf == leaf) mPendingFloatEntryLeaf = null;
+        focusHomeFloat(w);
+        mHost.onTreesChanged();
+        mHost.onHomeFloatsChanged();
+        return w;
+    }
+
+    /** Every Home float, across all pages, in z-order (last on top). */
+    @NonNull
+    public List<Window> homeFloats() {
+        return new ArrayList<>(mHomeFloats);
+    }
+
+    /** The Home float with this window id, or null. */
+    @Nullable
+    public Window homeFloatById(long windowId) {
+        for (Window w : mHomeFloats) if (w.id == windowId) return w;
+        return null;
+    }
+
+    /** The Home float showing {@code session}, or null when it is a pane of the row or of nothing. */
+    @Nullable
+    public Window homeFloatOf(@Nullable TerminalSession session) {
+        if (session == null) return null;
+        for (Window w : mHomeFloats)
+            if (w.active != null && w.active.session == session) return w;
+        return null;
+    }
+
+    /** The Home float holding focus, or null while Home or a window has it. */
+    @Nullable
+    public Window focusedHomeFloat() {
+        return mFocusedHomeFloat;
+    }
+
+    /** Gives {@code w} focus: raised over the other floats, its pane takes the keyboard. */
+    public void focusHomeFloat(@NonNull Window w) {
+        if (!mHomeFloats.contains(w) || w.active == null) return;
+        boolean changed = mFocusedHomeFloat != w;
+        mFocusedHomeFloat = w;
+        if (mHomeFloats.indexOf(w) != mHomeFloats.size() - 1) {
+            mHomeFloats.remove(w);
+            mHomeFloats.add(w);
+        }
+        FloatingPaneContainer container = mHomeFloatContainers.get(w.active);
+        if (container != null) container.bringToFront();
+        updateActiveBorders();
+        focusActiveView();
+        applyHomeFloatLift();
+        if (changed) mHost.onActivePaneChanged();
+    }
+
+    /**
+     * Home takes focus back from the focused Home float, if one has it: a press beside the floats,
+     * the page turned away, the wall gone to the Workspace. The host closes the keyboard it raised.
+     */
+    public void releaseHomeFloatFocus() {
+        if (mFocusedHomeFloat == null) return;
+        mFocusedHomeFloat = null;
+        applyHomeFloatLift();
+        updateActiveBorders();
+        mHost.onActivePaneChanged();
+        mHost.onHomeFloatFocusReleased();
+    }
+
+    /** Tucks {@code w} into its chip; its shell keeps running, and Home has the focus again. */
+    public void minimiseHomeFloat(@NonNull Window w) {
+        if (!mHomeFloats.contains(w) || w.minimised) return;
+        if (w == mFocusedHomeFloat) releaseHomeFloatFocus();
+        w.minimised = true;
+        FloatingPaneContainer container = w.active == null ? null : mHomeFloatContainers.get(w.active);
+        if (container == null || container.getVisibility() != View.VISIBLE
+            || !arePaneAnimationsEnabled() || !flyIntoChip(w, container)) {
+            if (container != null) settleMinimiseFlight(container);
+            applyHomeFloatPage();
+        }
+        mHost.onHomeFloatsChanged();
+    }
+
+    /** Minimise all floats: every Home float, on every page, into its chip. */
+    public void minimiseAllHomeFloats() {
+        for (Window w : new ArrayList<>(mHomeFloats)) minimiseHomeFloat(w);
+    }
+
+    /**
+     * Brings {@code w} back from its chip and focuses it. The host pages Home to the float's page
+     * first; a float restored onto a page not on screen waits there, unfocused.
+     */
+    public void restoreHomeFloat(@NonNull Window w) {
+        if (!mHomeFloats.contains(w)) return;
+        boolean wasMinimised = w.minimised;
+        w.minimised = false;
+        FloatingPaneContainer container = w.active == null ? null : mHomeFloatContainers.get(w.active);
+        if (container != null) settleMinimiseFlight(container);
+        applyHomeFloatPage();
+        if (wasMinimised && container != null && container.getVisibility() == View.VISIBLE) {
+            mPendingFloatEntryLeaf = w.active;
+            maybeAnimateFloatEntry(w.active, container);
+        }
+        if (container == null || container.getVisibility() == View.VISIBLE) focusHomeFloat(w);
+        if (wasMinimised) mHost.onHomeFloatsChanged();
+    }
+
+    /** Restore floats: every minimised Home float comes back onto its page. */
+    public void restoreHomeFloats() {
+        boolean any = false;
+        for (Window w : mHomeFloats) {
+            if (!w.minimised) continue;
+            w.minimised = false;
+            FloatingPaneContainer container = w.active == null ? null : mHomeFloatContainers.get(w.active);
+            if (container != null) settleMinimiseFlight(container);
+            any = true;
+        }
+        if (!any) return;
+        applyHomeFloatPage();
+        mHost.onHomeFloatsChanged();
+    }
+
+    /**
+     * Dock on a Home float: it leaves Home and becomes a tiled window whose one pane is its tree.
+     * The host puts it in the Workspace's row right after the current window and slides there.
+     */
+    public void dockHomeFloat(@NonNull Window w) {
+        if (!mHomeFloats.contains(w) || w.active == null) return;
+        Leaf leaf = w.active;
+        boolean wasFocused = w == mFocusedHomeFloat;
+        mHomeFloats.remove(w);
+        removeFloatContainer(leaf);
+        w.floating.remove(leaf);
+        leaf.parent = null;
+        leaf.floatFrac = null;
+        leaf.floatRestoreFrac = null;
+        leaf.appliedFloatFrac = null;
+        w.root = leaf;
+        w.active = leaf;
+        w.homePage = HomeFloatPolicy.NOT_HOME_FLOAT;
+        w.minimised = false;
+        w.layoutPolicy = mDefaultLayoutPolicy;
+        if (wasFocused) mFocusedHomeFloat = null;
+        mHost.onHomeFloatDocked(w);
+        mHost.onTreesChanged();
+        mHost.onHomeFloatsChanged();
+    }
+
+    /**
+     * Ctrl+Alt+F on a window of the row that holds one pane: the window floats onto Home page
+     * {@code page} as a Home float, born full-size and focused. False for a window of several
+     * panes, whose focused pane floats inside it instead ({@link #toggleFloatActivePane}). The host
+     * takes it out of the row.
+     */
+    public boolean floatWindowOntoHome(@NonNull Window w, int page) {
+        if (w.isHomeFloat() || !(w.root instanceof Leaf) || !w.floating.isEmpty()) return false;
+        Leaf leaf = (Leaf) w.root;
+        if (mActiveWindow == w) {
+            // The pane host lets go of the pane before the float layer takes it.
+            mActiveWindow = null;
+            mMaximizedLeaf = null;
+            render();
+        }
+        w.root = null;
+        leaf.parent = null;
+        leaf.floatFrac = HomeFloatPolicy.birthFrac();
+        leaf.floatRestoreFrac = null;
+        w.floating.add(leaf);
+        w.active = leaf;
+        w.homePage = Math.max(0, page);
+        w.minimised = false;
+        w.layoutPolicy = null;
+        mHomeFloats.add(w);
+        attachHomeFloatContainer(w);
+        focusHomeFloat(w);
+        mHost.onTreesChanged();
+        mHost.onHomeFloatsChanged();
+        return true;
+    }
+
+    /**
+     * What covers the float layer, in screen pixels: the bottom of the status bar (or of the
+     * system bar) above it, the top of the dock below it with the keyboard down, and the top of the
+     * keyboard, with the dock riding on it, while it is up (-1 while it is down). Floats are laid
+     * out between the first two and never resized by the keyboard: the focused one is lifted.
+     */
+    public void setHomeFloatObstructions(int roomTopOnScreenPx, int dockTopOnScreenPx,
+                                         int keyboardTopOnScreenPx) {
+        boolean roomMoved = roomTopOnScreenPx != mHomeRoomTopOnScreenPx
+            || dockTopOnScreenPx != mHomeDockTopOnScreenPx;
+        boolean keyboardMoved = keyboardTopOnScreenPx != mHomeKeyboardTopOnScreenPx;
+        mHomeRoomTopOnScreenPx = roomTopOnScreenPx;
+        mHomeDockTopOnScreenPx = dockTopOnScreenPx;
+        mHomeKeyboardTopOnScreenPx = keyboardTopOnScreenPx;
+        if (roomMoved) relayHomeFloats();
+        else if (keyboardMoved) applyHomeFloatLift();
+    }
+
+    private void attachHomeFloatContainer(@NonNull Window w) {
+        HomeFloatLayer layer = mHomeFloatLayer;
+        Leaf leaf = w.active;
+        if (layer == null || leaf == null) return;
+        FloatingPaneContainer existing = mHomeFloatContainers.get(leaf);
+        if (existing != null && existing.getParent() == layer) return;
+        if (existing != null) removeFloatContainer(leaf);
+        FloatingPaneContainer container = new FloatingPaneContainer(leaf, w);
+        mHomeFloatContainers.put(leaf, container);
+        layer.addView(container, new FrameLayout.LayoutParams(0, 0));
+        applyFloatBounds(leaf, container);
+        container.setVisibility(HomeFloatPolicy.shownOn(w.homePage, w.minimised, layer.page())
+            ? View.VISIBLE : View.GONE);
+        if (container.getVisibility() == View.VISIBLE) maybeAnimateFloatEntry(leaf, container);
+        updateHomeFloatBorders();
+    }
+
+    /** Shows the floats of the Home page on screen and hides every other page's. */
+    private void applyHomeFloatPage() {
+        HomeFloatLayer layer = mHomeFloatLayer;
+        if (layer == null) return;
+        int page = layer.page();
+        boolean focusedHidden = false;
+        for (Window w : mHomeFloats) {
+            FloatingPaneContainer container = w.active == null ? null : mHomeFloatContainers.get(w.active);
+            if (container == null) continue;
+            boolean shown = HomeFloatPolicy.shownOn(w.homePage, w.minimised, page);
+            int visibility = shown ? View.VISIBLE : View.GONE;
+            if (container.getVisibility() != visibility) container.setVisibility(visibility);
+            if (!shown && w == mFocusedHomeFloat) focusedHidden = true;
+        }
+        // The page turned away from the focused float: Home has the focus again.
+        if (focusedHidden) releaseHomeFloatFocus();
+    }
+
+    private void relayHomeFloats() {
+        for (Map.Entry<Leaf, FloatingPaneContainer> entry : mHomeFloatContainers.entrySet())
+            applyFloatBounds(entry.getKey(), entry.getValue());
+        applyHomeFloatLift();
+    }
+
+    /** The room Home floats are laid out in, in the float layer's pixels. */
+    @NonNull
+    private Rect homeFloatRoom() {
+        HomeFloatLayer layer = mHomeFloatLayer;
+        if (layer == null) return new Rect();
+        int[] onScreen = new int[2];
+        layer.getLocationOnScreen(onScreen);
+        int height = layer.getHeight();
+        int top = mHomeRoomTopOnScreenPx == Integer.MIN_VALUE ? 0
+            : mHomeRoomTopOnScreenPx - onScreen[1];
+        int bottom = mHomeDockTopOnScreenPx == Integer.MAX_VALUE ? 0
+            : onScreen[1] + height - mHomeDockTopOnScreenPx;
+        return HomeFloatPolicy.room(layer.getWidth(), height, top, bottom);
+    }
+
+    /** Lifts the focused Home float so its cursor row clears the keyboard; every other sits flat. */
+    private void applyHomeFloatLift() {
+        for (Window w : mHomeFloats) {
+            FloatingPaneContainer container = w.active == null ? null : mHomeFloatContainers.get(w.active);
+            if (container == null || container.mFlying) continue;
+            float target = w == mFocusedHomeFloat ? -homeFloatLiftPx(w, container) : 0f;
+            if (container.getTranslationY() != target) container.setTranslationY(target);
+        }
+    }
+
+    private int homeFloatLiftPx(@NonNull Window w, @NonNull FloatingPaneContainer container) {
+        HomeFloatLayer layer = mHomeFloatLayer;
+        if (layer == null || w.active == null || mHomeKeyboardTopOnScreenPx < 0
+            || container.getVisibility() != View.VISIBLE) return 0;
+        TerminalView view = mPaneViews.get(w.active.session);
+        TerminalEmulator emulator = view == null ? null : view.mEmulator;
+        if (emulator == null || emulator.mRows <= 0) return 0;
+        int row = Math.max(0, Math.min(emulator.mRows - 1, emulator.getCursorRow()));
+        float rowBottom = view.getRowTopPixels(row) + view.getTerminalCellHeightPixels();
+        int viewTop = container.getTop() + topWithin(view, container);
+        int[] onScreen = new int[2];
+        layer.getLocationOnScreen(onScreen);
+        return KeyboardOverlayPolicy.floatLiftPx(true, Math.round(viewTop + rowBottom),
+            mHomeKeyboardTopOnScreenPx - onScreen[1]);
+    }
+
+    /** {@code view}'s laid-out top inside {@code ancestor}, translations left out. */
+    private static int topWithin(@NonNull View view, @NonNull View ancestor) {
+        int top = 0;
+        View current = view;
+        while (current != null && current != ancestor) {
+            top += current.getTop();
+            current = current.getParent() instanceof View ? (View) current.getParent() : null;
+        }
+        return top;
+    }
+
+    /**
+     * Minimise's flight: the float shrinks into its chip in the status bar, or, with no chip on
+     * screen yet, up and away toward where the bar comes in. Hidden when it lands.
+     */
+    private boolean flyIntoChip(@NonNull Window w, @NonNull FloatingPaneContainer container) {
+        if (container.getWidth() <= 0 || container.getHeight() <= 0) return false;
+        Rect chip = new Rect();
+        int[] at = new int[2];
+        container.getLocationOnScreen(at);
+        float toX, toY, scaleX, scaleY;
+        if (mHost.homeFloatChipOnScreen(w, chip) && !chip.isEmpty()) {
+            scaleX = chip.width() / (float) container.getWidth();
+            scaleY = chip.height() / (float) container.getHeight();
+            toX = container.getTranslationX() + chip.left - at[0];
+            toY = container.getTranslationY() + chip.top - at[1];
+        } else {
+            scaleX = .2f;
+            scaleY = .2f;
+            toX = container.getTranslationX() + container.getWidth() * .4f;
+            toY = container.getTranslationY() - at[1];
+        }
+        container.mFlying = true;
+        container.setPivotX(0f);
+        container.setPivotY(0f);
+        container.animate().cancel();
+        final Runnable land = new Runnable() {
+            private boolean done;
+            @Override public void run() {
+                if (done) return;
+                done = true;
+                settleMinimiseFlight(container);
+                applyHomeFloatPage();
+            }
+        };
+        container.animate()
+            .translationX(toX).translationY(toY)
+            .scaleX(scaleX).scaleY(scaleY).alpha(0f)
+            .setDuration(HOME_FLOAT_MINIMISE_MS)
+            .setInterpolator(PaneMotionOverlayView.standardInterpolator())
+            .setListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator a) {
+                    land.run();
+                }
+            })
+            .start();
+        return true;
+    }
+
+    /** Puts a float's flight transforms back, so it comes back from its chip as it went. */
+    private static void settleMinimiseFlight(@NonNull FloatingPaneContainer container) {
+        container.animate().setListener(null);
+        container.animate().cancel();
+        container.mFlying = false;
+        container.setAlpha(1f);
+        container.setScaleX(1f);
+        container.setScaleY(1f);
+        container.setTranslationX(0f);
+        container.setTranslationY(0f);
+        container.setPivotX(container.getWidth() / 2f);
+        container.setPivotY(container.getHeight() / 2f);
+    }
+
+    /** A Home float's shell ended: it goes, and nothing in the Workspace moves. */
+    private void removeHomeFloat(@NonNull Window w) {
+        boolean wasFocused = w == mFocusedHomeFloat;
+        Leaf leaf = w.active;
+        mHomeFloats.remove(w);
+        mWindows.remove(w);
+        if (leaf != null) {
+            removeFloatContainer(leaf);
+            detachPaneView(leaf.session);
+        }
+        w.floating.clear();
+        if (wasFocused) {
+            mFocusedHomeFloat = null;
+            updateActiveBorders();
+            mHost.onActivePaneChanged();
+            mHost.onHomeFloatFocusReleased();
+        }
+        mHost.onTreesChanged();
+        mHost.onHomeFloatsChanged();
+    }
+
+    /** Dresses each Home float's rim: a float always wears its own, the focused one the active rim. */
+    private void updateHomeFloatBorders() {
+        if (mHomeFloatContainers.isEmpty()) return;
+        PaneBorderStyle.Palette palette = PaneRim.palette(mHostView.getContext());
+        float density = mHostView.getResources().getDisplayMetrics().density;
+        boolean glassShape = paneGlassActive();
+        float radiusPx = paneRadiusPx();
+        for (Window w : mHomeFloats) {
+            Leaf leaf = w.active;
+            if (leaf == null) continue;
+            FloatingPaneContainer container = mHomeFloatContainers.get(leaf);
+            PaneContentFrame frame = mPaneFrames.get(leaf.session);
+            if (container == null || frame == null) continue;
+            boolean focused = w == mFocusedHomeFloat;
+            // Counted as a split, as a window's floats are: a float is never a lone bare pane.
+            PaneBorderStyle.Decision border = PaneBorderStyle.decide(2, focused,
+                mPaneAttention.isSet(leaf.session.getPid()), palette);
+            frame.setPaneShape(radiusPx, glassShape);
+            frame.setRimStrokePx(paneBorderStrokePx(glassShape, true, density));
+            PaneRim rim = mBorderStates.get(leaf.session);
+            if (rim == null) rim = new PaneRim();
+            if (rim.apply(frame, glassShape, radiusPx, border, mSurfaceStyle)) {
+                mBorderStates.put(leaf.session, rim);
+            } else {
+                mBorderStates.remove(leaf.session);
+            }
+            container.titlebar().applyRim(glassShape, radiusPx, border, mSurfaceStyle, 1f, focused);
+            container.invalidate();
+        }
+    }
+
+    /** A float's container, a window's floating pane's or a Home float's. */
+    @Nullable
+    private FloatingPaneContainer containerOf(@NonNull Leaf leaf) {
+        FloatingPaneContainer container = mFloatContainers.get(leaf);
+        return container != null ? container : mHomeFloatContainers.get(leaf);
+    }
+
+    /** Whether the screen stands in landscape: the key a float's shape memory is kept under. */
+    private boolean isLandscapeScreen() {
+        return mHostView.getResources().getConfiguration().orientation
+            == Configuration.ORIENTATION_LANDSCAPE;
+    }
+
 
     // ------------------------------------------------------------------ scratchpad
 
@@ -2657,8 +3236,20 @@ public class TerminalPaneController {
 
     /** Re-clamp {@code leaf}'s fractions against the live host size and lay its container out. */
     private void applyFloatBounds(@NonNull Leaf leaf, @NonNull FloatingPaneContainer container) {
-        float hostWidth = mHostView.getWidth();
-        float hostHeight = mHostView.getHeight();
+        Rect room = container.room();
+        float hostWidth = room.width();
+        float hostHeight = room.height();
+        if (hostWidth > 0f && hostHeight > 0f) {
+            // A turn of the screen: the float takes the shape it last had in this orientation.
+            if (leaf.shapeMemory == null) leaf.shapeMemory = new HomeFloatPolicy.ShapeMemory();
+            HomeFloatPolicy.Shape remembered = leaf.shapeMemory.turn(isLandscapeScreen(),
+                leaf.floatFrac, leaf.floatRestoreFrac);
+            if (remembered != null && remembered.frac != null) {
+                leaf.floatFrac = remembered.frac;
+                leaf.floatRestoreFrac = remembered.restoreFrac;
+                container.onMaximisedChanged();
+            }
+        }
         RectF frac = leaf.floatFrac != null ? leaf.floatFrac : defaultFloatFrac(0);
         if (hostWidth > 0f && hostHeight > 0f) {
             frac = clampFloatFractions(frac, hostWidth, hostHeight,
@@ -2681,8 +3272,8 @@ public class TerminalPaneController {
             : new FrameLayout.LayoutParams(0, 0);
         int width = Math.round(frac.width() * hostWidth);
         int height = Math.round(frac.height() * hostHeight);
-        int leftMargin = Math.round(frac.left * hostWidth);
-        int topMargin = Math.round(frac.top * hostHeight);
+        int leftMargin = room.left + Math.round(frac.left * hostWidth);
+        int topMargin = room.top + Math.round(frac.top * hostHeight);
         // Skip the no-op relayout: repeated host layout passes (keyboard settle, accessory band
         // churn) would otherwise re-trigger a full measure of the float — and a PTY resize under a
         // busy TUI — for bounds that did not actually change.
@@ -2710,6 +3301,7 @@ public class TerminalPaneController {
 
     private void removeFloatContainer(@NonNull Leaf leaf) {
         FloatingPaneContainer container = mFloatContainers.remove(leaf);
+        if (container == null) container = mHomeFloatContainers.remove(leaf);
         if (container != null && container.getParent() instanceof ViewGroup)
             ((ViewGroup) container.getParent()).removeView(container);
     }
@@ -3596,6 +4188,8 @@ public class TerminalPaneController {
         }
         for (FloatingPaneContainer container : mFloatContainers.values())
             container.titlebar().invalidateGlassPosition();
+        for (FloatingPaneContainer container : mHomeFloatContainers.values())
+            container.titlebar().invalidateGlassPosition();
     }
 
     /**
@@ -3624,6 +4218,8 @@ public class TerminalPaneController {
         }
         // A float's titlebar is cut from the same glass as its pane, in the same pass.
         for (FloatingPaneContainer container : mFloatContainers.values())
+            container.titlebar().dress(mSurfaceStyle, radiusPx);
+        for (FloatingPaneContainer container : mHomeFloatContainers.values())
             container.titlebar().dress(mSurfaceStyle, radiusPx);
         // The corner tab is cut from the same glass as the pane it grows out of, and re-dressed
         // in the same pass, so a new frost frame reaches the tab as it reaches the slabs.
@@ -3992,6 +4588,7 @@ public class TerminalPaneController {
         applyAttentionHold();
         // The resize chevrons dim with focus like the pane borders do.
         for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
+        updateHomeFloatBorders();
     }
 
     @Nullable
@@ -5261,17 +5858,26 @@ public class TerminalPaneController {
         private static final int DRAG_RESIZE = 2;
 
         private final Leaf mLeaf;
+        /** The Home float this container draws, or null for a window's floating pane. */
+        @Nullable private final Window mHomeFloat;
         private final FloatTitlebarView mTitlebar;
         private final Paint mChromePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private int mDragMode = DRAG_NONE;
+        /** Minimise's flight is carrying this float into its chip; nothing else moves it meanwhile. */
+        boolean mFlying;
         private float mDownRawX;
         private float mDownRawY;
         private boolean mDragMoved;
         @Nullable private RectF mDownFrac;
 
         FloatingPaneContainer(@NonNull Leaf leaf) {
+            this(leaf, null);
+        }
+
+        FloatingPaneContainer(@NonNull Leaf leaf, @Nullable Window homeFloat) {
             super(mHostView.getContext());
             mLeaf = leaf;
+            mHomeFloat = homeFloat;
             setElevation(dp(FLOAT_ELEVATION_DP));
             // The container itself stays transparent so the gap between the titlebar and the
             // pane shows what is behind; the surface color lives on a wrapper rather than the
@@ -5311,6 +5917,21 @@ public class TerminalPaneController {
             return mTitlebar;
         }
 
+        /**
+         * The room this float is laid out in, in its parent's pixels: the pane host for a window's
+         * floating pane, the float layer between the status bar and the dock for a Home float.
+         */
+        @NonNull Rect room() {
+            if (mHomeFloat != null) return homeFloatRoom();
+            return new Rect(0, 0, mHostView.getWidth(), mHostView.getHeight());
+        }
+
+        /** Whether this float holds focus: its window's focused pane, or the focused Home float. */
+        boolean isFocusedFloat() {
+            if (mHomeFloat != null) return mFocusedHomeFloat == mHomeFloat;
+            return mFocusedHomeFloat == null && mActiveWindow != null && mActiveWindow.active == mLeaf;
+        }
+
         /** Maximise was tapped, or a hand move ended the maximised state. */
         void onMaximisedChanged() {
             mTitlebar.setMaximised(FloatTitlebarPolicy.isMaximised(mLeaf.floatRestoreFrac));
@@ -5323,7 +5944,11 @@ public class TerminalPaneController {
                 // Posted because raising reorders the host's children mid-dispatch otherwise.
                 // Skipped while already the focused top-most float, so typing taps don't re-run
                 // border/focus work on every DOWN.
-                if (mActiveWindow == null || mActiveWindow.active != mLeaf
+                if (mHomeFloat != null) {
+                    if (mFocusedHomeFloat != mHomeFloat
+                        || mHomeFloats.indexOf(mHomeFloat) != mHomeFloats.size() - 1)
+                        post(() -> focusHomeFloat(mHomeFloat));
+                } else if (mActiveWindow == null || mActiveWindow.active != mLeaf
                     || mActiveWindow.floating.indexOf(mLeaf) != mActiveWindow.floating.size() - 1)
                     post(() -> focusSession(mLeaf.session));
                 // A press on a titlebar button is the button's; the rest of the strip moves.
@@ -5349,8 +5974,9 @@ public class TerminalPaneController {
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     if (mDragMode == DRAG_NONE || mDownFrac == null) return false;
-                    float hostWidth = mHostView.getWidth();
-                    float hostHeight = mHostView.getHeight();
+                    Rect room = room();
+                    float hostWidth = room.width();
+                    float hostHeight = room.height();
                     if (hostWidth <= 0f || hostHeight <= 0f) return true;
                     // Raw coordinates: the container moves under the pointer, so view-local
                     // deltas would feed back into themselves.
@@ -5441,7 +6067,7 @@ public class TerminalPaneController {
             int primary = MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(getContext(), R.color.termux_primary));
-            boolean active = mActiveWindow != null && mActiveWindow.active == mLeaf;
+            boolean active = isFocusedFloat();
             int chromeAlpha = active ? 200 : 90;
             mChromePaint.setStyle(Paint.Style.STROKE);
             mChromePaint.setStrokeWidth(dp(1.5f));

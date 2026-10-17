@@ -5362,7 +5362,18 @@ public final class SuggestionBarView extends GridLayout
             : (inheritedTintColor & 0x00FFFFFF);
         menuHighlight.setTintBase(tintBase);
 
-        // The Terminal entry's long press: a new window, first, the way an app's shortcuts lead.
+        // The Terminal entry's long press: a Home float on the page in view, then a new window,
+        // first, the way an app's shortcuts lead.
+        if (com.termux.app.launcher.LauncherEntries.hasHomeFloat(context.entry.appRef)) {
+            Runnable newFloat = () -> {
+                dismissAppContextPopup();
+                LauncherAppLauncher.launchEntryHomeFloat(context.entry);
+            };
+            TextView newFloatRow = menuRows.addActionRow(shell,
+                getResources().getString(R.string.launcher_entry_new_float),
+                R.drawable.ic_symbol_add, false, tintBase, newFloat);
+            pendingMenuRows.add(new MenuRow(newFloatRow, newFloat, false));
+        }
         if (com.termux.app.launcher.LauncherEntries.hasAlternate(context.entry.appRef)) {
             Runnable newWindow = () -> {
                 dismissAppContextPopup();

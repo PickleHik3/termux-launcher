@@ -12,6 +12,7 @@
     <string name="widget_empty_hint">Long-press to add widgets</string>
     <string name="widget_menu_edit_widgets">Edit widgets</string>
     <string name="widget_menu_remove_page">Remove page</string>
+    <string name="widget_menu_terminal">Terminal</string>
     <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
     <string name="widget_remove_failed">Widget couldn\'t be removed</string>
     <string name="widget_add_busy">Finish adding the current widget first</string>
@@ -394,6 +395,7 @@
     <!-- The launcher's own drawer entries, listed with the Linux apps (ADR 0008). -->
     <string name="launcher_entry_terminal">Terminal</string>
     <string name="launcher_entry_display">Display</string>
+    <string name="launcher_entry_new_float">New float here</string>
     <string name="launcher_entry_new_window">New window</string>
     <string name="termux_x11_session_failed">This desktop could not be opened.</string>
     <string name="termux_x11_session_replace">Stop %1$s and open %2$s instead?</string>
