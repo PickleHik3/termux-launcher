@@ -70,30 +70,36 @@ page, not in the strip.
 ### 4.2 Titlebar
 
 One translucent glass strip along the float's top, designed to the launcher's look, carrying the
-drag handle and four buttons: **Minimise**, **Maximise**, **Close**, **Dock**.
+drag handle and three buttons at the trailing end: **Minimise** (a chevron down), **Maximise** (a
+square), **Close** (an X). **Dock** is in the menu a long press on the drag handle opens, with the
+window's name, so no glyph on the strip can read as Split (developer, 2026-10-18).
 
 - Maximise toggles full-size and remembers the previous size and spot.
 - Minimise flies the float, animated, into its chip in the status bar.
 - Dock sends a Home float into the strip as a tiled window right after the current window and
   slides to the Workspace. On a window's floating pane it tiles the pane back, as Dock does today.
-- Ctrl+Alt+F on a strip window floats it onto the Home page last shown; on a float it docks it.
+- Ctrl+Alt+F on a one-pane window floats it onto the Home page last shown; on a window of several
+  panes it floats the focused pane inside the window, as before; on a float it docks it.
 - This is the one floating-pane design: window floating panes and the scratchpad get the same
-  titlebar. The pill goes.
+  titlebar. The pill goes. On the scratchpad, Minimise hides it (as its toggle does) and Close ends
+  its shell, like Close anywhere.
 
 ### 4.3 Focus and the keyboard
 
 - A tap inside a float focuses it; a tap on Home outside any float focuses Home.
 - A float born on Home grabs focus and raises the keyboard overlay; a tap outside the float closes
   the keyboard (§5). Minimising or closing the focused float closes it too.
-- The keyboard overlays a float and never resizes it. A focused float is lifted so its cursor row
-  stays above the keyboard and put back when the keyboard closes (new: today floats are not
-  lifted).
+- The keyboard overlays a float the user has placed smaller than the room: that float is lifted so
+  its cursor row stays above the keyboard, never past the room's top, and put back when the
+  keyboard closes. A full-size float behaves like a tiled pane while the keyboard is up: its height
+  shrinks to the room above the keyboard and grows back after (developer, 2026-10-18).
 
 ### 4.4 The status bar on Home
 
 - Home has no launcher status bar until the first float opens; then the bar slides down from the
   top, in its compact form, and stays while any float is open or minimised. It slides up when the
-  last float closes.
+  last float closes. The bar overlays the page: the widget grid keeps its size, and floats are born
+  below the bar's edge (developer, 2026-10-18).
 - Chips on Home are floats only, across all pages; a chip carries its page's dot. Tapping a chip
   pages Home to that float's page and restores it. Workspace windows are not chips on Home; the
   Terminal entry reaches them.
@@ -152,7 +158,10 @@ keyboard layouts) shown with a Home action set:
   Corners, Margin, status bar, dock with extra keys, corner tabs, keyboard swipe, status swipe.
   Display windows wear the same chrome as terminal windows.
 - **Lifetime**: the Workspace exists while the row has at least one window (terminal or display).
-  Closing the last one slides Home back in. Home floats do not keep it alive and do not need it.
+  Closing the last one slides Home back in, and no shell is started behind it: the old
+  session-recovery (`showNextSessionAfterClose`, `maybeRecoverFromEmptySession`) retires
+  (developer, 2026-10-18). The Terminal entry opens a window when there is none; Start in =
+  Workspace opens one on a cold start. Home floats do not keep it alive and do not need it.
 
 ## 7. Display
 

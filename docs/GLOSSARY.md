@@ -207,8 +207,9 @@ _Avoid_: terminal icon (in prose), Create Pane, Open Workspace
 
 **Titlebar**:
 The translucent glass strip along the top of every floating pane, Home float and the scratchpad:
-the drag handle and Minimise, Maximise, Close and Dock. It replaces the floating pane's move corner
-and pill; resizing stays at the bottom-right corner.
+the drag handle and Minimise, Maximise and Close; Dock is in the menu a long press on the handle
+opens. It replaces the floating pane's move corner and pill; resizing stays at the bottom-right
+corner.
 _Avoid_: pill (the retired control; the dictation pill is another thing), header, handle bar
 
 **Wall**:
