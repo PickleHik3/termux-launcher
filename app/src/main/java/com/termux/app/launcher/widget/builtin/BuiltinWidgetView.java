@@ -35,6 +35,14 @@ import java.util.List;
  * at the card's own size (nothing more left out, no label newly cut short), which the card's
  * width decides as often as its height: a 2×1 on a 4×5 grid is taller than the design but no
  * wider.</p>
+ *
+ * <p>A measure only measures. A parent may measure the card more than once a pass at sizes it
+ * then throws away: the Home column measures the widget grid at the status bar's height first
+ * while the bar overlays Home, then at its full height. A rebuild in the measure flipped the
+ * content to the 1×1 and back on every pass, and every rebuild stopped and started the live
+ * sources, each start a new receiver or observer in the system server. So the bucket the last
+ * measure asks for is built at layout, once the size is the one the card is drawn at, and the
+ * sources run from attach to detach across measures.</p>
  */
 public abstract class BuiltinWidgetView extends FrameLayout {
     /** One editable setting of a widget, offered by the settings sheet. */
@@ -69,8 +77,19 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     private static final int ZOOM_STEPS = 6;
     /** How much the content is drawn larger than it is laid out; chosen per size and layout. */
     private float zoom = 1f;
-    private int zoomWidth = -1, zoomHeight = -1;
-    private boolean zoomStale = true;
+    /**
+     * The zoom chosen for the last two sizes the current layout was measured at: a parent that
+     * measures twice a pass at two sizes would otherwise search for it twice a pass. Forgotten
+     * whenever the layout changes.
+     */
+    private final int[] zoomMemoWidth = {-1, -1};
+    private final int[] zoomMemoHeight = {-1, -1};
+    private final float[] zoomMemo = {1f, 1f};
+    private int zoomMemoNext;
+    /** The bucket the last measure's room asks for; built at the next layout when it is new. */
+    @NonNull private BuiltinWidgetSpan wantedSpan = BuiltinWidgetSpan.ONE_BY_ONE;
+    private int lastWidthSpec, lastHeightSpec;
+    private boolean measuredOnce;
 
     private final View background;
     private final FrameLayout content;
@@ -91,8 +110,8 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         // A subclass may swap the layout in place (a permission granted, a file opened) without
         // a rebuild; the zoom chosen for the old one is not the new one's.
         content.setOnHierarchyChangeListener(new OnHierarchyChangeListener() {
-            @Override public void onChildViewAdded(View parent, View child) { zoomStale = true; }
-            @Override public void onChildViewRemoved(View parent, View child) { zoomStale = true; }
+            @Override public void onChildViewAdded(View parent, View child) { forgetZoom(); }
+            @Override public void onChildViewRemoved(View parent, View child) { forgetZoom(); }
         });
         addView(content, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         setContentDescription(context.getString(kind.label));
@@ -103,8 +122,9 @@ public abstract class BuiltinWidgetView extends FrameLayout {
 
     /**
      * Brings the view level with its record's settings. The span is not the record's cell count
-     * but the room those cells give on this grid, so it is chosen in {@link #onMeasure} from the
-     * size the cell hands down; until the first measure the content is built for the smallest.
+     * but the room those cells give on this grid, so it is chosen from the size the cell hands
+     * down and built at layout ({@link #onLayout}); until the first layout the content is built
+     * for the smallest.
      */
     public final void bind(@Nullable Bundle config) {
         Bundle nextConfig = config == null ? new Bundle() : new Bundle(config);
@@ -129,39 +149,75 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     }
 
     @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        // The cell measures its content exactly, so the room is known here, before the content
-        // is measured: a bucket change rebuilds the content in the same pass, with no frame in
-        // between where the old layout shows in the new size.
+        lastWidthSpec = widthMeasureSpec;
+        lastHeightSpec = heightMeasureSpec;
+        measuredOnce = true;
+        // The room asks for a bucket, which is built at layout, not here: a parent may measure
+        // at sizes it never lays out (see the class note). A view never bound builds at once.
         if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED
             && MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.UNSPECIFIED) {
-            BuiltinWidgetSpan next = spanForPixels(MeasureSpec.getSize(widthMeasureSpec),
+            wantedSpan = spanForPixels(MeasureSpec.getSize(widthMeasureSpec),
                 MeasureSpec.getSize(heightMeasureSpec));
-            if (next != span || !built) {
-                span = next;
-                rebuild();
-            }
         }
+        if (!built) {
+            span = wantedSpan;
+            rebuild();
+        }
+        measureCard(widthMeasureSpec, heightMeasureSpec);
+    }
+
+    /** Measures the built layout into the card, zoomed to fill an exact size. */
+    private void measureCard(int widthMeasureSpec, int heightMeasureSpec) {
         if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.EXACTLY
             || MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.EXACTLY) {
             setZoom(1f);
-            zoomStale = true;
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
             return;
         }
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
-        if (zoomStale || width != zoomWidth || height != zoomHeight) {
-            zoomWidth = width;
-            zoomHeight = height;
-            zoomStale = false;
-            setZoom(chooseZoom(width, height));
-        }
+        setZoom(zoomFor(width, height));
         background.measure(widthMeasureSpec, heightMeasureSpec);
         measureContent(width, height, zoom);
         setMeasuredDimension(width, height);
     }
 
+    /** The zoom for the current layout at {@code width}x{@code height}, remembered per size. */
+    private float zoomFor(int width, int height) {
+        for (int i = 0; i < zoomMemo.length; i++) {
+            if (zoomMemoWidth[i] == width && zoomMemoHeight[i] == height) return zoomMemo[i];
+        }
+        float chosen = chooseZoom(width, height);
+        int slot = zoomMemoNext;
+        zoomMemoNext = (slot + 1) % zoomMemo.length;
+        zoomMemoWidth[slot] = width;
+        zoomMemoHeight[slot] = height;
+        zoomMemo[slot] = chosen;
+        return chosen;
+    }
+
+    private void forgetZoom() {
+        for (int i = 0; i < zoomMemo.length; i++) {
+            zoomMemoWidth[i] = -1;
+            zoomMemoHeight[i] = -1;
+        }
+    }
+
     @Override protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        // The size laid out is the one drawn: its bucket is built now, before the frame draws,
+        // so the old layout never shows at the new size. Measured once more for the new layout.
+        if (measuredOnce && built && wantedSpan != span) {
+            span = wantedSpan;
+            rebuild();
+            int wasWidth = getMeasuredWidth();
+            int wasHeight = getMeasuredHeight();
+            measureCard(lastWidthSpec, lastHeightSpec);
+            // Only a card that wraps its content can change size with its layout; the parent
+            // hears of it on the next pass.
+            if (getMeasuredWidth() != wasWidth || getMeasuredHeight() != wasHeight) {
+                post(this::requestLayout);
+            }
+        }
         background.layout(0, 0, right - left, bottom - top);
         content.layout(0, 0, content.getMeasuredWidth(), content.getMeasuredHeight());
     }
@@ -281,7 +337,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         content.removeAllViews();
         onBuild(content, span, ui());
         built = true;
-        zoomStale = true;
+        forgetZoom();
         if (wasStarted || (isAttachedToWindow() && !preview)) startInternal();
     }
 
