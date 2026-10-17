@@ -59,7 +59,10 @@ public class RootPreferencesSearchIndexTest {
         return (SettingsActivity.RootPreferencesFragment) fragment;
     }
 
-    /** The search box, then the usage mode row on its own, then the first task group. */
+    /**
+     * The search box, then the usage mode row and the Start in row on their own, then the first
+     * task group.
+     */
     @Test
     public void theUsageModeRowStandsAboveTheLauncherHeader() {
         SettingsActivity.RootPreferencesFragment root = launch();
@@ -71,7 +74,12 @@ public class RootPreferencesSearchIndexTest {
         assertEquals("a fresh install is the terminal with the home screen",
             useAs.getContext().getString(R.string.settings_use_as_home),
             String.valueOf(useAs.getSummary()));
-        assertTrue(screen.getPreference(2) instanceof PreferenceCategory);
+        Preference startIn = screen.getPreference(2);
+        assertEquals("app_launcher_start_in", startIn.getKey());
+        assertEquals("a fresh install starts in Home",
+            startIn.getContext().getString(R.string.settings_start_in_home),
+            String.valueOf(startIn.getSummary()));
+        assertTrue(screen.getPreference(3) instanceof PreferenceCategory);
     }
 
     @Test
@@ -95,7 +103,7 @@ public class RootPreferencesSearchIndexTest {
         SettingsActivity.RootPreferencesFragment root = launch();
         PreferenceScreen screen = root.getPreferenceScreen();
         for (int g = 0; g < EXPECTED_GROUPS.length; g++) {
-            PreferenceCategory group = (PreferenceCategory) screen.getPreference(2 + g);
+            PreferenceCategory group = (PreferenceCategory) screen.getPreference(3 + g);
             assertEquals(EXPECTED_GROUPS[g], group.getKey());
             assertEquals(EXPECTED_ROWS[g].length, group.getPreferenceCount());
             for (int i = 0; i < EXPECTED_ROWS[g].length; i++) {

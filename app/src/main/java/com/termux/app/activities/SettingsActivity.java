@@ -690,6 +690,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
 
         /** The usage mode row, which is the one root row that writes a preference. */
         private static final String KEY_USE_AS = "app_launcher_use_case_mode";
+        /** The Start in row, the other root row that writes a preference. */
+        private static final String KEY_START_IN = "app_launcher_start_in";
 
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -707,6 +709,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
             SettingsLayoutUtils.applyRootLayout(this);
             configureUseAsRow(context);
+            configureStartInRow();
             configureSearch();
         }
 
@@ -767,6 +770,26 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 return true;
             });
             refreshUseAsSummary();
+        }
+
+        /**
+         * The Start in row (ADR 0008): the same plain setting row as the mode row above it, its
+         * summary the choice. Set by hand rather than by a summary provider, since the search box
+         * writes every root row's summary.
+         */
+        private void configureStartInRow() {
+            ListPreference row = findPreference(KEY_START_IN);
+            if (row == null) return;
+            row.setLayoutResource(R.layout.preference_settings_row);
+            row.setWidgetLayoutResource(R.layout.preference_widget_chevron);
+            row.setSummary(row.getEntry());
+            row.setOnPreferenceChangeListener((preference, newValue) -> {
+                int index = row.findIndexOfValue(String.valueOf(newValue));
+                CharSequence summary = index < 0 ? null : row.getEntries()[index];
+                row.setSummary(summary);
+                mOriginalSummaries.put(KEY_START_IN, summary);
+                return true;
+            });
         }
 
         private void refreshUseAsSummary() {
