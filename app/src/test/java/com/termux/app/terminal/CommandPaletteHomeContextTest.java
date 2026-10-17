@@ -225,6 +225,27 @@ public class CommandPaletteHomeContextTest {
     }
 
     @Test
+    public void appSections_fileTheDisplayEntryUnderLinuxAppsAsTheDrawerDoes() {
+        LauncherAppEntry android = new LauncherAppEntry(new AppRef("com.example.mail", "Main"),
+            "Mail", null);
+        LauncherAppEntry display = new LauncherAppEntry(
+            com.termux.app.launcher.LauncherEntries.display(), "Display", null);
+        List<LauncherAppEntry> apps = Arrays.asList(android, display);
+
+        assertEquals(Collections.singletonList(display),
+            TerminalCommandPalette.appsIn(apps, TerminalCommandPalette.AppSection.LINUX));
+        assertEquals(Collections.singletonList(android),
+            TerminalCommandPalette.appsIn(apps, TerminalCommandPalette.AppSection.ANDROID));
+
+        CommandPaletteFilter.Entry row = TerminalCommandPalette.linuxAppEntry(context, display,
+            Collections.<String, String>emptyMap());
+        assertEquals(CommandPaletteHomeSet.CATEGORY_LINUX_APPS, row.category);
+        assertEquals(display.appRef.stableId(), row.arguments.optString("query"));
+        assertEquals(context.getString(com.termux.R.string.palette_launcher_entry_row_subtitle),
+            row.subtitle);
+    }
+
+    @Test
     public void linuxAppEntry_launchesByStableIdUnderLinuxAppsAndIsBindable() {
         LauncherAppEntry linux = new LauncherAppEntry(X11Apps.ref("org.gimp.GIMP.desktop"),
             "GIMP", null);

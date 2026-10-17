@@ -1583,7 +1583,10 @@ public class LauncherCtlApiServer {
             return error;
         }
 
-        List<LauncherAppEntry> apps = LauncherAppDataProvider.getInstance(context).getAllAppsBlocking();
+        // A Linux app installed from a pane a moment ago is found: the catalogue re-lists the
+        // desktop files first when they changed.
+        List<LauncherAppEntry> apps = LauncherAppDataProvider.getInstance(context)
+            .getAllAppsWithCurrentLinuxAppsBlocking();
         AppLaunchMatch match = resolveLaunchMatch(apps, query);
         if (match.entry == null) {
             JSONObject error = jsonError(match.errorCode, match.message);

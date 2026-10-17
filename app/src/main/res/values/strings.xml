@@ -2147,6 +2147,7 @@
     <string name="palette_jump_float">Float</string>
     <string name="palette_jump_float_page">Float · page %1$d</string>
     <string name="palette_linux_app_row_subtitle">Linux app · hold to bind a key</string>
+    <string name="palette_launcher_entry_row_subtitle">Hold to bind a key</string>
     <string name="palette_contact_open_failed">Couldn\'t open this contact</string>
     <string name="palette_contact_call_failed">Couldn\'t dial this number</string>
     <string name="palette_argument_notice">TYPE A VALUE FOR %1$s, ⏎ TO APPLY</string>

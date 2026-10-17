@@ -427,7 +427,10 @@ public final class TerminalCommandPalette {
         return entries;
     }
 
-    /** The apps of one section, in the provider's order. */
+    /**
+     * The apps of one section, in the provider's order. Linux apps holds what the drawer files
+     * under Linux Apps: the Linux apps and the launcher's own Terminal and Display entries.
+     */
     @NonNull
     static List<LauncherAppEntry> appsIn(@NonNull List<LauncherAppEntry> apps,
                                          @NonNull AppSection section) {
@@ -435,8 +438,13 @@ public final class TerminalCommandPalette {
         boolean linux = section == AppSection.LINUX;
         List<LauncherAppEntry> out = new ArrayList<>(apps.size());
         for (LauncherAppEntry app : apps)
-            if (com.termux.app.x11.X11Apps.isLinuxApp(app.appRef) == linux) out.add(app);
+            if (inLinuxSection(app) == linux) out.add(app);
         return out;
+    }
+
+    private static boolean inLinuxSection(@NonNull LauncherAppEntry app) {
+        return com.termux.app.x11.X11Apps.isLinuxApp(app.appRef)
+            || com.termux.app.launcher.LauncherEntries.isEntry(app.appRef);
     }
 
     /**
@@ -450,8 +458,11 @@ public final class TerminalCommandPalette {
                                                     @NonNull LauncherAppEntry app,
                                                     @NonNull Map<String, String> shortcuts) {
         CommandPaletteFilter.Entry row = appEntry(context, app, shortcuts);
+        // The launcher's own entries are not Linux apps; they say only what a row can do.
+        boolean launcherEntry = com.termux.app.launcher.LauncherEntries.isEntry(app.appRef);
         return new CommandPaletteFilter.Entry(row.toolName, row.title,
-            context.getString(R.string.palette_linux_app_row_subtitle),
+            context.getString(launcherEntry ? R.string.palette_launcher_entry_row_subtitle
+                : R.string.palette_linux_app_row_subtitle),
             CommandPaletteHomeSet.CATEGORY_LINUX_APPS, row.bindings, row.enabled,
             row.disabledReason, row.requiresConfirmation, row.risk, row.arguments, null, null,
             row.iconKey);

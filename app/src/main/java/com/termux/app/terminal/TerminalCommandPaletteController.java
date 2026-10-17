@@ -454,6 +454,14 @@ public final class TerminalCommandPaletteController
                 if (mOpen) rebuildKeycaps(true);
                 if (mOpen && mMode == Mode.LIST) rebuildRows();
             });
+        // A Linux app installed from a pane leaves no broadcast and no resume behind; its desktop
+        // file is read now, off this thread, and the rows grow when the new list is in.
+        else mAppProvider.refreshIfLinuxAppsChanged(() -> {
+            if (!mOpen) return;
+            mAppUsage = mAppUsageStats.decayedScores(mAppProvider.getAllApps(),
+                System.currentTimeMillis());
+            if (mMode == Mode.LIST) rebuildRows();
+        });
 
         resolveAnchor();
         resolveSeed();
