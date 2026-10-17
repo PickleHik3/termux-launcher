@@ -39,6 +39,14 @@ public final class LauncherEntries {
         return ref != null && PACKAGE.equals(ref.packageName);
     }
 
+    /**
+     * Whether {@code ref} is in every catalogue whatever the device holds: Terminal is. Display
+     * comes and goes with Show Linux apps in drawer, so a Display pin can go unresolved.
+     */
+    public static boolean isAlwaysListed(@Nullable AppRef ref) {
+        return TERMINAL.equals(idOf(ref));
+    }
+
     /** Which entry a ref names, or null for any other app. */
     @Nullable
     public static String idOf(@Nullable AppRef ref) {

@@ -291,6 +291,7 @@ public final class LauncherAppDataProvider {
     public synchronized void invalidate() {
         refreshGeneration++;
         iconPackIdentity = null;
+        terminalEntry = null;
         loading = false;
         loaded = false;
         refreshing = false;
@@ -602,7 +603,25 @@ public final class LauncherAppDataProvider {
     @Nullable
     public synchronized LauncherAppEntry findByRef(@NonNull AppRef ref) {
         LauncherAppEntry entry = cachedById.get(ref.stableId());
+        if (entry == null && com.termux.app.launcher.LauncherEntries.isAlwaysListed(ref)) {
+            // Terminal is in every catalogue, so it resolves even while none is loaded (before
+            // the first load, after an invalidate): the dock's prune of unresolvable pins must
+            // never take the way back to the Workspace off the row.
+            entry = terminalEntry();
+        }
         return entry;
+    }
+
+    @Nullable private LauncherAppEntry terminalEntry;
+
+    @NonNull
+    private LauncherAppEntry terminalEntry() {
+        if (terminalEntry == null) {
+            terminalEntry = new LauncherAppEntry(com.termux.app.launcher.LauncherEntries.terminal(),
+                context.getString(com.termux.R.string.launcher_entry_terminal), null, false,
+                ApplicationInfo.CATEGORY_UNDEFINED, 0L);
+        }
+        return terminalEntry;
     }
 
     @Nullable
