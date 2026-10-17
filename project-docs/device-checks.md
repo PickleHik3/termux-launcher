@@ -109,6 +109,18 @@ under twenty items; past that, the oldest are re-judged first.
   Paused), its summary wrapping rather than clipping, and dims with the switch off · emulator,
   `font_scale 1.3`, force-stop after the change.
 
+### Wall rework: emulator pass of 2026-10-18 (debug builds up to 47e7893ae, tl16, 420 dpi)
+Seen, by the orchestrator, so these parts of the items below are done on the emulator and owe pong
+only: home press lands on Home page 1; Home at rest shows no status row, extra keys or slab, the
+dock with the pinned Terminal entry and the A–Z index; the seam Home → window 1 by a plain swipe;
+window 1 ↔ window 2 by a top-air drag; the drag back from window 1 to Home with a 700 ms injected
+drag (a 350 ms one did not page: the emulator batches injected moves late); the Terminal entry's
+tap goes to the Workspace; a split pane floated by Ctrl+Alt+F wears the titlebar (Dock, Maximise,
+Close, no Minimise) and Maximise/Restore size work; Home long-press › Terminal opens a Home float
+full-size under the bar with its titlebar, shell over glass, keyboard up and the chip "home · 1";
+Minimise hides it and the chip restores it; Dock makes it window 2 and slides to the Workspace.
+Not seen: everything else listed under the sections below.
+
 ### Wall rework #79 titlebar
 - 2026-10-17 · commit "feat(panes): a glass titlebar on every float" · Float a pane (Ctrl+Alt+F):
   drag its titlebar and the pane follows; Maximise fills the window and the button reads Restore
