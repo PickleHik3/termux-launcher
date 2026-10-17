@@ -3830,8 +3830,10 @@ public final class SuggestionBarView extends GridLayout
         }
         if (playRipple) dispatchLaunchRipple(entry, launchSourceView);
         Context context = getContext();
-        if (com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)) {
-            // A Linux app: the display's runner takes it, with the same bookkeeping a launch gets.
+        if (com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)
+                || com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef)) {
+            // A Linux app, or the launcher's own Terminal or Display entry: the launcher's runner
+            // takes it, with the same bookkeeping a launch gets.
             if (!LauncherAppLauncher.launchEntry(context, entry)) return;
             if (activeAzLetter != null) clearAzPreview();
             getUsageStatsStore().recordLaunch(entry.appRef.stableId());
@@ -5320,7 +5322,9 @@ public final class SuggestionBarView extends GridLayout
 
     private void showAppContextPopup(@NonNull AppMenuContext context) {
         dismissAppContextPopup();
-        boolean linuxApp = com.termux.app.x11.X11Apps.isLinuxApp(context.entry.appRef);
+        // A Linux app and the launcher's own entries have no Android package behind them.
+        boolean linuxApp = com.termux.app.x11.X11Apps.isLinuxApp(context.entry.appRef)
+            || com.termux.app.launcher.LauncherEntries.isEntry(context.entry.appRef);
         List<ShortcutInfo> shortcuts = linuxApp ? java.util.Collections.<ShortcutInfo>emptyList()
             : queryEntryShortcuts(context.entry);
         boolean hasShortcuts = !shortcuts.isEmpty();
@@ -5357,6 +5361,18 @@ public final class SuggestionBarView extends GridLayout
             ? (sourceFolder.tintColor & 0x00FFFFFF)
             : (inheritedTintColor & 0x00FFFFFF);
         menuHighlight.setTintBase(tintBase);
+
+        // The Terminal entry's long press: a new window, first, the way an app's shortcuts lead.
+        if (com.termux.app.launcher.LauncherEntries.hasAlternate(context.entry.appRef)) {
+            Runnable newWindow = () -> {
+                dismissAppContextPopup();
+                LauncherAppLauncher.launchEntryAlternate(context.entry);
+            };
+            TextView newWindowRow = menuRows.addActionRow(shell,
+                getResources().getString(R.string.launcher_entry_new_window),
+                R.drawable.ic_symbol_add, false, tintBase, newWindow);
+            pendingMenuRows.add(new MenuRow(newWindowRow, newWindow, false));
+        }
 
         // Uninstall and App info ask Android about a package; a Linux app has none.
         if (!linuxApp) {
