@@ -16,6 +16,7 @@ import android.view.Choreographer;
 import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -551,6 +552,7 @@ public final class TerminalCommandPaletteController
         });
         mView = new CommandPaletteView(mActivity);
         mView.setCallbacks(this);
+        mView.setPassThroughSource(this::passThroughRects);
         mHost.addView(mView, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         // Stay above the backdrop pane in z. Without this the whole ledger — surface tint and
@@ -744,6 +746,39 @@ public final class TerminalCommandPaletteController
         mMaxHeightPx = CommandPaletteHomeOverlay.availableHeightPx(room, inset, dp(SIDE_INSET),
             dp(MAX_HEIGHT));
         mModalBounds.set(0f, top, mHost.getWidth(), bottom - stackHeight);
+    }
+
+    /**
+     * What takes its own touches even inside the modal bounds, in host coordinates: the in-app
+     * keyboard wherever it stands (docked, on a side edge), the floating keyboard's frame with its
+     * drag handle and resize grip, and the dock's rows. A floating keyboard lies over the page or
+     * the terminal, so without these a key tap read as a tap outside and closed the palette.
+     */
+    @NonNull
+    private float[] passThroughRects() {
+        List<View> views = new ArrayList<>(4);
+        views.add(mActivity.findViewById(R.id.inapp_keyboard_container));
+        views.add(mActivity.findViewById(R.id.accessory_stack_container));
+        View floatingHost = mActivity.findViewById(R.id.floating_keyboard_host);
+        if (floatingHost instanceof ViewGroup && floatingHost.isShown()) {
+            ViewGroup group = (ViewGroup) floatingHost;
+            for (int i = 0; i < group.getChildCount(); i++) views.add(group.getChildAt(i));
+        }
+        mHost.getLocationOnScreen(mLocation);
+        int hostX = mLocation[0];
+        int hostY = mLocation[1];
+        float[] out = new float[views.size() * 4];
+        int n = 0;
+        for (View view : views) {
+            if (view == null || !view.isShown() || view.getWidth() <= 0 || view.getHeight() <= 0)
+                continue;
+            view.getLocationOnScreen(mLocation);
+            out[n++] = mLocation[0] - hostX;
+            out[n++] = mLocation[1] - hostY;
+            out[n++] = mLocation[0] - hostX + view.getWidth();
+            out[n++] = mLocation[1] - hostY + view.getHeight();
+        }
+        return n == out.length ? out : java.util.Arrays.copyOf(out, n);
     }
 
     /** The top of the bottom stack (dock rows and keyboard) in host coordinates, NaN if none. */
