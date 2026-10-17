@@ -805,8 +805,11 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         setFormInternal(Form.CAPSULE, animate, 0f);
     }
 
-    /** The capsule opens to compact: a tap, or an accessibility click. */
-    private void openCapsule() {
+    /**
+     * The capsule opens to compact: a tap, an accessibility click, or the host (a Home float
+     * minimising into its chip lands on a compact bar, spec §4.4). Nothing for any other form.
+     */
+    public void openCapsule() {
         if (mForm != Form.CAPSULE) return;
         setFormInternal(Form.COMPACT, true, 0f);
     }
