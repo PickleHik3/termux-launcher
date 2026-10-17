@@ -9,7 +9,7 @@ page also lists every action id you can use in those places.
 - Swipe up on the space bar of the [built-in keyboard](Keyboard.md).
 - Press `Ctrl+Alt+Shift+P`, or `Ctrl+Alt+Space` then `P`.
 - Hold the terminal, tap **More**, then **Command palette**.
-- On Home, swipe up from the bottom edge. The palette and the keyboard open together, and both
+- On Home, swipe up on the page's free area (anywhere but a widget or the dock). The palette and the keyboard open together, and both
   close on **Esc**, on a tap outside, or once the action is done. With the
   [keyboard always on](Widgets.md#keyboard-always-on), just start typing.
 

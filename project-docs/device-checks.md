@@ -283,19 +283,22 @@ Not seen: everything else listed under the sections below.
   window's frame and extra keys come with it, and no frame of the slide flashes the status bar on
   Home or leaves a band of wallpaper between the grid and the dock · emulator, record what shows
   (the status bar and extra keys switch at settle in this slice, see the hand-over).
-- 2026-10-17 · commit "feat(home): the palette gesture on Home …" · Swipe up from the bottom edge
-  of a Home page: the keyboard rises under the finger and the command palette opens over it with
-  the Home rows (Open terminal here first); with reduced motion both appear on release. The palette
-  sprouts from the space bar and keyboard taps type into it rather than closing it · emulator.
+- 2026-10-17 · commit "fix(home): the palette gesture starts anywhere on the page's free area" ·
+  Swipe up on empty grid of a Home page (e.g. 540,1700 → 540,900 on 1080x2400): on release the
+  keyboard rises and the command palette opens over it with the Home rows (Open terminal here
+  first). The palette sprouts from the space bar and keyboard taps type into it rather than closing
+  it. A sideways swipe on the same spot still pages Home (and leaves into the Workspace from the
+  last page); an up swipe that starts on a widget or a Home float is theirs; an up swipe on the
+  dock (540,2300 → 540,1500) is still the dock's · emulator.
 - 2026-10-17 · same commit · Closing: Esc on the keyboard, a tap on the page outside the palette,
-  Back, a swipe down from the bottom edge, and running a row (Wallpaper, an app) each close the
+  Back, a swipe down on the page's free area, and running a row (Wallpaper, an app) each close the
   palette and the keyboard together; with always on the keyboard stays up each time · emulator.
 - 2026-10-17 · same commit · Always on, no palette open: typing a letter on the in-app keyboard
   opens the Home palette with that letter in the query; a Ctrl+Alt binding to an app runs the app
   instead of opening the palette; with a Home float focused the letter goes to its shell. Also
   with a hardware keyboard (an unbound letter opens the palette, a bound chord runs) · emulator.
 - 2026-10-17 · same commit · Settings → Apps & Home: one new row "Palette gesture on Home" under
-  "Swipe down for app drawer", summary "Swipe up from the bottom edge"; the page otherwise looks as
+  "Swipe down for app drawer", summary "Swipe up"; the page otherwise looks as
   before. Set Off: the swipe up on Home does nothing, a swipe down still puts away a keyboard that
   is up · emulator, 1.3× font scale too.
 - 2026-10-17 · same commit · The Workspace keyboard swipe is unchanged: up opens the keyboard
