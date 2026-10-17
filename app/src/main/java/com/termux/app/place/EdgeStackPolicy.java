@@ -447,6 +447,19 @@ public final class EdgeStackPolicy {
         return thicknessPx(Element.STATUS, Edge.TOP, metrics);
     }
 
+    /**
+     * Where a side stack's bands start below its top, while the canvas reaches up under the status
+     * bar ({@link #topOverlapPx}): by exactly that overlap, so a side column (a dock rail in
+     * landscape on Home) starts at the bar's edge, as it does on the Workspace where the bar takes
+     * its own row, and never stands under the bar's chips. 0 for an empty side and wherever the
+     * bar does not overlay.
+     */
+    public static int sideStackTopInsetPx(@NonNull PlaceLayout layout, @NonNull Edge side,
+                                          @NonNull Metrics metrics, boolean statusOverlays) {
+        if (!side.isOnSide() || stack(layout, side).isEmpty()) return 0;
+        return topOverlapPx(layout, metrics, statusOverlays);
+    }
+
     // ---------------------------------------------------------------- drop targets
 
     /**
