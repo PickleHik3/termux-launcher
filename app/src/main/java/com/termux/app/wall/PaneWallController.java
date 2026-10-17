@@ -479,6 +479,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallDragBegin(@NonNull PaneWallPage page) {
         mWorkspacePending = false;
+        // Off the first window the drag may bring Home in from the left: on its last page, the
+        // one beside the seam, whatever page it was left on (a Home page added while away, say).
+        if (page == PaneWallPage.TERMINAL && mHost.innerIndex(PaneWallPage.TERMINAL) == 0) {
+            int last = WallRow.lastHomePage(mHost.innerCount(PaneWallPage.WIDGETS));
+            if (mHost.innerIndex(PaneWallPage.WIDGETS) != last) {
+                mHost.showInnerPage(PaneWallPage.WIDGETS, last);
+            }
+        }
         int windows = mHost.innerCount(PaneWallPage.TERMINAL);
         if (windows <= 0 || !mWall.pages().contains(PaneWallPage.TERMINAL)) return;
         if (page == PaneWallPage.WIDGETS) {

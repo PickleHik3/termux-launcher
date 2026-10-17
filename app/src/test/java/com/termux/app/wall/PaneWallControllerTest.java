@@ -36,6 +36,7 @@ public class PaneWallControllerTest {
 
     /** A host with a number of Home pages and windows, each with one in front. */
     private static final class Host implements PaneWallController.Host {
+        boolean reduced = true;
         boolean hasWindow = true;
         boolean display = true;
         int homePages = 3;
@@ -47,7 +48,8 @@ public class PaneWallControllerTest {
         int stepped;
         float steppedFrom;
 
-        @Override public boolean reducedMotion() { return true; }
+        @Override public boolean reducedMotion() { return reduced; }
+        @Override public boolean isPlankTiltEnabled() { return !reduced; }
         @Override public boolean hasWindow() { return hasWindow; }
         @Override public boolean isDisplayEnabled() { return display; }
         @Override public int innerCount(PaneWallPage page) {
@@ -345,5 +347,146 @@ public class PaneWallControllerTest {
         wall.layout(0, 0, 1080, 1800);
         assertFalse(controller.isTerminalShowing());
         assertFalse(controller.isTerminalOnScreen());
+    }
+
+    /**
+     * The drag back from the first window to Home, by touch through the wall as the phone sends
+     * it (#77, emulator 10-16): Home left through the seam, then a sideways slide in the air
+     * above the window, let go with no speed, lands on the last Home page. At the phone's
+     * density, on a wall below the status bar, with Home's real frame on a window and the
+     * slide's own spring running.
+     */
+    @Config(qualifiers = "xxhdpi")
+    @Test public void aTopAirSlideOffTheFirstWindowReachesTheLastHomePage() {
+        Host moving = new Host();
+        moving.reduced = false;
+        moving.display = false;
+        moving.windows = 1;
+        PaneWallController row = laidOutOnAWindow(moving);
+        PaneWallLayout layout = row.wall();
+        View terminal = layout.pageView(PaneWallPage.TERMINAL);
+        enterTheFirstWindowBySeam(row, moving);
+
+        // In the air between the bar and the window's top, sideways, and let go still.
+        layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 150f, 12f, 0L));
+        for (int i = 1; i <= 20; i++) {
+            layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 150f + i * 40f,
+                12f, i * 17L));
+        }
+        assertTrue("the slide off the top border is the wall's", layout.isDragging());
+        assertTrue(terminal.getTranslationX() > 0f);
+        layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 950f, 12f, 360L));
+        assertEquals(PaneWallPage.WIDGETS, row.currentPage());
+        idle();
+        assertEquals(PaneWallPage.WIDGETS, row.currentPage());
+        assertEquals(0f, layout.offsetPx(), 0f);
+        assertEquals("Home arrives on its last page, the one beside the seam", 2,
+            moving.homePage);
+    }
+
+    /** The same from the left border: held still past the hold, then drawn to the right. */
+    @Config(qualifiers = "xxhdpi")
+    @Test public void aHeldLeftBorderDragOffTheFirstWindowReachesTheLastHomePage() {
+        Host moving = new Host();
+        moving.reduced = false;
+        moving.display = false;
+        moving.windows = 2;
+        PaneWallController row = laidOutOnAWindow(moving);
+        PaneWallLayout layout = row.wall();
+        enterTheFirstWindowBySeam(row, moving);
+
+        layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 6f, 700f, 0L));
+        letTheHoldElapse();
+        assertTrue("the hold claims the left border", layout.isDragging());
+        for (int i = 1; i <= 20; i++) {
+            layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 6f + i * 45f,
+                700f, 1000L + i * 17L));
+        }
+        layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 906f, 700f, 1360L));
+        idle();
+        assertEquals(PaneWallPage.WIDGETS, row.currentPage());
+        assertEquals("no step inside the Workspace", 0, moving.stepped);
+        assertEquals(2, moving.homePage);
+    }
+
+    /**
+     * What {@code adb shell input swipe} sends from a side border: the finger sets off at once,
+     * so it is past the slop long before the hold and the side border gives it up. Not a page
+     * change, and not the hold-and-drag a person makes: a device check of the side border needs
+     * a held start.
+     */
+    @Config(qualifiers = "xxhdpi")
+    @Test public void aSideBorderSwipeWithNoHoldIsNotTheWalls() {
+        Host moving = new Host();
+        moving.reduced = false;
+        moving.display = false;
+        moving.windows = 1;
+        PaneWallController row = laidOutOnAWindow(moving);
+        PaneWallLayout layout = row.wall();
+        enterTheFirstWindowBySeam(row, moving);
+
+        layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 6f, 700f, 0L));
+        for (int i = 1; i <= 20; i++) {
+            layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 6f + i * 45f,
+                700f, i * 70L));
+        }
+        assertFalse(layout.isDragging());
+        layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 906f, 700f, 1400L));
+        idle();
+        assertEquals(PaneWallPage.TERMINAL, row.currentPage());
+    }
+
+    /**
+     * A wall the size of the phone's below its status bar, the window standing in from it as the
+     * frame puts it, Home's real frame on the wall, attached to a window and laid out.
+     */
+    private PaneWallController laidOutOnAWindow(Host withHost) {
+        PaneWallLayout layout = new PaneWallLayout(activity);
+        View terminal = new FrameLayout(activity);
+        layout.addView(terminal);
+        PaneWallController made = new PaneWallController(layout, withHost);
+        made.attachTerminalPage(terminal);
+        made.attachWidgetsPage(LayoutInflater.from(activity));
+        android.view.ViewGroup.MarginLayoutParams margins =
+            (android.view.ViewGroup.MarginLayoutParams) terminal.getLayoutParams();
+        margins.setMargins(22, 20, 22, 300);
+        terminal.setLayoutParams(margins);
+        activity.setContentView(layout);
+        layout.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(1500, View.MeasureSpec.EXACTLY));
+        layout.layout(0, 0, 1080, 1500);
+        made.refreshPages();
+        idle();
+        return made;
+    }
+
+    /** Home's last page, then its swipe on through the seam to the first window. */
+    private static void enterTheFirstWindowBySeam(PaneWallController row, Host withHost) {
+        row.goHome(false);
+        withHost.homePage = 2;
+        assertTrue(row.homeSeam().canLeaveForward());
+        row.homeSeam().begin();
+        row.homeSeam().drag(-800f);
+        row.homeSeam().end(0f);
+        idle();
+        assertEquals(PaneWallPage.TERMINAL, row.currentPage());
+        assertEquals(0, withHost.current);
+        // Away from Home, a Home that did not wait on its last page could be on any of them.
+        withHost.homePage = 0;
+    }
+
+    private static android.view.MotionEvent touch(int action, float x, float y, long timeMs) {
+        return android.view.MotionEvent.obtain(0L, timeMs, action, x, y, 0);
+    }
+
+    private static void letTheHoldElapse() {
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
+            java.time.Duration.ofMillis(com.termux.view.HoldTiming.holdTimeoutMs() + 20L));
+    }
+
+    /** Lets every spring and slide run out. */
+    private static void idle() {
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(3000L));
     }
 }

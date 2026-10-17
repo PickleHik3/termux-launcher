@@ -149,6 +149,14 @@ under twenty items; past that, the oldest are re-judged first.
   the wallpaper pans across Home → Workspace → Display as before. Not built in this slice: Home
   still wears the status bar, extra keys, corner tabs and its frame (needs the Home layout, #78),
   and Home pages and window steps do not pan the wallpaper · emulator, record what shows.
+- 2026-10-17 · commit "fix(wall): the drag off the first window lands Home on its last page" ·
+  From window 1 (reached by the seam, and again after visiting window 2), back to the last Home
+  page with the slide, glow and tilt: (a) a sideways swipe in the top air between the status bar
+  and the window's top frame, to the right; (b) a hold on the left border past the hold time,
+  then a drag right. For (b) the hold must be a real hold: `adb shell input swipe` sets off at
+  once and the side border gives it up by design, so use a motionevent DOWN, a pause of at
+  least 400 ms, then MOVE/UP (or a finger). If (a) still stays on the window, record the
+  emulator's density and whether the drag moved the window at all · emulator, two Home pages.
 
 ### Wall rework #78 Home layout
 - 2026-10-17 · commit "feat(home): Home pages wear the Home layout …" · A Home page shows no
