@@ -254,4 +254,17 @@ public class HomeChromePolicyTest {
         assertTrue("one value apart is enough", HomeChromePolicy.shapeChanges(HOME, WINDOW,
             WORKSPACE_SHAPE, WallHalfShape.of(LayoutStyle.DOCKED, 24, 13)));
     }
+
+    @Test
+    public void aRememberedLayoutPlaceComesBackOnlyOnItsOwnHalf() {
+        // Left over Home, brought back from a window: the window's own, not Home's.
+        assertEquals(null, HomeChromePolicy.restoredEditorPlace(HOME, WINDOW));
+        // Left over a window, brought back on Home: Home's.
+        assertEquals(null, HomeChromePolicy.restoredEditorPlace(WINDOW, HOME));
+        assertEquals(HOME, HomeChromePolicy.restoredEditorPlace(HOME, HOME));
+        // Between two windows the remembered one stands, as before.
+        assertEquals(PaneWallPage.DISPLAY,
+            HomeChromePolicy.restoredEditorPlace(PaneWallPage.DISPLAY, WINDOW));
+        assertEquals(null, HomeChromePolicy.restoredEditorPlace(null, WINDOW));
+    }
 }

@@ -1,6 +1,7 @@
 package com.termux.app.place;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.wall.PaneWallPage;
 
@@ -166,6 +167,23 @@ public final class HomeChromePolicy {
      */
     public static boolean editorEndKeepsKeyboard(@NonNull PaneWallPage page, boolean alwaysOn) {
         return isHome(page) && keyboardOnEnter(page, false, false, alwaysOn);
+    }
+
+    /**
+     * The place a Layout page the Appearance surface brings back (where the person last left it)
+     * opens on, with the wall resting on {@code onScreen}: the remembered place only while it is on
+     * the same half, else null, the place on screen. Opening it moves the wall there and the
+     * editor edits that half's Style, Corners and Margin, so a Layout page left over Home and
+     * brought back from a window would carry the wall off to Home and edit Home's (2026-10-18:
+     * "Margin · Home" from a window's palette). Between two windows the remembered one stands,
+     * as it always has.
+     */
+    @Nullable
+    public static PaneWallPage restoredEditorPlace(@Nullable PaneWallPage remembered,
+                                                   @NonNull PaneWallPage onScreen) {
+        if (remembered == null || wearsHomeShape(remembered) != wearsHomeShape(onScreen))
+            return null;
+        return remembered;
     }
 
     /**

@@ -602,8 +602,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mRestore = null;
         if (restore != null && restore.editorMode() != mode)
             restore = null;
+        // The remembered place only on the half the wall rests on: the editor edits the page the
+        // wall rests on, never a half left in an earlier session.
         if (restore != null && layoutMode && place == null)
-            place = placeNamed(restore.place);
+            place = HomeChromePolicy.restoredEditorPlace(placeNamed(restore.place),
+                mHost.pageOnScreen());
         mOpen = true;
         // No Look drag is under way at an open: a preview left behind by one that never saw its
         // lift (a recreated activity) must not stand between the launcher and its stored look.
