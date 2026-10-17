@@ -20381,17 +20381,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Stop the server the way {@code pkill termux-x11} does. It is a separate process on
-     * purpose — that is what keeps an X server crash off the home screen — so its own name is
-     * the only handle the launcher has on it.
+     * Stop the server the way {@code pkill termux-x11} does, whoever started it. It is a separate
+     * process on purpose — that is what keeps an X server crash off the home screen — so its own
+     * name is the only handle the launcher has on it. Signalled from here, not through the
+     * prefix's {@code pkill}, which a prefix without procps lacks; that is only the fallback when
+     * no server could be found here. The window leaves when the server's Binder dies.
      */
     private void killEmbeddedDisplayServer() {
-        if (mTermuxService != null) {
-            mTermuxService.createTermuxTask(
-                TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/pkill",
-                new String[]{"-f", "termux-x11 " + getPackageName()}, null,
-                TermuxConstants.TERMUX_HOME_DIR_PATH);
-        }
+        final String packageName = getPackageName();
+        new Thread(() -> {
+            if (com.termux.app.x11.X11ServerProcesses.stopAll(packageName) > 0) return;
+            runOnUiThread(() -> {
+                if (mTermuxService == null) return;
+                mTermuxService.createTermuxTask(
+                    TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/pkill",
+                    new String[]{"-f", "termux-x11 " + packageName}, null,
+                    TermuxConstants.TERMUX_HOME_DIR_PATH);
+            });
+        }, "x11-stop").start();
         syncPlaceBar();
     }
 
