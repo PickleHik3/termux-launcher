@@ -35,6 +35,14 @@ import java.util.List;
 public final class FirstBootTour implements TourController.Listener, TourOverlayView.Callbacks,
     TourSignals.Listener, TourViewTargets.ViewFinder {
 
+    /**
+     * Switched off for the wall rework (ADR 0008): the run still teaches the three places and
+     * the border drag on Home, which no longer exist. The activity builds no tour while this is
+     * false (every caller handles the null), and Settings' "Start the tour" does nothing. Turn it
+     * back on with the rewrite; see project-docs/active/wall-rework-2026-10-17.md §12.
+     */
+    public static final boolean ENABLED = false;
+
     /** How long a cleared lesson's card says "Got it" before the run moves on. */
     static final long GOT_IT_MS = 1100L;
     /** The closing card's downloads line is refreshed no faster than this. */

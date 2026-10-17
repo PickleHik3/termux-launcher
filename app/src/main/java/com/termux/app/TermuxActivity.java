@@ -2585,6 +2585,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The tour, built on the preferences the first time anything asks for it. */
     @Nullable
     private FirstBootTour firstBootTour() {
+        if (!FirstBootTour.ENABLED) return null;
         if (mFirstBootTour == null && mPreferences != null) {
             mFirstBootTour = new FirstBootTour(this, mPreferences,
                 this::getInAppKeyboardKeyRect);
