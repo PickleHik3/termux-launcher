@@ -202,6 +202,183 @@ public class StatusBarSwipeLayoutTest {
         return MotionEvent.obtain(0L, 10L, action, x, y, 0);
     }
 
+    // ---------------------------------------------------------------- the capsule
+
+    private static final StatusBarFormPolicy.Form CAPSULE = StatusBarFormPolicy.Form.CAPSULE;
+    private static final StatusBarFormPolicy.Form COMPACT = StatusBarFormPolicy.Form.COMPACT;
+    private static final StatusBarFormPolicy.Form EXPANDED = StatusBarFormPolicy.Form.EXPANDED;
+
+    /** A host that lands what it is asked, as the activity does, and records the asks. */
+    private static StatusBarSwipeLayout.Listener echoingHost(StatusBarSwipeLayout view,
+                                                             List<Boolean> requests) {
+        return collapsed -> {
+            requests.add(collapsed);
+            view.setCollapsed(collapsed);
+        };
+    }
+
+    /** {@code value} dp in this view's pixels. */
+    private static float dp(StatusBarSwipeLayout view, float value) {
+        return value * view.getResources().getDisplayMetrics().density;
+    }
+
+    /**
+     * A vertical drag from y0 to y1 at x 100: slow (a second, ending at rest) or quick (the
+     * whole way in about 11 ms, over a thousand dp a second for the shortest drag here; the
+     * test tracker reads only samples at least 10 ms after the oldest).
+     */
+    private static void drag(StatusBarSwipeLayout view, float y0, float y1, boolean quick) {
+        long down = 1_000L;
+        view.dispatchTouchEvent(MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, 100f, y0,
+            0));
+        if (quick) {
+            view.dispatchTouchEvent(MotionEvent.obtain(down, down + 10L, MotionEvent.ACTION_MOVE,
+                100f, (y0 + y1) / 2f, 0));
+            view.dispatchTouchEvent(MotionEvent.obtain(down, down + 11L, MotionEvent.ACTION_MOVE,
+                100f, y1, 0));
+            view.dispatchTouchEvent(MotionEvent.obtain(down, down + 12L, MotionEvent.ACTION_UP,
+                100f, y1, 0));
+        } else {
+            view.dispatchTouchEvent(MotionEvent.obtain(down, down + 400L, MotionEvent.ACTION_MOVE,
+                100f, y1, 0));
+            view.dispatchTouchEvent(MotionEvent.obtain(down, down + 900L, MotionEvent.ACTION_MOVE,
+                100f, y1, 0));
+            view.dispatchTouchEvent(MotionEvent.obtain(down, down + 1_400L, MotionEvent.ACTION_UP,
+                100f, y1, 0));
+        }
+    }
+
+    private static void idle(long millis) {
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofMillis(millis));
+    }
+
+    @Test
+    public void aSlowFoldPastHalfTheCapsulesStretchLandsInTheCapsuleWithoutTheHost() {
+        StatusBarSwipeLayout view = createView();
+        List<Boolean> requests = new ArrayList<>();
+        view.setCollapsed(true);
+        view.setListener(echoingHost(view, requests));
+        // The capsule's stretch is 40 dp; 30 up from compact is nearer the capsule.
+        drag(view, 60f, 60f - dp(view, 30f), false);
+        assertEquals(CAPSULE, view.form());
+        assertTrue("the capsule is the bar's own: the host's height never moved",
+            requests.isEmpty());
+    }
+
+    @Test
+    public void aSlowShortFoldSpringsBackToCompact() {
+        StatusBarSwipeLayout view = createView();
+        List<Boolean> requests = new ArrayList<>();
+        view.setCollapsed(true);
+        view.setListener(echoingHost(view, requests));
+        // 18 dp: past the test runtime's 16 px touch slop, short of half the capsule's 40 dp.
+        drag(view, 60f, 60f - dp(view, 18f), false);
+        assertEquals(COMPACT, view.form());
+        assertTrue(requests.isEmpty());
+    }
+
+    @Test
+    public void aQuickShortFoldStepsIntoTheCapsule() {
+        StatusBarSwipeLayout view = createView();
+        List<Boolean> requests = new ArrayList<>();
+        view.setCollapsed(true);
+        view.setListener(echoingHost(view, requests));
+        drag(view, 60f, 60f - dp(view, 18f), true);
+        assertEquals(CAPSULE, view.form());
+    }
+
+    @Test
+    public void aTapOnTheCapsuleOpensCompactAndOneBesideItDoesNot() {
+        StatusBarSwipeLayout view = createView();
+        view.setCollapsed(true);
+        view.setMinimalMode(true);
+        assertEquals(CAPSULE, view.form());
+        // Beside the capsule, at the band's far end: nobody's.
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 3f, 40f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 3f, 40f));
+        assertEquals(CAPSULE, view.form());
+        // On it, at the bar's centre.
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 40f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 40f));
+        assertEquals(COMPACT, view.form());
+    }
+
+    @Test
+    public void aSlowLongDragFromTheCapsuleCrossesCompactToExpanded() {
+        StatusBarSwipeLayout view = createView();
+        List<Boolean> requests = new ArrayList<>();
+        view.setCollapsed(true);
+        view.setMinimalMode(true);
+        view.setFoldTravelPx(Math.round(dp(view, 60f)));
+        view.setListener(echoingHost(view, requests));
+        // Capsule 0, compact 40, expanded 100 dp on the finger's axis: 95 is nearest expanded.
+        drag(view, 10f, 10f + dp(view, 95f), false);
+        assertEquals(Collections.singletonList(false), requests);
+        assertEquals(EXPANDED, view.form());
+    }
+
+    @Test
+    public void aQuickDragFromTheCapsuleStepsOnlyToCompactAndLandsTheHostThere() {
+        StatusBarSwipeLayout view = createView();
+        List<Boolean> requests = new ArrayList<>();
+        view.setCollapsed(true);
+        view.setMinimalMode(true);
+        view.setFoldTravelPx(Math.round(dp(view, 60f)));
+        view.setListener(echoingHost(view, requests));
+        drag(view, 10f, 10f + dp(view, 65f), true);
+        assertEquals(COMPACT, view.form());
+        // The finger had the host's height past compact; it is landed back there.
+        assertEquals(Collections.singletonList(true), requests);
+    }
+
+    @Test
+    public void theBarFoldsToTheCapsuleAfterFourQuietSecondsButNotUnderAFinger() {
+        StatusBarSwipeLayout view = createView();
+        List<Boolean> requests = new ArrayList<>();
+        view.setCollapsed(false);
+        view.setListener(echoingHost(view, requests));
+        // A finger resting on the bar holds it as long as it stays.
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 40f));
+        idle(10_000L);
+        assertEquals(EXPANDED, view.form());
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 40f));
+        view.setCollapsed(false);
+        idle(3_900L);
+        assertEquals(EXPANDED, view.form());
+        idle(200L);
+        // The host folded its height first; the capsule is the bar's.
+        assertEquals(Collections.singletonList(true), requests);
+        assertEquals(CAPSULE, view.form());
+    }
+
+    @Test
+    public void minimalModeStartsAsTheCapsuleAndLeavingItGivesCompact() {
+        StatusBarSwipeLayout view = createView();
+        view.setCollapsed(true);
+        view.setMinimalMode(true);
+        assertEquals(CAPSULE, view.form());
+        assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_YES, view.getImportantForAccessibility());
+        assertTrue(String.valueOf(view.getContentDescription()).startsWith("Status bar folded"));
+        ArrayList<View> children = new ArrayList<>();
+        view.addChildrenForAccessibility(children);
+        assertTrue("the folded content is not read", children.isEmpty());
+        view.setMinimalMode(false);
+        assertEquals(COMPACT, view.form());
+        assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_NO, view.getImportantForAccessibility());
+    }
+
+    @Test
+    public void aBarDownASideNeverBecomesTheCapsule() {
+        StatusBarSwipeLayout view = createView();
+        view.setEdge(com.termux.app.place.PlaceLayout.Edge.LEFT);
+        view.setExpansionAllowed(false);
+        view.setCollapsed(true);
+        view.setMinimalMode(true);
+        assertEquals(COMPACT, view.form());
+        idle(10_000L);
+        assertEquals(COMPACT, view.form());
+    }
+
     private static int exact(int size) {
         return View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY);
     }
