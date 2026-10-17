@@ -3164,21 +3164,54 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * out with — so there is nothing to keep in step.
      */
     void applySideStackFrameInset(int verticalInsetPx) {
-        int inset = Math.max(0, verticalInsetPx);
-        int[] ids = {R.id.place_edge_stack_left, R.id.place_edge_stack_right};
-        for (int side = 0; side < ids.length; side++) {
-            View stack = findViewById(ids[side]);
-            if (stack == null) continue;
-            // Plus the status bar's band on a page it overlays (EdgeStackPolicy
-            // .sideStackTopInsetPx), so a side column starts at the bar's edge.
-            int top = inset + mSideStackBarInsetPx[side];
-            if (stack.getPaddingTop() == top && stack.getPaddingBottom() == inset) continue;
-            stack.setPadding(stack.getPaddingLeft(), top, stack.getPaddingRight(), inset);
-        }
+        mSideStackFrameInsetPx = Math.max(0, verticalInsetPx);
+        padSideStack(0, findViewById(R.id.place_edge_stack_left));
+        padSideStack(1, findViewById(R.id.place_edge_stack_right));
     }
+
+    /**
+     * A side stack's padding: the frame inset at both ends, plus the status bar's band on top on a
+     * page it overlays (EdgeStackPolicy.sideStackTopInsetPx), so a side column starts at the bar's
+     * edge, and the dock's reach at the bottom on a page it overlays
+     * (EdgeStackPolicy.sideStackBottomInsetPx), so it ends above the dock. Whether it changed.
+     */
+    private boolean padSideStack(int side, @Nullable View stack) {
+        if (stack == null) return false;
+        int top = mSideStackFrameInsetPx + mSideStackBarInsetPx[side];
+        int bottom = mSideStackFrameInsetPx + mSideStackDockInsetPx[side];
+        if (stack.getPaddingTop() == top && stack.getPaddingBottom() == bottom) return false;
+        stack.setPadding(stack.getPaddingLeft(), top, stack.getPaddingRight(), bottom);
+        return true;
+    }
+
+    /** The frame inset both side stacks keep at each end (applySideStackFrameInset). */
+    private int mSideStackFrameInsetPx;
 
     /** Per side stack (left, right), the status bar's band it starts below; 0 off Home. */
     @NonNull private final int[] mSideStackBarInsetPx = new int[2];
+
+    /** Per side stack (left, right), the dock's reach it ends above; 0 off Home. */
+    @NonNull private final int[] mSideStackDockInsetPx = new int[2];
+
+    /**
+     * Ends each side stack above the dock on a page the dock overlays: the canvas reaches
+     * {@code bottomReachPx} under the bottom stack there, and a side column standing the canvas's
+     * whole height ran on under the dock's last icons. Whether either stack moved.
+     */
+    private boolean applySideStackDockInsets(boolean dockOverlays, int bottomReachPx) {
+        PlaceLayout layout = currentPlaceLayout();
+        boolean moved = false;
+        PlaceLayout.Edge[] edges = {PlaceLayout.Edge.LEFT, PlaceLayout.Edge.RIGHT};
+        int[] ids = {R.id.place_edge_stack_left, R.id.place_edge_stack_right};
+        for (int side = 0; side < ids.length; side++) {
+            int inset = EdgeStackPolicy.sideStackBottomInsetPx(layout, edges[side], dockOverlays,
+                bottomReachPx);
+            if (mSideStackDockInsetPx[side] == inset) continue;
+            mSideStackDockInsetPx[side] = inset;
+            moved |= padSideStack(side, findViewById(ids[side]));
+        }
+        return moved;
+    }
 
     /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
     private int terminalFrameInsetPx(boolean vertical) {
@@ -13719,11 +13752,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean applySideStackTopInset(int side, int stackId, int insetPx) {
         if (mSideStackBarInsetPx[side] == insetPx) return false;
         mSideStackBarInsetPx[side] = insetPx;
-        View stack = findViewById(stackId);
-        if (stack == null) return false;
-        int frame = stack.getPaddingBottom();
-        stack.setPadding(stack.getPaddingLeft(), frame + insetPx, stack.getPaddingRight(), frame);
-        return true;
+        return padSideStack(side, findViewById(stackId));
     }
 
     /**
@@ -14253,9 +14282,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeFloatKeyboardShown = state.keyboardShown;
         syncHomeFloatObstructions();
         // On a Home page the dock floats with the keyboard: the grid keeps its whole height.
+        boolean dockOverlays = com.termux.app.place.HomeChromePolicy.dockOverlays(mLastWallPage);
         keyboardOverlapPx = KeyboardOverlayPolicy.overlapPx(
-            com.termux.app.place.HomeChromePolicy.dockOverlays(mLastWallPage), combinedHeight,
-            accessoryBottomMarginPx, keyboardOverlapPx);
+            dockOverlays, combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx);
+        // A side rail on Home ends above the dock, as it does on the Workspace.
+        if (applySideStackDockInsets(dockOverlays, KeyboardOverlayPolicy.overlapPx(true,
+                combinedHeight, accessoryBottomMarginPx, 0)))
+            mChrome.onArrangementChanged();
         // While the wall travels with chrome pre-rolled, the content keeps exactly the room it
         // was committed with: whatever the stack grew by for the slide, the content reaches under
         // it by the same amount, so nothing the terminal is measured from moves until settle.
