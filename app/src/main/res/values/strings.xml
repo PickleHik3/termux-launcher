@@ -396,6 +396,7 @@
     <string name="launcher_entry_terminal">Terminal</string>
     <string name="launcher_entry_display">Display</string>
     <string name="launcher_entry_new_float">New float here</string>
+    <string name="window_chip_home_float">Home float, page %1$d</string>
     <string name="launcher_entry_new_window">New window</string>
     <string name="termux_x11_session_failed">This desktop could not be opened.</string>
     <string name="termux_x11_session_replace">Stop %1$s and open %2$s instead?</string>

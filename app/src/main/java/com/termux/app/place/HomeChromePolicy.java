@@ -64,7 +64,37 @@ public final class HomeChromePolicy {
      * and a slide toward a window brings it with the window.
      */
     public static boolean statusShownAtRest(@NonNull PaneWallPage page) {
-        return !isHome(page);
+        return statusShownAtRest(page, false);
+    }
+
+    /**
+     * The same, once Home floats are counted: on a Home page the status bar is there exactly while
+     * a Home float is open or minimised, in its compact form, and on a window always. The first
+     * float brings it down from the top and the last one closing takes it away.
+     */
+    public static boolean statusShownAtRest(@NonNull PaneWallPage page, boolean homeFloatsExist) {
+        return !isHome(page) || homeFloatsExist;
+    }
+
+    /**
+     * Whether the status bar rests compact on the page whatever the orientation's memory says:
+     * on a Home page it only ever comes in compact, to carry the floats' chips.
+     */
+    public static boolean statusForcedCompact(@NonNull PaneWallPage page) {
+        return isHome(page);
+    }
+
+    /**
+     * The Home layout with the status bar brought in while Home floats exist: on the edge it
+     * stands on in the Workspace, so it reads as the same bar. Unchanged while there is no float,
+     * or while the layout already shows one.
+     */
+    @NonNull
+    public static PlaceLayout withFloatStatusBar(@NonNull PlaceLayout home,
+                                                 @NonNull PlaceLayout.Edge edge,
+                                                 boolean homeFloatsExist) {
+        if (!homeFloatsExist || !home.slot(Element.STATUS).hidden) return home;
+        return home.withSlot(Element.STATUS, Slot.on(edge, Element.STATUS));
     }
 
     /**

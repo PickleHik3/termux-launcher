@@ -248,6 +248,17 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                     doneFailed, agentState, icon);
         }
 
+        /**
+         * The chip of a Home float: the label carries the float's page, as the page dots count it,
+         * and the spoken label says what it is ({@code spokenMark}, such as "Home float, page 2").
+         */
+        @NonNull
+        public WindowItem withHomeFloat(int page, @NonNull String spokenMark) {
+            return new WindowItem(label + HomeFloatPolicy.chipPageMark(page),
+                spokenLabel + ", " + spokenMark, busy, attention, progress, progressError, done,
+                doneFailed, agentState, icon);
+        }
+
         /** Whether the two would draw the same marks. Labels are compared separately. */
         boolean sameActivity(@NonNull WindowItem other) {
             return busy == other.busy && attention == other.attention && done == other.done
@@ -1994,6 +2005,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             if (!a.label.equals(b.label) || !a.spokenLabel.equals(b.spokenLabel)) return false;
         }
         return true;
+    }
+
+    /**
+     * The chip at {@code index}, so a surface can find where a window's chip stands (a Home
+     * float's Minimise flies into it). Null before the row is populated or past its end.
+     */
+    @Nullable
+    public View chipViewAt(int index) {
+        if (index < 0 || index >= mItems.size() || index >= mTabs.getChildCount()) return null;
+        return mTabs.getChildAt(index);
     }
 
     /**

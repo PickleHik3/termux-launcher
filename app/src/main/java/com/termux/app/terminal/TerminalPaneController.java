@@ -244,6 +244,11 @@ public class TerminalPaneController {
          * Workspace's row, right after the current window, and the Workspace slides in.
          */
         default void onHomeFloatDocked(@NonNull Window window) {}
+        /**
+         * Ctrl+Alt+F on {@code window}, a window of the row with one pane: float it onto the Home
+         * page last shown as a Home float, taking it out of the row. False leaves it where it is.
+         */
+        default boolean onFloatWindowOntoHome(@NonNull Window window) { return false; }
     }
 
     /** Supplies durable metadata for a pane while its tree is being snapshotted. */
@@ -2318,6 +2323,11 @@ public class TerminalPaneController {
      * later re-dock to split against.
      */
     public int toggleFloatActivePane() {
+        // On a Home float the toggle docks it into the row, as its titlebar's Dock does.
+        if (mFocusedHomeFloat != null) {
+            dockHomeFloat(mFocusedHomeFloat);
+            return FLOAT_TOGGLE_DOCKED;
+        }
         if (mActiveWindow == null || mActiveWindow.active == null) return FLOAT_TOGGLE_NONE;
         Window window = mActiveWindow;
         Leaf leaf = window.active;
@@ -2329,7 +2339,12 @@ public class TerminalPaneController {
             mHost.onTreesChanged();
             return FLOAT_TOGGLE_DOCKED;
         }
-        if (!(window.root instanceof Split)) return FLOAT_TOGGLE_SINGLE_PANE;
+        if (!(window.root instanceof Split)) {
+            // A window of one pane floats whole, onto Home, when the host can take it out of the row.
+            if (window.floating.isEmpty() && mHost.onFloatWindowOntoHome(window))
+                return FLOAT_TOGGLE_FLOATED;
+            return FLOAT_TOGGLE_SINGLE_PANE;
+        }
         mMaximizedLeaf = null;
         detachLeaf(window, leaf);
         leaf.parent = null;
@@ -2530,6 +2545,11 @@ public class TerminalPaneController {
         mHost.onTreesChanged();
         mHost.onHomeFloatsChanged();
         return w;
+    }
+
+    /** How many Home floats there are, open or minimised, across every page. */
+    public int homeFloatCount() {
+        return mHomeFloats.size();
     }
 
     /** Every Home float, across all pages, in z-order (last on top). */
