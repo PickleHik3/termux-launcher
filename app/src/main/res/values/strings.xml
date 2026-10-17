@@ -310,7 +310,7 @@
         <item>workspace</item>
     </string-array>
     <string name="settings_home_palette_gesture_title">Palette gesture on Home</string>
-    <string name="settings_home_palette_gesture_swipe_up">Swipe up from the bottom edge</string>
+    <string name="settings_home_palette_gesture_swipe_up">Swipe up</string>
     <string name="settings_home_palette_gesture_off">Off</string>
     <string-array name="settings_home_palette_gesture_entries" translatable="false">
         <item>@string/settings_home_palette_gesture_swipe_up</item>

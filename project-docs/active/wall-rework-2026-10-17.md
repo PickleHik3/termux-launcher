@@ -110,8 +110,9 @@ window's name, so no glyph on the strip can read as Split (developer, 2026-10-18
 
 ### 5.1 Transient keyboard
 
-- Default: no keyboard on Home. A configurable gesture, default swipe up from the bottom edge
-  (today's keyboard swipe), opens the **command palette** and the keyboard together as one
+- Default: no keyboard on Home. A configurable gesture, default an up swipe on the page's free
+  area (the grid's empty cells and the air between widgets; not a widget, the dock or a Home
+  float; the first movement past the slop decides vertical against paging), opens the **command palette** and the keyboard together as one
   overlay. Both close on Esc, on focus loss (a tap outside), or when a palette action completes.
 - The keyboard is an overlay on Home (already: `KeyboardOverlayPolicy`) and never changes the
   grid.
@@ -210,7 +211,7 @@ footer Save as workspace… It gains:
 ## 10. Settings and migration
 
 - **Start in**: Home | Workspace. New, under the launcher's settings.
-- **Palette gesture on Home**: beside the other gestures, default swipe up from the bottom edge.
+- **Palette gesture on Home**: beside the other gestures, default an up swipe on the page's free area.
 - **Gone**: Usage mode (Terminal alone, with Home, with Display); the Display switch.
 - **Migration, once**: Terminal alone → Start in = Workspace; the other two → Home. Display on →
   nothing (on demand now). The normal and minimal layouts become the Workspace layouts unchanged;

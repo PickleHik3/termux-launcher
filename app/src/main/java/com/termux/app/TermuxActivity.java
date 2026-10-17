@@ -21912,6 +21912,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return mPaneController != null && isSplitPanesEnabled();
                 }
                 @Override public void openHomeFloat() { openHomeFloatHere(); }
+                // The palette gesture starts on the page's free area: Home has no bottom border.
+                @Override public void onHomePaletteSwipe(boolean up) {
+                    if (isWidgetsPageShowing()) applyBorderKeyboardSwipe(up);
+                }
                 @Override @NonNull
                 public com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host builtinWidgetHost() {
                     return new com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host() {

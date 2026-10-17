@@ -94,8 +94,9 @@ Widgets that no longer fit a smaller grid move to free space or to a new page; n
 
 ## The keyboard on Home
 
-Home does not keep the keyboard up. Swipe up from the bottom edge to open the command palette and
-the keyboard together, over the page, so the widgets keep their places. Both close on **Esc**, on a
+Home does not keep the keyboard up. Swipe up on the page's free area — anywhere that is not a
+widget or the dock — to open the command palette and the keyboard together, over the page, so the
+widgets keep their places. Swipe down to put them away. Both close on **Esc**, on a
 tap outside them, or once the action you picked is done. The gesture can be changed in Settings. A
 text field inside a widget opens the Android keyboard.
 
