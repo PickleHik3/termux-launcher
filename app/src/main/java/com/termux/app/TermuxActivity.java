@@ -13619,24 +13619,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Lets the canvas reach up under the top edge's stack by {@code overlapPx} (EdgeStackPolicy
-     * .topOverlapPx), as a negative top margin, with the stack raised so it draws and takes touches
-     * over what the canvas keeps: the status bar on Home overlays the widget grid as the dock does.
+     * .topOverlapPx), keeping the bounds it has without the stack, with the stack raised so it
+     * draws and takes touches over it: the status bar on Home overlays the widget grid as the dock
+     * does (EdgeStackView.overlayFollowing).
      *
      * @return whether the canvas moved
      */
     private boolean applyTopStackOverlap(int overlapPx) {
         View band = findViewById(R.id.terminal_canvas_band);
         View stack = findViewById(R.id.place_edge_stack_top);
-        if (band == null || stack == null
-            || !(band.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return false;
-        float z = overlapPx > 0 ? 1f : 0f;
-        if (stack.getTranslationZ() != z) stack.setTranslationZ(z);
-        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) band.getLayoutParams();
-        int topMargin = -Math.max(0, overlapPx);
-        if (params.topMargin == topMargin) return false;
-        params.topMargin = topMargin;
-        band.setLayoutParams(params);
-        return true;
+        if (band == null || !(stack instanceof com.termux.app.place.EdgeStackView)) return false;
+        return ((com.termux.app.place.EdgeStackView) stack).overlayFollowing(band, overlapPx);
     }
 
     /**
