@@ -20707,6 +20707,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncDisplayEnvironment();
         syncDisplayKeyboardRoute();
         onWallPlacesChanged();
+        // Taking the page away hands the wall to a window with no settle after it, and may move
+        // the panes under the hand-back above: the keys are checked once more where they ended.
+        if (!(getCurrentFocus() instanceof TerminalView)) returnKeysToTerminal();
     }
 
     /**
@@ -20859,11 +20862,101 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         com.termux.app.x11.DisplayViewFocus.release(view,
-            focused -> focused instanceof TerminalView,
+            focused -> focused instanceof TerminalView, this::returnKeysToTerminal);
+    }
+
+    /**
+     * The keys go back to the active terminal pane, quietly, and are checked to have landed: a
+     * focus request made while the display goes can come to nothing (the pane out of the window,
+     * or its page changing under it), and then nothing in the window holds the keys at all. Tried
+     * again after each of the next layouts until it lands, or until something that types — a
+     * terminal, a text field taking input — holds them.
+     */
+    private void returnKeysToTerminal() {
+        if (mInAppKeyboard != null && mInAppKeyboard.isExternalTextInputActive()) return;
+        if (handKeysToActivePane() || getWindow() == null || mKeysReturnPending) return;
+        mKeysReturnPending = true;
+        com.termux.app.x11.DisplayViewFocus.retryAfterLayout(getWindow().getDecorView(), 3,
             () -> {
-                if (mInAppKeyboard == null || !mInAppKeyboard.isExternalTextInputActive())
-                    returnFocusToTerminalQuietly();
-            });
+                boolean done = (mInAppKeyboard != null && mInAppKeyboard.isExternalTextInputActive())
+                    || getCurrentFocus() instanceof TerminalView
+                    || isDisplayKeyHolderShowing()
+                    || handKeysToActivePane();
+                if (done) mKeysReturnPending = false;
+                return done;
+            },
+            // Out of tries: the safety net delivers each key and asks again with the next one.
+            () -> mKeysReturnPending = false);
+    }
+
+    /** A {@link #returnKeysToTerminal} retry waits for a layout; one at a time. */
+    private boolean mKeysReturnPending;
+
+    /** One quiet focus request on the active pane; true when the pane really holds the keys. */
+    private boolean handKeysToActivePane() {
+        TerminalView pane = getTerminalView();
+        return com.termux.app.x11.DisplayViewFocus.handBackTo(pane, () -> {
+            View.OnFocusChangeListener listener = pane.getOnFocusChangeListener();
+            pane.setOnFocusChangeListener(null);
+            try {
+                // A pane focused while it was out of the window says it is focused and refuses
+                // the request: its stale claim goes first.
+                if (pane.isFocused()) pane.clearFocus();
+                pane.requestFocus();
+            } finally {
+                pane.setOnFocusChangeListener(listener);
+            }
+        });
+    }
+
+    /** The display's view holds the keys on its own window at rest, where they are X's. */
+    private boolean isDisplayKeyHolderShowing() {
+        View focus = getCurrentFocus();
+        return focus instanceof com.termux.x11.LorieView && isDisplayPageShowing() && focus.isShown();
+    }
+
+    /**
+     * The safety net under the display's focus hand-back: a key that arrives while no view holds
+     * the keys, or while a display view whose window has gone does, is delivered to what is in
+     * front — the active terminal's key handler, which offers it to the palette and the other
+     * overlays first, or those overlays alone — and the keys are handed back for the next one.
+     * Typing never dies with the focus. See {@link com.termux.app.x11.DisplayViewFocus#routeFor}.
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (routeKeyNobodyHolds(event)) return true;
+        return super.dispatchKeyEvent(event);
+    }
+
+    private boolean routeKeyNobodyHolds(@NonNull KeyEvent event) {
+        View focus = getCurrentFocus();
+        com.termux.app.x11.DisplayViewFocus.Holder holder = focus == null
+            ? com.termux.app.x11.DisplayViewFocus.Holder.NONE
+            : !(focus instanceof com.termux.x11.LorieView)
+            ? com.termux.app.x11.DisplayViewFocus.Holder.OTHER
+            : isDisplayKeyHolderShowing()
+            ? com.termux.app.x11.DisplayViewFocus.Holder.DISPLAY_SHOWING
+            : com.termux.app.x11.DisplayViewFocus.Holder.DISPLAY_AWAY;
+        TerminalView terminal = getTerminalView();
+        com.termux.app.x11.DisplayViewFocus.Route route =
+            com.termux.app.x11.DisplayViewFocus.routeFor(holder, event.getKeyCode(),
+                terminal != null && terminal.mEmulator != null);
+        if (route == com.termux.app.x11.DisplayViewFocus.Route.PASS) return false;
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+            returnKeysToTerminal();
+            // Landed: the ordinary path delivers this key too.
+            if (route == com.termux.app.x11.DisplayViewFocus.Route.TERMINAL
+                && com.termux.app.x11.DisplayViewFocus.holdsKeys(terminal)) return false;
+        }
+        if (route == com.termux.app.x11.DisplayViewFocus.Route.TERMINAL)
+            return terminal.dispatchKeyEvent(event);
+        // No terminal to type into: the overlays, in the order a terminal would offer them.
+        int keyCode = event.getKeyCode();
+        if (event.getAction() == KeyEvent.ACTION_UP) return mOverlays.consumeKeyUp(keyCode);
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        if (mOverlays.consumeKeyDown(keyCode, event)) return true;
+        int codePoint = event.getUnicodeChar(event.getMetaState());
+        return codePoint > 0 && mOverlays.consumeCodePoint(codePoint, event.isCtrlPressed());
     }
 
     /**

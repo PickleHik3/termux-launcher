@@ -1,9 +1,13 @@
 package com.termux.app.x11;
 
+import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewTreeObserver;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 /**
@@ -43,5 +47,94 @@ public final class DisplayViewFocus {
         if (focused == null || display.hasFocus() || !typesHere.test(focused)) handBack.run();
         display.setFocusableInTouchMode(false);
         display.setFocusable(false);
+        // A display that still held the keys — the hand-back did not land — loses them just now,
+        // and Android gives them to the first focusable view it finds, or to nobody: once more.
+        View now = display.getRootView().findFocus();
+        if (now == null || !typesHere.test(now)) handBack.run();
+    }
+
+    /**
+     * Whether {@code view} really holds its window's focus: attached, and the one view the
+     * window's root finds focused. Its own focused flag is not enough — a view focused while it
+     * was out of the window says so too, and no key ever reaches it.
+     */
+    public static boolean holdsKeys(@Nullable View view) {
+        return view != null && view.isAttachedToWindow() && view.getRootView().findFocus() == view;
+    }
+
+    /**
+     * Gives the keys to {@code terminal} through {@code request} (its quiet focus request) and
+     * says whether they landed. At the moment the display goes they may not: the terminal can be
+     * out of the window, or its page about to change under it.
+     */
+    public static boolean handBackTo(@Nullable View terminal, @NonNull Runnable request) {
+        if (terminal == null) return false;
+        if (holdsKeys(terminal)) return true;
+        request.run();
+        return holdsKeys(terminal);
+    }
+
+    /**
+     * Runs {@code attempt} after {@code anchor}'s next layout pass, and after the one after that
+     * while it answers false, {@code attempts} times at most; {@code exhausted} runs when the last
+     * one answered false too. A layout is asked for each time, so a retry does not wait for
+     * something else to move.
+     */
+    public static void retryAfterLayout(@NonNull View anchor, int attempts,
+                                        @NonNull BooleanSupplier attempt,
+                                        @NonNull Runnable exhausted) {
+        if (attempts <= 0) {
+            exhausted.run();
+            return;
+        }
+        anchor.getViewTreeObserver().addOnGlobalLayoutListener(
+            new ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override public void onGlobalLayout() {
+                    ViewTreeObserver live = anchor.getViewTreeObserver();
+                    if (live.isAlive()) live.removeOnGlobalLayoutListener(this);
+                    if (!attempt.getAsBoolean())
+                        retryAfterLayout(anchor, attempts - 1, attempt, exhausted);
+                }
+            });
+        anchor.requestLayout();
+    }
+
+    /** Who holds the window's focus when a key arrives. */
+    public enum Holder {
+        /** Nobody: the key would fall through to the activity and be lost. */
+        NONE,
+        /** The display's view, while its window is not the one at rest (or is gone). */
+        DISPLAY_AWAY,
+        /** The display's view on its own window at rest: the keys are X's. */
+        DISPLAY_SHOWING,
+        /** Any other view: a terminal, a text field. */
+        OTHER
+    }
+
+    /** Where the activity sends a key event. */
+    public enum Route {
+        /** The ordinary path: the focused view, else the activity. */
+        PASS,
+        /**
+         * The active terminal view's key handler, which offers the key to the palette and every
+         * other focusless overlay first — the path it takes when the terminal holds the focus.
+         */
+        TERMINAL,
+        /** No terminal to type into: the overlays alone (the palette, a sheet, the drawer). */
+        OVERLAYS
+    }
+
+    /**
+     * The safety net under {@link #release}: when no view holds the keys, or the one that does is
+     * a display view whose window is not on screen, a typed key still reaches what is in front.
+     * Back keeps its own route — the activity's, which closes the overlays in order — always.
+     *
+     * @param terminalTypes whether there is an active terminal view with an emulator to type into
+     */
+    @NonNull
+    public static Route routeFor(@NonNull Holder holder, int keyCode, boolean terminalTypes) {
+        if (holder == Holder.OTHER || holder == Holder.DISPLAY_SHOWING) return Route.PASS;
+        if (keyCode == KeyEvent.KEYCODE_BACK) return Route.PASS;
+        return terminalTypes ? Route.TERMINAL : Route.OVERLAYS;
     }
 }
