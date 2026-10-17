@@ -195,6 +195,51 @@ public class SuggestionBarPinnedRowTest {
         assertEquals(terminal.appRef.stableId(), ((PinnedAppItem) left.get(0)).appRef.stableId());
     }
 
+    @Test public void aSlotAfterAnUnresolvedPinActsOnItsOwnPinNotTheTerminalEntry() throws Exception {
+        PinnedAppItem display = new PinnedAppItem(LauncherEntries.display());
+        PinnedAppItem terminal = new PinnedAppItem(LauncherEntries.terminal());
+        AppRef alphaRef = new AppRef("com.example.alpha", "com.example.alpha.Main");
+        PinnedAppItem alpha = new PinnedAppItem(alphaRef);
+        LauncherConfigRepository store = new LauncherConfigRepository(new Store());
+        store.savePinnedItems(new ArrayList<PinnedItem>(java.util.Arrays.asList(display, terminal, alpha)));
+        // A catalogue that lists one installed app and not the Display entry (Show Linux apps in
+        // drawer off, or not loaded yet): Display does not resolve, so the row draws Terminal and
+        // Alpha in its first two columns.
+        ReflectionHelpers.setField(bar, "allApps", new ArrayList<>(Collections.singletonList(
+            new com.termux.app.launcher.model.LauncherAppEntry(alphaRef, "Alpha", null))));
+        bar.setConfigRepository(store);
+        bar.reload();
+        idle();
+
+        int[] drawn = ReflectionHelpers.getField(bar, "drawnPinnedIndices");
+        assertEquals("Display is not drawn, and never as a second Terminal", 2, drawn.length);
+        assertEquals("the first column is the Terminal pin", 1, drawn[0]);
+        assertEquals("the second column is Alpha's pin", 2, drawn[1]);
+
+        // Unpin from the column that draws Alpha: Alpha goes, the Terminal entry stays.
+        java.lang.reflect.Method removePinnedAt =
+            SuggestionBarView.class.getDeclaredMethod("removePinnedAt", int.class);
+        removePinnedAt.setAccessible(true);
+        removePinnedAt.invoke(bar, drawn[1]);
+
+        List<PinnedItem> left = store.loadPinnedItems();
+        assertEquals(2, left.size());
+        assertEquals(display.appRef.stableId(), ((PinnedAppItem) left.get(0)).appRef.stableId());
+        assertEquals(terminal.appRef.stableId(), ((PinnedAppItem) left.get(1)).appRef.stableId());
+    }
+
+    @Test public void aDropOverADrawnColumnLandsOnThatColumnsPin() {
+        // Nothing drawn yet, or every pin drawn: the page offset plus the column, as before.
+        assertEquals(7, SuggestionBarView.pinnedIndexAtDrawnSlot(null, 2, 5));
+        assertEquals(7, SuggestionBarView.pinnedIndexAtDrawnSlot(new int[] {5, 6, 7}, 2, 5));
+        assertEquals(9, SuggestionBarView.pinnedIndexAtDrawnSlot(new int[] {5, 6, 7}, 4, 5));
+        // Pin 0 does not resolve: column 0 draws pin 1, and a column past the last drawn pin
+        // lands just after it.
+        assertEquals(1, SuggestionBarView.pinnedIndexAtDrawnSlot(new int[] {1, 2}, 0, 0));
+        assertEquals(2, SuggestionBarView.pinnedIndexAtDrawnSlot(new int[] {1, 2}, 1, 0));
+        assertEquals(3, SuggestionBarView.pinnedIndexAtDrawnSlot(new int[] {1, 2}, 2, 0));
+    }
+
     @Test public void aPinIsFoundByWhatItIsNotWhereItSat() {
         PinnedAppItem terminal = new PinnedAppItem(LauncherEntries.terminal());
         PinnedAppItem alpha = new PinnedAppItem(new AppRef("com.example.alpha", "com.example.alpha.Main"));

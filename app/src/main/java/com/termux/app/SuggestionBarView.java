@@ -527,6 +527,8 @@ public final class SuggestionBarView extends GridLayout
     private int swipePreviewPageIndex = -1;
     @NonNull private List<LauncherAppEntry> swipePreviewEntries = Collections.emptyList();
     @NonNull private List<PinnedItem> swipePreviewPinnedItems = Collections.emptyList();
+    /** Each column the last pinned render drew, as its index in the stored pin list. */
+    @Nullable private int[] drawnPinnedIndices;
     @NonNull private List<List<LauncherAppEntry>> swipePreviewFolderEntries = Collections.emptyList();
     /**
      * The two swipe-preview animations are kept apart on purpose. The settle commits a page; the
@@ -3060,6 +3062,9 @@ public final class SuggestionBarView extends GridLayout
         int buttonCount = Math.max(1, maxButtonCount);
         int renderStartCol = 0;
         List<PinnedItem> pinnedForSlots = new ArrayList<>();
+        // Where in pinnedForSlots each drawn entry came from: a pin that does not resolve is not
+        // drawn, so the drawn column and the pin's position part ways after it.
+        List<Integer> drawnSlotPositions = new ArrayList<>();
         int pinnedPageOffset = 0;
         Set<String> azFreshPageEntryKeys = Collections.emptySet();
 
@@ -3110,8 +3115,13 @@ public final class SuggestionBarView extends GridLayout
                     PinnedItem item = pinnedItems.get(i);
                     if (item != null) pinnedForSlots.add(item);
                 }
-                entries = entriesForPinnedItems(pinnedForSlots);
+                entries = entriesForPinnedItems(pinnedForSlots, drawnSlotPositions);
             }
+        }
+        if (!azPreview) {
+            int[] drawn = new int[drawnSlotPositions.size()];
+            for (int i = 0; i < drawn.length; i++) drawn[i] = pinnedPageOffset + drawnSlotPositions.get(i);
+            drawnPinnedIndices = drawn;
         }
         // Nothing else writes the pinned row's paging. The A-Z matches, a typed line's suggestions
         // and an empty row all borrow the same slots, and each of them used to reset
@@ -3193,9 +3203,13 @@ public final class SuggestionBarView extends GridLayout
                 view.setAlpha(0.38f);
             }
 
-            if (!azPreview && col < pinnedForSlots.size()) {
-                final int pinnedIndex = pinnedPageOffset + col;
-                final PinnedItem pinnedItem = pinnedForSlots.get(col);
+            if (!azPreview && col < drawnSlotPositions.size()) {
+                // The column's own pin, never the one at the same column of the stored list: with
+                // an unresolved pin before it, that is the neighbour, and Unpin, a drag or a new
+                // icon would land on the neighbour (the Terminal entry, when it sat first).
+                int slotPosition = drawnSlotPositions.get(col);
+                final int pinnedIndex = pinnedPageOffset + slotPosition;
+                final PinnedItem pinnedItem = pinnedForSlots.get(slotPosition);
                 if (pinnedItem instanceof PinnedFolderItem) {
                     view = createFolderPreviewButton((PinnedFolderItem) pinnedItem);
                     view.setLayoutParams(param);
@@ -4076,17 +4090,29 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private List<LauncherAppEntry> entriesForPinnedItems(@NonNull List<PinnedItem> source) {
+        return entriesForPinnedItems(source, null);
+    }
+
+    /**
+     * The entries a pin list draws, in order, skipping pins that do not resolve.
+     *
+     * @param positions when given, receives each drawn entry's position in {@code source}
+     */
+    private List<LauncherAppEntry> entriesForPinnedItems(@NonNull List<PinnedItem> source,
+                                                         @Nullable List<Integer> positions) {
         List<LauncherAppEntry> out = new ArrayList<>();
-        for (PinnedItem item : source) {
+        if (positions != null) positions.clear();
+        for (int i = 0; i < source.size(); i++) {
+            PinnedItem item = source.get(i);
+            LauncherAppEntry entry = null;
             if (item instanceof PinnedAppItem) {
-                LauncherAppEntry entry = resolvePinnedApp((PinnedAppItem) item);
-                if (entry != null) {
-                    out.add(entry);
-                }
+                entry = resolvePinnedApp((PinnedAppItem) item);
             } else if (item instanceof PinnedFolderItem) {
-                LauncherAppEntry synthetic = folderSyntheticEntry((PinnedFolderItem) item);
-                out.add(synthetic);
+                entry = folderSyntheticEntry((PinnedFolderItem) item);
             }
+            if (entry == null) continue;
+            out.add(entry);
+            if (positions != null) positions.add(i);
         }
         return out;
     }
@@ -4188,6 +4214,9 @@ public final class SuggestionBarView extends GridLayout
                 return exact;
             }
         }
+        // The launcher's entries share one made-up package: the by-package fallbacks below would
+        // answer a Display pin the catalogue does not list with the Terminal entry.
+        if (com.termux.app.launcher.LauncherEntries.isEntry(ref)) return null;
         if (injectedSuggestionButtons == null) {
             LauncherAppEntry resolved = appDataProvider.findDefaultByPackage(ref.packageName);
             if (resolved != null) {
@@ -6793,7 +6822,8 @@ public final class SuggestionBarView extends GridLayout
         float dropXRatio = slotWidth <= 0f ? 0.5f : Math.max(0f, Math.min(1f, (contentX - slotStartX) / slotWidth));
 
         int pageOffset = Math.max(0, pinnedPageIndex) * Math.max(1, pinnedItemsPerPage);
-        int targetIndex = clamp(pageOffset + hoveredSlot, 0, pinnedItems == null ? 0 : pinnedItems.size());
+        int targetIndex = clamp(pinnedIndexAtDrawnSlot(drawnPinnedIndices, hoveredSlot, pageOffset),
+            0, pinnedItems == null ? 0 : pinnedItems.size());
         PinnedItem targetItem = null;
         if (pinnedItems != null && targetIndex >= 0 && targetIndex < pinnedItems.size()) {
             targetItem = pinnedItems.get(targetIndex);
@@ -6832,6 +6862,19 @@ public final class SuggestionBarView extends GridLayout
             default:
                 return false;
         }
+    }
+
+    /**
+     * The pin a drop over drawn column {@code slot} lands on: the pin that column draws, or just
+     * past the last drawn pin for a column beyond it. A pin that does not resolve is not drawn, so
+     * the column alone (the page offset plus the column) would name its neighbour.
+     *
+     * @param drawn each drawn column's index in the stored list, or null before a pinned render
+     */
+    static int pinnedIndexAtDrawnSlot(@Nullable int[] drawn, int slot, int pageOffset) {
+        if (drawn == null || drawn.length == 0) return pageOffset + slot;
+        if (slot < drawn.length) return drawn[Math.max(0, slot)];
+        return drawn[drawn.length - 1] + 1 + (slot - drawn.length);
     }
 
     private boolean applyPinnedDrop(@NonNull PinnedDragState dragState, int targetIndex, @Nullable PinnedItem targetItem, float dropXRatio) {
