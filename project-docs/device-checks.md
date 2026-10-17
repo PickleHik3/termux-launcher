@@ -443,6 +443,21 @@ Not seen: everything else listed under the sections below.
   empty extra-key page, white status icons in the appearance editors, font "smallest" claims,
   Licenses path) are from before the rework and listed on the review page for a settings pass.
 
+### Wall rework: the Surface round, 2026-10-18 afternoon (Bliss OS Android 15, x86_64, 2736x1824)
+- Seen at 052f83cbd on the Surface: a Home float stays up, `dumpsys activity binder-proxies` holds
+  238 for the app over 90 s (was +265/s until the kill "Too many Binders sent to SYSTEM"); the
+  palette takes a tap on the floating in-app keyboard (the key lands in the query); the Home
+  long-press sheet shows all rows; the A–Z rail ends at y 1607 above the dock at 1623.
+- Seen at 224af804d on the emulator: the Home grabber sits centred above the dock; a plain
+  `input swipe 8 1100 900 1100 700` from window 1 lands on Home; the sheet on a phone shows
+  Terminal, Add a widget, Add a page, Edit pages, Layout, Wallpaper, Look, Launcher settings, Help
+  (Remove page only on an empty second page: not driven).
+- Owed on pong, by hand: the bottom border's glow after the fix (lit at the edge, inside the
+  frame, with the keyboard up and down); the border swipe back to Home by finger; the sheet's
+  slide-up, swipe-down and dim; the grabber's visibility over a light wallpaper.
+- The Terminal pin leaving the first dock slot after an upgrade or cold boot was seen twice on
+  the emulator and not reproduced since (install -r and a reboot kept it, store included); watch.
+
 ## Developer
 
 - 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" · With the switch
