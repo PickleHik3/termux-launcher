@@ -2943,6 +2943,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void redressChromeFromState() {
         if (mPreferences == null || mChrome == null) return;
         mAppliedPaneStyleKey = null;
+        // A redress after the editor (Undo, a Look, a Style) or at a settle between halves
+        // (restyleChromeForHalfIfChanged): the grid's rim is Home's Margin as it stands now.
+        pushHomeMarginToWidgetGrid(true);
         mChrome.redressFromState();
         applyTerminalSurfaceAppearance();
         updateTerminalGlassFrost();
@@ -11956,6 +11959,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void applyGeometryPreview(boolean commit) {
+            // Home's Margin is the widget grid's rim: it moves with the slider, the caps settle
+            // with the release.
+            pushHomeMarginToWidgetGrid(commit);
             updateAppLauncherBarHeight();
             // Without commit the dock/keyboard visuals still track the drag live; only the
             // terminal resize (a SIGWINCH into the shell per reflow) waits for the release.
@@ -12819,10 +12825,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             currentPlaceOrientation().storageValue(), layout.widgetRows - keyboardRows,
             layout.widgetColumns);
         // The stored count is the user's; the wall holds what fits of it, and the pane works that
-        // out again whenever the wall changes size.
+        // out again whenever the wall changes size. Home's Margin is the grid's rim, so it is
+        // part of what fits.
         if (mWidgetPaneController != null) {
             mWidgetPaneController.applyWantedGrid(layout.widgetRows, layout.widgetColumns,
-                keyboardRows);
+                keyboardRows, homeMarginDp());
         } else {
             mWidgetHostController.applyGrid(layout.widgetRows - keyboardRows,
                 layout.widgetColumns);
@@ -12830,6 +12837,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The grid is unchanged on a turn of the screen that only swapped the layouts, so the
         // host's own redraw does not fire; the pane is asked to draw itself again here instead.
         if (moved && mWidgetPaneController != null) mWidgetPaneController.redraw();
+    }
+
+    /**
+     * Home's own Margin in dp, whichever half is in front: what lies on Home (the widget grid's
+     * rim, the Home floats' air) is laid out on Home's terms even while a window is in front.
+     */
+    private int homeMarginDp() {
+        return mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP
+            : Math.max(0, mPreferences.getLayoutMarginDp(true));
+    }
+
+    /**
+     * Home's Margin into the widget grid's rim. {@code settled} is false only for a tick of a
+     * Margin drag: the rim follows it, and the grid's caps (which may reflow the widgets) wait
+     * for the release.
+     */
+    private void pushHomeMarginToWidgetGrid(boolean settled) {
+        if (mWidgetPaneController != null)
+            mWidgetPaneController.setGridEdge(homeMarginDp(), settled);
     }
 
     private boolean updateAppLauncherBarHeight() {

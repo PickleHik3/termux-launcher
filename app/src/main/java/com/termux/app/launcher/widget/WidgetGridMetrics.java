@@ -6,9 +6,12 @@ import androidx.annotation.NonNull;
 
 /** Exact integer cell geometry for the measured middle body. */
 public final class WidgetGridMetrics {
-    /** The air between the wall's edge and the first cell, in dp. */
-    public static final float EDGE_DP = 6f;
-    /** The air between two cells, in dp. */
+    /**
+     * The air between two cells, in dp. Fixed on purpose: the rim between the page's edge and the
+     * first cell is Home's Margin, the one number for the air on Home that the user meets, and
+     * every caller passes it in as {@code edgePadding} ({@link WidgetGridCaps} takes the same in
+     * dp). The gap between cells is the grid's own, not a second knob.
+     */
     public static final float GAP_DP = 8f;
 
     @NonNull private final Rect body;
