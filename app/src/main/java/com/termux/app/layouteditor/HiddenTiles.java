@@ -19,6 +19,7 @@ import com.termux.app.fragments.settings.LayoutCanvasView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * The hidden-element tiles (layout editor v2, DECISIONS item 3): one Material chip per hidden
@@ -44,8 +45,17 @@ final class HiddenTiles {
     /** What the tiles were last filled for, so they are rebuilt only when that changes. */
     @NonNull private List<LayoutCanvasView.Block> mShown = new ArrayList<>();
 
+    /** Which hidden elements the layout being edited can bring back; the rest are not listed. */
+    @NonNull private final Predicate<LayoutCanvasView.Block> mRestorable;
+
     HiddenTiles(@NonNull LayoutCanvasView canvas, @NonNull ChipGroup group,
                 @NonNull Callbacks callbacks) {
+        this(canvas, group, callbacks, block -> true);
+    }
+
+    HiddenTiles(@NonNull LayoutCanvasView canvas, @NonNull ChipGroup group,
+                @NonNull Callbacks callbacks, @NonNull Predicate<LayoutCanvasView.Block> restorable) {
+        mRestorable = restorable;
         mCanvas = canvas;
         mGroup = group;
         mCallbacks = callbacks;
@@ -53,7 +63,7 @@ final class HiddenTiles {
 
     /** The tiles restated from the elements hidden now, in the canvas's order. */
     void update() {
-        List<LayoutCanvasView.Block> hidden = mCanvas.hiddenElements();
+        List<LayoutCanvasView.Block> hidden = restorable();
         if (hidden.equals(mShown) && mGroup.getChildCount() == hidden.size())
             return;
         mShown = new ArrayList<>(hidden);
@@ -71,7 +81,15 @@ final class HiddenTiles {
 
     /** Whether there is anything to show. */
     boolean isEmpty() {
-        return mCanvas.hiddenElements().isEmpty();
+        return restorable().isEmpty();
+    }
+
+    @NonNull
+    private List<LayoutCanvasView.Block> restorable() {
+        List<LayoutCanvasView.Block> out = new ArrayList<>();
+        for (LayoutCanvasView.Block block : mCanvas.hiddenElements())
+            if (mRestorable.test(block)) out.add(block);
+        return out;
     }
 
     @NonNull
