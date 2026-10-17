@@ -205,4 +205,31 @@ public class AppearanceSnapshotTest {
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT));
         assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
     }
+
+    /**
+     * Wall rework slice 2: an edit to Home's own Style, Corners or Margin is undone, and a Home
+     * value that was unset (following the Workspace's) comes back unset rather than pinned.
+     */
+    @Test
+    public void undoPutsHomesOwnShapeBackUnsetWhereItWasUnset() {
+        preferences.setLayoutCornersDp(true, 30);
+        int workspaceMargin = preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP);
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String signature = entry.signature();
+
+        preferences.setLayoutStyle(true, TermuxAppSharedPreferences.LayoutStyle.FLOATING);
+        preferences.setLayoutCornersDp(true, 6);
+        preferences.setLayoutMarginDp(true, 40);
+        assertNotEquals(signature, AppearanceSnapshot.signatureOf(preferences));
+
+        entry.restore(preferences);
+
+        assertFalse(store.contains(TERMUX_APP.KEY_HOME_LAYOUT_STYLE));
+        assertFalse(store.contains(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP));
+        assertEquals(30, preferences.getLayoutCornersDp(true));
+        preferences.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, 17);
+        assertEquals("still follows the Workspace", 17, preferences.getLayoutMarginDp(true));
+        preferences.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, workspaceMargin);
+        assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
+    }
 }

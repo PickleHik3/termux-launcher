@@ -471,6 +471,17 @@ Not seen: everything else listed under the sections below.
 - Emulator note: the pin store emptied between two cold boots while another session used the
   emulator for a "Look reset" check; not attributed.
 
+### Wall rework phase two: slice 2, Style, Corners and Margin on Home (feat/wall-rework-phase2)
+- 2026-10-18 · commit "feat(wall): the chrome wears the Style, Corners and Margin of the half on
+  screen" · Upgrade seeding: install over a build without the slice; Home and the Workspace look
+  exactly as before (no `home_*` keys in the prefs file). Open Appearance → Layout over a Home
+  page: the labels read "Corner radius · Home" and "Margin · Home"; flip Style Docked→Floating:
+  only Home's dock rows, keyboard and (with a float open) the compact status bar and the float's
+  corners reshape; slide to a window: the Workspace is still Docked, and back: Home is Floating
+  again, with no stale shape after the settle. Same for Corners and Margin. Open the editor over a
+  window: no "· Home", edits land on the Workspace only and Home keeps its own. Undo and Discard
+  in a Home session put an unset Home value back unset (it follows the Workspace again) · emulator.
+
 ## Developer
 
 - 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" · With the switch

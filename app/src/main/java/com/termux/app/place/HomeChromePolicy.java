@@ -8,9 +8,10 @@ import com.termux.app.wall.PaneWallPage;
  * What a page of the wall wears, by the kind of page it is (ADR 0008). A <b>Home page</b> wears
  * only the dock's rows (the pinned apps and the A–Z index) and the keyboard, both as overlays that
  * take no room from the widget grid, arranged by the Home layout ({@link LayoutVariant#HOME});
- * no borders, no launcher status bar, no extra keys. A <b>window</b> wears the Workspace's whole
- * chrome, arranged by the Workspace layout: the normal one, or the minimal one while minimal mode
- * is on.
+ * no borders, no launcher status bar, no extra keys, shaped by Home's own Style, Corners and
+ * Margin. A <b>window</b> wears the Workspace's whole chrome, arranged by the Workspace layout (the
+ * normal one, or the minimal one while minimal mode is on) and shaped by the Workspace's Style,
+ * Corners and Margin.
  *
  * <p>Every per-page chrome decision asks here, so what Home is spelled once rather than as a flag
  * per surface: the activity reads the variant, the page frame its border, the corner tab its
@@ -42,6 +43,34 @@ public final class HomeChromePolicy {
      */
     public static boolean minimalModeApplies(@NonNull PaneWallPage page) {
         return !isHome(page);
+    }
+
+    /**
+     * Whether the page wears Home's own Style, Corners and Margin rather than the Workspace's. A
+     * Home page does, whatever minimal mode says; a window wears the Workspace's. Home's are
+     * seeded from the Workspace's (they read them while unset), so the two differ only once the
+     * user has set Home apart. The chrome on screen switches at settle, with the layout variant.
+     */
+    public static boolean wearsHomeShape(@NonNull PaneWallPage page) {
+        return isHome(page);
+    }
+
+    /** The Style, Corners and Margin the page wears, of the two halves' {@code workspace} and {@code home}. */
+    @NonNull
+    public static WallHalfShape shape(@NonNull PaneWallPage page, @NonNull WallHalfShape workspace,
+                                      @NonNull WallHalfShape home) {
+        return wearsHomeShape(page) ? home : workspace;
+    }
+
+    /**
+     * Whether the wall settling on {@code to} from {@code from} changes what the chrome wears, so
+     * it has to be dressed again as a Style change dresses it. Only a crossing between the halves
+     * can, and only while their values differ.
+     */
+    public static boolean shapeChanges(@NonNull PaneWallPage from, @NonNull PaneWallPage to,
+                                       @NonNull WallHalfShape workspace,
+                                       @NonNull WallHalfShape home) {
+        return !shape(from, workspace, home).equals(shape(to, workspace, home));
     }
 
     /** Whether the page wears a frame: a window's border and slab. A Home page has none. */

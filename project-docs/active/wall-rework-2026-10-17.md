@@ -48,7 +48,8 @@ they are in.
   editor and the same put-away machinery, with the element set reduced to the dock's rows (pinned
   apps, A–Z) and the keyboard. The keyboard element is the **always on** toggle (§5.3). Seeded from
   the normal layout with the status bar, extra keys and borders removed and the keyboard put away.
-  Style, Corners, Margin and Minimal mode do not apply to Home.
+  Style, Corners and Margin are Home's own on Home, seeded from the Workspace's (phase two,
+  slice 2); Minimal mode stays Workspace-only.
 
 ## 4. Home floats
 
