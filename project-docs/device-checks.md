@@ -507,6 +507,14 @@ Not seen: everything else listed under the sections below.
   editor is the Workspace's (no "· Home", no Home grid in the preview, no blank preview while the
   wall moves). A cold start with Start in = Workspace opens in the Workspace. Use a true cold
   start: set the stock home first or launch from the icon (see the device map) · emulator.
+- Round 3 (2026-10-18) still saw the Clock drawn for the big Margin after Undo, then Done, with
+  910c9487b in. Cause found off device, in a Robolectric reproduction: the built-in widget's zoom
+  search (`BuiltinWidgetView.chooseZoom`) read its losses from labels the framework's measure cache
+  had not measured; a card back at a size it had before came back at the largest zoom (the Clock
+  at 149dp tall: 1.62 instead of 1.15), date cut short, "PM" clipped, and the zoom memo kept it.
+  Fixed: every trial measures the layout afresh. Re-check owed: the Clock whole after a Margin drag
+  and Undo, then Done; after Discard; after a Home Style flip and back; after a real Margin change
+  and Done; leaving Home and coming back changes nothing · emulator.
 
 ## Developer
 

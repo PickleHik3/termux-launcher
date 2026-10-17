@@ -46,6 +46,14 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    with its place, and the layout session held the wall on Home. The Home float played no part.
    A remembered place now comes back only on the half the wall rests on
    (`HomeChromePolicy.restoredEditorPlace`). Re-check owed (device-checks, slice 2).
+   Status 2026-10-18 (emulator round 3, C): the re-tell at the session's end did not heal the
+   Clock; it is a built-in widget, which reads its own size, so no size was ever stale. The zoom
+   was: a built-in's zoom search measured its layout at specs it had measured before, the
+   framework answered them from its measure cache without measuring the labels the losses are
+   read from, so a cell back at an earlier size (Undo, Discard, a Style flip and back) came back
+   at the largest zoom and the zoom memo kept it. Every trial now measures the layout afresh
+   (`BuiltinWidgetView.lossesAt`). For built-ins the `resyncSizes` re-tell was never the cure;
+   whether app widgets need it is still unproven. Re-check owed (device-checks, slice 2).
 3. **Parallax between Home pages and windows** (the wallpaper pans with the wall).
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.
 5. **Window reorder** by drag in the window bar; consume/expel of panes into and out of columns.
