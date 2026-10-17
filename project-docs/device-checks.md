@@ -124,6 +124,44 @@ under twenty items; past that, the oldest are re-judged first.
 - 2026-10-17 · commit "feat(panes): a glass titlebar on every float" · A tap just under the strip
   lands on the pane's first row (no move starts), and a hold-and-drag on that row still reaches
   the program · emulator.
+### Wall rework #79 Home floats
+- 2026-10-17 · commit "feat(wall): Home floats over the Home page they were opened on" · Long
+  press an empty cell on a Home page › Terminal, and the Terminal entry's long press › New float
+  here (first row, above New window): a float opens full-size between the status bar and the
+  dock, focused, keyboard up · emulator, then pong.
+- same · Drag the float's titlebar and resize from its bottom-right corner; open a second float
+  and tap the first: it comes to the front with the active rim; rotate and rotate back: each float
+  comes back to its shape for that orientation · emulator.
+- same · Pinned to its page: swipe to the next Home page and back (the float leaves and returns
+  with its page), and swipe past the last page into the Workspace and back across the seam (the
+  float slides with Home and never shows in the Workspace) · emulator.
+- same · Keyboard lift: with the keyboard up, run `seq 200` so the cursor sits on the bottom row:
+  the focused float rises so the cursor row stays above the keyboard, never resizes (no reflow),
+  and settles back when the keyboard closes · emulator.
+- same · Focus: tap inside a float (it takes the keyboard); tap on Home beside every float (Home
+  takes focus and the keyboard closes); close and minimise the focused float (the keyboard closes
+  too) · emulator.
+- 2026-10-17 · commit "feat(wall): the status bar on Home carries the floats' chips" · The first
+  float brings the status bar down from the top in its compact form; it stays while a float is
+  open or minimised and slides up when the last one closes. Note whether the widget grid moves
+  when the bar arrives (the bar takes its room today) · emulator screenshots before/after.
+- same · Chips on Home are floats only, from every page, each with its page (" · 2"); Minimise
+  flies the float into its chip; from another Home page, tap the chip: Home pages to the float's
+  page and the float comes back focused. In the Workspace the floats' chips follow the windows'
+  · emulator.
+- 2026-10-17 · commit "feat(wall): Dock and Ctrl+Alt+F move windows between Home and the row" ·
+  Dock on a Home float: it becomes a tiled window right after the current one and the Workspace
+  slides in; Ctrl+Alt+F on a one-pane window floats it onto the Home page last shown (a window
+  of several panes still floats its focused pane inside it); Ctrl+Alt+F on a focused float docks
+  it · emulator.
+- same · Home press with floats on pages 1 and 2 while on page 2: Home page 1, floats where they
+  were, keyboard closed; closing the last float leaves the Workspace's windows untouched · emulator.
+- 2026-10-17 · commit "feat(wall): the palette's Home set and the drawer's floats" · On a Home
+  page the palette shows the Home set: Open terminal here (a float on this page), Go to Workspace,
+  Minimise all floats, Restore floats, Add widget, Layout editor, and a float's row restores it.
+  The sessions drawer lists floats under the session ("Float · page 2"; a tap pages Home and
+  restores it) and its Home row goes to Home page 1 · emulator.
+
 ### Wall rework #77 row
 - 2026-10-17 · commit "feat(wall): one row …" · The seam both ways: with three windows and the
   current one the third, a plain swipe left on the last Home page slides window 1 in (not window
