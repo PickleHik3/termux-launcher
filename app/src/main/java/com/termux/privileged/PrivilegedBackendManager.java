@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -59,6 +60,9 @@ public class PrivilegedBackendManager {
     private boolean shizukuOnlyMode;
     @Nullable private Handler mainHandler;
     /** Fed by every state change and every availability check; see {@link #addAvailabilityListener}. */
+    /** Read-only commands now running, by their text; see {@link #executeSharedReadCommand}. */
+    private final ConcurrentHashMap<String, CompletableFuture<String>> sharedReads =
+        new ConcurrentHashMap<>();
     private final PrivilegedAvailabilitySignal availability =
         new PrivilegedAvailabilitySignal(command -> mainHandler().post(command));
 
@@ -468,6 +472,26 @@ public class PrivilegedBackendManager {
             return CompletableFuture.completedFuture("Shizuku permission required");
         }
         return currentBackend.executeCommand(command);
+    }
+
+    /**
+     * {@link #executeCommand} for a read-only command that several pollers may ask for at once
+     * (the status bar's sampler and a Home system widget each build the same stats command). While
+     * an identical command is still running, the caller shares its result instead of starting a
+     * second one: on Shizuku every command is a remote process with its own binder proxy and death
+     * registration, so a duplicate is not free. Only for commands that change nothing; anything
+     * with an effect ({@code input keyevent}, installs) goes through {@link #executeCommand} so a
+     * repeat still happens.
+     */
+    public CompletableFuture<String> executeSharedReadCommand(String command) {
+        if (command == null) return executeCommand(null);
+        CompletableFuture<String> running = sharedReads.get(command);
+        if (running != null && !running.isDone()) return running;
+        CompletableFuture<String> started = executeCommand(command);
+        if (started.isDone()) return started;
+        sharedReads.put(command, started);
+        started.whenComplete((output, error) -> sharedReads.remove(command, started));
+        return started;
     }
 
     public String getStatusDescription() {
