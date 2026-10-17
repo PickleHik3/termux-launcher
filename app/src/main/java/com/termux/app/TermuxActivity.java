@@ -20673,7 +20673,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mX11Display.destroy();
             mX11Display = null;
         }
-        if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(null);
+        // Whoever owns typing now — an open palette or sheet keeps its claim — not nobody.
+        restoreInAppKeyboardTypingClaim();
         hideDisplaySystemKeyboard();
         releaseDisplayFocus(mPaneWallController.displayPage());
         mPaneWallController.detachDisplayPage();
@@ -20809,7 +20810,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else {
             mX11Display.detachView();
             mX11Display.onDisplayPlaceLeft();
-            if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(null);
+            restoreInAppKeyboardTypingClaim();
             // The phone's keyboard belongs to the place it was raised on; it goes down with it,
             // and the launcher's keyboard takes its suppression back for the terminal.
             hideDisplaySystemKeyboard();
