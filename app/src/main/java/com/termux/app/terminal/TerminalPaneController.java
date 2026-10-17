@@ -30,6 +30,7 @@ import android.view.ViewOutlineProvider;
 import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -45,6 +46,11 @@ import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.haptics.Haptics;
+import com.termux.app.launcher.popup.AnchoredMenu;
+import com.termux.app.launcher.popup.AnchoredMenuTheme;
+import com.termux.app.launcher.popup.MenuRowFactory;
+import com.termux.app.launcher.popup.MenuSpec;
+import com.termux.app.material.M3;
 import com.termux.app.place.KeyboardOverlayPolicy;
 import com.termux.app.wall.PaneControlsView;
 import com.termux.terminal.TerminalSession;
@@ -2477,6 +2483,74 @@ public class TerminalPaneController {
             container.onMaximisedChanged();
             applyFloatBounds(leaf, container);
         }
+        // With the keyboard up a maximised Home float shrinks above it and a restored one lifts.
+        if (homeFloatOf(leaf.session) != null) applyHomeFloatLift();
+    }
+
+    /** The handle's menu on screen, so a second long press replaces it rather than stacking. */
+    @Nullable private AnchoredMenu mHandleMenu;
+
+    /**
+     * The menu a long press on a float's drag handle opens, anchored to its titlebar: the
+     * window's name, then {@link FloatTitlebarPolicy#handleMenu}'s rows.
+     */
+    private void showHandleMenu(@NonNull Leaf leaf, @NonNull FloatingPaneContainer container) {
+        if (!container.isAttachedToWindow()) return;
+        if (mHandleMenu != null) mHandleMenu.dismiss();
+        android.content.Context context = container.getContext();
+        int ink = M3.onSurface(context);
+        AnchoredMenuTheme theme = new AnchoredMenuTheme() {
+            @Override public int textColor() { return ink; }
+            @Override public int selectedTextColor() { return ink; }
+            @Override public int opacityPercent() { return 0; }
+            @Override public boolean blurEnabled() { return false; }
+            @Override public int blurRadiusDp() { return 0; }
+        };
+        AnchoredMenu menu = new AnchoredMenu(container, theme);
+        mHandleMenu = menu;
+        MenuRowFactory rows = new MenuRowFactory(context, theme);
+        LinearLayout shell = rows.newShell();
+        int tintBase = M3.surfaceContainer(context) & 0x00FFFFFF;
+        TextView title = new TextView(context);
+        title.setText(handleMenuTitle(leaf));
+        M3.textAppearance(title, com.google.android.material.R.attr.textAppearanceTitleSmall);
+        title.setTextColor(M3.onSurfaceVariant(context));
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setPadding(dp(8), dp(6), dp(8), dp(2));
+        shell.addView(title, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        rows.addDivider(shell);
+        for (int action : FloatTitlebarPolicy.handleMenu()) {
+            if (action != FloatTitlebarPolicy.ACTION_DOCK) continue;
+            rows.addActionRow(shell, context.getString(R.string.titlebar_menu_dock), tintBase, () -> {
+                menu.dismiss();
+                onTitlebarAction(leaf, action);
+            });
+        }
+        menu.show(MenuSpec.of(shell, tintBase)
+            .tightWrap(true)
+            .minimumOpacityPercent(90)
+            .verticalScrollbar(false)
+            .animateEntry(arePaneAnimationsEnabled())
+            .onDismiss(() -> {
+                if (mHandleMenu == menu) mHandleMenu = null;
+            })
+            .build(), container.titlebar());
+    }
+
+    /**
+     * The name the handle's menu carries: the window's own name when the user gave it one, the
+     * shell's session name (the scratchpad's), else what its chip reads.
+     */
+    @NonNull
+    private String handleMenuTitle(@NonNull Leaf leaf) {
+        Window homeFloat = homeFloatOf(leaf.session);
+        if (homeFloat != null && homeFloat.name != null && !homeFloat.name.isEmpty())
+            return homeFloat.name;
+        String session = leaf.session == null ? null : leaf.session.mSessionName;
+        if (session != null && !session.isEmpty()) return session;
+        return TerminalWindowBar.titleOf(TerminalWindowBar.itemFor(leaf.session, 0).label);
     }
 
     /** Send a float back into the tiled tree from its titlebar. */
@@ -2745,7 +2819,8 @@ public class TerminalPaneController {
      * What covers the float layer, in screen pixels: the bottom of the status bar (or of the
      * system bar) above it, the top of the dock below it with the keyboard down, and the top of the
      * keyboard, with the dock riding on it, while it is up (-1 while it is down). Floats are laid
-     * out between the first two and never resized by the keyboard: the focused one is lifted.
+     * out between the first two. While the keyboard is up the focused one meets it: shrunk above
+     * it when it fills the room, lifted otherwise ({@link #applyHomeFloatLift}).
      */
     public void setHomeFloatObstructions(int roomTopOnScreenPx, int dockTopOnScreenPx,
                                          int keyboardTopOnScreenPx) {
@@ -2815,12 +2890,20 @@ public class TerminalPaneController {
         return HomeFloatPolicy.room(layer.getWidth(), height, top, bottom);
     }
 
-    /** Lifts the focused Home float so its cursor row clears the keyboard; every other sits flat. */
+    /**
+     * Meets the keyboard with the focused Home float: one that fills its room shrinks to the room
+     * above the keyboard and grows back after, as a tiled pane does; one placed smaller is lifted
+     * so its cursor row clears the keyboard. Every other float sits flat at its full size.
+     */
     private void applyHomeFloatLift() {
         for (Window w : mHomeFloats) {
             FloatingPaneContainer container = w.active == null ? null : mHomeFloatContainers.get(w.active);
             if (container == null || container.mFlying) continue;
-            float target = w == mFocusedHomeFloat ? -homeFloatLiftPx(w, container) : 0f;
+            // Re-laid only when the room it should have changed: this runs on cursor moves too.
+            Rect laidOut = container.mLaidOutRoom != null ? container.mLaidOutRoom : container.room();
+            if (!laidOut.equals(container.layoutRoom())) applyFloatBounds(w.active, container);
+            float target = w == mFocusedHomeFloat && container.mLaidOutRoom == null
+                ? -homeFloatLiftPx(w, container) : 0f;
             if (container.getTranslationY() != target) container.setTranslationY(target);
         }
     }
@@ -2835,16 +2918,23 @@ public class TerminalPaneController {
         int row = Math.max(0, Math.min(emulator.mRows - 1, emulator.getCursorRow()));
         float rowBottom = view.getRowTopPixels(row) + view.getTerminalCellHeightPixels();
         int viewTop = container.getTop() + topWithin(view, container);
-        int[] onScreen = new int[2];
-        layer.getLocationOnScreen(onScreen);
         int wanted = KeyboardOverlayPolicy.floatLiftPx(true, Math.round(viewTop + rowBottom),
-            mHomeKeyboardTopOnScreenPx - onScreen[1]);
+            homeKeyboardTopInLayerPx());
         // Never past the room's top: lifted by its cursor row alone, a full-size float with its
         // prompt on the last row took its titlebar under the status bar, out of reach. The top
         // is where the float is placed, not where the last pass left it.
         int floatTop = container.getLayoutParams() instanceof FrameLayout.LayoutParams
             ? ((FrameLayout.LayoutParams) container.getLayoutParams()).topMargin : container.getTop();
         return HomeFloatPolicy.liftPx(wanted, floatTop, homeFloatRoom().top);
+    }
+
+    /** The keyboard's top in the float layer's pixels, or -1 while the keyboard is down. */
+    private int homeKeyboardTopInLayerPx() {
+        HomeFloatLayer layer = mHomeFloatLayer;
+        if (layer == null || mHomeKeyboardTopOnScreenPx < 0) return -1;
+        int[] onScreen = new int[2];
+        layer.getLocationOnScreen(onScreen);
+        return Math.max(0, mHomeKeyboardTopOnScreenPx - onScreen[1]);
     }
 
     /** {@code view}'s laid-out top inside {@code ancestor}, translations left out. */
@@ -3282,10 +3372,8 @@ public class TerminalPaneController {
 
     /** Re-clamp {@code leaf}'s fractions against the live host size and lay its container out. */
     private void applyFloatBounds(@NonNull Leaf leaf, @NonNull FloatingPaneContainer container) {
-        Rect room = container.room();
-        float hostWidth = room.width();
-        float hostHeight = room.height();
-        if (hostWidth > 0f && hostHeight > 0f) {
+        Rect fullRoom = container.room();
+        if (fullRoom.width() > 0 && fullRoom.height() > 0) {
             // A turn of the screen: the float takes the shape it last had in this orientation.
             if (leaf.shapeMemory == null) leaf.shapeMemory = new HomeFloatPolicy.ShapeMemory();
             HomeFloatPolicy.Shape remembered = leaf.shapeMemory.turn(isLandscapeScreen(),
@@ -3296,6 +3384,11 @@ public class TerminalPaneController {
                 container.onMaximisedChanged();
             }
         }
+        // Decided after the turn, which may hand back a shape that does or does not fill the room.
+        Rect room = container.layoutRoom();
+        container.mLaidOutRoom = room.equals(fullRoom) ? null : room;
+        float hostWidth = room.width();
+        float hostHeight = room.height();
         RectF frac = leaf.floatFrac != null ? leaf.floatFrac : defaultFloatFrac(0);
         if (hostWidth > 0f && hostHeight > 0f) {
             frac = clampFloatFractions(frac, hostWidth, hostHeight,
@@ -5955,7 +6048,15 @@ public class TerminalPaneController {
             contentParams.topMargin = titlebarBandPx();
             addView(content, contentParams);
             mTitlebar = new FloatTitlebarView(getContext(), hasMinimiseTarget(leaf),
-                action -> onTitlebarAction(mLeaf, action));
+                new FloatTitlebarView.Listener() {
+                    @Override public void onTitlebarAction(int action) {
+                        TerminalPaneController.this.onTitlebarAction(mLeaf, action);
+                    }
+
+                    @Override public void onHandleMenu() {
+                        showHandleMenu(mLeaf, FloatingPaneContainer.this);
+                    }
+                });
             mTitlebar.setMaximised(FloatTitlebarPolicy.isMaximised(leaf.floatRestoreFrac));
             mTitlebar.dress(mSurfaceStyle, paneRadiusPx());
             addView(mTitlebar, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -5974,6 +6075,23 @@ public class TerminalPaneController {
             if (mHomeFloat != null) return homeFloatRoom();
             return new Rect(0, 0, mHostView.getWidth(), mHostView.getHeight());
         }
+
+        /**
+         * The room this float is laid out in now: {@link #room()}, except that the focused Home
+         * float filling its room ends at the keyboard's top while the keyboard is up, as a tiled
+         * pane does. Its fractions stay those of the whole room, so the keyboard is no resize.
+         */
+        @NonNull Rect layoutRoom() {
+            Rect room = room();
+            if (mHomeFloat == null || mHomeFloat != mFocusedHomeFloat || mFlying
+                || getVisibility() != View.VISIBLE) return room;
+            int keyboardTop = homeKeyboardTopInLayerPx();
+            return HomeFloatPolicy.keyboardRoom(room, HomeFloatPolicy.fillsRoom(mLeaf.floatFrac),
+                keyboardTop >= 0, keyboardTop);
+        }
+
+        /** The room {@link #applyFloatBounds} last laid this float out in, when it was not {@link #room()}. */
+        @Nullable Rect mLaidOutRoom;
 
         /** Whether this float holds focus: its window's focused pane, or the focused Home float. */
         boolean isFocusedFloat() {
@@ -6033,6 +6151,8 @@ public class TerminalPaneController {
                     float dyRaw = event.getRawY() - mDownRawY;
                     // A slop gate keeps a tap on the strip from nudging the float a few pixels.
                     if (!mDragMoved && Math.hypot(dxRaw, dyRaw) < dp(6)) return true;
+                    // Past the slop the press is a drag, never the handle's long press.
+                    if (!mDragMoved) removeCallbacks(mHandleLongPress);
                     mDragMoved = true;
                     float dx = dxRaw / hostWidth;
                     float dy = dyRaw / hostHeight;
@@ -6073,15 +6193,39 @@ public class TerminalPaneController {
             // MOVE branch still writes floatFrac: a deliberate gesture IS new intent.
             RectF seed = mLeaf.appliedFloatFrac != null ? mLeaf.appliedFloatFrac : mLeaf.floatFrac;
             mDownFrac = seed != null ? new RectF(seed) : defaultFloatFrac(0);
+            // A float shrunk above the keyboard is laid out in less than its room; the hand
+            // shapes it in the room itself, from the shape it shows.
+            if (mLaidOutRoom != null) {
+                mDownFrac = HomeFloatPolicy.reframe(mDownFrac, mLaidOutRoom, room());
+            }
             if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(true);
+            // Held still on the handle, the press opens the handle's menu instead of moving.
+            if (mDragMode == DRAG_MOVE) {
+                postDelayed(mHandleLongPress, ViewConfiguration.getLongPressTimeout());
+            }
             getParent().requestDisallowInterceptTouchEvent(true);
         }
 
+        /** The handle's long press: the press ends as a drag and the handle's menu opens. */
+        private final Runnable mHandleLongPress = this::onHandleLongPress;
+
+        private void onHandleLongPress() {
+            if (mDragMode != DRAG_MOVE || mDragMoved) return;
+            endDrag();
+            Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
+            showHandleMenu(mLeaf, this);
+        }
+
         private void endDrag() {
+            removeCallbacks(mHandleLongPress);
             if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(false);
+            boolean shaped = mDragMoved;
             mDragMode = DRAG_NONE;
             mDragMoved = false;
             mDownFrac = null;
+            // Shaped by hand with the keyboard up, a Home float may now fill its room or no
+            // longer: it shrinks or lifts by what it is now.
+            if (shaped && mHomeFloat != null) applyHomeFloatLift();
         }
 
         /** The grid's pause for the resize drag under way. */

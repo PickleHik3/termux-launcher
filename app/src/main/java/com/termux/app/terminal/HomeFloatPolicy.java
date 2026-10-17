@@ -43,11 +43,52 @@ public final class HomeFloatPolicy {
      * How far the focused float rises over the keyboard: what its cursor row asks
      * ({@code wantedPx}), but never past the room's top, so the titlebar stays below the status
      * bar with its buttons in reach. {@code floatTopPx} and {@code roomTopPx} are the float's
-     * laid-out top and the room's top in the layer's pixels. A float already at the room's top,
-     * as one born full-size is, is not lifted: its cursor row may stay under the keyboard.
+     * laid-out top and the room's top in the layer's pixels. Only a float the user placed smaller
+     * than the room is lifted; one that fills it shrinks instead ({@link #keyboardRoom}).
      */
     public static int liftPx(int wantedPx, int floatTopPx, int roomTopPx) {
         return Math.max(0, Math.min(wantedPx, floatTopPx - roomTopPx));
+    }
+
+    /** How far from the whole room a float may be and still fill it: rounding, not a placement. */
+    private static final float FILL_EPSILON = 1e-4f;
+
+    /**
+     * Whether a float shaped {@code frac} fills its room: maximised, or born full-size and not
+     * moved or resized off it since. Such a float meets the keyboard as a tiled pane does.
+     */
+    public static boolean fillsRoom(@Nullable RectF frac) {
+        return frac != null && Math.abs(frac.left) <= FILL_EPSILON
+            && Math.abs(frac.top) <= FILL_EPSILON && Math.abs(frac.right - 1f) <= FILL_EPSILON
+            && Math.abs(frac.bottom - 1f) <= FILL_EPSILON;
+    }
+
+    /**
+     * The room the focused float is laid out in while the keyboard may be up, in the layer's
+     * pixels: a float that fills {@code room} ends at the keyboard's top ({@code keyboardTopPx}),
+     * as a tiled pane does, and grows back when it closes; any other keeps the whole room and is
+     * lifted instead. Never inverted: a keyboard over the whole room leaves one pixel.
+     */
+    @NonNull
+    public static Rect keyboardRoom(@NonNull Rect room, boolean fillsRoom, boolean keyboardUp,
+                                    int keyboardTopPx) {
+        if (!fillsRoom || !keyboardUp || keyboardTopPx >= room.bottom) return new Rect(room);
+        return new Rect(room.left, room.top, room.right, Math.max(room.top + 1, keyboardTopPx));
+    }
+
+    /**
+     * {@code frac}, fractions of {@code from}, as fractions of {@code to}: the same pixels. A drag
+     * on a float shrunk above the keyboard starts from what it shows, in its whole room's terms.
+     */
+    @NonNull
+    public static RectF reframe(@NonNull RectF frac, @NonNull Rect from, @NonNull Rect to) {
+        if (to.width() <= 0 || to.height() <= 0 || from.equals(to)) return new RectF(frac);
+        float left = from.left + frac.left * from.width();
+        float top = from.top + frac.top * from.height();
+        float right = from.left + frac.right * from.width();
+        float bottom = from.top + frac.bottom * from.height();
+        return new RectF((left - to.left) / to.width(), (top - to.top) / to.height(),
+            (right - to.left) / to.width(), (bottom - to.top) / to.height());
     }
 
     /** Whether Home page {@code page} shows a float pinned to {@code floatPage}. */

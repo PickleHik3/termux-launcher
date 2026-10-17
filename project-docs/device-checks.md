@@ -136,6 +136,18 @@ Not seen: everything else listed under the sections below.
 - 2026-10-17 · commit "feat(panes): a glass titlebar on every float" · A tap just under the strip
   lands on the pane's first row (no move starts), and a hold-and-drag on that row still reaches
   the program · emulator.
+- 2026-10-17 · commit "feat(panes): the titlebar's three buttons, Dock in the handle's menu" ·
+  On a window's floating pane, a Home float and the scratchpad: the strip shows, at its trailing
+  end, Minimise (a chevron down; Home float and scratchpad only), Maximise, Close, and no Dock. A
+  long press on the handle (held still) opens a small menu under the strip with the window's name
+  and Dock; Dock tiles the pane back, sends the Home float into the row, or docks the scratchpad.
+  A drag started on the handle still moves the float and opens no menu · emulator, then pong.
+- 2026-10-17 · commit "feat(wall): a full-size Home float shrinks for the keyboard" · A Home float
+  born full-size (and one maximised): bring the keyboard up and its titlebar stays at the room's
+  top while its bottom edge sits on the keyboard's top, the shell reflowing to the shorter pane;
+  close the keyboard and it grows back to full size, still Restore size when maximised. A float
+  resized smaller than the room lifts over the keyboard, keeps its size and never rises past the
+  bar · emulator, then pong.
 ### Wall rework #79 Home floats
 - 2026-10-17 · commit "feat(wall): Home floats over the Home page they were opened on" · Long
   press an empty cell on a Home page › Terminal, and the Terminal entry's long press › New float

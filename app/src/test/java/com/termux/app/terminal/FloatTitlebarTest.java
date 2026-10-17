@@ -35,13 +35,24 @@ public class FloatTitlebarTest {
 
     @Test
     public void buttons_listMinimiseOnlyWhereTheHostHasATargetForIt() {
-        assertArrayEquals(new int[]{FloatTitlebarPolicy.ACTION_DOCK,
+        assertArrayEquals(new int[]{
                 FloatTitlebarPolicy.ACTION_MAXIMISE, FloatTitlebarPolicy.ACTION_CLOSE},
             FloatTitlebarPolicy.buttons(false));
-        assertArrayEquals(new int[]{FloatTitlebarPolicy.ACTION_DOCK,
+        assertArrayEquals(new int[]{
                 FloatTitlebarPolicy.ACTION_MINIMISE, FloatTitlebarPolicy.ACTION_MAXIMISE,
                 FloatTitlebarPolicy.ACTION_CLOSE},
             FloatTitlebarPolicy.buttons(true));
+    }
+
+    @Test
+    public void dock_isInTheHandlesMenuNeverOnTheStrip() {
+        // The two-pane Dock glyph read as Split (developer, 2026-10-18).
+        for (boolean minimise : new boolean[]{false, true}) {
+            for (int action : FloatTitlebarPolicy.buttons(minimise))
+                assertTrue(action != FloatTitlebarPolicy.ACTION_DOCK);
+        }
+        assertArrayEquals(new int[]{FloatTitlebarPolicy.ACTION_DOCK},
+            FloatTitlebarPolicy.handleMenu());
     }
 
     @Test
@@ -83,8 +94,24 @@ public class FloatTitlebarTest {
         FloatTitlebarView strip = strip(false, new ArrayList<>());
         assertNull(strip.buttonFor(FloatTitlebarPolicy.ACTION_MINIMISE));
         assertNotNull(strip.buttonFor(FloatTitlebarPolicy.ACTION_MAXIMISE));
-        assertNotNull(strip.buttonFor(FloatTitlebarPolicy.ACTION_DOCK));
+        assertNull(strip.buttonFor(FloatTitlebarPolicy.ACTION_DOCK));
         assertNotNull(strip.buttonFor(FloatTitlebarPolicy.ACTION_CLOSE));
+    }
+
+    @Test
+    public void theHandleIsNamedForTalkBackAndItsLongPressAsksForTheMenu() {
+        int[] asked = {0};
+        Context themed = new android.view.ContextThemeWrapper(context(),
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        FloatTitlebarView strip = new FloatTitlebarView(themed, true,
+            new FloatTitlebarView.Listener() {
+                @Override public void onTitlebarAction(int action) {}
+                @Override public void onHandleMenu() { asked[0]++; }
+            });
+        assertEquals(context().getString(R.string.titlebar_handle_description),
+            strip.getContentDescription());
+        assertTrue(strip.performLongClick());
+        assertEquals(1, asked[0]);
     }
 
     @Test
@@ -118,9 +145,11 @@ public class FloatTitlebarTest {
         ImageButton close = strip.buttonFor(FloatTitlebarPolicy.ACTION_CLOSE);
         assertEquals(1000, close.getRight());
         assertEquals(slot, close.getWidth());
-        assertEquals(close.getLeft(),
-            strip.buttonFor(FloatTitlebarPolicy.ACTION_MAXIMISE).getRight());
-        assertEquals(1000 - 4 * slot, strip.buttonFor(FloatTitlebarPolicy.ACTION_DOCK).getLeft());
+        ImageButton maximise = strip.buttonFor(FloatTitlebarPolicy.ACTION_MAXIMISE);
+        assertEquals(close.getLeft(), maximise.getRight());
+        ImageButton minimise = strip.buttonFor(FloatTitlebarPolicy.ACTION_MINIMISE);
+        assertEquals(maximise.getLeft(), minimise.getRight());
+        assertEquals("Minimise leads the three", 1000 - 3 * slot, minimise.getLeft());
     }
 
     @Test
@@ -139,10 +168,10 @@ public class FloatTitlebarTest {
 
     @Test
     public void narrowStrip_stillFitsEveryButton() {
-        FloatTitlebarView strip = laidOut(strip(true, new ArrayList<>()), 120);
-        ImageButton dock = strip.buttonFor(FloatTitlebarPolicy.ACTION_DOCK);
-        assertTrue(dock.getLeft() >= 0);
-        assertEquals(120, strip.buttonFor(FloatTitlebarPolicy.ACTION_CLOSE).getRight());
+        FloatTitlebarView strip = laidOut(strip(true, new ArrayList<>()), 90);
+        ImageButton minimise = strip.buttonFor(FloatTitlebarPolicy.ACTION_MINIMISE);
+        assertTrue(minimise.getLeft() >= 0);
+        assertEquals(90, strip.buttonFor(FloatTitlebarPolicy.ACTION_CLOSE).getRight());
     }
 
     @Test
@@ -151,11 +180,9 @@ public class FloatTitlebarTest {
         FloatTitlebarView strip = strip(true, actions);
         strip.buttonFor(FloatTitlebarPolicy.ACTION_MAXIMISE).performClick();
         strip.buttonFor(FloatTitlebarPolicy.ACTION_MINIMISE).performClick();
-        strip.buttonFor(FloatTitlebarPolicy.ACTION_DOCK).performClick();
         strip.buttonFor(FloatTitlebarPolicy.ACTION_CLOSE).performClick();
         assertEquals(java.util.Arrays.asList(FloatTitlebarPolicy.ACTION_MAXIMISE,
-            FloatTitlebarPolicy.ACTION_MINIMISE, FloatTitlebarPolicy.ACTION_DOCK,
-            FloatTitlebarPolicy.ACTION_CLOSE), actions);
+            FloatTitlebarPolicy.ACTION_MINIMISE, FloatTitlebarPolicy.ACTION_CLOSE), actions);
     }
 
     @Test
