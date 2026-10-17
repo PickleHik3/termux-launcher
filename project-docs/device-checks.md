@@ -265,6 +265,18 @@ Not seen: everything else listed under the sections below.
   window right after the current one, not a pane; a second tap while it runs brings that window
   back · emulator.
 
+### Wall rework #81 migration
+- 2026-10-17 · commit "feat(wall): migrate the usage mode to Start in, once" · Install this build
+  over a build from before the wall rework, once per usage mode (set in Settings before the
+  upgrade): Terminal alone lands on a Workspace window and Settings shows Start in = Workspace;
+  With Home and With Display land on Home page 1 with Start in = Home. In each, `run-as <pkg> cat
+  shared_prefs/<pkg>_preferences.xml` has no `app_launcher_use_case_mode`, `x11_display_enabled`
+  or `wall_last_page`, and holds `wall_migration_version` = 1 · emulator.
+- 2026-10-17 · same commit · After the upgrade start, change Start in, force-stop and start again:
+  the choice stands and the preferences file is otherwise unchanged · emulator.
+- 2026-10-17 · same commit · After the upgrade, take the Terminal entry off the dock, force-stop
+  and start again: it stays off the dock · emulator.
+
 ## Developer
 
 - 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" · With the switch
