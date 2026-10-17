@@ -23,6 +23,22 @@ public class WallRowTest {
     }
 
     @Test
+    public void theWorkspaceIsOnTheRowOnlyWhileTheCurrentSessionHasAWindow() {
+        assertTrue(WallRow.hasWorkspace(true, 1));
+        assertFalse("the last window closed: the Workspace is gone", WallRow.hasWorkspace(true, 0));
+        assertTrue("not bound yet: assumed", WallRow.hasWorkspace(false, 0));
+    }
+
+    @Test
+    public void anEmptyServiceStartsAShellOnlyOnAColdStartOrWhenAsked() {
+        assertTrue("cold start: the first shell", WallRow.startsShellOnConnect(true, false, false));
+        assertFalse("emptied by the user: Home stays",
+            WallRow.startsShellOnConnect(true, true, false));
+        assertTrue("New session asks for one", WallRow.startsShellOnConnect(true, true, true));
+        assertFalse("a shell is already there", WallRow.startsShellOnConnect(false, false, true));
+    }
+
+    @Test
     public void aStepStaysInsideItsKindWhileThereIsAPageThatWay() {
         assertTrue(WallRow.hasInnerStep(0, 3, 1));
         assertTrue(WallRow.hasInnerStep(2, 3, -1));

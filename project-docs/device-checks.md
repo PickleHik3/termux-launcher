@@ -211,8 +211,22 @@ Not seen: everything else listed under the sections below.
 - 2026-10-17 · same commit · Home press: from a window → Home page 1 (slides); from Home page 2 →
   Home page 1, overlays closed; from another app (open an app, press Home) → the page that was in
   front, window or Home page, unmoved · emulator.
-- 2026-10-17 · same commit · Last window closed (`exit` in the only window of the only session):
-  the last Home page slides in; a fresh shell is started behind it and the seam reaches it ·
+- 2026-10-17 · commit "feat(wall): the Workspace may be empty" · Last window closed (`exit` in
+  the only window of the only session): the last Home page slides in and no shell starts (the
+  drawer lists no session, the notification counts none); a plain swipe on the last Home page
+  then stops (rubber-bands); a rotation and a home press from another app leave it empty ·
+  emulator.
+- 2026-10-17 · same commit · With the Workspace empty, the Terminal entry (drawer and dock) opens
+  one window and slides to it; its long press too opens one, not two · emulator.
+- 2026-10-17 · same commit · Start in = Workspace, force-stop, launch: opens on the Workspace
+  with one shell window; Start in = Home on a fresh install still gets Welcome and the first-boot
+  tour with their shell · emulator.
+- 2026-10-17 · same commit · A Home float with an empty row: open one on Home after the last
+  window closed, type in it, close it; the row stays empty and Home stays put, no shell starts;
+  with a float open and the row empty, the seam still stops · emulator.
+- 2026-10-17 · same commit · No window at all: the status bar's window chips (none, or only the
+  float's), the sessions drawer (empty, its + opens a session), the palette's session rows,
+  Ctrl+Alt+V/H/F and `launcherctl pane.list` / `window.open` do nothing or say so — no crash ·
   emulator.
 - 2026-10-17 · same commit · Start in: Settings shows the row under Launcher mode with the same
   look; Workspace + force-stop + launch opens on the Workspace with one shell window; Home (default)

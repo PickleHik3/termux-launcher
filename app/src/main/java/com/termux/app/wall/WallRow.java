@@ -149,4 +149,24 @@ public final class WallRow {
         }
         return homePage(0);
     }
+
+    /**
+     * Whether the Workspace is on the row (spec §6, Lifetime): while the current session has a
+     * window. Home floats are shells but never windows of the row, so they do not count. Before
+     * the terminal service is bound nothing is known and the Workspace is assumed.
+     */
+    public static boolean hasWorkspace(boolean serviceBound, int currentSessionWindows) {
+        return !serviceBound || currentSessionWindows > 0;
+    }
+
+    /**
+     * Whether an activity that finds the terminal service with no shell starts one. Only a cold
+     * start does — the process has not started its first shell yet, so the bootstrap, Welcome and
+     * the first-boot tour get theirs — or a launch that asks for a shell by name (New session,
+     * failsafe). After that an empty service is the user's empty Workspace, and Home stays.
+     */
+    public static boolean startsShellOnConnect(boolean sessionsEmpty, boolean firstShellStarted,
+                                               boolean launchAsksForSession) {
+        return sessionsEmpty && (!firstShellStarted || launchAsksForSession);
+    }
 }
