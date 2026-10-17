@@ -540,7 +540,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows = new java.util.ArrayList<>();
         int current;
         @Nullable String name;
-        com.termux.app.terminal.TerminalPaneController.Window currentWindow() { return windows.get(current); }
+        /**
+         * The window the row shows, null when the row is empty. A selection left past the end of
+         * the row (a window taken out without it being settled) is pulled back to the last window
+         * rather than read out of bounds.
+         */
+        @Nullable
+        com.termux.app.terminal.TerminalPaneController.Window currentWindow() {
+            if (windows.isEmpty()) return null;
+            current = Math.max(0, Math.min(current, windows.size() - 1));
+            return windows.get(current);
+        }
 
         /** A move that takes a window out of the row; false when it refused. */
         interface Move { boolean run(); }
