@@ -136,6 +136,8 @@ public final class LauncherAppLauncher {
         boolean open(@NonNull String entryId);
         /** The entry's long-press action: Terminal opens a new window. */
         boolean openAlternate(@NonNull String entryId);
+        /** New float here: Terminal opens a Home float on the Home page in view. */
+        default boolean openHomeFloat(@NonNull String entryId) { return false; }
     }
 
     @Nullable private static volatile EntryRunner entryRunner;
@@ -154,6 +156,13 @@ public final class LauncherAppLauncher {
         String id = LauncherEntries.idOf(entry.appRef);
         EntryRunner runner = entryRunner;
         return id != null && runner != null && runner.openAlternate(id);
+    }
+
+    /** The Terminal entry's New float here: a Home float on the Home page in view. */
+    public static boolean launchEntryHomeFloat(@NonNull LauncherAppEntry entry) {
+        String id = LauncherEntries.idOf(entry.appRef);
+        EntryRunner runner = entryRunner;
+        return id != null && runner != null && runner.openHomeFloat(id);
     }
 
     public static boolean launchEntry(@NonNull Context context, @NonNull LauncherAppEntry entry) {

@@ -45,6 +45,11 @@ public final class LauncherEntries {
         return isEntry(ref) ? ref.activityName : null;
     }
 
+    /** Whether the entry {@code ref} names offers New float here: a Home float on the page in view. */
+    public static boolean hasHomeFloat(@Nullable AppRef ref) {
+        return TERMINAL.equals(idOf(ref));
+    }
+
     /** Whether the entry {@code ref} names has a long-press action of its own (New window). */
     public static boolean hasAlternate(@Nullable AppRef ref) {
         return TERMINAL.equals(idOf(ref));

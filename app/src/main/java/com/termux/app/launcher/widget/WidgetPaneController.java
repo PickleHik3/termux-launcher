@@ -57,6 +57,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         /** True while the widgets page is glass, so built-in cards go translucent with a rim. */
         default boolean isWidgetSurfaceGlass() { return false; }
+        /** Whether the long-press menu offers Terminal: a Home float on the page on screen. */
+        default boolean offersHomeFloat() { return false; }
+        /** Terminal was chosen from the long-press menu: open a Home float on the page on screen. */
+        default void openHomeFloat() { }
         /** The activity-side services the built-in widgets need; null keeps them inert. */
         @Nullable default BuiltinWidgetServices.Host builtinWidgetHost() { return null; }
     }
@@ -328,7 +332,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         List<WidgetPaneMenuPolicy.Item> items = WidgetPaneMenuPolicy.itemsFor(
             widgets.capability() == LauncherWidgetHostController.Capability.AVAILABLE,
             widgets.repository().pageCount(),
-            widgets.repository().recordsOnPage(currentPage).isEmpty());
+            widgets.repository().recordsOnPage(currentPage).isEmpty(), host.offersHomeFloat());
         if (items.isEmpty()) return;
         paneMenu = WidgetPaneMenu.show(pane, items, rawX, rawY, this::onMenuItemSelected);
     }
@@ -346,6 +350,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             case ADD_WIDGET: openPicker(); break;
             case EDIT_WIDGETS: menuEditWidgets(); break;
             case REMOVE_PAGE: menuRemovePage(); break;
+            case TERMINAL: host.openHomeFloat(); break;
         }
     }
 

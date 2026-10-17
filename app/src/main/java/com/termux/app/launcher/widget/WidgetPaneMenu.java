@@ -98,6 +98,7 @@ final class WidgetPaneMenu {
             case ADD_WIDGET: return context.getString(R.string.widget_add);
             case EDIT_WIDGETS: return context.getString(R.string.widget_menu_edit_widgets);
             case REMOVE_PAGE: return context.getString(R.string.widget_menu_remove_page);
+            case TERMINAL: return context.getString(R.string.widget_menu_terminal);
             default: return "";
         }
     }

@@ -8,6 +8,15 @@ import static com.termux.app.launcher.widget.WidgetPaneMenuPolicy.Item.*;
 import static org.junit.Assert.*;
 
 public class WidgetPaneMenuPolicyTest {
+    @Test public void terminalComesLastWheneverTheHostCanOpenAHomeFloat() {
+        assertEquals(Arrays.asList(ADD_WIDGET, EDIT_WIDGETS, TERMINAL),
+            WidgetPaneMenuPolicy.itemsFor(true, 1, false, true));
+        assertEquals("a device without widgets still opens a terminal",
+            Arrays.asList(TERMINAL), WidgetPaneMenuPolicy.itemsFor(false, 1, true, true));
+        assertEquals(Arrays.asList(ADD_WIDGET),
+            WidgetPaneMenuPolicy.itemsFor(true, 1, true, false));
+    }
+
     @Test public void unsupportedDeviceGetsNoMenu() {
         assertTrue(WidgetPaneMenuPolicy.itemsFor(false, 1, true).isEmpty());
         assertTrue(WidgetPaneMenuPolicy.itemsFor(false, 3, false).isEmpty());

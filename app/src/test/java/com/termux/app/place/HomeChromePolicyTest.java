@@ -38,6 +38,16 @@ public class HomeChromePolicyTest {
     }
 
     @Test
+    public void homeHasTheStatusBarOnlyWhileAHomeFloatExistsAndThenCompact() {
+        assertFalse(HomeChromePolicy.statusShownAtRest(HOME, false));
+        assertTrue(HomeChromePolicy.statusShownAtRest(HOME, true));
+        assertTrue(HomeChromePolicy.statusShownAtRest(WINDOW, false));
+        assertTrue(HomeChromePolicy.statusShownAtRest(WINDOW, true));
+        assertTrue(HomeChromePolicy.statusForcedCompact(HOME));
+        assertFalse(HomeChromePolicy.statusForcedCompact(WINDOW));
+    }
+
+    @Test
     public void aHomePageWearsNoBordersAndNoStatusBarAndItsDockFloats() {
         assertFalse(HomeChromePolicy.bordersShown(HOME));
         assertFalse(HomeChromePolicy.statusShownAtRest(HOME));

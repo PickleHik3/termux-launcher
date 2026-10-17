@@ -88,7 +88,8 @@ public final class TerminalCommandPalette {
 
     /** Shows the palette. Must be called on the main thread. */
     public static void show(@NonNull TermuxActivity activity) {
-        activity.getCommandPaletteController().toggle();
+        // Opened on a Home page, the palette shows the Home set.
+        activity.getCommandPaletteController().toggle(activity.paletteContextHere());
     }
 
     /** Shows the palette with the row set for {@code where}. Must be called on the main thread. */

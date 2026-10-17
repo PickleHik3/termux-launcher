@@ -134,6 +134,26 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void compatibilityModeCollapsesTheRowAndLeavesHomeFloatsAsTheyAre() {
+        TerminalPaneController controller = newController();
+        HomeFloatLayer layer = new HomeFloatLayer(RuntimeEnvironment.getApplication());
+        controller.setHomeFloatLayer(layer);
+        TerminalSession rowShell = terminal();
+        controller.showWindow(controller.newWindow(rowShell));
+        TerminalSession floatShell = terminal();
+        TerminalPaneController.Window homeFloat = controller.openHomeFloat(floatShell, 0);
+
+        assertTrue(controller.collapseAll().isEmpty());
+        assertTrue("still a Home float", homeFloat.isHomeFloat());
+        assertSame(homeFloat, controller.windowOf(floatShell));
+        assertTrue(controller.isFloating(floatShell));
+        // Showing a Home float focuses it over its page; it never enters the pane host.
+        controller.showWindow(homeFloat);
+        assertSame(homeFloat, controller.focusedHomeFloat());
+        assertNotSame(homeFloat, controller.activeWindow());
+    }
+
+    @Test
     public void clampFirstWeight_keepsBothPanesAtLeastEighteenPercent() {
         assertEquals(.36f, TerminalPaneController.clampFirstWeight(2f, 0f), .001f);
         assertEquals(1.64f, TerminalPaneController.clampFirstWeight(2f, 2f), .001f);

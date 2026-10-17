@@ -75,6 +75,18 @@ public final class WidgetPaneView extends FrameLayout {
         void onCarryEnd(float rawX, float rawY, boolean canceled);
     }
 
+    /**
+     * A layer pinned to the Home page on screen: it shows what belongs to that page (the Home
+     * floats), moves with the page's content while a swipe drags it and while the next page slides
+     * in, and keeps the page's swipe from starting on what it holds.
+     */
+    public interface PagePinnedLayer {
+        /** The Home page {@code page} is the one on screen now. */
+        void onHomePageShown(int page);
+        /** Whether a press at ({@code x}, {@code y}), in the pane's coordinates, lands on the layer. */
+        boolean holdsPoint(float x, float y);
+    }
+
     /** Fraction of the pane width a released drag must cross to commit a page switch. */
     private static final float PAGE_COMMIT_FRACTION = 1f / 3f;
     private static final float PAGE_COMMIT_VELOCITY_DP_PER_SEC = 900f;
@@ -159,6 +171,29 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     private WidgetPickerAdapter.Listener providerListener;
+    @Nullable private View pinnedLayer;
+
+    /**
+     * Pins {@code layer} to the Home pages: drawn over the grid and under the page dots, the picker
+     * and the edit chrome, told which page is on screen and carried with the page's content.
+     */
+    public <T extends View & PagePinnedLayer> void setPagePinnedLayer(@Nullable T layer) {
+        if (pinnedLayer == layer) return;
+        if (pinnedLayer != null) removeView(pinnedLayer);
+        pinnedLayer = layer;
+        if (layer == null) return;
+        if (layer.getParent() instanceof ViewGroup) ((ViewGroup) layer.getParent()).removeView(layer);
+        addView(layer, indexOfChild(empty) + 1,
+            new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        layer.setTranslationX(grid.getTranslationX());
+        layer.onHomePageShown(currentPage);
+    }
+
+    private boolean pinnedLayerHolds(@NonNull MotionEvent event) {
+        return pinnedLayer instanceof PagePinnedLayer && pinnedLayer.getVisibility() == VISIBLE
+            && ((PagePinnedLayer) pinnedLayer).holdsPoint(event.getX(), event.getY());
+    }
+
     /** The wall's seam: a forward swipe on the last Home page carries on into the row. */
     public void setSeam(@Nullable Seam value) {
         seam = value;
@@ -347,6 +382,8 @@ public final class WidgetPaneView extends FrameLayout {
         currentPage = Math.max(0, Math.min(pageCount - 1, current));
         dots.setVisibility(pageCount > 1 ? VISIBLE : GONE);
         dots.invalidate();
+        if (pinnedLayer instanceof PagePinnedLayer)
+            ((PagePinnedLayer) pinnedLayer).onHomePageShown(currentPage);
         if (pageCommitPending && currentPage != previousPage) {
             pageCommitPending = false;
             enterFromSide(pageCommitDirection, pageCommitDragX);
@@ -374,7 +411,9 @@ public final class WidgetPaneView extends FrameLayout {
                 seamDragging = false;
                 // One page still tracks when the seam is open: its forward swipe is the wall's.
                 pagingTracking = (pageCount > 1 || seamOpen()) && !picker.isOpen()
-                    && !widgetEditActive() && !insideNestedScrollingChild(this, event);
+                    && !widgetEditActive() && !insideNestedScrollingChild(this, event)
+                    // A swipe on a Home float is the float's (its terminal or its titlebar).
+                    && !pinnedLayerHolds(event);
                 pagingDownX = event.getX(); pagingDownY = event.getY();
                 pagingDownRawX = event.getRawX();
                 if (pagingTracking) {
@@ -553,11 +592,16 @@ public final class WidgetPaneView extends FrameLayout {
     private void setContentTranslationX(float value) {
         grid.setTranslationX(value);
         empty.setTranslationX(value);
+        if (pinnedLayer != null) {
+            pinnedLayer.animate().cancel();
+            pinnedLayer.setTranslationX(value);
+        }
     }
 
     private void animateContentTranslationX() {
         grid.animate().translationX(0f).setDuration(160).start();
         empty.animate().translationX(0f).setDuration(160).start();
+        if (pinnedLayer != null) pinnedLayer.animate().translationX(0f).setDuration(160).start();
     }
 
     private static boolean insideNestedScrollingChild(@NonNull ViewGroup parent,
