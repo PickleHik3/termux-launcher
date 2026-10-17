@@ -72,6 +72,26 @@ public class WallRowTest {
     }
 
     @Test
+    public void theOpeningPageIsTheSavedHalfElseStartIn() {
+        // A cold start: Start in decides, Home when unset.
+        assertEquals(PaneWallPage.WIDGETS, WallRow.openingKind(null, WallRow.START_IN_HOME));
+        assertEquals(PaneWallPage.TERMINAL, WallRow.openingKind(null, WallRow.START_IN_WORKSPACE));
+        assertEquals(PaneWallPage.WIDGETS, WallRow.openingKind(null, null));
+        // A recreation: the half it saved, whatever Start in says.
+        assertEquals(PaneWallPage.WIDGETS,
+            WallRow.openingKind(WallRow.HALF_HOME, WallRow.START_IN_WORKSPACE));
+        assertEquals(PaneWallPage.TERMINAL,
+            WallRow.openingKind(WallRow.HALF_WORKSPACE, WallRow.START_IN_HOME));
+        assertEquals("a half this version does not know opens Home", PaneWallPage.WIDGETS,
+            WallRow.openingKind("display", WallRow.START_IN_WORKSPACE));
+        // It agrees with where the restore lands, half for half.
+        assertEquals(WallRow.restore(WallRow.HALF_HOME, 0, 1, 0, false).kind,
+            WallRow.openingKind(WallRow.HALF_HOME, null));
+        assertEquals(WallRow.restore(WallRow.HALF_WORKSPACE, 0, 1, 1, false).kind,
+            WallRow.openingKind(WallRow.HALF_WORKSPACE, null));
+    }
+
+    @Test
     public void theSavedPositionIsTheHalfAndTheIndexWithinIt() {
         assertEquals(WallRow.HALF_HOME, WallRow.halfOf(PaneWallPage.WIDGETS));
         assertEquals(WallRow.HALF_WORKSPACE, WallRow.halfOf(PaneWallPage.TERMINAL));

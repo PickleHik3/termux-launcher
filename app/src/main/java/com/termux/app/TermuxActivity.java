@@ -696,10 +696,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.x11.DisplayStopSequence mDisplayStop;
     /**
      * The place whose keyboard state is on screen: the one the wall last settled on, so arriving
-     * somewhere new can record what the place being left leaves behind.
+     * somewhere new can record what the place being left leaves behind. Before the first settle
+     * it is the page the wall opens on (seeded in onCreate, WallRow#openingKind), so the first
+     * frame already wears that page's chrome: Home's Style, Corners and Margin on a cold start
+     * into Home, not the Workspace's until the settle.
      */
     @NonNull private com.termux.app.wall.PaneWallPage mLastWallPage =
         com.termux.app.wall.PaneWallPage.TERMINAL;
+
+    /**
+     * Whether the wall has settled once. The first settle is measured from the Workspace's window,
+     * as every first settle was before the opening page was seeded, and records no keyboard for a
+     * page that was never left (syncPlaceState).
+     */
+    private boolean mWallSettledOnce;
 
     // ---- The chrome travelling with the wall (PlaceChromeTravel). Everything here is a transform
     // or a pre-roll made during one slide, and settlePlaceChrome clears all of it at the end.
@@ -1808,6 +1818,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIsInvalidState = true;
             return;
         }
+        // The chrome is dressed for the page the wall opens on from the first frame: every read of
+        // Home's Style, Corners and Margin and of the layout variant follows mLastWallPage, which
+        // otherwise said the Workspace until the first settle.
+        mLastWallPage = com.termux.app.wall.WallRow.openingKind(
+            mPendingWallState == null ? null
+                : mPendingWallState.getString(com.termux.app.wall.PaneWallController.ARG_HALF),
+            mPreferences.getLauncherStartIn());
         // Built after the preferences, and only while the Widgets place is on the wall, so a
         // terminal-only install never registers an app widget host at all — no binding, no
         // listening, no widget providers reconciled — and neither does a pane switched on under
@@ -18929,19 +18946,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * instead.
      */
     private void syncWallKeyboard(@NonNull com.termux.app.wall.PaneWallPage page,
-                                  boolean leavingKeyboardUp) {
-        if (page != mLastWallPage) {
-            rememberPlaceKeyboard(mLastWallPage, leavingKeyboardUp);
-            com.termux.app.wall.PaneWallPage left = mLastWallPage;
-            mLastWallPage = page;
-            // The arrangement before the keyboard, so the keyboard's geometry pass sees the
-            // chrome it will stand in.
-            syncChromeArrangement();
-            // Home wears its own Style, Corners and Margin: a crossing between halves that differ
-            // dresses the chrome for the arriving one, as the variant above re-arranged it.
-            restyleChromeForHalfIfChanged(left, page);
-        }
+                                  boolean leavingKeyboardUp, boolean remember) {
+        if (page != mLastWallPage && remember) rememberPlaceKeyboard(mLastWallPage, leavingKeyboardUp);
+        // A first settle on the seeded page commits nothing new; the arrangement is still checked
+        // (it only acts on a change), as the settle from the Workspace's window always did.
+        if (!commitWallPage(page) && !remember) syncChromeArrangement();
         applyPlaceKeyboard(page);
+    }
+
+    /**
+     * The chrome is committed to {@code page}: arranged by its layout variant and dressed in its
+     * half's Style, Corners and Margin. Nothing happens where it already is; whether it moved.
+     */
+    private boolean commitWallPage(@NonNull com.termux.app.wall.PaneWallPage page) {
+        if (page == mLastWallPage) return false;
+        com.termux.app.wall.PaneWallPage left = mLastWallPage;
+        mLastWallPage = page;
+        // The arrangement before the keyboard, so the keyboard's geometry pass sees the
+        // chrome it will stand in.
+        syncChromeArrangement();
+        // Home wears its own Style, Corners and Margin: a crossing between halves that differ
+        // dresses the chrome for the arriving one, as the variant above re-arranged it.
+        restyleChromeForHalfIfChanged(left, page);
+        return true;
     }
 
     /** Puts the keyboard where the place on screen remembers it, without recording anything. */
@@ -18979,10 +19006,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPlaceState(@NonNull com.termux.app.wall.PaneWallPage page,
                                 boolean leavingKeyboardUp) {
-        if (page == mLastWallPage) return;
+        // The first settle is measured from the Workspace's window, the page every first settle
+        // left before the opening page was seeded, so a cold start lands exactly as it did; the
+        // chrome is already dressed for the seed, and a seed the wall did not land on is
+        // corrected here. No keyboard is recorded for a page that was never left.
+        boolean first = !mWallSettledOnce;
+        mWallSettledOnce = true;
+        com.termux.app.wall.PaneWallPage from =
+            first ? com.termux.app.wall.PaneWallPage.TERMINAL : mLastWallPage;
+        if (page == from) {
+            if (first && commitWallPage(page))
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+            return;
+        }
         PlaceLayout layout = currentPlaceLayout();
-        boolean overlaid = KeyboardOverlayPolicy.overlays(mLastWallPage, layout);
-        syncWallKeyboard(page, leavingKeyboardUp);
+        boolean overlaid = KeyboardOverlayPolicy.overlays(from, layout);
+        syncWallKeyboard(page, leavingKeyboardUp, !first);
         syncDisplayTouchpad();
         applyPlaceSystemImeOwner();
         applyExtraKeysPlaceEligibility();

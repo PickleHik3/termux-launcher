@@ -123,6 +123,20 @@ public final class WallRow {
     }
 
     /**
+     * The kind of page the wall opens on, known before anything is laid out: the half a
+     * recreation saved ({@code savedHalf}, {@link #HALF_HOME} or {@link #HALF_WORKSPACE}), else
+     * the page Start in names. Only the half matters to what the chrome wears (HomeChromePolicy),
+     * so a Workspace half is the window page whether it lands on a window, the Display page, or
+     * waits for the windows to come back. A half this version does not know opens Home, as
+     * {@link #restore} does.
+     */
+    @NonNull
+    public static PaneWallPage openingKind(@Nullable String savedHalf, @Nullable String startIn) {
+        if (savedHalf == null) return coldStart(startIn);
+        return HALF_WORKSPACE.equals(savedHalf) ? PaneWallPage.TERMINAL : PaneWallPage.WIDGETS;
+    }
+
+    /**
      * The saved index of {@code position} within its half: a Home page's own index, a window's,
      * and the Display page after the windows.
      */
