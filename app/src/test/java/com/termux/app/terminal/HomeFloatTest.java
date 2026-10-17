@@ -343,6 +343,22 @@ public class HomeFloatTest {
         assertEquals(PlaceLayout.Edge.TOP, withBar.slot(Element.STATUS).edge);
     }
 
+    @Test
+    public void onHomeTheBarShowsTheFloatsChipsExactlyWhileFloatsExist() {
+        // The bar came onto Home with the first float but its chips stayed hidden, so a minimised
+        // float had nothing to be tapped back from.
+        assertTrue(HomeChromePolicy.windowChipsShown(PaneWallPage.WIDGETS, true));
+        assertFalse("no float, no chips on Home",
+            HomeChromePolicy.windowChipsShown(PaneWallPage.WIDGETS, false));
+        assertTrue(HomeChromePolicy.windowChipsShown(PaneWallPage.TERMINAL, false));
+        assertTrue(HomeChromePolicy.windowChipsShown(PaneWallPage.DISPLAY, false));
+        for (boolean floats : new boolean[] {false, true}) {
+            assertEquals("the chips show wherever the bar rests on Home",
+                HomeChromePolicy.statusShownAtRest(PaneWallPage.WIDGETS, floats),
+                HomeChromePolicy.windowChipsShown(PaneWallPage.WIDGETS, floats));
+        }
+    }
+
     // --- The float's shell gets its size ---
 
     @Test

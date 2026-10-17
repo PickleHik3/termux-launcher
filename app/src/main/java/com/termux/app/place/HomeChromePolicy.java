@@ -77,6 +77,15 @@ public final class HomeChromePolicy {
     }
 
     /**
+     * Whether the status bar's window chips show on the page. On a window they are the row's
+     * windows; on a Home page they are the Home floats, of every page, so they show exactly while
+     * a Home float exists, open or minimised: the bar comes onto Home only to carry them.
+     */
+    public static boolean windowChipsShown(@NonNull PaneWallPage page, boolean homeFloatsExist) {
+        return !isHome(page) || homeFloatsExist;
+    }
+
+    /**
      * Whether the status bar rests compact on the page whatever the orientation's memory says:
      * on a Home page it only ever comes in compact, to carry the floats' chips.
      */
