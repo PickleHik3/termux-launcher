@@ -11742,6 +11742,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void hideInAppKeyboardForEditor() {
+            // At the session's end, Home with always on keeps it: it is the keyboard Home wants.
+            PlaceLayoutStore store = placeLayoutStore();
+            if (!mSurfaceEditor.isActive() && store != null
+                && com.termux.app.place.HomeChromePolicy.editorEndKeepsKeyboard(mLastWallPage,
+                    store.isHomeKeyboardAlwaysOn()))
+                return;
             if (mInAppKeyboard != null)
                 mInAppKeyboard.hide(
                     com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
@@ -18381,6 +18387,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onClosed() {
             mOverviewRestore = null;
+            // Always on turned on in the editor: the keyboard Home wants is up now, whatever the
+            // editor did with the one it raised.
+            if (com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage)
+                && wantsKeyboardOnEnter(mLastWallPage))
+                applyPlaceKeyboard(mLastWallPage);
         }
 
         /** In the default preferences, as Settings keeps its own place, so a killed launcher keeps it. */

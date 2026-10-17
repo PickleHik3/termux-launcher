@@ -209,4 +209,18 @@ public class HomeChromePolicyTest {
             EdgeStackPolicy.sideStackTopInsetPx(withBar, PlaceLayout.Edge.LEFT, metrics,
                 HomeChromePolicy.statusOverlays(WINDOW)));
     }
+
+    /**
+     * Device check 3, finding 1: the Keyboard chip brought out in the Layout editor on Home turns
+     * always on on while the editor's own keyboard is up, so the arrangement pass leaves it; the
+     * editor's end must not then take it down, or Home stays without it until a cold launch.
+     */
+    @Test
+    public void theEditorsEndLeavesTheKeyboardUpOnHomeOnlyWhileAlwaysOnIsOn() {
+        assertTrue(HomeChromePolicy.editorEndKeepsKeyboard(HOME, true));
+        assertFalse(HomeChromePolicy.editorEndKeepsKeyboard(HOME, false));
+        assertFalse(HomeChromePolicy.editorEndKeepsKeyboard(WINDOW, true));
+        assertFalse(HomeChromePolicy.editorEndKeepsKeyboard(WINDOW, false));
+        assertFalse(HomeChromePolicy.editorEndKeepsKeyboard(PaneWallPage.DISPLAY, true));
+    }
 }

@@ -129,6 +129,17 @@ public final class HomeChromePolicy {
     }
 
     /**
+     * Whether the end of an editor session takes down the keyboard the editor raised for itself.
+     * On Home with always on it stays: always on wants it up there, and turned on while the editor
+     * was open, the arrangement pass found it already up (the editor's) and left it, so taking it
+     * down at Done would leave Home without the keyboard until the next launch. Anywhere else, and
+     * on Home without always on, the editor's keyboard goes as it came.
+     */
+    public static boolean editorEndKeepsKeyboard(@NonNull PaneWallPage page, boolean alwaysOn) {
+        return isHome(page) && keyboardOnEnter(page, false, false, alwaysOn);
+    }
+
+    /**
      * How many of the grid's rows always on gives the keyboard: as many whole rows as the keyboard
      * covers, from a grid {@code gridHeightPx} tall cut into {@code gridRows} rows. Zero when the
      * grid or the keyboard is not measured yet, or when nothing would be left of the grid.
