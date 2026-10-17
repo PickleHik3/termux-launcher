@@ -142,11 +142,14 @@ so the window chips, the sessions drawer and the shortcuts all see it.
 - Drag its **titlebar** to move it and its bottom-right corner to resize it. Each float remembers
   its size and spot in each orientation until the launcher restarts.
 - The titlebar's buttons: **Minimise** tucks the float into its chip in the status bar,
-  **Maximise** fills the room and becomes **Restore size**, **Close** closes it and its shell, and
-  **Dock** moves it into the Workspace as a window right after the current one and takes you there.
-- The keyboard opens over a float and never resizes it: the focused float lifts so the cursor's line
-  stays above the keyboard, and settles back when it closes. A tap on the page outside any float
-  puts the keyboard away, as does minimising or closing the focused float.
+  **Maximise** fills the room and becomes **Restore size**, and **Close** closes it and its shell.
+  Long press the titlebar's handle for its menu: **Dock** moves the float into the Workspace as a
+  window right after the current one and takes you there.
+- A float that fills the room makes way for the keyboard as a tiled pane does: it shortens to the
+  room above the keyboard and grows back when it closes. A float you made smaller keeps its size
+  and lifts so the cursor's line stays above the keyboard, never past the top of the room, and
+  settles back when it closes. A tap on the page outside any float puts the keyboard away, as does
+  minimising or closing the focused float.
 - While a float is open or minimised, the status bar slides down onto Home. Its chips are your
   floats, from every page, each marked with its page's dot; tap one to go to its page and bring it
   back. The bar slides away again when the last float closes.
@@ -158,9 +161,10 @@ Terminal entry takes you to them.
 
 **Float / dock pane** (`Ctrl+Alt+F`) lifts the focused pane above the others. A floating pane wears
 a **titlebar**, a glass strip along its top: drag the strip to move the pane, and resize it from
-its bottom-right corner. The titlebar's buttons are **Dock**, which puts the pane back among the
-others, **Maximise**, which fills the window and becomes **Restore size** to put the pane back where
-it was, and **Close**, which closes its shell. Running the action again also docks it. The last
+its bottom-right corner. The titlebar's buttons are **Maximise**, which fills the window and becomes
+**Restore size** to put the pane back where it was, and **Close**, which closes its shell. Long
+press the titlebar's handle for its menu, where **Dock** puts the pane back among the others;
+running the action again also docks it. The last
 tiled pane in a window cannot float. Inside the pane, touch works as usual: a hold-and-drag still
 goes to the running program. (The titlebar replaces the pill and the move corner floating panes
 used to have.)

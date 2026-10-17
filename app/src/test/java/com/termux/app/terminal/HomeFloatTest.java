@@ -109,7 +109,7 @@ public class HomeFloatTest {
         FloatTitlebarView titlebar = titlebarOf(containerOf(window));
         assertNotNull(titlebar);
         assertNotNull(titlebar.buttonFor(FloatTitlebarPolicy.ACTION_MINIMISE));
-        assertNotNull(titlebar.buttonFor(FloatTitlebarPolicy.ACTION_DOCK));
+        assertNull("Dock is in the handle's menu", titlebar.buttonFor(FloatTitlebarPolicy.ACTION_DOCK));
     }
 
     @Test
@@ -311,17 +311,139 @@ public class HomeFloatTest {
     }
 
     @Test
-    public void theKeyboardLiftsOnlyTheFocusedFloatAndNeverResizesIt() {
+    public void theKeyboardLiftsASmallerFloatAndNeverResizesIt() {
         TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        placeSmaller(window, new RectF(.1f, .5f, .8f, .9f));
         View container = containerOf(window);
         layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
-        int height = container.getLayoutParams().height;
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) container.getLayoutParams();
+        int height = params.height;
+        int top = params.topMargin;
         mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 400);
         assertEquals("never resized", height, container.getLayoutParams().height);
+        assertEquals("never moved: lifted", top,
+            ((FrameLayout.LayoutParams) container.getLayoutParams()).topMargin);
         assertTrue("lifted no lower than where it was", container.getTranslationY() <= 0f);
+        assertTrue("never past the room's top",
+            top + container.getTranslationY() >= ROOM_TOP);
 
         mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1);
         assertEquals("put back when the keyboard closes", 0f, container.getTranslationY(), 0f);
+    }
+
+    @Test
+    public void aFullSizeFloatShrinksAboveTheKeyboardAndGrowsBack() {
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        View container = containerOf(window);
+        layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
+        RectF born = new RectF(window.active.floatFrac);
+
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 400);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) container.getLayoutParams();
+        assertEquals("its titlebar at the room's top", ROOM_TOP, params.topMargin);
+        assertEquals("its bottom at the keyboard's top", 400 - ROOM_TOP, params.height);
+        assertEquals(LAYER_WIDTH, params.width);
+        assertEquals("shrunk, not lifted", 0f, container.getTranslationY(), 0f);
+        assertEquals("the keyboard is no resize: the float still fills its room",
+            born, window.active.floatFrac);
+
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1);
+        params = (FrameLayout.LayoutParams) container.getLayoutParams();
+        assertEquals("grown back when the keyboard closes", DOCK_TOP - ROOM_TOP, params.height);
+        assertEquals(ROOM_TOP, params.topMargin);
+    }
+
+    @Test
+    public void aMaximisedFloatShrinksForTheKeyboardAndStillRestoresItsShape() {
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        RectF small = new RectF(.1f, .5f, .8f, .8f);
+        placeSmaller(window, small);
+        mController.toggleFloatMaximised(window.active);
+        View container = containerOf(window);
+        layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
+
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 400);
+        assertEquals(400 - ROOM_TOP, container.getLayoutParams().height);
+        assertTrue("still maximised", FloatTitlebarPolicy.isMaximised(window.active.floatRestoreFrac));
+        assertNear("the restore shape is kept", small, window.active.floatRestoreFrac);
+
+        // Restore with the keyboard up: the float is the shape it was, lifted rather than shrunk.
+        mController.toggleFloatMaximised(window.active);
+        assertNear("restored", small, window.active.floatFrac);
+        assertEquals(Math.round(small.height() * (DOCK_TOP - ROOM_TOP)),
+            container.getLayoutParams().height);
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1);
+        assertEquals(Math.round(small.height() * (DOCK_TOP - ROOM_TOP)),
+            container.getLayoutParams().height);
+    }
+
+    @Test
+    public void onlyTheFocusedFloatShrinksForTheKeyboard() {
+        TerminalPaneController.Window first = mController.openHomeFloat(terminal(), 0);
+        TerminalPaneController.Window second = mController.openHomeFloat(terminal(), 0);
+        layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 400);
+        assertEquals(400 - ROOM_TOP, containerOf(second).getLayoutParams().height);
+        assertEquals("an unfocused float sits at its size", DOCK_TOP - ROOM_TOP,
+            containerOf(first).getLayoutParams().height);
+
+        mController.focusHomeFloat(first);
+        assertEquals(400 - ROOM_TOP, containerOf(first).getLayoutParams().height);
+        assertEquals(DOCK_TOP - ROOM_TOP, containerOf(second).getLayoutParams().height);
+    }
+
+    @Test
+    public void aFloatFillsItsRoomOnlyWhileItCoversAllOfIt() {
+        assertTrue(HomeFloatPolicy.fillsRoom(FloatTitlebarPolicy.fullRoom()));
+        assertTrue(HomeFloatPolicy.fillsRoom(HomeFloatPolicy.birthFrac()));
+        assertTrue("rounding is not a placement",
+            HomeFloatPolicy.fillsRoom(new RectF(0f, 0f, 1.00001f, 0.99999f)));
+        assertFalse(HomeFloatPolicy.fillsRoom(new RectF(.05f, 0f, 1.05f, 1f)));
+        assertFalse(HomeFloatPolicy.fillsRoom(new RectF(0f, 0f, 1f, .9f)));
+        assertFalse(HomeFloatPolicy.fillsRoom(null));
+    }
+
+    @Test
+    public void theKeyboardRoomEndsAtTheKeyboardOnlyForAFloatThatFillsTheRoom() {
+        Rect room = new Rect(0, 80, 600, 880);
+        assertEquals(new Rect(0, 80, 600, 400), HomeFloatPolicy.keyboardRoom(room, true, true, 400));
+        assertEquals("a smaller float keeps the room and is lifted", room,
+            HomeFloatPolicy.keyboardRoom(room, false, true, 400));
+        assertEquals("keyboard down", room, HomeFloatPolicy.keyboardRoom(room, true, false, 400));
+        assertEquals("a keyboard below the room changes nothing", room,
+            HomeFloatPolicy.keyboardRoom(room, true, true, 900));
+        assertEquals("never inverted", new Rect(0, 80, 600, 81),
+            HomeFloatPolicy.keyboardRoom(room, true, true, 20));
+    }
+
+    @Test
+    public void reframeKeepsThePixelsAFloatShows() {
+        Rect shrunk = new Rect(0, 80, 600, 400);
+        Rect room = new Rect(0, 80, 600, 880);
+        RectF inRoom = HomeFloatPolicy.reframe(new RectF(0f, 0f, 1f, 1f), shrunk, room);
+        assertEquals(0f, inRoom.left, 1e-6f);
+        assertEquals(0f, inRoom.top, 1e-6f);
+        assertEquals(1f, inRoom.right, 1e-6f);
+        assertEquals(320f / 800f, inRoom.bottom, 1e-6f);
+        assertEquals(new RectF(.1f, .2f, .3f, .4f),
+            HomeFloatPolicy.reframe(new RectF(.1f, .2f, .3f, .4f), room, room));
+    }
+
+    /** Gives {@code window}'s float a shape smaller than the room and lays it out at that shape. */
+    private void placeSmaller(@NonNull TerminalPaneController.Window window, @NonNull RectF frac) {
+        window.active.floatFrac = new RectF(frac);
+        window.active.appliedFloatFrac = null;
+        // Maximise and restore: the float is laid out again at the shape it was given.
+        mController.toggleFloatMaximised(window.active);
+        mController.toggleFloatMaximised(window.active);
+    }
+
+    private static void assertNear(String message, RectF expected, @Nullable RectF actual) {
+        assertNotNull(message, actual);
+        assertEquals(message, expected.left, actual.left, 1e-4f);
+        assertEquals(message, expected.top, actual.top, 1e-4f);
+        assertEquals(message, expected.right, actual.right, 1e-4f);
+        assertEquals(message, expected.bottom, actual.bottom, 1e-4f);
     }
 
     @Test
