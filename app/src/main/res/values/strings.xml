@@ -3137,6 +3137,13 @@
     <string name="pane_corner_tab_move_description">Move pane</string>
     <string name="pane_corner_tab_maximise_description">Maximise pane</string>
 
+    <!-- A float's titlebar: its buttons, read by TalkBack. -->
+    <string name="titlebar_minimise_description">Minimise</string>
+    <string name="titlebar_maximise_description">Maximise</string>
+    <string name="titlebar_restore_description">Restore size</string>
+    <string name="titlebar_dock_description">Dock</string>
+    <string name="titlebar_close_description">Close</string>
+
     <!-- On-device AI: the diagnostics share row. -->
     <string name="termux_ai_share_diagnostics_title">Share diagnostics log</string>
     <string name="termux_ai_share_diagnostics_summary">Loads, evictions and failures, the runtime history and the last crash, as one text file. No prompts or replies.</string>

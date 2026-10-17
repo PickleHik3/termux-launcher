@@ -123,15 +123,20 @@ it too.
 
 ## Floating panes
 
-**Float / dock pane** (`Ctrl+Alt+F`) lifts the focused pane above the others. Move it by its
-top-left corner and resize it from its bottom-right corner. Tap the pill at its top for **Close**
-and **Dock**, or run the action again to dock it. The last tiled pane in a window cannot float.
-Inside the pane, touch works as usual: a hold-and-drag still goes to the running program.
+**Float / dock pane** (`Ctrl+Alt+F`) lifts the focused pane above the others. A floating pane wears
+a **titlebar**, a glass strip along its top: drag the strip to move the pane, and resize it from
+its bottom-right corner. The titlebar's buttons are **Dock**, which puts the pane back among the
+others, **Maximise**, which fills the window and becomes **Restore size** to put the pane back where
+it was, and **Close**, which closes its shell. Running the action again also docks it. The last
+tiled pane in a window cannot float. Inside the pane, touch works as usual: a hold-and-drag still
+goes to the running program. (The titlebar replaces the pill and the move corner floating panes
+used to have.)
 
 ## The scratchpad
 
-**Toggle scratchpad** (``Ctrl+Alt+` ``) shows or hides a floating terminal of its own. Hiding it
-does not close it; its shell keeps running.
+**Toggle scratchpad** (``Ctrl+Alt+` ``) shows or hides a floating terminal of its own. It wears the
+same titlebar as a floating pane, with one more button: **Minimise** hides it, as the toggle does.
+Hiding it does not close it; its shell keeps running. **Close** ends its shell.
 
 ## Sessions
 

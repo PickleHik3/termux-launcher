@@ -39,7 +39,6 @@ import androidx.core.view.OneShotPreDrawListener;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.DockPlankController;
-import com.termux.app.chrome.CornerBracket;
 import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerTabGlyphs;
@@ -122,6 +121,10 @@ public class TerminalPaneController {
     private static final String STATE_FLOAT_TOP = "float_top";
     private static final String STATE_FLOAT_WIDTH = "float_width";
     private static final String STATE_FLOAT_HEIGHT = "float_height";
+    private static final String STATE_FLOAT_RESTORE_LEFT = "float_restore_left";
+    private static final String STATE_FLOAT_RESTORE_TOP = "float_restore_top";
+    private static final String STATE_FLOAT_RESTORE_WIDTH = "float_restore_width";
+    private static final String STATE_FLOAT_RESTORE_HEIGHT = "float_restore_height";
     private static final String STATE_SCRATCHPAD_LEFT = "scratchpad_left";
     private static final String STATE_SCRATCHPAD_TOP = "scratchpad_top";
     private static final String STATE_SCRATCHPAD_WIDTH = "scratchpad_width";
@@ -139,13 +142,8 @@ public class TerminalPaneController {
     private static final int FLOAT_MIN_HEIGHT_DP = 90;
     /** How much of the drag handle must remain reachable after any move or host resize. */
     private static final int FLOAT_MIN_VISIBLE_DP = 48;
-    private static final int FLOAT_HANDLE_DP = 26;
+    /** The bottom-trailing corner a float is resized from. */
     private static final int FLOAT_GRIP_DP = 28;
-    /** The floating pill hovering in the (transparent) handle row above the terminal. */
-    private static final int FLOAT_PILL_WIDTH_DP = 48;
-    private static final int FLOAT_PILL_HEIGHT_DP = 18;
-    /** Per-button slot width once a pill tap expands it into its action buttons. */
-    private static final int FLOAT_PILL_BUTTON_DP = 44;
     /** Above tiled panes and the interaction overlay, below the 6dp key chord overlay. */
     private static final int FLOAT_ELEVATION_DP = 4;
     /** Matches pane_active_border.xml's stroke width: the line a corner tab lines up against. */
@@ -256,6 +254,12 @@ public class TerminalPaneController {
          * because remembering a shape the user did not ask for is the ratchet this replaced.
          */
         @Nullable transient RectF appliedFloatFrac;
+        /**
+         * The shape the titlebar's Maximise restores, non-null exactly while the float is
+         * maximised ({@link FloatTitlebarPolicy#toggleMaximise}). A move or resize by hand ends
+         * the maximised state, so a float is never left full-size with a Restore that jumps.
+         */
+        @Nullable RectF floatRestoreFrac;
         /**
          * This pane's pinned font size, or 0 while it follows the app-wide default. Set the first
          * time the pane is zoomed (and inherited by panes split off it), never by the default
@@ -902,6 +906,13 @@ public class TerminalPaneController {
                 floatState.putFloat(STATE_FLOAT_TOP, frac.top);
                 floatState.putFloat(STATE_FLOAT_WIDTH, frac.width());
                 floatState.putFloat(STATE_FLOAT_HEIGHT, frac.height());
+                RectF restore = leaf.floatRestoreFrac;
+                if (restore != null) {
+                    floatState.putFloat(STATE_FLOAT_RESTORE_LEFT, restore.left);
+                    floatState.putFloat(STATE_FLOAT_RESTORE_TOP, restore.top);
+                    floatState.putFloat(STATE_FLOAT_RESTORE_WIDTH, restore.width());
+                    floatState.putFloat(STATE_FLOAT_RESTORE_HEIGHT, restore.height());
+                }
                 if (leaf.fontSize > 0) floatState.putInt(STATE_NODE_FONT_SIZE, leaf.fontSize);
                 floats.add(floatState);
             }
@@ -1023,6 +1034,13 @@ public class TerminalPaneController {
                 floatState.getFloat(STATE_FLOAT_TOP, Float.NaN),
                 floatState.getFloat(STATE_FLOAT_WIDTH, Float.NaN),
                 floatState.getFloat(STATE_FLOAT_HEIGHT, Float.NaN));
+            if (floatState.containsKey(STATE_FLOAT_RESTORE_LEFT)) {
+                leaf.floatRestoreFrac = sanitizedFloatFrac(
+                    floatState.getFloat(STATE_FLOAT_RESTORE_LEFT, Float.NaN),
+                    floatState.getFloat(STATE_FLOAT_RESTORE_TOP, Float.NaN),
+                    floatState.getFloat(STATE_FLOAT_RESTORE_WIDTH, Float.NaN),
+                    floatState.getFloat(STATE_FLOAT_RESTORE_HEIGHT, Float.NaN));
+            }
             leaf.fontSize = Math.max(0, floatState.getInt(STATE_NODE_FONT_SIZE, 0));
             floats.add(leaf);
         }
@@ -2267,15 +2285,61 @@ public class TerminalPaneController {
             .start();
     }
 
-    /** Close a float from its pill: the scratchpad just hides (shell survives), others die. */
+    /** What a float's titlebar button does to it. */
+    private void onTitlebarAction(@NonNull Leaf leaf, int action) {
+        switch (action) {
+            case FloatTitlebarPolicy.ACTION_MINIMISE: minimiseFloat(leaf); break;
+            case FloatTitlebarPolicy.ACTION_MAXIMISE: toggleFloatMaximised(leaf); break;
+            case FloatTitlebarPolicy.ACTION_DOCK: dockFloat(leaf); break;
+            case FloatTitlebarPolicy.ACTION_CLOSE: closeFloat(leaf); break;
+            default: break;
+        }
+    }
+
+    /**
+     * Whether {@code leaf}'s titlebar has somewhere for Minimise to go. Only the scratchpad does:
+     * it hides, as its toggle does. A window's floating pane gets Minimise with Home floats.
+     */
+    private static boolean hasMinimiseTarget(@NonNull Leaf leaf) {
+        return isScratchpadLeaf(leaf);
+    }
+
+    /** Close a float from its titlebar: its shell ends, as closing a pane's does. */
     private void closeFloat(@NonNull Leaf leaf) {
         Window window = mActiveWindow;
         if (window == null || !window.floating.contains(leaf)) return;
-        if (isScratchpadLeaf(leaf)) hideScratchpad(window, leaf);
-        else leaf.session.finishIfRunning();
+        leaf.session.finishIfRunning();
     }
 
-    /** Send a float back into the tiled tree from its pill. */
+    /** Minimise a float from its titlebar. The scratchpad hides and its shell keeps running. */
+    private void minimiseFloat(@NonNull Leaf leaf) {
+        Window window = mActiveWindow;
+        if (window == null || !window.floating.contains(leaf) || !hasMinimiseTarget(leaf)) return;
+        if (leaf != mHidingScratchpadLeaf) hideScratchpad(window, leaf);
+    }
+
+    /**
+     * Maximise a float to the whole room of its host, or restore the size and spot it had. The
+     * float stays a float: chrome, focus and its place in the z-order are untouched.
+     */
+    void toggleFloatMaximised(@NonNull Leaf leaf) {
+        Window window = mActiveWindow;
+        if (window == null || !window.floating.contains(leaf)) return;
+        // From what is on screen when the float is currently clamped, as a drag would.
+        RectF current = leaf.appliedFloatFrac != null ? leaf.appliedFloatFrac
+            : leaf.floatFrac != null ? leaf.floatFrac : defaultFloatFrac(0);
+        FloatTitlebarPolicy.Toggle toggle =
+            FloatTitlebarPolicy.toggleMaximise(current, leaf.floatRestoreFrac);
+        leaf.floatFrac = toggle.frac;
+        leaf.floatRestoreFrac = toggle.restoreFrac;
+        FloatingPaneContainer container = mFloatContainers.get(leaf);
+        if (container != null) {
+            container.onMaximisedChanged();
+            applyFloatBounds(leaf, container);
+        }
+    }
+
+    /** Send a float back into the tiled tree from its titlebar. */
     private void dockFloat(@NonNull Leaf leaf) {
         Window window = mActiveWindow;
         if (window == null || !window.floating.contains(leaf)) return;
@@ -2431,7 +2495,9 @@ public class TerminalPaneController {
 
     /** Remember where the user last shaped the scratchpad so the next show restores it. */
     private void rememberScratchpadFrac(@NonNull Leaf leaf) {
-        if (leaf.floatFrac != null) mScratchpadFrac = new RectF(leaf.floatFrac);
+        // A maximised scratchpad comes back at the size it was maximised from.
+        RectF shape = leaf.floatRestoreFrac != null ? leaf.floatRestoreFrac : leaf.floatFrac;
+        if (shape != null) mScratchpadFrac = new RectF(shape);
     }
 
     /** Remove the scratchpad float after its exit animation; the shell keeps running. */
@@ -2523,6 +2589,7 @@ public class TerminalPaneController {
     private void dockLeaf(@NonNull Window window, @NonNull Leaf leaf) {
         window.floating.remove(leaf);
         leaf.floatFrac = null;
+        leaf.floatRestoreFrac = null;
         removeFloatContainer(leaf);
         if (window.root == null) {
             leaf.parent = null;
@@ -2608,6 +2675,7 @@ public class TerminalPaneController {
         PaneGlassBackdropView movedGlass = movedFrame == null
             ? null : movedFrame.findViewById(R.id.terminal_pane_glass);
         if (movedGlass != null) movedGlass.invalidateGlassPosition();
+        container.titlebar().invalidateGlassPosition();
         FrameLayout.LayoutParams params = container.getLayoutParams() instanceof FrameLayout.LayoutParams
             ? (FrameLayout.LayoutParams) container.getLayoutParams()
             : new FrameLayout.LayoutParams(0, 0);
@@ -3526,6 +3594,8 @@ public class TerminalPaneController {
             PaneControlsView tab = mInteractionOverlay.controlsView();
             if (tab != null && tab.hasPaneGlass()) tab.invalidate();
         }
+        for (FloatingPaneContainer container : mFloatContainers.values())
+            container.titlebar().invalidateGlassPosition();
     }
 
     /**
@@ -3552,6 +3622,9 @@ public class TerminalPaneController {
             if (!PaneGlass.apply(mSurfaceStyle, frame, backdrop, radiusPx, true))
                 releasePanePlank(frame);
         }
+        // A float's titlebar is cut from the same glass as its pane, in the same pass.
+        for (FloatingPaneContainer container : mFloatContainers.values())
+            container.titlebar().dress(mSurfaceStyle, radiusPx);
         // The corner tab is cut from the same glass as the pane it grows out of, and re-dressed
         // in the same pass, so a new frost frame reaches the tab as it reaches the slabs.
         if (mInteractionOverlay != null)
@@ -3904,12 +3977,28 @@ public class TerminalPaneController {
             } else {
                 mBorderStates.remove(paneSession);
             }
+            // A float's titlebar wears the border its pane wears: the focused float's strip
+            // carries the active rim with it.
+            if (floating) {
+                FloatingPaneContainer container = floatContainerFor(paneSession);
+                if (container != null) {
+                    container.titlebar().applyRim(glassShape, paneRadiusPx(), border,
+                        mSurfaceStyle, mRimTravelAlpha, paneSession == activeSession);
+                }
+            }
         }
         applyCursorOwnership();
         // A glow made while the page is parked off screen starts held, not pulsing unseen.
         applyAttentionHold();
-        // The float handle pill dims with focus like the pane borders do.
+        // The resize chevrons dim with focus like the pane borders do.
         for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
+    }
+
+    @Nullable
+    private FloatingPaneContainer floatContainerFor(@NonNull TerminalSession session) {
+        for (Map.Entry<Leaf, FloatingPaneContainer> entry : mFloatContainers.entrySet())
+            if (entry.getKey().session == session) return entry.getValue();
+        return null;
     }
 
     /**
@@ -3981,6 +4070,8 @@ public class TerminalPaneController {
     public void setRimTravelAlpha(float alpha) {
         mRimTravelAlpha = alpha;
         for (PaneRim rim : mBorderStates.values()) rim.setTravelAlpha(alpha);
+        for (FloatingPaneContainer container : mFloatContainers.values())
+            container.titlebar().setRimTravelAlpha(alpha);
     }
 
 
@@ -5155,53 +5246,36 @@ public class TerminalPaneController {
     }
 
     /**
-     * Chrome around one floating pane: a transparent top handle row holding a floating pill
-     * (tap = expand into action buttons), a top-leading corner it is moved from and a
-     * bottom-trailing corner it is resized from. The panel surface starts at the terminal's top
-     * edge, so nothing extends under the pill.
+     * Chrome around one floating pane: the {@link FloatTitlebarView titlebar} along its top, which
+     * moves it and carries its buttons, and a bottom-trailing corner it is resized from. The
+     * pane's slab starts below the titlebar, so the strip never covers the terminal's first row.
      *
-     * <p>The whole handle row used to move the float. It moves from its top-leading corner now,
-     * like every other frame on the wall, and the pill keeps only the tap that opens its actions
-     * — an affordance that is drawn has to answer, so the pill is still touchable where it is
-     * drawn. Move and resize deliberately never start from the terminal content itself —
-     * long-press plus drag there is mouse-drag reporting
-     * (TerminalView.armTouchMouseDragFromLongPress) and must keep reaching the shell — so only
-     * these chrome regions ever intercept.
+     * <p>Move and resize deliberately never start from the terminal content itself — long-press
+     * plus drag there is mouse-drag reporting (TerminalView.armTouchMouseDragFromLongPress) and
+     * must keep reaching the shell — so only these chrome regions ever intercept.
      */
     private final class FloatingPaneContainer extends FrameLayout {
 
         private static final int DRAG_NONE = 0;
         private static final int DRAG_MOVE = 1;
         private static final int DRAG_RESIZE = 2;
-        /** The pill: it takes the touch so the terminal does not, but the float never moves. */
-        private static final int DRAG_PILL = 3;
-
-        private static final int PILL_ACTION_NONE = 0;
-        private static final int PILL_ACTION_CLOSE = 1;
-        private static final int PILL_ACTION_DOCK = 2;
 
         private final Leaf mLeaf;
+        private final FloatTitlebarView mTitlebar;
         private final Paint mChromePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        /** Scratch for the pill grip and its glyphs, redrawn on every frame a float is on screen. */
-        private final RectF mChromeScratch = new RectF();
-        private final Runnable mCollapsePill = this::collapsePill;
-        private final CornerBracket mBracket = new CornerBracket();
         private int mDragMode = DRAG_NONE;
         private float mDownRawX;
         private float mDownRawY;
         private boolean mDragMoved;
         @Nullable private RectF mDownFrac;
-        /** Pill expanded into its action buttons (close / dock) after a tap. */
-        private boolean mPillExpanded;
-        private int mPressedPillAction = PILL_ACTION_NONE;
 
         FloatingPaneContainer(@NonNull Leaf leaf) {
             super(mHostView.getContext());
             mLeaf = leaf;
             setElevation(dp(FLOAT_ELEVATION_DP));
-            // The container itself stays transparent so the handle row shows only the pill;
-            // the surface color lives on a wrapper rather than the shared pane frame, which
-            // must stay unstyled for tiled rendering.
+            // The container itself stays transparent so the gap between the titlebar and the
+            // pane shows what is behind; the surface color lives on a wrapper rather than the
+            // shared pane frame, which must stay unstyled for tiled rendering.
             FrameLayout content = new FrameLayout(getContext());
             // On glass the float's fill would sit between the frost and the text and flatten the
             // slab back to a panel; the pane's own glass is the float's surface instead.
@@ -5223,8 +5297,23 @@ public class TerminalPaneController {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             LayoutParams contentParams = new LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-            contentParams.topMargin = dp(FLOAT_HANDLE_DP);
+            contentParams.topMargin = titlebarBandPx();
             addView(content, contentParams);
+            mTitlebar = new FloatTitlebarView(getContext(), hasMinimiseTarget(leaf),
+                action -> onTitlebarAction(mLeaf, action));
+            mTitlebar.setMaximised(FloatTitlebarPolicy.isMaximised(leaf.floatRestoreFrac));
+            mTitlebar.dress(mSurfaceStyle, paneRadiusPx());
+            addView(mTitlebar, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(FloatTitlebarPolicy.HEIGHT_DP)));
+        }
+
+        @NonNull FloatTitlebarView titlebar() {
+            return mTitlebar;
+        }
+
+        /** Maximise was tapped, or a hand move ended the maximised state. */
+        void onMaximisedChanged() {
+            mTitlebar.setMaximised(FloatTitlebarPolicy.isMaximised(mLeaf.floatRestoreFrac));
         }
 
         @Override
@@ -5237,11 +5326,8 @@ public class TerminalPaneController {
                 if (mActiveWindow == null || mActiveWindow.active != mLeaf
                     || mActiveWindow.floating.indexOf(mLeaf) != mActiveWindow.floating.size() - 1)
                     post(() -> focusSession(mLeaf.session));
-                if (mPillExpanded && event.getY() > dp(FLOAT_HANDLE_DP)) collapsePill();
-                // A press on an expanded pill button must fall through to onTouchEvent (the
-                // strip has no child, so it lands there) instead of starting a move drag.
-                mDragMode = pillActionAt(event.getX(), event.getY()) != PILL_ACTION_NONE
-                    ? DRAG_NONE : dragModeAt(event.getX(), event.getY());
+                // A press on a titlebar button is the button's; the rest of the strip moves.
+                mDragMode = dragModeAt(event.getX(), event.getY());
                 if (mDragMode != DRAG_NONE) {
                     startDrag(event);
                     return true;
@@ -5254,36 +5340,14 @@ public class TerminalPaneController {
         public boolean onTouchEvent(MotionEvent event) {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    // Down lands here directly when it hits the handle strip (no child there).
+                    // Down lands here directly on the gap between strip and pane (no child).
                     if (mDragMode == DRAG_NONE) {
-                        int action = pillActionAt(event.getX(), event.getY());
-                        if (action != PILL_ACTION_NONE) {
-                            mPressedPillAction = action;
-                            mDownRawX = event.getRawX();
-                            mDownRawY = event.getRawY();
-                            getParent().requestDisallowInterceptTouchEvent(true);
-                            invalidate();
-                            return true;
-                        }
                         mDragMode = dragModeAt(event.getX(), event.getY());
                         if (mDragMode == DRAG_NONE) return false;
                         startDrag(event);
                     }
                     return true;
                 case MotionEvent.ACTION_MOVE: {
-                    if (mPressedPillAction != PILL_ACTION_NONE) {
-                        if (Math.hypot(event.getRawX() - mDownRawX, event.getRawY() - mDownRawY)
-                                > dp(8)) {
-                            mPressedPillAction = PILL_ACTION_NONE;
-                            invalidate();
-                        }
-                        return true;
-                    }
-                    if (mDragMode == DRAG_PILL) {
-                        if (Math.hypot(event.getRawX() - mDownRawX, event.getRawY() - mDownRawY)
-                                > dp(6)) mDragMoved = true;
-                        return true;
-                    }
                     if (mDragMode == DRAG_NONE || mDownFrac == null) return false;
                     float hostWidth = mHostView.getWidth();
                     float hostHeight = mHostView.getHeight();
@@ -5292,12 +5356,9 @@ public class TerminalPaneController {
                     // deltas would feed back into themselves.
                     float dxRaw = event.getRawX() - mDownRawX;
                     float dyRaw = event.getRawY() - mDownRawY;
-                    // A slop gate keeps a pill tap from nudging the float by a few pixels.
+                    // A slop gate keeps a tap on the strip from nudging the float a few pixels.
                     if (!mDragMoved && Math.hypot(dxRaw, dyRaw) < dp(6)) return true;
-                    if (!mDragMoved) {
-                        mDragMoved = true;
-                        collapsePill();
-                    }
+                    mDragMoved = true;
                     float dx = dxRaw / hostWidth;
                     float dy = dyRaw / hostHeight;
                     RectF candidate = new RectF(mDownFrac);
@@ -5309,28 +5370,18 @@ public class TerminalPaneController {
                     }
                     mLeaf.floatFrac = clampFloatFractions(candidate, hostWidth, hostHeight,
                         dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), dp(FLOAT_MIN_VISIBLE_DP));
+                    // Moved or resized off the full room by hand, the float is no longer
+                    // maximised: Maximise starts over from this shape rather than jumping back.
+                    if (mLeaf.floatRestoreFrac != null
+                        && !FloatTitlebarPolicy.fullRoom().equals(mLeaf.floatFrac)) {
+                        mLeaf.floatRestoreFrac = null;
+                        onMaximisedChanged();
+                    }
                     applyFloatBounds(mLeaf, this);
                     return true;
                 }
                 case MotionEvent.ACTION_UP:
-                    if (mPressedPillAction != PILL_ACTION_NONE) {
-                        int action = mPressedPillAction;
-                        mPressedPillAction = PILL_ACTION_NONE;
-                        if (pillActionAt(event.getX(), event.getY()) == action)
-                            performPillAction(action);
-                        else invalidate();
-                        return true;
-                    }
-                    if ((mDragMode == DRAG_MOVE || mDragMode == DRAG_PILL) && !mDragMoved)
-                        togglePill();
-                    endDrag();
-                    return true;
                 case MotionEvent.ACTION_CANCEL:
-                    if (mPressedPillAction != PILL_ACTION_NONE) {
-                        mPressedPillAction = PILL_ACTION_NONE;
-                        invalidate();
-                        return true;
-                    }
                     endDrag();
                     return true;
                 default:
@@ -5342,10 +5393,6 @@ public class TerminalPaneController {
             mDownRawX = event.getRawX();
             mDownRawY = event.getRawY();
             mDragMoved = false;
-            if (mDragMode == DRAG_PILL) {
-                getParent().requestDisallowInterceptTouchEvent(true);
-                return;
-            }
             // Seed from what is on screen when the float is currently clamped, so a drag that
             // starts while the host is short does not teleport back to the remembered shape. The
             // MOVE branch still writes floatFrac: a deliberate gesture IS new intent.
@@ -5362,65 +5409,6 @@ public class TerminalPaneController {
             mDownFrac = null;
         }
 
-        // --- Pill actions ---
-
-        /** Ordered action slots: floats offer dock + close, the scratchpad only close (hide). */
-        private int pillActionCount() {
-            return isScratchpadLeaf(mLeaf) ? 1 : 2;
-        }
-
-        private int pillActionForSlot(int slot) {
-            if (pillActionCount() == 1) return PILL_ACTION_CLOSE;
-            return slot == 0 ? PILL_ACTION_DOCK : PILL_ACTION_CLOSE;
-        }
-
-        /** The pill capsule, collapsed or grown to fit its action slots. */
-        @NonNull private RectF pillRect() {
-            float centerX = getWidth() / 2f;
-            float centerY = dp(FLOAT_HANDLE_DP) / 2f;
-            float width = mPillExpanded
-                ? pillActionCount() * dp(FLOAT_PILL_BUTTON_DP) : dp(FLOAT_PILL_WIDTH_DP);
-            float height = dp(FLOAT_PILL_HEIGHT_DP);
-            return new RectF(centerX - width / 2f, centerY - height / 2f,
-                centerX + width / 2f, centerY + height / 2f);
-        }
-
-        private int pillActionAt(float x, float y) {
-            if (!mPillExpanded) return PILL_ACTION_NONE;
-            RectF pill = pillRect();
-            RectF hit = new RectF(pill);
-            hit.inset(-dp(8), -dp(4));
-            hit.top = 0f; // The whole handle-row height above the pill is fair game.
-            if (!hit.contains(x, y)) return PILL_ACTION_NONE;
-            int slot = (int) ((x - pill.left) / dp(FLOAT_PILL_BUTTON_DP));
-            return pillActionForSlot(Math.max(0, Math.min(pillActionCount() - 1, slot)));
-        }
-
-        private void performPillAction(int action) {
-            collapsePill();
-            if (action == PILL_ACTION_CLOSE) closeFloat(mLeaf);
-            else if (action == PILL_ACTION_DOCK) dockFloat(mLeaf);
-        }
-
-        private void togglePill() {
-            if (mPillExpanded) {
-                collapsePill();
-                return;
-            }
-            mPillExpanded = true;
-            invalidate();
-            removeCallbacks(mCollapsePill);
-            postDelayed(mCollapsePill, 4000);
-        }
-
-        private void collapsePill() {
-            removeCallbacks(mCollapsePill);
-            if (!mPillExpanded && mPressedPillAction == PILL_ACTION_NONE) return;
-            mPillExpanded = false;
-            mPressedPillAction = PILL_ACTION_NONE;
-            invalidate();
-        }
-
         /** The grid's pause for the resize drag under way. */
         @Nullable private GridHold mResizeHold;
 
@@ -5432,19 +5420,18 @@ public class TerminalPaneController {
         }
 
         /**
-         * Resize from the bottom-trailing corner, move from the top-leading one, and the pill in
-         * between keeps its own tap. Everything else on the float is the terminal's.
+         * Resize from the bottom-trailing corner and move from the titlebar, except where a
+         * titlebar button takes the press. Everything below the titlebar is the terminal's.
          */
         private int dragModeAt(float x, float y) {
             float grip = dp(FLOAT_GRIP_DP);
             boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
             if (y >= getHeight() - grip
                 && (rtl ? x <= grip : x >= getWidth() - grip)) return DRAG_RESIZE;
-            if (y <= grip && (rtl ? x >= getWidth() - grip : x <= grip)) return DRAG_MOVE;
-            RectF pill = pillRect();
-            pill.inset(-dp(8), -dp(6));
-            pill.top = 0f;
-            if (pill.contains(x, y)) return DRAG_PILL;
+            if (y < titlebarBandPx()) {
+                return mTitlebar.actionAt(x - mTitlebar.getLeft(), y - mTitlebar.getTop())
+                    == FloatTitlebarPolicy.ACTION_NONE ? DRAG_MOVE : DRAG_NONE;
+            }
             return DRAG_NONE;
         }
 
@@ -5454,78 +5441,8 @@ public class TerminalPaneController {
             int primary = MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(getContext(), R.color.termux_primary));
-            // One step lighter than the float's own slab, so the action strip reads as chrome
-            // sitting on the float rather than as a hole punched through it.
-            int panelHigh = MaterialColors.getColor(getContext(),
-                com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-                ContextCompat.getColor(getContext(), R.color.termux_surface_panel_high));
-            int outlineVariant = MaterialColors.getColor(getContext(),
-                com.termux.shared.R.attr.termuxColorOutlineVariant,
-                ContextCompat.getColor(getContext(), R.color.termux_outline_variant));
             boolean active = mActiveWindow != null && mActiveWindow.active == mLeaf;
-            RectF pill = pillRect();
-            float radius = pill.height() / 2f;
-            int backdropAlpha = pillBackdropAlpha(mPillExpanded, active);
-            if (backdropAlpha > 0) {
-                mChromePaint.setStyle(Paint.Style.FILL);
-                mChromePaint.setColor(ColorUtils.setAlphaComponent(panelHigh, backdropAlpha));
-                canvas.drawRoundRect(pill, radius, radius, mChromePaint);
-                mChromePaint.setStyle(Paint.Style.STROKE);
-                mChromePaint.setStrokeWidth(Math.max(1f, dp(1f)));
-                mChromePaint.setColor(ColorUtils.setAlphaComponent(outlineVariant, 0x66));
-                canvas.drawRoundRect(pill, radius, radius, mChromePaint);
-            }
-            if (mDragMode == DRAG_MOVE) {
-                // The corner under the finger, marked for as long as the finger is on it.
-                mChromeScratch.set(0f, 0f, getWidth(), getHeight());
-                mBracket.draw(canvas, CornerZones.corner(true, true,
-                        getLayoutDirection() == LAYOUT_DIRECTION_RTL), mChromeScratch,
-                    getResources().getDisplayMetrics().density,
-                    CornerBracket.color(getContext()));
-            }
             int chromeAlpha = active ? 200 : 90;
-            mChromePaint.setStyle(Paint.Style.FILL);
-            if (!mPillExpanded) {
-                // With no slab behind it the grip is the whole affordance, so an inactive float's
-                // grip needs a higher floor than the resize chevrons to read on busy output.
-                mChromePaint.setColor(ColorUtils.setAlphaComponent(primary,
-                    Math.max(chromeAlpha, 120)));
-                mChromeScratch.set(pill.centerX() - dp(14), pill.centerY() - dp(1.8f),
-                    pill.centerX() + dp(14), pill.centerY() + dp(1.8f));
-                canvas.drawRoundRect(mChromeScratch, dp(1.8f), dp(1.8f), mChromePaint);
-            } else {
-                mChromePaint.setStyle(Paint.Style.STROKE);
-                mChromePaint.setStrokeWidth(dp(1.5f));
-                mChromePaint.setStrokeCap(Paint.Cap.ROUND);
-                int slots = pillActionCount();
-                for (int slot = 0; slot < slots; slot++) {
-                    int action = pillActionForSlot(slot);
-                    int alpha = mPressedPillAction == action ? 255 : Math.max(chromeAlpha, 150);
-                    mChromePaint.setColor(ColorUtils.setAlphaComponent(primary, alpha));
-                    float slotCenterX = pill.left + (slot + 0.5f) * dp(FLOAT_PILL_BUTTON_DP);
-                    float slotCenterY = pill.centerY();
-                    if (action == PILL_ACTION_CLOSE) {
-                        canvas.drawLine(slotCenterX - dp(4), slotCenterY - dp(4),
-                            slotCenterX + dp(4), slotCenterY + dp(4), mChromePaint);
-                        canvas.drawLine(slotCenterX + dp(4), slotCenterY - dp(4),
-                            slotCenterX - dp(4), slotCenterY + dp(4), mChromePaint);
-                    } else {
-                        // Dock-back-to-tiling: a small window split down the middle.
-                        mChromeScratch.set(slotCenterX - dp(6), slotCenterY - dp(4.5f),
-                            slotCenterX + dp(6), slotCenterY + dp(4.5f));
-                        canvas.drawRoundRect(mChromeScratch, dp(1.5f), dp(1.5f), mChromePaint);
-                        canvas.drawLine(slotCenterX, mChromeScratch.top, slotCenterX,
-                            mChromeScratch.bottom, mChromePaint);
-                    }
-                }
-                if (slots > 1) {
-                    mChromePaint.setColor(ColorUtils.setAlphaComponent(primary, 60));
-                    float dividerX = pill.left + dp(FLOAT_PILL_BUTTON_DP);
-                    canvas.drawLine(dividerX, pill.top + dp(4), dividerX, pill.bottom - dp(4),
-                        mChromePaint);
-                }
-                mChromePaint.setStyle(Paint.Style.FILL);
-            }
             mChromePaint.setStyle(Paint.Style.STROKE);
             mChromePaint.setStrokeWidth(dp(1.5f));
             mChromePaint.setStrokeCap(Paint.Cap.ROUND);
@@ -5538,15 +5455,9 @@ public class TerminalPaneController {
         }
     }
 
-    /**
-     * Alpha of the slab drawn behind the floating pane's grab pill. Zero while collapsed: there is
-     * nothing to read against but the grip itself, and a filled capsule at that size looks like a
-     * black border across the top of the float. Expanded, the close and dock glyphs do need a
-     * surface, and an inactive float's is a touch more transparent so focus stays legible.
-     */
-    static int pillBackdropAlpha(boolean expanded, boolean activeFloat) {
-        if (!expanded) return 0;
-        return activeFloat ? 0xF0 : 0xD0;
+    /** The band a float's titlebar claims above its pane: the strip and the air under it. */
+    private int titlebarBandPx() {
+        return dp(FloatTitlebarPolicy.HEIGHT_DP + FloatTitlebarPolicy.GAP_DP);
     }
 
     // --- Tree helpers ---

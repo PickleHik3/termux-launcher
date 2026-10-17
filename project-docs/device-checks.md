@@ -109,6 +109,22 @@ under twenty items; past that, the oldest are re-judged first.
   Paused), its summary wrapping rather than clipping, and dims with the switch off · emulator,
   `font_scale 1.3`, force-stop after the change.
 
+### Wall rework #79 titlebar
+- 2026-10-17 · commit "feat(panes): a glass titlebar on every float" · Float a pane (Ctrl+Alt+F):
+  drag its titlebar and the pane follows; Maximise fills the window and the button reads Restore
+  size, a second tap puts it back where it was; Dock tiles it back; Close ends its shell. The
+  resize corner still works · emulator, then pong.
+- 2026-10-17 · commit "feat(panes): a glass titlebar on every float" · The scratchpad
+  (Ctrl+Alt+`) shows Minimise, which hides it with its shell alive (the toggle brings the same
+  shell back); a window's floating pane shows no Minimise · emulator.
+- 2026-10-17 · commit "feat(panes): a glass titlebar on every float" · The strip's glass matches
+  the pane under it under Docked and Floating Style, with glass on and off: same frost, tint and
+  corners, the wallpaper staying put under the strip while the float is dragged, and the focused
+  float's strip wearing the active rim · emulator screenshots, then pong.
+- 2026-10-17 · commit "feat(panes): a glass titlebar on every float" · A tap just under the strip
+  lands on the pane's first row (no move starts), and a hold-and-drag on that row still reaches
+  the program · emulator.
+
 ## Developer
 
 - 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" · With the switch

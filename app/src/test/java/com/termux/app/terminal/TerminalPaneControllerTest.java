@@ -1260,6 +1260,64 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void titlebarMaximise_fillsTheHostThenRestoresTheShapeItHad() {
+        PaneFixture fixture = fourPaneFixture();
+        fixture.controller.toggleFloatActivePane();
+        TerminalPaneController.Leaf leaf = fixture.window.floating.get(0);
+        leaf.floatFrac = new RectF(.2f, .3f, .7f, .8f);
+        leaf.appliedFloatFrac = null;
+
+        fixture.controller.toggleFloatMaximised(leaf);
+        assertEquals(new RectF(0f, 0f, 1f, 1f), leaf.floatFrac);
+        assertEquals(new RectF(.2f, .3f, .7f, .8f), leaf.floatRestoreFrac);
+        // Still a float: maximising a float is not docking it.
+        assertTrue(fixture.controller.isActivePaneFloating());
+
+        leaf.appliedFloatFrac = null;
+        fixture.controller.toggleFloatMaximised(leaf);
+        assertEquals(new RectF(.2f, .3f, .7f, .8f), leaf.floatFrac);
+        assertNull(leaf.floatRestoreFrac);
+    }
+
+    @Test
+    public void titlebarMaximise_isForgottenWhenThePaneDocks() {
+        PaneFixture fixture = fourPaneFixture();
+        fixture.controller.toggleFloatActivePane();
+        TerminalPaneController.Leaf leaf = fixture.window.floating.get(0);
+        fixture.controller.toggleFloatMaximised(leaf);
+        assertTrue(leaf.floatRestoreFrac != null);
+
+        assertEquals(TerminalPaneController.FLOAT_TOGGLE_DOCKED,
+            fixture.controller.toggleFloatActivePane());
+        assertNull(leaf.floatRestoreFrac);
+        assertEquals(TerminalPaneController.FLOAT_TOGGLE_FLOATED,
+            fixture.controller.toggleFloatActivePane());
+        assertNull(fixture.window.floating.get(0).floatRestoreFrac);
+    }
+
+    @Test
+    public void savedWindow_keepsAMaximisedFloatsRestoreShape() {
+        PaneFixture fixture = fourPaneFixture();
+        fixture.controller.toggleFloatActivePane();
+        TerminalPaneController.Leaf leaf = fixture.window.floating.get(0);
+        leaf.floatFrac = new RectF(.1f, .2f, .6f, .7f);
+        leaf.appliedFloatFrac = null;
+        fixture.controller.toggleFloatMaximised(leaf);
+
+        Bundle saved = fixture.controller.saveWindow(fixture.window);
+        Map<String, TerminalSession> sessions = new HashMap<>();
+        for (TerminalSession session : fixture.sessions) sessions.put(session.mHandle, session);
+        TerminalPaneController.Window restored = newController().restoreWindow(saved, sessions);
+
+        TerminalPaneController.Leaf floating = restored.floating.get(0);
+        assertEquals(1f, floating.floatFrac.width(), .001f);
+        assertEquals(.1f, floating.floatRestoreFrac.left, .001f);
+        assertEquals(.2f, floating.floatRestoreFrac.top, .001f);
+        assertEquals(.5f, floating.floatRestoreFrac.width(), .001f);
+        assertEquals(.5f, floating.floatRestoreFrac.height(), .001f);
+    }
+
+    @Test
     public void savedWindow_roundTripsFloatingPanesAndTheirBounds() {
         PaneFixture fixture = fourPaneFixture();
         assertEquals(TerminalPaneController.FLOAT_TOGGLE_FLOATED,
@@ -1398,18 +1456,6 @@ public class TerminalPaneControllerTest {
         int before = fixture.controller.shellsOf(fixture.window).size();
         assertTrue(fixture.controller.split(LinearLayout.HORIZONTAL));
         assertEquals(before + 1, fixture.controller.shellsOf(fixture.window).size());
-    }
-
-    @Test
-    public void pillBackdrop_isDrawnOnlyForTheExpandedActionStrip() {
-        // A collapsed pill drew an opaque 48x18dp slab of surface panel across the top of the
-        // float, which read as a black border. The grip alone is the affordance there.
-        assertEquals(0, TerminalPaneController.pillBackdropAlpha(false, true));
-        assertEquals(0, TerminalPaneController.pillBackdropAlpha(false, false));
-        assertTrue(TerminalPaneController.pillBackdropAlpha(true, true) > 0);
-        assertTrue(TerminalPaneController.pillBackdropAlpha(true, false) > 0);
-        assertTrue(TerminalPaneController.pillBackdropAlpha(true, true)
-            >= TerminalPaneController.pillBackdropAlpha(true, false));
     }
 
     @Test
