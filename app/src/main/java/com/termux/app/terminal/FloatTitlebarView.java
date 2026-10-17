@@ -16,6 +16,8 @@ import android.widget.ImageButton;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
@@ -33,14 +35,21 @@ import com.termux.app.chrome.OnGlass;
  * {@link PaneShape#radiusForBounds}, the rule every slab follows, and it wears the rim its pane
  * wears ({@link #applyRim}), so a focused float's strip carries the active rim with it.
  *
- * <p>The strip's own touch is the drag handle, which the float's container owns: this view only
- * answers {@link #actionAt} so the container knows when a press belongs to a button instead.
+ * <p>The strip's own touch is the drag handle, which the float's container owns: a drag moves the
+ * float and a long press opens the handle's menu. This view only answers {@link #actionAt} so the
+ * container knows when a press belongs to a button instead.
  */
 public final class FloatTitlebarView extends FrameLayout {
 
-    /** What the float does when a titlebar button is tapped. */
+    /** What the float does when a titlebar button is tapped, or its handle's menu is asked for. */
     public interface Listener {
         void onTitlebarAction(int action);
+
+        /**
+         * The handle's menu was asked for without a touch: TalkBack's long press on the strip. A
+         * finger's long press on the handle is the float's container's, which owns the strip's touch.
+         */
+        default void onHandleMenu() {}
     }
 
     private final PaneGlassBackdropView mGlass;
@@ -79,6 +88,15 @@ public final class FloatTitlebarView extends FrameLayout {
             mButtons[i] = button;
             addView(button, new LayoutParams(0, 0));
         }
+        // TalkBack reaches the handle as the strip itself: "Move window", long press for its menu.
+        setContentDescription(context.getString(R.string.titlebar_handle_description));
+        setOnLongClickListener(v -> {
+            listener.onHandleMenu();
+            return true;
+        });
+        ViewCompat.replaceAccessibilityAction(this,
+            AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_LONG_CLICK,
+            context.getString(R.string.titlebar_handle_menu_action), null);
         setClipToOutline(true);
         setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
@@ -239,11 +257,6 @@ public final class FloatTitlebarView extends FrameLayout {
                     button.setContentDescription(getContext().getString(mMaximised
                         ? R.string.titlebar_restore_description
                         : R.string.titlebar_maximise_description));
-                    break;
-                case FloatTitlebarPolicy.ACTION_DOCK:
-                    button.setImageResource(R.drawable.ic_titlebar_dock);
-                    button.setContentDescription(getContext().getString(
-                        R.string.titlebar_dock_description));
                     break;
                 default:
                     button.setImageResource(R.drawable.ic_titlebar_close);

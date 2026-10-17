@@ -3191,8 +3191,11 @@
     <string name="titlebar_minimise_description">Minimise</string>
     <string name="titlebar_maximise_description">Maximise</string>
     <string name="titlebar_restore_description">Restore size</string>
-    <string name="titlebar_dock_description">Dock</string>
     <string name="titlebar_close_description">Close</string>
+    <!-- The titlebar's drag handle, read by TalkBack, and the menu a long press on it opens. -->
+    <string name="titlebar_handle_description">Move window</string>
+    <string name="titlebar_handle_menu_action">Window menu</string>
+    <string name="titlebar_menu_dock">Dock</string>
 
     <!-- Always on (the Home keyboard): the one-line notice when the grid gives the keyboard its rows. -->
     <string name="home_always_on_nothing_moved">Keyboard always on: nothing on Home moved</string>

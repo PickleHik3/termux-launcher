@@ -11,7 +11,9 @@ import androidx.annotation.Nullable;
  *
  * <p>The titlebar is the one floating-pane design (docs/GLOSSARY.md, "Titlebar"): a strip along
  * the float's top carrying the drag handle and the buttons. The host declares which buttons it
- * offers by whether it has somewhere for Minimise to go; Maximise, Dock and Close are always there.
+ * offers by whether it has somewhere for Minimise to go; Maximise and Close are always there. Dock
+ * is not on the strip: it is in the menu a long press on the handle opens ({@link #handleMenu}),
+ * so no glyph on the strip reads as Split.
  */
 public final class FloatTitlebarPolicy {
 
@@ -33,15 +35,25 @@ public final class FloatTitlebarPolicy {
     public static final int GRIP_WIDTH_DP = 28;
 
     /**
-     * The buttons a titlebar shows, leading to trailing, Close at the trailing end as on every
-     * desktop. Minimise is listed only when the host has a target for it: the scratchpad hides,
-     * a window's floating pane has nowhere to go yet.
+     * The buttons a titlebar shows, leading to trailing, all at the trailing end with Close
+     * outermost as on every desktop. Minimise is listed only when the host has a target for it:
+     * a Home float goes into its chip, the scratchpad hides, a window's floating pane has nowhere
+     * to go yet.
      */
     @NonNull
     public static int[] buttons(boolean hasMinimiseTarget) {
         return hasMinimiseTarget
-            ? new int[]{ACTION_DOCK, ACTION_MINIMISE, ACTION_MAXIMISE, ACTION_CLOSE}
-            : new int[]{ACTION_DOCK, ACTION_MAXIMISE, ACTION_CLOSE};
+            ? new int[]{ACTION_MINIMISE, ACTION_MAXIMISE, ACTION_CLOSE}
+            : new int[]{ACTION_MAXIMISE, ACTION_CLOSE};
+    }
+
+    /**
+     * The rows of the menu a long press on the drag handle opens, top to bottom, under the
+     * window's name. Dock is the only row in phase one, on every float.
+     */
+    @NonNull
+    public static int[] handleMenu() {
+        return new int[]{ACTION_DOCK};
     }
 
     /**
