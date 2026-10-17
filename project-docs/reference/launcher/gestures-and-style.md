@@ -113,9 +113,13 @@ compact for the landing. The compact and open forms are the Workspace's.
 
 ## Style
 
-How the Workspace's chrome is shaped as a whole: **Docked** or **Floating**; Style, Corners and
-Margin do not apply to Home. It covers the status bar, the
-dock's elements, the keyboard and the pane's opening, and one shape decides the fill, the
+How the chrome is shaped as a whole: **Docked** or **Floating**. Style, Corners and Margin are
+Home's own on Home (seeded from the Workspace's: an unset Home value reads the Workspace's, and the
+first edit made over a Home page sets it apart); Minimal mode stays Workspace-only. The Appearance
+editor edits the half it is opened over, its Corners and Margin labelled "· Home" on Home. On a
+window Style covers the status bar, the dock's elements, the keyboard and the pane's opening; on
+Home the dock's rows, the keyboard, the compact status bar and the Home floats' corners. One
+shape decides the fill, the
 selection outline and the lifted copy in the Layout editor. In **Floating** each piece is a
 rounded card with air around it: the status bar is always its own card, apps, A–Z index and extra
 keys that stand next to each other on one edge share one card, and the keyboard is its own card;

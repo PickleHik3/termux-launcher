@@ -14,6 +14,12 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    Status 2026-10-18: merged at 1458207d8 + d3f2fa8e7 (StatusBarFormPolicy, fold motion, gesture,
    view); seen on the emulator; ink fix and the Minimal-mode bar owed.
 2. **Style, Corners and Margin on Home** as Home's own settings (today global).
+   Status 2026-10-18: built on a worker branch (keys `home_layout_style`,
+   `home_surface_corner_radius`, `home_surface_side_gap`, seeded from the Workspace's while unset;
+   `HomeChromePolicy.wearsHomeShape`; the chrome's reads follow the committed page and a settle
+   across halves that differ redresses; the Appearance editor edits the half it stands over). Unit
+   tests green; emulator pass owed. Home floats keep no Margin from their room's edges (they never
+   had one), so Margin reaches them only through the dock and status bar they stand between.
 3. **Parallax between Home pages and windows** (the wallpaper pans with the wall).
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.
 5. **Window reorder** by drag in the window bar; consume/expel of panes into and out of columns.
