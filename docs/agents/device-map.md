@@ -100,7 +100,8 @@ ad -s emu runas com.termux 'launcherctl pane list'
 ## The wall rework (feat/wall-rework, 2026-10-18)
 
 - Home's palette gesture: `ad swipe 540 1700 540 900 700` (an up swipe on the page's free area).
-  A Home float opens from `ad long 540 1000` then the Terminal row (about 414,1058); on a
+  A Home float opens from `ad long 540 1000` (a free cell) then the Terminal row of the Home actions
+  sheet that slides up (`ad tap Terminal`; the sheet's rows are real nodes, unlike the old menu); on a
   full-size float Close is about 1006,283 and Minimise about 796,283.
 - The Terminal entry's menu is a long press at 76,2190 on the dock (New float here / New window).
   The dock's edit sheet is a long press at 540,2180; the Terminal entry is under MOST USED there.

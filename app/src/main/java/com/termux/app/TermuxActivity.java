@@ -23774,6 +23774,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ensureStatsController().start(
                 statsInterval(cardShowing ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS),
                 cardShowing);
+            // The sampler pauses while nothing shows its numbers (StatsPollCadence).
+            View barHost = findViewById(R.id.terminal_window_bar_host);
+            mStatsController.setConsumerVisible(cardShowing
+                || (barHost != null && barHost.getVisibility() == View.VISIBLE));
         } else if (mStatsController != null) {
             mStatsController.stop();
         }
