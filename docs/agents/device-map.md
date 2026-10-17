@@ -135,3 +135,15 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - In the Home widget edit frame the X at 77,212 removes the widget; it does not exit edit mode.
 - `ad home` while a window is showing stays on that window on the emulator's first press; press
   twice to reach Home page 1. Display Stop lands on the terminal window, not Home.
+- A release build for the emulator: `scripts/dev-install.sh` keeps arm64 libs only and is for pong.
+  For the emulator zipalign the universal release APK and sign it with
+  `app/testkey_untrusted.jks` (alias `alias`, the password in dev-install.sh), then
+  `adb install -r --no-incremental`; the unsigned APK fails with INSTALL_PARSE_FAILED_NO_CERTIFICATES.
+- Popup menus (the dock's long-press menus, the float handle menu) are not in `ad ui`; read the
+  screenshot and tap by coordinates. From the Terminal pin's menu, New float here is about 190,1746.
+- `ad long` is `input swipe x y x y 800`. Before 31803120e that still press on a dock pin ran
+  Unpin (the gesture took the screen corner as its origin); a pin that vanishes on a long press is
+  that bug, not the store.
+- A blind end-user review: `ad codex "<goal>" -c model_reasoning_effort=medium`, one area per run
+  (Home, Workspace, floats, Settings), 6–35 min each; the goal text and answers of the 2026-10-18
+  run are in the session scratchpad `codex-review/` and under ~/reports/wall-rework-2026-10-18/blind/.
