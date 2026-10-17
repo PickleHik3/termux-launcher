@@ -3208,12 +3208,13 @@
     <string name="titlebar_handle_menu_action">Window menu</string>
     <string name="titlebar_menu_dock">Dock</string>
 
-    <!-- Always on (the Home keyboard): the one-line notice when the grid gives the keyboard its rows. -->
-    <string name="home_always_on_nothing_moved">Keyboard always on: nothing on Home moved</string>
-    <string name="home_always_on_no_rows">Keyboard always on: the grid has no rows to give</string>
+    <!-- Always on (the Home keyboard): the notice when the grid gives the keyboard its rows. Keep
+         each short enough for one line of the notice on a 360dp phone. -->
+    <string name="home_always_on_nothing_moved">Keyboard always on. Nothing moved.</string>
+    <string name="home_always_on_no_rows">Keyboard always on. No room on Home.</string>
     <plurals name="home_always_on_moved">
-        <item quantity="one">Keyboard always on: %1$d widget moved (%2$d shrunk, %3$d to another page)</item>
-        <item quantity="other">Keyboard always on: %1$d widgets moved (%2$d shrunk, %3$d to another page)</item>
+        <item quantity="one">Keyboard always on. %1$d widget moved.</item>
+        <item quantity="other">Keyboard always on. %1$d widgets moved.</item>
     </plurals>
 
     <!-- On-device AI: the diagnostics share row. -->
