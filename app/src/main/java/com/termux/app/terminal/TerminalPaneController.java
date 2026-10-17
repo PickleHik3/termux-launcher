@@ -2837,8 +2837,14 @@ public class TerminalPaneController {
         int viewTop = container.getTop() + topWithin(view, container);
         int[] onScreen = new int[2];
         layer.getLocationOnScreen(onScreen);
-        return KeyboardOverlayPolicy.floatLiftPx(true, Math.round(viewTop + rowBottom),
+        int wanted = KeyboardOverlayPolicy.floatLiftPx(true, Math.round(viewTop + rowBottom),
             mHomeKeyboardTopOnScreenPx - onScreen[1]);
+        // Never past the room's top: lifted by its cursor row alone, a full-size float with its
+        // prompt on the last row took its titlebar under the status bar, out of reach. The top
+        // is where the float is placed, not where the last pass left it.
+        int floatTop = container.getLayoutParams() instanceof FrameLayout.LayoutParams
+            ? ((FrameLayout.LayoutParams) container.getLayoutParams()).topMargin : container.getTop();
+        return HomeFloatPolicy.liftPx(wanted, floatTop, homeFloatRoom().top);
     }
 
     /** {@code view}'s laid-out top inside {@code ancestor}, translations left out. */

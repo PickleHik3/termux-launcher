@@ -22,12 +22,14 @@ import com.termux.app.place.KeyboardOverlayPolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.Slot;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.Shadows;
@@ -323,6 +325,110 @@ public class HomeFloatTest {
     }
 
     @Test
+    public void aFullSizeFloatsTitlebarStaysInTheRoomWhenItsCursorRowIsUnderTheKeyboard() {
+        // The emulator check: a full screen of shell output put the cursor on the last row, the
+        // keyboard came up, and the lift raised the whole float by the cursor row's overshoot,
+        // titlebar and all, under the status bar, where none of its buttons could be reached.
+        TerminalSession shell = terminal();
+        TerminalPaneController.Window window = mController.openHomeFloat(shell, 0);
+        View container = containerOf(window);
+        layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
+        TerminalView view = mController.getViewForSession(shell);
+        assertNotNull(view);
+        // The test's shell has no process and its view no client: a held grid keeps the new text
+        // size from sizing the shell, and the emulator is the test's.
+        mController.beginHostSurfaceResize();
+        view.setTextSize(20);
+        int rows = Math.max(2, (int) (view.getHeight() / view.getTerminalCellHeightPixels()));
+        view.mEmulator = new TerminalEmulator(new SilentOutput(), false, 40, rows, 10,
+            (int) view.getTerminalCellHeightPixels(), 100, null);
+        byte[] toLastRow = ("\033[" + rows + ";1H").getBytes();
+        view.mEmulator.append(toLastRow, toLastRow.length);
+        assertEquals(rows - 1, view.mEmulator.getCursorRow());
+
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 500);
+        assertTrue("the titlebar's top stays at or below the room's top",
+            container.getTop() + container.getTranslationY() >= ROOM_TOP);
+        FloatTitlebarView titlebar = titlebarOf(container);
+        assertNotNull(titlebar);
+        assertEquals("the titlebar is the float's top strip", 0, titlebar.getTop());
+    }
+
+    @Test
+    public void aFloatLowInTheRoomRisesOnlyAsFarAsTheRoomsTop() {
+        assertEquals(0, HomeFloatPolicy.liftPx(0, 300, 80));
+        assertEquals("the keyboard's ask, while there is room above", 120,
+            HomeFloatPolicy.liftPx(120, 300, 80));
+        assertEquals("capped at the room's top", 220, HomeFloatPolicy.liftPx(500, 300, 80));
+        assertEquals("a float at the room's top stays put", 0, HomeFloatPolicy.liftPx(95, 80, 80));
+        assertEquals("never lowered", 0, HomeFloatPolicy.liftPx(95, 40, 80));
+    }
+
+    @Test
+    public void aFloatOpenedBeforeTheBarKeepsItsTitlebarInTheRoomWhenTheBarTakesItsRoom() {
+        // The layer in a real window, so it has a place on screen: the bar arriving moves it down.
+        android.app.Activity activity =
+            Robolectric.buildActivity(android.app.Activity.class).setup().get();
+        FrameLayout column = new FrameLayout(activity);
+        activity.setContentView(column);
+        column.addView(mLayer, new FrameLayout.LayoutParams(LAYER_WIDTH, LAYER_HEIGHT));
+        idle();
+        int[] at = new int[2];
+        column.getLocationOnScreen(at);
+        final int columnTop = at[1];
+        final int dockTop = columnTop + DOCK_TOP;
+
+        // No bar on Home yet: the room starts at the layer's top.
+        mController.setHomeFloatObstructions(columnTop, dockTop, -1);
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        View container = containerOf(window);
+        idle();
+        assertTitlebarAtLeast(container, columnTop);
+
+        // The first float brings the bar onto Home: it takes its height at the top of the content
+        // column, so the layer moves down and gets shorter. The layout lands before the
+        // obstructions are synced again.
+        final int bar = 84;
+        FrameLayout.LayoutParams moved =
+            new FrameLayout.LayoutParams(LAYER_WIDTH, LAYER_HEIGHT - bar);
+        moved.topMargin = bar;
+        mLayer.setLayoutParams(moved);
+        idle();
+        assertTitlebarAtLeast(container, columnTop + bar);
+        mController.setHomeFloatObstructions(columnTop + bar, dockTop, -1);
+        idle();
+        assertTitlebarAtLeast(container, columnTop + bar);
+        assertEquals("still full-size: the bar's bottom to the dock's top",
+            DOCK_TOP - bar, container.getHeight());
+
+        // The keyboard comes up: the float may not rise past the bar either.
+        mController.setHomeFloatObstructions(columnTop + bar, dockTop, columnTop + 400);
+        assertTitlebarAtLeast(container, columnTop + bar);
+
+        // The bar leaves with the keyboard down: the float grows back to the column's top.
+        mController.setHomeFloatObstructions(columnTop, dockTop, -1);
+        mLayer.setLayoutParams(new FrameLayout.LayoutParams(LAYER_WIDTH, LAYER_HEIGHT));
+        idle();
+        assertTitlebarAtLeast(container, columnTop);
+        assertEquals(DOCK_TOP, container.getHeight());
+    }
+
+    /** The float's strip, its top edge, starts at or below {@code roomTopOnScreen}. */
+    private static void assertTitlebarAtLeast(@NonNull View container, int roomTopOnScreen) {
+        int[] at = new int[2];
+        container.getLocationOnScreen(at);
+        FloatTitlebarView titlebar = titlebarOf(container);
+        assertNotNull(titlebar);
+        assertEquals("the titlebar is the float's top strip", 0, titlebar.getTop());
+        assertTrue("strip top " + at[1] + " at or under the room's top " + roomTopOnScreen,
+            at[1] >= roomTopOnScreen);
+    }
+
+    private static void idle() {
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+    }
+
+    @Test
     public void homeHasTheStatusBarExactlyWhileFloatsExist() {
         PaneWallPage home = PaneWallPage.WIDGETS;
         assertFalse(HomeChromePolicy.statusShownAtRest(home, false));
@@ -433,6 +539,15 @@ public class HomeFloatTest {
             floatedOntoHome = window;
             return takesFloatedWindows;
         }
+    }
+
+    private static final class SilentOutput extends com.termux.terminal.TerminalOutput {
+        @Override public void write(byte[] data, int offset, int count) {}
+        @Override public void titleChanged(String oldTitle, String newTitle) {}
+        @Override public void onCopyTextToClipboard(String text) {}
+        @Override public void onPasteTextFromClipboard() {}
+        @Override public void onBell() {}
+        @Override public void onColorsChanged() {}
     }
 
     @NonNull
