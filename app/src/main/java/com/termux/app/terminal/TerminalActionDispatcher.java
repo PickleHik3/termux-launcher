@@ -758,7 +758,10 @@ public final class TerminalActionDispatcher {
                             "No window could be opened: there is no active terminal session, the"
                                 + " terminal limit is reached, or the window could never be given a size");
                     }
-                    AgentPaneRegistry.getInstance().register(opened.mHandle, "", command);
+                    // Tagged like pane.open's, so pane.list finds the window's pane again (a
+                    // Terminal=true Linux app's second tap).
+                    AgentPaneRegistry.getInstance().register(opened.mHandle,
+                        arguments.optString("tag", "").trim(), command);
                     int columns = 0, rows = 0;
                     if (opened.getEmulator() != null) {
                         columns = opened.getEmulator().mColumns;
