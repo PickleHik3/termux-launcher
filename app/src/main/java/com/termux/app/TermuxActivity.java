@@ -541,6 +541,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int current;
         @Nullable String name;
         com.termux.app.terminal.TerminalPaneController.Window currentWindow() { return windows.get(current); }
+
+        /** A move that takes a window out of the row; false when it refused. */
+        interface Move { boolean run(); }
+        /** {@link #takeOutFor}'s answer when the window is not in the row or the move refused. */
+        static final int REFUSED = Integer.MIN_VALUE;
+
+        /**
+         * Takes {@code w} out of the row for {@code move} (it floating onto Home). Returns the
+         * index the row shows afterwards, -1 when the row is empty, or {@link #REFUSED} with the
+         * row as it was. The selection is settled before the move runs: the move announces the
+         * change, and what hears it (the drawer's rebuild) reads this row's current window.
+         */
+        int takeOutFor(com.termux.app.terminal.TerminalPaneController.Window w, Move move) {
+            int removed = windows.indexOf(w);
+            if (removed < 0) return REFUSED;
+            int oldIndex = current;
+            windows.remove(removed);
+            int next = com.termux.app.terminal.WindowCloseFocus.afterRemoval(oldIndex, removed,
+                windows.size());
+            current = Math.max(0, next);
+            if (!move.run()) {
+                windows.add(removed, w);
+                current = oldIndex;
+                return REFUSED;
+            }
+            return next;
+        }
+
+        /** A docked Home float joins the row right after the current window and becomes it. */
+        int dockAfterCurrent(com.termux.app.terminal.TerminalPaneController.Window w) {
+            int at = com.termux.app.wall.WallRow.insertionIndex(current, windows.size());
+            windows.add(at, w);
+            current = at;
+            return at;
+        }
     }
     /** All sessions the drawer lists. Each owns one or more windows. */
     private final java.util.List<WSession> mWSessions = new java.util.ArrayList<>();
@@ -24728,10 +24763,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mWSessions.add(ws);
             mCurrentWSession = ws;
         } else {
-            int at = com.termux.app.wall.WallRow.insertionIndex(mCurrentWSession.current,
-                mCurrentWSession.windows.size());
-            mCurrentWSession.windows.add(at, window);
-            mCurrentWSession.current = at;
+            mCurrentWSession.dockAfterCurrent(window);
         }
         mPaneController.showWindow(window);
         rebuildDrawerSessions();
@@ -24752,24 +24784,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         WSession ws = wsessionOwning(window);
         if (ws == null || mPaneController.homeFloatLayer() == null) return false;
         int page = mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
-        int removed = ws.windows.indexOf(window);
-        int oldIndex = ws.current;
-        ws.windows.remove(window);
-        if (!mPaneController.floatWindowOntoHome(window, page)) {
-            ws.windows.add(removed, window);
-            return false;
-        }
-        int next = com.termux.app.terminal.WindowCloseFocus.afterRemoval(oldIndex, removed,
-            ws.windows.size());
+        int next = ws.takeOutFor(window, () -> mPaneController.floatWindowOntoHome(window, page));
+        if (next == WSession.REFUSED) return false;
         if (next < 0) {
             mWSessions.remove(ws);
             if (ws == mCurrentWSession) {
                 mCurrentWSession = null;
                 showNextSessionAfterClose();
             }
-        } else {
-            ws.current = next;
-            if (ws == mCurrentWSession) mPaneController.showWindow(ws.currentWindow());
+        } else if (ws == mCurrentWSession) {
+            mPaneController.showWindow(ws.currentWindow());
         }
         if (mWidgetPaneController != null && mWidgetPaneController.homePageIndex() != page)
             mWidgetPaneController.showHomePage(page);
