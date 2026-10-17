@@ -145,10 +145,16 @@ badge in the status bar, the **Sessions** key on the extra-keys row, **Sessions*
 sessions** in the palette, or `Ctrl+Alt+Shift+S`.
 
 - The **Live** tab lists sessions with their window and pane counts. Tap a session to switch to
-  it; tap **›** to list its windows and tap one to go there.
+  it; tap **›** to list its windows and tap one to go there. A Home float is marked **Float**, with
+  its Home page when there is one ("Float · page 2"); tapping it pages Home there and brings the
+  float to front.
+- While a display is running, **Displays** follows the sessions: one row per display, with the
+  app windows open on it listed underneath. Tap the display to go to it, or an app window to raise
+  it.
 - Tap **⋯** on a session for **Clone with CWD**, **Rename** and **End** ("End this session?",
   **End** or **Keep**).
 - Tap **+** for a new session; hold **+** for a named one.
+- **Home** at the bottom of either tab goes to the first Home page.
 
 `Ctrl+Alt+Up` / `Ctrl+Alt+Down` step through sessions, `Ctrl+Alt+Shift+1` to `9` jump to one, and
 `Ctrl+Alt+Shift+R` renames the current one. The palette also lists every session twice, once to

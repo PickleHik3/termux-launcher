@@ -2516,6 +2516,14 @@
     <string name="sessions_drawer_close_question">End this session?</string>
     <string name="sessions_drawer_add_to_current">Add to current</string>
     <string name="sessions_drawer_save_workspace">Save sessions…</string>
+    <string name="sessions_drawer_home">Home</string>
+    <string name="sessions_drawer_displays">Displays</string>
+    <string name="sessions_drawer_float">Float</string>
+    <string name="sessions_drawer_float_page">Float · page %1$d</string>
+    <plurals name="sessions_drawer_toplevel_count">
+        <item quantity="one">%1$d app window</item>
+        <item quantity="other">%1$d app windows</item>
+    </plurals>
     <string name="sessions_drawer_run_commands">Also start what was running</string>
     <string name="sessions_drawer_session_name">Session name</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
