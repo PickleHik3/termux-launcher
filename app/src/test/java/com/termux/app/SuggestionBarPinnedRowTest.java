@@ -173,6 +173,28 @@ public class SuggestionBarPinnedRowTest {
         assertEquals(beta.appRef.stableId(), ((PinnedAppItem) left.get(1)).appRef.stableId());
     }
 
+    @Test public void theCatalogueLoadNeverPrunesTheLauncherEntries() throws Exception {
+        PinnedAppItem terminal = new PinnedAppItem(LauncherEntries.terminal());
+        PinnedAppItem gone = new PinnedAppItem(new AppRef("com.example.gone", "com.example.gone.Main"));
+        LauncherConfigRepository store = new LauncherConfigRepository(new Store());
+        store.savePinnedItems(new ArrayList<PinnedItem>(java.util.Arrays.asList(terminal, gone)));
+        bar.setConfigRepository(store);
+        // A catalogue that holds one installed app and has not resolved the entries (an upgrade's
+        // package-change reload): the made-up app is pruned, the Terminal entry stays.
+        ReflectionHelpers.setField(bar, "allApps", new ArrayList<>(Collections.singletonList(
+            new com.termux.app.launcher.model.LauncherAppEntry(
+                new AppRef("com.example.alpha", "com.example.alpha.Main"), "Alpha", null))));
+
+        java.lang.reflect.Method prune =
+            SuggestionBarView.class.getDeclaredMethod("pruneUnavailablePinnedItems");
+        prune.setAccessible(true);
+        prune.invoke(bar);
+
+        List<PinnedItem> left = store.loadPinnedItems();
+        assertEquals(1, left.size());
+        assertEquals(terminal.appRef.stableId(), ((PinnedAppItem) left.get(0)).appRef.stableId());
+    }
+
     @Test public void aPinIsFoundByWhatItIsNotWhereItSat() {
         PinnedAppItem terminal = new PinnedAppItem(LauncherEntries.terminal());
         PinnedAppItem alpha = new PinnedAppItem(new AppRef("com.example.alpha", "com.example.alpha.Main"));

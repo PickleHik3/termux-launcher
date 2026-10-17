@@ -971,10 +971,10 @@ public final class SessionsDrawerView extends LinearLayout
         view.setGravity(Gravity.CENTER);
         view.setMinWidth(0);
         view.setPaddingRelative(dp(12), 0, dp(12), 0);
-        // A segment carries one word in a space the font scale can halve, so it shrinks its text
-        // rather than clipping it.
-        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
-            view, 9, Math.round(ACTION_SP), 1, TypedValue.COMPLEX_UNIT_SP);
+        // The two tabs take their labels' width: about 180dp of the drawer's 350dp at font scale
+        // 1.0 and 220dp at 1.3, so neither label is ever cut. (Autosize with a wrapped width
+        // measured the label at its smallest size and ellipsized it.)
+        view.setEllipsize(null);
         view.setOnClickListener(ignored -> setTab(tab));
         return view;
     }

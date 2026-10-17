@@ -1653,6 +1653,12 @@ public final class SuggestionBarView extends GridLayout
         for (PinnedItem item : pinnedItems) {
             if (item instanceof PinnedAppItem) {
                 PinnedAppItem appItem = (PinnedAppItem) item;
+                // The launcher's own entries (Terminal, Display) are not installed apps: a catalogue
+                // reload that has not resolved them yet must not take them off the dock.
+                if (com.termux.app.launcher.LauncherEntries.isEntry(appItem.appRef)) {
+                    cleaned.add(appItem);
+                    continue;
+                }
                 AppRef normalizedRef = resolveNormalizedPinnedRef(appItem.appRef);
                 if (normalizedRef == null) {
                     changed = true;
@@ -1673,7 +1679,8 @@ public final class SuggestionBarView extends GridLayout
                 List<PinnedAppItem> normalizedFolderApps = new ArrayList<>();
                 for (int i = folder.apps.size() - 1; i >= 0; i--) {
                     PinnedAppItem folderApp = folder.apps.get(i);
-                    AppRef normalizedRef = resolveNormalizedPinnedRef(folderApp.appRef);
+                    AppRef normalizedRef = com.termux.app.launcher.LauncherEntries.isEntry(folderApp.appRef)
+                        ? folderApp.appRef : resolveNormalizedPinnedRef(folderApp.appRef);
                     if (normalizedRef == null) {
                         changed = true;
                         continue;
