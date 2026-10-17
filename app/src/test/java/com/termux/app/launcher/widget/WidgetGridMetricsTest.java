@@ -90,6 +90,37 @@ public class WidgetGridMetricsTest {
         assertEquals(6, metrics.largestSpanWithin(0, 100000).rows);
     }
 
+    /**
+     * Home's Margin is the rim: a 360 x 640 dp page at 3 px/dp, a five-row, four-column grid with
+     * the fixed 8 dp gap, at no Margin, the seeded 12 dp and the 48 dp maximum. The first cell
+     * starts a rim in, the last ends a rim short, and the cells give up what the rim takes.
+     */
+    @Test public void homesMarginIsTheRimRoundTheCells() {
+        Rect body = new Rect(0, 0, 1080, 1920);
+        WidgetGridDefinition grid = new WidgetGridDefinition(5, 4);
+        int gap = Math.round(WidgetGridMetrics.GAP_DP * 3f);
+        int previousWidth = Integer.MAX_VALUE;
+        for (int marginDp : new int[] {0, 12, 48}) {
+            int rim = marginDp * 3;
+            WidgetGridMetrics metrics = new WidgetGridMetrics(body, 0, rim, gap, grid, false);
+            assertEquals(new Rect(rim, rim, 1080 - rim, 1920 - rim), metrics.contentBounds());
+            Rect first = metrics.boundsFor(new WidgetCellRect(0, 0, 1, 1));
+            Rect last = metrics.boundsFor(new WidgetCellRect(3, 4, 4, 5));
+            assertEquals(rim, first.left);
+            assertEquals(rim, first.top);
+            assertEquals(1080 - rim, last.right);
+            assertEquals(1920 - rim, last.bottom);
+            assertEquals("the gap between cells stays the grid's own", gap,
+                metrics.boundsFor(new WidgetCellRect(1, 0, 2, 1)).left - first.right);
+            assertTrue("a wider rim leaves narrower cells at " + marginDp + " dp",
+                first.width() < previousWidth);
+            previousWidth = first.width();
+        }
+        assertNotEquals("a rim change misses the catalog cache",
+            new WidgetGridMetrics(body, 0, 36, gap, grid, false),
+            new WidgetGridMetrics(body, 0, 144, gap, grid, false));
+    }
+
     @Test public void aMaximumUnderTheMinimumOrUnsetIsNoCap() {
         assertEquals(6, WidgetGridMetrics.effectiveMaxSpan(0, 1, 6));
         assertEquals(6, WidgetGridMetrics.effectiveMaxSpan(1, 2, 6));

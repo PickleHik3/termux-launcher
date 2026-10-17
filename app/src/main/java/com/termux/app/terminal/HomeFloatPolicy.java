@@ -19,7 +19,10 @@ public final class HomeFloatPolicy {
     /** A window's Home page while it is not a Home float: it is in the Workspace's row. */
     public static final int NOT_HOME_FLOAT = -1;
 
-    /** The shape a Home float is born with: the whole room, between the status bar and the dock. */
+    /**
+     * The shape a Home float is born with: the whole room, between the status bar and the dock
+     * with Home's Margin of air inside them ({@link #room}).
+     */
     @NonNull
     public static RectF birthFrac() {
         return FloatTitlebarPolicy.fullRoom();
@@ -64,15 +67,22 @@ public final class HomeFloatPolicy {
     /**
      * The room Home floats are laid out in, in the float layer's own pixels: the layer's width, and
      * its height between {@code topPx} (what the status bar covers) and {@code bottomPx} from its
-     * bottom (what the dock covers). Never inverted: a room squeezed to nothing keeps one pixel.
+     * bottom (what the dock covers), inset on all four sides by {@code marginPx}, Home's Margin:
+     * the same air the widget grid keeps from the page's edge and the dock's cards keep round
+     * them. Never inverted: a room squeezed to nothing keeps one pixel each way, the Margin giving
+     * way evenly on both sides; an unmeasured layer (zero width) stays zero wide.
      */
     @NonNull
-    public static Rect room(int layerWidthPx, int layerHeightPx, int topPx, int bottomPx) {
+    public static Rect room(int layerWidthPx, int layerHeightPx, int topPx, int bottomPx,
+                            int marginPx) {
         int width = Math.max(0, layerWidthPx);
         int height = Math.max(0, layerHeightPx);
         int top = Math.max(0, Math.min(height, topPx));
         int bottom = Math.max(top + 1, height - Math.max(0, bottomPx));
-        return new Rect(0, top, width, bottom);
+        int margin = Math.max(0, marginPx);
+        int side = width == 0 ? 0 : Math.min(margin, (width - 1) / 2);
+        int edge = Math.min(margin, (bottom - top - 1) / 2);
+        return new Rect(side, top + edge, width - side, bottom - edge);
     }
 
     /**

@@ -44,7 +44,8 @@ public final class WidgetGridView extends ViewGroup {
     private final Map<Integer, WidgetCellView> cells = new HashMap<>();
     private final Map<Integer, Long> committedSizes = new HashMap<>();
     private final Map<Integer, Long> deliveredSizes = new HashMap<>();
-    private final int edgePadding;
+    /** The rim round the cells, in px: Home's Margin, pushed in through {@link #setEdgePadding}. */
+    private int edgePadding;
     private final int gap;
     private final int touchSlop;
     private final Runnable emptyLongPressFire = this::fireEmptyLongPress;
@@ -56,8 +57,7 @@ public final class WidgetGridView extends ViewGroup {
 
     public WidgetGridView(@NonNull Context context) {
         super(context);
-        edgePadding = Math.round(WidgetGridMetrics.EDGE_DP * getResources().getDisplayMetrics().density);
-        gap = Math.round(WidgetGridMetrics.GAP_DP * getResources().getDisplayMetrics().density);
+        gap =Math.round(WidgetGridMetrics.GAP_DP * getResources().getDisplayMetrics().density);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setClipChildren(true);
         setClipToPadding(true);
@@ -73,6 +73,19 @@ public final class WidgetGridView extends ViewGroup {
     }
 
     public void setListener(@Nullable Listener value) { listener = value; }
+
+    /**
+     * The rim between the page's edge and the cells, in px: Home's Margin, which the activity
+     * pushes in ({@code WidgetPaneController#setGridEdge}). A change re-lays the cells at once;
+     * the sizes reach the providers through the same settle any other layout change waits for.
+     */
+    public void setEdgePadding(int px) {
+        int wanted = Math.max(0, px);
+        if (edgePadding == wanted) return;
+        edgePadding = wanted;
+        requestLayout();
+        invalidate();
+    }
 
     /**
      * The page's frame says a corner square may still take this finger, so the grid and its cells

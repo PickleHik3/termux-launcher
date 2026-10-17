@@ -4405,7 +4405,8 @@ public final class LayoutCanvasView extends View {
      * ({@code mCanvasScale} pixels per real dp, for the orientation it shows), so the opening's
      * size over that scale is the wall in dp, from the same geometry the miniature already models
      * for the chrome around it. That is the real pane's measured size to within the miniature's
-     * rounding, which {@link WidgetGridCaps} absorbs.
+     * rounding, which {@link WidgetGridCaps} absorbs. The rim round the grid is the Margin
+     * {@link #setShape} gave: the grid is only offered on Home, where that is Home's Margin.
      */
     @NonNull
     private WidgetGridCaps widgetGridCaps() {
@@ -4413,7 +4414,8 @@ public final class LayoutCanvasView extends View {
         if (rect == null || rect.isEmpty() || mCanvasScale <= 0f) {
             return WidgetGridCaps.unbounded();
         }
-        return WidgetGridCaps.forWall(rect.width() / mCanvasScale, rect.height() / mCanvasScale);
+        return WidgetGridCaps.forWall(rect.width() / mCanvasScale, rect.height() / mCanvasScale,
+            mMarginDp);
     }
 
     private boolean canStepGrid(int columnStep, int rowStep) {

@@ -164,17 +164,41 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      */
     private int portraitWallWidth, portraitWallHeight, landscapeWallWidth, landscapeWallHeight;
     @Nullable private WidgetGridCaps appliedCaps;
+    /**
+     * Home's Margin as last settled, in dp: the rim the caps are worked out with. The grid's live
+     * rim follows a Margin drag tick by tick ({@link #setGridEdge}); the caps wait for it to
+     * settle, because a cap that falls reflows the widgets and a reflow is kept.
+     */
+    private float gridEdgeDp;
 
     /**
-     * What this wall can hold, from the largest it has been in this orientation; unbounded before
-     * its first layout. The grid is the wall as far as cells go, so this is the answer for the
-     * wheels and the apply.
+     * What this wall can hold, from the largest it has been in this orientation and Home's
+     * Margin as last settled; unbounded before its first layout. The grid is the wall as far as
+     * cells go, so this is the answer for the wheels and the apply.
      */
     @NonNull public WidgetGridCaps gridCaps() {
         boolean landscape = isLandscape();
         float density = pane.getResources().getDisplayMetrics().density;
         return WidgetGridCaps.forWallPx(landscape ? landscapeWallWidth : portraitWallWidth,
-            landscape ? landscapeWallHeight : portraitWallHeight, density);
+            landscape ? landscapeWallHeight : portraitWallHeight, density, gridEdgeDp);
+    }
+
+    /**
+     * Home's Margin, the rim between the page's edge and the cells, in dp; the activity pushes it
+     * in, since the pane has no preferences of its own. The rim moves at once. With
+     * {@code settled} (anything but a tick of a Margin drag) the caps are worked out again with
+     * it, and a grid that no longer fits, or now fits more, is applied through the same path a
+     * resized wall takes ({@link #applyWantedGrid}); a drag's ticks leave that to its release.
+     */
+    public void setGridEdge(float edgeDp, boolean settled) {
+        float edge = edgeDp > 0f ? edgeDp : 0f;
+        float density = pane.getResources().getDisplayMetrics().density;
+        pane.grid().setEdgePadding(Math.round(edge * density));
+        if (!settled || Float.compare(edge, gridEdgeDp) == 0) return;
+        gridEdgeDp = edge;
+        if (wantedRows > 0 && !gridCaps().equals(appliedCaps)) {
+            applyWantedGrid(wantedRows, wantedColumns);
+        }
     }
 
     /**
@@ -184,6 +208,19 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      */
     public void applyWantedGrid(int rows, int columns) {
         applyWantedGrid(rows, columns, keyboardRows);
+    }
+
+    /**
+     * {@link #applyWantedGrid(int, int, int)} with Home's Margin as the rim, taken in the same
+     * pass: the caps are worked out once, with the rim the grid is about to wear, so a pass that
+     * changes both the grid and the Margin (a launch, a turn of the screen) reflows at most once.
+     */
+    public void applyWantedGrid(int rows, int columns, int takenRows, float edgeDp) {
+        float edge = edgeDp > 0f ? edgeDp : 0f;
+        float density = pane.getResources().getDisplayMetrics().density;
+        pane.grid().setEdgePadding(Math.round(edge * density));
+        gridEdgeDp = edge;
+        applyWantedGrid(rows, columns, takenRows);
     }
 
     /**

@@ -481,6 +481,17 @@ Not seen: everything else listed under the sections below.
   again, with no stale shape after the settle. Same for Corners and Margin. Open the editor over a
   window: no "· Home", edits land on the Workspace only and Home keeps its own. Undo and Discard
   in a Home session put an unset Home value back unset (it follows the Workspace again) · emulator.
+- 2026-10-18 · slice 2b, commits "feat(widgets): Home's Margin is the widget grid's rim" and
+  "feat(home-floats): Home floats breathe Home's Margin" · Upgrade: the widget grid's rim moves
+  from 6dp to the seeded 12dp (accepted; the seeding check above holds for everything else). With a
+  6-column grid and a float open on a Home page, drag Margin · Home: the widget rim and the float's
+  air (sides, below the status bar, above the dock) move together, tick by tick, and the grid
+  re-lays at once with no flicker worse than a grid-size change. At 48dp on tl16 (~411dp wide) the
+  column cap drops to 5 on release (the grid reflows once, not mid-drag); the size popup's column
+  wheel now stops at 5; back to 12dp the wheel offers 6 again. A float born after the change fills
+  the smaller room; a float sized smaller earlier keeps its fraction of the room. Margin 0dp: the
+  widgets sit flush to the page's edge, a widget's edit chip still inside the pane. Margin over a
+  window leaves Home's rim and floats alone · emulator.
 
 ## Developer
 

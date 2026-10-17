@@ -118,7 +118,13 @@ Home's own on Home (seeded from the Workspace's: an unset Home value reads the W
 first edit made over a Home page sets it apart); Minimal mode stays Workspace-only. The Appearance
 editor edits the half it is opened over, its Corners and Margin labelled "· Home" on Home. On a
 window Style covers the status bar, the dock's elements, the keyboard and the pane's opening; on
-Home the dock's rows, the keyboard, the compact status bar and the Home floats' corners. One
+Home the dock's rows, the keyboard, the compact status bar and the Home floats' corners. On Home,
+Corners is the radius of the dock, the keyboard, the bar and the floats, and Margin is the one air:
+the rim between the page's edge and the widget grid (the 8dp gap between cells is the grid's own),
+the air a Home float keeps inside its room (from the screen's sides, below the status bar and above
+the dock) and the air round the dock's cards. A wider Margin leaves less wall for cells, so the
+grid's column and row caps fall with it and a larger grid is held to them; the rim follows a Margin
+drag at once and the caps settle on release. One
 shape decides the fill, the
 selection outline and the lifted copy in the Layout editor. In **Floating** each piece is a
 rounded card with air around it: the status bar is always its own card, apps, A–Z index and extra

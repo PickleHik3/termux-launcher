@@ -18,13 +18,18 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    `home_surface_corner_radius`, `home_surface_side_gap`, seeded from the Workspace's while unset;
    `HomeChromePolicy.wearsHomeShape`; the chrome's reads follow the committed page and a settle
    across halves that differ redresses; the Appearance editor edits the half it stands over). Unit
-   tests green; emulator pass owed. Home floats keep no Margin from their room's edges (they never
-   had one), so Margin reaches them only through the dock and status bar they stand between.
+   tests green; emulator pass owed.
+   Status 2026-10-18 (slice 2b): Home's Margin is the one air on Home. The widget grid's rim (was a
+   fixed 6dp) and the Home floats' room inset both read it, with the dock's cards; the grid's caps
+   take it as the rim, so a wide Margin lowers them (the rim follows a drag, the caps settle on
+   release). Upgrade moves the rim to the seeded 12dp, accepted; on a 386dp phone that lowers the
+   column cap from six to five. Unit tests green; emulator pass owed.
 3. **Parallax between Home pages and windows** (the wallpaper pans with the wall).
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.
 5. **Window reorder** by drag in the window bar; consume/expel of panes into and out of columns.
 6. **The first-boot tour**, rewritten for the wall (switched off since 651ea9d7f).
-7. **The icon grid on Home pages**: app icons, folders, drag between pages.
+7. **The icon grid on Home pages**: app icons, folders, drag between pages. Born on slice 2b's
+   rule: its rim is Home's Margin, as the widget grid's is.
 8. **Per-toplevel X11 windows** (needs a rootless server).
 9. **Rebuilding the row and the floats after a background kill** beyond Saved sessions.
 

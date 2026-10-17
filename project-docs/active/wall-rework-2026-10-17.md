@@ -59,7 +59,8 @@ page, not in the strip.
 
 ### 4.1 Birth, move, size
 
-- Born full-size: the room between the status bar (§4.4) and the dock. Chrome draws over floats.
+- Born full-size: the room between the status bar (§4.4) and the dock, with Home's Margin of air
+  inside it on all four sides (the same air as the widget grid's rim). Chrome draws over floats.
 - Moved by its **titlebar**, resized at its bottom-right corner, as today's floating pane
   (`TerminalPaneController`), with the titlebar replacing the top-left move corner and the pill.
 - Pinned to the Home page it was opened on and scrolls with it. Any number of floats; a tap brings

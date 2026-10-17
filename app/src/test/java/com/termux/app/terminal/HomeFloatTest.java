@@ -349,11 +349,64 @@ public class HomeFloatTest {
 
     @Test
     public void theRoomIsBetweenTheStatusBarAndTheDockAndNeverInverted() {
-        assertEquals(new Rect(0, 80, 600, 880), HomeFloatPolicy.room(600, 1000, 80, 120));
-        assertEquals(new Rect(0, 0, 600, 1000), HomeFloatPolicy.room(600, 1000, -20, -5));
-        Rect squeezed = HomeFloatPolicy.room(600, 100, 90, 90);
+        assertEquals(new Rect(0, 80, 600, 880), HomeFloatPolicy.room(600, 1000, 80, 120, 0));
+        assertEquals(new Rect(0, 0, 600, 1000), HomeFloatPolicy.room(600, 1000, -20, -5, -4));
+        Rect squeezed = HomeFloatPolicy.room(600, 100, 90, 90, 0);
         assertEquals(90, squeezed.top);
         assertEquals(91, squeezed.bottom);
+    }
+
+    /** Home's Margin is the floats' air: inside the layer's sides, under the bar, over the dock. */
+    @Test
+    public void homesMarginInsetsTheRoomOnAllFourSides() {
+        assertEquals(new Rect(24, 104, 576, 856), HomeFloatPolicy.room(600, 1000, 80, 120, 24));
+        assertEquals("the 48 dp maximum at 3 px/dp", new Rect(144, 224, 456, 736),
+            HomeFloatPolicy.room(600, 1000, 80, 120, 144));
+        Rect squeezed = HomeFloatPolicy.room(600, 100, 90, 90, 24);
+        assertEquals("a room with no height to spare keeps its pixel", 90, squeezed.top);
+        assertEquals(91, squeezed.bottom);
+        Rect narrow = HomeFloatPolicy.room(30, 1000, 80, 120, 24);
+        assertEquals("the Margin gives way evenly, never inverting", 14, narrow.left);
+        assertEquals(16, narrow.right);
+        assertEquals("an unmeasured layer stays unmeasured", 0,
+            HomeFloatPolicy.room(0, 1000, 80, 120, 24).width());
+    }
+
+    @Test
+    public void aFloatBornAfterAMarginFillsTheSmallerRoom() {
+        int margin = 24;
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1, margin);
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        FrameLayout.LayoutParams params =
+            (FrameLayout.LayoutParams) containerOf(window).getLayoutParams();
+        assertEquals(margin, params.leftMargin);
+        assertEquals(ROOM_TOP + margin, params.topMargin);
+        assertEquals(LAYER_WIDTH - 2 * margin, params.width);
+        assertEquals(DOCK_TOP - ROOM_TOP - 2 * margin, params.height);
+        assertEquals("still full-size: the whole room", HomeFloatPolicy.birthFrac(),
+            window.active.floatFrac);
+    }
+
+    @Test
+    public void aMarginChangeReLaysARememberedFloatAtItsOwnFraction() {
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        RectF small = new RectF(.1f, .5f, .8f, .9f);
+        placeSmaller(window, small);
+        int margin = 36;
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1, margin);
+        FrameLayout.LayoutParams params =
+            (FrameLayout.LayoutParams) containerOf(window).getLayoutParams();
+        int roomWidth = LAYER_WIDTH - 2 * margin;
+        int roomHeight = DOCK_TOP - ROOM_TOP - 2 * margin;
+        assertEquals(margin + Math.round(.1f * roomWidth), params.leftMargin);
+        assertEquals(ROOM_TOP + margin + Math.round(.5f * roomHeight), params.topMargin);
+        assertEquals(Math.round(.7f * roomWidth), params.width);
+        assertEquals(Math.round(.4f * roomHeight), params.height);
+        assertNear("the fraction is the float's own and stays", small, window.active.floatFrac);
+        // The three-argument pass the keyboard makes keeps the Margin it has.
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1);
+        assertEquals(margin + Math.round(.1f * roomWidth),
+            ((FrameLayout.LayoutParams) containerOf(window).getLayoutParams()).leftMargin);
     }
 
     @Test
