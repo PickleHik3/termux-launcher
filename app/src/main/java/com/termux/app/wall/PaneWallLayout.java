@@ -333,6 +333,22 @@ public final class PaneWallLayout extends ViewGroup {
     private float mFold;
     /** Reused for the wall's place in its window, so a press allocates nothing. */
     private final int[] mWindowLocation = new int[2];
+    /** Scratch for {@link #dockTopInWall}: the dock's place in the window. */
+    private final int[] mDockLocation = new int[2];
+    /** A Home page's grabber at rest and the box its swipe starts in ({@link #loadHomeGrabber}). */
+    private final float[] mHomePill = new float[4];
+    private final float[] mHomeHit = new float[4];
+    /** The dock's top the Home grabber was last drawn over, so a dock that moves redraws it. */
+    private float mDrawnDockTop = Float.NaN;
+    /**
+     * Watches the dock while Home shows its grabber: the dock rides up and down with the keyboard
+     * by its own layout and translation, which the wall is not told of, and the grabber stands on
+     * it.
+     */
+    private final android.view.ViewTreeObserver.OnPreDrawListener mDockWatch = () -> {
+        watchDock();
+        return true;
+    };
     /**
      * The keyboard's height the finger drives the reveal over ({@link KeyboardReveal}), from a
      * keyboard swipe the listener took ({@link Listener#onKeyboardRevealBegin}) until the settle
@@ -985,7 +1001,65 @@ public final class PaneWallLayout extends ViewGroup {
             .corner(CornerZones.paneSizePx(density))
             .pills(grabberCentreX(page, slide), BorderDrag.PILL_SWIPE_WIDTH_DP * density,
                 BorderDrag.PILL_SWIPE_REACH_DP * density);
+        // A Home page's grabber stands over the dock, and its swipe starts by it there.
+        if (mCurrent == PaneWallPage.WIDGETS && loadHomeGrabber(page)) {
+            mBorderZone.bottomPill(mHomeHit[0] + slide, mHomeHit[1], mHomeHit[2] + slide,
+                mHomeHit[3]);
+        } else {
+            mBorderZone.clearBottomPill();
+        }
         return true;
+    }
+
+    /**
+     * Fills {@link #mHomePill} and {@link #mHomeHit} for the Home page {@code page} at rest
+     * ({@link BorderDrag#homeGrabber}): centred on the screen's width, and standing on the dock's
+     * top edge where the dock is on screen.
+     *
+     * @return false where {@code page} is not Home's
+     */
+    private boolean loadHomeGrabber(@NonNull View page) {
+        if (page != mPageViews.get(PaneWallPage.WIDGETS)) return false;
+        View root = getRootView();
+        getLocationInWindow(mWindowLocation);
+        float leftInset = mWindowLocation[0];
+        float rightInset = root != null && root != this && root.getWidth() > 0
+            ? root.getWidth() - mWindowLocation[0] - getWidth() : 0f;
+        float density = getResources().getDisplayMetrics().density;
+        BorderDrag.homeGrabber(getWidth(), leftInset, Math.max(0f, rightInset), page.getBottom(),
+            dockTopInWall(), density, mHomePill, mHomeHit);
+        return true;
+    }
+
+    /**
+     * The top of the dock as it stands on screen, in the wall's coordinates: the dock's glass, or
+     * the whole stack below the content where that is not drawn — up with the keyboard too, since
+     * the dock rides on it. NaN where there is no dock on screen.
+     */
+    private float dockTopInWall() {
+        View root = getRootView();
+        if (root == null || root == this) return Float.NaN;
+        View dock = root.findViewById(com.termux.R.id.accessory_surface_host);
+        if (!isOnScreen(dock)) dock = root.findViewById(com.termux.R.id.accessory_stack_container);
+        if (!isOnScreen(dock)) return Float.NaN;
+        dock.getLocationInWindow(mDockLocation);
+        getLocationInWindow(mWindowLocation);
+        return mDockLocation[1] - mWindowLocation[1];
+    }
+
+    private static boolean isOnScreen(@Nullable View view) {
+        return view != null && view.isShown() && view.getHeight() > 0;
+    }
+
+    /** Before a frame: a dock that moved under Home's grabber redraws it. */
+    private void watchDock() {
+        if (!isGrabberShown()) return;
+        View home = mPageViews.get(PaneWallPage.WIDGETS);
+        if (home == null || home.getVisibility() != VISIBLE) return;
+        float top = dockTopInWall();
+        if (Float.compare(top, mDrawnDockTop) == 0) return;
+        mDrawnDockTop = top;
+        invalidate();
     }
 
     /**
@@ -1538,7 +1612,11 @@ public final class PaneWallLayout extends ViewGroup {
             if (!(visibility > 0f)) continue;
             float centreX = grabberCentreX(page, page.getTranslationX());
             float pivotY = page.getTop() + page.getTranslationY() + page.getPivotY();
-            if (bottom) {
+            if (bottom && place == PaneWallPage.WIDGETS && loadHomeGrabber(page)) {
+                // Home's stands over the dock, centred on the screen, and slides with its page.
+                mGrabber.drawHome(canvas, mHomePill[0], mHomePill[1], mHomePill[2], mHomePill[3],
+                    page.getTranslationX(), visibility);
+            } else if (bottom) {
                 float bottomY = pivotY + (page.getHeight() - page.getPivotY()) * page.getScaleY();
                 mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), visibility);
             }
@@ -2249,11 +2327,14 @@ public final class PaneWallLayout extends ViewGroup {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (isRestingOffPage()) settleImmediately();
+        getViewTreeObserver().addOnPreDrawListener(mDockWatch);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        getViewTreeObserver().removeOnPreDrawListener(mDockWatch);
+        mDrawnDockTop = Float.NaN;
         mSliding = false;
         stopSlide();
         stopNudge();

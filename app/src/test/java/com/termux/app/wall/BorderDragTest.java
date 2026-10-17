@@ -1011,4 +1011,79 @@ public class BorderDragTest {
         assertTrue(pastBand.isKeyboardEligible());
         assertFalse("past the band only the swipe is taken", pastBand.holdElapsed());
     }
+
+    // ---- Home's grabber ------------------------------------------------------------------------
+
+    private static final float PHONE_DENSITY = 2.625f;
+
+    /**
+     * On a 1080 px phone with nothing beside the wall, the dock's top at 2140: centred on the
+     * screen, its lower edge 4 dp over the dock, 32 by 4 dp, and its box 48 dp tall on the dock's
+     * top edge and 120 dp wide.
+     */
+    @Test
+    public void homesGrabberStandsCentredOnTheScreenJustAboveTheDock() {
+        float[] pill = new float[4];
+        float[] hit = new float[4];
+        float d = PHONE_DENSITY;
+        BorderDrag.homeGrabber(1080f, 0f, 0f, 2400f, 2140f, d, pill, hit);
+        assertEquals(540f, (pill[0] + pill[2]) / 2f, 0.01f);
+        assertEquals(BorderGrabber.WIDTH_DP * d, pill[2] - pill[0], 0.01f);
+        assertEquals(BorderDrag.HOME_GRABBER_THICKNESS_DP * d, pill[3] - pill[1], 0.01f);
+        assertEquals(2140f - BorderDrag.HOME_GRABBER_LIFT_DP * d, pill[3], 0.01f);
+        assertTrue("above the dock, never behind it", pill[3] < 2140f);
+        assertEquals(540f, (hit[0] + hit[2]) / 2f, 0.01f);
+        assertEquals(BorderDrag.PILL_SWIPE_WIDTH_DP * d, hit[2] - hit[0], 0.01f);
+        assertEquals(2140f, hit[3], 0.01f);
+        assertEquals(BorderDrag.HOME_GRABBER_HIT_DP * d, hit[3] - hit[1], 0.01f);
+        assertTrue("the grabber lies in its box", hit[1] <= pill[1] && pill[3] <= hit[3]);
+    }
+
+    /**
+     * A wall narrowed by a side stack on the left (an A-Z rail, 120 px): the grabber is still on
+     * the screen's centre, not the wall's; the dock up with the keyboard carries it up too.
+     */
+    @Test
+    public void homesGrabberKeepsTheScreensCentreBesideASideStackAndRidesTheDock() {
+        float[] pill = new float[4];
+        float[] hit = new float[4];
+        BorderDrag.homeGrabber(960f, 120f, 0f, 2400f, 1300f, PHONE_DENSITY, pill, hit);
+        assertEquals("the screen's 540, in the wall's own coordinates", 420f,
+            (pill[0] + pill[2]) / 2f, 0.01f);
+        assertEquals(1300f - BorderDrag.HOME_GRABBER_LIFT_DP * PHONE_DENSITY, pill[3], 0.01f);
+        assertEquals(1300f, hit[3], 0.01f);
+        // Insets on both sides: the middle of the whole width.
+        BorderDrag.homeGrabber(900f, 60f, 120f, 2400f, 2140f, PHONE_DENSITY, pill, hit);
+        assertEquals(480f, (pill[0] + pill[2]) / 2f, 0.01f);
+        // No dock on screen: the page's bottom edge stands in for its top.
+        BorderDrag.homeGrabber(1080f, 0f, 0f, 2300f, Float.NaN, PHONE_DENSITY, pill, hit);
+        assertEquals(2300f, hit[3], 0.01f);
+        assertTrue(pill[3] < 2300f);
+        // The box never reaches past the wall's sides.
+        BorderDrag.homeGrabber(200f, 0f, 0f, 2400f, 2140f, PHONE_DENSITY, pill, hit);
+        assertEquals(0f, hit[0], 0.01f);
+        assertEquals(200f, hit[2], 0.01f);
+    }
+
+    /** The Home box takes the keyboard's swipe where the pill's box by the edge would have been. */
+    @Test
+    public void theBottomPillsBoxCanStandOverTheDock() {
+        BorderDrag.Zone zone = pillZone(MID_X).bottomPill(MID_X - 100f, 1200f, MID_X + 100f,
+            1344f);
+        float[] box = new float[4];
+        assertTrue(zone.pillBounds(BorderDrag.Border.BOTTOM, box));
+        assertArrayEquals(new float[] {MID_X - 100f, 1200f, MID_X + 100f, 1344f}, box, 0.01f);
+        assertEquals(BorderDrag.Border.BOTTOM, BorderDrag.pillAt(MID_X, 1300f, zone));
+        assertEquals("the edge's own box is gone", BorderDrag.Border.NONE,
+            BorderDrag.pillAt(MID_X, BOTTOM - 10f, zone));
+        BorderDrag drag = new BorderDrag();
+        drag.down(MID_X, 1300f, zone, SLOP, false, true, false, NO_LIMIT);
+        assertTrue(drag.isKeyboardEligible());
+        assertEquals(BorderDrag.Claim.KEYBOARD, drag.move(MID_X, 1300f - SLOP - 10f));
+        // The top box is untouched, and clearing puts the bottom one back by the edge.
+        assertEquals(BorderDrag.Border.TOP, BorderDrag.pillAt(MID_X, TOP + 10f, zone));
+        zone.clearBottomPill();
+        assertEquals(BorderDrag.Border.BOTTOM, BorderDrag.pillAt(MID_X, BOTTOM - 10f, zone));
+        assertEquals(BorderDrag.Border.NONE, BorderDrag.pillAt(MID_X, 1300f, zone));
+    }
 }

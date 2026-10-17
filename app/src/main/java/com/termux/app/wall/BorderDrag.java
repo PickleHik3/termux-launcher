@@ -98,6 +98,18 @@ public final class BorderDrag {
     /** How fast a shorter keyboard swipe has to be flicked to count, in dp per second. */
     public static final float KEYBOARD_FLING_DP_PER_SEC = 500f;
 
+    /**
+     * How tall the box a Home page's grabber is found in is, in dp: a finger's height, standing on
+     * the dock's top edge ({@link #homeGrabber}).
+     */
+    public static final float HOME_GRABBER_HIT_DP = 48f;
+
+    /** How far above the dock's top edge a Home page's grabber's lower edge sits, in dp. */
+    public static final float HOME_GRABBER_LIFT_DP = 4f;
+
+    /** A Home page's grabber's thickness, in dp: a little bolder than a window's. */
+    public static final float HOME_GRABBER_THICKNESS_DP = 4f;
+
     /** Which border a finger is on. */
     public enum Border { NONE, TOP, BOTTOM, LEFT, RIGHT }
 
@@ -151,6 +163,13 @@ public final class BorderDrag {
         float mPillCentreX;
         float mPillWidth;
         float mPillReach;
+        /**
+         * Where the bottom pill's box stands when it is not by the page's bottom edge (a Home
+         * page's grabber, over the dock): set by {@link #bottomPill}, and only while
+         * {@link #mBottomPillSet}.
+         */
+        private final float[] mBottomPill = new float[4];
+        private boolean mBottomPillSet;
         /** Scratch for {@link #inPill}, so a press allocates nothing. */
         private final float[] mPillBox = new float[4];
 
@@ -209,6 +228,28 @@ public final class BorderDrag {
             mPillCentreX = centreX;
             mPillWidth = Math.max(0f, width);
             mPillReach = Math.max(0f, reach);
+            return this;
+        }
+
+        /**
+         * The bottom pill's box where it is not by the page's bottom edge: a Home page's grabber
+         * stands over the dock ({@link BorderDrag#homeGrabber}), and its swipe starts by it. An
+         * empty box is no override.
+         */
+        @NonNull
+        public Zone bottomPill(float left, float top, float right, float bottom) {
+            mBottomPill[0] = left;
+            mBottomPill[1] = top;
+            mBottomPill[2] = right;
+            mBottomPill[3] = bottom;
+            mBottomPillSet = right > left && bottom > top;
+            return this;
+        }
+
+        /** The bottom pill's box by the page's bottom edge again, as {@link #pills} puts it. */
+        @NonNull
+        public Zone clearBottomPill() {
+            mBottomPillSet = false;
             return this;
         }
 
@@ -278,6 +319,10 @@ public final class BorderDrag {
          */
         public boolean pillBounds(@NonNull Border side, @NonNull float[] out) {
             if (mRight <= mLeft || mBottom <= mTop) return false;
+            if (side == Border.BOTTOM && mBottomPillSet) {
+                System.arraycopy(mBottomPill, 0, out, 0, 4);
+                return true;
+            }
             if (!(mPillWidth > 0f) || !(mPillReach > 0f)) return false;
             float corner = cornerSize();
             float l = Math.max(mLeft + corner, mPillCentreX - mPillWidth / 2f);
@@ -377,6 +422,41 @@ public final class BorderDrag {
                 return x >= zone.mRight - Math.min(zone.mSideReach, zone.inside(Border.RIGHT));
             default: return false;
         }
+    }
+
+    /**
+     * Where a Home page's grabber stands, and the box its swipe (the palette gesture) starts in.
+     * A Home page has no border, and the dock floats over its foot, so the grabber is not on the
+     * page's edge as a window's is: it stands centred on the screen's width — the wall's width
+     * and the insets beside it ({@code leftInset}, {@code rightInset}: a side stack, say) — with
+     * its lower edge {@link #HOME_GRABBER_LIFT_DP} above the dock's top, wherever the dock is (up
+     * with the keyboard too). Its box is {@link #PILL_SWIPE_WIDTH_DP} wide on the same centre
+     * and {@link #HOME_GRABBER_HIT_DP} tall, standing on the dock's top edge, never over the dock.
+     * With no dock ({@code dockTop} NaN) the page's bottom edge stands in for it. All in the
+     * wall's coordinates, at rest.
+     *
+     * @param pillOut the grabber at rest, {@code left, top, right, bottom}: {@link
+     *                BorderGrabber#WIDTH_DP} by {@link #HOME_GRABBER_THICKNESS_DP}
+     * @param hitOut  the box its swipe starts in, inside the wall's width
+     */
+    public static void homeGrabber(float wallWidth, float leftInset, float rightInset,
+                                   float pageBottom, float dockTop, float density,
+                                   @NonNull float[] pillOut, @NonNull float[] hitOut) {
+        float left = Math.max(0f, leftInset);
+        float right = Math.max(0f, rightInset);
+        float centreX = (left + Math.max(0f, wallWidth) + right) / 2f - left;
+        float anchor = Float.isNaN(dockTop) ? pageBottom : dockTop;
+        float halfWidth = BorderGrabber.WIDTH_DP * density / 2f;
+        float pillBottom = anchor - HOME_GRABBER_LIFT_DP * density;
+        pillOut[0] = centreX - halfWidth;
+        pillOut[1] = pillBottom - HOME_GRABBER_THICKNESS_DP * density;
+        pillOut[2] = centreX + halfWidth;
+        pillOut[3] = pillBottom;
+        float halfBox = PILL_SWIPE_WIDTH_DP * density / 2f;
+        hitOut[0] = Math.max(0f, centreX - halfBox);
+        hitOut[1] = anchor - HOME_GRABBER_HIT_DP * density;
+        hitOut[2] = Math.min(Math.max(0f, wallWidth), centreX + halfBox);
+        hitOut[3] = anchor;
     }
 
     /**
