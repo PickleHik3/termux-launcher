@@ -373,6 +373,14 @@ Not seen: everything else listed under the sections below.
 - 2026-10-17 · same commit · A `Terminal=true` Linux app (htop's desktop file) opens a new terminal
   window right after the current one, not a pane; a second tap while it runs brings that window
   back · emulator.
+- 2026-10-18 · commit "fix(launcher): Linux apps installed from a pane …" · Without leaving the
+  launcher, `pkg install gtk3-demo` in a pane, then open the palette on Home and type `gtk`: GTK+
+  Demo is under Linux apps (it may arrive a moment after the palette opens), Display is there too
+  with no query; `launcherctl launch gtk3-demo` opens it on the display window · emulator.
+- 2026-10-18 · commit "fix(x11): Stop stops the display server …" · Start `termux-x11 :0 &` by
+  hand in a pane, then long-press the display › power › Stop and confirm the dialog (screenshot,
+  a UI dump does not see it): the server exits (`pgrep -f termux-x11` empty) and the display window
+  leaves the row; the same for a display the Display entry started · emulator.
 
 ### Wall rework #81 migration
 - 2026-10-17 · commit "feat(wall): migrate the usage mode to Start in, once" · Install this build
