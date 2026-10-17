@@ -79,37 +79,49 @@ public final class HomeFloatPolicy {
      * How far the focused float rises over the keyboard: what its cursor row asks
      * ({@code wantedPx}), but never past the room's top, so the titlebar stays below the status
      * bar with its buttons in reach. {@code floatTopPx} and {@code roomTopPx} are the float's
-     * laid-out top and the room's top in the layer's pixels. Only a float the user placed smaller
-     * than the room is lifted; one that fills it shrinks instead ({@link #keyboardRoom}).
+     * laid-out top and the room's top in the layer's pixels. Only a float that stops short of the
+     * room's bottom is lifted; one that reaches it shrinks instead ({@link #keyboardRoom}).
      */
     public static int liftPx(int wantedPx, int floatTopPx, int roomTopPx) {
         return Math.max(0, Math.min(wantedPx, floatTopPx - roomTopPx));
     }
 
-    /** How far from the whole room a float may be and still fill it: rounding, not a placement. */
+    /** How far above the room's bottom a float may end and still reach it: rounding, not a placement. */
     private static final float FILL_EPSILON = 1e-4f;
 
     /**
-     * Whether a float shaped {@code frac} fills its room: maximised, or born full-size and not
-     * moved or resized off it since. Such a float meets the keyboard as a tiled pane does.
+     * Whether a float shaped {@code frac} reaches its room's bottom: full-size, maximised, or
+     * cascaded off one of those, and not moved or resized off the bottom since. Such a float meets
+     * the keyboard by shrinking above it ({@link #keyboardRoom}); any other is lifted.
      */
-    public static boolean fillsRoom(@Nullable RectF frac) {
-        return frac != null && Math.abs(frac.left) <= FILL_EPSILON
-            && Math.abs(frac.top) <= FILL_EPSILON && Math.abs(frac.right - 1f) <= FILL_EPSILON
-            && Math.abs(frac.bottom - 1f) <= FILL_EPSILON;
+    public static boolean reachesBottom(@Nullable RectF frac) {
+        return frac != null && frac.bottom >= 1f - FILL_EPSILON;
     }
 
     /**
-     * The room the focused float is laid out in while the keyboard may be up, in the layer's
-     * pixels: a float that fills {@code room} ends at the keyboard's top ({@code keyboardTopPx}),
-     * as a tiled pane does, and grows back when it closes; any other keeps the whole room and is
-     * lifted instead. Never inverted: a keyboard over the whole room leaves one pixel.
+     * The room the focused float shaped {@code frac} is laid out in while the keyboard may be up,
+     * in the layer's pixels. For a float that reaches {@code room}'s bottom, with the keyboard up
+     * and its top ({@code keyboardTopPx}) inside the room, it is the room in which {@code frac}
+     * lands on {@link #keyboardShrunk}'s rect: the float keeps its own top and ends at the
+     * keyboard, so a full-size float ends there as a tiled pane does and a cascaded one keeps its
+     * titlebar below the one it was cascaded off. Any other float keeps the whole room and is
+     * lifted instead. The float's fractions stay those of the whole room: the keyboard is no resize.
      */
     @NonNull
-    public static Rect keyboardRoom(@NonNull Rect room, boolean fillsRoom, boolean keyboardUp,
-                                    int keyboardTopPx) {
-        if (!fillsRoom || !keyboardUp || keyboardTopPx >= room.bottom) return new Rect(room);
-        return new Rect(room.left, room.top, room.right, Math.max(room.top + 1, keyboardTopPx));
+    public static Rect keyboardRoom(@NonNull Rect room, @Nullable RectF frac, boolean keyboardUp,
+                                    int keyboardTopPx, int minHeightPx) {
+        if (!reachesBottom(frac) || !keyboardUp || keyboardTopPx >= room.bottom
+            || room.height() <= 0) return new Rect(room);
+        float span = frac.bottom - frac.top;
+        if (span <= 0f) return new Rect(room);
+        int top = room.top + Math.round(frac.top * room.height());
+        int bottom = room.top + Math.round(frac.bottom * room.height());
+        Rect shrunk = keyboardShrunk(new Rect(room.left, top, room.right, bottom), room,
+            keyboardTopPx, minHeightPx);
+        int height = Math.max(1, Math.round(shrunk.height() / span));
+        // Laid out at this room's top + round(frac.top * height): exactly the float's own top.
+        int roomTop = shrunk.top - Math.round(frac.top * height);
+        return new Rect(room.left, roomTop, room.right, roomTop + height);
     }
 
     /**
@@ -117,8 +129,8 @@ public final class HomeFloatPolicy {
      * it shrinks above the keyboard, whose top is {@code keyboardTopPx} (negative while the keyboard
      * is down): it keeps its own top edge, so its titlebar stays where it was, and only its bottom
      * comes up to the keyboard's top, never so far that it is shorter than {@code minHeightPx} (or
-     * than it already was). A float whose top is the room's top ends at the keyboard as
-     * {@link #keyboardRoom} lays it out; a keyboard below the float changes nothing.
+     * than it already was). A float whose top is the room's top ends at the keyboard, as a tiled
+     * pane does; a keyboard below the float changes nothing.
      */
     @NonNull
     public static Rect keyboardShrunk(@NonNull Rect floatPx, @NonNull Rect room, int keyboardTopPx,

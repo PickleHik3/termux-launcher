@@ -2854,7 +2854,7 @@ public class TerminalPaneController {
      * system bar) above it, the top of the dock below it with the keyboard down, and the top of the
      * keyboard, with the dock riding on it, while it is up (-1 while it is down). Floats are laid
      * out between the first two. While the keyboard is up the focused one meets it: shrunk above
-     * it when it fills the room, lifted otherwise ({@link #applyHomeFloatLift}).
+     * it when it reaches the room's bottom, lifted otherwise ({@link #applyHomeFloatLift}).
      */
     public void setHomeFloatObstructions(int roomTopOnScreenPx, int dockTopOnScreenPx,
                                          int keyboardTopOnScreenPx) {
@@ -2925,9 +2925,9 @@ public class TerminalPaneController {
     }
 
     /**
-     * Meets the keyboard with the focused Home float: one that fills its room shrinks to the room
-     * above the keyboard and grows back after, as a tiled pane does; one placed smaller is lifted
-     * so its cursor row clears the keyboard. Every other float sits flat at its full size.
+     * Meets the keyboard with the focused Home float: one that reaches its room's bottom keeps its
+     * top and shrinks to the keyboard, growing back after, as a tiled pane does; one that stops
+     * short of the bottom is lifted so its cursor row clears the keyboard. Every other float sits flat at its full size.
      */
     private void applyHomeFloatLift() {
         for (Window w : mHomeFloats) {
@@ -6112,16 +6112,17 @@ public class TerminalPaneController {
 
         /**
          * The room this float is laid out in now: {@link #room()}, except that the focused Home
-         * float filling its room ends at the keyboard's top while the keyboard is up, as a tiled
-         * pane does. Its fractions stay those of the whole room, so the keyboard is no resize.
+         * float reaching its room's bottom keeps its top and ends at the keyboard's top while the
+         * keyboard is up ({@link HomeFloatPolicy#keyboardRoom}). Its fractions stay those of the
+         * whole room, so the keyboard is no resize.
          */
         @NonNull Rect layoutRoom() {
             Rect room = room();
             if (mHomeFloat == null || mHomeFloat != mFocusedHomeFloat || mFlying
                 || getVisibility() != View.VISIBLE) return room;
             int keyboardTop = homeKeyboardTopInLayerPx();
-            return HomeFloatPolicy.keyboardRoom(room, HomeFloatPolicy.fillsRoom(mLeaf.floatFrac),
-                keyboardTop >= 0, keyboardTop);
+            return HomeFloatPolicy.keyboardRoom(room, mLeaf.floatFrac, keyboardTop >= 0,
+                keyboardTop, dp(FLOAT_MIN_HEIGHT_DP));
         }
 
         /** The room {@link #applyFloatBounds} last laid this float out in, when it was not {@link #room()}. */

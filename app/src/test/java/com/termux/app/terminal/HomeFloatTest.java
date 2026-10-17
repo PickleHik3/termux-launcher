@@ -385,6 +385,32 @@ public class HomeFloatTest {
     }
 
     @Test
+    public void aCascadedFloatKeepsItsTitlebarBelowTheFirstOnesWhenTheKeyboardIsUp() {
+        // The emulator check: the cascaded float rose to the room's top with the keyboard up and
+        // hid the first float's titlebar again.
+        TerminalPaneController.Window first = mController.openHomeFloat(terminal(), 0);
+        TerminalPaneController.Window second = mController.openHomeFloat(terminal(), 0);
+        layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
+        View container = containerOf(second);
+        int cascadedTop = ((FrameLayout.LayoutParams) container.getLayoutParams()).topMargin;
+        assertTrue("born below the first", cascadedTop > ROOM_TOP);
+
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 400);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) container.getLayoutParams();
+        assertEquals("its titlebar stays where it was", cascadedTop, params.topMargin);
+        assertEquals("its bottom at the keyboard's top", 400, params.topMargin + params.height, 1);
+        assertEquals("shrunk, not lifted", 0f, container.getTranslationY(), 0f);
+        assertEquals("the first sits flat at its size", ROOM_TOP,
+            ((FrameLayout.LayoutParams) containerOf(first).getLayoutParams()).topMargin);
+
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1);
+        params = (FrameLayout.LayoutParams) container.getLayoutParams();
+        assertEquals(cascadedTop, params.topMargin);
+        assertEquals("grown back when the keyboard closes", DOCK_TOP,
+            params.topMargin + params.height, 1);
+    }
+
+    @Test
     public void aFullSizeFloatShrinksAboveTheKeyboardAndGrowsBack() {
         TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
         View container = containerOf(window);
@@ -448,27 +474,48 @@ public class HomeFloatTest {
     }
 
     @Test
-    public void aFloatFillsItsRoomOnlyWhileItCoversAllOfIt() {
-        assertTrue(HomeFloatPolicy.fillsRoom(FloatTitlebarPolicy.fullRoom()));
-        assertTrue(HomeFloatPolicy.fillsRoom(HomeFloatPolicy.birthFrac()));
+    public void aFloatReachesTheRoomsBottomOnlyWhileItEndsThere() {
+        assertTrue(HomeFloatPolicy.reachesBottom(FloatTitlebarPolicy.fullRoom()));
+        assertTrue(HomeFloatPolicy.reachesBottom(HomeFloatPolicy.birthFrac()));
         assertTrue("rounding is not a placement",
-            HomeFloatPolicy.fillsRoom(new RectF(0f, 0f, 1.00001f, 0.99999f)));
-        assertFalse(HomeFloatPolicy.fillsRoom(new RectF(.05f, 0f, 1.05f, 1f)));
-        assertFalse(HomeFloatPolicy.fillsRoom(new RectF(0f, 0f, 1f, .9f)));
-        assertFalse(HomeFloatPolicy.fillsRoom(null));
+            HomeFloatPolicy.reachesBottom(new RectF(0f, 0f, 1.00001f, 0.99999f)));
+        assertTrue("a cascaded float", HomeFloatPolicy.reachesBottom(new RectF(.03f, .05f, 1f, 1f)));
+        assertTrue(HomeFloatPolicy.reachesBottom(new RectF(.05f, 0f, 1.05f, 1f)));
+        assertFalse(HomeFloatPolicy.reachesBottom(new RectF(0f, 0f, 1f, .9f)));
+        assertFalse(HomeFloatPolicy.reachesBottom(null));
     }
 
     @Test
-    public void theKeyboardRoomEndsAtTheKeyboardOnlyForAFloatThatFillsTheRoom() {
+    public void theKeyboardRoomShrinksOnlyAFloatThatReachesTheRoomsBottom() {
         Rect room = new Rect(0, 80, 600, 880);
-        assertEquals(new Rect(0, 80, 600, 400), HomeFloatPolicy.keyboardRoom(room, true, true, 400));
+        RectF full = FloatTitlebarPolicy.fullRoom();
+        assertEquals(new Rect(0, 80, 600, 400),
+            HomeFloatPolicy.keyboardRoom(room, full, true, 400, 90));
         assertEquals("a smaller float keeps the room and is lifted", room,
-            HomeFloatPolicy.keyboardRoom(room, false, true, 400));
-        assertEquals("keyboard down", room, HomeFloatPolicy.keyboardRoom(room, true, false, 400));
+            HomeFloatPolicy.keyboardRoom(room, new RectF(.1f, .5f, .8f, .9f), true, 400, 90));
+        assertEquals("keyboard down", room, HomeFloatPolicy.keyboardRoom(room, full, false, 400, 90));
         assertEquals("a keyboard below the room changes nothing", room,
-            HomeFloatPolicy.keyboardRoom(room, true, true, 900));
+            HomeFloatPolicy.keyboardRoom(room, full, true, 900, 90));
         assertEquals("never inverted", new Rect(0, 80, 600, 81),
-            HomeFloatPolicy.keyboardRoom(room, true, true, 20));
+            HomeFloatPolicy.keyboardRoom(room, full, true, 20, 0));
+    }
+
+    @Test
+    public void aCascadedFloatLaidOutInItsKeyboardRoomKeepsItsTopAndEndsAtTheKeyboard() {
+        Rect room = new Rect(0, 80, 600, 880);
+        // Cascaded 40px down and 16px right off a full-size float.
+        RectF frac = new RectF(16f / 600f, 40f / 800f, 1f, 1f);
+        Rect laidOut = HomeFloatPolicy.keyboardRoom(room, frac, true, 400, 90);
+        int top = laidOut.top + Math.round(frac.top * laidOut.height());
+        int bottom = top + Math.round(frac.height() * laidOut.height());
+        assertEquals("its titlebar stays below the first one's", 120, top);
+        assertEquals("its bottom meets the keyboard", 400, bottom, 1);
+        // A drag starts from the shape it shows, in the whole room's terms.
+        RectF shown = HomeFloatPolicy.reframe(frac, laidOut, room);
+        assertEquals(40f / 800f, shown.top, 1f / 800f);
+        assertEquals(320f / 800f, shown.bottom, 1f / 800f);
+        assertEquals(frac.left, shown.left, 1e-6f);
+        assertEquals(1f, shown.right, 1e-6f);
     }
 
     @Test
