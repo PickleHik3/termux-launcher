@@ -529,6 +529,17 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     }
 
     public boolean onHostSizeCommitted(int appWidgetId, int widthPx, int heightPx, int orientation) {
+        return onHostSizeCommitted(appWidgetId, widthPx, heightPx, orientation, false);
+    }
+
+    /**
+     * {@code retell}: the provider is told even when it already holds these options, so it
+     * renders once more for the size the cell ends a resizing session at
+     * ({@link WidgetGridView#resyncSizes}); its renders for the sizes passed through on the way
+     * may have landed after the one for this size.
+     */
+    public boolean onHostSizeCommitted(int appWidgetId, int widthPx, int heightPx, int orientation,
+                                       boolean retell) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return false;
         // A built-in widget reads its own size; its options bundle is its settings, not a
@@ -546,8 +557,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         // itself has a different one (a reinstall, an update that reset its options) - a live
         // read here is what actually decides whether the write, which wakes the provider process,
         // is skippable. Two reads beat one needless write.
-        if (WidgetSizeOptionsPolicy.effectivelyEqual(safeGetOptions(appWidgetId), result.options,
-            Build.VERSION.SDK_INT)) {
+        if (!retell && WidgetSizeOptionsPolicy.effectivelyEqual(safeGetOptions(appWidgetId),
+            result.options, Build.VERSION.SDK_INT)) {
             return result.changed;
         }
         try {

@@ -152,6 +152,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         void applyTerminalSurfaceAppearance();
         /** Dresses all the chrome again from the current state, the way a launch does. */
         void redressChrome();
+        /**
+         * The session is over (Done, Discard, or the surface closed) and the chrome is dressed
+         * again: whatever the session resized on the page under it (Home's widget cells, through
+         * a Margin, a Style or an Undo) settles with the providers now.
+         */
+        default void editorSessionEnded() { }
         void refreshTerminalWindowBar();
         /** Rebuilds the terminal palette if the contrast level moved (Legibility drives both). */
         void refreshTerminalPalette();
@@ -3570,6 +3576,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mRaisedKeyboard = false;
         mHost.holdPaneWall(false);
         mHost.setTopStatusBarExpandedForEditor(false, false);
+        mHost.editorSessionEnded();
     }
 
     private void releaseIconsContent() {

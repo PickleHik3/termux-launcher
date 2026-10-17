@@ -315,6 +315,16 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.grid().setPageAtRest(false);
     }
 
+    /**
+     * The Appearance editor's session ended. The cells may have passed through several sizes in
+     * it (a Margin's ticks, a Style's chrome, an Undo back) while Home's settled Margin ends where
+     * it began, so no rim change is left to deliver them: each widget whose cell moved is told
+     * its size again once the wall rests here ({@link WidgetGridView#resyncSizes}).
+     */
+    public void onEditorSessionEnded() {
+        pane.grid().resyncSizes();
+    }
+
     public void onWallPageShown(boolean shown) {
         // Sizes reach the providers only while the wall rests here; see WidgetGridView.
         pane.grid().setPageAtRest(shown);

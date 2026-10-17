@@ -11908,6 +11908,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.applyTerminalSurfaceAppearance();
         }
 
+        @Override public void editorSessionEnded() {
+            if (mWidgetPaneController != null) mWidgetPaneController.onEditorSessionEnded();
+        }
+
         @Override public void redressChrome() {
             TermuxActivity.this.redressChromeFromState();
             // Icon packs were applied live while the surface was open (the dock followed, nothing

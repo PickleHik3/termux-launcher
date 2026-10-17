@@ -145,6 +145,91 @@ public class WidgetGridHostViewIntegrationTest {
             platform.lastOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH));
     }
 
+    /**
+     * The emulator repro of 2026-10-18 in small: Margin dragged from 8 to 45 (each tick moves the
+     * rim, and the narrower cells reach the provider), then Undo puts 8 back while the wall is
+     * not at rest. When it rests again the provider's last word is 8's size.
+     */
+    @Test public void aMarginDragThenUndoOffRestEndsOnTheRestoredSize() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetTestFixtures.Platform platform = new WidgetTestFixtures.Platform(activity);
+        WidgetGridView grid = boundGrid(activity, platform);
+        grid.setEdgePadding(8);
+        layout(grid, 800, 600); settle();
+        int atEight = platform.lastOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH);
+        for (int rim = 9; rim <= 45; rim += 9) {   // the slider's ticks
+            grid.setEdgePadding(rim);
+            layout(grid, 800, 600);
+        }
+        settle();
+        assertTrue("the drag's size reached the provider",
+            platform.lastOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH) < atEight);
+        int updates = platform.optionUpdates;
+
+        grid.setPageAtRest(false);
+        grid.setEdgePadding(8);             // Undo
+        layout(grid, 800, 600); settle();
+        assertEquals("held while the wall is not at rest", updates, platform.optionUpdates);
+
+        grid.setPageAtRest(true); settle();
+        assertEquals(updates + 1, platform.optionUpdates);
+        assertEquals("the provider's last size is 8's", atEight,
+            platform.lastOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH));
+    }
+
+    /**
+     * The end of an editor session tells every widget whose cell moved in it its size once more,
+     * even where the ledger and the provider's options already agree: the provider's renders for
+     * the sizes passed through may have landed after the one for the size it ends at. A widget
+     * that did not move is not woken.
+     */
+    @Test public void aSessionEndRetellsOnlyTheWidgetsWhoseCellsMoved() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetTestFixtures.Platform platform = new WidgetTestFixtures.Platform(activity);
+        WidgetGridView grid = boundGrid(activity, platform);
+        grid.setEdgePadding(8);
+        layout(grid, 800, 600); settle();
+        int atEight = platform.lastOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH);
+        // The window's own first layout and the one above count as a move: an earlier session.
+        grid.resyncSizes(); settle();
+        int base = platform.optionUpdates;
+
+        grid.resyncSizes(); settle();
+        assertEquals("nothing moved, nothing is woken", base, platform.optionUpdates);
+
+        grid.setEdgePadding(45); layout(grid, 800, 600); settle();
+        grid.setEdgePadding(8); layout(grid, 800, 600); settle();
+        assertEquals(base + 2, platform.optionUpdates);
+
+        grid.resyncSizes(); settle();
+        assertEquals("told again although its options already match", base + 3,
+            platform.optionUpdates);
+        assertEquals(atEight,
+            platform.lastOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH));
+
+        grid.resyncSizes(); settle();
+        assertEquals("once per session that moved it", base + 3, platform.optionUpdates);
+    }
+
+    /** A session that ends while the wall is elsewhere tells the provider when the wall rests. */
+    @Test public void aSessionEndOffRestWaitsForTheRest() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetTestFixtures.Platform platform = new WidgetTestFixtures.Platform(activity);
+        WidgetGridView grid = boundGrid(activity, platform);
+        grid.setEdgePadding(8);
+        layout(grid, 800, 600); settle();
+        grid.resyncSizes(); settle();       // an earlier session's end
+        grid.setEdgePadding(45); layout(grid, 800, 600); settle();
+        grid.setEdgePadding(8); layout(grid, 800, 600); settle();
+        int updates = platform.optionUpdates;
+
+        grid.setPageAtRest(false);
+        grid.resyncSizes(); settle();
+        assertEquals(updates, platform.optionUpdates);
+        grid.setPageAtRest(true); settle();
+        assertEquals(updates + 1, platform.optionUpdates);
+    }
+
     private static WidgetGridView boundGrid(Activity activity,
                                             WidgetTestFixtures.Platform platform) {
         LauncherWidgetRepository repository = WidgetTestFixtures.repository();
