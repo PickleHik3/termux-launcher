@@ -106,24 +106,13 @@ public class WallParallaxTest {
     }
 
     @Test
-    public void aRingWrapSweepsThePictureAcrossItsWholeSpan() {
-        // Past Display comes Home: dragging on from Display (pages moving left) heads for the
-        // picture's left edge, all the way across the span rather than a quarter of it.
+    public void theRowIsALineSoItsEndsDoNotWrap() {
+        // Past the Display page there is nothing (ADR 0008): a drag on into the row's right end
+        // leaves the picture at its right edge rather than sweeping it back to Home's.
         assertEquals(540f, WallParallax.offsetPx(ring(), PaneWallPage.DISPLAY, 0f, WIDTH, SPARE), EPS);
-        assertEquals(270f, WallParallax.offsetPx(ring(), PaneWallPage.DISPLAY, -540f, WIDTH, SPARE), EPS);
-        assertEquals(0f, WallParallax.offsetPx(ring(), PaneWallPage.DISPLAY, -1080f, WIDTH, SPARE), EPS);
-        // And the other way round: from Home, the place on the left is Display.
-        assertEquals(270f, WallParallax.offsetPx(ring(), PaneWallPage.WIDGETS, 540f, WIDTH, SPARE), EPS);
-    }
-
-    @Test
-    public void aRingWrapHasNoJumpWhenTheWallCommits() {
-        // 0.3 widths into the wrap from Display towards Home...
-        float dragging = WallParallax.offsetPx(ring(), PaneWallPage.DISPLAY, -324f, WIDTH, SPARE);
-        // ...the wall commits to Home, one step to the right on the ring: offset += +1 width.
-        float sliding = WallParallax.offsetPx(ring(), PaneWallPage.WIDGETS, -324f + 1080f, WIDTH, SPARE);
-        assertEquals(dragging, sliding, EPS);
-        assertEquals(540f * 0.7f, sliding, EPS);
+        assertEquals(540f, WallParallax.offsetPx(ring(), PaneWallPage.DISPLAY, -540f, WIDTH, SPARE), EPS);
+        // And before Home page 1 there is nothing either.
+        assertEquals(0f, WallParallax.offsetPx(ring(), PaneWallPage.WIDGETS, 540f, WIDTH, SPARE), EPS);
     }
 
     @Test

@@ -8,7 +8,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Which places the wall has, and where a horizontal drag lands. Pure and tested; the layout is
+ * Which stretches the row has, and where a horizontal drag lands. Pure and tested; the layout is
  * dumb enough to just apply the answer.
  *
  * <p>The commit thresholds are the ones the status bar's pull-down already uses, so a page swipe
@@ -45,11 +45,8 @@ public final class PaneWallPolicy {
     private PaneWallPolicy() {}
 
     /**
-     * The places this install has, in spatial order. The terminal is always there — it is the
-     * home screen. The usage mode decides the rest: terminal mode is the terminal alone; a home
-     * screen adds the Widgets place while the widget pane is on; the display mode adds the
-     * Display place. A place is on the wall only while its own switch is on — the Display place
-     * is not built at all while the display is off, whatever the build carries.
+     * The page kinds of the old three-place wall, for the callers that still ask by usage mode
+     * (the extra keys' wall row). The wall itself is built from {@link #rowPages}.
      *
      * @param terminalOnly   the terminal-only usage mode: no home surfaces at all
      * @param widgetsEnabled the widget pane is switched on
@@ -65,21 +62,39 @@ public final class PaneWallPolicy {
         return Collections.unmodifiableList(pages);
     }
 
-    /** The page {@code pages} shows at rest on a cold start, and where Home returns to. */
+    /**
+     * The wall's row, by the kind of page that stands in each stretch of it (ADR 0008): the Home
+     * pages first, always there; then the Workspace's windows, only while the current session
+     * has one; then, for now, the Display page while the display is on. A Home page and a window
+     * are each one entry here however many of them there are: the Home pages page inside the
+     * widget grid and the windows inside the terminal ({@link WallRow}), and the wall only slides
+     * between the stretches.
+     *
+     * @param hasWindow      the current session has at least one window
+     * @param displayEnabled the embedded display is built into this edition and switched on
+     */
+    @NonNull
+    public static List<PaneWallPage> rowPages(boolean hasWindow, boolean displayEnabled) {
+        List<PaneWallPage> pages = new ArrayList<>(3);
+        pages.add(PaneWallPage.WIDGETS);
+        if (hasWindow) pages.add(PaneWallPage.TERMINAL);
+        if (displayEnabled) pages.add(PaneWallPage.DISPLAY);
+        return Collections.unmodifiableList(pages);
+    }
+
+    /** The stretch the home press lands on, and where a page taken away hands the wall: Home. */
     @NonNull
     public static PaneWallPage homePage() {
-        return PaneWallPage.TERMINAL;
+        return PaneWallPage.WIDGETS;
     }
 
     /**
-     * Whether the wall wraps. Three places make a ring — past the Display page comes the Widgets
-     * page, and the other way round — so every place is one step from every other and the two
-     * tiles in the status bar are always "the place to my left" and "the place to my right".
-     * Two places cannot form a ring (the one other page cannot be on both sides at once), so a
-     * two-page wall stays a line with an end.
+     * Whether the wall wraps. It used to, with three places; the row is a line now, Home pages on
+     * the left and the Workspace on the right, so it never does. Kept so the arithmetic below
+     * reads the same for a line of any length.
      */
     public static boolean isRing(@NonNull List<PaneWallPage> pages) {
-        return pages.size() >= 3;
+        return false;
     }
 
     /**
@@ -246,10 +261,12 @@ public final class PaneWallPolicy {
                 return neighbour(pages, current, -1);
             case "right":
                 return neighbour(pages, current, 1);
+            case "home":
             case "widgets":
                 return pages.contains(PaneWallPage.WIDGETS) ? PaneWallPage.WIDGETS : null;
+            case "workspace":
             case "terminal":
-                return PaneWallPage.TERMINAL;
+                return pages.contains(PaneWallPage.TERMINAL) ? PaneWallPage.TERMINAL : null;
             case "display":
                 return pages.contains(PaneWallPage.DISPLAY) ? PaneWallPage.DISPLAY : null;
             default:

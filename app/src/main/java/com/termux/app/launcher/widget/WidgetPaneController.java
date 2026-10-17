@@ -253,7 +253,31 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.grid().setPageAtRest(shown);
         if (shown) return;
         dismissPaneMenu();
-        if (currentPage != 0) { currentPage = 0; render(); }
+        // Home waits on its last page while the wall is elsewhere: that is the page next to the
+        // seam, the one a border drag back off the first window arrives on (ADR 0008). The home
+        // press turns it to page 1 itself (showHomePage).
+        int last = Math.max(0, widgets.repository().pageCount() - 1);
+        if (currentPage != last) { currentPage = last; render(); }
+    }
+
+    /** How many Home pages there are. */
+    public int homePageCount() {
+        return Math.max(1, widgets.repository().pageCount());
+    }
+
+    /** Which Home page is in front, counting from 0. */
+    public int homePageIndex() {
+        return currentPage;
+    }
+
+    /** Turn Home to page {@code page} (clamped), without the swipe's slide. */
+    public void showHomePage(int page) {
+        setCurrentPage(page);
+    }
+
+    /** The wall's seam out of the last Home page; see {@link WidgetPaneView.Seam}. */
+    public void setSeam(@Nullable WidgetPaneView.Seam seam) {
+        pane.setSeam(seam);
     }
     public boolean onBackPressed() {
         if (paneMenu != null && paneMenu.isShowing()) { dismissPaneMenu(); return true; }

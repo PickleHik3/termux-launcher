@@ -615,8 +615,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mStatusBarSurfaceOutline =
         new com.termux.app.chrome.ChromeShapeOutlineProvider();
     @Nullable private com.termux.app.wall.PaneWallController mPaneWallController;
-    /** The wall page an activity recreation is coming back to; null on a cold start. */
-    @Nullable private String mPendingWallPage;
+    /** The saved state an activity recreation brings the wall's row position back from. */
+    @Nullable private Bundle mPendingWallState;
+    /**
+     * Set by onStop, cleared by onResume: a home press that finds it set is a return from another
+     * app (nothing moves), one that finds it clear came while the launcher was in front.
+     */
+    private boolean mStoppedSinceResume;
     @Nullable private com.termux.app.x11.X11DisplayHostController mX11Display;
     @Nullable private com.termux.app.x11.X11KeyboardBridge mX11KeyboardBridge;
     /** Runs a Linux app from the drawer on the display, starting the display when needed. */
@@ -1699,8 +1704,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (savedInstanceState != null) {
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
-            mPendingWallPage = savedInstanceState.getString(
-                com.termux.app.wall.PaneWallController.ARG_PAGE);
+            mPendingWallState = savedInstanceState;
         }
         // Delete ReportInfo serialized object files from cache older than 14 days
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
@@ -1803,6 +1807,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastLaunchWasLauncherEntry = isLauncherHomeIntent(getIntent());
         setTermuxTerminalViewAndClients();
         createWidgetPaneController();
+        landWall();
         setTerminalWindowBar();
         setTerminalToolbarView(savedInstanceState);
         syncPinnedAppsHost();
@@ -2033,8 +2038,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // alpha, scale and translation, so a drawer left open across HOME would strand faded
             // pinned icons.
             mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
-            // HOME means the home screen as it was left: the wall stays on its place, whichever
-            // of the three that is.
+            // A home press while the launcher is in front lands on Home page 1, from a window or
+            // from another Home page; a return from another app finds the page it left.
+            if (!mStoppedSinceResume && mPaneWallController != null) {
+                mPaneWallController.goHome(isVisible());
+            }
             if (mSuggestionBarView != null) {
                 mSuggestionBarView.resetTransientVisualState();
             }
@@ -2286,6 +2294,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onResume() {
         super.onResume();
+        mStoppedSinceResume = false;
         Logger.logVerbose(LOG_TAG, "onResume");
         // Text left waiting in the pill holds the screen again, its idle release started over.
         mVoiceScreenMayHold = true;
@@ -8712,6 +8721,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onStop() {
         super.onStop();
+        mStoppedSinceResume = true;
         Logger.logDebug(LOG_TAG, "onStop");
         // The Appearance surface survives a stop (the overlay registry's STOP keeps it, as it kept
         // the editor); only a HOME press closes it.
@@ -9557,8 +9567,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * home screen. The host, the page and the controller all follow this one answer.
      */
     private boolean isWidgetsPageWanted() {
-        return mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled()
-            && !com.termux.app.launcher.LauncherUseCaseMode.isTerminalOnly(mPreferences);
+        // Home is always on the wall (ADR 0008): neither the usage mode nor the widget pane
+        // switch takes it off any more.
+        return mPreferences != null;
     }
 
     /**
@@ -9568,11 +9579,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     public java.util.List<com.termux.app.wall.PaneWallPage> availableWallPages() {
         if (mPaneWallController != null) return mPaneWallController.pages();
-        return com.termux.app.wall.PaneWallPolicy.availablePages(
-            mPreferences != null
-                && com.termux.app.launcher.LauncherUseCaseMode.isTerminalOnly(mPreferences),
-            mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled(),
-            isX11DisplayEnabled());
+        return com.termux.app.wall.PaneWallPolicy.rowPages(true, isX11DisplayEnabled());
     }
 
     /**
@@ -17667,8 +17674,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mCurrentWSession = mWSessions.get(Math.min(index, mWSessions.size() - 1));
                 mPaneController.showWindow(mCurrentWSession.currentWindow());
                 animateTerminalSessionLifecycleArrival(-1);
-            } else if (getTermuxTerminalSessionClient() != null) {
-                getTermuxTerminalSessionClient().addNewSession(false, null);
+            } else {
+                // The row's last window is gone: the last Home page slides in (see
+                // showNextSessionAfterClose).
+                if (mPaneWallController != null) mPaneWallController.goToLastHomePage(isVisible());
+                if (getTermuxTerminalSessionClient() != null) {
+                    getTermuxTerminalSessionClient().addNewSession(false, null);
+                }
             }
         }
         rebuildDrawerSessions();
@@ -18447,6 +18459,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mTermuxService != null)
             mTermuxService.setVisibleSessionCount(mDrawerSessions.size());
+        // The wall's row follows the windows: the Workspace is on it while there is one.
+        if (mPaneWallController != null) mPaneWallController.refreshPages();
         // The one funnel every structural change to the sessions and their windows already takes,
         // so it is where the run reads them. Both are edge-triggered: a rebuild that moved neither
         // says nothing.
@@ -19354,12 +19368,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             (com.termux.app.wall.PaneWallLayout) wall,
             new com.termux.app.wall.PaneWallController.Host() {
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
-                @Override public boolean isTerminalOnly() {
-                    return mPreferences != null
-                        && com.termux.app.launcher.LauncherUseCaseMode.isTerminalOnly(mPreferences);
+                // Home is always on the row; the Workspace while there is a window to show.
+                @Override public boolean hasWindow() { return isWorkspaceOnRow(); }
+                @Override public int innerCount(@NonNull com.termux.app.wall.PaneWallPage page) {
+                    return wallInnerCount(page);
                 }
-                @Override public boolean isWidgetsEnabled() {
-                    return mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled();
+                @Override public int innerIndex(@NonNull com.termux.app.wall.PaneWallPage page) {
+                    return wallInnerIndex(page);
+                }
+                @Override public void showInnerPage(@NonNull com.termux.app.wall.PaneWallPage page,
+                                                    int index) {
+                    showWallInnerPage(page, index);
+                }
+                @Override public void onInnerStepBegin(
+                        @NonNull com.termux.app.wall.PaneWallPage page, int steps) {
+                    if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
+                    mStatusCardHost.dismiss();
+                    captureTerminalDeparture();
+                }
+                @Override public void onInnerStep(@NonNull com.termux.app.wall.PaneWallPage page,
+                                                  int steps, float fromPx) {
+                    if (page == com.termux.app.wall.PaneWallPage.TERMINAL) {
+                        stepWindowFromWall(steps, fromPx);
+                    } else {
+                        dropTerminalDepartureSnapshot();
+                    }
                 }
                 // The Display place is on the wall only while the display is switched on: off,
                 // nothing of it is built, and the wall is the places that are left.
@@ -19454,9 +19487,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     } finally {
                         Trace.endSection();
                     }
-                    // Where the wall rests is where the home screen comes back to, across Home
-                    // presses and across launches alike.
-                    if (mPreferences != null) mPreferences.setWallLastPage(page.name());
                     dismissHelpOverlay();
                     if (mFirstBootTour != null) mFirstBootTour.onPlaceSettled(page.name());
                     // The "Go to …" read-out lands with the page (showTerminalActionHint).
@@ -19561,16 +19591,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         installLinuxAppRunner();
         mAppliedPaneStyleKey = null;
         mPaneWallController.applyStyle(paneSurfaceStyle());
-        // A recreated activity comes back to the page it showed; a fresh launch comes back to
-        // the place the wall last rested on.
-        String initialPage = mPendingWallPage != null ? mPendingWallPage
-            : mPreferences != null ? mPreferences.getWallLastPage() : null;
-        mPendingWallPage = null;
-        if (initialPage != null) {
-            Bundle state = new Bundle();
-            state.putString(com.termux.app.wall.PaneWallController.ARG_PAGE, initialPage);
-            mPaneWallController.restoreInstanceState(state);
-        }
+        // Where the wall starts is decided in landWall(), once the widget grid can be turned.
         // Minimal mode is remembered across launches. The arrangement reads it through
         // currentPlaceLayout on its own; the bar is told once here, and every change after this
         // goes through syncChromeArrangement.
@@ -23211,6 +23232,95 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             () -> setWidgetAccent(anchor, false));
     }
 
+    /**
+     * A border drag between windows committed: the window {@code steps} away comes in from
+     * {@code fromPx}, where the drag had brought it, while the picture of the one leaving
+     * ({@link #captureTerminalDeparture}, taken at the release) carries on the same distance.
+     */
+    private void stepWindowFromWall(int steps, float fromPx) {
+        if (mPaneController == null || mCurrentWSession == null) {
+            dropTerminalDepartureSnapshot();
+            return;
+        }
+        int target = mCurrentWSession.current + steps;
+        if (target < 0 || target >= mCurrentWSession.windows.size()) {
+            dropTerminalDepartureSnapshot();
+            return;
+        }
+        mCurrentWSession.current = target;
+        mPaneController.showWindow(mCurrentWSession.currentWindow());
+        rebuildDrawerSessions();
+        View host = findViewById(R.id.terminal_surface_host);
+        int width = host == null ? 0 : host.getWidth();
+        float remaining = Math.abs(fromPx);
+        long duration = com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS;
+        if (width > 0) duration = Math.max(160L, Math.round(duration * Math.min(1f, remaining / width)));
+        animateTerminalArrival(steps > 0 ? 1 : -1, true, duration, remaining);
+    }
+
+    /** Whether the Workspace is on the wall's row: the terminal has a session to show. */
+    private boolean isWorkspaceOnRow() {
+        // Before the service is bound nothing is known, and the terminal is assumed, as before.
+        return mTermuxService == null || !mTermuxService.isTermuxSessionsEmpty();
+    }
+
+    /** How many Home pages or windows the wall's view of that kind holds. */
+    private int wallInnerCount(@NonNull com.termux.app.wall.PaneWallPage page) {
+        switch (page) {
+            case WIDGETS:
+                return mWidgetPaneController == null ? 1 : mWidgetPaneController.homePageCount();
+            case TERMINAL:
+                return mCurrentWSession == null ? 0 : mCurrentWSession.windows.size();
+            default:
+                return 1;
+        }
+    }
+
+    /** Which Home page or window is in front. */
+    private int wallInnerIndex(@NonNull com.termux.app.wall.PaneWallPage page) {
+        switch (page) {
+            case WIDGETS:
+                return mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
+            case TERMINAL:
+                return mCurrentWSession == null ? 0 : mCurrentWSession.current;
+            default:
+                return 0;
+        }
+    }
+
+    /** Turn Home to a page, or the Workspace to a window, at once and without a slide. */
+    private void showWallInnerPage(@NonNull com.termux.app.wall.PaneWallPage page, int index) {
+        if (page == com.termux.app.wall.PaneWallPage.WIDGETS) {
+            if (mWidgetPaneController != null) mWidgetPaneController.showHomePage(index);
+            return;
+        }
+        if (page != com.termux.app.wall.PaneWallPage.TERMINAL || mPaneController == null
+            || mCurrentWSession == null || index < 0
+            || index >= mCurrentWSession.windows.size() || index == mCurrentWSession.current) {
+            return;
+        }
+        mCurrentWSession.current = index;
+        mPaneController.showWindow(mCurrentWSession.currentWindow());
+        rebuildDrawerSessions();
+    }
+
+    /**
+     * Where the wall starts: the row position a recreation saved, or on a cold start the page
+     * Start in names (Home page 1, or the Workspace). After the widget pane controller exists, so
+     * Home can be turned to the right page, and where Home's swipe is given the seam.
+     */
+    private void landWall() {
+        if (mPaneWallController == null) return;
+        if (mWidgetPaneController != null) {
+            mWidgetPaneController.setSeam(mPaneWallController.homeSeam());
+        }
+        Bundle state = mPendingWallState;
+        mPendingWallState = null;
+        if (mPaneWallController.restoreInstanceState(state)) return;
+        mPaneWallController.landOnColdStart(
+            mPreferences == null ? null : mPreferences.getLauncherStartIn());
+    }
+
     /** Switch directly from the app-owned window row and settle the terminal with a short wave. */
     private void showWindowFromBar(int index) {
         if (mPaneController == null || mCurrentWSession == null
@@ -23264,13 +23374,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void animateTerminalArrival(int direction, boolean horizontal, long durationMs) {
+        animateTerminalArrival(direction, horizontal, durationMs, 0f);
+    }
+
+    /**
+     * @param travelPx how far the arrival travels, when it is less than a whole viewport: a
+     *                 border drag between windows has already carried the pages part of the way
+     */
+    private void animateTerminalArrival(int direction, boolean horizontal, long durationMs,
+                                        float travelPx) {
         ViewGroup surfaceHost = findViewById(R.id.terminal_surface_host);
         View paneHost = findViewById(R.id.terminal_pane_host);
         if (surfaceHost == null || paneHost == null || isReducedMotionEnabled()) {
             dropTerminalDepartureSnapshot();
             return;
         }
-        float travel = horizontal ? surfaceHost.getWidth() : surfaceHost.getHeight();
+        float viewport = horizontal ? surfaceHost.getWidth() : surfaceHost.getHeight();
+        float travel = travelPx > 0f ? Math.min(travelPx, viewport) : viewport;
         if (travel <= 0f) {
             dropTerminalDepartureSnapshot();
             return;
@@ -23709,9 +23829,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return null;
         }
         com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell, title);
-        mCurrentWSession.windows.add(w);
+        // Right after the current window, so related windows sit together (ADR 0008).
+        int at = com.termux.app.wall.WallRow.insertionIndex(mCurrentWSession.current,
+            mCurrentWSession.windows.size());
+        mCurrentWSession.windows.add(at, w);
+        if (!focus && at <= mCurrentWSession.current) mCurrentWSession.current++;
         if (focus) {
-            mCurrentWSession.current = mCurrentWSession.windows.size() - 1;
+            mCurrentWSession.current = at;
             if (isVisible()) {
                 runWithoutNotices(() -> {
                     captureTerminalDeparture();
@@ -23789,11 +23913,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (shell == null) return;
         runWithoutNotices(() -> {
             com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
-            mCurrentWSession.windows.add(w);
-            mCurrentWSession.current = mCurrentWSession.windows.size() - 1;
+            // Right after the current window, so related windows sit together (ADR 0008).
+            int at = com.termux.app.wall.WallRow.insertionIndex(mCurrentWSession.current,
+                mCurrentWSession.windows.size());
+            mCurrentWSession.windows.add(at, w);
+            mCurrentWSession.current = at;
             // niri's language: a new window on a full screen scrolls the strip sideways to make
-            // room, so creation rides the same wall pan as navigation — appended at the end, it
-            // enters from the trailing edge while the old window slides out the other side.
+            // room, so creation rides the same wall pan as navigation — placed after the current
+            // one, it enters from the trailing edge while the old window slides out the other side.
             captureTerminalDeparture();
             mPaneController.showWindow(w);
             animateTerminalWindowLifecycleArrival(1);
@@ -23913,8 +24040,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The closed session is carried off along the session axis, the survivor slides in —
             // the same travel its creation played, reversed. Callers capture the departure.
             animateTerminalSessionLifecycleArrival(-1);
-        } else if (getTermuxTerminalSessionClient() != null) {
-            getTermuxTerminalSessionClient().addNewSession(false, null);
+        } else {
+            // The row's last window is gone: the last Home page slides in. The terminal still
+            // starts a fresh session behind it, as it always has, so the Workspace is there to go
+            // back to.
+            if (mPaneWallController != null) mPaneWallController.goToLastHomePage(isVisible());
+            if (getTermuxTerminalSessionClient() != null) {
+                getTermuxTerminalSessionClient().addNewSession(false, null);
+            }
         }
     }
 
