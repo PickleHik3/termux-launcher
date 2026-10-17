@@ -259,10 +259,35 @@ public abstract class BuiltinWidgetView extends FrameLayout {
             MeasureSpec.makeMeasureSpec(Math.round(height / scale), MeasureSpec.EXACTLY));
     }
 
-    /** What the layout gives up at {@code scale}: parts left out, labels cut short, numerals shrunk. */
+    /**
+     * What the layout gives up at {@code scale}: parts left out, labels cut short, numerals shrunk.
+     *
+     * <p>Every trial measures the whole layout afresh. A view answers a measure at a spec it has
+     * seen before from its measure cache, without measuring its children, and the losses are read
+     * from those children: a card back at a size it had before (the Margin slider walked, then
+     * Undo) ran its trials at the very specs of its first search, every one of them answered from
+     * the cache, every one read the losses the last size had left behind, and the search settled
+     * on the largest zoom, the date cut short and the numerals clipped. The zoom memo then kept
+     * that zoom for the size.</p>
+     */
     private int lossesAt(int width, int height, float scale) {
+        remeasureAll(content);
         measureContent(width, height, scale);
         return losses(content);
+    }
+
+    /** Marks {@code view} and everything under it to measure for real at its next measure. */
+    private static void remeasureAll(@NonNull View view) {
+        view.forceLayout();
+        if (view instanceof FitStack) {
+            // Its children are only the ones the last layout attached; it measures all of them.
+            List<View> all = new ArrayList<>();
+            ((FitStack) view).collectAll(all);
+            for (View child : all) remeasureAll(child);
+        } else if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) remeasureAll(group.getChildAt(i));
+        }
     }
 
     private static int losses(@NonNull View view) {
