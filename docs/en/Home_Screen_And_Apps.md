@@ -24,7 +24,9 @@ tabs.
 Home has a layout of its own. Opened on a Home page, Appearance → **Layout** edits only the dock's
 rows and the keyboard. Style, Corners and Margin are Home's own there: they start as the
 Workspace's, and once you change them over a Home page (the labels read **· Home**) Home keeps its
-own while the Workspace keeps its. Minimal mode belongs to the Workspace only. See
+own while the Workspace keeps its. On Home, Margin is the space around the widgets, around the
+terminals floating over Home and around the dock, all at once. Minimal mode belongs to the
+Workspace only. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
 **Settings → Start in** says where the launcher opens after a restart: **Home** (the default) or
