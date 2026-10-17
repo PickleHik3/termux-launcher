@@ -5123,31 +5123,86 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /** Whether the chrome on screen wears the Floating Style: Home's on a Home page, else the Workspace's. */
     public boolean isRoundedDockStyle() {
         return mPreferences != null
-            && mPreferences.getLayoutStyle()
+            && mPreferences.getLayoutStyle(chromeWearsHomeShape())
                 == com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle.FLOATING;
     }
 
     // ---- The one shape model, read live (ADR 0007) ----
 
-    /** Corners, the one Floating radius, in px: Base's corner radius, or the auto token. */
-    private float layoutCornersPx() {
-        int dp = mPreferences == null
+    /**
+     * Whether the chrome on screen wears Home's own Style, Corners and Margin rather than the
+     * Workspace's (HomeChromePolicy): read off the page the chrome is committed to, so it switches
+     * at settle with the layout variant, and a settle that crosses between halves that differ
+     * dresses the chrome again ({@link #restyleChromeForHalfIfChanged}).
+     */
+    private boolean chromeWearsHomeShape() {
+        return com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage);
+    }
+
+    /** Corners in dp as stored for the chrome on screen (-1 is the auto token). */
+    private int chromeCornersDp() {
+        return mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS
-            : mPreferences.getSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.CORNER_RADIUS);
+            : mPreferences.getLayoutCornersDp(chromeWearsHomeShape());
+    }
+
+    /** Margin in dp as stored for the chrome on screen. */
+    private int chromeMarginDp() {
+        return mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP
+            : mPreferences.getLayoutMarginDp(chromeWearsHomeShape());
+    }
+
+    /**
+     * The dock's configured corner radius for a Corners value, as the retired per-surface getter
+     * read it off Base: the follow-the-Style sentinel for the auto token, else capped.
+     */
+    private static int dockCornerRadiusDp(int cornersDp) {
+        if (cornersDp < 0)
+            return TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
+        return Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS,
+            cornersDp);
+    }
+
+    /**
+     * A settle from {@code from} onto {@code to} that crosses between the halves of the wall while
+     * Home's Style, Corners or Margin differ from the Workspace's: the chrome is dressed again as
+     * the Appearance editor dresses it for a Style change (a launch's dress, the dock and terminal
+     * heights, the status bar, the keyboard and the dock's styling), now that every read above
+     * answers for the arriving half. Nothing happens while the halves agree, which is every
+     * install until the user sets Home apart.
+     */
+    private void restyleChromeForHalfIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
+                                               @NonNull com.termux.app.wall.PaneWallPage to) {
+        if (mPreferences == null || mChrome == null) return;
+        if (com.termux.app.place.HomeChromePolicy.wearsHomeShape(from)
+            == com.termux.app.place.HomeChromePolicy.wearsHomeShape(to)) return;
+        if (!com.termux.app.place.HomeChromePolicy.shapeChanges(from, to,
+            com.termux.app.place.WallHalfShape.read(mPreferences, false),
+            com.termux.app.place.WallHalfShape.read(mPreferences, true))) return;
+        redressChromeFromState();
+        updateAppLauncherBarHeight();
+        setTerminalToolbarHeight(true);
+        refreshTerminalWindowBar();
+        if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
+        applySuggestionBarSurfaceStyling();
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+            | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    /** Corners, the one Floating radius, in px: the half's corner radius, or the auto token. */
+    private float layoutCornersPx() {
+        int dp = chromeCornersDp();
         if (dp < 0) dp = TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(null, true);
         return dpToPx(dp);
     }
 
     /** Margin, the air between and around Floating cards, in px. */
     private float layoutMarginPx() {
-        int dp = mPreferences == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP
-            : mPreferences.getSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP);
-        return dpToPx(Math.max(0, dp));
+        return dpToPx(Math.max(0, chromeMarginDp()));
     }
 
     /** The device's screen radius, which a Docked frame's outer corners take; 28dp when unknown. */
@@ -5223,7 +5278,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : mKeyboardGeometry.desiredHeightPx()) : 0f;
         return com.termux.app.chrome.LiveChromeShape.of(layout,
             mPreferences == null ? TermuxAppSharedPreferences.LayoutStyle.DOCKED
-                : mPreferences.getLayoutStyle(), width, height,
+                : mPreferences.getLayoutStyle(chromeWearsHomeShape()), width, height,
             com.termux.app.place.ChromeShapeModel.Thickness.of(status, status, apps, apps, az, az,
                 keys, keys, keyboard),
             layoutCornersPx(), layoutMarginPx(), screenRadiusPx(),
@@ -5561,13 +5616,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int resolveInAppKeyboardHorizontalInsetPx() {
         return resolveSurfaceHorizontalInsetPx(mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET
-            : mPreferences.getInAppKeyboardHorizontalInset(), isInAppKeyboardCapsule());
+            : TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp()),
+            isInAppKeyboardCapsule());
     }
 
     private int resolveStatusBarHorizontalInsetPx() {
         return resolveSurfaceHorizontalInsetPx(mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET
-            : mPreferences.getStatusBarHorizontalInset(), isRoundedDockStyle());
+            : TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp()),
+            isRoundedDockStyle());
     }
 
     /**
@@ -13160,8 +13217,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the shape model, which is fed this very answer through {@link #chromeThicknessPx}.
      */
     private int dockedFrameSharedBandPx() {
-        if (mPreferences == null
-            || mPreferences.getLayoutStyle() != TermuxAppSharedPreferences.LayoutStyle.DOCKED) {
+        if (mPreferences == null || mPreferences.getLayoutStyle(chromeWearsHomeShape())
+                != TermuxAppSharedPreferences.LayoutStyle.DOCKED) {
             return 0;
         }
         PlaceLayout layout = currentPlaceLayout();
@@ -14647,11 +14704,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .density(getResources().getDisplayMetrics().density)
             .barHeightScale(preferencesAvailable
                 ? mPreferences.getAppLauncherBarHeightScale() : DockLayoutPolicy.sizePreset(2))
+            // The dock's side gap and corner radius are Margin and Corners since the Style
+            // rework (the per-surface overrides are retired), so they are the half's on screen.
             .dockHorizontalInsetDp(preferencesAvailable
-                ? mPreferences.getDockHorizontalInset()
+                ? TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp())
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET)
             .configuredCornerRadiusDp(preferencesAvailable
-                ? mPreferences.getAppLauncherDockCornerRadius()
+                ? dockCornerRadiusDp(chromeCornersDp())
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS)
             .appsRowEnabledPref(PlaceChromePolicy.appsShown(layout))
             .azRowEnabledPref(PlaceChromePolicy.azRowOnDock(layout))
@@ -18841,10 +18900,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                   boolean leavingKeyboardUp) {
         if (page != mLastWallPage) {
             rememberPlaceKeyboard(mLastWallPage, leavingKeyboardUp);
+            com.termux.app.wall.PaneWallPage left = mLastWallPage;
             mLastWallPage = page;
             // The arrangement before the keyboard, so the keyboard's geometry pass sees the
             // chrome it will stand in.
             syncChromeArrangement();
+            // Home wears its own Style, Corners and Margin: a crossing between halves that differ
+            // dresses the chrome for the arriving one, as the variant above re-arranged it.
+            restyleChromeForHalfIfChanged(left, page);
         }
         applyPlaceKeyboard(page);
     }
