@@ -271,6 +271,33 @@ public final class LauncherToolRegistry {
                 // The pill says it: listening, then what became of the text.
                 TOOL_VOICE_DICTATE));
 
+        /**
+         * Categories whose every tool acts on the focused pane: its text, selection, URLs,
+         * transcript, splits and float, its font, the clipboard it pastes into. Home has no focused
+         * pane, so the Home palette leaves these sections out whole.
+         */
+        public static final Set<String> TERMINAL_ONLY_CATEGORIES =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+                CATEGORY_PANE, CATEGORY_TERMINAL, CATEGORY_CLIPBOARD)));
+
+        /**
+         * The terminal-only tools filed under another category: the pane's mouse mode, and the
+         * actions on the current Workspace window, which Home replaces with a jump row per window.
+         * One table beside the categories, so the Home rule reads in one place.
+         */
+        private static final Set<String> TERMINAL_ONLY_TOOLS =
+            new HashSet<>(Arrays.asList(
+                TOOL_MOUSE_TOGGLE,
+                TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
+                TOOL_WINDOW_RENAME, TOOL_WINDOW_RENAME_PROMPT, TOOL_WINDOW_SELECT));
+
+        /**
+         * Whether the action only means something with a terminal pane in front of the user, so
+         * the Home palette leaves it out. Derived from the category first and the short tool table
+         * second; see {@link #TERMINAL_ONLY_CATEGORIES}.
+         */
+        public final boolean terminalOnly;
+
         /** Agent-only tool: no UI metadata. */
         public ToolMetadata(
             @NonNull String name,
@@ -326,6 +353,8 @@ public final class LauncherToolRegistry {
                 ? Collections.<Binding>emptyList()
                 : Collections.unmodifiableList(new ArrayList<>(defaultBindings));
             this.selfEvident = SELF_EVIDENT_TOOLS.contains(name);
+            this.terminalOnly = (category != null && TERMINAL_ONLY_CATEGORIES.contains(category))
+                || TERMINAL_ONLY_TOOLS.contains(name);
         }
 
         /** Whether this tool carries enough metadata to appear in the command palette. */
