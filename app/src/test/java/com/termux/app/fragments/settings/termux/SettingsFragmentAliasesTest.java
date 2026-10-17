@@ -112,6 +112,6 @@ public class SettingsFragmentAliasesTest {
     public void theX11FragmentNameStillResolvesUnchanged() {
         Fragment fragment = launch(X11DisplayPreferencesFragment.class);
         PreferenceScreen screen = ((X11DisplayPreferencesFragment) fragment).getPreferenceScreen();
-        assertNotNull(screen.findPreference("x11_display_enabled"));
+        assertNotNull(screen.findPreference("x11_sub_input"));
     }
 }

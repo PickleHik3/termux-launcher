@@ -6,13 +6,7 @@
         app:title="@string/settings_search_hint"
         app:persistent="false" />
 
-    <ListPreference
-        app:key="app_launcher_use_case_mode"
-        app:icon="@drawable/ic_symbol_stacks"
-        app:title="@string/settings_use_as_title"
-        app:dialogTitle="@string/settings_use_as_dialog_title" />
-
-    <!-- Start in: the page a cold start shows (ADR 0008). Dressed like the row above. -->
+    <!-- Start in: the page a cold start shows (ADR 0008). A plain setting row. -->
     <ListPreference
         app:key="app_launcher_start_in"
         app:title="@string/settings_start_in_title"
