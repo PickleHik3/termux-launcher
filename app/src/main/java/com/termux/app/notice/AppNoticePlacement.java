@@ -163,8 +163,33 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
 
     private void apply() {
         View terminal = resolveTerminalArea();
-        if (terminal != null) applyTerminalBand(terminal);
+        if (terminal != null && terminalOnScreen(terminal)) applyTerminalBand(terminal);
         else applyChromeRow(resolveChrome());
+    }
+
+    /**
+     * Whether the terminal area stands wholly across the anchor. It is shown whichever page the
+     * wall rests on, so on Home, mid-slide or behind the Layout editor it can stand partly or
+     * wholly off the screen; a band cut to it then runs past the screen's edge and the pill
+     * centred in it with it. Such a terminal is not the screen's terminal, and the pill hangs in
+     * the chrome row instead, the full width of the anchor.
+     */
+    private boolean terminalOnScreen(@NonNull View terminal) {
+        int[] location = new int[2];
+        terminal.getLocationInWindow(location);
+        int[] anchorLocation = new int[2];
+        mAnchor.getLocationInWindow(anchorLocation);
+        return bandWithinAnchor(location[0] - anchorLocation[0], terminal.getWidth(),
+            mAnchor.getWidth());
+    }
+
+    /**
+     * Whether a band starting {@code leftPx} into the anchor and {@code widthPx} wide fits in an
+     * anchor {@code anchorWidthPx} wide; true while the anchor is not measured yet.
+     */
+    static boolean bandWithinAnchor(int leftPx, int widthPx, int anchorWidthPx) {
+        if (anchorWidthPx <= 0) return true;
+        return leftPx >= 0 && leftPx + widthPx <= anchorWidthPx;
     }
 
     /**

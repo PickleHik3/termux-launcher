@@ -18,7 +18,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+// The window is as wide as the anchor the tests lay out by hand: a terminal band is only taken
+// while it fits across the anchor (AppNoticePlacement.bandWithinAnchor).
+@Config(sdk = {Build.VERSION_CODES.P}, qualifiers = "w400dp-h800dp-mdpi")
 @LooperMode(LooperMode.Mode.LEGACY)
 public class AppNoticePlacementTest {
 
@@ -143,6 +145,51 @@ public class AppNoticePlacementTest {
         int gap = Math.round(8f * activity.getResources().getDisplayMetrics().density);
         assertEquals(gap,
             ((ViewGroup.MarginLayoutParams) host.getLayoutParams()).topMargin);
+    }
+
+    /**
+     * The Layout editor shows the live launcher scaled down behind it: the terminal area's
+     * on-screen left moves in while its width stays the unscaled one, and a band cut to that ran
+     * past the screen's right edge with the pill centred in it (devcheck: the always-on notice
+     * cut off at the right of a 1080 px screen). A terminal not wholly across the anchor is not
+     * the screen's terminal, so the pill hangs in the full-width row instead, and its side margins
+     * keep it inside the screen.
+     */
+    @Test
+    public void aTerminalNotWhollyOnScreenGivesTheFullWidthRow() {
+        assertTrue(AppNoticePlacement.bandWithinAnchor(0, 1080, 1080));
+        assertTrue(AppNoticePlacement.bandWithinAnchor(120, 960, 1080));
+        assertFalse(AppNoticePlacement.bandWithinAnchor(237, 1080, 1080));
+        assertFalse(AppNoticePlacement.bandWithinAnchor(-540, 1080, 1080));
+        assertTrue("unmeasured: no reason to refuse", AppNoticePlacement.bandWithinAnchor(237, 1080, 0));
+
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout anchor = new FrameLayout(activity);
+        activity.setContentView(anchor);
+        View terminal = new View(activity);
+        terminal.setId(AppNoticePlacement.TERMINAL_AREA_ID);
+        anchor.addView(terminal, new FrameLayout.LayoutParams(400, 500));
+        terminal.setPivotX(200f);
+        terminal.setPivotY(0f);
+        terminal.setScaleX(0.5f);
+        terminal.setScaleY(0.5f);
+        FrameLayout frame = AppNoticeHostView.buildFrame(activity);
+        AppNoticeHostView host = new AppNoticeHostView(activity);
+        frame.addView(host, AppNoticeHostView.buildHostLayoutParams(activity));
+        anchor.addView(frame, AppNoticeHostView.buildFrameLayoutParams());
+
+        AppNoticePlacement.attach(anchor, frame, host);
+        layout(anchor);
+
+        FrameLayout.LayoutParams band = (FrameLayout.LayoutParams) frame.getLayoutParams();
+        assertEquals(0, band.leftMargin);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, band.width);
+        assertFalse(frame.getClipChildren());
+        FrameLayout.LayoutParams pill = (FrameLayout.LayoutParams) host.getLayoutParams();
+        assertTrue("the pill keeps a margin on both sides", pill.leftMargin > 0
+            && pill.rightMargin > 0);
+        assertTrue("the pill fits inside the screen less its margins",
+            frame.getWidth() <= 400 && host.getRight() <= 400 - pill.rightMargin);
     }
 
     /**
