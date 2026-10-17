@@ -45,6 +45,46 @@ public class FloatTitlebarTest {
     }
 
     @Test
+    public void glyphInk_onGlassIsTheWindowBarsLabelInkOnTheChromesPolarity() {
+        int lightOnSurface = 0xFF171C24;
+        int lightSurfaceBase = 0xFFF4F6FB;
+        int paleTint = 0x33F4F6FB;
+        // The light theme over a dark wallpaper: the chrome reads pale ink, and so does the strip,
+        // where solving against the pale tint alone gave near-black glyphs that read as disabled.
+        assertEquals(lightSurfaceBase, FloatTitlebarPolicy.glyphInk(true,
+            com.termux.app.chrome.ChromeInk.Polarity.PALE_INK, lightOnSurface, lightSurfaceBase,
+            paleTint, true));
+        assertEquals("full alpha on an unfocused float too", lightSurfaceBase,
+            FloatTitlebarPolicy.glyphInk(true, com.termux.app.chrome.ChromeInk.Polarity.PALE_INK,
+                lightOnSurface, lightSurfaceBase, paleTint, false));
+        assertEquals(lightOnSurface, FloatTitlebarPolicy.glyphInk(true,
+            com.termux.app.chrome.ChromeInk.Polarity.DARK_INK, lightOnSurface, lightSurfaceBase,
+            paleTint, true));
+
+        int darkOnSurface = 0xFFE8EDF7;
+        int darkSurfaceBase = 0xFF0F1218;
+        assertEquals(darkOnSurface, FloatTitlebarPolicy.glyphInk(true,
+            com.termux.app.chrome.ChromeInk.Polarity.PALE_INK, darkOnSurface, darkSurfaceBase,
+            0x33101418, true));
+        assertEquals("the dark theme over a light wallpaper", darkSurfaceBase,
+            FloatTitlebarPolicy.glyphInk(true, com.termux.app.chrome.ChromeInk.Polarity.DARK_INK,
+                darkOnSurface, darkSurfaceBase, 0x33101418, true));
+    }
+
+    @Test
+    public void glyphInk_onThePanelOrUnmeasuredIsLegibleOnTheStrip() {
+        int onSurface = 0xFF171C24;
+        int panel = 0xFFFFFFFF;
+        assertEquals(com.termux.app.chrome.GlassInk.legible(panel, onSurface,
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT, 255),
+            FloatTitlebarPolicy.glyphInk(false, com.termux.app.chrome.ChromeInk.Polarity.PALE_INK,
+                onSurface, 0xFFF4F6FB, panel, true));
+        assertEquals(com.termux.app.chrome.GlassInk.legible(panel, onSurface,
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT, 170),
+            FloatTitlebarPolicy.glyphInk(true, null, onSurface, 0xFFF4F6FB, panel, false));
+    }
+
+    @Test
     public void dock_isInTheHandlesMenuNeverOnTheStrip() {
         // The two-pane Dock glyph read as Split (developer, 2026-10-18).
         for (boolean minimise : new boolean[]{false, true}) {
