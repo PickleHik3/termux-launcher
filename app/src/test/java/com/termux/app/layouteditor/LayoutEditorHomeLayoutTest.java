@@ -131,6 +131,27 @@ public class LayoutEditorHomeLayoutTest {
         assertFalse(plan.isDirty());
     }
 
+    /**
+     * Always on turned on and the editor opened again on Home: the keyboard is no longer in the
+     * tray because it stands on the canvas (the shown layout carries it), and putting it away
+     * brings its chip back and turns always on off.
+     */
+    @Test
+    public void reopenedWithAlwaysOnTheKeyboardStandsOnTheCanvasAndCanBePutAway() {
+        LayoutEditorPlan first = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        first.restore(LayoutEditorPlan.TrayItem.KEYBOARD);
+        assertTrue(places.isHomeKeyboardAlwaysOn());
+
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        assertTrue("the canvas is handed the keyboard", plan.shownLayout().keyboardShown);
+        assertFalse(plan.trayItems().contains(LayoutEditorPlan.TrayItem.KEYBOARD));
+
+        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setKeyboardShown(false));
+        assertFalse(places.isHomeKeyboardAlwaysOn());
+        assertTrue(plan.trayItems().contains(LayoutEditorPlan.TrayItem.KEYBOARD));
+        assertFalse(plan.shownLayout().keyboardShown);
+    }
+
     @Test
     public void editsOnHomeLeaveTheWorkspaceLayoutAlone() {
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);

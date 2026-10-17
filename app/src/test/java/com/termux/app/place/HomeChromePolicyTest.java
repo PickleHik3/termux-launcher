@@ -174,4 +174,39 @@ public class HomeChromePolicyTest {
         // The floats' room starts at the bar's edge, under the whole top stack.
         assertEquals(120, EdgeStackPolicy.stackThicknessPx(withBar, PlaceLayout.Edge.TOP, metrics));
     }
+
+    /**
+     * Landscape on Home with a float open: the dock is a rail on the left and the floats' status
+     * bar stands on the top, overlaying the page. The canvas band reaches up under the bar, and
+     * the rail in it starts back at the bar's edge, as on the Workspace where the bar takes its
+     * own row, so the rail's first icon never covers the bar's first chip (devcheck w2-d-1s).
+     */
+    @Test
+    public void aSideDockOnHomeStartsBelowTheFloatsBar() {
+        PlaceLayout home = new PlaceLayout(PlaceLayout.Edge.TOP, PlaceLayout.RowPlacement.LEFT,
+            true, PlaceLayout.Edge.BOTTOM, PlaceLayout.RowPlacement.HIDDEN,
+            PlaceLayout.KeyboardMode.RESIZE, PlaceLayout.KeyboardForm.DOCKED, 4, 5)
+            .withSlot(Element.STATUS, Slot.hiddenFrom(PlaceLayout.Edge.TOP, 0));
+        EdgeStackPolicy.Metrics metrics = EdgeStackPolicy.Metrics.builder()
+            .status(120, 200).apps(150, 90).az(40, 60).extraKeys(80, 100).build();
+        PlaceLayout withBar = HomeChromePolicy.withFloatStatusBar(home, PlaceLayout.Edge.TOP, true);
+        assertEquals(PlaceLayout.Edge.LEFT, EdgeStackPolicy.edgeOf(withBar, Element.APPS));
+        boolean overlays = HomeChromePolicy.statusOverlays(HOME);
+
+        int overlap = EdgeStackPolicy.topOverlapPx(withBar, metrics, overlays);
+        assertEquals(120, overlap);
+        int railTop = EdgeStackPolicy.stackThicknessPx(withBar, PlaceLayout.Edge.TOP, metrics)
+            - overlap
+            + EdgeStackPolicy.sideStackTopInsetPx(withBar, PlaceLayout.Edge.LEFT, metrics,
+                overlays);
+        assertEquals("the rail starts at the bar's edge", 120, railTop);
+        assertEquals("an empty side keeps no inset", 0,
+            EdgeStackPolicy.sideStackTopInsetPx(withBar, PlaceLayout.Edge.RIGHT, metrics,
+                overlays));
+        assertEquals("no float, no bar, no inset", 0,
+            EdgeStackPolicy.sideStackTopInsetPx(home, PlaceLayout.Edge.LEFT, metrics, overlays));
+        assertEquals("a window's bar takes its row, so its rail needs none", 0,
+            EdgeStackPolicy.sideStackTopInsetPx(withBar, PlaceLayout.Edge.LEFT, metrics,
+                HomeChromePolicy.statusOverlays(WINDOW)));
+    }
 }

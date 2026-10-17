@@ -3162,13 +3162,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     void applySideStackFrameInset(int verticalInsetPx) {
         int inset = Math.max(0, verticalInsetPx);
-        for (int id : new int[] {R.id.place_edge_stack_left, R.id.place_edge_stack_right}) {
-            View stack = findViewById(id);
+        int[] ids = {R.id.place_edge_stack_left, R.id.place_edge_stack_right};
+        for (int side = 0; side < ids.length; side++) {
+            View stack = findViewById(ids[side]);
             if (stack == null) continue;
-            if (stack.getPaddingTop() == inset && stack.getPaddingBottom() == inset) continue;
-            stack.setPadding(stack.getPaddingLeft(), inset, stack.getPaddingRight(), inset);
+            // Plus the status bar's band on a page it overlays (EdgeStackPolicy
+            // .sideStackTopInsetPx), so a side column starts at the bar's edge.
+            int top = inset + mSideStackBarInsetPx[side];
+            if (stack.getPaddingTop() == top && stack.getPaddingBottom() == inset) continue;
+            stack.setPadding(stack.getPaddingLeft(), top, stack.getPaddingRight(), inset);
         }
     }
+
+    /** Per side stack (left, right), the status bar's band it starts below; 0 off Home. */
+    @NonNull private final int[] mSideStackBarInsetPx = new int[2];
 
     /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
     private int terminalFrameInsetPx(boolean vertical) {
@@ -13664,9 +13671,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean applyEdgeStacksAndInvalidate(@NonNull PlaceLayout layout) {
         boolean moved = applyEdgeStacks(layout);
-        moved |= applyTopStackOverlap(EdgeStackPolicy.topOverlapPx(layout,
-            buildEdgeStackMetrics(),
-            com.termux.app.place.HomeChromePolicy.statusOverlays(mLastWallPage)));
+        EdgeStackPolicy.Metrics metrics = buildEdgeStackMetrics();
+        boolean statusOverlays =
+            com.termux.app.place.HomeChromePolicy.statusOverlays(mLastWallPage);
+        moved |= applyTopStackOverlap(EdgeStackPolicy.topOverlapPx(layout, metrics,
+            statusOverlays));
+        // The side stacks ride up with the canvas; they start back at the bar's edge.
+        moved |= applySideStackTopInset(0, R.id.place_edge_stack_left,
+            EdgeStackPolicy.sideStackTopInsetPx(layout, PlaceLayout.Edge.LEFT, metrics,
+                statusOverlays));
+        moved |= applySideStackTopInset(1, R.id.place_edge_stack_right,
+            EdgeStackPolicy.sideStackTopInsetPx(layout, PlaceLayout.Edge.RIGHT, metrics,
+                statusOverlays));
         if (moved) mChrome.onArrangementChanged();
         return moved;
     }
@@ -13684,6 +13700,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View stack = findViewById(R.id.place_edge_stack_top);
         if (band == null || !(stack instanceof com.termux.app.place.EdgeStackView)) return false;
         return ((com.termux.app.place.EdgeStackView) stack).overlayFollowing(band, overlapPx);
+    }
+
+    /**
+     * A side stack starts below the status bar's band on a page the bar overlays
+     * (EdgeStackPolicy.sideStackTopInsetPx), on top of the frame inset its bottom padding holds
+     * (applySideStackFrameInset). Whether it changed.
+     */
+    private boolean applySideStackTopInset(int side, int stackId, int insetPx) {
+        if (mSideStackBarInsetPx[side] == insetPx) return false;
+        mSideStackBarInsetPx[side] = insetPx;
+        View stack = findViewById(stackId);
+        if (stack == null) return false;
+        int frame = stack.getPaddingBottom();
+        stack.setPadding(stack.getPaddingLeft(), frame + insetPx, stack.getPaddingRight(), frame);
+        return true;
     }
 
     /**

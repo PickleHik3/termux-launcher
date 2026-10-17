@@ -223,7 +223,29 @@ public final class WidgetGridView extends ViewGroup {
 
     @NonNull public WidgetGridMetrics metrics() {
         return new WidgetGridMetrics(new Rect(0, 0, getWidth(), getHeight()), 0,
-            edgePadding, gap, definition, getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+            edgePadding, gap, definition, getLayoutDirection() == LAYOUT_DIRECTION_RTL,
+            reservedRows);
+    }
+
+    /** Rows kept empty under the grid for an always-on keyboard; see {@link #setReservedRows}. */
+    private int reservedRows;
+
+    /**
+     * The rows an always-on keyboard took off the grid ({@code WidgetPaneController
+     * #applyWantedGrid}). The grid keeps its whole height on Home, under the keyboard too, so the
+     * cells are still cut as if those rows were there: every cell keeps its height and the grid
+     * ends that many rows above the bottom, rather than its fewer rows stretching to fill it.
+     */
+    public void setReservedRows(int rows) {
+        int wanted = Math.max(0, rows);
+        if (reservedRows == wanted) return;
+        reservedRows = wanted;
+        requestLayout();
+        invalidate();
+    }
+
+    public int reservedRows() {
+        return reservedRows;
     }
 
     @Nullable public WidgetCellView cellForId(int id) { return cells.get(id); }
@@ -243,7 +265,8 @@ public final class WidgetGridView extends ViewGroup {
         int height = MeasureSpec.getSize(heightMeasureSpec);
         setMeasuredDimension(resolveSize(width, widthMeasureSpec), resolveSize(height, heightMeasureSpec));
         WidgetGridMetrics metrics = new WidgetGridMetrics(new Rect(0, 0, width, height), 0,
-            edgePadding, gap, definition, getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+            edgePadding, gap, definition, getLayoutDirection() == LAYOUT_DIRECTION_RTL,
+            reservedRows);
         for (LauncherWidgetRecord record : records) {
             WidgetCellView child = cells.get(record.appWidgetId);
             if (child == null) continue;
