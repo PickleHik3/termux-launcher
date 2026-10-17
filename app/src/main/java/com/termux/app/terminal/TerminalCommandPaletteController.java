@@ -173,6 +173,11 @@ public final class TerminalCommandPaletteController
     /** True while {@link #doFrame} runs: a kick from inside it continues the loop and keeps its clock. */
     private boolean mInFrame;
     private float mAnchorY;
+    /**
+     * The tallest the glass may grow above {@link #mAnchorY}: unbounded in the Workspace, and on
+     * Home the room above the dock ({@link CommandPaletteHomeOverlay#availableHeightPx}).
+     */
+    private float mMaxHeightPx = Float.MAX_VALUE;
     private float mCurrentRadius;
 
     private final List<CommandPaletteFilter.Entry> mEntries = new ArrayList<>();
@@ -557,6 +562,12 @@ public final class TerminalCommandPaletteController
         // the square band applyFrame() already documents fighting.
         mView.setOutlineProvider(null);
         mView.setElevation(dp(1f));
+        // On Home the glass stands above the dock and the keyboard, so it follows them when the
+        // stack settles or changes height under an open palette (a keyboard laid out late, a
+        // rotation, the dock's rows coming or going).
+        View stack = mActivity.findViewById(R.id.accessory_stack_container);
+        if (stack != null) stack.addOnLayoutChangeListener(
+            (v, l, t, r, b, ol, ot, or, ob) -> onStackLayoutChanged(t != ot || b != ob));
         return true;
     }
 
@@ -687,13 +698,28 @@ public final class TerminalCommandPaletteController
         mSeed.set(centerX - width / 2f, bottom - height, centerX + width / 2f, bottom);
     }
 
+    /** The bottom stack moved under an open Home palette: the glass settles above it again. */
+    private void onStackLayoutChanged(boolean moved) {
+        if (!moved || !mOpen || mView == null || mContext != CommandPaletteContext.HOME) return;
+        resolveAnchor();
+        mView.setModalBounds(mModalBounds);
+        mHeight.target = targetHeight();
+        applyFrame();
+        kick();
+    }
+
     /**
      * Bottom edge lands mid-terminal and is clamped so the keycap strip below it never covers
-     * the last prompt rows.
+     * the last prompt rows. On Home it lands above the dock and the keyboard instead.
      */
     private void resolveAnchor() {
         float top = terminalTop();
         float bottom = terminalBottom();
+        if (mContext == CommandPaletteContext.HOME) {
+            resolveHomeAnchor(top, bottom);
+            return;
+        }
+        mMaxHeightPx = Float.MAX_VALUE;
         float anchor = top + (bottom - top) * ANCHOR_FRACTION;
         float lowest = bottom - dp(STRIP_RESERVE);
         float highest = top + dp(MIN_HEIGHT);
@@ -702,6 +728,33 @@ public final class TerminalCommandPaletteController
         // Below that sits the in-app keyboard, whose keys are how the palette is typed into: if
         // the overlay ate those taps, every keystroke would register as a dismissing outside tap.
         mModalBounds.set(0f, top, mHost.getWidth(), bottom);
+    }
+
+    /**
+     * On Home the page runs on under the dock and the keyboard, which overlay it (spec §5), so the
+     * glass and its keycap strip end above the bottom stack and the glass grows upward into the
+     * room left above. Taps on the dock and the keyboard go through to them.
+     */
+    private void resolveHomeAnchor(float top, float bottom) {
+        float stackHeight = CommandPaletteHomeOverlay.stackHeightPx(top, bottom, bottomStackTop());
+        float room = bottom - top;
+        float inset = CommandPaletteHomeOverlay.bottomInsetPx(room, stackHeight,
+            dp(STRIP_RESERVE));
+        mAnchorY = bottom - inset;
+        mMaxHeightPx = CommandPaletteHomeOverlay.availableHeightPx(room, inset, dp(SIDE_INSET),
+            dp(MAX_HEIGHT));
+        mModalBounds.set(0f, top, mHost.getWidth(), bottom - stackHeight);
+    }
+
+    /** The top of the bottom stack (dock rows and keyboard) in host coordinates, NaN if none. */
+    private float bottomStackTop() {
+        View stack = mActivity.findViewById(R.id.accessory_stack_container);
+        if (stack == null || stack.getVisibility() != View.VISIBLE || stack.getHeight() <= 0)
+            return Float.NaN;
+        stack.getLocationOnScreen(mLocation);
+        int stackTop = mLocation[1];
+        mHost.getLocationOnScreen(mLocation);
+        return stackTop - mLocation[1];
     }
 
     private float terminalTop() {
@@ -721,7 +774,8 @@ public final class TerminalCommandPaletteController
 
     private float targetHeight() {
         float content = mView.measuredContentHeight();
-        return Math.max(mView.chromeHeight(), Math.min(dp(MAX_HEIGHT), content));
+        return Math.max(mView.chromeHeight(),
+            Math.min(Math.min(dp(MAX_HEIGHT), mMaxHeightPx), content));
     }
 
     private boolean isReducedMotion() {
