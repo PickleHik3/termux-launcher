@@ -114,8 +114,10 @@ ad -s emu runas com.termux 'launcherctl pane list'
   then `ad launch` for a cold start (`am start` into a live instance does not re-land).
 - Always run `ad logcat` and `ad crash` under `timeout`; they follow forever. A crash is read with
   `adb -s emulator-5554 logcat -d -b crash`.
-- Injected swipes release with zero velocity: use 600–800 ms for page drags; a side-border hold is
-  `input motionevent DOWN x y`, a 500 ms pause, then MOVE and UP.
+- Injected swipes release with zero velocity: use 600–800 ms for page drags, past the middle of the
+  screen. A border drag from a side border is a plain `input swipe` starting in the air beside the
+  window (no hold needed); a hold is still `input motionevent DOWN x y`, a 500 ms pause, then MOVE
+  and UP.
 - Export `AD_RUNAS_PRELUDE` in every bash call; a new call loses it and `launcherctl` reports
   "inaccessible". `launcherctl` is also unavailable while no window exists.
 - Ctrl+Alt+F over adb needs a prior tap on the terminal for focus.

@@ -437,13 +437,12 @@ public class PaneWallControllerTest {
     }
 
     /**
-     * What {@code adb shell input swipe} sends from a side border: the finger sets off at once,
-     * so it is past the slop long before the hold and the side border gives it up. Not a page
-     * change, and not the hold-and-drag a person makes: a device check of the side border needs
-     * a held start.
+     * The swipe back to Home, as a person makes it and as {@code adb shell input swipe} sends it:
+     * a plain sideways drag off the first window's left border with no hold, let go with no
+     * speed past the middle, lands Home on its last page.
      */
     @Config(qualifiers = "xxhdpi")
-    @Test public void aSideBorderSwipeWithNoHoldIsNotTheWalls() {
+    @Test public void aSideBorderSwipeWithNoHoldReachesTheLastHomePage() {
         Host moving = new Host();
         moving.reduced = false;
         moving.display = false;
@@ -457,10 +456,13 @@ public class PaneWallControllerTest {
             layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 6f + i * 45f,
                 700f, i * 70L));
         }
-        assertFalse(layout.isDragging());
+        assertTrue("the side border's slide is the wall's, no hold", layout.isDragging());
         layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 906f, 700f, 1400L));
         idle();
-        assertEquals(PaneWallPage.TERMINAL, row.currentPage());
+        assertEquals(PaneWallPage.WIDGETS, row.currentPage());
+        assertEquals("no step inside the Workspace", 0, moving.stepped);
+        assertEquals("Home arrives on its last page, the one beside the seam", 2,
+            moving.homePage);
     }
 
     /**

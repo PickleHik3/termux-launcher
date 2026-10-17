@@ -1103,10 +1103,15 @@ public class PaneWallLayoutTest {
         assertTrue(statusSwipes.isEmpty());
     }
 
+    /**
+     * The swipe back from a window: a plain sideways drag off a side border, in the air beside
+     * the page or its clearance, takes the wall at once with no hold. Past the clearance, where
+     * the minimum band reaches into a flush page's text, the drag stays the content's.
+     */
     @Test
-    public void aSidewaysStartFromASideBorderStillWaitsForTheHold() {
+    public void aSidewaysStartFromASideBorderPagesAtOnce() {
         buildWithContent();
-        float[] xs = {4f, WIDTH - 4f};
+        float[] xs = {4f, MARGIN + SIDE_REACH - 1f, WIDTH - 4f, WIDTH - MARGIN - SIDE_REACH};
         long t = 0L;
         for (float x : xs) {
             wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, x, HEIGHT / 2f, t));
@@ -1114,16 +1119,30 @@ public class PaneWallLayoutTest {
             float to = x < WIDTH / 2f ? x + 200f : x - 200f;
             wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, to, HEIGHT / 2f,
                 t + 50L));
-            assertEquals("the back swipe's edge: given up", BorderDrag.Claim.ABANDONED,
+            assertEquals(x + ": the wall's, no hold", BorderDrag.Claim.PAGING,
                 wall.borderDragClaim());
-            assertFalse(wall.isDragging());
-            letTheHoldElapse();
-            assertFalse(wall.isDragging());
+            assertTrue(wall.isDragging());
             wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, to, HEIGHT / 2f,
                 t + 1000L));
-            assertEquals(0f, terminal.getTranslationX(), EPS);
+            letTheMotionSettle();
+            wall.goTo(PaneWallPage.TERMINAL, false);
             t += 5000L;
         }
+
+        buildWithContent(0);
+        float inText = SIDE_REACH + 2f;
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, inText, HEIGHT / 2f,
+            t));
+        assertEquals(BorderDrag.Claim.PENDING, wall.borderDragClaim());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, inText + 200f,
+            HEIGHT / 2f, t + 50L));
+        assertEquals("the band over the text: given up", BorderDrag.Claim.ABANDONED,
+            wall.borderDragClaim());
+        letTheHoldElapse();
+        assertFalse(wall.isDragging());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, inText + 200f,
+            HEIGHT / 2f, t + 1000L));
+        assertEquals(0f, terminal.getTranslationX(), EPS);
         assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
     }
 
@@ -2585,11 +2604,11 @@ public class PaneWallLayoutTest {
 
     @Test
     public void aHoldThatCanPageLightsItsBorderAtOnceAndFillsUntilItTakes() {
-        buildWithContent();
+        // Margin 0: the left border's band reaches past the clearance, where only the hold pages.
+        buildWithContent(0);
         wall.setReducedMotion(false);
         BorderGlow glow = wall.borderGlow();
         assertFalse(glow.isShowing());
-        // In the air beside the page: the left border, whose hold pages.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
         assertTrue(glow.isHeld());
         assertEquals(BorderDrag.Border.LEFT, glow.side());
@@ -2688,12 +2707,12 @@ public class PaneWallLayoutTest {
         buildWithContent();
         wall.setReducedMotion(false);
         BorderGlow glow = wall.borderGlow();
-        // Set off sideways past the slop from a side border, where only the hold pages.
+        // Set off up or down past the slop from a side border: no gesture of the wall's.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
         assertTrue(glow.isHeld());
         assertEquals(BorderDrag.Border.LEFT, glow.side());
-        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 204f, HEIGHT / 2f,
-            50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 4f,
+            HEIGHT / 2f + 200f, 50L));
         assertEquals(BorderDrag.Claim.ABANDONED, wall.borderDragClaim());
         assertFalse(glow.isHeld());
         idle(BorderGlow.FADE_MS + 20L);

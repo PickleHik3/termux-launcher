@@ -3,7 +3,7 @@ package com.termux.app.wall;
 import androidx.annotation.NonNull;
 
 /**
- * A press on a pane's border that pages the wall: slid sideways off the top or bottom border, or
+ * A press on a pane's border that pages the wall: slid sideways off any of its four borders, or
  * held on any border and then dragged. The one gesture every place has for moving to the places
  * beside it, in every mode.
  *
@@ -27,15 +27,16 @@ import androidx.annotation.NonNull;
  * as a pinch. What a finger that sets off sideways before the hold does depends on where it
  * landed:
  * <ul>
- *   <li>On the top or bottom border, out in the air beyond the page, with another place to go
- *       ({@link #slidePages}): the wall is claimed at once, the same drag a hold would have begun,
- *       measured from where the claim was made. Nothing there is the content's, and the phone's
- *       back swipe is on the side edges, not these.</li>
- *   <li>Anywhere else — the left and right borders, which share their edge with the phone's back
- *       swipe and reach over the page's edge, the minimum band where it reaches into the page, the
- *       boxes by the pills, and the phone's own strip at the top of the screen: the gesture is
- *       given up, so a scroll, a selection or a TUI's drag inside the page stays the content's.
- *       Only the hold pages from there.</li>
+ *   <li>On a border outside the page's text, with another place to go ({@link #slidePages}):
+ *       the top or bottom border out in the air beyond the page, or the left or right border in
+ *       the air beside it and its {@link #SIDE_REACH_DP} of clearance. The wall is claimed at
+ *       once, the same drag a hold would have begun, measured from where the claim was made.
+ *       Nothing there is the content's. The phone's back swipe still takes the side edges outside
+ *       the stretch the wall asks it to leave (its gesture exclusion), before this sees them.</li>
+ *   <li>Anywhere else — the minimum band where it reaches past the clearance into the page (a
+ *       page almost flush with the wall), the boxes by the pills, and the phone's own strip at the
+ *       top of the screen: the gesture is given up, so a scroll, a selection or a TUI's drag
+ *       inside the page stays the content's. Only the hold pages from there.</li>
  * </ul>
  *
  * <p>The bottom border carries one more gesture, the keyboard's: a clear vertical swipe that
@@ -318,8 +319,8 @@ public final class BorderDrag {
     /** Whether the hold may page: the wall has another place to go. */
     private boolean mHoldPages;
     /**
-     * Whether a sideways start pages at once, without the hold: the top or bottom border, out in
-     * the air beyond the page and below the phone's own strip, on a wall that can page.
+     * Whether a sideways start pages at once, without the hold: a border outside the page's text
+     * ({@link #slidesFrom}) and below the phone's own strip, on a wall that can page.
      */
     private boolean mSlidePages;
     /** Where the wall's drag is measured from: the DOWN, or where a sideways start claimed it. */
@@ -359,6 +360,26 @@ public final class BorderDrag {
     }
 
     /**
+     * Whether a sideways start from {@code (x, y)} on {@code side} pages at once: the point lies
+     * outside the page's text. On the top and bottom that is the air beyond the page's edge; on
+     * the left and right, the air beside it and the clearance the side reach takes over the edge
+     * ({@link #SIDE_REACH_DP}), which never holds a character. Where the minimum band reaches
+     * further in than that (a page almost flush with the wall), the rest of it may be text, and
+     * only the hold pages from there.
+     */
+    static boolean slidesFrom(@NonNull Border side, float x, float y, @NonNull Zone zone) {
+        switch (side) {
+            case TOP: return y < zone.mTop;
+            case BOTTOM: return y >= zone.mBottom;
+            case LEFT:
+                return x < zone.mLeft + Math.min(zone.mSideReach, zone.inside(Border.LEFT));
+            case RIGHT:
+                return x >= zone.mRight - Math.min(zone.mSideReach, zone.inside(Border.RIGHT));
+            default: return false;
+        }
+    }
+
+    /**
      * Which pill's box ({@link Zone#pills}) the point {@code (x, y)} lies in, inside the page:
      * {@link Border#BOTTOM} for the keyboard's, {@link Border#TOP} for the status bar's, and
      * {@link Border#NONE} anywhere else. Like the page itself, a box holds its left and top edges
@@ -376,9 +397,8 @@ public final class BorderDrag {
      * {@code zone} (see {@link #borderAt}) that the press can do something on, or lies in a pill's
      * box ({@link #pillAt}) whose swipe is on; otherwise the gesture is not this one and every
      * later call is a no-op. A press in a pill's box may only become that pill's swipe: its hold
-     * never pages, so a still finger there is given up to the content at the hold. A press on the
-     * top or bottom border outside the page may also page by setting off sideways
-     * ({@link #slidePages}).
+     * never pages, so a still finger there is given up to the content at the hold. A press on a
+     * border outside the page's text may also page by setting off sideways ({@link #slidePages}).
      *
      * @param canPage whether the hold may page the wall: it has another place to go
      * @param keyboardSwipe whether a vertical swipe from the bottom border is the keyboard's
@@ -396,10 +416,7 @@ public final class BorderDrag {
         mSlop = Math.max(0f, slopPx);
         mBorder = borderAt(x, y, zone);
         mHoldPages = canPage && mBorder != Border.NONE;
-        // Out in the air only: where the band reaches into the page, the content keeps its drags.
-        boolean beyondPage = mBorder == Border.TOP ? y < zone.mTop
-            : mBorder == Border.BOTTOM && y >= zone.mBottom;
-        mSlidePages = mHoldPages && beyondPage && !(y < statusTopLimit);
+        mSlidePages = mHoldPages && slidesFrom(mBorder, x, y, zone) && !(y < statusTopLimit);
         // Off the border, the pills' boxes inside the page carry the vertical swipes alone.
         Border swipeSide = mBorder != Border.NONE ? mBorder : pillAt(x, y, zone);
         mKeyboardEligible = keyboardSwipe && swipeSide == Border.BOTTOM;
@@ -515,9 +532,9 @@ public final class BorderDrag {
     }
 
     /**
-     * True from a DOWN whose sideways start pages at once — the top or bottom border, beyond the
-     * page, below the phone's strip, with another place to go — until the lift, whichever way the
-     * claim went. Every such press also {@link #holdPages}.
+     * True from a DOWN whose sideways start pages at once — a border outside the page's text
+     * ({@link #slidesFrom}), below the phone's strip, with another place to go — until the lift,
+     * whichever way the claim went. Every such press also {@link #holdPages}.
      */
     public boolean slidePages() {
         return mSlidePages;

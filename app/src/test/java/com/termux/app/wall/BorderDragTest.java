@@ -11,9 +11,9 @@ import org.junit.Test;
  * The border a press finds, the hold that claims it, and the drag that follows. The border lives
  * in the air between the page and the wall's edge, never on the page: a press on the page's first
  * or last pixel is the content's. A finger on a border claims nothing until it has held still
- * through the hold, set off up or down from the top or bottom border, or set off sideways from the
- * air beyond the top or bottom edge, and is the wall's from there to the lift, whichever of the
- * four borders it started on.
+ * through the hold, set off up or down from the top or bottom border, or set off sideways from a
+ * border outside the page's text (the air beyond any edge, and the side borders' clearance), and
+ * is the wall's from there to the lift, whichever of the four borders it started on.
  */
 public class BorderDragTest {
 
@@ -359,18 +359,45 @@ public class BorderDragTest {
         assertFalse("a second elapse claims nothing new", drag.holdElapsed());
     }
 
+    /**
+     * The swipe back to Home from a window: a plain sideways drag off a side border, in the air
+     * beside the page or its clearance, pages at once with no hold, measured from the claim.
+     */
     @Test
-    public void aFingerThatSetsOffSidewaysFromASideBorderBeforeTheHoldIsGivenUp() {
-        float[][] presses = {{LEFT - 10f, MID_Y}, {RIGHT + 10f, MID_Y}, {LEFT + 2f, MID_Y}};
+    public void aFingerThatSetsOffSidewaysFromASideBorderPagesAtOnce() {
+        float[][] presses = {{LEFT - 10f, MID_Y}, {LEFT - GAP, MID_Y}, {LEFT + 2f, MID_Y},
+            {LEFT + SIDE_REACH - 1f, MID_Y}, {RIGHT + 10f, MID_Y}, {RIGHT + GAP, MID_Y},
+            {RIGHT - SIDE_REACH, MID_Y}};
         for (float[] p : presses) {
             BorderDrag sideways = armed(p[0], p[1]);
-            assertFalse("the back swipe's edges never slide", sideways.slidePages());
-            assertEquals(BorderDrag.Claim.ABANDONED, sideways.move(p[0] + SLOP + 1f, p[1]));
-            assertFalse("the hold finds nothing to claim", sideways.holdElapsed());
-            assertEquals(BorderDrag.Claim.ABANDONED, sideways.claim());
-            assertTrue("armed to the lift, so the rest of the stream is known",
-                sideways.isArmed());
+            assertTrue(p[0] + " slides", sideways.slidePages());
+            assertEquals(BorderDrag.Claim.PENDING, sideways.move(p[0] + SLOP, p[1]));
+            float claimX = p[0] < MID_X ? p[0] + SLOP + 1f : p[0] - SLOP - 1f;
+            assertEquals(BorderDrag.Claim.PAGING, sideways.move(claimX, p[1] + 3f));
+            assertTrue(sideways.isPaging());
+            assertFalse("claimed before the hold, the hold claims nothing new",
+                sideways.holdElapsed());
+            assertEquals(0f, sideways.travel(claimX), 0.01f);
+            assertEquals(300f, sideways.travel(claimX + 300f), 0.01f);
         }
+        // Up or down from a side border is no gesture of the wall's: the content keeps it.
+        BorderDrag vertical = armed(LEFT - 10f, MID_Y);
+        assertEquals(BorderDrag.Claim.ABANDONED, vertical.move(LEFT - 10f, MID_Y + SLOP + 1f));
+        assertFalse("the hold finds nothing to claim", vertical.holdElapsed());
+        assertTrue("armed to the lift, so the rest of the stream is known", vertical.isArmed());
+        // Past the clearance, where the minimum band reaches into a flush page's text, only the
+        // hold pages.
+        BorderDrag.Zone flush = zone(0f);
+        float[] inText = {LEFT + SIDE_REACH, RIGHT - SIDE_REACH - 1f};
+        for (float x : inText) {
+            BorderDrag band = armed(x, MID_Y, flush, true, true, true, NO_LIMIT);
+            assertTrue("the band is armed", band.isArmed());
+            assertFalse("but its sideways drag is the content's", band.slidePages());
+            assertEquals(BorderDrag.Claim.ABANDONED, band.move(x + 100f, MID_Y));
+            assertFalse(band.holdElapsed());
+        }
+        BorderDrag inClearance = armed(LEFT + 1f, MID_Y, flush, true, true, true, NO_LIMIT);
+        assertTrue("the clearance of a flush page still slides", inClearance.slidePages());
         // Without the status swipe, a vertical start from the top is given up as well.
         BorderDrag downward = armed(MID_X, TOP - 10f, zone(GAP), true, true, false, NO_LIMIT);
         assertEquals(BorderDrag.Claim.ABANDONED, downward.move(MID_X, TOP - 10f + SLOP + 1f));
@@ -564,14 +591,16 @@ public class BorderDragTest {
     }
 
     /**
-     * Where the content could be under the finger, or the back swipe or the phone's own strip
-     * share the edge, sideways is never taken: only the air beyond the top and bottom edges,
-     * below the strip, on a wall with somewhere to go.
+     * Where the content's text could be under the finger, or the phone's own strip shares the
+     * edge, sideways is never taken: only the borders outside the text — the air beyond the top
+     * and bottom edges, the air and clearance beside the side ones — below the strip, on a wall
+     * with somewhere to go.
      */
     @Test
-    public void onlyTheTopAndBottomAirBeyondThePageSlides() {
+    public void onlyTheBordersOutsideTheTextSlide() {
         float[][] slide = {{MID_X, TOP - 1f}, {MID_X, TOP - GAP}, {MID_X, BOTTOM},
-            {MID_X, BOTTOM + GAP}};
+            {MID_X, BOTTOM + GAP}, {LEFT - 1f, MID_Y}, {LEFT, MID_Y}, {RIGHT, MID_Y},
+            {RIGHT + GAP, MID_Y}};
         for (float[] p : slide) {
             assertTrue(p[1] + " slides", armed(p[0], p[1]).slidePages());
         }
