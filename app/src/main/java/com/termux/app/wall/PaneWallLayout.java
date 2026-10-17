@@ -315,6 +315,12 @@ public final class PaneWallLayout extends ViewGroup {
     /** The page the glow is drawn on: the one the wall rested on when the finger landed. */
     @Nullable private View mGlowPage;
     /**
+     * The glow's page's size when the press lit it: the frame the glow stays in
+     * ({@link BorderGlow#heldExtent}).
+     */
+    private int mGlowPageWidth;
+    private int mGlowPageHeight;
+    /**
      * The status bar's fold the finger drives ({@link Listener#onStatusFoldBegin}): its whole way
      * in px from the claim to the lift, 0 while no fold is engaged. The fold is carried on the
      * keyboard's reveal arithmetic ({@link KeyboardReveal}) with the direction turned over, since
@@ -327,6 +333,22 @@ public final class PaneWallLayout extends ViewGroup {
     private float mFold;
     /** Reused for the wall's place in its window, so a press allocates nothing. */
     private final int[] mWindowLocation = new int[2];
+    /** Scratch for {@link #dockTopInWall}: the dock's place in the window. */
+    private final int[] mDockLocation = new int[2];
+    /** A Home page's grabber at rest and the box its swipe starts in ({@link #loadHomeGrabber}). */
+    private final float[] mHomePill = new float[4];
+    private final float[] mHomeHit = new float[4];
+    /** The dock's top the Home grabber was last drawn over, so a dock that moves redraws it. */
+    private float mDrawnDockTop = Float.NaN;
+    /**
+     * Watches the dock while Home shows its grabber: the dock rides up and down with the keyboard
+     * by its own layout and translation, which the wall is not told of, and the grabber stands on
+     * it.
+     */
+    private final android.view.ViewTreeObserver.OnPreDrawListener mDockWatch = () -> {
+        watchDock();
+        return true;
+    };
     /**
      * The keyboard's height the finger drives the reveal over ({@link KeyboardReveal}), from a
      * keyboard swipe the listener took ({@link Listener#onKeyboardRevealBegin}) until the settle
@@ -766,9 +788,10 @@ public final class PaneWallLayout extends ViewGroup {
      * ({@link #cancelChildGesture}), so the terminal has released whatever mouse button or hold
      * it had begun, and every later event is read here and goes no further.
      *
-     * <p>On the top and bottom borders out in the air beyond the page, a finger that sets off
-     * sideways before the hold claims the wall by that move ({@link BorderDrag#slidePages}), and
-     * the drag begins there as the hold's would ({@link #takeBorderDrag}).
+     * <p>On any border outside the page's text — the air beyond the top and bottom edges, and the
+     * air and clearance beside the left and right ones — a finger that sets off sideways before
+     * the hold claims the wall by that move ({@link BorderDrag#slidePages}), and the drag begins
+     * there as the hold's would ({@link #takeBorderDrag}).
      *
      * <p>The keyboard swipe is claimed by the move rather than by the timer too: a
      * finger that sets off up or down from the bottom border, or from the box by its grabber a row
@@ -820,7 +843,7 @@ public final class PaneWallLayout extends ViewGroup {
                     return true;
                 }
                 if (claim == BorderDrag.Claim.PAGING) {
-                    // Slid sideways off the top or bottom border: the wall's at once, no hold.
+                    // Slid sideways off a border outside the text: the wall's at once, no hold.
                     mHoldHandler.removeCallbacks(mHoldElapsed);
                     if (takeBorderDrag(event.getX()) && mBorderVelocity != null) {
                         mBorderVelocity.addMovement(event);
@@ -942,6 +965,8 @@ public final class PaneWallLayout extends ViewGroup {
         // and filling over the hold where only the hold does.
         if (mBorderDrag.holdPages()) {
             mGlowPage = mPageViews.get(mCurrent);
+            mGlowPageWidth = mGlowPage == null ? 0 : mGlowPage.getWidth();
+            mGlowPageHeight = mGlowPage == null ? 0 : mGlowPage.getHeight();
             if (mBorderDrag.slidePages()) {
                 mGlow.light(mBorderDrag.border());
             } else {
@@ -976,7 +1001,65 @@ public final class PaneWallLayout extends ViewGroup {
             .corner(CornerZones.paneSizePx(density))
             .pills(grabberCentreX(page, slide), BorderDrag.PILL_SWIPE_WIDTH_DP * density,
                 BorderDrag.PILL_SWIPE_REACH_DP * density);
+        // A Home page's grabber stands over the dock, and its swipe starts by it there.
+        if (mCurrent == PaneWallPage.WIDGETS && loadHomeGrabber(page)) {
+            mBorderZone.bottomPill(mHomeHit[0] + slide, mHomeHit[1], mHomeHit[2] + slide,
+                mHomeHit[3]);
+        } else {
+            mBorderZone.clearBottomPill();
+        }
         return true;
+    }
+
+    /**
+     * Fills {@link #mHomePill} and {@link #mHomeHit} for the Home page {@code page} at rest
+     * ({@link BorderDrag#homeGrabber}): centred on the screen's width, and standing on the dock's
+     * top edge where the dock is on screen.
+     *
+     * @return false where {@code page} is not Home's
+     */
+    private boolean loadHomeGrabber(@NonNull View page) {
+        if (page != mPageViews.get(PaneWallPage.WIDGETS)) return false;
+        View root = getRootView();
+        getLocationInWindow(mWindowLocation);
+        float leftInset = mWindowLocation[0];
+        float rightInset = root != null && root != this && root.getWidth() > 0
+            ? root.getWidth() - mWindowLocation[0] - getWidth() : 0f;
+        float density = getResources().getDisplayMetrics().density;
+        BorderDrag.homeGrabber(getWidth(), leftInset, Math.max(0f, rightInset), page.getBottom(),
+            dockTopInWall(), density, mHomePill, mHomeHit);
+        return true;
+    }
+
+    /**
+     * The top of the dock as it stands on screen, in the wall's coordinates: the dock's glass, or
+     * the whole stack below the content where that is not drawn — up with the keyboard too, since
+     * the dock rides on it. NaN where there is no dock on screen.
+     */
+    private float dockTopInWall() {
+        View root = getRootView();
+        if (root == null || root == this) return Float.NaN;
+        View dock = root.findViewById(com.termux.R.id.accessory_surface_host);
+        if (!isOnScreen(dock)) dock = root.findViewById(com.termux.R.id.accessory_stack_container);
+        if (!isOnScreen(dock)) return Float.NaN;
+        dock.getLocationInWindow(mDockLocation);
+        getLocationInWindow(mWindowLocation);
+        return mDockLocation[1] - mWindowLocation[1];
+    }
+
+    private static boolean isOnScreen(@Nullable View view) {
+        return view != null && view.isShown() && view.getHeight() > 0;
+    }
+
+    /** Before a frame: a dock that moved under Home's grabber redraws it. */
+    private void watchDock() {
+        if (!isGrabberShown()) return;
+        View home = mPageViews.get(PaneWallPage.WIDGETS);
+        if (home == null || home.getVisibility() != VISIBLE) return;
+        float top = dockTopInWall();
+        if (Float.compare(top, mDrawnDockTop) == 0) return;
+        mDrawnDockTop = top;
+        invalidate();
     }
 
     /**
@@ -1466,7 +1549,8 @@ public final class PaneWallLayout extends ViewGroup {
     /**
      * The glow along the held edge of the page it was lit on, as that page is drawn now: slid,
      * sunk about its pivot, tilted with the plank, and faded with its outline as it leaves its
-     * rest.
+     * rest. Inside the frame the press found, never beyond it: a page that grew since the press
+     * leaves the glow where the finger was.
      */
     private void drawBorderGlow(@NonNull android.graphics.Canvas canvas) {
         View page = mGlowPage;
@@ -1481,7 +1565,8 @@ public final class PaneWallLayout extends ViewGroup {
         int save = canvas.save();
         canvas.translate(page.getLeft(), page.getTop());
         canvas.concat(page.getMatrix());
-        mGlow.draw(canvas, 0f, 0f, page.getWidth(), page.getHeight(), 1f, visibility,
+        mGlow.draw(canvas, 0f, 0f, BorderGlow.heldExtent(mGlowPageWidth, page.getWidth()),
+            BorderGlow.heldExtent(mGlowPageHeight, page.getHeight()), 1f, visibility,
             SystemClock.uptimeMillis());
         canvas.restoreToCount(save);
     }
@@ -1527,7 +1612,11 @@ public final class PaneWallLayout extends ViewGroup {
             if (!(visibility > 0f)) continue;
             float centreX = grabberCentreX(page, page.getTranslationX());
             float pivotY = page.getTop() + page.getTranslationY() + page.getPivotY();
-            if (bottom) {
+            if (bottom && place == PaneWallPage.WIDGETS && loadHomeGrabber(page)) {
+                // Home's stands over the dock, centred on the screen, and slides with its page.
+                mGrabber.drawHome(canvas, mHomePill[0], mHomePill[1], mHomePill[2], mHomePill[3],
+                    page.getTranslationX(), visibility);
+            } else if (bottom) {
                 float bottomY = pivotY + (page.getHeight() - page.getPivotY()) * page.getScaleY();
                 mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), visibility);
             }
@@ -2238,11 +2327,14 @@ public final class PaneWallLayout extends ViewGroup {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (isRestingOffPage()) settleImmediately();
+        getViewTreeObserver().addOnPreDrawListener(mDockWatch);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        getViewTreeObserver().removeOnPreDrawListener(mDockWatch);
+        mDrawnDockTop = Float.NaN;
         mSliding = false;
         stopSlide();
         stopNudge();

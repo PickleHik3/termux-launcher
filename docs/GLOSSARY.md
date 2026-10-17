@@ -25,9 +25,12 @@ _Avoid_: alphabet bar (the Layout editor's file names still say `alphabets`), fa
 **Border drag**:
 The one-finger gesture that pages the wall from a **window**, in every mode. It starts on the
 current window's border: the frame line on any of its four sides and the air between it and the next
-thing out, less the corner squares. On the top and bottom air it is a plain sideways swipe. On the
-side borders, and wherever the border reaches into the window, it is a hold and then a sideways drag.
-The edge lights in the accent colour where a finger can page. A **Home page** has no border: it pages
+thing out, less the corner squares. Anywhere on it outside the window's text (the air on all four
+sides, and the side borders' 2 dp of clearance inside the frame) it is a plain sideways swipe that
+pages at once, past the touch slop, with no hold. A hold there still starts it too. Where the border
+reaches further into the window (a window almost flush with the wall) it is a hold and then a
+sideways drag, and a drag that starts in the terminal's text is the terminal's. The edge lights in
+the accent colour inside the frame where a finger can page. A **Home page** has no border: it pages
 by a plain swipe anywhere on it, as any launcher does. Reach, hold, glow and tilt are
 specified in `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: edge swipe, status bar swipe, page swipe

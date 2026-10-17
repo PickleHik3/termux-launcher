@@ -43,6 +43,11 @@ public final class BorderGrabber {
     /** How far outside the page's edge its centre sits: on the frame line, outside the page. */
     public static final float DROP_DP = 2f;
     static final float REST_ALPHA = 0.3f;
+    /**
+     * A Home page's grabber at rest: twice a window's, since it stands over the wallpaper and the
+     * widgets rather than on a frame line.
+     */
+    static final float HOME_REST_ALPHA = 0.6f;
     static final float PRESSED_ALPHA = 0.75f;
     /** How much of the swipe's travel it is drawn along by, and how far at most. */
     static final float TRACK_FRACTION = 0.25f;
@@ -175,6 +180,25 @@ public final class BorderGrabber {
         canvas.drawRoundRect(mRect, radius, radius, mPaint);
     }
 
+    /**
+     * Draw the grabber of a Home page, at rest in {@code restLeft, restTop, restRight, restBottom}
+     * ({@link BorderDrag#homeGrabber}) carried {@code shiftX} sideways with its page, at
+     * {@code visibility} of its full alpha: {@link #HOME_REST_ALPHA} at rest, wider and brighter
+     * under a finger and drawn along the swipe as a window's is.
+     */
+    void drawHome(@NonNull Canvas canvas, float restLeft, float restTop, float restRight,
+                  float restBottom, float shiftX, float visibility) {
+        if (!(visibility > 0f)) return;
+        float density = mHost.getResources().getDisplayMetrics().density;
+        homeBounds(mRect, restLeft + shiftX, restTop, restRight + shiftX, restBottom, mEmphasis,
+            mTrackPx, density);
+        float alpha = homeAlpha(mEmphasis) * Math.min(1f, visibility);
+        mPaint.setColor(mColor);
+        mPaint.setAlpha(Math.round(255f * alpha * (android.graphics.Color.alpha(mColor) / 255f)));
+        float radius = mRect.height() / 2f;
+        canvas.drawRoundRect(mRect, radius, radius, mPaint);
+    }
+
     /** The emphasis the grabber is drawn at, for tests. */
     float emphasis() {
         return mEmphasis;
@@ -208,6 +232,25 @@ public final class BorderGrabber {
         float centreY = edgeY + (top ? -drop : drop) + (Float.isNaN(trackPx) ? 0f : trackPx);
         out.set(centreX - halfWidth, centreY - halfThickness, centreX + halfWidth,
             centreY + halfThickness);
+    }
+
+    /**
+     * A Home page's grabber resting at {@code left, top, right, bottom}, as drawn for
+     * {@code emphasis} and a swipe's {@code trackPx}: wider about its centre under a finger, and
+     * drawn along the swipe.
+     */
+    static void homeBounds(@NonNull RectF out, float left, float top, float right, float bottom,
+                           float emphasis, float trackPx, float density) {
+        float centreX = (left + right) / 2f;
+        float halfWidth = (right - left) / 2f + PRESSED_EXTRA_WIDTH_DP * density * clamp01(emphasis)
+            / 2f;
+        float track = Float.isNaN(trackPx) ? 0f : trackPx;
+        out.set(centreX - halfWidth, top + track, centreX + halfWidth, bottom + track);
+    }
+
+    /** The share of full alpha a Home page's grabber is drawn at for {@code emphasis}. */
+    static float homeAlpha(float emphasis) {
+        return HOME_REST_ALPHA + (PRESSED_ALPHA - HOME_REST_ALPHA) * clamp01(emphasis);
     }
 
     /** The share of full alpha the grabber is drawn at for {@code emphasis}. */
