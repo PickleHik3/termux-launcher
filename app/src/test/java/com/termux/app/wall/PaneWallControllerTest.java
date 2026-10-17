@@ -81,7 +81,9 @@ public class PaneWallControllerTest {
     private PaneWallController controller;
 
     @Before public void build() {
-        activity = Robolectric.buildActivity(Activity.class).setup().get();
+        // A recycled velocity tracker can carry an earlier test's movements under Robolectric.
+        FreshVelocityTrackers.drainPool();
+        activity =Robolectric.buildActivity(Activity.class).setup().get();
         host = new Host();
         controller = newController(host);
         wall = controller.wall();

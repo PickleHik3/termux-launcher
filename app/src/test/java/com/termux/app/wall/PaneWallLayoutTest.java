@@ -10,6 +10,7 @@ import android.os.Build;
 import android.view.View;
 import android.widget.FrameLayout;
 
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -38,6 +39,15 @@ public class PaneWallLayoutTest {
     private View widgets;
     private View terminal;
     private View display;
+
+    /**
+     * Every drag and swipe here starts from a new velocity tracker: a recycled one can carry an
+     * earlier test's movements under Robolectric ({@link FreshVelocityTrackers}).
+     */
+    @Before
+    public void freshVelocityTrackers() {
+        FreshVelocityTrackers.drainPool();
+    }
 
     private void build(Activity activity, boolean widgetsPage, boolean displayPage) {
         wall = new PaneWallLayout(activity);
