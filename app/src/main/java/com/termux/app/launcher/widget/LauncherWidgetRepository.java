@@ -61,6 +61,11 @@ public final class LauncherWidgetRepository {
     @Nullable private String orientation;
     /** The layouts of the orientations that are not on screen; never holds {@link #orientation}. */
     @NonNull private LinkedHashMap<String, OrientationLayout> layouts = new LinkedHashMap<>();
+    /**
+     * The wall as it stood before {@link #shrinkGridRows} ran, kept beside the layout in the same
+     * payload so the two commit together. Null when no shrink is outstanding.
+     */
+    @Nullable private RowSnapshot rowSnapshot;
     private long revision;
     private boolean migrationWritePending;
     private boolean readOnlyUnknownVersion;
@@ -148,6 +153,81 @@ public final class LauncherWidgetRepository {
         LinkedHashMap<Integer, LauncherWidgetRecord> relaid = reflow(records, next, pages);
         if (relaid == null) return false;
         return commitValidated(relaid, null, next, pages[0], revision + 1);
+    }
+
+    /**
+     * Takes {@code rows} rows off the grid (the room an always-on keyboard needs) with today's
+     * reflow, after keeping the wall as it stands so {@link #restoreGridRows()} can put it back.
+     * Returns what moved or shrank, empty when nothing did, or null when refused (an add is in
+     * flight, the grid cannot lose that many rows, or the write failed) with nothing changed.
+     *
+     * <p>A second shrink while the first snapshot is still untouched by edits widens that
+     * snapshot rather than replacing it, so one restore undoes both. After an edit it starts a
+     * new snapshot of the edited wall. The report is always against the wall before this call.</p>
+     */
+    @Nullable public synchronized WidgetReflowReport shrinkGridRows(int rows) {
+        if (rows < 1 || pending != null || migrationWritePending || readOnlyUnknownVersion) {
+            return null;
+        }
+        int nextRows = grid.rows - rows;
+        if (nextRows < WidgetGridDefinition.MIN_ROWS) return null;
+        WidgetGridDefinition next = new WidgetGridDefinition(nextRows, grid.columns);
+        int[] pages = { pageCount };
+        LinkedHashMap<Integer, LauncherWidgetRecord> relaid = reflow(records, next, pages);
+        if (relaid == null) return null;
+        RowSnapshot previous = rowSnapshot != null && rowSnapshot.isUntouched(this)
+            ? rowSnapshot : null;
+        OrientationLayout before = previous != null ? previous.before : snapshot();
+        int taken = (previous != null ? previous.rows : 0) + rows;
+        OrientationLayout after = layoutOf(relaid, next, pages[0], freshPages);
+        RowSnapshot nextSnapshot = new RowSnapshot(orientation, taken, before, after);
+        ArrayList<WidgetReflowReport.Entry> moved = new ArrayList<>();
+        for (LauncherWidgetRecord old : records.values()) {
+            LauncherWidgetRecord now = relaid.get(old.appWidgetId);
+            if (now != null && (now.page != old.page || !now.cell.equals(old.cell))) {
+                moved.add(new WidgetReflowReport.Entry(old.appWidgetId, old.page, old.cell,
+                    now.page, now.cell));
+            }
+        }
+        if (!commitValidated(relaid, null, next, pages[0], freshPages, orientation, layouts,
+            nextSnapshot, revision + 1)) {
+            return null;
+        }
+        return moved.isEmpty() ? WidgetReflowReport.EMPTY : new WidgetReflowReport(moved);
+    }
+
+    /** True while a {@link #shrinkGridRows} snapshot is held, edited since or not. */
+    public synchronized boolean hasGridRowSnapshot() { return rowSnapshot != null; }
+
+    /**
+     * Gives the rows back. When nothing was edited since the shrink (no add, move, resize, remove
+     * or page change, and the same orientation and grid are still on screen) the snapshot is
+     * replayed exactly and true is returned. Otherwise the snapshot is dropped and only the grid
+     * grows, the regained rows left empty, and false is returned. Refused with false and nothing
+     * changed while an add is in flight; false also when there was no snapshot, in which case the
+     * grid is left alone.
+     */
+    public synchronized boolean restoreGridRows() {
+        RowSnapshot held = rowSnapshot;
+        if (held == null || pending != null || migrationWritePending || readOnlyUnknownVersion) {
+            return false;
+        }
+        if (held.isUntouched(this)) {
+            OrientationLayout before = held.before;
+            LinkedHashMap<Integer, LauncherWidgetRecord> replayed = new LinkedHashMap<>();
+            for (LauncherWidgetRecord record : records.values()) {
+                Placement placed = before.cells.get(record.appWidgetId);
+                replayed.put(record.appWidgetId,
+                    placed == null ? record : record.withPage(placed.page).withCell(placed.cell));
+            }
+            return commitValidated(replayed, null, before.grid, before.pageCount,
+                before.freshPages, orientation, layouts, null, revision + 1);
+        }
+        int rows = Math.min(WidgetGridDefinition.MAX_ROWS, grid.rows + held.rows);
+        WidgetGridDefinition grown = new WidgetGridDefinition(rows, grid.columns);
+        commitValidated(records, null, grown, pageCount, freshPages, orientation, layouts, null,
+            revision + 1);
+        return false;
     }
 
     /**
@@ -251,11 +331,51 @@ public final class LauncherWidgetRepository {
 
     /** What the orientation on screen looks like right now, for the shelf. */
     private OrientationLayout snapshot() {
+        return layoutOf(records, grid, pageCount, freshPages);
+    }
+
+    private static OrientationLayout layoutOf(@NonNull Map<Integer, LauncherWidgetRecord> values,
+                                              @NonNull WidgetGridDefinition definition, int pages,
+                                              @NonNull Collection<Integer> fresh) {
         LinkedHashMap<Integer, Placement> cells = new LinkedHashMap<>();
-        for (LauncherWidgetRecord record : records.values()) {
+        for (LauncherWidgetRecord record : values.values()) {
             cells.put(record.appWidgetId, new Placement(record.cell, record.page));
         }
-        return new OrientationLayout(grid, pageCount, new LinkedHashSet<>(freshPages), cells);
+        return new OrientationLayout(definition, pages, new LinkedHashSet<>(fresh), cells);
+    }
+
+    /**
+     * The wall before a row shrink and the wall the shrink left. "Edited since" is a comparison of
+     * the live wall with {@code after}, so it needs no flag to keep in step with every mutator
+     * (add, move, resize, remove, page add or remove all change it) and it survives a restart
+     * because both layouts are persisted. A turn of the screen swaps the records, so it reads as
+     * an edit too and the snapshot is never replayed into the wrong orientation.
+     */
+    private static final class RowSnapshot {
+        @Nullable final String orientation;
+        final int rows;
+        @NonNull final OrientationLayout before;
+        @NonNull final OrientationLayout after;
+        RowSnapshot(@Nullable String orientation, int rows, @NonNull OrientationLayout before,
+                    @NonNull OrientationLayout after) {
+            this.orientation = orientation;
+            this.rows = rows;
+            this.before = before;
+            this.after = after;
+        }
+
+        boolean isUntouched(@NonNull LauncherWidgetRepository live) {
+            if (!java.util.Objects.equals(orientation, live.orientation)
+                || !after.grid.equals(live.grid) || after.pageCount != live.pageCount
+                || !after.freshPages.equals(live.freshPages)
+                || after.cells.size() != live.records.size()) return false;
+            for (LauncherWidgetRecord record : live.records.values()) {
+                Placement placed = after.cells.get(record.appWidgetId);
+                if (placed == null || placed.page != record.page
+                    || !placed.cell.equals(record.cell)) return false;
+            }
+            return true;
+        }
     }
 
     /** One widget's place in an orientation that is not on screen. */
@@ -540,12 +660,12 @@ public final class LauncherWidgetRepository {
     public synchronized boolean resetToEmptyWall() {
         return commitValidated(new LinkedHashMap<Integer, LauncherWidgetRecord>(), null, grid, 1,
             Collections.<Integer>emptySet(), orientation,
-            new LinkedHashMap<String, OrientationLayout>(), revision + 1);
+            new LinkedHashMap<String, OrientationLayout>(), null, revision + 1);
     }
 
     @NonNull public synchronized String serialize() {
         return encode(records, pending, grid, pageCount, freshPages, orientation, layouts,
-            revision);
+            rowSnapshot, revision);
     }
 
     private boolean commitValidated(Map<Integer, LauncherWidgetRecord> next,
@@ -571,13 +691,24 @@ public final class LauncherWidgetRepository {
                                     @Nullable String nextOrientation,
                                     @NonNull Map<String, OrientationLayout> nextLayouts,
                                     long nextRevision) {
+        return commitValidated(next, nextPending, nextGrid, nextPageCount, nextFresh,
+            nextOrientation, nextLayouts, rowSnapshot, nextRevision);
+    }
+
+    private boolean commitValidated(Map<Integer, LauncherWidgetRecord> next,
+                                    @Nullable WidgetAddTransaction nextPending,
+                                    WidgetGridDefinition nextGrid, int nextPageCount,
+                                    @NonNull Collection<Integer> nextFresh,
+                                    @Nullable String nextOrientation,
+                                    @NonNull Map<String, OrientationLayout> nextLayouts,
+                                    @Nullable RowSnapshot nextSnapshot, long nextRevision) {
         if (migrationWritePending || readOnlyUnknownVersion) return false;
         if (!validatePaged(nextGrid, next, nextPending, nextPageCount)) return false;
         LinkedHashSet<Integer> fresh = settledFresh(nextFresh, next, nextPageCount);
         LinkedHashMap<String, OrientationLayout> shelf = new LinkedHashMap<>(nextLayouts);
         if (nextOrientation != null) shelf.remove(nextOrientation);
         String encoded = encode(next, nextPending, nextGrid, nextPageCount, fresh, nextOrientation,
-            shelf, nextRevision);
+            shelf, nextSnapshot, nextRevision);
         if (!storage.write(encoded)) return false;
         records = new LinkedHashMap<>(next);
         pending = nextPending;
@@ -586,6 +717,7 @@ public final class LauncherWidgetRepository {
         freshPages = fresh;
         orientation = nextOrientation;
         layouts = shelf;
+        rowSnapshot = nextSnapshot;
         revision = nextRevision;
         return true;
     }
@@ -692,6 +824,7 @@ public final class LauncherWidgetRepository {
             orientation = loadedOrientation == null || loadedOrientation.isEmpty()
                 ? null : loadedOrientation;
             layouts = decodeLayouts(root.optJSONObject("layouts"), orientation);
+            rowSnapshot = decodeRowSnapshot(root.optJSONObject("rowSnapshot"));
             revision = Math.max(0, root.optLong("revision", 0));
         } catch (JSONException | IllegalArgumentException exception) {
             android.util.Log.e("LauncherWidgets", "stored wall unreadable", exception);
@@ -713,7 +846,7 @@ public final class LauncherWidgetRepository {
         pageCount = 1;
         revision = Math.max(0, root.optLong("revision", 0));
         migrationWritePending = !storage.write(encode(loaded, loadedPending, loadedGrid, 1,
-            Collections.emptySet(), null, Collections.emptyMap(), revision));
+            Collections.emptySet(), null, Collections.emptyMap(), null, revision));
     }
 
     private void migrateV1(JSONObject root) throws JSONException {
@@ -744,7 +877,7 @@ public final class LauncherWidgetRepository {
         pageCount = 1;
         revision = 0;
         migrationWritePending = !storage.write(encode(migrated, migratedPending, migratedGrid, 1,
-            Collections.emptySet(), null, Collections.emptyMap(), 0));
+            Collections.emptySet(), null, Collections.emptyMap(), null, 0));
     }
 
     private static LinkedHashSet<Integer> decodePages(@Nullable JSONArray array) {
@@ -775,7 +908,8 @@ public final class LauncherWidgetRepository {
                                  WidgetGridDefinition definition, int pages,
                                  @NonNull Collection<Integer> fresh,
                                  @Nullable String orientation,
-                                 @NonNull Map<String, OrientationLayout> layouts, long revision) {
+                                 @NonNull Map<String, OrientationLayout> layouts,
+                                 @Nullable RowSnapshot snapshot, long revision) {
         try {
             JSONObject root = new JSONObject();
             root.put("version", holdsBuiltin(values.values()) ? BUILTIN_VERSION : SCHEMA_VERSION);
@@ -798,6 +932,13 @@ public final class LauncherWidgetRepository {
                     shelf.put(entry.getKey(), encodeLayout(entry.getValue()));
                 }
                 root.put("layouts", shelf);
+            }
+            if (snapshot != null) {
+                JSONObject held = new JSONObject().put("rows", snapshot.rows)
+                    .put("before", encodeLayout(snapshot.before))
+                    .put("after", encodeLayout(snapshot.after));
+                if (snapshot.orientation != null) held.put("orientation", snapshot.orientation);
+                root.put("rowSnapshot", held);
             }
             JSONArray array = new JSONArray();
             for (LauncherWidgetRecord record : values.values()) array.put(encodeRecord(record));
@@ -842,21 +983,38 @@ public final class LauncherWidgetRepository {
             String key = keys.next();
             if (key.isEmpty() || key.equals(active)) continue;
             try {
-                JSONObject entry = value.getJSONObject(key);
-                LinkedHashMap<Integer, Placement> cells = new LinkedHashMap<>();
-                JSONArray array = entry.optJSONArray("cells");
-                for (int i = 0; array != null && i < array.length(); i++) {
-                    JSONObject item = array.getJSONObject(i);
-                    cells.put(item.getInt("id"), new Placement(decodeCell(item.getJSONObject("cell")),
-                        Math.max(0, item.optInt("page", 0))));
-                }
-                shelf.put(key, new OrientationLayout(decodeGrid(entry.getJSONObject("grid")),
-                    entry.optInt("pages", 1), decodePages(entry.optJSONArray("freshPages")), cells));
+                shelf.put(key, decodeLayout(value.getJSONObject(key)));
             } catch (JSONException | IllegalArgumentException ignored) {
                 // Drop this orientation's shelf entry; the rest of the payload stands.
             }
         }
         return shelf;
+    }
+
+    private static OrientationLayout decodeLayout(@NonNull JSONObject entry) throws JSONException {
+        LinkedHashMap<Integer, Placement> cells = new LinkedHashMap<>();
+        JSONArray array = entry.optJSONArray("cells");
+        for (int i = 0; array != null && i < array.length(); i++) {
+            JSONObject item = array.getJSONObject(i);
+            cells.put(item.getInt("id"), new Placement(decodeCell(item.getJSONObject("cell")),
+                Math.max(0, item.optInt("page", 0))));
+        }
+        return new OrientationLayout(decodeGrid(entry.getJSONObject("grid")),
+            entry.optInt("pages", 1), decodePages(entry.optJSONArray("freshPages")), cells);
+    }
+
+    /** An unreadable snapshot is dropped: the wall stands as it is and nothing is replayed. */
+    @Nullable
+    private static RowSnapshot decodeRowSnapshot(@Nullable JSONObject value) {
+        if (value == null) return null;
+        try {
+            String key = value.optString("orientation", null);
+            return new RowSnapshot(key == null || key.isEmpty() ? null : key,
+                Math.max(1, value.getInt("rows")), decodeLayout(value.getJSONObject("before")),
+                decodeLayout(value.getJSONObject("after")));
+        } catch (JSONException | IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     private static JSONObject encodeGrid(WidgetGridDefinition value) throws JSONException {
