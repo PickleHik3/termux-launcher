@@ -343,6 +343,47 @@ public class HomeFloatTest {
         assertEquals(PlaceLayout.Edge.TOP, withBar.slot(Element.STATUS).edge);
     }
 
+    // --- The float's shell gets its size ---
+
+    @Test
+    public void aFloatOpenedWhileTheGridIsHeldIsSizedWhenTheHoldEnds() {
+        // The status bar coming onto Home and the keyboard rising hold the grid while the float
+        // is laid out for the first time; a size discarded at the end of the hold leaves the
+        // shell without an emulator, and the pane draws solid black.
+        mController.beginHostSurfaceResize();
+        TerminalSession shell = terminal();
+        mController.openHomeFloat(shell, 0);
+        TerminalView view = mController.getViewForSession(shell);
+        assertNotNull(view);
+        int[] sized = {0};
+        view.setSizeUpdateObserverForTests(v -> sized[0]++);
+        layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
+        assertTrue("laid out", view.getWidth() > 0 && view.getHeight() > 0);
+        assertEquals("held while the grid is held", 0, sized[0]);
+
+        mController.finishHostSurfaceResizeKeepingBottom();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertTrue("the float's shell is sized once the hold ends", sized[0] > 0);
+    }
+
+    @Test
+    public void aFloatLaidOutDuringAHoldTakenAfterItOpenedIsSizedWhenTheHoldEnds() {
+        TerminalSession shell = terminal();
+        mController.openHomeFloat(shell, 0);
+        TerminalView view = mController.getViewForSession(shell);
+        assertNotNull(view);
+        int[] sized = {0};
+        view.setSizeUpdateObserverForTests(v -> sized[0]++);
+        // The keyboard rises right after the float opens, before the float's first layout.
+        mController.beginHostSurfaceResize();
+        layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
+        assertEquals(0, sized[0]);
+
+        mController.finishHostSurfaceResizeKeepingBottom();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertTrue("the float's shell is sized once the hold ends", sized[0] > 0);
+    }
+
     @Test
     public void aFloatsChipCarriesItsPage() {
         TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("~", "home")

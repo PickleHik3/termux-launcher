@@ -1308,6 +1308,26 @@ public class TerminalPaneController {
     public void refreshPaneSizes() {
         for (TerminalView v : getVisiblePaneViews())
             v.post(v::updateSize);
+        for (TerminalView v : shownHomeFloatPaneViews())
+            v.post(v::updateSize);
+    }
+
+    /**
+     * The pane views of the Home floats laid out in the float layer now: not minimised and on the
+     * Home page shown. They are never the pane host's, so {@link #getVisiblePaneViews()} leaves
+     * them out, but a grid hold pauses them with every other pane and they are owed its size.
+     */
+    @NonNull
+    private List<TerminalView> shownHomeFloatPaneViews() {
+        List<TerminalView> out = new ArrayList<>();
+        for (Window w : mHomeFloats) {
+            Leaf leaf = w.active;
+            FloatingPaneContainer container = leaf == null ? null : mHomeFloatContainers.get(leaf);
+            TerminalView view = leaf == null ? null : mPaneViews.get(leaf.session);
+            if (container != null && view != null && container.getVisibility() == View.VISIBLE)
+                out.add(view);
+        }
+        return out;
     }
 
     /** Hands the grid's pause to {@code geometry} for the transitions this controller drives. */
@@ -4795,6 +4815,9 @@ public class TerminalPaneController {
         String cause = mReturnHoldInSpan ? TerminalView.CAUSE_RETURN_HOLD : "resume";
         mReturnHoldInSpan = false;
         java.util.HashSet<TerminalView> visible = new java.util.HashSet<>(getVisiblePaneViews());
+        // A Home float laid out during the hold is owed that size: discarded, its shell never gets
+        // an emulator and the pane draws nothing but black.
+        visible.addAll(shownHomeFloatPaneViews());
         for (TerminalView view : mPaneViews.values()) {
             if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, keepBottom, cause);
             else view.resumeTerminalSizeUpdatesDiscardingPending();
