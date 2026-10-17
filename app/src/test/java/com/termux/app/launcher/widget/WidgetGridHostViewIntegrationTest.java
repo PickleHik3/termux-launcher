@@ -117,6 +117,34 @@ public class WidgetGridHostViewIntegrationTest {
         assertEquals("once, not again", 2, platform.optionUpdates);
     }
 
+    /**
+     * Home's Margin is the grid's rim, and a new rim resizes every cell without the grid's size
+     * changing. Each size the cells settle at reaches the provider, a Margin put back by Undo
+     * included, so a widget is never left drawing for the size it had before (2026-10-18 check:
+     * a Clock widget cut off after a Margin change and Undo).
+     */
+    @Test public void aRimChangeAndItsUndoEachReachTheProvider() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetTestFixtures.Platform platform = new WidgetTestFixtures.Platform(activity);
+        WidgetGridView grid = boundGrid(activity, platform);
+        grid.setEdgePadding(8);
+        layout(grid, 800, 600); settle();
+        assertEquals(1, platform.optionUpdates);
+        int before = platform.lastOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH);
+
+        grid.setEdgePadding(48);            // the Margin slider let go at 48
+        layout(grid, 800, 600); settle();
+        assertEquals("the narrower cells reach the provider", 2, platform.optionUpdates);
+        assertTrue(platform.lastOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
+            < before);
+
+        grid.setEdgePadding(8);             // Undo
+        layout(grid, 800, 600); settle();
+        assertEquals("the size put back reaches it too", 3, platform.optionUpdates);
+        assertEquals(before,
+            platform.lastOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH));
+    }
+
     private static WidgetGridView boundGrid(Activity activity,
                                             WidgetTestFixtures.Platform platform) {
         LauncherWidgetRepository repository = WidgetTestFixtures.repository();
