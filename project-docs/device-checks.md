@@ -423,6 +423,24 @@ Not seen: everything else listed under the sections below.
 - 2026-10-17 · same commit · After the upgrade, take the Terminal entry off the dock, force-stop
   and start again: it stays off the dock · emulator.
 
+### Wall rework: blind end-user review, 2026-10-18 (Codex on the emulator at ecfd75107)
+- Four `ad codex` passes (Home, Workspace, floats, Settings) with no code shown; answers and shots
+  under ~/reports/wall-rework-2026-10-18/blind/. Fixed and seen again on the release build of
+  31803120e: a still long press on a dock pin no longer unpins it (menu opens, five pins survive
+  the press on Terminal and on Camera, a force-stop and a relaunch); the Home palette's glass ends
+  above the keycap strip, the dock rows and the A–Z row (card bottom about y 1400, dock rows
+  1527–1748, keyboard below); Back over a focused float closes the keyboard first (dock back at
+  y 2116); titlebar glyphs pale on dark glass; a second float opens 92 px lower and 42 px right
+  of the first (keyboard down); the Home layout editor's tray shows one Keyboard chip under a
+  badge of 1.
+- Still owed on the emulator: the second float keeps its own top while the keyboard is up (fix in
+  flight), the drawer's "Saved sessions" tab in full (fix merged at 802536634, not yet seen).
+- Judged not defects: status-lens neighbour icons half past the screen edge (#46); the drawer's
+  glass showing the pane under it, the Workspace key-row ink, the corner tab staying after Back,
+  the pin editor's bottom row under the gesture inset and the Settings nits (retention labels,
+  empty extra-key page, white status icons in the appearance editors, font "smallest" claims,
+  Licenses path) are from before the rework and listed on the review page for a settings pass.
+
 ## Developer
 
 - 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" · With the switch
