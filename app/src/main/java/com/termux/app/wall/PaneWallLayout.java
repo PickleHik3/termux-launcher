@@ -315,6 +315,12 @@ public final class PaneWallLayout extends ViewGroup {
     /** The page the glow is drawn on: the one the wall rested on when the finger landed. */
     @Nullable private View mGlowPage;
     /**
+     * The glow's page's size when the press lit it: the frame the glow stays in
+     * ({@link BorderGlow#heldExtent}).
+     */
+    private int mGlowPageWidth;
+    private int mGlowPageHeight;
+    /**
      * The status bar's fold the finger drives ({@link Listener#onStatusFoldBegin}): its whole way
      * in px from the claim to the lift, 0 while no fold is engaged. The fold is carried on the
      * keyboard's reveal arithmetic ({@link KeyboardReveal}) with the direction turned over, since
@@ -766,9 +772,10 @@ public final class PaneWallLayout extends ViewGroup {
      * ({@link #cancelChildGesture}), so the terminal has released whatever mouse button or hold
      * it had begun, and every later event is read here and goes no further.
      *
-     * <p>On the top and bottom borders out in the air beyond the page, a finger that sets off
-     * sideways before the hold claims the wall by that move ({@link BorderDrag#slidePages}), and
-     * the drag begins there as the hold's would ({@link #takeBorderDrag}).
+     * <p>On any border outside the page's text — the air beyond the top and bottom edges, and the
+     * air and clearance beside the left and right ones — a finger that sets off sideways before
+     * the hold claims the wall by that move ({@link BorderDrag#slidePages}), and the drag begins
+     * there as the hold's would ({@link #takeBorderDrag}).
      *
      * <p>The keyboard swipe is claimed by the move rather than by the timer too: a
      * finger that sets off up or down from the bottom border, or from the box by its grabber a row
@@ -820,7 +827,7 @@ public final class PaneWallLayout extends ViewGroup {
                     return true;
                 }
                 if (claim == BorderDrag.Claim.PAGING) {
-                    // Slid sideways off the top or bottom border: the wall's at once, no hold.
+                    // Slid sideways off a border outside the text: the wall's at once, no hold.
                     mHoldHandler.removeCallbacks(mHoldElapsed);
                     if (takeBorderDrag(event.getX()) && mBorderVelocity != null) {
                         mBorderVelocity.addMovement(event);
@@ -942,6 +949,8 @@ public final class PaneWallLayout extends ViewGroup {
         // and filling over the hold where only the hold does.
         if (mBorderDrag.holdPages()) {
             mGlowPage = mPageViews.get(mCurrent);
+            mGlowPageWidth = mGlowPage == null ? 0 : mGlowPage.getWidth();
+            mGlowPageHeight = mGlowPage == null ? 0 : mGlowPage.getHeight();
             if (mBorderDrag.slidePages()) {
                 mGlow.light(mBorderDrag.border());
             } else {
@@ -1466,7 +1475,8 @@ public final class PaneWallLayout extends ViewGroup {
     /**
      * The glow along the held edge of the page it was lit on, as that page is drawn now: slid,
      * sunk about its pivot, tilted with the plank, and faded with its outline as it leaves its
-     * rest.
+     * rest. Inside the frame the press found, never beyond it: a page that grew since the press
+     * leaves the glow where the finger was.
      */
     private void drawBorderGlow(@NonNull android.graphics.Canvas canvas) {
         View page = mGlowPage;
@@ -1481,7 +1491,8 @@ public final class PaneWallLayout extends ViewGroup {
         int save = canvas.save();
         canvas.translate(page.getLeft(), page.getTop());
         canvas.concat(page.getMatrix());
-        mGlow.draw(canvas, 0f, 0f, page.getWidth(), page.getHeight(), 1f, visibility,
+        mGlow.draw(canvas, 0f, 0f, BorderGlow.heldExtent(mGlowPageWidth, page.getWidth()),
+            BorderGlow.heldExtent(mGlowPageHeight, page.getHeight()), 1f, visibility,
             SystemClock.uptimeMillis());
         canvas.restoreToCount(save);
     }
