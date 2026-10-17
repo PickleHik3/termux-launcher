@@ -143,6 +143,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     /** The grid the user asked for on this orientation, before the wall's caps; 0 until asked. */
     private int wantedRows, wantedColumns;
+    /** The rows always on gives the keyboard, taken off the capped grid; 0 while it is off. */
+    private int keyboardRows;
     /**
      * The largest the wall has measured in each orientation. The caps come from this, not from
      * the live size: the keyboard or a sheet shrinking the wall for a while must not shrink the
@@ -170,12 +172,27 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * larger, so a wider orientation or a smaller font later gets the full count back.
      */
     public void applyWantedGrid(int rows, int columns) {
+        applyWantedGrid(rows, columns, keyboardRows);
+    }
+
+    /**
+     * The same, with {@code takenRows} of the capped grid given to an always-on keyboard
+     * ({@code LauncherWidgetRepository#shrinkGridRows}): the grid is applied that much shorter on
+     * every later pass, so a pass that re-reads the layout never grows it back under the keyboard.
+     */
+    public void applyWantedGrid(int rows, int columns, int takenRows) {
         wantedRows = rows;
         wantedColumns = columns;
+        keyboardRows = Math.max(0, takenRows);
         rememberWall();
         WidgetGridCaps caps = gridCaps();
         appliedCaps = caps;
-        widgets.applyGrid(caps.clampRows(rows), caps.clampColumns(columns));
+        widgets.applyGrid(caps.clampRows(rows) - keyboardRows, caps.clampColumns(columns));
+    }
+
+    /** The grid's height as last laid out, in px: what always on measures a keyboard row by. */
+    public int gridHeightPx() {
+        return pane.grid().getHeight();
     }
 
     private boolean isLandscape() {
