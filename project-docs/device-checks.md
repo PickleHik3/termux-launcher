@@ -109,6 +109,16 @@ under twenty items; past that, the oldest are re-judged first.
   Paused), its summary wrapping rather than clipping, and dims with the switch off · emulator,
   `font_scale 1.3`, force-stop after the change.
 
+### Wall rework: device-checker pass of e1cc519c0 (emulator, 2026-10-18 10:45)
+Seen (owed on pong only): always on in the same process (no notice while the editor is up; after
+Done the keyboard is up at once and the notice shows once, inside the screen; dragging the block
+onto the tray's eye and Done lowers it with no notice); a Home float opens and closes; the pin; the
+home press to page 1.
+Failed (fix in flight): after a display session (Stop, with its confirm), typed keys reach neither
+the palette's query nor the terminal until a relaunch; the first fix (b47894709) did not take.
+Noticed: the "Text selected / Drag the handles…" hint stays on Home's top-right after a terminal
+text selection; in the widget edit frame the X at 77,212 removes the widget outright.
+
 ### Wall rework: device-checker pass of 2a4f5741a (emulator, 2026-10-18 10:15)
 Seen (owed on pong only): the always-on notice fits the screen and the widget keeps its height;
 the keyboard block stands on Home's canvas and can be put away; in landscape the side dock starts

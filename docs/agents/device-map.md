@@ -132,3 +132,6 @@ ad -s emu runas com.termux 'launcherctl pane list'
   drawer or the palette and `launcherctl launch gtk3-demo` answers 404 until that flag is false.
 - Display stop: long press 1030,262 on the display window, power at 604,285, confirm Stop at
   841,1420. The display's chip sits at about 298,177 in the window bar.
+- In the Home widget edit frame the X at 77,212 removes the widget; it does not exit edit mode.
+- `ad home` while a window is showing stays on that window on the emulator's first press; press
+  twice to reach Home page 1. Display Stop lands on the terminal window, not Home.
