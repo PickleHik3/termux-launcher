@@ -1139,16 +1139,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, value, false);
     }
 
-    public boolean isX11DisplayEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_X11_DISPLAY_ENABLED, TERMUX_APP.DEFAULT_X11_DISPLAY_ENABLED);
-    }
-
-    public void setX11DisplayEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_X11_DISPLAY_ENABLED, value, false);
-    }
-
     @NonNull
     public String getX11DisplayCommand() {
         String value = SharedPreferenceUtils.getString(mSharedPreferences,
@@ -1289,19 +1279,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_DEFAULTS_APPLIED, value, false);
     }
 
-    /** The name of the wall place last rested on, or null when none was recorded. */
-    @Nullable
-    public String getWallLastPage() {
-        String value = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_WALL_LAST_PAGE, null, false);
-        return value == null || value.trim().isEmpty() ? null : value.trim();
-    }
-
-    public void setWallLastPage(@Nullable String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_WALL_LAST_PAGE,
-            value == null ? "" : value, false);
-    }
-
     /** Start in: {@code home} (Home page 1, the default) or {@code workspace}. */
     @NonNull
     public String getLauncherStartIn() {
@@ -1336,40 +1313,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             value == null ? TERMUX_APP.DEFAULT_X11_RUNTIME_BADGE : value.trim(), false);
     }
 
-    /**
-     * The stored usage mode as written, or null when nothing was ever stored. Raw on purpose: the
-     * older two-way switch's "launcher" and any unknown value are mapped by
-     * {@code LauncherUseCaseMode}, which is the one reader that knows what they mean.
-     */
-    @Nullable
-    public String getAppLauncherUseCaseMode() {
-        String value = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE, null, true);
-        return value == null || value.trim().isEmpty() ? null : value.trim();
-    }
-
-    public void setAppLauncherUseCaseMode(@Nullable String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE,
-            value == null ? TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_MODE : value.trim(), false);
-    }
-
-    /** The terminal-alone mode, read straight off the store; the mapped answer is {@code LauncherUseCaseMode}'s. */
-    public boolean isTerminalOnlyUseCase() {
-        return TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(getAppLauncherUseCaseMode());
-    }
-
-    public String getAppLauncherUseCaseSnapshot() {
-        return SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT, true);
-    }
-
-    public void setAppLauncherUseCaseSnapshot(String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT,
-            value == null ? TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT : value, false);
-    }
 
     public boolean isAppLauncherNotificationDotsEnabled() {
         return isAppLauncherAppsRowEnabled() && SharedPreferenceUtils.getBoolean(
