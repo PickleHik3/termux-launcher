@@ -185,8 +185,10 @@ public final class SessionsDrawerView extends LinearLayout
         segments.setOrientation(HORIZONTAL);
         mLiveTab = segment(R.string.sessions_drawer_live, Tab.LIVE);
         mSavedTab = segment(R.string.sessions_drawer_saved, Tab.SAVED);
+        // Live takes its label's width; Saved sessions takes the rest of the drawer's 153dp row
+        // (about 110dp), which holds the whole label at font scale 1.0 and ellipsizes it above.
         segments.addView(mLiveTab, new LayoutParams(LayoutParams.WRAP_CONTENT, dp(32)));
-        LayoutParams savedParams = new LayoutParams(LayoutParams.WRAP_CONTENT, dp(32));
+        LayoutParams savedParams = new LayoutParams(0, dp(32), 1f);
         savedParams.setMarginStart(dp(4));
         segments.addView(mSavedTab, savedParams);
         LayoutParams segmentRow = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
@@ -970,11 +972,9 @@ public final class SessionsDrawerView extends LinearLayout
         view.setText(labelRes);
         view.setGravity(Gravity.CENTER);
         view.setMinWidth(0);
-        view.setPaddingRelative(dp(12), 0, dp(12), 0);
-        // The two tabs take their labels' width: about 180dp of the drawer's 350dp at font scale
-        // 1.0 and 220dp at 1.3, so neither label is ever cut. (Autosize with a wrapped width
-        // measured the label at its smallest size and ellipsized it.)
-        view.setEllipsize(null);
+        view.setPaddingRelative(dp(6), 0, dp(6), 0);
+        // No autosize: with a wrapped width it measured the label at its smallest size and
+        // ellipsized it. The label keeps its size and the row's widths above make it fit.
         view.setOnClickListener(ignored -> setTab(tab));
         return view;
     }
