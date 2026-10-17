@@ -13610,8 +13610,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean applyEdgeStacksAndInvalidate(@NonNull PlaceLayout layout) {
         boolean moved = applyEdgeStacks(layout);
+        moved |= applyTopStackOverlap(EdgeStackPolicy.topOverlapPx(layout,
+            buildEdgeStackMetrics(),
+            com.termux.app.place.HomeChromePolicy.statusOverlays(mLastWallPage)));
         if (moved) mChrome.onArrangementChanged();
         return moved;
+    }
+
+    /**
+     * Lets the canvas reach up under the top edge's stack by {@code overlapPx} (EdgeStackPolicy
+     * .topOverlapPx), as a negative top margin, with the stack raised so it draws and takes touches
+     * over what the canvas keeps: the status bar on Home overlays the widget grid as the dock does.
+     *
+     * @return whether the canvas moved
+     */
+    private boolean applyTopStackOverlap(int overlapPx) {
+        View band = findViewById(R.id.terminal_canvas_band);
+        View stack = findViewById(R.id.place_edge_stack_top);
+        if (band == null || stack == null
+            || !(band.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return false;
+        float z = overlapPx > 0 ? 1f : 0f;
+        if (stack.getTranslationZ() != z) stack.setTranslationZ(z);
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) band.getLayoutParams();
+        int topMargin = -Math.max(0, overlapPx);
+        if (params.topMargin == topMargin) return false;
+        params.topMargin = topMargin;
+        band.setLayoutParams(params);
+        return true;
     }
 
     /**
@@ -20791,10 +20816,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             roomTop += insets.getInsets(
                 androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
         }
-        View bar = findViewById(R.id.terminal_window_bar_host);
-        if (bar != null && bar.isShown()) {
-            bar.getLocationOnScreen(at);
-            roomTop = Math.max(roomTop, at[1] + bar.getHeight());
+        // The room starts under the top edge's whole stack, the bar the floats bring included,
+        // which overlays the grid rather than pushing it down (HomeChromePolicy.statusOverlays).
+        // Read off the layout, not the bar's live position: a float born as the bar arrives sits
+        // where the bar settles, not where its slide has got to.
+        View column = findViewById(R.id.terminal_content_column);
+        if (column != null) {
+            column.getLocationOnScreen(at);
+            int columnTop = Math.round(at[1] - column.getTranslationY());
+            roomTop = Math.max(roomTop, columnTop + EdgeStackPolicy.stackThicknessPx(
+                currentPlaceLayout(), PlaceLayout.Edge.TOP, buildEdgeStackMetrics()));
         }
         mPaneController.setHomeFloatObstructions(roomTop, dockTop, keyboardTop);
     }

@@ -173,6 +173,16 @@ Not seen: everything else listed under the sections below.
   Minimise all floats, Restore floats, Add widget, Layout editor, and a float's row restores it.
   The sessions drawer lists floats under the session ("Float · page 2"; a tap pages Home and
   restores it) and its Home row goes to Home page 1 · emulator.
+- 2026-10-18 · commit "feat(wall): the status bar overlays Home" · The widget grid does not move
+  when the bar slides in with the first float, nor when it slides out after the last one closes:
+  screenshot a widget's top edge before, with the bar, and after; the bar draws over the grid and
+  takes the taps on its chips · emulator screenshots, then pong.
+- same · A float born with the bar already there (the second float) and the first float, born as
+  the bar arrives, both sit with their titlebar just below the bar's bottom edge, not under it;
+  with the keyboard up and the cursor on a lower row, a smaller float lifts no higher than that
+  edge · emulator.
+- same · Home ↔ Workspace with a float open: the terminal in the Workspace keeps its rows below the
+  bar after the slide settles, and the grid on Home is back at its full height on return · emulator.
 
 ### Wall rework #77 row
 - 2026-10-17 · commit "feat(wall): one row …" · The seam both ways: with three windows and the

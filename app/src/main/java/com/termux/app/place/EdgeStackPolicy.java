@@ -431,6 +431,22 @@ public final class EdgeStackPolicy {
             stackThicknessPx(layout, Edge.BOTTOM, metrics));
     }
 
+    /**
+     * How far the content reaches up under the top edge's stack: the status bar's band while the
+     * bar stands on the top edge and overlays the page ({@link HomeChromePolicy#statusOverlays}),
+     * and nothing otherwise. Applied as a negative top margin on the canvas, it hands back exactly
+     * the band the bar took, so the content keeps the bounds it has without the bar and the bar
+     * draws over it. Every other band on the top edge keeps taking its room.
+     *
+     * <p>What covers the content from the top is still the whole stack: {@link #stackThicknessPx}
+     * of the top edge is where the room under the bar begins.
+     */
+    public static int topOverlapPx(@NonNull PlaceLayout layout, @NonNull Metrics metrics,
+                                   boolean statusOverlays) {
+        if (!statusOverlays || !stack(layout, Edge.TOP).contains(Element.STATUS)) return 0;
+        return thicknessPx(Element.STATUS, Edge.TOP, metrics);
+    }
+
     // ---------------------------------------------------------------- drop targets
 
     /**

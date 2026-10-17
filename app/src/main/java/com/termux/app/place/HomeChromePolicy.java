@@ -59,6 +59,17 @@ public final class HomeChromePolicy {
     }
 
     /**
+     * Whether the status bar floats over the page's content rather than taking room from it. On a
+     * Home page it does, as the dock does: the bar the first float brings down slides over the
+     * widget grid, which keeps its size whether the bar is there or not, and the floats' room
+     * starts at the bar's edge ({@link EdgeStackPolicy#topOverlapPx}). On a window the bar takes
+     * its band as always.
+     */
+    public static boolean statusOverlays(@NonNull PaneWallPage page) {
+        return isHome(page);
+    }
+
+    /**
      * Whether the status bar's content shows while the wall rests on the page. On a Home page the
      * Home layout has no status bar, so a slide toward Home fades the window's bar out on the way
      * and a slide toward a window brings it with the window.
