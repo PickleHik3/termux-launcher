@@ -109,6 +109,12 @@ under twenty items; past that, the oldest are re-judged first.
   Paused), its summary wrapping rather than clipping, and dims with the switch off · emulator,
   `font_scale 1.3`, force-stop after the change.
 
+### Wall rework: orchestrator check of e64d95a92 (emulator, 2026-10-18 10:55)
+Seen: after the Display chip in the Home palette started the X server (one process) and Stop with
+its confirm killed it (none), typing reached the terminal window's prompt ("echoecho") and, in
+the same process, the Home palette's query ("gtk"). The keys-dead-after-display defect is closed
+on the emulator; owed on pong only.
+
 ### Wall rework: device-checker pass of e1cc519c0 (emulator, 2026-10-18 10:45)
 Seen (owed on pong only): always on in the same process (no notice while the editor is up; after
 Done the keyboard is up at once and the notice shows once, inside the screen; dragging the block
