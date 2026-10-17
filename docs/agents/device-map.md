@@ -180,3 +180,12 @@ ad -s emu runas com.termux 'launcherctl pane list'
   (927,178).
 - In the editor, Back steps through the pages and Done closes it. A Layout page left over Home
   and brought back from a window opens on the window's own place (590ff4c8b).
+- Long-press at about (540,1000) on empty Home opens the launcher's sheet; Layout at about
+  (240,1925) opens the Appearance editor on its Layout page. The editor's Undo button is
+  `appearance_page_undo` at about (855,220), shown only after a change; the Unsaved-changes
+  dialog is not in `ui`, its Discard is at about (642,1418).
+- The Margin slider gives roughly 8 px per dp from the thumb. For an exact value drag fully left
+  to 0 (swipe 700→560 at y 1916), then swipe 633→678 for 8. Read the label with
+  `zoom 400,1800,1080,1900`.
+- `ad -s emu adb shell cmd package set-home-activity com.termux/.app.TermuxActivity` sets the
+  launcher as home before a check.

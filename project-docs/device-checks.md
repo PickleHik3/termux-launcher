@@ -515,6 +515,11 @@ Not seen: everything else listed under the sections below.
   Fixed: every trial measures the layout afresh. Re-check owed: the Clock whole after a Margin drag
   and Undo, then Done; after Discard; after a Home Style flip and back; after a real Margin change
   and Done; leaving Home and coming back changes nothing · emulator.
+- Round 4 (2026-10-18, ec304bb50, emulator): seen. The Clock is whole after install, after a
+  Margin drag to 43 and Undo then Done, after Discard, after Style Floating and Docked, after a
+  real Margin change to 25 and back to 8, and across a minute tick. At font scale 1.5 the date
+  line truncates to "Saturday, Octobe…" with the time intact (acceptable for a fixed cell). Not
+  seen: dark theme, rotation, keyboard up; Start in = Workspace on a true cold start.
 
 ## Developer
 
