@@ -185,8 +185,8 @@ public final class SessionsDrawerView extends LinearLayout
         segments.setOrientation(HORIZONTAL);
         mLiveTab = segment(R.string.sessions_drawer_live, Tab.LIVE);
         mSavedTab = segment(R.string.sessions_drawer_saved, Tab.SAVED);
-        segments.addView(mLiveTab, new LayoutParams(0, dp(32), 2f));
-        LayoutParams savedParams = new LayoutParams(0, dp(32), 3f);
+        segments.addView(mLiveTab, new LayoutParams(LayoutParams.WRAP_CONTENT, dp(32)));
+        LayoutParams savedParams = new LayoutParams(LayoutParams.WRAP_CONTENT, dp(32));
         savedParams.setMarginStart(dp(4));
         segments.addView(mSavedTab, savedParams);
         LayoutParams segmentRow = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
@@ -970,7 +970,7 @@ public final class SessionsDrawerView extends LinearLayout
         view.setText(labelRes);
         view.setGravity(Gravity.CENTER);
         view.setMinWidth(0);
-        view.setPaddingRelative(dp(2), 0, dp(2), 0);
+        view.setPaddingRelative(dp(12), 0, dp(12), 0);
         // A segment carries one word in a space the font scale can halve, so it shrinks its text
         // rather than clipping it.
         androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
