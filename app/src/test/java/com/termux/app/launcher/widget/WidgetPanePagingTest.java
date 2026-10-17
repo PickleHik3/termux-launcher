@@ -66,9 +66,9 @@ public class WidgetPanePagingTest {
         assertEquals(2, fixture.controller.homePageCount());
     }
 
-    @Test public void menuAddWidgetOpensPickerAndNewWidgetsLandOnTheVisiblePage() {
+    @Test public void addWidgetOpensPickerAndNewWidgetsLandOnTheVisiblePage() {
         Fixture fixture = new Fixture();
-        fixture.controller.onMenuItemSelected(WidgetPaneMenuPolicy.Item.ADD_WIDGET);
+        fixture.controller.openPicker();
         assertTrue(fixture.pane.picker().isOpen());
         fixture.pane.picker().closeImmediate();
 

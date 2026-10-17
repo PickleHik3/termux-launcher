@@ -15749,6 +15749,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     && isScrollbackFindActive()) cancelScrollbackFind();
             }
         });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            // Home's long-press sheet lies over the Home page that summoned it.
+            @Override public boolean onBack() {
+                if (mHomeActionsSheet == null || !mHomeActionsSheet.isOpen()) return false;
+                mHomeActionsSheet.close();
+                return true;
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mHomeActionsSheet != null) mHomeActionsSheet.closeImmediately();
+            }
+        });
         registry.register(() -> mWidgetPaneController != null && mWidgetPaneController.onBackPressed());
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
@@ -21124,6 +21135,64 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
+    /** Home's long-press sheet, built on the first long press and laid over everything. */
+    @Nullable private com.termux.app.launcher.home.HomeActionsSheet mHomeActionsSheet;
+    /** Where the long press that opened the sheet rested, on screen; Edit pages' wheels hang there. */
+    private float mHomeActionsRawX, mHomeActionsRawY;
+
+    /** A long press on a Home page's free area: the sheet of what Home and the launcher offer. */
+    private void showHomeActionsSheet(float rawX, float rawY) {
+        ViewGroup content = findViewById(android.R.id.content);
+        if (content == null) return;
+        if (mHomeActionsSheet == null) {
+            mHomeActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(this,
+                this::runHomeAction);
+            content.addView(mHomeActionsSheet, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        mHomeActionsRawX = rawX;
+        mHomeActionsRawY = rawY;
+        mHomeActionsSheet.open(com.termux.app.launcher.home.HomeActionsSheetPolicy.itemsFor(
+            isDefaultHomeApp(), mWidgetPaneController != null,
+            mPaneController != null && isSplitPanesEnabled()));
+    }
+
+    /** Each row runs what the corner tab, the palette and Settings already run for it. */
+    private void runHomeAction(@NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) {
+        switch (item) {
+            case TERMINAL: openHomeFloatHere(); break;
+            case ADD_WIDGET:
+                if (mWidgetPaneController != null) mWidgetPaneController.openPicker();
+                break;
+            case ADD_PAGE: {
+                View pane = findViewById(R.id.widget_pane);
+                if (pane instanceof com.termux.app.launcher.widget.WidgetPaneView)
+                    ((com.termux.app.launcher.widget.WidgetPaneView) pane).addWidgetPage();
+                break;
+            }
+            case EDIT_PAGES: {
+                com.termux.app.wall.WidgetPaneFrame page = mPaneWallController == null ? null
+                    : mPaneWallController.widgetsPage();
+                if (page == null) break;
+                int[] onScreen = new int[2];
+                page.getLocationOnScreen(onScreen);
+                float x = mHomeActionsRawX - onScreen[0];
+                float y = mHomeActionsRawY - onScreen[1];
+                page.runPencil(new android.graphics.RectF(x, y, x, y));
+                break;
+            }
+            case LAYOUT: openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS); break;
+            case WALLPAPER:
+                openAppearanceSurface(
+                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
+                break;
+            case LOOK: openSurfaceEditor(); break;
+            case LAUNCHER_SETTINGS: openSettings(); break;
+            case SET_DEFAULT_HOME: HomeAppChooser.open(this); break;
+            case HELP: showHelpOverlay(); break;
+        }
+    }
+
     /** The dock's, the stack's and the margin's heights as the last geometry pass laid them. */
     private int mHomeFloatDockPx, mHomeFloatStackPx;
     private boolean mHomeFloatKeyboardShown;
@@ -22149,10 +22218,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 // The widgets page is a pane: glass when the terminal panes are glass.
                 @Override public boolean isWidgetSurfaceGlass() { return isTerminalPaneGlassActive(); }
-                @Override public boolean offersHomeFloat() {
-                    return mPaneController != null && isSplitPanesEnabled();
+                @Override public void onHomeLongPressed(float rawX, float rawY) {
+                    showHomeActionsSheet(rawX, rawY);
                 }
-                @Override public void openHomeFloat() { openHomeFloatHere(); }
                 // The palette gesture starts on the page's free area: Home has no bottom border.
                 @Override public void onHomePaletteSwipe(boolean up) {
                     if (isWidgetsPageShowing()) applyBorderKeyboardSwipe(up);

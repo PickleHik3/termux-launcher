@@ -328,12 +328,28 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         else if (id == ACTION_EDIT && !mHost.editWidgets()) openGridSizePopup();
     }
 
+    /**
+     * The pencil, asked for from outside the tab (Home's long-press sheet's Edit pages): edit the
+     * widgets, or on a page with none, the grid's wheels hanging off {@code anchor}, a rectangle in
+     * this page's own coordinates.
+     */
+    public void runPencil(@NonNull android.graphics.RectF anchor) {
+        if (mHost == null) return;
+        dismissControls();
+        if (!mHost.editWidgets()) openGridSizePopup(anchor);
+    }
+
     /** The wheels, hanging off the tab that opened them. */
     private void openGridSizePopup() {
         if (mHost == null || mControls == null) return;
-        dismissGridSizePopup();
         android.graphics.RectF tab = new android.graphics.RectF();
         mControls.tabBounds(tab);
+        openGridSizePopup(tab);
+    }
+
+    private void openGridSizePopup(@NonNull android.graphics.RectF tab) {
+        if (mHost == null) return;
+        dismissGridSizePopup();
         mGridSizePopup = com.termux.app.launcher.widget.WidgetGridSizePopup.show(this, tab,
             mHost.widgetGridColumns(), mHost.widgetGridRows(), mHost.widgetGridCaps(),
             (columns, rows) -> {
