@@ -2511,15 +2511,7 @@ public class TerminalPaneController {
         MenuRowFactory rows = new MenuRowFactory(context, theme);
         LinearLayout shell = rows.newShell();
         int tintBase = M3.surfaceContainer(context) & 0x00FFFFFF;
-        TextView title = new TextView(context);
-        title.setText(handleMenuTitle(leaf));
-        M3.textAppearance(title, com.google.android.material.R.attr.textAppearanceTitleSmall);
-        title.setTextColor(M3.onSurfaceVariant(context));
-        title.setSingleLine(true);
-        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        title.setPadding(dp(8), dp(6), dp(8), dp(2));
-        shell.addView(title, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        addHandleMenuTitle(shell, handleMenuTitle(leaf));
         rows.addDivider(shell);
         for (int action : FloatTitlebarPolicy.handleMenu()) {
             if (action != FloatTitlebarPolicy.ACTION_DOCK) continue;
@@ -2537,6 +2529,29 @@ public class TerminalPaneController {
                 if (mHandleMenu == menu) mHandleMenu = null;
             })
             .build(), container.titlebar());
+    }
+
+    /**
+     * The handle menu's header: the window's name, one line. It wraps rather than matching the
+     * shell, because a vertical LinearLayout measured at most leaves a match-parent child out of
+     * its own width: the menu took the Dock row's width and cut "home" to "ho…". Wrapped, the
+     * name widens the menu up to the menu's cap, and only a name longer than that ellipsizes.
+     */
+    @NonNull
+    static TextView addHandleMenuTitle(@NonNull LinearLayout shell, @NonNull String name) {
+        android.content.Context context = shell.getContext();
+        float density = context.getResources().getDisplayMetrics().density;
+        TextView title = new TextView(context);
+        title.setText(name);
+        M3.textAppearance(title, com.google.android.material.R.attr.textAppearanceTitleSmall);
+        title.setTextColor(M3.onSurfaceVariant(context));
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setPadding(Math.round(8 * density), Math.round(6 * density),
+            Math.round(8 * density), Math.round(2 * density));
+        shell.addView(title, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return title;
     }
 
     /**

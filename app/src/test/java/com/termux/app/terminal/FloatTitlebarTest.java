@@ -211,4 +211,47 @@ public class FloatTitlebarTest {
         strip.layout(0, 0, width, height);
         return strip;
     }
+
+    // --- The handle's menu ---
+
+    @Test
+    public void handleMenuTitle_widensTheMenuRatherThanEllipsizingAShortName() {
+        android.widget.LinearLayout shell = handleMenuShell("workspace notes");
+        android.widget.TextView title = (android.widget.TextView) shell.getChildAt(0);
+        assertNotNull(title.getLayout());
+        assertEquals("the whole name shows", 0, title.getLayout().getEllipsisCount(0));
+        assertTrue(shell.getMeasuredWidth() >= title.getMeasuredWidth());
+    }
+
+    @Test
+    public void handleMenuTitle_aNameLongerThanTheMenuStillEllipsizes() {
+        StringBuilder name = new StringBuilder();
+        for (int i = 0; i < 40; i++) name.append("window ");
+        android.widget.LinearLayout shell = handleMenuShell(name.toString().trim());
+        android.widget.TextView title = (android.widget.TextView) shell.getChildAt(0);
+        assertTrue(title.getLayout().getEllipsisCount(0) > 0);
+    }
+
+    /** The menu's content as TerminalPaneController builds it, measured the way AnchoredMenu does. */
+    private static android.widget.LinearLayout handleMenuShell(String name) {
+        Context themed = new android.view.ContextThemeWrapper(context(), R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        com.termux.app.launcher.popup.AnchoredMenuTheme theme =
+            new com.termux.app.launcher.popup.AnchoredMenuTheme() {
+                @Override public int textColor() { return 0xFF000000; }
+                @Override public int selectedTextColor() { return 0xFF000000; }
+                @Override public int opacityPercent() { return 0; }
+                @Override public boolean blurEnabled() { return false; }
+                @Override public int blurRadiusDp() { return 0; }
+            };
+        com.termux.app.launcher.popup.MenuRowFactory rows =
+            new com.termux.app.launcher.popup.MenuRowFactory(themed, theme);
+        android.widget.LinearLayout shell = rows.newShell();
+        TerminalPaneController.addHandleMenuTitle(shell, name);
+        rows.addDivider(shell);
+        rows.addActionRow(shell, "Dock", 0x202020, () -> { });
+        shell.measure(View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.AT_MOST),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        shell.layout(0, 0, shell.getMeasuredWidth(), shell.getMeasuredHeight());
+        return shell;
+    }
 }
