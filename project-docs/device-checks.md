@@ -737,6 +737,9 @@ Not seen: everything else listed under the sections below.
   told the tour nothing; it now sends `launcher.az_apps_shown`, which clears the apps lesson too.
   Re-check owed: tap a letter on the apps card (the log reads the signal, the card clears); a tap
   on a pinned app only launches it and is not counted.
+- Re-check 2026-10-18 (7fccb5d8d): an A–Z letter tap clears the apps lesson (`az_apps_shown`).
+  Polish owed: the first card sits over the page's icon labels and the "swipe left" stage draws no
+  guide arrow.
 ### Wall rework phase two: slice 7a, app icons on Home pages (feat/wall-rework-phase2)
 - Owed · commits "feat(home): app icons as a Home item kind in the widget store (schema v6)",
   "feat(home): app icon cells on Home pages: launch, edit mode, gone apps" and "feat(home): Add to
@@ -797,6 +800,13 @@ Not seen: everything else listed under the sections below.
   the focus and ahead of the rebuild's layout, so its hold ran out unseen (cause inferred, not seen
   on a device); it now waits for a started, focused window. Re-check owed: the force-stop rebuild
   above, with Start in = Home and = Workspace: the notice shows on the half in front.
+- Re-check 2026-10-18 (7fccb5d8d, emulator): the "Windows restored from before the restart" toast
+  shows about 2 s after a cold-start rebuild with both windows back. FAIL: typing `exit` in the
+  last rebuilt window opened the Sessions drawer and the window stayed (and `launcherctl window
+  close` answers not_owned for rebuilt windows), so the empty-arrangement restart could not be
+  made; after a force-stop one live window came back. Owed: a shell spawned by the rebuild must
+  be owned like any launcher window (close on exit, empty Workspace → Home). Saved sessions showed
+  none because the earlier `pm clear` wiped the files, not a bug. Parallax card re-check not done.
 ### Wall rework phase two: slice 7b, folders on Home pages (feat/wall-rework-phase2)
 - Owed · commits "feat(home): folders as a Home item kind in the widget store (schema v7)" and
   "feat(home): folder cells, the folder popup and drop-to-merge on Home pages" · emulator,
@@ -844,6 +854,14 @@ Not seen: everything else listed under the sections below.
   for keyboard touches during a rename, and the rename raises the in-app keyboard (else the system
   IME through a focused terminal). Re-check owed: Home and dock folder rename with the in-app
   keyboard, then the Android keyboard, Enter commits; a tap elsewhere still closes the popup.
+- Re-check 2026-10-18 (7fccb5d8d, emulator): Margin · Home insets icons, the folder and widgets
+  together; the grid-size popup re-lays items with nothing lost; the folder rename takes hardware
+  keys (`ad type`, Enter) but not touches on the in-app keyboard while the popup is open, and the
+  popup dims the keyboard: a PopupWindow gets outside touches only as ACTION_OUTSIDE, so the
+  keyboard under it can never be pressed; owed: the Home (and dock) folder popup as an in-activity
+  overlay, or the keyboard inside the popup's touch path. Also: the popup's title and member
+  labels are dark on dark glass, near unreadable. Not reached: Add to Home from the drawer (the
+  checker could not open the drawer), the empty page being dropped.
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners
