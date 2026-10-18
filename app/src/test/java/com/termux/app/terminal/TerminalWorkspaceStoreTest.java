@@ -13,6 +13,8 @@ import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -146,6 +148,123 @@ public class TerminalWorkspaceStoreTest {
         expectCode("invalid_workspace", () -> workspaceAround(
             new TerminalWorkspace.Window(2, new TerminalWorkspace.Pane("/", null, null),
                 Collections.singletonList(sane))).validate());
+    }
+
+    @Test
+    public void homeFloatRoundTrip_keepsPageMinimisedAndBothShapes() throws Exception {
+        TerminalWorkspace.HomeFloat saved = new TerminalWorkspace.HomeFloat(1, true,
+            new TerminalWorkspace.FloatShape(.1f, .2f, .5f, .4f),
+            new TerminalWorkspace.FloatShape(.3f, .05f, .6f, .9f));
+        TerminalWorkspace decoded = TerminalWorkspace.fromJson(withHomeFloat(saved).toJson());
+
+        assertEquals(4, decoded.version);
+        assertEquals(2, decoded.sessions.get(0).windows.size());
+        assertNull("the row's window stays a window of the row",
+            decoded.sessions.get(0).windows.get(0).homeFloat);
+        TerminalWorkspace.Window window = decoded.sessions.get(0).windows.get(1);
+        assertEquals("the float's one pane is its root", "/home/float",
+            ((TerminalWorkspace.Pane) window.root).cwd);
+        assertEquals("notes", window.name);
+        TerminalWorkspace.HomeFloat homeFloat = window.homeFloat;
+        assertNotNull(homeFloat);
+        assertEquals(1, homeFloat.page);
+        assertTrue(homeFloat.minimised);
+        assertShape(.1f, .2f, .5f, .4f, homeFloat.portrait);
+        assertShape(.3f, .05f, .6f, .9f, homeFloat.landscape);
+        assertEquals(4, decoded.paneCount());
+    }
+
+    @Test
+    public void homeFloatWithoutShapes_roundTripsWithNone() throws Exception {
+        TerminalWorkspace decoded = TerminalWorkspace.fromJson(withHomeFloat(
+            new TerminalWorkspace.HomeFloat(0, false, null, null)).toJson());
+
+        TerminalWorkspace.HomeFloat homeFloat = decoded.sessions.get(0).windows.get(1).homeFloat;
+        assertNotNull(homeFloat);
+        assertEquals(0, homeFloat.page);
+        assertFalse(homeFloat.minimised);
+        assertNull(homeFloat.portrait);
+        assertNull(homeFloat.landscape);
+    }
+
+    @Test
+    public void versionThreeAndVersionFourWithoutTheKey_loadAsTiledWindows() throws Exception {
+        JSONObject v3 = sampleWithFloat("dev").toJson().put("version", 3);
+        TerminalWorkspace three = TerminalWorkspace.fromJson(v3);
+        assertEquals(3, three.version);
+        assertNull(three.sessions.get(0).windows.get(0).homeFloat);
+        assertEquals("a floating pane inside a window is untouched", 1,
+            three.sessions.get(0).windows.get(0).floats.size());
+
+        JSONObject v4 = sample("dev").toJson();
+        assertEquals(4, v4.getInt("version"));
+        assertFalse(v4.getJSONArray("sessions").getJSONObject(0).getJSONArray("windows")
+            .getJSONObject(0).has("homeFloat"));
+        assertNull(TerminalWorkspace.fromJson(v4).sessions.get(0).windows.get(0).homeFloat);
+    }
+
+    @Test
+    public void malformedHomeFloat_isDroppedAndTheWindowLoadsTiled() throws Exception {
+        JSONObject[] broken = {
+            new JSONObject().put("minimised", false),
+            new JSONObject().put("page", -1),
+            new JSONObject().put("page", 1.5),
+            new JSONObject().put("page", "2"),
+            new JSONObject().put("page", 0).put("minimised", "yes"),
+            new JSONObject().put("page", 0).put("portrait", "big"),
+            new JSONObject().put("page", 0).put("portrait",
+                new JSONObject().put("left", 0).put("top", 0).put("width", 2).put("height", .5)),
+            new JSONObject().put("page", 0).put("landscape",
+                new JSONObject().put("left", 0).put("top", 0).put("width", .5)),
+        };
+        for (JSONObject homeFloat : broken) {
+            JSONObject json = withHomeFloat(new TerminalWorkspace.HomeFloat(0, false, null, null))
+                .toJson();
+            json.getJSONArray("sessions").getJSONObject(0).getJSONArray("windows")
+                .getJSONObject(1).put("homeFloat", homeFloat);
+            TerminalWorkspace decoded = TerminalWorkspace.fromJson(json);
+            assertNull(homeFloat.toString(), decoded.sessions.get(0).windows.get(1).homeFloat);
+            assertEquals(2, decoded.sessions.get(0).windows.size());
+        }
+
+        JSONObject notAnObject = sample("dev").toJson();
+        notAnObject.getJSONArray("sessions").getJSONObject(0).getJSONArray("windows")
+            .getJSONObject(0).put("homeFloat", 3);
+        assertNull(TerminalWorkspace.fromJson(notAnObject).sessions.get(0).windows.get(0).homeFloat);
+    }
+
+    @Test
+    public void aHomeFloatOnAWindowOfManyPanesIsDropped() throws Exception {
+        // The sample's window is a split: a Home float holds one pane, so the key cannot stand.
+        JSONObject json = sample("dev").toJson();
+        json.getJSONArray("sessions").getJSONObject(0).getJSONArray("windows").getJSONObject(0)
+            .put("homeFloat", new JSONObject().put("page", 0));
+        assertNull(TerminalWorkspace.fromJson(json).sessions.get(0).windows.get(0).homeFloat);
+    }
+
+    @Test
+    public void versionsPastFourAreStillUnsupported() throws Exception {
+        expectCode("unsupported_version",
+            () -> TerminalWorkspace.fromJson(sample("dev").toJson().put("version", 5)));
+    }
+
+    private static TerminalWorkspace withHomeFloat(TerminalWorkspace.HomeFloat homeFloat) {
+        TerminalWorkspace base = sample("dev");
+        TerminalWorkspace.Window tiled = base.sessions.get(0).windows.get(0);
+        TerminalWorkspace.Window floated = new TerminalWorkspace.Window(0,
+            new TerminalWorkspace.Pane("/home/float", "float", null), null, "notes", homeFloat);
+        TerminalWorkspace.Session session = new TerminalWorkspace.Session(
+            "project", 0, Arrays.asList(tiled, floated));
+        return new TerminalWorkspace("dev", 1234L, 0, Collections.singletonList(session));
+    }
+
+    private static void assertShape(float left, float top, float width, float height,
+                                    TerminalWorkspace.FloatShape shape) {
+        assertNotNull(shape);
+        assertEquals(left, shape.left, .001f);
+        assertEquals(top, shape.top, .001f);
+        assertEquals(width, shape.width, .001f);
+        assertEquals(height, shape.height, .001f);
     }
 
     private static TerminalWorkspace workspaceAround(TerminalWorkspace.Window window) {
