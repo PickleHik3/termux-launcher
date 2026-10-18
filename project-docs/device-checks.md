@@ -792,7 +792,7 @@ Not seen: everything else listed under the sections below.
   the icon, the split, the /system/bin cwd and the float come back on fresh shells. Not seen: the
   "Windows restored" notice (owed: check it fires after a rebuild), the empty-arrangement restart,
   Saved sessions Load after a rebuild, the parallax card re-check.
-- Fixed 2026-10-18 (worker branch, "fix(wall): the \"Windows restored\" notice waits for the
+- Fixed 2026-10-18 (worker branch, "fix(wall): the “Windows restored” notice waits for the
   window to be in front"): the notice went up inside the service connection, before the window had
   the focus and ahead of the rebuild's layout, so its hold ran out unseen (cause inferred, not seen
   on a device); it now waits for a started, focused window. Re-check owed: the force-stop rebuild
