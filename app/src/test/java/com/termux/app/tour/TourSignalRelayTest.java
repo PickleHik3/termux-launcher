@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -292,6 +293,14 @@ public class TourSignalRelayTest {
         relay.onDrawerOpenSettled(true, true);
         assertEquals(2, signals.size());
         assertEquals(TourSignals.DRAWER_OPENED, signals.get(1));
+    }
+
+    /** The A-Z letters laying a letter's apps out: an action, so every report is a signal. */
+    @Test
+    public void lettersLayingAppsOutSpeakEveryTime() {
+        relay.onAzAppsShown();
+        relay.onAzAppsShown();
+        assertEquals(Arrays.asList(TourSignals.AZ_APPS_SHOWN, TourSignals.AZ_APPS_SHOWN), signals);
     }
 
     @Test

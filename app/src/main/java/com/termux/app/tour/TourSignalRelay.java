@@ -244,6 +244,15 @@ public final class TourSignalRelay implements TourSignals {
      * signals: the scrub is one of the ways to an app, and the lesson that asks the user to open
      * one does not care which way they found.
      */
+    /**
+     * The dock's A-Z letters laid a letter's apps out, once per touch on them that did not end in
+     * a launch (that one is {@link #onAppLaunchedFromScrub}). An action, like the launch, so
+     * there is no state to compare against.
+     */
+    public void onAzAppsShown() {
+        emit(AZ_APPS_SHOWN);
+    }
+
     public void onAppLaunchedFromScrub() {
         emit(APP_LAUNCHED_FROM_SCRUB);
         emit(APP_LAUNCHED);

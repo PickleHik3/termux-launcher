@@ -397,6 +397,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mSignals.onPaneControlsDismissed();
     }
 
+    /** A touch on the dock's A-Z letters laid a letter's apps out, and launched nothing. */
+    public void onAzAppsShown() {
+        mSignals.onAzAppsShown();
+    }
+
     /** The A-Z row's scrub launched an app. */
     public void onAppLaunchedFromScrub() {
         mSignals.onAppLaunchedFromScrub();
@@ -675,7 +680,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @NonNull
     private static String describeWait(@NonNull TourStep step, int stage) {
         String signal = step.signalAt(stage);
-        return signal == null ? "its own button" : signal;
+        String also = step.alsoSignalAt(stage);
+        return signal == null ? "its own button" : also == null ? signal : signal + " or " + also;
     }
 
     // ---- the closing card's downloads ----------------------------------------------------------

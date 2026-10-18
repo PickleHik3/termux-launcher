@@ -1411,6 +1411,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the suggestion bar, the three FX layers and the {@code Choreographer} loop below.
      */
     private final AzScrubGesture mAzGesture = new AzScrubGesture(SystemClock::uptimeMillis);
+    /** The touch on the A-Z letters now under way laid a letter's apps out (for the tour). */
+    private boolean mAzAppsShownThisTouch;
     @Nullable private Choreographer.FrameCallback mAzEdgePagingFrameCallback;
     @Nullable private SuggestionBarView.AzDragFocusResult mAzCurrentFocusResult;
     @Nullable private Runnable mAzOverflowRefreshRunnable;
@@ -1542,6 +1544,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final Runnable mArrangementAutosave = this::autosaveArrangementNow;
     /** The autosaved arrangement a cold start rebuilds once the bootstrap answers, or null. */
     @Nullable private com.termux.app.terminal.TerminalWorkspace mPendingArrangementRebuild;
+    /** A rebuild put the arrangement back and its notice waits for the window to be in front. */
+    private boolean mWindowsRestoredNoticeOwed;
 
     private boolean mSeamlessStatusBackgroundActive;
     private int mLastStatusBarInsetTop;
@@ -9476,8 +9480,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (com.termux.app.terminal.ArrangementRecovery.rebuildWantsFreshWindow(rowWindows,
                 arrangementStartIn()))
             mTermuxTerminalSessionActivityClient.addNewSession(false, null);
-        com.termux.app.notice.AppNotice.show(this, R.string.notice_windows_restored);
+        mWindowsRestoredNoticeOwed = true;
+        showWindowsRestoredNoticeIfDue();
         return true;
+    }
+
+    /**
+     * Shows the "Windows restored" notice a rebuild owes, once the activity is in front
+     * ({@link com.termux.app.terminal.ArrangementRecovery#restoredNoticeDue}); called again when
+     * the window gains the focus. Posted, so it goes up after the frame the wall's start page and
+     * the rebuilt row are laid out in, on whichever half is in front, for its ordinary hold.
+     */
+    private void showWindowsRestoredNoticeIfDue() {
+        if (!com.termux.app.terminal.ArrangementRecovery.restoredNoticeDue(
+                mWindowsRestoredNoticeOwed, mIsVisible, hasWindowFocus())) return;
+        mWindowsRestoredNoticeOwed = false;
+        View content = findViewById(android.R.id.content);
+        Runnable show = () -> com.termux.app.notice.AppNotice.show(this,
+            R.string.notice_windows_restored);
+        if (content != null) content.post(show);
+        else show.run();
     }
 
     /** Start in as the arrangement's start reads it: the Workspace when there is no Home. */
@@ -9728,6 +9750,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public void cancelFolderRename() {
                 TermuxActivity.this.cancelFolderRename();
+            }
+
+            @Override public boolean isFolderRenameTypingTouch(float rawX, float rawY) {
+                return TermuxActivity.this.isFolderRenameTypingTouch(rawX, rawY);
             }
         });
         mSuggestionBarView.setNotificationPopupInteractionListener(
@@ -10871,6 +10897,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         AzScrubGesture.Decision decision;
         switch (phase) {
             case DOWN:
+                mAzAppsShownThisTouch = false;
                 decision = mAzGesture.onDown(letter, selectionIndex, touchX, touchY,
                     canonicalX, canonicalY, eventTimeMs, geometry);
                 break;
@@ -10916,9 +10943,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (decision.persistPreview) {
             if (standalone) {
-                syncAzStandaloneStrip(decision.previewLetter, true);
+                // No strip: the letter matched nothing, so nothing was laid out.
+                if (syncAzStandaloneStrip(decision.previewLetter, true) != null)
+                    mAzAppsShownThisTouch = true;
             } else {
                 mSuggestionBarView.persistAzPreview(decision.previewLetter, decision.previewSelectionIndex);
+                mAzAppsShownThisTouch = true;
             }
         }
         updateAzOverflowAffordance();
@@ -10949,6 +10979,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : mSuggestionBarView.launchAzFocusedEntry(focusResult);
             }
             if (launched && mFirstBootTour != null) mFirstBootTour.onAppLaunchedFromScrub();
+            // A tap on a letter lays its apps out in the row and leaves them there: the apps found
+            // from the dock, as the drawer's pull finds them, so the apps lesson counts it.
+            else if (mAzAppsShownThisTouch && mFirstBootTour != null) mFirstBootTour.onAzAppsShown();
+            mAzAppsShownThisTouch = false;
             resetAzGestureState(false);
             updateAzOverflowAffordance();
             if (!launched) {
@@ -16017,8 +16051,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         if (mInAppKeyboard != null)
             mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
-        onSystemImeRequested();
-        KeyboardUtils.showSoftKeyboard(this, mTerminalView);
+        raiseFolderRenameKeyboard();
     }
 
     /**
@@ -16041,15 +16074,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public void onRenameEnded(boolean committed) {
                 titleView.bind(new FolderRenameModel(target.currentName()), false);
-                if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(
-                    isAppDrawerOpen() && mAppDrawerController != null
-                        ? mAppDrawerController.getSearchController() : null);
+                // Whoever owns the slot now: on Home that can be the palette or a sheet too.
+                restoreInAppKeyboardTypingClaim();
             }
         });
         if (mInAppKeyboard != null)
             mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
+        raiseFolderRenameKeyboard();
+    }
+
+    /**
+     * The keyboard a folder rename is typed with. The in-app keyboard when it is on, shown if it
+     * is down: the rename takes its keys through the interceptor slot, and on Home it may well
+     * be down (Home rests without it unless Keyboard on Home is on), where asking the system IME
+     * for itself raised nothing, since the in-app keyboard holds the system IME suppressed.
+     * Otherwise the system IME, through a terminal view that holds the focus: the rename has no
+     * text field, and the IME's text and keys reach the rename only by the terminal's overlay
+     * channel. On Home the focus may sit elsewhere, and the IME then typed into nothing.
+     */
+    private void raiseFolderRenameKeyboard() {
+        if (ensureInAppTypingKeyboard()) return;
+        if (!(getCurrentFocus() instanceof TerminalView)) handKeysToActivePane();
+        View target = getCurrentFocus() instanceof TerminalView ? getCurrentFocus() : mTerminalView;
         onSystemImeRequested();
-        KeyboardUtils.showSoftKeyboard(this, mTerminalView);
+        KeyboardUtils.showSoftKeyboard(this, target);
+    }
+
+    /**
+     * Whether a touch at this screen point is a key of the keyboard a folder rename is typed with:
+     * the in-app keyboard's keys or the extra-keys row beside them. The folder popup stays open
+     * for those, where any other touch outside it closes it.
+     */
+    private boolean isFolderRenameTypingTouch(float rawX, float rawY) {
+        return isFolderRenameActive()
+            && (isPointOnInAppKeyboard(rawX, rawY)
+                || viewContainsScreenPoint(findViewById(R.id.inapp_keyboard_container), rawX, rawY)
+                || viewContainsScreenPoint(findViewById(R.id.terminal_toolbar_host), rawX, rawY));
     }
 
     public void cancelFolderRename() { mFolderRenameController.cancel(); }
@@ -22952,6 +23012,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxActivity.this.beginHomeFolderRename(name, title, target);
                 }
                 @Override public void cancelHomeFolderRename() { cancelFolderRename(); }
+                @Override public boolean isFolderRenameTypingTouch(float rawX, float rawY) {
+                    return TermuxActivity.this.isFolderRenameTypingTouch(rawX, rawY);
+                }
                 // The palette gesture starts on the page's free area: Home has no bottom border.
                 @Override public void onHomePaletteSwipe(boolean up) {
                     if (isWidgetsPageShowing()) applyBorderKeyboardSwipe(up);
@@ -27031,6 +27094,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!hasFocus || mIsInvalidState || !mIsVisible) {
             return;
         }
+        showWindowsRestoredNoticeIfDue();
         // The Appearance surface's own dialogs and sheets take and return focus: the backdrops are
         // not re-rendered for them (a re-render under the scaled editor frame showed as a flash).
         if (!mAppearance.isOpen())

@@ -91,6 +91,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                                            @NonNull HomeFolderRenameTarget target) { }
         /** The Home folder popup went away: a rename in progress ends with it. */
         default void cancelHomeFolderRename() { }
+        /** Whether a touch at this screen point types into a rename in progress (a key). */
+        default boolean isFolderRenameTypingTouch(float rawX, float rawY) { return false; }
     }
 
     /** Where a Home folder's rename lands; the activity's rename intake commits through it. */
@@ -534,6 +536,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 });
             }
             @Override public void onPopupDismissed() { host.cancelHomeFolderRename(); }
+            @Override public boolean keepsOpenOnTouch(float rawX, float rawY) {
+                return host.isFolderRenameTypingTouch(rawX, rawY);
+            }
         });
         folderPopup = popup;
         return popup;

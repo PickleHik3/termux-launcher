@@ -62,6 +62,12 @@ public final class TourStep {
         @StringRes public final int bodyRes;
         @NonNull public final String targetId;
         @NonNull public final String signal;
+        /**
+         * Another signal that clears the stage as well, or null: a second way to do the same thing
+         * (the apps lesson's drawer pull, and the tap on the A-Z letters that lays a letter's apps
+         * out in the row).
+         */
+        @Nullable public final String alsoSignal;
         @NonNull public final TourGesture gesture;
 
         /** A stage read wherever the wall rests. */
@@ -73,6 +79,13 @@ public final class TourStep {
         public Stage(@NonNull Side side, @StringRes int titleRes, @StringRes int bodyRes,
                      @NonNull String targetId, @NonNull String signal,
                      @NonNull TourGesture gesture) {
+            this(side, titleRes, bodyRes, targetId, signal, null, gesture);
+        }
+
+        /** As above, cleared by {@code alsoSignal} too. */
+        public Stage(@NonNull Side side, @StringRes int titleRes, @StringRes int bodyRes,
+                     @NonNull String targetId, @NonNull String signal,
+                     @Nullable String alsoSignal, @NonNull TourGesture gesture) {
             if (titleRes == 0 || bodyRes == 0)
                 throw new IllegalArgumentException("a stage needs a title and a sentence");
             this.side = side;
@@ -80,6 +93,7 @@ public final class TourStep {
             this.bodyRes = bodyRes;
             this.targetId = targetId;
             this.signal = signal;
+            this.alsoSignal = alsoSignal;
             this.gesture = gesture;
         }
     }
@@ -140,6 +154,18 @@ public final class TourStep {
     /** The signal this lesson is waiting for at {@code stage}, or null past its last stage. */
     public String signalAt(int stage) {
         return stage >= 0 && stage < stages.length ? stages[stage].signal : null;
+    }
+
+    /** The other signal that clears {@code stage} too, or null when it has only the one. */
+    @Nullable
+    public String alsoSignalAt(int stage) {
+        return stage >= 0 && stage < stages.length ? stages[stage].alsoSignal : null;
+    }
+
+    /** Whether {@code signalId} clears {@code stage}: its signal, or the other one it takes. */
+    public boolean clearedBy(int stage, @Nullable String signalId) {
+        if (signalId == null || stage < 0 || stage >= stages.length) return false;
+        return signalId.equals(stages[stage].signal) || signalId.equals(stages[stage].alsoSignal);
     }
 
     /** The control to glow at {@code stage}; nothing on the closing card. */

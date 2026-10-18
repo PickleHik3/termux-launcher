@@ -732,6 +732,11 @@ Not seen: everything else listed under the sections below.
   moves on; Replay tour replays; a force-stop resumes on the same lesson; one shell. Caveat: the
   apps lesson clears on a drag down on the dock strip (drawer.opened) but not on a tap on the
   A–Z letters; owed: a tap that opens the drawer should count.
+- Fixed 2026-10-18 (worker branch, "fix(tour): the apps lesson also clears on a tap on the dock's
+  A-Z letters"): a letter tap never opens the drawer, it lays the letter's apps out in the row and
+  told the tour nothing; it now sends `launcher.az_apps_shown`, which clears the apps lesson too.
+  Re-check owed: tap a letter on the apps card (the log reads the signal, the card clears); a tap
+  on a pinned app only launches it and is not counted.
 ### Wall rework phase two: slice 7a, app icons on Home pages (feat/wall-rework-phase2)
 - Owed · commits "feat(home): app icons as a Home item kind in the widget store (schema v6)",
   "feat(home): app icon cells on Home pages: launch, edit mode, gone apps" and "feat(home): Add to
@@ -787,6 +792,11 @@ Not seen: everything else listed under the sections below.
   the icon, the split, the /system/bin cwd and the float come back on fresh shells. Not seen: the
   "Windows restored" notice (owed: check it fires after a rebuild), the empty-arrangement restart,
   Saved sessions Load after a rebuild, the parallax card re-check.
+- Fixed 2026-10-18 (worker branch, "fix(wall): the “Windows restored” notice waits for the
+  window to be in front"): the notice went up inside the service connection, before the window had
+  the focus and ahead of the rebuild's layout, so its hold ran out unseen (cause inferred, not seen
+  on a device); it now waits for a started, focused window. Re-check owed: the force-stop rebuild
+  above, with Start in = Home and = Workspace: the notice shows on the half in front.
 ### Wall rework phase two: slice 7b, folders on Home pages (feat/wall-rework-phase2)
 - Owed · commits "feat(home): folders as a Home item kind in the widget store (schema v7)" and
   "feat(home): folder cells, the folder popup and drop-to-merge on Home pages" · emulator,
@@ -828,6 +838,12 @@ Not seen: everything else listed under the sections below.
   the folder rename (typed "Tools", the label stayed: likely the focusless rename not taking keys
   on Home; owed), Margin · Home with icons, the grid-size popup, the drawer's Add to Home route,
   the empty page being dropped.
+- Fixed 2026-10-18 (worker branch, "fix(folders): a folder rename on Home takes the keyboard's
+  keys"): the popup is outside-touchable, so a key press on the in-app keyboard closed it and
+  cancelled the rename, and on Home the rename raised no keyboard at all. The popup now stays open
+  for keyboard touches during a rename, and the rename raises the in-app keyboard (else the system
+  IME through a focused terminal). Re-check owed: Home and dock folder rename with the in-app
+  keyboard, then the Android keyboard, Enter commits; a tap elsewhere still closes the popup.
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners
