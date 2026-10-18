@@ -818,6 +818,9 @@ Not seen: everything else listed under the sections below.
   Re-check owed: after a force-stop rebuild, type `exit` with the in-app keyboard in each rebuilt
   window (and a rebuilt float): each closes, the last leaves Home over an empty Workspace, and a
   second force-stop comes back empty; if the drawer still opens, capture logcat and the screen.
+- Seen 2026-10-18 (454940fd8, emulator): after the rebuild and its notice, `exit` in the restored
+  window closes it, Home stays with no drawer; a second cold start lands on Home with no shell,
+  and the dock's Terminal entry opens a fresh window. Parallax card re-check still not done.
 ### Wall rework phase two: slice 7b, folders on Home pages (feat/wall-rework-phase2)
 - Owed · commits "feat(home): folders as a Home item kind in the widget store (schema v7)" and
   "feat(home): folder cells, the folder popup and drop-to-merge on Home pages" · emulator,
@@ -884,6 +887,16 @@ Not seen: everything else listed under the sections below.
   Home folder rename typed with the in-app keyboard, keyboard undimmed, Enter commits; tap on the
   dim and on the dock each close it; the title and labels read on a dark and a light wallpaper,
   in both themes, and with the dock opacity at 80.
+- Seen 2026-10-18 (454940fd8, emulator): the folder rename typed on the in-app keyboard lands on
+  the popup and the label, the keyboard is not dimmed, a tap on the dim closes the popup without
+  pressing the page; the title and labels read on a dark and a light wallpaper; an icon dragged
+  past the last page makes a page, moved back the empty page is gone. Not found: a drawer route
+  with "Add to Home" (a dock icon's long press opens Edit pinned apps, A–Z letters filter the
+  dock, the palette's app rows bind keys): the sheet's "Add an app" is the only entry seen;
+  developer to say where the drawer route should live. Polish seen: opening the palette on Home
+  leaves a grey highlight panel around a folder cell until the palette closes; on a light
+  wallpaper the icon labels (white with a shadow) read weakly; the pinned-apps editor's app icons
+  are tiny while the Add an app list's are full size.
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners
