@@ -15869,6 +15869,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         KeyboardUtils.showSoftKeyboard(this, mTerminalView);
     }
 
+    /**
+     * The same focusless rename for a folder on a Home page: the dock's intake and title view,
+     * committing into the Home store instead of the dock's.
+     */
+    private void beginHomeFolderRename(@NonNull String name, @NonNull FolderRenameTitleView titleView,
+            @NonNull com.termux.app.launcher.widget.WidgetPaneController.HomeFolderRenameTarget target) {
+        mFolderRenameController.begin(0L, "home", name, new FolderRenameController.Host() {
+            @NonNull
+            @Override public LauncherConfigRepository.MutationResult commit(long expected,
+                @NonNull String id, @NonNull String value) {
+                return target.rename(value) ? LauncherConfigRepository.MutationResult.APPLIED
+                    : LauncherConfigRepository.MutationResult.MISSING;
+            }
+
+            @Override public void onDraftChanged(@NonNull FolderRenameModel model) {
+                titleView.bind(model, true);
+            }
+
+            @Override public void onRenameEnded(boolean committed) {
+                titleView.bind(new FolderRenameModel(target.currentName()), false);
+                if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(
+                    isAppDrawerOpen() && mAppDrawerController != null
+                        ? mAppDrawerController.getSearchController() : null);
+            }
+        });
+        if (mInAppKeyboard != null)
+            mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
+        onSystemImeRequested();
+        KeyboardUtils.showSoftKeyboard(this, mTerminalView);
+    }
+
     public void cancelFolderRename() { mFolderRenameController.cancel(); }
 
     private boolean isFolderRenameActive() { return mFolderRenameController.isActive(); }
@@ -22674,6 +22705,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void onHomeLongPressed(float rawX, float rawY) {
                     showHomeActionsSheet(rawX, rawY);
                 }
+                // A folder on Home opens the dock's popup, in the dock's look, and renames through the
+                // dock's own focusless intake.
+                @Override @Nullable
+                public com.termux.app.launcher.popup.AnchoredMenuTheme homeMenuTheme() {
+                    return mSuggestionBarView == null ? null : mSuggestionBarView.menuTheme();
+                }
+                @Override public void beginHomeFolderRename(@NonNull String name,
+                        @NonNull FolderRenameTitleView title,
+                        @NonNull com.termux.app.launcher.widget.WidgetPaneController.HomeFolderRenameTarget target) {
+                    TermuxActivity.this.beginHomeFolderRename(name, title, target);
+                }
+                @Override public void cancelHomeFolderRename() { cancelFolderRename(); }
                 // The palette gesture starts on the page's free area: Home has no bottom border.
                 @Override public void onHomePaletteSwipe(boolean up) {
                     if (isWidgetsPageShowing()) applyBorderKeyboardSwipe(up);
