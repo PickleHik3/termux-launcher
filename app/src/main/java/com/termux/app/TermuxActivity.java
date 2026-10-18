@@ -24515,8 +24515,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         captureTerminalDeparture();
         mCurrentWSession.current = index;
         mPaneController.showWindow(mCurrentWSession.currentWindow());
-        rebuildDrawerSessions();
+        // The arrival's nudge first, naming the window it left, so the wallpaper re-sync inside
+        // rebuildDrawerSessions already reads the departure: started after it, that sync wrote
+        // the arrival's offset (a whole jump) and the nudge's first tick wrote the departure back.
         animateTerminalWindowArrival(index >= previous ? 1 : -1, previous);
+        rebuildDrawerSessions();
     }
 
     /**
