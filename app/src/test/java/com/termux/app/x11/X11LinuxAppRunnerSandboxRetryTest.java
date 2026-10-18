@@ -187,11 +187,9 @@ public class X11LinuxAppRunnerSandboxRetryTest {
         final List<X11LinuxAppRunner.ScriptExitListener> listeners = new ArrayList<>();
         boolean startSucceeds = true;
 
-        @Override public boolean isDisplayEnabled() { return true; }
-        @Override public void turnOnDisplay() { }
         @Override public boolean isDisplayRunning() { return true; }
         @Override public void startDisplay() { }
-        @Override public void showDisplayPlace() { }
+        @Override public void showDisplayWindow() { }
         @Override public void showNotice(@NonNull String message) { notices.add(message); }
 
         @Override public boolean runScript(@NonNull String script,

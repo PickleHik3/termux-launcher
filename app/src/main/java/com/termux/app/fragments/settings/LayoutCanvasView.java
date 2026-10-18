@@ -890,8 +890,8 @@ public final class LayoutCanvasView extends View {
 
     /**
      * The keyboard's block along the bottom of the phone, in view pixels, or null while the place
-     * does not show one: the keyboard element off, Home (where it opens over the page), or the
-     * display with a keyboard that floats.
+     * does not show one: the keyboard element off (on Home, always on off), or the display with a
+     * keyboard that floats.
      */
     @Nullable
     public RectF keyboardRect() {
@@ -1310,9 +1310,11 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * The arrangement the model is asked about: what the place shows of it. Home opens the
-     * keyboard over its page, so it has none; the display with a keyboard that floats over it has
-     * a floating card; the terminal and a display the keyboard resizes show it as the form says.
+     * The arrangement the model is asked about: what the place shows of it. The display with a
+     * keyboard that floats over it has a floating card; the terminal, a display the keyboard
+     * resizes and Home show it as the form says. On Home the keyboard element is always on (the
+     * Home layout's {@code keyboardShown}), which keeps the keyboard up and gives it the grid's
+     * bottom rows, so it is a block of the page there like the dock's rows.
      */
     @NonNull
     private PlaceLayout shapeLayout() {
@@ -1320,8 +1322,6 @@ public final class LayoutCanvasView extends View {
         if (layout == null) throw new IllegalStateException("no arrangement");
         if (!layout.keyboardShown) return layout;
         switch (mPlace) {
-            case WIDGETS:
-                return layout.withKeyboardShown(false);
             case DISPLAY:
                 if (layout.keyboardMode == KeyboardMode.OVERLAY
                     && layout.keyboardForm != KeyboardForm.FLOATING) {
@@ -1417,16 +1417,19 @@ public final class LayoutCanvasView extends View {
 
     /**
      * Whether the picture shows the keyboard as a block of the phone: only while the keyboard
-     * element is on, and only on a place whose content it actually shrinks — the terminal, and
-     * the display with a keyboard that resizes it. Home's keyboard opens over the page, and a
-     * floating one over the display is drawn on the pane instead.
+     * element is on, and only on a place whose content it actually shrinks — the terminal, Home
+     * with always on (the Home layout's keyboard element shown, which takes the grid's bottom
+     * rows), and the display with a keyboard that resizes it. A floating one over the display is
+     * drawn on the pane instead. Shown, it is a block like any other: dragged to the tray, it is
+     * put away, which on Home turns always on off.
      */
     private boolean showsKeyboard() {
         if (mLayout == null || !mLayout.keyboardShown) return false;
         switch (mPlace) {
-            case TERMINAL: return true;
-            case DISPLAY: return mLayout.keyboardMode == KeyboardMode.RESIZE;
+            case TERMINAL:
             case WIDGETS:
+                return true;
+            case DISPLAY: return mLayout.keyboardMode == KeyboardMode.RESIZE;
             default: return false;
         }
     }
@@ -4402,7 +4405,8 @@ public final class LayoutCanvasView extends View {
      * ({@code mCanvasScale} pixels per real dp, for the orientation it shows), so the opening's
      * size over that scale is the wall in dp, from the same geometry the miniature already models
      * for the chrome around it. That is the real pane's measured size to within the miniature's
-     * rounding, which {@link WidgetGridCaps} absorbs.
+     * rounding, which {@link WidgetGridCaps} absorbs. The rim round the grid is the Margin
+     * {@link #setShape} gave: the grid is only offered on Home, where that is Home's Margin.
      */
     @NonNull
     private WidgetGridCaps widgetGridCaps() {
@@ -4410,7 +4414,8 @@ public final class LayoutCanvasView extends View {
         if (rect == null || rect.isEmpty() || mCanvasScale <= 0f) {
             return WidgetGridCaps.unbounded();
         }
-        return WidgetGridCaps.forWall(rect.width() / mCanvasScale, rect.height() / mCanvasScale);
+        return WidgetGridCaps.forWall(rect.width() / mCanvasScale, rect.height() / mCanvasScale,
+            mMarginDp);
     }
 
     private boolean canStepGrid(int columnStep, int rowStep) {

@@ -49,6 +49,8 @@ the keys go to the shell.
 | `Ctrl+Alt+[` / `Ctrl+Alt+]` | **Previous window** / **Next window** | (to the shell) |
 | `Ctrl+Alt+Left` / `Ctrl+Alt+Right` | **Previous window** / **Next window** | **Close sessions** / **Open sessions** (the sessions drawer) |
 | `Ctrl+Alt+1` … `Ctrl+Alt+9` | **Switch to window** 1 to 9 in this session | **Switch to session by number** 1 to 9 |
+| `Ctrl+Alt+,` | **Consume next window into this pane**: the window on the right joins this one as panes | (to the shell) |
+| `Ctrl+Alt+.` | **Expel pane to its own window**, right after this one | (to the shell) |
 
 On the Display place, next and previous window step through the apps open on the display.
 

@@ -540,7 +540,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows = new java.util.ArrayList<>();
         int current;
         @Nullable String name;
-        com.termux.app.terminal.TerminalPaneController.Window currentWindow() { return windows.get(current); }
+        /**
+         * The window the row shows, null when the row is empty. A selection left past the end of
+         * the row (a window taken out without it being settled) is pulled back to the last window
+         * rather than read out of bounds.
+         */
+        @Nullable
+        com.termux.app.terminal.TerminalPaneController.Window currentWindow() {
+            if (windows.isEmpty()) return null;
+            current = Math.max(0, Math.min(current, windows.size() - 1));
+            return windows.get(current);
+        }
+
+        /** A move that takes a window out of the row; false when it refused. */
+        interface Move { boolean run(); }
+        /** {@link #takeOutFor}'s answer when the window is not in the row or the move refused. */
+        static final int REFUSED = Integer.MIN_VALUE;
+
+        /**
+         * Takes {@code w} out of the row for {@code move} (it floating onto Home). Returns the
+         * index the row shows afterwards, -1 when the row is empty, or {@link #REFUSED} with the
+         * row as it was. The selection is settled before the move runs: the move announces the
+         * change, and what hears it (the drawer's rebuild) reads this row's current window.
+         */
+        int takeOutFor(com.termux.app.terminal.TerminalPaneController.Window w, Move move) {
+            int removed = windows.indexOf(w);
+            if (removed < 0) return REFUSED;
+            int oldIndex = current;
+            windows.remove(removed);
+            int next = com.termux.app.terminal.WindowCloseFocus.afterRemoval(oldIndex, removed,
+                windows.size());
+            current = Math.max(0, next);
+            if (!move.run()) {
+                windows.add(removed, w);
+                current = oldIndex;
+                return REFUSED;
+            }
+            return next;
+        }
+
+        /** A docked Home float joins the row right after the current window and becomes it. */
+        int dockAfterCurrent(com.termux.app.terminal.TerminalPaneController.Window w) {
+            int at = com.termux.app.wall.WallRow.insertionIndex(current, windows.size());
+            windows.add(at, w);
+            current = at;
+            return at;
+        }
     }
     /** All sessions the drawer lists. Each owns one or more windows. */
     private final java.util.List<WSession> mWSessions = new java.util.ArrayList<>();
@@ -615,8 +660,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mStatusBarSurfaceOutline =
         new com.termux.app.chrome.ChromeShapeOutlineProvider();
     @Nullable private com.termux.app.wall.PaneWallController mPaneWallController;
-    /** The wall page an activity recreation is coming back to; null on a cold start. */
-    @Nullable private String mPendingWallPage;
+    /** The saved state an activity recreation brings the wall's row position back from. */
+    @Nullable private Bundle mPendingWallState;
+    /**
+     * Set by onStop, cleared by onResume: a home press that finds it set is a return from another
+     * app (nothing moves), one that finds it clear came while the launcher was in front.
+     */
+    private boolean mStoppedSinceResume;
     @Nullable private com.termux.app.x11.X11DisplayHostController mX11Display;
     @Nullable private com.termux.app.x11.X11KeyboardBridge mX11KeyboardBridge;
     /** Runs a Linux app from the drawer on the display, starting the display when needed. */
@@ -625,6 +675,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.launcher.LauncherAppLauncher.LinuxAppRunner mLinuxAppRunnerHook;
     /** Same, for {@code Terminal=true} Linux apps (D5) — taken out again on destroy. */
     @Nullable private com.termux.app.launcher.LauncherAppLauncher.TerminalAppRunner mTerminalAppRunnerHook;
+    /** Same, for the launcher's own Terminal and Display entries — taken out again on destroy. */
+    @Nullable private com.termux.app.launcher.LauncherAppLauncher.EntryRunner mEntryRunnerHook;
+    /** Hears a display that announced itself with no window open; taken out again on destroy. */
+    @Nullable private com.termux.app.x11.X11DisplayReceiver.UnclaimedListener mUnclaimedDisplayListener;
+    /**
+     * A display was asked for (the Display entry, a Linux app, the screen glyph) and has not come
+     * up yet: its window is on the row while it starts. Cleared when it runs — the running display
+     * holds the window from then on — and when the wall leaves the window before it does.
+     */
+    private boolean mDisplayRequested;
     /** The apps open on the display, shown as the window chips while the Display place is up. */
     @Nullable private com.termux.app.x11.X11WindowList mX11Windows;
     @NonNull private java.util.List<com.termux.app.x11.X11WindowList.Window> mDisplayWindows =
@@ -636,10 +696,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.x11.DisplayStopSequence mDisplayStop;
     /**
      * The place whose keyboard state is on screen: the one the wall last settled on, so arriving
-     * somewhere new can record what the place being left leaves behind.
+     * somewhere new can record what the place being left leaves behind. Before the first settle
+     * it is the page the wall opens on (seeded in onCreate, WallRow#openingKind), so the first
+     * frame already wears that page's chrome: Home's Style, Corners and Margin on a cold start
+     * into Home, not the Workspace's until the settle.
      */
     @NonNull private com.termux.app.wall.PaneWallPage mLastWallPage =
         com.termux.app.wall.PaneWallPage.TERMINAL;
+
+    /**
+     * Whether the wall has settled once. The first settle is measured from the Workspace's window,
+     * as every first settle was before the opening page was seeded, and records no keyboard for a
+     * page that was never left (syncPlaceState).
+     */
+    private boolean mWallSettledOnce;
 
     // ---- The chrome travelling with the wall (PlaceChromeTravel). Everything here is a transform
     // or a pre-roll made during one slide, and settlePlaceChrome clears all of it at the end.
@@ -695,8 +765,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the tour — any more than the settle it stands in for would be twice.
      */
     private boolean mQuietKeyboardChange;
-    /** Whether the arrangement last applied was a minimal one, so a change is applied once. */
-    private boolean mAppliedChromeMinimal;
+    /**
+     * The layout the arrangement was last applied for (normal, minimal or Home), so a change of
+     * minimal mode or of the half the wall rests in is applied once.
+     */
+    @Nullable private com.termux.app.place.LayoutVariant mAppliedChromeVariant;
+    /** The variant the arrangement pass last laid out, so a keyboard element is compared within one. */
+    @Nullable private com.termux.app.place.LayoutVariant mAppliedPlaceVariant;
+    /** Always on as last applied to the widget grid; null until the first pass reads it. */
+    @Nullable private Boolean mAppliedHomeAlwaysOn;
+    /** Always on's notice, held while the editor that turned it on is still up. */
+    private final com.termux.app.place.HomeAlwaysOnNotice mAlwaysOnNotice =
+        new com.termux.app.place.HomeAlwaysOnNotice();
     /** The shared arrangement and each place's memory; built on the preferences when first asked. */
     @Nullable private PlaceLayoutStore mPlaceLayoutStore;
     /** The first-boot tour: the cards drawn over the real chrome, and the run behind them. */
@@ -1427,6 +1507,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int SUGGESTION_BAR_MAX_INPUT_CHARS = 10;
     private static final long EMPTY_SESSION_RECOVERY_DEBOUNCE_MS = 1500L;
     private static volatile boolean sPendingStyleReloadRecreateActivity = true;
+    /**
+     * This process has started its first shell. The Workspace may be empty after that (ADR 0008):
+     * an empty session list then means the user closed everything, and an activity coming back
+     * (recreation, a second launch) starts nothing behind Home. A fresh process is a cold start
+     * and gets its shell as always — the bootstrap, the Welcome flow and the first-boot tour ride
+     * on it.
+     */
+    private static volatile boolean sFirstShellStarted;
 
     private boolean mSeamlessStatusBackgroundActive;
     private int mLastStatusBarInsetTop;
@@ -1699,8 +1787,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (savedInstanceState != null) {
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
-            mPendingWallPage = savedInstanceState.getString(
-                com.termux.app.wall.PaneWallController.ARG_PAGE);
+            mPendingWallState = savedInstanceState;
         }
         // Delete ReportInfo serialized object files from cache older than 14 days
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
@@ -1731,9 +1818,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIsInvalidState = true;
             return;
         }
-        // The older two-way mode value is mapped once here, before anything reads it.
-        com.termux.app.launcher.LauncherUseCaseMode.migrateIfNeeded(mPreferences,
-            com.termux.BuildConfig.X11_SERVER);
+        // The chrome is dressed for the page the wall opens on from the first frame: every read of
+        // Home's Style, Corners and Margin and of the layout variant follows mLastWallPage, which
+        // otherwise said the Workspace until the first settle.
+        mLastWallPage = com.termux.app.wall.WallRow.openingKind(
+            mPendingWallState == null ? null
+                : mPendingWallState.getString(com.termux.app.wall.PaneWallController.ARG_HALF),
+            mPreferences.getLauncherStartIn());
         // Built after the preferences, and only while the Widgets place is on the wall, so a
         // terminal-only install never registers an app widget host at all — no binding, no
         // listening, no widget providers reconciled — and neither does a pane switched on under
@@ -1803,6 +1894,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastLaunchWasLauncherEntry = isLauncherHomeIntent(getIntent());
         setTermuxTerminalViewAndClients();
         createWidgetPaneController();
+        attachHomeFloatLayer();
+        landWall();
         setTerminalWindowBar();
         setTerminalToolbarView(savedInstanceState);
         syncPinnedAppsHost();
@@ -1947,21 +2040,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The Linux display switch, wherever it is moved from. On takes the same path the Display
-     * place's own button and the Settings switch take, so the pref, the defaults pass and the page
-     * state all agree with what the user would get either other way; off tears the page and the
-     * server connection down the same way a switch moved in Settings does.
-     */
-    private void setEmbeddedDisplayEnabled(boolean enabled) {
-        if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return;
-        if (enabled) {
-            turnOnEmbeddedDisplay();
-            return;
-        }
-        turnOffEmbeddedDisplay();
-    }
-
-    /**
      * Creates the notice pill up front, hands it the terminal it will be floating over, and joins
      * it to the column below, so the background-process stack moves down under it while a notice is
      * up rather than being drawn over.
@@ -2033,8 +2111,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // alpha, scale and translation, so a drawer left open across HOME would strand faded
             // pinned icons.
             mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
-            // HOME means the home screen as it was left: the wall stays on its place, whichever
-            // of the three that is.
+            // A home press while the launcher is in front lands on Home page 1, from a window or
+            // from another Home page; a return from another app finds the page it left.
+            if (!mStoppedSinceResume && mPaneWallController != null) {
+                mPaneWallController.goHome(isVisible());
+                // Home floats stay on their pages; a focused one gives the keyboard back.
+                if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
+            }
             if (mSuggestionBarView != null) {
                 mSuggestionBarView.resetTransientVisualState();
             }
@@ -2079,7 +2162,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPendingLaunchIntent = null;
             startBootstrapAndSession(pendingIntent);
         }
-        maybeRecoverFromEmptySession("onStart");
 
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onStart();
@@ -2286,6 +2368,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onResume() {
         super.onResume();
+        mStoppedSinceResume = false;
         Logger.logVerbose(LOG_TAG, "onResume");
         // Text left waiting in the pill holds the screen again, its idle release started over.
         mVoiceScreenMayHold = true;
@@ -2350,15 +2433,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (sPendingStyleReloadOnNextResume) {
             boolean recreateActivity = consumePendingStyleReloadRecreateActivity();
-            // A display switched off in Settings is torn down before the reload, and a server
-            // running on it is asked about first; the reload — and any recreate it carries —
-            // waits for that answer rather than rebuilding under the question.
-            Runnable reload = () -> reloadActivityStyling(recreateActivity);
-            if (!reconcileEmbeddedDisplay(reload)) reload.run();
+            reloadActivityStyling(recreateActivity);
             return;
         }
-        // The display can have been switched on or off by another path while we were away.
-        reconcileEmbeddedDisplay(null);
+        // A display started from a shell while we were away announced itself to nobody.
+        claimKeptDisplay();
         if (sPendingAppDrawerReloadOnNextResume) {
             sPendingAppDrawerReloadOnNextResume = false;
             if (mAppDrawerController != null) mAppDrawerController.onPreferencesReloaded();
@@ -2372,7 +2451,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onResume();
         refreshLauncherIconsIfPreferencesChanged();
-        maybeRecoverFromEmptySession("onResume");
         if (!transientPause) {
             // If compatibility mode was just enabled, drop any active split back to a single pane.
             if (!isSplitPanesEnabled())
@@ -2572,6 +2650,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The tour, built on the preferences the first time anything asks for it. */
     @Nullable
     private FirstBootTour firstBootTour() {
+        if (!FirstBootTour.ENABLED) return null;
         if (mFirstBootTour == null && mPreferences != null) {
             mFirstBootTour = new FirstBootTour(this, mPreferences,
                 this::getInAppKeyboardKeyRect);
@@ -2581,16 +2660,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 View decor = getWindow().getDecorView();
                 decor.post(this::maybeOfferTaiWelcomeCard);
             });
-            // Between lessons the home screen is put back the way every lesson starts, and a
-            // terminal-only install has no other place to drag the border to.
+            // Between lessons the home screen is put back the way every lesson starts.
             mFirstBootTour.setHomeHost(new FirstBootTour.HomeHost() {
                 @Override public void resetHome() {
                     resetHomeForTour();
                 }
 
                 @Override public boolean hasOnePlace() {
-                    return mPreferences != null
-                        && com.termux.app.launcher.LauncherUseCaseMode.isTerminalOnly(mPreferences);
+                    // Home is always on the wall (ADR 0008): there is no terminal-only install.
+                    return false;
                 }
             });
             mFirstBootTour.setSetupHost(welcomeSheet());
@@ -2756,17 +2834,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 new String[] {permission}, REQUEST_CODE_PALETTE_CONTACTS);
         }
 
+        // The display has no switch any more (ADR 0008): it opens on demand, so the welcome
+        // sheet has no Display row to offer.
         @Override public boolean displayOffered() {
-            return com.termux.BuildConfig.X11_SERVER;
+            return false;
         }
 
         @Override public boolean displayOn() {
-            return isX11DisplayEnabled();
+            return false;
         }
 
-        @Override public void setDisplayOn(boolean on) {
-            setEmbeddedDisplayEnabled(on);
-        }
+        @Override public void setDisplayOn(boolean on) { }
 
         @Override public void onPlaceSearchFocusChanged(@NonNull EditText field, boolean focused) {
             if (focused) {
@@ -2882,6 +2960,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void redressChromeFromState() {
         if (mPreferences == null || mChrome == null) return;
         mAppliedPaneStyleKey = null;
+        // A redress after the editor (Undo, a Look, a Style) or at a settle between halves
+        // (restyleChromeForHalfIfChanged): the grid's rim is Home's Margin as it stands now.
+        pushHomeMarginToWidgetGrid(true);
         mChrome.redressFromState();
         applyTerminalSurfaceAppearance();
         updateTerminalGlassFrost();
@@ -3103,13 +3184,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * out with — so there is nothing to keep in step.
      */
     void applySideStackFrameInset(int verticalInsetPx) {
-        int inset = Math.max(0, verticalInsetPx);
-        for (int id : new int[] {R.id.place_edge_stack_left, R.id.place_edge_stack_right}) {
-            View stack = findViewById(id);
-            if (stack == null) continue;
-            if (stack.getPaddingTop() == inset && stack.getPaddingBottom() == inset) continue;
-            stack.setPadding(stack.getPaddingLeft(), inset, stack.getPaddingRight(), inset);
+        mSideStackFrameInsetPx = Math.max(0, verticalInsetPx);
+        padSideStack(0, findViewById(R.id.place_edge_stack_left));
+        padSideStack(1, findViewById(R.id.place_edge_stack_right));
+    }
+
+    /**
+     * A side stack's padding: the frame inset at both ends, plus the status bar's band on top on a
+     * page it overlays (EdgeStackPolicy.sideStackTopInsetPx), so a side column starts at the bar's
+     * edge, and the dock's reach at the bottom on a page it overlays
+     * (EdgeStackPolicy.sideStackBottomInsetPx), so it ends above the dock. Whether it changed.
+     */
+    private boolean padSideStack(int side, @Nullable View stack) {
+        if (stack == null) return false;
+        int top = mSideStackFrameInsetPx + mSideStackBarInsetPx[side];
+        int bottom = mSideStackFrameInsetPx + mSideStackDockInsetPx[side];
+        if (stack.getPaddingTop() == top && stack.getPaddingBottom() == bottom) return false;
+        stack.setPadding(stack.getPaddingLeft(), top, stack.getPaddingRight(), bottom);
+        return true;
+    }
+
+    /** The frame inset both side stacks keep at each end (applySideStackFrameInset). */
+    private int mSideStackFrameInsetPx;
+
+    /** Per side stack (left, right), the status bar's band it starts below; 0 off Home. */
+    @NonNull private final int[] mSideStackBarInsetPx = new int[2];
+
+    /** Per side stack (left, right), the dock's reach it ends above; 0 off Home. */
+    @NonNull private final int[] mSideStackDockInsetPx = new int[2];
+
+    /**
+     * Ends each side stack above the dock on a page the dock overlays: the canvas reaches
+     * {@code bottomReachPx} under the bottom stack there, and a side column standing the canvas's
+     * whole height ran on under the dock's last icons. Whether either stack moved.
+     */
+    private boolean applySideStackDockInsets(boolean dockOverlays, int bottomReachPx) {
+        PlaceLayout layout = currentPlaceLayout();
+        boolean moved = false;
+        PlaceLayout.Edge[] edges = {PlaceLayout.Edge.LEFT, PlaceLayout.Edge.RIGHT};
+        int[] ids = {R.id.place_edge_stack_left, R.id.place_edge_stack_right};
+        for (int side = 0; side < ids.length; side++) {
+            int inset = EdgeStackPolicy.sideStackBottomInsetPx(layout, edges[side], dockOverlays,
+                bottomReachPx);
+            if (mSideStackDockInsetPx[side] == inset) continue;
+            mSideStackDockInsetPx[side] = inset;
+            moved |= padSideStack(side, findViewById(ids[side]));
         }
+        return moved;
     }
 
     /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
@@ -3860,11 +3981,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Puts the wallpaper where the wall is: the offset is a function of the wall's live
-     * position ({@link com.termux.app.wall.WallParallax#offsetPx}), so a drag, a fling and a
-     * settle all move the picture on the wall's own curve, and every surface that samples the
-     * frame is told to draw again when it moved. Per frame of a slide, so nothing here allocates:
-     * one number written, and invalidates.
+     * Puts the wallpaper where the row is: the offset is a function of the row's live position
+     * ({@link com.termux.app.wall.PaneWallController#rowPosition}, spread over the picture by
+     * {@link com.termux.app.wall.WallParallax#offsetPx}), so Home's swipe, the seam, a border drag
+     * between windows, a window's arrival and a slide to the Display page all move the picture on
+     * their own curve, and every surface that samples the frame is told to draw again when it
+     * moved. Per frame of a slide, so nothing here allocates: one number written, and
+     * invalidates. A Home page or a window coming or going re-spreads the picture over the new
+     * count at once: the pan snaps to it rather than animating.
      */
     private void syncWallpaperParallax() {
         syncWallpaperParallax(false);
@@ -3879,9 +4003,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float offsetPx = 0f;
         int sparePx = mWallpaperParallaxSparePx;
         if (sparePx > 0 && mPaneWallController != null) {
-            offsetPx = com.termux.app.wall.WallParallax.offsetPx(mPaneWallController.pages(),
-                mPaneWallController.currentPage(), mWallOffsetPx,
-                mPaneWallController.wall().getWidth(), sparePx);
+            offsetPx = com.termux.app.wall.WallParallax.offsetPx(
+                mPaneWallController.rowPosition(), mPaneWallController.rowCount(), sparePx);
         }
         if (!mWallpaperParallax.setOffsetPx(offsetPx)) return;
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.invalidate();
@@ -5022,31 +5145,86 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /** Whether the chrome on screen wears the Floating Style: Home's on a Home page, else the Workspace's. */
     public boolean isRoundedDockStyle() {
         return mPreferences != null
-            && mPreferences.getLayoutStyle()
+            && mPreferences.getLayoutStyle(chromeWearsHomeShape())
                 == com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle.FLOATING;
     }
 
     // ---- The one shape model, read live (ADR 0007) ----
 
-    /** Corners, the one Floating radius, in px: Base's corner radius, or the auto token. */
-    private float layoutCornersPx() {
-        int dp = mPreferences == null
+    /**
+     * Whether the chrome on screen wears Home's own Style, Corners and Margin rather than the
+     * Workspace's (HomeChromePolicy): read off the page the chrome is committed to, so it switches
+     * at settle with the layout variant, and a settle that crosses between halves that differ
+     * dresses the chrome again ({@link #restyleChromeForHalfIfChanged}).
+     */
+    private boolean chromeWearsHomeShape() {
+        return com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage);
+    }
+
+    /** Corners in dp as stored for the chrome on screen (-1 is the auto token). */
+    private int chromeCornersDp() {
+        return mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS
-            : mPreferences.getSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.CORNER_RADIUS);
+            : mPreferences.getLayoutCornersDp(chromeWearsHomeShape());
+    }
+
+    /** Margin in dp as stored for the chrome on screen. */
+    private int chromeMarginDp() {
+        return mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP
+            : mPreferences.getLayoutMarginDp(chromeWearsHomeShape());
+    }
+
+    /**
+     * The dock's configured corner radius for a Corners value, as the retired per-surface getter
+     * read it off Base: the follow-the-Style sentinel for the auto token, else capped.
+     */
+    private static int dockCornerRadiusDp(int cornersDp) {
+        if (cornersDp < 0)
+            return TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
+        return Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS,
+            cornersDp);
+    }
+
+    /**
+     * A settle from {@code from} onto {@code to} that crosses between the halves of the wall while
+     * Home's Style, Corners or Margin differ from the Workspace's: the chrome is dressed again as
+     * the Appearance editor dresses it for a Style change (a launch's dress, the dock and terminal
+     * heights, the status bar, the keyboard and the dock's styling), now that every read above
+     * answers for the arriving half. Nothing happens while the halves agree, which is every
+     * install until the user sets Home apart.
+     */
+    private void restyleChromeForHalfIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
+                                               @NonNull com.termux.app.wall.PaneWallPage to) {
+        if (mPreferences == null || mChrome == null) return;
+        if (com.termux.app.place.HomeChromePolicy.wearsHomeShape(from)
+            == com.termux.app.place.HomeChromePolicy.wearsHomeShape(to)) return;
+        if (!com.termux.app.place.HomeChromePolicy.shapeChanges(from, to,
+            com.termux.app.place.WallHalfShape.read(mPreferences, false),
+            com.termux.app.place.WallHalfShape.read(mPreferences, true))) return;
+        redressChromeFromState();
+        updateAppLauncherBarHeight();
+        setTerminalToolbarHeight(true);
+        refreshTerminalWindowBar();
+        if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
+        applySuggestionBarSurfaceStyling();
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+            | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    /** Corners, the one Floating radius, in px: the half's corner radius, or the auto token. */
+    private float layoutCornersPx() {
+        int dp = chromeCornersDp();
         if (dp < 0) dp = TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(null, true);
         return dpToPx(dp);
     }
 
     /** Margin, the air between and around Floating cards, in px. */
     private float layoutMarginPx() {
-        int dp = mPreferences == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP
-            : mPreferences.getSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP);
-        return dpToPx(Math.max(0, dp));
+        return dpToPx(Math.max(0, chromeMarginDp()));
     }
 
     /** The device's screen radius, which a Docked frame's outer corners take; 28dp when unknown. */
@@ -5122,7 +5300,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : mKeyboardGeometry.desiredHeightPx()) : 0f;
         return com.termux.app.chrome.LiveChromeShape.of(layout,
             mPreferences == null ? TermuxAppSharedPreferences.LayoutStyle.DOCKED
-                : mPreferences.getLayoutStyle(), width, height,
+                : mPreferences.getLayoutStyle(chromeWearsHomeShape()), width, height,
             com.termux.app.place.ChromeShapeModel.Thickness.of(status, status, apps, apps, az, az,
                 keys, keys, keyboard),
             layoutCornersPx(), layoutMarginPx(), screenRadiusPx(),
@@ -5460,13 +5638,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int resolveInAppKeyboardHorizontalInsetPx() {
         return resolveSurfaceHorizontalInsetPx(mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET
-            : mPreferences.getInAppKeyboardHorizontalInset(), isInAppKeyboardCapsule());
+            : TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp()),
+            isInAppKeyboardCapsule());
     }
 
     private int resolveStatusBarHorizontalInsetPx() {
         return resolveSurfaceHorizontalInsetPx(mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET
-            : mPreferences.getStatusBarHorizontalInset(), isRoundedDockStyle());
+            : TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp()),
+            isRoundedDockStyle());
     }
 
     /**
@@ -8712,6 +8892,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onStop() {
         super.onStop();
+        mStoppedSinceResume = true;
         Logger.logDebug(LOG_TAG, "onStop");
         // The Appearance surface survives a stop (the overlay registry's STOP keeps it, as it kept
         // the editor); only a HOME press closes it.
@@ -8910,6 +9091,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.launcher.LauncherAppLauncher.clearTerminalAppRunner(mTerminalAppRunnerHook);
             mTerminalAppRunnerHook = null;
         }
+        if (mEntryRunnerHook != null) {
+            com.termux.app.launcher.LauncherAppLauncher.clearEntryRunner(mEntryRunnerHook);
+            mEntryRunnerHook = null;
+        }
+        if (mUnclaimedDisplayListener != null) {
+            com.termux.app.x11.X11DisplayReceiver.clearUnclaimedListener(mUnclaimedDisplayListener);
+            mUnclaimedDisplayListener = null;
+        }
         clearAccessoryRenderEffectBackdrop();
         removeDecorNavBarSurfaceOverlay();
         if (mSuggestionBarView != null) {
@@ -9052,7 +9241,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherTransitionController.maybeHandleGestureContract(intent, mSuggestionBarView);
         }
         setIntent(null);
-        if (mTermuxService.isTermuxSessionsEmpty()) {
+        if (mTermuxService.isTermuxSessionsEmpty()
+            && !com.termux.app.wall.WallRow.startsShellOnConnect(true, sFirstShellStarted,
+                asksForSession(intent))) {
+            // The Workspace was emptied on purpose: Home stays, and nothing starts behind it.
+            Logger.logDebug(LOG_TAG, "No sessions after the first shell: the Workspace stays empty");
+        } else if (mTermuxService.isTermuxSessionsEmpty()) {
             if (mIsVisible) {
                 if (!recoverEmptyVisibleSessionInPlace(intent, "service-connected")) {
                     startBootstrapAndSession(intent);
@@ -9136,14 +9330,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bootstrapReturned[0] = true;
     }
 
-    private void maybeRecoverFromEmptySession(@NonNull String source) {
-        if (!mIsVisible || mTermuxService == null || mTermuxTerminalSessionActivityClient == null) {
-            return;
-        }
-        if (!mTermuxService.isTermuxSessionsEmpty()) {
-            return;
-        }
-        recoverEmptyVisibleSessionInPlace(null, source);
+    /** A launch that names a shell of its own: the New session shortcut, or a failsafe one. */
+    private static boolean asksForSession(@Nullable Intent intent) {
+        if (intent == null) return false;
+        return Intent.ACTION_RUN.equals(intent.getAction())
+            || intent.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
     }
 
     private boolean shouldRecoverEmptySessionInPlace() {
@@ -9557,8 +9748,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * home screen. The host, the page and the controller all follow this one answer.
      */
     private boolean isWidgetsPageWanted() {
-        return mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled()
-            && !com.termux.app.launcher.LauncherUseCaseMode.isTerminalOnly(mPreferences);
+        // Home is always on the wall (ADR 0008): neither the usage mode nor the widget pane
+        // switch takes it off any more.
+        return mPreferences != null;
     }
 
     /**
@@ -9568,11 +9760,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     public java.util.List<com.termux.app.wall.PaneWallPage> availableWallPages() {
         if (mPaneWallController != null) return mPaneWallController.pages();
-        return com.termux.app.wall.PaneWallPolicy.availablePages(
-            mPreferences != null
-                && com.termux.app.launcher.LauncherUseCaseMode.isTerminalOnly(mPreferences),
-            mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled(),
-            isX11DisplayEnabled());
+        return com.termux.app.wall.PaneWallPolicy.rowPages(true, isDisplayUp());
     }
 
     /**
@@ -11649,6 +11837,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return currentPlaceLayout();
         }
 
+        @NonNull @Override public com.termux.app.wall.PaneWallPage pageOnScreen() {
+            // The same page the Layout editor's session opens on for an unnamed place.
+            return currentWallPlace();
+        }
+
         @Nullable @Override public com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard inAppKeyboard() {
             return mInAppKeyboard;
         }
@@ -11669,6 +11862,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void hideInAppKeyboardForEditor() {
+            // At the session's end, Home with always on keeps it: it is the keyboard Home wants.
+            PlaceLayoutStore store = placeLayoutStore();
+            if (!mSurfaceEditor.isActive() && store != null
+                && com.termux.app.place.HomeChromePolicy.editorEndKeepsKeyboard(mLastWallPage,
+                    store.isHomeKeyboardAlwaysOn()))
+                return;
             if (mInAppKeyboard != null)
                 mInAppKeyboard.hide(
                     com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
@@ -11709,6 +11908,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void applyTerminalSurfaceAppearance() {
             TermuxActivity.this.applyTerminalSurfaceAppearance();
+        }
+
+        @Override public void editorSessionEnded() {
+            if (mWidgetPaneController != null) mWidgetPaneController.onEditorSessionEnded();
         }
 
         @Override public void redressChrome() {
@@ -11779,6 +11982,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void applyGeometryPreview(boolean commit) {
+            // Home's Margin is the widget grid's rim: it moves with the slider, the caps settle
+            // with the release.
+            pushHomeMarginToWidgetGrid(commit);
             updateAppLauncherBarHeight();
             // Without commit the dock/keyboard visuals still track the drag live; only the
             // terminal resize (a SIGWINCH into the shell per reflow) waits for the release.
@@ -12617,8 +12823,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (base == null || base.getSharedPreferences() == null)
             return base;
         mPlaceLayoutStore = new PlaceLayoutStore(base);
+        // The sizes are the layout's the chrome stands in: the Home layout's on a Home page.
         base.setPlaceSizes(new PlaceSizePreferences(
-            () -> mPlaceLayoutStore, this::currentPlaceOrientation));
+            () -> mPlaceLayoutStore == null ? null
+                : mPlaceLayoutStore.forVariant(chromeVariant()),
+            this::currentPlaceOrientation));
         return base;
     }
 
@@ -12631,18 +12840,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyWidgetGridPreference() {
         if (mWidgetHostController == null) return;
         PlaceLayout layout = placeLayout(currentPlaceOrientation());
+        // The rows always on gave the keyboard stay given on every pass (HomeChromePolicy).
+        PlaceLayoutStore store = placeLayoutStore();
+        int keyboardRows = store != null && store.isHomeKeyboardAlwaysOn()
+            ? store.homeKeyboardRows() : 0;
         boolean moved = mWidgetHostController.repository().applyOrientation(
-            currentPlaceOrientation().storageValue(), layout.widgetRows, layout.widgetColumns);
+            currentPlaceOrientation().storageValue(), layout.widgetRows - keyboardRows,
+            layout.widgetColumns);
         // The stored count is the user's; the wall holds what fits of it, and the pane works that
-        // out again whenever the wall changes size.
+        // out again whenever the wall changes size. Home's Margin is the grid's rim, so it is
+        // part of what fits.
         if (mWidgetPaneController != null) {
-            mWidgetPaneController.applyWantedGrid(layout.widgetRows, layout.widgetColumns);
+            mWidgetPaneController.applyWantedGrid(layout.widgetRows, layout.widgetColumns,
+                keyboardRows, homeMarginDp());
         } else {
-            mWidgetHostController.applyGrid(layout.widgetRows, layout.widgetColumns);
+            mWidgetHostController.applyGrid(layout.widgetRows - keyboardRows,
+                layout.widgetColumns);
         }
         // The grid is unchanged on a turn of the screen that only swapped the layouts, so the
         // host's own redraw does not fire; the pane is asked to draw itself again here instead.
         if (moved && mWidgetPaneController != null) mWidgetPaneController.redraw();
+    }
+
+    /**
+     * Home's own Margin in dp, whichever half is in front: what lies on Home (the widget grid's
+     * rim, the Home floats' air) is laid out on Home's terms even while a window is in front.
+     */
+    private int homeMarginDp() {
+        return mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP
+            : Math.max(0, mPreferences.getLayoutMarginDp(true));
+    }
+
+    /**
+     * Home's Margin into the widget grid's rim. {@code settled} is false only for a tick of a
+     * Margin drag: the rim follows it, and the grid's caps (which may reflow the widgets) wait
+     * for the release.
+     */
+    private void pushHomeMarginToWidgetGrid(boolean settled) {
+        if (mWidgetPaneController != null)
+            mWidgetPaneController.setGridEdge(homeMarginDp(), settled);
     }
 
     private boolean updateAppLauncherBarHeight() {
@@ -12689,8 +12926,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private PlaceLayout currentPlaceLayout() {
-        // Minimal mode is a layout of its own, which placeLayout resolves while it is on. It is
-        // one preference for every place, so a slide never crosses into or out of it.
+        // Minimal mode is a layout of its own, which placeLayout resolves while it is on, and Home
+        // has one of its own too (chromeVariant): a slide between the halves changes the layout
+        // once, at settle.
         return placeLayout(currentPlaceOrientation());
     }
 
@@ -12698,6 +12936,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean isMinimalMode() {
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && store.isMinimal();
+    }
+
+    /**
+     * The layout the chrome on screen is arranged by (HomeChromePolicy): the Home layout while the
+     * wall rests on a Home page, the Workspace's otherwise. Read off the page the chrome is
+     * committed to, so a slide changes it once, at settle (syncWallKeyboard).
+     */
+    @NonNull
+    private com.termux.app.place.LayoutVariant chromeVariant() {
+        return com.termux.app.place.HomeChromePolicy.variant(mLastWallPage, isMinimalMode());
     }
 
     /**
@@ -12710,6 +12958,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return true;
         }
+        // On Home the bar only ever comes in compact, carrying the floats' chips.
+        if (com.termux.app.place.HomeChromePolicy.statusForcedCompact(mLastWallPage)) return true;
         // The Look editor holds the bar open without touching the stored choice.
         if (mStatusBarExpandedForEditor) {
             return false;
@@ -12728,8 +12978,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private PlaceLayout placeLayout(@NonNull PlaceOrientation orientation) {
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return NO_PREFERENCES_PLACE_LAYOUT;
-        com.termux.app.place.LayoutVariant variant =
-            com.termux.app.place.LayoutVariant.of(isMinimalMode());
+        com.termux.app.place.LayoutVariant variant = chromeVariant();
         if (mCachedPlaceLayout == null
             || mCachedPlaceLayoutOrientation != orientation
             || mCachedPlaceLayoutVariant != variant
@@ -12738,9 +12987,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCachedPlaceLayoutOrientation = orientation;
             mCachedPlaceLayoutVariant = variant;
             mCachedPlaceLayoutRevision = store.revision();
+            mCachedFloatBarLayout = null;
+        }
+        // Home has no status bar until a Home float exists; then it carries the floats' chips.
+        if (variant == com.termux.app.place.LayoutVariant.HOME && mHomeFloatBarInLayout) {
+            if (mCachedFloatBarLayout == null) {
+                mCachedFloatBarLayout = com.termux.app.place.HomeChromePolicy.withFloatStatusBar(
+                    mCachedPlaceLayout, store.statusBarEdge(orientation), true);
+            }
+            return mCachedFloatBarLayout;
         }
         return mCachedPlaceLayout;
     }
+
+    /** The Home layout with the status bar brought in for the floats, built once per resolve. */
+    @Nullable private PlaceLayout mCachedFloatBarLayout;
+    /** Whether the status bar stands on Home for the floats: from the first float to the last. */
+    private boolean mHomeFloatBarInLayout;
 
     /** Horizontal display-cutout insets from the last insets pass; the rail never draws narrower. */
     private int mLastDisplayCutoutInsetLeft;
@@ -13009,8 +13272,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the shape model, which is fed this very answer through {@link #chromeThicknessPx}.
      */
     private int dockedFrameSharedBandPx() {
-        if (mPreferences == null
-            || mPreferences.getLayoutStyle() != TermuxAppSharedPreferences.LayoutStyle.DOCKED) {
+        if (mPreferences == null || mPreferences.getLayoutStyle(chromeWearsHomeShape())
+                != TermuxAppSharedPreferences.LayoutStyle.DOCKED) {
             return 0;
         }
         PlaceLayout layout = currentPlaceLayout();
@@ -13562,8 +13825,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean applyEdgeStacksAndInvalidate(@NonNull PlaceLayout layout) {
         boolean moved = applyEdgeStacks(layout);
+        EdgeStackPolicy.Metrics metrics = buildEdgeStackMetrics();
+        boolean statusOverlays =
+            com.termux.app.place.HomeChromePolicy.statusOverlays(mLastWallPage);
+        moved |= applyTopStackOverlap(EdgeStackPolicy.topOverlapPx(layout, metrics,
+            statusOverlays));
+        // The side stacks ride up with the canvas; they start back at the bar's edge.
+        moved |= applySideStackTopInset(0, R.id.place_edge_stack_left,
+            EdgeStackPolicy.sideStackTopInsetPx(layout, PlaceLayout.Edge.LEFT, metrics,
+                statusOverlays));
+        moved |= applySideStackTopInset(1, R.id.place_edge_stack_right,
+            EdgeStackPolicy.sideStackTopInsetPx(layout, PlaceLayout.Edge.RIGHT, metrics,
+                statusOverlays));
         if (moved) mChrome.onArrangementChanged();
         return moved;
+    }
+
+    /**
+     * Lets the canvas reach up under the top edge's stack by {@code overlapPx} (EdgeStackPolicy
+     * .topOverlapPx), keeping the bounds it has without the stack, with the stack raised so it
+     * draws and takes touches over it: the status bar on Home overlays the widget grid as the dock
+     * does (EdgeStackView.overlayFollowing).
+     *
+     * @return whether the canvas moved
+     */
+    private boolean applyTopStackOverlap(int overlapPx) {
+        View band = findViewById(R.id.terminal_canvas_band);
+        View stack = findViewById(R.id.place_edge_stack_top);
+        if (band == null || !(stack instanceof com.termux.app.place.EdgeStackView)) return false;
+        return ((com.termux.app.place.EdgeStackView) stack).overlayFollowing(band, overlapPx);
+    }
+
+    /**
+     * A side stack starts below the status bar's band on a page the bar overlays
+     * (EdgeStackPolicy.sideStackTopInsetPx), on top of the frame inset its bottom padding holds
+     * (applySideStackFrameInset). Whether it changed.
+     */
+    private boolean applySideStackTopInset(int side, int stackId, int insetPx) {
+        if (mSideStackBarInsetPx[side] == insetPx) return false;
+        mSideStackBarInsetPx[side] = insetPx;
+        return padSideStack(side, findViewById(stackId));
     }
 
     /**
@@ -13633,11 +13934,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout previous = mAppliedPlaceLayout;
         boolean arrangementChanged = !layout.equals(previous);
         mAppliedPlaceLayout = layout;
+        com.termux.app.place.LayoutVariant variant = chromeVariant();
+        boolean sameVariant = variant == mAppliedPlaceVariant;
+        mAppliedPlaceVariant = variant;
         // The keyboard element put away in the Layout editor is the keyboard switched off: it
         // goes down here, on the same pass every other element leaves on. Shown again, it waits
         // for the next tap rather than rising behind the editor's sheet; the palette's own
-        // Keyboard on/off raises it itself, before this pass ever sees the change.
-        if (previous != null && previous.keyboardShown && !layout.keyboardShown
+        // Keyboard on/off raises it itself, before this pass ever sees the change. Compared
+        // within one layout: the Home layout's element is always on, not the switch.
+        if (sameVariant && previous != null && previous.keyboardShown && !layout.keyboardShown
             && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
             mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                 .HideReason.KEYBOARD_ACTION);
@@ -13660,6 +13965,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // appearance pass owns the same number but does not necessarily run on this one.
         applySideStackFrameInset(hasDockedFrameCard() ? 0 : terminalFrameInsetPx(true));
         applyStatusBarEdge(layout);
+        boolean alwaysOnChanged = syncHomeKeyboardAlwaysOn();
         applyWidgetGridPreference();
         boolean columnChanged = syncPinnedAppsHost();
         columnChanged |= syncExtraKeysHost();
@@ -13676,6 +13982,63 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
         if (sizesMoved) applySizedSurfaces();
+        // Always on brings the keyboard up on Home, or takes it down, once the grid has its rows.
+        if (alwaysOnChanged && com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage))
+            applyPlaceKeyboard(mLastWallPage);
+    }
+
+    /**
+     * Always on (the Home layout's keyboard element shown): turned on, the widget grid gives the
+     * keyboard the rows it covers, through the repository's shrink that keeps the wall as it stood,
+     * and a one-line notice says what moved; put away again, that wall is put back if nothing was
+     * edited meanwhile. Only a change is acted on, so the first pass after a start reads the state
+     * the grid was saved in and moves nothing.
+     *
+     * @return whether always on changed on this pass
+     */
+    private boolean syncHomeKeyboardAlwaysOn() {
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null || mWidgetHostController == null) return false;
+        boolean on = store.isHomeKeyboardAlwaysOn();
+        Boolean applied = mAppliedHomeAlwaysOn;
+        mAppliedHomeAlwaysOn = on;
+        if (applied == null || applied == on) return false;
+        com.termux.app.launcher.widget.LauncherWidgetRepository widgets =
+            mWidgetHostController.repository();
+        if (on) {
+            int rows = com.termux.app.place.HomeChromePolicy.keyboardRows(
+                Math.max(0, mKeyboardGeometry.desiredHeightPx()),
+                mWidgetPaneController == null ? 0 : mWidgetPaneController.gridHeightPx(),
+                widgets.gridDefinition().rows);
+            com.termux.app.launcher.widget.WidgetReflowReport report =
+                rows > 0 ? widgets.shrinkGridRows(rows) : null;
+            store.setHomeKeyboardRows(report == null ? 0 : rows);
+            showAlwaysOnNotice(report);
+        } else {
+            widgets.restoreGridRows();
+            store.setHomeKeyboardRows(0);
+            mAlwaysOnNotice.withdraw();
+        }
+        if (mWidgetPaneController != null) mWidgetPaneController.redraw();
+        return true;
+    }
+
+    /** The one line always on says about the grid: what moved, or that nothing could. */
+    private void showAlwaysOnNotice(
+            @Nullable com.termux.app.launcher.widget.WidgetReflowReport report) {
+        String text;
+        if (report == null) {
+            text = getString(R.string.home_always_on_no_rows);
+        } else if (report.isEmpty()) {
+            text = getString(R.string.home_always_on_nothing_moved);
+        } else {
+            text = getResources().getQuantityString(R.plurals.home_always_on_moved,
+                report.movedCount(), report.movedCount());
+        }
+        // Turned on from the Layout editor, it waits for the editor to close (onClosed), so it
+        // never stands over the editor's controls.
+        String now = mAlwaysOnNotice.offer(text, mSurfaceEditor.isActive());
+        if (now != null) showToast(now, false);
     }
 
     /** The three sizes as last applied, so a place or a turn that moves one is noticed. */
@@ -14024,6 +14387,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             accessoryStackContainer,
             accessoryBottomMarginPx
         );
+        // Home floats are laid out between the status bar and the dock, and lifted over the
+        // keyboard: they hear the stack's rows from this pass.
+        mHomeFloatDockPx = dockContentHeightPx + terminalFlushPaddingPx;
+        mHomeFloatStackPx = combinedHeight;
+        mHomeFloatKeyboardShown = state.keyboardShown;
+        syncHomeFloatObstructions();
+        // On a Home page the dock floats with the keyboard: the grid keeps its whole height.
+        boolean dockOverlays = com.termux.app.place.HomeChromePolicy.dockOverlays(mLastWallPage);
+        keyboardOverlapPx = KeyboardOverlayPolicy.overlapPx(
+            dockOverlays, combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx);
+        // A side rail on Home ends above the dock, as it does on the Workspace.
+        if (applySideStackDockInsets(dockOverlays, KeyboardOverlayPolicy.overlapPx(true,
+                combinedHeight, accessoryBottomMarginPx, 0)))
+            mChrome.onArrangementChanged();
         // While the wall travels with chrome pre-rolled, the content keeps exactly the room it
         // was committed with: whatever the stack grew by for the slide, the content reaches under
         // it by the same amount, so nothing the terminal is measured from moves until settle.
@@ -14382,11 +14759,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .density(getResources().getDisplayMetrics().density)
             .barHeightScale(preferencesAvailable
                 ? mPreferences.getAppLauncherBarHeightScale() : DockLayoutPolicy.sizePreset(2))
+            // The dock's side gap and corner radius are Margin and Corners since the Style
+            // rework (the per-surface overrides are retired), so they are the half's on screen.
             .dockHorizontalInsetDp(preferencesAvailable
-                ? mPreferences.getDockHorizontalInset()
+                ? TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp())
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET)
             .configuredCornerRadiusDp(preferencesAvailable
-                ? mPreferences.getAppLauncherDockCornerRadius()
+                ? dockCornerRadiusDp(chromeCornersDp())
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS)
             .appsRowEnabledPref(PlaceChromePolicy.appsShown(layout))
             .azRowEnabledPref(PlaceChromePolicy.azRowOnDock(layout))
@@ -14958,8 +15337,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     public com.termux.app.terminal.TerminalCommandPaletteController getCommandPaletteController() {
-        if (mCommandPalette == null)
+        if (mCommandPalette == null) {
             mCommandPalette = new com.termux.app.terminal.TerminalCommandPaletteController(this);
+            mCommandPalette.setHomeHost(new PaletteHomeHost());
+        }
         return mCommandPalette;
     }
 
@@ -15515,6 +15896,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     && isScrollbackFindActive()) cancelScrollbackFind();
             }
         });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            // Home's long-press sheet lies over the Home page that summoned it.
+            @Override public boolean onBack() {
+                if (mHomeActionsSheet == null || !mHomeActionsSheet.isOpen()) return false;
+                mHomeActionsSheet.close();
+                return true;
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mHomeActionsSheet != null) mHomeActionsSheet.closeImmediately();
+            }
+        });
         registry.register(() -> mWidgetPaneController != null && mWidgetPaneController.onBackPressed());
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
@@ -15578,6 +15970,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 closeAppDrawerImmediate();
             }
         });
+        registry.register(() -> {
+            // Back over a focused Home float with the keyboard up closes the keyboard first (the
+            // float grows back); the float keeps focus, and the next press falls through as before.
+            // Home's always-on keyboard is not the float's to close.
+            if (!isWidgetsPageShowing() || mPaneController == null
+                || mPaneController.focusedHomeFloat() == null || mInAppKeyboard == null
+                || !mInAppKeyboard.isVisible()
+                || wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) return false;
+            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .HideReason.USER_EVENT);
+            return true;
+        });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
                 // Icons to Overview, an editor to Overview (after its unsaved-changes question),
@@ -15599,6 +16003,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     default:
                         break;
                 }
+            }
+        });
+        // Last, so every surface above has had the stroke: on Home with always on, a typed
+        // character no binding took opens the palette with it (spec §5.2). Code points only — a
+        // key event reaches here as one after the bindings have passed it by.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            @Override public boolean onBack() { return false; }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return false;
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                if (ctrlDown || !isWidgetsPageShowing() || !Character.isValidCodePoint(codePoint))
+                    return false;
+                boolean floatFocused = mPaneController != null
+                    && mPaneController.focusedHomeFloat() != null;
+                return getCommandPaletteController().offerHomeTypedText(
+                    new String(Character.toChars(codePoint)), floatFocused);
             }
         });
         return registry;
@@ -17548,6 +17969,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 windows.add(new com.termux.app.terminal.SessionBrowserModel.Window(window.id,
                     windowIndex, windowIndex == ws.current, activePane, panes, windowLabel));
             }
+            // Home floats are windows of the session too: listed under it, marked as floats.
+            if (ws == mCurrentWSession) {
+                for (com.termux.app.terminal.TerminalPaneController.Window window
+                        : mPaneController.homeFloats()) {
+                    TerminalSession shell = mPaneController.windowActiveSession(window);
+                    if (shell == null) continue;
+                    java.util.List<com.termux.app.terminal.SessionBrowserModel.Pane> panes =
+                        new java.util.ArrayList<>();
+                    panes.add(new com.termux.app.terminal.SessionBrowserModel.Pane(
+                        shell.getCwd(), shell.getTitle(), null, true));
+                    String named = mPaneController.windowName(window);
+                    int index = windows.size();
+                    windows.add(new com.termux.app.terminal.SessionBrowserModel.Window(window.id,
+                        index, false, 0, panes, named != null ? named
+                            : com.termux.app.terminal.TerminalWindowBar.itemFor(shell, index)
+                                .spokenLabel));
+                }
+            }
             sessions.add(new com.termux.app.terminal.SessionBrowserModel.Session(ws.id, sessionIndex,
                 ws == mCurrentWSession, ws.name, windows));
         }
@@ -17667,8 +18106,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mCurrentWSession = mWSessions.get(Math.min(index, mWSessions.size() - 1));
                 mPaneController.showWindow(mCurrentWSession.currentWindow());
                 animateTerminalSessionLifecycleArrival(-1);
-            } else if (getTermuxTerminalSessionClient() != null) {
-                getTermuxTerminalSessionClient().addNewSession(false, null);
+            } else {
+                // The row's last window is gone: the last Home page slides in (see
+                // showNextSessionAfterClose).
+                if (mPaneWallController != null) mPaneWallController.goToLastHomePage(isVisible());
             }
         }
         rebuildDrawerSessions();
@@ -17720,6 +18161,89 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
+    /**
+     * Moves the Workspace's window at {@code from} to {@code to} in the current session's row: a
+     * chip dropped in the window bar, {@code window.move}, the palette's Move window left / right.
+     * The current window stays current and its index follows it. Everything that reads the row —
+     * the window bar, the drawer, the wall's inner index, the Ctrl+Alt window keys, Saved
+     * sessions — reads {@link WSession#windows}, so one rebuild brings them all along. False when
+     * either index is outside the row.
+     */
+    boolean moveWindow(int from, int to) {
+        if (mCurrentWSession == null) return false;
+        int count = mCurrentWSession.windows.size();
+        if (from < 0 || from >= count || to < 0 || to >= count) return false;
+        if (from == to) return true;
+        mCurrentWSession.current = com.termux.app.terminal.WindowReorderPolicy.move(
+            mCurrentWSession.windows, from, to, mCurrentWSession.current);
+        rebuildDrawerSessions();
+        return true;
+    }
+
+    /**
+     * Consume ({@code pane.consume}, Niri's word; {@link com.termux.app.terminal.ColumnPolicy}):
+     * the current window's neighbour in the row — on the right, or on the left when
+     * {@code fromLeft} — joins it as panes beside its focused pane and leaves the row. The current
+     * window stays current and on screen, its index following it when the neighbour stood before
+     * it; the consumed window's focused pane takes the focus. No session closes. Home floats are
+     * not in the row, so a consume never takes one. False at the row's end on that side, with one
+     * window, or when the controller refuses.
+     */
+    boolean consumeWindow(boolean fromLeft) {
+        if (mPaneController == null || mCurrentWSession == null) return false;
+        WSession ws = mCurrentWSession;
+        int current = ws.current;
+        int source = com.termux.app.terminal.ColumnPolicy.consumeSource(current, ws.windows.size(),
+            fromLeft);
+        if (source == com.termux.app.terminal.ColumnPolicy.INVALID) return false;
+        com.termux.app.terminal.TerminalPaneController.Window into = ws.windows.get(current);
+        com.termux.app.terminal.TerminalPaneController.Window taken = ws.windows.get(source);
+        // The row is settled before the controller announces the change: what hears it (the
+        // drawer's rebuild) reads this row, which must no longer hold the consumed window.
+        ws.windows.remove(source);
+        ws.current = com.termux.app.terminal.ColumnPolicy.currentAfterRemove(current, source);
+        if (!mPaneController.consumeWindow(into, taken, fromLeft)) {
+            ws.windows.add(source, taken);
+            ws.current = current;
+            return false;
+        }
+        if (mPaneController.activeWindow() != into) mPaneController.showWindow(into);
+        rebuildDrawerSessions();
+        return true;
+    }
+
+    /**
+     * Expel ({@code pane.expel}, Niri's word; {@link com.termux.app.terminal.ColumnPolicy}): the
+     * current window's focused pane leaves it for a new window of its own, right after it in the
+     * row, or right before it when {@code toLeft}. Focus goes with the pane, as in Niri: the new
+     * window becomes current and the Workspace slides to it the way a new window arrives, from the
+     * side it was placed on. No session closes. False for a window of one pane, and while a Home
+     * float has the focus: a float is not in the row.
+     */
+    boolean expelPane(boolean toLeft) {
+        if (mPaneController == null || mCurrentWSession == null) return false;
+        if (mPaneController.focusedHomeFloat() != null) return false;
+        WSession ws = mCurrentWSession;
+        com.termux.app.terminal.TerminalPaneController.Window from = ws.currentWindow();
+        int target = com.termux.app.terminal.ColumnPolicy.expelTarget(ws.current,
+            ws.windows.size(), toLeft);
+        if (from == null || target == com.termux.app.terminal.ColumnPolicy.INVALID) return false;
+        // The window as it was slides off; the new one arrives in its place.
+        captureTerminalDeparture();
+        com.termux.app.terminal.TerminalPaneController.Window expelled =
+            mPaneController.expelPane(from);
+        if (expelled == null) {
+            dropTerminalDepartureSnapshot();
+            return false;
+        }
+        ws.windows.add(target, expelled);
+        ws.current = com.termux.app.terminal.ColumnPolicy.currentAfterExpel(target);
+        mPaneController.showWindow(expelled);
+        animateTerminalWindowLifecycleArrival(toLeft ? -1 : 1);
+        rebuildDrawerSessions();
+        return true;
+    }
+
     /** Number of windows in the current tmux-style session. */
     int getCurrentWindowCount() {
         return mCurrentWSession == null ? 0 : mCurrentWSession.windows.size();
@@ -17741,33 +18265,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public com.termux.app.terminal.TerminalWorkspace saveWorkspace(
             @NonNull String requestedName, boolean overwrite, boolean captureCommands)
             throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
-        if (mPaneController == null || mWSessions.isEmpty()) {
+        if (mPaneController == null
+            || (mWSessions.isEmpty() && mPaneController.homeFloatCount() == 0)) {
             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                 "no_session", "There are no terminal sessions to save");
         }
         String name = com.termux.app.terminal.TerminalWorkspaceStore.validateName(requestedName);
         java.util.List<com.termux.app.terminal.TerminalWorkspace.Session> sessions =
             new java.util.ArrayList<>();
+        com.termux.app.terminal.TerminalPaneController.WorkspacePaneCapture capture = shell -> {
+            String cwd = shell.getCwd();
+            if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
+            java.util.List<String> command = java.util.Collections.emptyList();
+            if (captureCommands && mWindowForegroundResolver != null) {
+                com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                    mWindowForegroundResolver.get(shell.getPid());
+                if (info != null && !info.idle) command = info.command;
+            }
+            return new com.termux.app.terminal.TerminalWorkspace.Pane(
+                cwd, shell.mSessionName, command);
+        };
+        // Home floats are windows of the current session (the drawer lists them under it): they
+        // are saved after its row's windows, in the order they were opened, as the chips run.
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> homeFloats =
+            chipFloats();
+        WSession floatsSession = mCurrentWSession != null && !mCurrentWSession.windows.isEmpty()
+            ? mCurrentWSession : null;
         for (WSession ws : mWSessions) {
             if (ws.windows.isEmpty()) continue;
+            if (floatsSession == null) floatsSession = ws;
             java.util.List<com.termux.app.terminal.TerminalWorkspace.Window> windows =
                 new java.util.ArrayList<>();
-            for (com.termux.app.terminal.TerminalPaneController.Window window : ws.windows) {
-                windows.add(mPaneController.snapshotWorkspaceWindow(window, shell -> {
-                    String cwd = shell.getCwd();
-                    if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
-                    java.util.List<String> command = java.util.Collections.emptyList();
-                    if (captureCommands && mWindowForegroundResolver != null) {
-                        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
-                            mWindowForegroundResolver.get(shell.getPid());
-                        if (info != null && !info.idle) command = info.command;
-                    }
-                    return new com.termux.app.terminal.TerminalWorkspace.Pane(
-                        cwd, shell.mSessionName, command);
-                }));
+            for (com.termux.app.terminal.TerminalPaneController.Window window : ws.windows)
+                windows.add(mPaneController.snapshotWorkspaceWindow(window, capture));
+            int currentWindow = Math.max(0, Math.min(ws.current, windows.size() - 1));
+            if (ws == floatsSession) {
+                for (com.termux.app.terminal.TerminalPaneController.Window window : homeFloats)
+                    windows.add(mPaneController.snapshotWorkspaceWindow(window, capture));
             }
             sessions.add(new com.termux.app.terminal.TerminalWorkspace.Session(ws.name,
-                Math.max(0, Math.min(ws.current, windows.size() - 1)), windows));
+                currentWindow, windows));
+        }
+        if (floatsSession == null && !homeFloats.isEmpty()) {
+            // An empty Workspace with Home floats: they are saved as a session of floats only,
+            // which loads back as floats only.
+            java.util.List<com.termux.app.terminal.TerminalWorkspace.Window> windows =
+                new java.util.ArrayList<>();
+            for (com.termux.app.terminal.TerminalPaneController.Window window : homeFloats)
+                windows.add(mPaneController.snapshotWorkspaceWindow(window, capture));
+            sessions.add(new com.termux.app.terminal.TerminalWorkspace.Session(null, 0, windows));
         }
         int current = Math.max(0, Math.min(
             mCurrentWSession == null ? 0 : mWSessions.indexOf(mCurrentWSession), sessions.size() - 1));
@@ -17908,6 +18454,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     + " terminals; the limit is "
                     + com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS);
         }
+        // Saved Home floats float again over Home's pages; with no Home pages (no widget pane)
+        // there is nothing to float over, and they load as tiled windows of the row.
+        int homePageCount = 0;
+        if (savesHomeFloats(workspace)) {
+            attachHomeFloatLayer();
+            if (mPaneController.homeFloatLayer() != null && mWidgetPaneController != null)
+                homePageCount = mWidgetPaneController.homePageCount();
+        }
 
         java.util.List<TerminalSession> createdShells = new java.util.ArrayList<>();
         java.util.List<java.util.List<TerminalSession>> windowShells = new java.util.ArrayList<>();
@@ -17949,19 +18503,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<WSession> restored = new java.util.ArrayList<>();
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> restoredWindows =
             new java.util.ArrayList<>();
+        java.util.Set<com.termux.app.terminal.TerminalPaneController.Window> restoredFloats =
+            new java.util.HashSet<>();
+        // The restored session the saved currentSession names, or null when it kept no window in
+        // the row (it was saved as floats only).
+        WSession savedCurrent = null;
         int shellWindowIndex = 0;
         try {
-            for (com.termux.app.terminal.TerminalWorkspace.Session savedSession : workspace.sessions) {
+            for (int s = 0; s < workspace.sessions.size(); s++) {
+                com.termux.app.terminal.TerminalWorkspace.Session savedSession = workspace.sessions.get(s);
                 WSession ws = new WSession();
                 ws.name = TerminalNamePolicy.normalizeSession(savedSession.name);
-                for (com.termux.app.terminal.TerminalWorkspace.Window savedWindow : savedSession.windows) {
+                boolean[] savedAsFloat = new boolean[savedSession.windows.size()];
+                for (int i = 0; i < savedAsFloat.length; i++)
+                    savedAsFloat[i] = savedSession.windows.get(i).homeFloat != null;
+                boolean[] asFloat = com.termux.app.terminal.HomeFloatPolicy.restoredAsFloats(
+                    savedAsFloat, homePageCount > 0);
+                for (int i = 0; i < asFloat.length; i++) {
+                    com.termux.app.terminal.TerminalWorkspace.Window savedWindow =
+                        savedSession.windows.get(i);
+                    java.util.List<TerminalSession> shells = windowShells.get(shellWindowIndex++);
+                    if (asFloat[i]) {
+                        // A Home float: out of the row, on its page (the last one if its page is
+                        // gone), minimised if it was, at its saved size and spot.
+                        com.termux.app.terminal.TerminalPaneController.Window window =
+                            mPaneController.newWorkspaceHomeFloat(savedWindow, shells,
+                                com.termux.app.terminal.HomeFloatPolicy.restoredPage(
+                                    savedWindow.homeFloat.page, homePageCount));
+                        restoredWindows.add(window);
+                        restoredFloats.add(window);
+                        continue;
+                    }
                     com.termux.app.terminal.TerminalPaneController.Window window =
-                        mPaneController.newWorkspaceWindow(savedWindow, windowShells.get(shellWindowIndex++));
+                        mPaneController.newWorkspaceWindow(savedWindow, shells);
                     ws.windows.add(window);
                     restoredWindows.add(window);
                 }
-                ws.current = savedSession.currentWindow;
+                // The row's current window; one saved as a float leaves the row on the window
+                // before it, and the wall stays where it is.
+                int rowIndex = com.termux.app.terminal.HomeFloatPolicy.restoredRowIndex(
+                    asFloat, savedSession.currentWindow);
+                // A session is its row's windows: one saved as floats only comes back as its
+                // floats alone, as after its last window closed, and is no session of the row.
+                if (rowIndex < 0) continue;
+                ws.current = rowIndex;
                 restored.add(ws);
+                if (s == workspace.currentSession) savedCurrent = ws;
             }
         } catch (RuntimeException e) {
             for (com.termux.app.terminal.TerminalPaneController.Window window : restoredWindows)
@@ -17971,8 +18558,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 "invalid_workspace", "Could not rebuild workspace topology: " + e.getMessage(), e);
         }
 
-        int firstRestoredIndex = mWSessions.size();
         if (replace) {
+            // The live Home floats are windows of the session being replaced: they go too, while
+            // the old sessions still stand for what their closing announces.
+            for (com.termux.app.terminal.TerminalPaneController.Window window :
+                    mPaneController.homeFloats()) {
+                if (restoredFloats.contains(window)) continue;
+                for (TerminalSession shell : mPaneController.removeWindow(window))
+                    mTermuxService.killTermuxSession(shell);
+            }
             java.util.List<WSession> oldSessions = new java.util.ArrayList<>(mWSessions);
             mWSessions.clear();
             mCurrentWSession = null;
@@ -17983,18 +18577,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mTermuxService.killTermuxSession(shell);
                 }
             }
-            firstRestoredIndex = 0;
         }
         mWSessions.addAll(restored);
-        int selected = firstRestoredIndex + workspace.currentSession;
-        mCurrentWSession = mWSessions.get(selected);
-        mPaneController.showWindow(mCurrentWSession.currentWindow());
+        WSession selected = savedCurrent != null ? savedCurrent
+            : restored.isEmpty() ? null : restored.get(0);
+        if (selected != null) {
+            mCurrentWSession = selected;
+            mPaneController.showWindow(mCurrentWSession.currentWindow());
+        } else if (mWSessions.isEmpty()) {
+            // Floats only, and nothing left in the row: the Workspace is empty, as after its last
+            // window closed. The wall stays on Home; off Home, the last Home page slides in.
+            mCurrentWSession = null;
+            if (mPaneWallController != null
+                && mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.TERMINAL)
+                mPaneWallController.goToLastHomePage(isVisible());
+        }
+        // Else floats only were added to a live Workspace: its current session stays.
         if (getTermuxTerminalSessionClient() != null)
             getTermuxTerminalSessionClient().checkForFontAndColors();
+        if (!restoredFloats.isEmpty()) onHomeFloatsChangedInActivity();
         rebuildDrawerSessions();
         return new com.termux.app.terminal.TerminalWorkspace.LoadResult(restored.size(), windowCount, paneCount,
             runCommands ? workspace.commandCount() : 0,
             runCommands ? 0 : workspace.commandCount(), replace);
+    }
+
+    /** Whether any window of {@code workspace} was saved as a Home float. */
+    private static boolean savesHomeFloats(
+            @NonNull com.termux.app.terminal.TerminalWorkspace workspace) {
+        for (com.termux.app.terminal.TerminalWorkspace.Session session : workspace.sessions)
+            for (com.termux.app.terminal.TerminalWorkspace.Window window : session.windows)
+                if (window.homeFloat != null) return true;
+        return false;
     }
 
     private static void collectWorkspacePanes(
@@ -18123,6 +18737,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onClosed() {
             mOverviewRestore = null;
+            // Always on turned on in the editor: the keyboard Home wants is up now, whatever the
+            // editor did with the one it raised, and the notice the editor held back follows on
+            // the arrangement after the close.
+            if (com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage)
+                && wantsKeyboardOnEnter(mLastWallPage))
+                applyPlaceKeyboard(mLastWallPage);
+            String notice = mAlwaysOnNotice.onEditorClosed();
+            if (notice != null) {
+                if (mTermuxActivityRootView != null)
+                    mTermuxActivityRootView.post(() -> showToast(notice, false));
+                else
+                    showToast(notice, false);
+            }
         }
 
         /** In the default preferences, as Settings keeps its own place, so a killed launcher keeps it. */
@@ -18447,6 +19074,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mTermuxService != null)
             mTermuxService.setVisibleSessionCount(mDrawerSessions.size());
+        if (!mDrawerSessions.isEmpty()) sFirstShellStarted = true;
+        // The wall's row follows the windows: the Workspace is on it while there is one.
+        if (mPaneWallController != null) mPaneWallController.refreshPages();
+        // So does the wallpaper's pan: a window opened or closed, or another session's windows,
+        // re-spread the picture over the row (a snap; an arrival that follows pans from there).
+        syncWallpaperParallax();
         // The one funnel every structural change to the sessions and their windows already takes,
         // so it is where the run reads them. Both are edge-triggered: a rebuild that moved neither
         // says nothing.
@@ -18495,15 +19128,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * instead.
      */
     private void syncWallKeyboard(@NonNull com.termux.app.wall.PaneWallPage page,
-                                  boolean leavingKeyboardUp) {
-        if (page != mLastWallPage) {
-            rememberPlaceKeyboard(mLastWallPage, leavingKeyboardUp);
-            mLastWallPage = page;
-            // The arrangement before the keyboard, so the keyboard's geometry pass sees the
-            // chrome it will stand in.
-            syncChromeArrangement();
-        }
+                                  boolean leavingKeyboardUp, boolean remember) {
+        if (page != mLastWallPage && remember) rememberPlaceKeyboard(mLastWallPage, leavingKeyboardUp);
+        // A first settle on the seeded page commits nothing new; the arrangement is still checked
+        // (it only acts on a change), as the settle from the Workspace's window always did.
+        if (!commitWallPage(page) && !remember) syncChromeArrangement();
         applyPlaceKeyboard(page);
+    }
+
+    /**
+     * The chrome is committed to {@code page}: arranged by its layout variant and dressed in its
+     * half's Style, Corners and Margin. Nothing happens where it already is; whether it moved.
+     */
+    private boolean commitWallPage(@NonNull com.termux.app.wall.PaneWallPage page) {
+        if (page == mLastWallPage) return false;
+        com.termux.app.wall.PaneWallPage left = mLastWallPage;
+        mLastWallPage = page;
+        // The arrangement before the keyboard, so the keyboard's geometry pass sees the
+        // chrome it will stand in.
+        syncChromeArrangement();
+        // Home wears its own Style, Corners and Margin: a crossing between halves that differ
+        // dresses the chrome for the arriving one, as the variant above re-arranged it.
+        restyleChromeForHalfIfChanged(left, page);
+        return true;
     }
 
     /** Puts the keyboard where the place on screen remembers it, without recording anything. */
@@ -18541,10 +19188,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPlaceState(@NonNull com.termux.app.wall.PaneWallPage page,
                                 boolean leavingKeyboardUp) {
-        if (page == mLastWallPage) return;
+        // The first settle is measured from the Workspace's window, the page every first settle
+        // left before the opening page was seeded, so a cold start lands exactly as it did; the
+        // chrome is already dressed for the seed, and a seed the wall did not land on is
+        // corrected here. No keyboard is recorded for a page that was never left.
+        boolean first = !mWallSettledOnce;
+        mWallSettledOnce = true;
+        com.termux.app.wall.PaneWallPage from =
+            first ? com.termux.app.wall.PaneWallPage.TERMINAL : mLastWallPage;
+        if (page == from) {
+            if (first && commitWallPage(page))
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+            return;
+        }
         PlaceLayout layout = currentPlaceLayout();
-        boolean overlaid = KeyboardOverlayPolicy.overlays(mLastWallPage, layout);
-        syncWallKeyboard(page, leavingKeyboardUp);
+        boolean overlaid = KeyboardOverlayPolicy.overlays(from, layout);
+        syncWallKeyboard(page, leavingKeyboardUp, !first);
         syncDisplayTouchpad();
         applyPlaceSystemImeOwner();
         applyExtraKeysPlaceEligibility();
@@ -18655,14 +19314,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull com.termux.app.wall.PaneWallPage place) {
         boolean keyboardUp = place == mLastWallPage ? committedKeyboardVisible()
             : wantsKeyboardOnEnter(place);
+        // A Home page has no status bar: the window's fades on the way there (HomeChromePolicy).
+        if (!com.termux.app.place.HomeChromePolicy.statusShownAtRest(place, mHomeFloatBarInLayout))
+            return keyboardUp ? REST_HOME_KEYBOARD_UP : REST_HOME_KEYBOARD_DOWN;
         return keyboardUp ? REST_KEYBOARD_UP : REST_KEYBOARD_DOWN;
     }
 
-    /** The two rests a place can have (the Rest is immutable), so a slide frame allocates neither. */
+    /** The rests a page can have (the Rest is immutable), so a slide frame allocates none. */
     private static final com.termux.app.place.PlaceChromeTravel.Rest REST_KEYBOARD_UP =
         new com.termux.app.place.PlaceChromeTravel.Rest(true, false);
     private static final com.termux.app.place.PlaceChromeTravel.Rest REST_KEYBOARD_DOWN =
         new com.termux.app.place.PlaceChromeTravel.Rest(false, false);
+    private static final com.termux.app.place.PlaceChromeTravel.Rest REST_HOME_KEYBOARD_UP =
+        new com.termux.app.place.PlaceChromeTravel.Rest(true, false, false);
+    private static final com.termux.app.place.PlaceChromeTravel.Rest REST_HOME_KEYBOARD_DOWN =
+        new com.termux.app.place.PlaceChromeTravel.Rest(false, false, false);
     /** {@link #chromeRestOf} as the travel asks it, bound once rather than per frame. */
     private final com.termux.app.place.PlaceChromeTravel.States mChromeRestStates = this::chromeRestOf;
 
@@ -18748,7 +19414,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                         boolean toolbarShown, boolean keyboardShown) {
         int flushPadding = place == com.termux.app.wall.PaneWallPage.TERMINAL
             && place == mLastWallPage && !keyboardShown ? mAppliedTerminalFlushPaddingPx : 0;
-        return KeyboardOverlayPolicy.restReservationPx(mAppliedDockContentHeightPx, flushPadding,
+        return KeyboardOverlayPolicy.restReservationPx(
+            com.termux.app.place.HomeChromePolicy.dockOverlays(place),
+            mAppliedDockContentHeightPx, flushPadding,
             keyboardShown, KeyboardOverlayPolicy.overlays(place, currentPlaceLayout()),
             Math.max(0, mKeyboardGeometry.desiredHeightPx()),
             resolveAccessoryStackBottomMarginPx(toolbarShown, keyboardShown));
@@ -18993,9 +19661,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * changed since it was last applied.
      */
     private void syncChromeArrangement() {
-        boolean minimal = isMinimalMode();
-        if (minimal == mAppliedChromeMinimal) return;
-        mAppliedChromeMinimal = minimal;
+        com.termux.app.place.LayoutVariant variant = chromeVariant();
+        if (variant == mAppliedChromeVariant) return;
+        mAppliedChromeVariant = variant;
         syncPlaceLayout();
         applyMinimalStatusChrome();
     }
@@ -19011,6 +19679,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * works as it does in the normal layout.
      */
     void setMinimalMode(boolean minimal) {
+        // Home has no minimal mode: the Workspace's flag is not changed from a Home page.
+        if (!com.termux.app.place.HomeChromePolicy.minimalModeApplies(mLastWallPage)) return;
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null || store.isMinimal() == minimal) return;
         com.termux.app.wall.PaneWallPage place = mLastWallPage;
@@ -19048,6 +19718,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 (com.termux.app.statusbar.StatusBarSwipeLayout) host;
             swipeHost.setExpansionAllowed(
                 com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
+            // Minimal mode opens in the capsule (StatusBarFormPolicy); Home keeps its own rule.
+            swipeHost.setMinimalMode(isMinimalMode()
+                && !com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage));
         }
         if (host != null && host.getAlpha() != 1f) host.setAlpha(1f);
         View row = findViewById(R.id.terminal_status_row);
@@ -19100,8 +19773,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Whether the place wants its keyboard up as the wall lands on it. */
     private boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) {
         PlaceLayoutStore store = placeLayoutStore();
-        return store != null && com.termux.app.place.MinimalMode.keyboardOnEnter(
-            store.wasKeyboardOpen(place), store.isMinimal());
+        return store != null && com.termux.app.place.HomeChromePolicy.keyboardOnEnter(place,
+            store.wasKeyboardOpen(place), store.isMinimal(), store.isHomeKeyboardAlwaysOn());
     }
 
     /** Whether the wall rests on the Display place. */
@@ -19142,12 +19815,74 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * when that goes the way the swipe asked.
      */
     private void applyBorderKeyboardSwipe(boolean open) {
+        applyBorderKeyboardSwipe(open, committedKeyboardVisible());
+    }
+
+    /** As above, told whether the keyboard was up as the swipe began. */
+    private void applyBorderKeyboardSwipe(boolean open, boolean keyboardWasUp) {
+        if (isWidgetsPageShowing() && applyHomeKeyboardSwipe(open, keyboardWasUp)) return;
         com.termux.app.terminal.TerminalHost host = terminalHost();
         if (open ? host.showInAppKeyboard(false) : host.hideInAppKeyboard(false)) return;
         TermuxTerminalViewClient client = mTermuxTerminalViewClient;
         if (client == null) return;
         boolean up = isImeVisible();
         if (open ? (client.isKeyboardTurnedOff() || !up) : up) client.onToggleSoftKeyboardRequest();
+    }
+
+    /**
+     * The keyboard swipe on a Home page (spec §5.1). Up is the palette gesture: the Home palette
+     * opens with the keyboard as one overlay, and the palette's close takes the keyboard it raised
+     * down again ({@code TerminalCommandPaletteController.showHomeOverlay}). Down closes an open
+     * palette, and with it its keyboard; always on keeps the keyboard up.
+     *
+     * @return whether the swipe was spent here; false leaves it to the plain keyboard swipe
+     */
+    private boolean applyHomeKeyboardSwipe(boolean open, boolean keyboardWasUp) {
+        com.termux.app.terminal.TerminalCommandPaletteController palette =
+            getCommandPaletteController();
+        if (!open) {
+            if (palette.isOpen()) {
+                palette.collapse();
+                return true;
+            }
+            return isHomeKeyboardAlwaysOn();
+        }
+        if (palette.isOpen() || !isHomePaletteGestureEnabled()) return true;
+        if (keyboardWasUp || !terminalHost().showInAppKeyboard(false)) {
+            // Nothing raised (already up, or no in-app keyboard to raise): the palette alone.
+            palette.showHomeOverlay(true);
+            return true;
+        }
+        // A keyboard raised just now is laid out by the next frame; the palette sprouts from its
+        // space bar, so it opens once the keyboard stands where it will be.
+        View decor = getWindow().getDecorView();
+        decor.post(() -> {
+            if (isWidgetsPageShowing()) palette.showHomeOverlay(false);
+            else if (mInAppKeyboard != null && mInAppKeyboard.isVisible()
+                && !isHomeKeyboardAlwaysOn()) {
+                // The wall moved away before the palette could open: nothing to pair with.
+                lowerHomePaletteKeyboard();
+            }
+        });
+        return true;
+    }
+
+    /** Whether the Home layout keeps the keyboard up on Home (always on). */
+    private boolean isHomeKeyboardAlwaysOn() {
+        PlaceLayoutStore store = placeLayoutStore();
+        return store != null && store.isHomeKeyboardAlwaysOn();
+    }
+
+    /** Whether the keyboard swipe up on a Home page opens the palette (Settings). */
+    private boolean isHomePaletteGestureEnabled() {
+        return mPreferences == null || mPreferences.isHomePaletteGestureEnabled();
+    }
+
+    /** The keyboard the Home palette raised goes down with it. */
+    private void lowerHomePaletteKeyboard() {
+        if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) return;
+        mInAppKeyboard.hide(
+            com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
     }
 
     // ---- The keyboard swipe under the finger (wall/KeyboardReveal) --------------------------
@@ -19190,6 +19925,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || displayTakesSystemKeyboard() || isDisplayTouchpadFrame()) return 0;
         boolean up = committedKeyboardVisible();
         if (opening == up) return 0;
+        // On Home the finger raises the palette gesture's keyboard only; a down swipe that closes
+        // the palette, or meets always on, is decided on release (applyHomeKeyboardSwipe).
+        if (isWidgetsPageShowing() && (opening ? !isHomePaletteGestureEnabled()
+            : isCommandPaletteOpen() || isHomeKeyboardAlwaysOn())) return 0;
         mKeyboardSwipeTravel = true;
         mKeyboardSwipeFromOpen = up;
         // The room the content has now, read before anything moves; the other end is read once
@@ -19312,7 +20051,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The pre-rolled keyboard, up already, becomes the one the person asked for; the
                 // display's policy hears it here, since the keyboard itself saw no change to
                 // report.
-                applyBorderKeyboardSwipe(open);
+                applyBorderKeyboardSwipe(open, mKeyboardSwipeFromOpen);
                 if (open && mX11Display != null && !mRaisingDisplayFrameKeyboard)
                     mX11Display.onUserKeyboardIntent(true);
             } else if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
@@ -19354,16 +20093,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             (com.termux.app.wall.PaneWallLayout) wall,
             new com.termux.app.wall.PaneWallController.Host() {
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
-                @Override public boolean isTerminalOnly() {
-                    return mPreferences != null
-                        && com.termux.app.launcher.LauncherUseCaseMode.isTerminalOnly(mPreferences);
+                // Home is always on the row; the Workspace while there is a window to show.
+                @Override public boolean hasWindow() { return isWorkspaceOnRow(); }
+                @Override public int innerCount(@NonNull com.termux.app.wall.PaneWallPage page) {
+                    return wallInnerCount(page);
                 }
-                @Override public boolean isWidgetsEnabled() {
-                    return mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled();
+                @Override public int innerIndex(@NonNull com.termux.app.wall.PaneWallPage page) {
+                    return wallInnerIndex(page);
                 }
-                // The Display place is on the wall only while the display is switched on: off,
-                // nothing of it is built, and the wall is the places that are left.
-                @Override public boolean isDisplayEnabled() { return isX11DisplayEnabled(); }
+                @Override public void showInnerPage(@NonNull com.termux.app.wall.PaneWallPage page,
+                                                    int index) {
+                    showWallInnerPage(page, index);
+                }
+                // Home's own swipe between Home pages, for the wallpaper's pan over the row.
+                @Override public float innerShiftFraction(
+                        @NonNull com.termux.app.wall.PaneWallPage page) {
+                    return page == com.termux.app.wall.PaneWallPage.WIDGETS
+                        && mWidgetPaneController != null
+                        ? mWidgetPaneController.homePageShiftFraction() : 0f;
+                }
+                @Override public void onInnerStepBegin(
+                        @NonNull com.termux.app.wall.PaneWallPage page, int steps) {
+                    if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
+                    mStatusCardHost.dismiss();
+                    captureTerminalDeparture();
+                }
+                @Override public void onInnerStep(@NonNull com.termux.app.wall.PaneWallPage page,
+                                                  int steps, float fromPx) {
+                    if (page == com.termux.app.wall.PaneWallPage.TERMINAL) {
+                        stepWindowFromWall(steps, fromPx);
+                    } else {
+                        dropTerminalDepartureSnapshot();
+                    }
+                }
+                // The display window is on the row while a display is up (ADR 0008).
+                @Override public boolean isDisplayUp() { return TermuxActivity.this.isDisplayUp(); }
                 // The plank (PlankTilt) is a Fancier Glass motion: the look as the last apply
                 // resolved it, with nothing telling the phone to hold still.
                 @Override public boolean isPlankTiltEnabled() {
@@ -19372,6 +20136,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onBorderKeyboardSwipe(boolean open) {
                     applyBorderKeyboardSwipe(open);
+                }
+                // On Home the swipe is the palette gesture: off in Settings, it is armed only
+                // to put away a keyboard that is up.
+                @Override public boolean isBorderKeyboardSwipeEnabled() {
+                    return !isWidgetsPageShowing() || isHomePaletteGestureEnabled()
+                        || committedKeyboardVisible();
                 }
                 // The keyboard swipe tied to the finger: the reveal the wall's slide already
                 // draws the keyboard through, driven by the finger instead of the wall.
@@ -19454,9 +20224,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     } finally {
                         Trace.endSection();
                     }
-                    // Where the wall rests is where the home screen comes back to, across Home
-                    // presses and across launches alike.
-                    if (mPreferences != null) mPreferences.setWallLastPage(page.name());
+                    // A display window left before its display came up goes, once the wall has
+                    // finished settling rather than inside it.
+                    if (page != com.termux.app.wall.PaneWallPage.DISPLAY && mDisplayRequested) {
+                        mPaneWallController.wall().post(() -> {
+                            if (mPaneWallController == null || mPaneWallController.wall().isMoving())
+                                return;
+                            dropUnstartedDisplay(mPaneWallController.currentPage());
+                        });
+                    }
                     dismissHelpOverlay();
                     if (mFirstBootTour != null) mFirstBootTour.onPlaceSettled(page.name());
                     // The "Go to …" read-out lands with the page (showTerminalActionHint).
@@ -19533,6 +20309,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             && page != com.termux.app.wall.PaneWallPage.WIDGETS) {
                             mWidgetPaneController.onWallPageLeaving();
                         }
+                        // Leaving Home, a focused Home float gives the keyboard back to the window.
+                        if (mPaneController != null
+                            && page != com.termux.app.wall.PaneWallPage.WIDGETS) {
+                            mPaneController.releaseHomeFloatFocus();
+                        }
                         // Only the bar is re-dressed at release, beside the cheap put-aways above:
                         // it is the pager, and it names the place the wall has committed to. The
                         // rest waits for the settle (syncPlaceState).
@@ -19557,25 +20338,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isWidgetsPageWanted()) {
             attachWidgetsPage();
         }
-        if (isX11DisplayEnabled()) attachDisplayPage();
+        // The display window opens on demand (ADR 0008); a display already up — announced to the
+        // activity this one replaces — is taken at once.
+        if (com.termux.app.x11.X11DisplayReceiver.hasKeptAnnouncement()) attachDisplayPage();
         installLinuxAppRunner();
+        installLauncherEntryRunner();
         mAppliedPaneStyleKey = null;
         mPaneWallController.applyStyle(paneSurfaceStyle());
-        // A recreated activity comes back to the page it showed; a fresh launch comes back to
-        // the place the wall last rested on.
-        String initialPage = mPendingWallPage != null ? mPendingWallPage
-            : mPreferences != null ? mPreferences.getWallLastPage() : null;
-        mPendingWallPage = null;
-        if (initialPage != null) {
-            Bundle state = new Bundle();
-            state.putString(com.termux.app.wall.PaneWallController.ARG_PAGE, initialPage);
-            mPaneWallController.restoreInstanceState(state);
-        }
+        // Where the wall starts is decided in landWall(), once the widget grid can be turned.
         // Minimal mode is remembered across launches. The arrangement reads it through
         // currentPlaceLayout on its own; the bar is told once here, and every change after this
         // goes through syncChromeArrangement.
-        if (isMinimalMode() != mAppliedChromeMinimal) {
-            mAppliedChromeMinimal = isMinimalMode();
+        if (chromeVariant() != mAppliedChromeVariant) {
+            mAppliedChromeVariant = chromeVariant();
             applyMinimalStatusChrome();
         }
     }
@@ -19647,8 +20422,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // badge and the chips agree, so the row reads as one thing rather than three.
         Integer placeAccent = accent;
         // The row's badge is the terminal session's and shows nowhere else; the chips are the
-        // terminal's windows or the display's apps, and the Widgets place has none: its widgets
-        // speak for themselves.
+        // terminal's windows or the display's apps, and on the Widgets place the Home floats,
+        // while there is one: without a float its widgets speak for themselves.
         com.termux.app.statusbar.SessionsIndicatorView sessions =
             findViewById(R.id.terminal_sessions_indicator);
         if (sessions != null) {
@@ -19656,7 +20431,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             sessions.setVisibility(page == com.termux.app.wall.PaneWallPage.TERMINAL
                 ? View.VISIBLE : View.GONE);
         }
-        boolean windowsShown = page != com.termux.app.wall.PaneWallPage.WIDGETS;
+        // On Home the chips are the Home floats; the bar comes onto Home only to carry them.
+        boolean windowsShown = com.termux.app.place.HomeChromePolicy.windowChipsShown(page,
+            mPaneController != null && mPaneController.homeFloatCount() > 0);
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) {
             // The chips are drawn on glass, so they ask the chrome what they are standing on
@@ -19678,11 +20455,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bindPlaceBadge(sessions);
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
         if (lens != null) {
-            // A server can outlive its place — it is left running when the display is switched
-            // off — but the bar shows a display only where the wall has one.
-            boolean displayOnWall = mPaneWallController != null && mPaneWallController.pages()
-                .contains(com.termux.app.wall.PaneWallPage.DISPLAY);
-            lens.setDisplayRunning(displayOnWall && isEmbeddedDisplayRunning());
+            // The screen glyph is always there on a build with the display; it reads quieter
+            // until a display runs, and a tap on it then starts one.
+            lens.setDisplayRunning(isEmbeddedDisplayRunning());
             lens.setDisplayGlyph(displayRuntimeGlyph());
             // The row may have said what colour each place is before this view existed.
             lens.setPlaceAccents(mPlaceAccents);
@@ -19910,7 +20685,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
         com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
         com.termux.app.statusbar.StatusBarLensView lens = hotView(R.id.terminal_status_lens);
-        if (lens != null) lens.setWallState(pages, current, offsetPx, width);
+        if (lens != null) lens.setWallState(lensPages(pages), current, offsetPx, width);
+    }
+
+    /** The row {@link #lensPages} last answered for, and its answer; read on every wall frame. */
+    @Nullable private java.util.List<com.termux.app.wall.PaneWallPage> mLensPagesFor;
+    @Nullable private java.util.List<com.termux.app.wall.PaneWallPage> mLensPages;
+
+    /**
+     * The marks the status bar draws: the row's pages, and the screen glyph at its end on a build
+     * with the display even while no display is up, so a tap on it can start one (ADR 0008).
+     * Worked out once per row, not per frame.
+     */
+    @NonNull
+    private java.util.List<com.termux.app.wall.PaneWallPage> lensPages(
+            @NonNull java.util.List<com.termux.app.wall.PaneWallPage> pages) {
+        if (pages == mLensPagesFor && mLensPages != null) return mLensPages;
+        java.util.List<com.termux.app.wall.PaneWallPage> marks = pages;
+        if (isX11DisplayEnabled() && !pages.contains(com.termux.app.wall.PaneWallPage.DISPLAY)) {
+            marks = new java.util.ArrayList<>(pages);
+            marks.add(com.termux.app.wall.PaneWallPage.DISPLAY);
+        }
+        mLensPagesFor = pages;
+        mLensPages = marks;
+        return marks;
     }
 
     /** The badge at the start of the status row is the terminal session's; it shows nowhere else. */
@@ -20022,17 +20820,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Stop the server the way {@code pkill termux-x11} does. It is a separate process on
-     * purpose — that is what keeps an X server crash off the home screen — so its own name is
-     * the only handle the launcher has on it.
+     * Stop the server the way {@code pkill termux-x11} does, whoever started it. It is a separate
+     * process on purpose — that is what keeps an X server crash off the home screen — so its own
+     * name is the only handle the launcher has on it. Signalled from here, not through the
+     * prefix's {@code pkill}, which a prefix without procps lacks; that is only the fallback when
+     * no server could be found here. The window leaves when the server's Binder dies.
      */
     private void killEmbeddedDisplayServer() {
-        if (mTermuxService != null) {
-            mTermuxService.createTermuxTask(
-                TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/pkill",
-                new String[]{"-f", "termux-x11 " + getPackageName()}, null,
-                TermuxConstants.TERMUX_HOME_DIR_PATH);
-        }
+        final String packageName = getPackageName();
+        new Thread(() -> {
+            if (com.termux.app.x11.X11ServerProcesses.stopAll(packageName) > 0) return;
+            runOnUiThread(() -> {
+                if (mTermuxService == null) return;
+                mTermuxService.createTermuxTask(
+                    TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/pkill",
+                    new String[]{"-f", "termux-x11 " + packageName}, null,
+                    TermuxConstants.TERMUX_HOME_DIR_PATH);
+            });
+        }, "x11-stop").start();
         syncPlaceBar();
     }
 
@@ -20092,20 +20897,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The embedded Linux display. Off by default, and never on in a build made without the
-     * server; there is no Display page while it is off.
+     * The build carries the embedded Linux display. Nothing switches it on (ADR 0008): a display
+     * comes up on demand and its window is on the row while it is ({@link #isDisplayUp}).
      */
     public boolean isX11DisplayEnabled() {
-        return com.termux.BuildConfig.X11_SERVER && mPreferences != null
-            && mPreferences.isX11DisplayEnabled();
+        return com.termux.BuildConfig.X11_SERVER && mPreferences != null;
     }
 
     /**
-     * Put the Display place on the wall. Only while the Linux display is switched on: the page
-     * inflates the X view, whose native side loads the server library and allocates a context,
-     * so an install with the display off never builds any of it and the wall is the places that
-     * are left. Switching the display off takes the page away again
-     * ({@link #tearDownEmbeddedDisplay}).
+     * A display is up, so its window is on the row: one runs, or one was asked for and is
+     * starting ({@link #mDisplayRequested}). Read by the wall on every refresh of its row.
+     */
+    private boolean isDisplayUp() {
+        return isX11DisplayEnabled() && mPaneWallController != null
+            && mPaneWallController.displayPage() != null
+            && (mDisplayRequested || isEmbeddedDisplayRunning());
+    }
+
+    /**
+     * Build the display window: the page that inflates the X view, whose native side loads the
+     * server library and allocates a context, and the server connection behind it. Built only when
+     * a display is wanted or one announced itself, so an install that never runs one never builds
+     * any of it; the page goes again when the display does ({@link #tearDownEmbeddedDisplay}).
+     * Whether it is on the row is {@link #isDisplayUp}'s to say.
      */
     private void attachDisplayPage() {
         if (mPaneWallController == null || !isX11DisplayEnabled()) return;
@@ -20131,13 +20945,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
             }
             @Override public void startDisplay() { startEmbeddedDisplay(); }
-            @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
+            @Override public void turnOnDisplay() { startEmbeddedDisplay(); }
             @Override public void installKeyboardData(@NonNull java.util.List<String> command) {
                 runKeyboardDataInstall(command);
             }
             @Override public void toggleDisplayPower() {
-                if (!isX11DisplayEnabled()) turnOnEmbeddedDisplay();
-                else if (isEmbeddedDisplayRunning()) confirmStopEmbeddedDisplay();
+                if (isEmbeddedDisplayRunning()) confirmStopEmbeddedDisplay();
                 else startEmbeddedDisplay();
             }
             @Override public void openDisplaySettings() {
@@ -20155,8 +20968,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         page.applyEnabled(true);
-        // An install that switched the display on before the phone defaults existed gets them
-        // here, once, the same way a fresh Turn on does.
+        // The phone defaults (text size, touch mode) go in the first time a display is used.
         com.termux.app.x11.X11Defaults.applyOnce(this);
         createX11DisplayController();
     }
@@ -20173,81 +20985,88 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyExtraKeysPlaceEligibility();
     }
 
-    /**
-     * The display switched on while the launcher is up: the page goes on the wall and the server
-     * connection behind it is built, whichever path moved the switch.
-     */
+    /** The display window is wanted: its page and the server connection built, if they are not. */
     private void attachEmbeddedDisplay() {
         if (mPaneWallController == null || !isX11DisplayEnabled()) return;
-        refreshLinuxApps(true);
         if (mPaneWallController.displayPage() == null) attachDisplayPage();
         else createX11DisplayController();
+    }
+
+    /**
+     * The row re-read after the display came up or went down, and the chrome that names the
+     * row's pages with it when the row changed. A display going down while its window is in front
+     * hands the wall to the last window, or to the last Home page when there is none.
+     */
+    private void syncDisplayOnRow() {
+        if (mPaneWallController == null) return;
+        java.util.List<com.termux.app.wall.PaneWallPage> before = mPaneWallController.pages();
+        mPaneWallController.refreshPages();
+        if (before.equals(mPaneWallController.pages())) return;
         onWallPlacesChanged();
+        // The display's chip comes and goes with its window.
+        refreshTerminalWindowBar();
     }
 
     /**
-     * Brings the wall in line with the display switch: the page attached while the switch is on,
-     * gone while it is off. Called on every resume — Settings moves the switch while this
-     * activity is stopped — and by every path that moves it here.
-     *
-     * <p>Taking the page down while a server runs on it is asked about first, because the server
-     * is never stopped silently. While the question is up nothing is torn down; {@code then} runs
-     * once it is answered, whichever way.
-     *
-     * @return true when a question is up and {@code then} has been kept for after it
+     * Open the display window and bring it in front: the Display entry, the screen glyph with no
+     * display up, Go to Display, and every Linux app tapped in the drawer come here. With no
+     * display running one is asked for, so the window is on the row while it starts and says what
+     * it is waiting for; {@code start} starts it here (a Linux app's runner starts it itself, with
+     * the app queued behind it). A display missing its keyboard layouts is not started: the window
+     * offers to install them instead.
      */
-    private boolean reconcileEmbeddedDisplay(@Nullable Runnable then) {
-        if (mPaneWallController == null || mPreferences == null) return false;
-        boolean wanted = isX11DisplayEnabled();
-        boolean attached = mPaneWallController.displayPage() != null;
-        if (wanted == attached) return false;
-        if (wanted) {
-            attachEmbeddedDisplay();
-            return false;
+    private void openDisplayWindow(boolean start) {
+        if (mPaneWallController == null || !isX11DisplayEnabled()) return;
+        attachEmbeddedDisplay();
+        if (mPaneWallController.displayPage() == null) return;
+        if (!isEmbeddedDisplayRunning()) {
+            mDisplayRequested = true;
+            if (start && com.termux.app.x11.X11CliInstaller.hasKeyboardData()) {
+                startEmbeddedDisplay();
+            }
         }
-        if (isEmbeddedDisplayRunning()) {
-            askBeforeTearingDownEmbeddedDisplay(then);
-            return true;
-        }
+        syncDisplayOnRow();
+        closeAppDrawerForLinuxLaunch();
+        // A Linux app can be launched (via launcherctl) while this Activity is stopped. Animating
+        // a wall transition nobody can see would just spend real frames on an invisible window
+        // (the same reasoning as TerminalWindowBar's animateSelectionSlide); animate only when
+        // visible, otherwise land on the page directly so it is simply where the user finds it.
+        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, isVisible());
+    }
+
+    /**
+     * A display announced itself with no window open — started from a shell, by Start with the
+     * launcher, or before this activity existed: build the window, and the controller takes the
+     * kept announcement and reports the display running, which puts the window on the row.
+     */
+    private void claimKeptDisplay() {
+        if (mPaneWallController == null || !isX11DisplayEnabled()) return;
+        if (mPaneWallController.displayPage() != null) return;
+        if (!com.termux.app.x11.X11DisplayReceiver.hasKeptAnnouncement()) return;
+        attachEmbeddedDisplay();
+    }
+
+    /**
+     * The wall came to rest away from a display window whose display never came up (it would not
+     * start, or it waits for its keyboard layouts): the ask lapses and the window goes, so a
+     * window with nothing on it does not stay on the row.
+     */
+    private void dropUnstartedDisplay(@NonNull com.termux.app.wall.PaneWallPage page) {
+        if (page == com.termux.app.wall.PaneWallPage.DISPLAY || !mDisplayRequested
+            || isEmbeddedDisplayRunning()) return;
+        mDisplayRequested = false;
         tearDownEmbeddedDisplay();
-        return false;
-    }
-
-    /** What waits for the server to stop before the display is torn down; see the ask below. */
-    @Nullable private Runnable mDisplayTearDownAfterStop;
-
-    /**
-     * The display was switched off with a server running on it. Stop closes the apps and the
-     * server, and the teardown follows the server going; Leave it running only takes the page
-     * away, and the server keeps its clients the way it always has when the page went.
-     */
-    private void askBeforeTearingDownEmbeddedDisplay(@Nullable Runnable then) {
-        new MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.termux_wall_display_stop_title)
-            .setMessage(R.string.termux_wall_display_stop_message)
-            .setNegativeButton(R.string.termux_wall_display_leave_running, (dialog, which) -> {
-                tearDownEmbeddedDisplay();
-                if (then != null) then.run();
-            })
-            .setPositiveButton(R.string.termux_wall_display_stop_confirm, (dialog, which) -> {
-                mDisplayTearDownAfterStop = then == null ? () -> { } : then;
-                stopEmbeddedDisplay();
-            })
-            .setOnCancelListener(dialog -> {
-                tearDownEmbeddedDisplay();
-                if (then != null) then.run();
-            })
-            .show();
     }
 
     /**
-     * Takes the display off the wall: the server connection is let go of, the page and the X
-     * view behind it are removed — which frees the view's native context — and the chrome that
-     * read the place is brought up to date. The server itself, if one runs, is left alone.
+     * Takes the display window off the wall: the server connection is let go of, the page and
+     * the X view behind it are removed — which frees the view's native context — and the chrome
+     * that read the row is brought up to date. The server itself, if one runs, is left alone.
+     * Runs when the display stops, and when a display that never came up is left.
      */
     private void tearDownEmbeddedDisplay() {
         if (mPaneWallController == null || mPaneWallController.displayPage() == null) return;
-        mDisplayTearDownAfterStop = null;
+        mDisplayRequested = false;
         if (mDisplayStop != null) {
             mDisplayStop.abandon();
             mDisplayStop = null;
@@ -20255,25 +21074,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncDisplayWindowList(false);
         if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(false);
         if (mX11Display != null) {
+            // Destroying the controller reports it stopped; nothing is to hear that now.
+            mX11Display.setListener(null);
             mX11Display.detachView();
             mX11Display.onDisplayPlaceLeft();
             mX11Display.destroy();
             mX11Display = null;
         }
-        if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(null);
+        // Whoever owns typing now — an open palette or sheet keeps its claim — not nobody.
+        restoreInAppKeyboardTypingClaim();
         hideDisplaySystemKeyboard();
+        releaseDisplayFocus(mPaneWallController.displayPage());
         mPaneWallController.detachDisplayPage();
         syncDisplayEnvironment();
         syncDisplayKeyboardRoute();
-        refreshLinuxApps(true);
         onWallPlacesChanged();
-    }
-
-    /** The display switched off from here — the first-run card's row. */
-    private void turnOffEmbeddedDisplay() {
-        if (mPreferences == null) return;
-        if (!com.termux.app.x11.X11DisplaySwitch.write(this, mPreferences, false)) return;
-        reconcileEmbeddedDisplay(null);
+        // Taking the page away hands the wall to a window with no settle after it, and may move
+        // the panes under the hand-back above: the keys are checked once more where they ended.
+        if (!(getCurrentFocus() instanceof TerminalView)) returnKeysToTerminal();
     }
 
     /**
@@ -20368,7 +21186,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.TERMINAL) {
             return;
         }
-        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, isVisible());
+        // The window went when the wall left it for the install; it comes back offering Start.
+        openDisplayWindow(false);
     }
 
     /**
@@ -20380,12 +21199,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncDisplayPageAttachment(@NonNull com.termux.app.wall.PaneWallPage page) {
         com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
             ? null : mPaneWallController.displayPage();
+        // Off its window the display's view must neither keep the keys nor take them back.
+        if (page != com.termux.app.wall.PaneWallPage.DISPLAY) releaseDisplayFocus(display);
         if (mX11Display == null || display == null) return;
         if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
             // The arrival itself: nothing about starting or stopping a display happened, but the
             // message may be stale if a package landed in the prefix while the wall rested
             // elsewhere.
             refreshDisplayEmptyStateReadiness();
+            com.termux.app.x11.DisplayViewFocus.admit(display.display());
             mX11Display.attachView(display.display());
             display.display().requestFocus();
             // A place that asked for the keyboard as it arrived asked for it itself, so the
@@ -20399,12 +21221,124 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else {
             mX11Display.detachView();
             mX11Display.onDisplayPlaceLeft();
-            if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(null);
+            restoreInAppKeyboardTypingClaim();
             // The phone's keyboard belongs to the place it was raised on; it goes down with it,
             // and the launcher's keyboard takes its suppression back for the terminal.
             hideDisplaySystemKeyboard();
             syncDisplayKeyboardRoute();
         }
+    }
+
+    /**
+     * The display window left the screen or is going: the keys go back to the active terminal
+     * pane — quietly, so no system keyboard comes up for it — and the display's view stops being
+     * able to take them (DisplayViewFocus). Without it the palette and the terminal stay deaf
+     * after a display session until the app restarts.
+     */
+    private void releaseDisplayFocus(@Nullable com.termux.app.x11.X11PaneFrame frame) {
+        if (frame == null) return;
+        com.termux.x11.LorieView view;
+        try {
+            view = frame.display();
+        } catch (IllegalStateException notInflated) {
+            return;
+        }
+        com.termux.app.x11.DisplayViewFocus.release(view,
+            focused -> focused instanceof TerminalView, this::returnKeysToTerminal);
+    }
+
+    /**
+     * The keys go back to the active terminal pane, quietly, and are checked to have landed: a
+     * focus request made while the display goes can come to nothing (the pane out of the window,
+     * or its page changing under it), and then nothing in the window holds the keys at all. Tried
+     * again after each of the next layouts until it lands, or until something that types — a
+     * terminal, a text field taking input — holds them.
+     */
+    private void returnKeysToTerminal() {
+        if (mInAppKeyboard != null && mInAppKeyboard.isExternalTextInputActive()) return;
+        if (handKeysToActivePane() || getWindow() == null || mKeysReturnPending) return;
+        mKeysReturnPending = true;
+        com.termux.app.x11.DisplayViewFocus.retryAfterLayout(getWindow().getDecorView(), 3,
+            () -> {
+                boolean done = (mInAppKeyboard != null && mInAppKeyboard.isExternalTextInputActive())
+                    || getCurrentFocus() instanceof TerminalView
+                    || isDisplayKeyHolderShowing()
+                    || handKeysToActivePane();
+                if (done) mKeysReturnPending = false;
+                return done;
+            },
+            // Out of tries: the safety net delivers each key and asks again with the next one.
+            () -> mKeysReturnPending = false);
+    }
+
+    /** A {@link #returnKeysToTerminal} retry waits for a layout; one at a time. */
+    private boolean mKeysReturnPending;
+
+    /** One quiet focus request on the active pane; true when the pane really holds the keys. */
+    private boolean handKeysToActivePane() {
+        TerminalView pane = getTerminalView();
+        return com.termux.app.x11.DisplayViewFocus.handBackTo(pane, () -> {
+            View.OnFocusChangeListener listener = pane.getOnFocusChangeListener();
+            pane.setOnFocusChangeListener(null);
+            try {
+                // A pane focused while it was out of the window says it is focused and refuses
+                // the request: its stale claim goes first.
+                if (pane.isFocused()) pane.clearFocus();
+                pane.requestFocus();
+            } finally {
+                pane.setOnFocusChangeListener(listener);
+            }
+        });
+    }
+
+    /** The display's view holds the keys on its own window at rest, where they are X's. */
+    private boolean isDisplayKeyHolderShowing() {
+        View focus = getCurrentFocus();
+        return focus instanceof com.termux.x11.LorieView && isDisplayPageShowing() && focus.isShown();
+    }
+
+    /**
+     * The safety net under the display's focus hand-back: a key that arrives while no view holds
+     * the keys, or while a display view whose window has gone does, is delivered to what is in
+     * front — the active terminal's key handler, which offers it to the palette and the other
+     * overlays first, or those overlays alone — and the keys are handed back for the next one.
+     * Typing never dies with the focus. See {@link com.termux.app.x11.DisplayViewFocus#routeFor}.
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (routeKeyNobodyHolds(event)) return true;
+        return super.dispatchKeyEvent(event);
+    }
+
+    private boolean routeKeyNobodyHolds(@NonNull KeyEvent event) {
+        View focus = getCurrentFocus();
+        com.termux.app.x11.DisplayViewFocus.Holder holder = focus == null
+            ? com.termux.app.x11.DisplayViewFocus.Holder.NONE
+            : !(focus instanceof com.termux.x11.LorieView)
+            ? com.termux.app.x11.DisplayViewFocus.Holder.OTHER
+            : isDisplayKeyHolderShowing()
+            ? com.termux.app.x11.DisplayViewFocus.Holder.DISPLAY_SHOWING
+            : com.termux.app.x11.DisplayViewFocus.Holder.DISPLAY_AWAY;
+        TerminalView terminal = getTerminalView();
+        com.termux.app.x11.DisplayViewFocus.Route route =
+            com.termux.app.x11.DisplayViewFocus.routeFor(holder, event.getKeyCode(),
+                terminal != null && terminal.mEmulator != null);
+        if (route == com.termux.app.x11.DisplayViewFocus.Route.PASS) return false;
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+            returnKeysToTerminal();
+            // Landed: the ordinary path delivers this key too.
+            if (route == com.termux.app.x11.DisplayViewFocus.Route.TERMINAL
+                && com.termux.app.x11.DisplayViewFocus.holdsKeys(terminal)) return false;
+        }
+        if (route == com.termux.app.x11.DisplayViewFocus.Route.TERMINAL)
+            return terminal.dispatchKeyEvent(event);
+        // No terminal to type into: the overlays, in the order a terminal would offer them.
+        int keyCode = event.getKeyCode();
+        if (event.getAction() == KeyEvent.ACTION_UP) return mOverlays.consumeKeyUp(keyCode);
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        if (mOverlays.consumeKeyDown(keyCode, event)) return true;
+        int codePoint = event.getUnicodeChar(event.getMetaState());
+        return codePoint > 0 && mOverlays.consumeCodePoint(codePoint, event.isCtrlPressed());
     }
 
     /**
@@ -20422,15 +21356,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Re-list the Linux apps — the prefix's and every container's — in the drawer when their
-     * desktop files changed, a distro was installed or removed, or, forced,
-     * when the display was just switched on or off, which decides whether they are listed at all.
+     * desktop files changed or a distro was installed or removed; forced, whatever the files say.
      */
     private void refreshLinuxApps(boolean force) {
         if (!com.termux.BuildConfig.X11_SERVER) return;
-        // The drawer lists Linux apps only while the display is on, so with it off there is
-        // nothing to re-read on every resume; the forced call that follows the switch itself is
-        // what drops them from the drawer.
-        if (!force && !isX11DisplayEnabled()) return;
         long signature = com.termux.app.x11.LinuxAppCatalog.signature(
             com.termux.app.x11.LinuxAppCatalog.roots());
         if (!force && signature == mLinuxAppsSignature) return;
@@ -20471,13 +21400,223 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isAppDrawerOpen()) mAppDrawerController.close(false);
     }
 
+    /**
+     * The launcher's own drawer entries (ADR 0008): Terminal goes to the Workspace, Display opens
+     * the bare display. Terminal is pinned to the dock the first time a build with it runs.
+     */
+    private void installLauncherEntryRunner() {
+        mEntryRunnerHook = new com.termux.app.launcher.LauncherAppLauncher.EntryRunner() {
+            @Override public boolean open(@NonNull String entryId) {
+                if (com.termux.app.launcher.LauncherEntries.DISPLAY.equals(entryId)) {
+                    if (!isX11DisplayEnabled()) return false;
+                    openDisplayWindow(true);
+                    return true;
+                }
+                return com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)
+                    && openTerminalEntry(false);
+            }
+            @Override public boolean openAlternate(@NonNull String entryId) {
+                return com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)
+                    && openTerminalEntry(true);
+            }
+            @Override public boolean openHomeFloat(@NonNull String entryId) {
+                return com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)
+                    && openHomeFloatHere();
+            }
+        };
+        com.termux.app.launcher.LauncherAppLauncher.setEntryRunner(mEntryRunnerHook);
+        if (mPreferences != null) {
+            com.termux.app.launcher.data.TerminalEntryPin.pinOnce(
+                mPreferences.getSharedPreferences(),
+                com.termux.app.launcher.data.LauncherConfigRepository.getInstance(this));
+        }
+    }
+
+    /**
+     * The Terminal entry: the Workspace at the window last shown, or a new window when there is
+     * none or one was asked for ({@code newWindow}, the long press). A new window lands right
+     * after the current one.
+     */
+    private boolean openTerminalEntry(boolean newWindow) {
+        if (mPaneWallController == null) return false;
+        closeAppDrawerForLinuxLaunch();
+        if (!isWorkspaceOnRow()) {
+            // An empty Workspace: one fresh shell, its session's only window (any mode).
+            if (getTermuxTerminalSessionClient() != null)
+                getTermuxTerminalSessionClient().addNewSession(false, null);
+        } else if (newWindow) {
+            createNewWindow();
+        }
+        mPaneWallController.refreshPages();
+        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+        return true;
+    }
+
+    /**
+     * The float layer Home floats are drawn in, pinned to the Home pages; built once the pane
+     * controller and the Home view both exist.
+     */
+    private void attachHomeFloatLayer() {
+        if (mPaneController == null || mPaneController.homeFloatLayer() != null) return;
+        View view = findViewById(R.id.widget_pane);
+        if (!(view instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
+        com.termux.app.terminal.HomeFloatLayer layer =
+            new com.termux.app.terminal.HomeFloatLayer(this);
+        ((com.termux.app.launcher.widget.WidgetPaneView) view).setPagePinnedLayer(layer);
+        mPaneController.setHomeFloatLayer(layer);
+        syncHomeFloatObstructions();
+    }
+
+    /**
+     * Terminal on Home (its long-press menu, the Terminal entry's New float here, the palette's
+     * Open terminal here): a Home float on the Home page in view, born full-size between the status
+     * bar and the dock, focused, with the keyboard overlay up. It is a window of the current
+     * session but not of the row: the Workspace neither gains it nor is needed for it.
+     */
+    boolean openHomeFloatHere() {
+        if (mPaneController == null || mPaneWallController == null || !isSplitPanesEnabled())
+            return false;
+        attachHomeFloatLayer();
+        if (mPaneController.homeFloatLayer() == null) return false;
+        closeAppDrawerForLinuxLaunch();
+        TerminalSession current = getCurrentSession();
+        TerminalSession shell = createShellForCwd(current != null ? current.getCwd() : null);
+        if (shell == null) return false;
+        int page = mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
+        if (mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.WIDGETS)
+            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
+        syncHomeFloatObstructions();
+        runWithoutNotices(() -> mPaneController.openHomeFloat(shell, page));
+        if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .ShowReason.KEYBOARD_ACTION);
+        }
+        return true;
+    }
+
+    /** Home's long-press sheet, built on the first long press and laid over everything. */
+    @Nullable private com.termux.app.launcher.home.HomeActionsSheet mHomeActionsSheet;
+    /** Where the long press that opened the sheet rested, on screen; Edit pages' wheels hang there. */
+    private float mHomeActionsRawX, mHomeActionsRawY;
+
+    /** A long press on a Home page's free area: the sheet of what Home and the launcher offer. */
+    private void showHomeActionsSheet(float rawX, float rawY) {
+        ViewGroup content = findViewById(android.R.id.content);
+        if (content == null) return;
+        if (mHomeActionsSheet == null) {
+            mHomeActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(this,
+                this::runHomeAction);
+            content.addView(mHomeActionsSheet, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        mHomeActionsRawX = rawX;
+        mHomeActionsRawY = rawY;
+        boolean hasPages = mWidgetPaneController != null;
+        mHomeActionsSheet.open(com.termux.app.launcher.home.HomeActionsSheetPolicy.itemsFor(
+            isDefaultHomeApp(), hasPages,
+            hasPages && mWidgetPaneController.currentPageEmpty(),
+            hasPages ? mWidgetPaneController.homePageCount() : 0));
+    }
+
+    /** Each row runs what the corner tab, the palette and Settings already run for it. */
+    private void runHomeAction(@NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) {
+        switch (item) {
+            case TERMINAL: openHomeFloatHere(); break;
+            case ADD_WIDGET:
+                if (mWidgetPaneController != null) mWidgetPaneController.openPicker();
+                break;
+            case ADD_PAGE: {
+                View pane = findViewById(R.id.widget_pane);
+                if (pane instanceof com.termux.app.launcher.widget.WidgetPaneView)
+                    ((com.termux.app.launcher.widget.WidgetPaneView) pane).addWidgetPage();
+                break;
+            }
+            case EDIT_PAGES: {
+                com.termux.app.wall.WidgetPaneFrame page = mPaneWallController == null ? null
+                    : mPaneWallController.widgetsPage();
+                if (page == null) break;
+                int[] onScreen = new int[2];
+                page.getLocationOnScreen(onScreen);
+                float x = mHomeActionsRawX - onScreen[0];
+                float y = mHomeActionsRawY - onScreen[1];
+                page.runPencil(new android.graphics.RectF(x, y, x, y));
+                break;
+            }
+            case LAYOUT: openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS); break;
+            case REMOVE_PAGE:
+                if (mWidgetPaneController != null) mWidgetPaneController.removeCurrentPage();
+                break;
+            case WALLPAPER:
+                openAppearanceSurface(
+                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
+                break;
+            case LOOK: openSurfaceEditor(); break;
+            case LAUNCHER_SETTINGS: openSettings(); break;
+            case SET_DEFAULT_HOME: HomeAppChooser.open(this); break;
+            case HELP: showHelpOverlay(); break;
+        }
+    }
+
+    /** The dock's, the stack's and the margin's heights as the last geometry pass laid them. */
+    private int mHomeFloatDockPx, mHomeFloatStackPx;
+    private boolean mHomeFloatKeyboardShown;
+
+    /**
+     * Tells the float layer what covers it, in screen pixels: the status bar (or the system bar)
+     * above, the dock below, and the keyboard with the dock riding on it while it is up. The
+     * stack's bottom edge is where it stands on screen; its rows are this pass's heights.
+     */
+    private void syncHomeFloatObstructions() {
+        if (mPaneController == null || mPaneController.homeFloatLayer() == null) return;
+        View stack = findViewById(R.id.accessory_stack_container);
+        View root = findViewById(R.id.activity_termux_root_view);
+        if (stack == null || root == null) return;
+        int[] at = new int[2];
+        stack.getLocationOnScreen(at);
+        int stackBottom = Math.round(at[1] - stack.getTranslationY()) + stack.getHeight();
+        int dockTop = stackBottom - Math.max(0, mHomeFloatDockPx);
+        int keyboardTop = mHomeFloatKeyboardShown ? stackBottom - Math.max(0, mHomeFloatStackPx) : -1;
+        root.getLocationOnScreen(at);
+        int roomTop = at[1];
+        androidx.core.view.WindowInsetsCompat insets =
+            androidx.core.view.ViewCompat.getRootWindowInsets(root);
+        if (insets != null) {
+            roomTop += insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
+        }
+        // The room starts under the top edge's whole stack, the bar the floats bring included,
+        // which overlays the grid rather than pushing it down (HomeChromePolicy.statusOverlays).
+        // Read off the layout, not the bar's live position: a float born as the bar arrives sits
+        // where the bar settles, not where its slide has got to.
+        View column = findViewById(R.id.terminal_content_column);
+        if (column != null) {
+            column.getLocationOnScreen(at);
+            int columnTop = Math.round(at[1] - column.getTranslationY());
+            roomTop = Math.max(roomTop, columnTop + EdgeStackPolicy.stackThicknessPx(
+                currentPlaceLayout(), PlaceLayout.Edge.TOP, buildEdgeStackMetrics()));
+        }
+        // The floats breathe Home's Margin inside all that, the same air as the widget grid's
+        // rim: Home's own, read explicitly, since floats are laid out while a window is in front.
+        mPaneController.setHomeFloatObstructions(roomTop, dockTop, keyboardTop,
+            Math.round(dpToPx(homeMarginDp())));
+    }
+
     /** Linux apps tapped in the drawer run on the display; this is what runs them. */
     private void installLinuxAppRunner() {
         if (!com.termux.BuildConfig.X11_SERVER) return;
+        // A display that announces itself with no window open opens one (ADR 0008).
+        mUnclaimedDisplayListener = this::claimKeptDisplay;
+        com.termux.app.x11.X11DisplayReceiver.setUnclaimedListener(mUnclaimedDisplayListener);
+        // The display's commands go in the prefix on every start, so a display can be started
+        // from any shell; off the main thread, because it is disk I/O on the home screen's way up.
+        com.termux.app.x11.X11CliInstaller.installAsync(this, result -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (result == com.termux.app.x11.X11CliInstaller.Result.FOREIGN_COMMAND) {
+                showToast(getString(R.string.termux_x11_command_taken), true);
+            }
+        });
         mLinuxApps = new com.termux.app.x11.X11LinuxAppRunner(this,
             new com.termux.app.x11.X11LinuxAppRunner.Host() {
-                @Override public boolean isDisplayEnabled() { return isX11DisplayEnabled(); }
-                @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
                 @Override public boolean isDisplayRunning() { return isEmbeddedDisplayRunning(); }
                 @Override public void startDisplay() { startEmbeddedDisplay(); }
                 @Override public boolean runScript(@NonNull String script,
@@ -20497,17 +21636,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTermuxService.notifyOnAppShellExit(shell, onExit::onExit);
                     return true;
                 }
-                @Override public void showDisplayPlace() {
-                    closeAppDrawerForLinuxLaunch();
-                    if (mPaneWallController != null) {
-                        // A Linux app can now be launched (via launcherctl) while this Activity is
-                        // stopped. Animating a wall transition nobody can see would just spend real
-                        // frames on an invisible window (the same reasoning as
-                        // TerminalWindowBar's animateSelectionSlide); animate only when visible,
-                        // otherwise land on the page directly so it is simply where the user finds
-                        // it on return.
-                        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, isVisible());
-                    }
+                @Override public void showDisplayWindow() {
+                    // The runner starts the display itself, with the app queued behind it.
+                    openDisplayWindow(false);
                 }
                 @Override public void showNotice(@NonNull String message) { showToast(message, true); }
                 @Override public void askBeforeReplacingSession(@NonNull String message,
@@ -20547,18 +21678,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     refreshLinuxApps(true);
                     return false;
                 }
-                // A terminal app is a pane, not the display: no showDisplayPlace, no
-                // X11LinuxAppRunner. Bring the terminal into view first, the way the display's
-                // own runner brings the Display place into view before running an app on it.
+                // A terminal app is a terminal window, not the display: no display window, no
+                // X11LinuxAppRunner. It opens right after the current window (ADR 0008), and the
+                // wall follows it to the Workspace — after the run, since with no window yet
+                // there is no Workspace on the row to go to before it.
                 closeAppDrawerForLinuxLaunch();
-                if (mPaneWallController != null) {
-                    mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
-                }
                 // No WindowForegroundResolver here: it needs the privileged backend only because
                 // it scans every process on the system, not because reading this app's own pane
                 // shell needs one, and it is async/cache-only besides. LinuxTerminalAppRunner
                 // reads /proc/<pid>/stat for this exact pid directly instead — see its class doc.
-                return com.termux.app.x11.LinuxTerminalAppRunner.run(app);
+                boolean ran = com.termux.app.x11.LinuxTerminalAppRunner.run(app);
+                if (ran && mPaneWallController != null) {
+                    mPaneWallController.refreshPages();
+                    mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+                }
+                return ran;
             }
         };
         com.termux.app.launcher.LauncherAppLauncher.setTerminalAppRunner(mTerminalAppRunnerHook);
@@ -20619,18 +21753,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * "Turn on", from the first-run card, a Linux app tapped in the drawer or the page's own
-     * button: the setting flips and the Display place comes onto the wall with a live connection.
-     */
-    private void turnOnEmbeddedDisplay() {
-        if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return;
-        com.termux.app.x11.X11DisplaySwitch.write(this, mPreferences, true);
-        attachEmbeddedDisplay();
-    }
-
-    /**
-     * Wire the connection to a server started from a shell. Nothing here starts one: a display
-     * exists because someone typed {@code termux-x11 :0}.
+     * Wire the connection to a display server. Nothing here starts one: a display exists because
+     * something asked for it ({@link #openDisplayWindow}) or someone typed {@code termux-x11 :0}.
      */
     private void createX11DisplayController() {
         if (mPaneWallController == null || mX11Display != null) return;
@@ -20693,37 +21817,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         mX11Display.host().setLorieView(page.display());
-        mX11Display.setListener(running -> {
-            // The display was switched off with a server running, and the user chose to stop
-            // it: the server has gone now, so the page follows it.
-            if (!running && mDisplayTearDownAfterStop != null) {
-                Runnable then = mDisplayTearDownAfterStop;
-                tearDownEmbeddedDisplay();
-                then.run();
-                return;
-            }
-            com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
-                ? null : mPaneWallController.displayPage();
-            if (frame != null) frame.applyRunning(running);
-            syncPlaceBar();
-            syncDisplayTouchpad();
-            syncDisplayEnvironment();
-            if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(running);
-            syncDisplayWindowList(running);
-            // A display that stopped has nothing left to type into.
-            if (!running) hideDisplaySystemKeyboard();
-            syncDisplayKeyboardRoute();
-        });
+        com.termux.app.x11.X11DisplayHostController controller = mX11Display;
+        controller.setListener(this::onEmbeddedDisplayRunningChanged);
+        // A kept announcement can have reported the display running while the controller was
+        // built, before anything listened: told once the build has finished.
+        if (controller.isRunning()) {
+            mPaneWallController.wall().post(() -> {
+                if (mX11Display == controller && controller.isRunning()) {
+                    onEmbeddedDisplayRunningChanged(true);
+                }
+            });
+        }
         syncDisplayEnvironment();
-        // The prefix commands go in with the feature, and are re-checked on every start — off
-        // the main thread, because it is disk I/O on the home screen's way up.
-        com.termux.app.x11.X11CliInstaller.installAsync(this, result -> {
-            if (isFinishing() || isDestroyed()) return;
-            if (result == com.termux.app.x11.X11CliInstaller.Result.FOREIGN_COMMAND) {
-                showToast(getString(R.string.termux_x11_command_taken), true);
-            }
-        });
-        // The tool store CLI goes in the same way, on every start.
+        // The tool store CLI goes in the same way the display's commands do, on every start.
         com.termux.app.store.TlstoreInstaller.installAsync(this, result -> {
             Logger.logDebug(LOG_TAG, "tlstore install: " + result);
             if (result.kind == com.termux.app.store.TlstoreInstaller.Result.Kind.FOREIGN_COMMAND) {
@@ -20737,6 +21843,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && !mPaneWallController.wall().isMoving()) {
             syncDisplayPageAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
         }
+    }
+
+    /**
+     * A display came up or went down. Up, it holds its window on the row from now on; down, and
+     * not asked for again, its window goes (ADR 0008) — the wall, if it was on it, lands on the
+     * last window or the last Home page.
+     */
+    private void onEmbeddedDisplayRunningChanged(boolean running) {
+        if (running) mDisplayRequested = false;
+        if (!running && !mDisplayRequested) {
+            tearDownEmbeddedDisplay();
+            syncPlaceBar();
+            return;
+        }
+        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+            ? null : mPaneWallController.displayPage();
+        if (frame != null) frame.applyRunning(running);
+        syncPlaceBar();
+        syncDisplayTouchpad();
+        syncDisplayEnvironment();
+        if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(running);
+        syncDisplayWindowList(running);
+        // A display that stopped has nothing left to type into.
+        if (!running) hideDisplaySystemKeyboard();
+        syncDisplayKeyboardRoute();
+        syncDisplayOnRow();
     }
 
     /** Follow the display's apps while a display runs; forget them when it stops. */
@@ -21421,6 +22553,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mPaneWallController.widgetsPage().applyWidgetEditing(editing);
                     }
                 }
+                // Home's swipe between Home pages pans the wallpaper over the row, per frame; a
+                // Home page added or removed lands here too as the page re-renders at rest.
+                @Override public void onHomePageShifted() {
+                    syncWallpaperParallax();
+                }
                 @Override public void onWidgetPageRendered() {
                     // The badge, the chips and the summary read the page: a new page or a new
                     // widget changes all three.
@@ -21453,6 +22590,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 // The widgets page is a pane: glass when the terminal panes are glass.
                 @Override public boolean isWidgetSurfaceGlass() { return isTerminalPaneGlassActive(); }
+                @Override public void onHomeLongPressed(float rawX, float rawY) {
+                    showHomeActionsSheet(rawX, rawY);
+                }
+                // The palette gesture starts on the page's free area: Home has no bottom border.
+                @Override public void onHomePaletteSwipe(boolean up) {
+                    if (isWidgetsPageShowing()) applyBorderKeyboardSwipe(up);
+                }
                 @Override @NonNull
                 public com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host builtinWidgetHost() {
                     return new com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host() {
@@ -21509,11 +22653,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** A window chip was tapped, in the row's pills or the column's stack. */
     private void selectWindowFromStatusBar(int index) {
         if (!isSplitPanesEnabled()) return;
+        com.termux.app.terminal.TerminalPaneController.Window homeFloat = floatOfChip(index);
+        if (homeFloat != null) {
+            showHomeFloat(homeFloat);
+            return;
+        }
+        if (isWidgetsPageShowing()) return;
         if (isDisplayPageShowing()) {
             // On the Display place the chips are the display's apps: a tap brings one to the front.
             if (mX11Windows != null && index >= 0 && index < mDisplayWindows.size()) {
                 mX11Windows.activate(mDisplayWindows.get(index).id);
             }
+            return;
+        }
+        // The display's chip, after the terminal windows: the wall goes to the display window.
+        if (mCurrentWSession != null && index == mCurrentWSession.windows.size() && isDisplayUp()
+                && mPaneWallController != null) {
+            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, true);
             return;
         }
         if (mPaneController == null || mCurrentWSession == null
@@ -21528,6 +22684,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void closeWindowFromStatusBar(int index) {
         if (!isSplitPanesEnabled()) return;
+        com.termux.app.terminal.TerminalPaneController.Window homeFloat = floatOfChip(index);
+        if (homeFloat != null) {
+            // A float's × closes it as its titlebar's Close does: its shell ends.
+            TerminalSession shell = mPaneController.windowActiveSession(homeFloat);
+            if (shell != null) shell.finishIfRunning();
+            return;
+        }
+        if (isWidgetsPageShowing()) return;
         if (isDisplayPageShowing()) {
             // The app shows its own "save before closing?" when it has something to ask.
             closeDisplayWindow(index);
@@ -21583,6 +22747,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mFirstBootTour != null) mFirstBootTour.onWindowSelected(String.valueOf(index));
         });
         bar.setOnWindowCloseRequestedListener(this::closeWindowFromStatusBar);
+        // A chip dragged along the row and dropped: the window moves there, and stays current if
+        // it was. Only the Workspace's windows' chips lift (setMovableChipCount below).
+        bar.setOnWindowChipMovedListener(this::moveWindow);
         bar.setOnCreateWindowListener(() -> {
             // On the Display place the chips are the display's apps, and the plus meant
             // "open another app"; the app drawer has no programmatic open yet, so the plus
@@ -21603,6 +22770,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
                 (com.termux.app.statusbar.StatusBarSwipeLayout) statusBarHost;
             swipeHost.setCollapsed(isStatusBarCompact());
+            // The compact-to-expanded stretch in pixels, so the three forms share one axis.
+            swipeHost.setFoldTravelPx(targetStatusBarHeightPx(isRoundedDockStyle(), false)
+                - targetStatusBarHeightPx(isRoundedDockStyle(), true));
             swipeHost.setExpansionAllowed(
                 com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
             swipeHost.setListener(new com.termux.app.statusbar.StatusBarSwipeLayout.Listener() {
@@ -21629,9 +22799,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
         if (lens != null) {
-            // A tap on a peeking place icon slides the wall to the place it stands for.
+            // A tap on a peeking place icon slides the wall to the place it stands for; the screen
+            // glyph with no display up opens one, as the Display entry does.
             lens.setListener(page -> {
-                if (mPaneWallController != null) mPaneWallController.goTo(page, true);
+                if (mPaneWallController == null) return;
+                if (page == com.termux.app.wall.PaneWallPage.DISPLAY
+                        && !mPaneWallController.pages().contains(page)) {
+                    openDisplayWindow(true);
+                    return;
+                }
+                mPaneWallController.goTo(page, true);
             });
             View slotView = findViewById(R.id.terminal_top_widget_area);
             if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
@@ -22218,9 +23395,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             selected = mDisplayActiveWindow;
         } else if (isWidgetsPageShowing()) {
-            // The Widgets place has no chips: the row is bare there and the widgets speak for
-            // themselves.
+            // On Home the chips are the Home floats, from every page, each with its page; the
+            // focused one is selected. Without a float there is no bar here at all.
             selected = -1;
+            if (mPaneController != null) {
+                addHomeFloatChips(items, foregroundPids);
+                com.termux.app.terminal.TerminalPaneController.Window focused =
+                    mPaneController.focusedHomeFloat();
+                if (focused != null) selected = chipFloats().indexOf(focused);
+            }
         } else if (mCurrentWSession != null && mPaneController != null) {
             terminalWindows = true;
             long now = android.os.SystemClock.uptimeMillis();
@@ -22252,14 +23435,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR)
                     .withAgentState(agentState));
             }
+            // The display window is a window of the Workspace too (ADR 0008): its chip stands
+            // after the terminal windows while a display is up, where its page stands on the row.
+            if (isDisplayUp()) {
+                String display = getString(R.string.launcher_entry_display);
+                items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(display, display));
+            }
+            // Home floats are windows of the session too: chips after the row's, marked as floats.
+            addHomeFloatChips(items, foregroundPids);
         }
+        // Only the row's own windows can be dragged to reorder: not the display's chip or the
+        // Home floats' after them, and nothing on the places that fill the row with other things.
+        bar.setMovableChipCount(terminalWindows && mCurrentWSession != null
+            ? mCurrentWSession.windows.size() : 0);
         bar.setWindows(items, selected);
         // The row is rebuilt whenever anything about a window changes, so the count is the edge
-        // the tour reads: one more chip is the +, one fewer is a chip's ×. Only on the terminal,
-        // though — the Display place fills the same row with its apps and the Widgets place empties
-        // it, and neither of those counts is a window opening or closing.
+        // the tour reads: one more chip is the +, one fewer is a chip's ×. Only the terminal
+        // windows, though — the Display place fills the same row with its apps and the Widgets
+        // place empties it, and neither of those counts, nor the display's own chip, is a window
+        // opening or closing.
         if (mFirstBootTour != null)
-            mFirstBootTour.onWindowCountSettled(terminalWindows ? items.size() : -1);
+            mFirstBootTour.onWindowCountSettled(terminalWindows && mCurrentWSession != null
+                ? mCurrentWSession.windows.size() : -1);
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setWindows(items, selected);
@@ -22921,6 +24118,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ensureStatsController().start(
                 statsInterval(cardShowing ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS),
                 cardShowing);
+            // The sampler pauses while nothing shows its numbers (StatsPollCadence).
+            View barHost = findViewById(R.id.terminal_window_bar_host);
+            mStatsController.setConsumerVisible(cardShowing
+                || (barHost != null && barHost.getVisibility() == View.VISIBLE));
         } else if (mStatsController != null) {
             mStatsController.stop();
         }
@@ -23211,6 +24412,99 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             () -> setWidgetAccent(anchor, false));
     }
 
+    /**
+     * A border drag between windows committed: the window {@code steps} away comes in from
+     * {@code fromPx}, where the drag had brought it, while the picture of the one leaving
+     * ({@link #captureTerminalDeparture}, taken at the release) carries on the same distance.
+     */
+    private void stepWindowFromWall(int steps, float fromPx) {
+        if (mPaneController == null || mCurrentWSession == null) {
+            dropTerminalDepartureSnapshot();
+            return;
+        }
+        int target = mCurrentWSession.current + steps;
+        if (target < 0 || target >= mCurrentWSession.windows.size()) {
+            dropTerminalDepartureSnapshot();
+            return;
+        }
+        mCurrentWSession.current = target;
+        mPaneController.showWindow(mCurrentWSession.currentWindow());
+        rebuildDrawerSessions();
+        View host = findViewById(R.id.terminal_surface_host);
+        int width = host == null ? 0 : host.getWidth();
+        float remaining = Math.abs(fromPx);
+        long duration = com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS;
+        if (width > 0) duration = Math.max(160L, Math.round(duration * Math.min(1f, remaining / width)));
+        animateTerminalArrival(steps > 0 ? 1 : -1, true, duration, remaining);
+    }
+
+    /**
+     * Whether the Workspace is on the wall's row: the current session has a window. Home floats
+     * are shells too but never in the row, so the service's session list does not decide this.
+     */
+    private boolean isWorkspaceOnRow() {
+        // Before the service is bound nothing is known, and the terminal is assumed, as before.
+        return com.termux.app.wall.WallRow.hasWorkspace(mTermuxService != null,
+            mCurrentWSession == null ? 0 : mCurrentWSession.windows.size());
+    }
+
+    /** How many Home pages or windows the wall's view of that kind holds. */
+    private int wallInnerCount(@NonNull com.termux.app.wall.PaneWallPage page) {
+        switch (page) {
+            case WIDGETS:
+                return mWidgetPaneController == null ? 1 : mWidgetPaneController.homePageCount();
+            case TERMINAL:
+                return mCurrentWSession == null ? 0 : mCurrentWSession.windows.size();
+            default:
+                return 1;
+        }
+    }
+
+    /** Which Home page or window is in front. */
+    private int wallInnerIndex(@NonNull com.termux.app.wall.PaneWallPage page) {
+        switch (page) {
+            case WIDGETS:
+                return mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
+            case TERMINAL:
+                return mCurrentWSession == null ? 0 : mCurrentWSession.current;
+            default:
+                return 0;
+        }
+    }
+
+    /** Turn Home to a page, or the Workspace to a window, at once and without a slide. */
+    private void showWallInnerPage(@NonNull com.termux.app.wall.PaneWallPage page, int index) {
+        if (page == com.termux.app.wall.PaneWallPage.WIDGETS) {
+            if (mWidgetPaneController != null) mWidgetPaneController.showHomePage(index);
+            return;
+        }
+        if (page != com.termux.app.wall.PaneWallPage.TERMINAL || mPaneController == null
+            || mCurrentWSession == null || index < 0
+            || index >= mCurrentWSession.windows.size() || index == mCurrentWSession.current) {
+            return;
+        }
+        mCurrentWSession.current = index;
+        mPaneController.showWindow(mCurrentWSession.currentWindow());
+        rebuildDrawerSessions();
+    }
+
+    /**
+     * Where the wall starts: the row position a recreation saved, or on a cold start the page
+     * Start in names (Home page 1, or the Workspace). After the widget pane controller exists, so
+     * Home can be turned to the right page, and where Home's swipe is given the seam.
+     */
+    private void landWall() {
+        if (mPaneWallController == null) return;
+        if (mWidgetPaneController != null) {
+            mWidgetPaneController.setSeam(mPaneWallController.homeSeam());
+        }
+        Bundle state = mPendingWallState;
+        mPendingWallState = null;
+        if (mPaneWallController.restoreInstanceState(state)) return;
+        mPaneWallController.landOnColdStart(
+            mPreferences == null ? null : mPreferences.getLauncherStartIn());
+    }
+
     /** Switch directly from the app-owned window row and settle the terminal with a short wave. */
     private void showWindowFromBar(int index) {
         if (mPaneController == null || mCurrentWSession == null
@@ -23221,8 +24515,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         captureTerminalDeparture();
         mCurrentWSession.current = index;
         mPaneController.showWindow(mCurrentWSession.currentWindow());
+        // The arrival's nudge first, naming the window it left, so the wallpaper re-sync inside
+        // rebuildDrawerSessions already reads the departure: started after it, that sync wrote
+        // the arrival's offset (a whole jump) and the nudge's first tick wrote the departure back.
+        animateTerminalWindowArrival(index >= previous ? 1 : -1, previous);
         rebuildDrawerSessions();
-        animateTerminalWindowArrival(index >= previous ? 1 : -1);
     }
 
     /**
@@ -23237,9 +24534,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Hyprland gives workspaces on one axis and groups on another, and once both switches animate
      * the axis is what tells the user which of the two just happened, without reading a label.
      */
-    private void animateTerminalWindowArrival(int direction) {
+    private void animateTerminalWindowArrival(int direction, int fromWindow) {
         animateTerminalArrival(direction, true,
-            com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
+            com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS, 0f,
+            fromWindow);
     }
 
     /** Session switch: the same arrival on the vertical axis. */
@@ -23264,13 +24562,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void animateTerminalArrival(int direction, boolean horizontal, long durationMs) {
+        animateTerminalArrival(direction, horizontal, durationMs, 0f);
+    }
+
+    /**
+     * @param travelPx how far the arrival travels, when it is less than a whole viewport: a
+     *                 border drag between windows has already carried the pages part of the way
+     */
+    private void animateTerminalArrival(int direction, boolean horizontal, long durationMs,
+                                        float travelPx) {
+        animateTerminalArrival(direction, horizontal, durationMs, travelPx,
+            com.termux.app.wall.WallParallax.ADJACENT);
+    }
+
+    /**
+     * @param fromWindow the window a sideways arrival left, so the wallpaper pans over every
+     *                   window between on the arrival's curve; {@code WallParallax.ADJACENT} for
+     *                   the one next door, on the side the arrival comes from
+     */
+    private void animateTerminalArrival(int direction, boolean horizontal, long durationMs,
+                                        float travelPx, int fromWindow) {
         ViewGroup surfaceHost = findViewById(R.id.terminal_surface_host);
         View paneHost = findViewById(R.id.terminal_pane_host);
         if (surfaceHost == null || paneHost == null || isReducedMotionEnabled()) {
             dropTerminalDepartureSnapshot();
             return;
         }
-        float travel = horizontal ? surfaceHost.getWidth() : surfaceHost.getHeight();
+        float viewport = horizontal ? surfaceHost.getWidth() : surfaceHost.getHeight();
+        float travel = travelPx > 0f ? Math.min(travelPx, viewport) : viewport;
         if (travel <= 0f) {
             dropTerminalDepartureSnapshot();
             return;
@@ -23303,7 +24622,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The pane host is the wall's terminal page and the wall owns where its pages sit, so
             // a sideways arrival is drawn by the wall; nothing else writes that position.
             if (mPaneWallController != null) {
-                mPaneWallController.nudgeTerminalPage(offset, durationMs, settle, unclip);
+                mPaneWallController.nudgeTerminalPage(offset, fromWindow, durationMs, settle,
+                    unclip);
             } else {
                 unclip.run();
             }
@@ -23696,7 +25016,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable TerminalSession openCommandWindow(@NonNull java.util.List<String> command,
                                                 @Nullable String cwd, @Nullable String title,
                                                 boolean focus) {
-        if (!isSplitPanesEnabled() || mPaneController == null || mCurrentWSession == null) return null;
+        if (!isSplitPanesEnabled() || mPaneController == null) return null;
         TerminalSession shell = createCommandShell(command, cwd, title, false);
         if (shell == null) return null;
         boolean seeded = seedWindowSize(shell);
@@ -23709,9 +25029,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return null;
         }
         com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell, title);
-        mCurrentWSession.windows.add(w);
+        if (mCurrentWSession == null) {
+            // An empty Workspace (ADR 0008): the window starts a session of its own, as the
+            // Terminal entry does, and the Workspace comes back onto the row with it.
+            WSession ws = new WSession();
+            ws.windows.add(w);
+            ws.current = 0;
+            ws.name = TerminalNamePolicy.normalizeSession(shell.mSessionName);
+            mWSessions.add(ws);
+            mCurrentWSession = ws;
+            mPaneController.showWindow(w);
+            rebuildDrawerSessions();
+            if (mPaneWallController != null && focus) {
+                mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+            }
+            return shell;
+        }
+        // Right after the current window, so related windows sit together (ADR 0008).
+        int at = com.termux.app.wall.WallRow.insertionIndex(mCurrentWSession.current,
+            mCurrentWSession.windows.size());
+        mCurrentWSession.windows.add(at, w);
+        if (!focus && at <= mCurrentWSession.current) mCurrentWSession.current++;
         if (focus) {
-            mCurrentWSession.current = mCurrentWSession.windows.size() - 1;
+            mCurrentWSession.current = at;
             if (isVisible()) {
                 runWithoutNotices(() -> {
                     captureTerminalDeparture();
@@ -23789,11 +25129,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (shell == null) return;
         runWithoutNotices(() -> {
             com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
-            mCurrentWSession.windows.add(w);
-            mCurrentWSession.current = mCurrentWSession.windows.size() - 1;
+            // Right after the current window, so related windows sit together (ADR 0008).
+            int at = com.termux.app.wall.WallRow.insertionIndex(mCurrentWSession.current,
+                mCurrentWSession.windows.size());
+            mCurrentWSession.windows.add(at, w);
+            mCurrentWSession.current = at;
             // niri's language: a new window on a full screen scrolls the strip sideways to make
-            // room, so creation rides the same wall pan as navigation — appended at the end, it
-            // enters from the trailing edge while the old window slides out the other side.
+            // room, so creation rides the same wall pan as navigation — placed after the current
+            // one, it enters from the trailing edge while the old window slides out the other side.
             captureTerminalDeparture();
             mPaneController.showWindow(w);
             animateTerminalWindowLifecycleArrival(1);
@@ -23905,7 +25248,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildDrawerSessions();
     }
 
-    /** After a session closes, show another session, or spawn a fresh one if none remain. */
+    /** After a session closes, show another session, or Home's last page if none remain. */
     private void showNextSessionAfterClose() {
         if (!mWSessions.isEmpty()) {
             mCurrentWSession = mWSessions.get(0);
@@ -23913,8 +25256,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The closed session is carried off along the session axis, the survivor slides in —
             // the same travel its creation played, reversed. Callers capture the departure.
             animateTerminalSessionLifecycleArrival(-1);
-        } else if (getTermuxTerminalSessionClient() != null) {
-            getTermuxTerminalSessionClient().addNewSession(false, null);
+        } else {
+            // The row's last window is gone: the last Home page slides in and the Workspace is
+            // gone with it. No shell starts behind Home; the Terminal entry opens the next one.
+            if (mPaneWallController != null) mPaneWallController.goToLastHomePage(isVisible());
         }
     }
 
@@ -23924,8 +25269,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * exiting takes its chip with it — and the session's selection follows
      * {@link com.termux.app.terminal.WindowCloseFocus}: unchanged when the emptied window was
      * elsewhere in the strip, a neighbour when it was the one shown. A session losing its last
-     * window goes with it; if that was the current session, the next one is shown or a fresh empty
-     * home is started, as when a session is closed by hand.
+     * window goes with it; if that was the current session, the next one is shown or Home's last
+     * page slides in, as when a session is closed by hand.
      */
     void onWindowEmptied(com.termux.app.terminal.TerminalPaneController.Window w) {
         WSession ws = wsessionOwning(w);
@@ -23950,6 +25295,286 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         rebuildDrawerSessions();
+    }
+
+    /**
+     * Home floats came, went, were minimised or restored: what shows them follows. The first float
+     * brings the status bar down onto Home, compact, and the last one closing takes it back up.
+     */
+    private void onHomeFloatsChangedInActivity() {
+        boolean exist = mPaneController != null && mPaneController.homeFloatCount() > 0;
+        if (exist && !mHomeFloatBarInLayout) {
+            mHomeFloatBarInLayout = true;
+            mCachedFloatBarLayout = null;
+            syncPlaceLayout();
+            refreshTerminalWindowBar();
+            slideHomeStatusBar(true, null);
+            syncHomeFloatObstructions();
+        } else if (!exist && mHomeFloatBarInLayout) {
+            slideHomeStatusBar(false, () -> {
+                if (mPaneController != null && mPaneController.homeFloatCount() > 0) return;
+                mHomeFloatBarInLayout = false;
+                mCachedFloatBarLayout = null;
+                syncPlaceLayout();
+                refreshTerminalWindowBar();
+                syncHomeFloatObstructions();
+            });
+        }
+        refreshTerminalWindowBar();
+        refreshSessionsDrawer();
+        // A float that just flew into its chip (or a new one) needs the chip in sight: a bar
+        // folded to the capsule opens to compact (spec §4.4; StatusBarFormPolicy).
+        if (exist) {
+            View host = findViewById(R.id.terminal_window_bar_host);
+            if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout)
+                ((com.termux.app.statusbar.StatusBarSwipeLayout) host).openCapsule();
+        }
+    }
+
+    /**
+     * The status bar slides down onto Home from the top ({@code in}), or back up out of it; the
+     * layout follows at the end of the way out. Off Home, and with reduced motion, nothing slides.
+     */
+    private void slideHomeStatusBar(boolean in, @Nullable Runnable end) {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        boolean onHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
+        if (host == null || !onHome || isReducedMotionEnabled()) {
+            if (host != null) host.setTranslationY(0f);
+            if (end != null) end.run();
+            return;
+        }
+        host.animate().cancel();
+        if (in) {
+            // Laid out first, so the slide starts a whole bar above where it settles.
+            host.post(() -> {
+                host.setTranslationY(-Math.max(1, host.getHeight()));
+                host.animate().translationY(0f).setDuration(220L)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+            });
+        } else {
+            host.animate().translationY(-Math.max(1, host.getHeight())).setDuration(180L)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .withEndAction(() -> {
+                    host.setTranslationY(0f);
+                    if (end != null) end.run();
+                }).start();
+        }
+    }
+
+    /**
+     * A float's chip was tapped, on Home or in the Workspace: Home pages to the float's page and
+     * the float comes back from its chip there, focused, with the keyboard up.
+     */
+    void showHomeFloat(@NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        if (mPaneController == null || !window.isHomeFloat()) return;
+        if (mWidgetPaneController != null
+            && mWidgetPaneController.homePageIndex() != window.homePage()) {
+            mWidgetPaneController.showHomePage(window.homePage());
+        }
+        if (mPaneWallController != null
+            && mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.WIDGETS) {
+            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
+        }
+        mPaneController.restoreHomeFloat(window);
+        if (mPaneController.focusedHomeFloat() == window && mInAppKeyboard != null
+            && !mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .ShowReason.KEYBOARD_ACTION);
+        }
+    }
+
+    /**
+     * The Home floats the window chips stand for after the row's: on Home they are the only chips,
+     * across every page; in the Workspace they follow the windows and the display, marked as floats.
+     */
+    @NonNull
+    private java.util.List<com.termux.app.terminal.TerminalPaneController.Window> chipFloats() {
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats =
+            new java.util.ArrayList<>();
+        if (mPaneController == null) return floats;
+        floats.addAll(mPaneController.homeFloats());
+        // In the order they were opened, so raising one does not reshuffle the chips.
+        java.util.Collections.sort(floats, (a, b) -> Long.compare(a.id, b.id));
+        return floats;
+    }
+
+    /** Where the chips before the floats end: none on Home, the row's windows and the display's elsewhere. */
+    private int firstFloatChipIndex() {
+        if (isWidgetsPageShowing()) return 0;
+        if (mCurrentWSession == null) return 0;
+        return mCurrentWSession.windows.size() + (isDisplayUp() ? 1 : 0);
+    }
+
+    /** The float a chip stands for, or null when the chip is a window's. */
+    @Nullable
+    private com.termux.app.terminal.TerminalPaneController.Window floatOfChip(int index) {
+        if (isDisplayPageShowing()) return null;
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
+        int at = index - firstFloatChipIndex();
+        return at >= 0 && at < floats.size() ? floats.get(at) : null;
+    }
+
+    /** One chip per Home float, each carrying its page, appended to {@code items}. */
+    private void addHomeFloatChips(
+            @NonNull java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items,
+            @NonNull java.util.List<Integer> foregroundPids) {
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
+        for (int i = 0; i < floats.size(); i++) {
+            com.termux.app.terminal.TerminalPaneController.Window window = floats.get(i);
+            TerminalSession session = mPaneController.windowActiveSession(window);
+            items.add(buildWindowItem(session, items.size(), foregroundPids,
+                mPaneController.windowName(window))
+                .withHomeFloat(window.homePage(),
+                    getString(R.string.window_chip_home_float, window.homePage() + 1)));
+        }
+    }
+
+    /**
+     * Dock on a Home float: it becomes a tiled window of the current session, right after the
+     * current window, and the Workspace slides in on it.
+     */
+    private void dockHomeFloatIntoRow(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        if (mPaneController == null) return;
+        if (mCurrentWSession == null) {
+            WSession ws = new WSession();
+            ws.windows.add(window);
+            ws.current = 0;
+            TerminalSession shell = mPaneController.windowActiveSession(window);
+            ws.name = TerminalNamePolicy.normalizeSession(shell == null ? null : shell.mSessionName);
+            mWSessions.add(ws);
+            mCurrentWSession = ws;
+        } else {
+            mCurrentWSession.dockAfterCurrent(window);
+        }
+        mPaneController.showWindow(window);
+        rebuildDrawerSessions();
+        if (mPaneWallController != null) {
+            mPaneWallController.refreshPages();
+            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+        }
+    }
+
+    /**
+     * Ctrl+Alt+F on a window of the row that holds one pane: it floats onto the Home page last
+     * shown, focused, with the keyboard up, and leaves the row; its neighbour takes its place there.
+     */
+    private boolean floatRowWindowOntoHome(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        if (mPaneController == null || mPaneWallController == null) return false;
+        attachHomeFloatLayer();
+        WSession ws = wsessionOwning(window);
+        if (ws == null || mPaneController.homeFloatLayer() == null) return false;
+        int page = mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
+        int next = ws.takeOutFor(window, () -> mPaneController.floatWindowOntoHome(window, page));
+        if (next == WSession.REFUSED) return false;
+        if (next < 0) {
+            mWSessions.remove(ws);
+            if (ws == mCurrentWSession) {
+                mCurrentWSession = null;
+                showNextSessionAfterClose();
+            }
+        } else if (ws == mCurrentWSession) {
+            mPaneController.showWindow(ws.currentWindow());
+        }
+        if (mWidgetPaneController != null && mWidgetPaneController.homePageIndex() != page)
+            mWidgetPaneController.showHomePage(page);
+        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
+        rebuildDrawerSessions();
+        if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .ShowReason.KEYBOARD_ACTION);
+        }
+        return true;
+    }
+
+    /** The palette's row set where it is opened: the Home set on a Home page. */
+    @NonNull
+    public com.termux.app.terminal.CommandPaletteContext paletteContextHere() {
+        return isWidgetsPageShowing() ? com.termux.app.terminal.CommandPaletteContext.HOME
+            : com.termux.app.terminal.CommandPaletteContext.TERMINAL;
+    }
+
+    /** The Home palette's actions that need the wall, and what it asks about Home floats. */
+    private final class PaletteHomeHost implements com.termux.app.terminal.CommandPaletteHomeHost {
+        @Override public void openTerminalHere() { openHomeFloatHere(); }
+
+        @Override public void goToWorkspace() { openTerminalEntry(false); }
+
+        @Override public void minimiseAllFloats() {
+            if (mPaneController != null) mPaneController.minimiseAllHomeFloats();
+        }
+
+        @Override public void restoreFloats() {
+            if (mPaneController != null) mPaneController.restoreHomeFloats();
+        }
+
+        @Override public void addWidget() {
+            if (mWidgetPaneController == null || mPaneWallController == null) return;
+            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
+            mWidgetPaneController.openPicker();
+        }
+
+        @Override public void openLayoutEditor() {
+            TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
+        }
+
+        @Override public void restoreFloat(long windowId) {
+            com.termux.app.terminal.TerminalPaneController.Window window = homeFloatById(windowId);
+            if (window != null) showHomeFloat(window);
+        }
+
+        @Override public boolean isHomeFloat(long windowId) {
+            return homeFloatById(windowId) != null;
+        }
+
+        @Override public int homeFloatPage(long windowId) {
+            com.termux.app.terminal.TerminalPaneController.Window window = homeFloatById(windowId);
+            return window == null ? UNKNOWN_PAGE : window.homePage();
+        }
+
+        @Override public boolean isOnHome() { return isWidgetsPageShowing(); }
+
+        @Override public boolean isKeyboardAlwaysOn() { return isHomeKeyboardAlwaysOn(); }
+
+        @Override public void lowerKeyboard() { lowerHomePaletteKeyboard(); }
+    }
+
+    @Nullable
+    private com.termux.app.terminal.TerminalPaneController.Window homeFloatById(long windowId) {
+        return mPaneController == null ? null : mPaneController.homeFloatById(windowId);
+    }
+
+    /**
+     * What the sessions drawer asks of the wall: where each float lives, the way back to Home, and
+     * a float brought back from the drawer. The displays' toplevels wait for the display host.
+     */
+    @NonNull
+    public com.termux.app.terminal.SessionsDrawerHost sessionsDrawerHost() {
+        return new com.termux.app.terminal.SessionsDrawerHost() {
+            @Override public int homeFloatPage(long windowId) {
+                com.termux.app.terminal.TerminalPaneController.Window window = homeFloatById(windowId);
+                return window == null ? UNKNOWN_PAGE : window.homePage();
+            }
+
+            @Override public void goHome() {
+                getTerminalSheetController().dismiss();
+                if (mPaneWallController != null) mPaneWallController.goHome(isVisible());
+            }
+
+            @Override public void goToDisplay(@NonNull String displayId) {
+                getTerminalSheetController().dismiss();
+                if (mPaneWallController != null)
+                    mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, isVisible());
+            }
+
+            @Override public void restoreFloat(long windowId) {
+                com.termux.app.terminal.TerminalPaneController.Window window = homeFloatById(windowId);
+                if (window == null) return;
+                getTerminalSheetController().dismiss();
+                showHomeFloat(window);
+            }
+        };
     }
 
     /** Collapse every window back to single panes (used when entering compatibility mode). */
@@ -24096,6 +25721,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             rebuildDrawerSessions();
         }
 
+        @Override public void onHomeFloatsChanged() {
+            onHomeFloatsChangedInActivity();
+        }
+
+        @Override public void onHomeFloatDocked(
+                @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+            dockHomeFloatIntoRow(window);
+        }
+
+        @Override public boolean onFloatWindowOntoHome(
+                @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+            return floatRowWindowOntoHome(window);
+        }
+
+        @Override public boolean homeFloatChipOnScreen(
+                @NonNull com.termux.app.terminal.TerminalPaneController.Window window,
+                @NonNull android.graphics.Rect out) {
+            com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+            if (bar == null || !bar.isShown()) return false;
+            int at = chipFloats().indexOf(window);
+            View chip = at < 0 ? null : bar.chipViewAt(firstFloatChipIndex() + at);
+            if (chip == null || chip.getWidth() <= 0) return false;
+            int[] onScreen = new int[2];
+            chip.getLocationOnScreen(onScreen);
+            out.set(onScreen[0], onScreen[1], onScreen[0] + chip.getWidth(),
+                onScreen[1] + chip.getHeight());
+            return true;
+        }
+
+        @Override public void onHomeFloatFocusReleased() {
+            // A press on Home beside the floats, or the focused float minimised or closed: the
+            // keyboard it raised goes with it, unless Home keeps one always on.
+            if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS && mInAppKeyboard != null
+                && mInAppKeyboard.isVisible()
+                && !wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) {
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                    .HideReason.USER_EVENT);
+            }
+        }
+
         @Override public void onPanesRendered() {
             // Who owns the frame line depends on how many panes are up, so re-decide it here.
             applyTerminalBorderAppearance();
@@ -24175,6 +25840,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void finishActivityIfNotFinishing() {
             TermuxActivity.this.finishActivityIfNotFinishing();
+        }
+
+        @Override public boolean staysWhenWorkspaceEmpty() {
+            return com.termux.app.wall.WallRow.lastShellClosedShowsHome(isWidgetsPageWanted(),
+                isDefaultHomeApp());
         }
 
         @Override public void runOnUiThread(@NonNull Runnable runnable) {
@@ -24443,6 +26113,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean goToWallPage(@NonNull String page) {
+            // Go to Display with no display up opens one, as the screen glyph does.
+            if ("display".equalsIgnoreCase(page.trim()) && mPaneWallController != null
+                    && !mPaneWallController.pages().contains(
+                        com.termux.app.wall.PaneWallPage.DISPLAY)
+                    && isX11DisplayEnabled()) {
+                openDisplayWindow(true);
+                return true;
+            }
             return mPaneWallController != null && mPaneWallController.goTo(page);
         }
 
@@ -24468,8 +26146,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @NonNull java.util.List<String> command, @Nullable String cwd,
                 @Nullable String title, boolean focus,
                 @Nullable com.termux.app.terminal.TerminalPaneController.PlacementRequest placement) {
-            if (!isSplitPanesEnabled() || mPaneController == null
-                || mPaneController.getActiveSession() == null) return null;
+            if (!isSplitPanesEnabled() || mPaneController == null) return null;
+            if (mCurrentWSession == null && placement == null) {
+                // An empty Workspace has no pane to split: the pane opens as the first window of
+                // a fresh session, which is what a split of nothing amounts to.
+                return TermuxActivity.this.openCommandWindow(command, cwd, title, focus);
+            }
+            if (mPaneController.getActiveSession() == null) return null;
             TerminalSession shell = createCommandShell(command, cwd, title);
             if (shell == null) return null;
             // A split only gets its real size from the layout pass addPane's render() triggers,
@@ -24651,6 +26334,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean selectWindow(int index) {
             return TermuxActivity.this.selectWindow(index);
+        }
+
+        @Override public boolean moveWindow(int from, int to) {
+            return TermuxActivity.this.moveWindow(from, to);
+        }
+
+        @Override public boolean consumeWindow(boolean fromLeft) {
+            return TermuxActivity.this.consumeWindow(fromLeft);
+        }
+
+        @Override public boolean expelPane(boolean toLeft) {
+            return TermuxActivity.this.expelPane(toLeft);
         }
 
         @Override public int currentWindowCount() {

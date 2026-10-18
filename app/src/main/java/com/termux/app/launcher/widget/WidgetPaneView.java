@@ -40,6 +40,36 @@ public final class WidgetPaneView extends FrameLayout {
         default void onWidgetEditDiscard() { }
         /** The + on the page's border tab: another page, and the pane turns to it. */
         default void onWidgetAddPage() { }
+        /**
+         * A vertical swipe on the page's free area let go, up ({@code up}) or down: the palette
+         * gesture ({@link HomeSwipePolicy}). Never sent for a swipe on a widget, a Home float or
+         * the picker.
+         */
+        default void onFreeAreaVerticalSwipe(boolean up) { }
+        /**
+         * The page's content moved sideways: the swipe drags it, or a page slides in or back.
+         * Per frame of that motion; {@link #contentShiftFraction} says where it stands.
+         */
+        default void onContentShifted() { }
+    }
+
+    /**
+     * The seam out of Home into the rest of the wall's row (ADR 0008): a plain swipe forward on
+     * the last Home page carries on into the first window instead of resisting. The pane asks
+     * whether the row goes on, then hands the drag over to the wall, in screen coordinates, since
+     * this view slides with the wall while the finger drives it.
+     */
+    public interface Seam {
+        /** Whether a forward swipe on the last Home page leaves Home: the row has a page after it. */
+        boolean canLeaveForward();
+        /** The swipe is the wall's from here. */
+        void begin();
+        /** The finger has travelled {@code dxPx} on screen since it went down, positive right. */
+        void drag(float dxPx);
+        /** The finger let go at {@code velocityPxPerSec}, positive right. */
+        void end(float velocityPxPerSec);
+        /** The stream was cancelled. */
+        void cancel();
     }
 
     /**
@@ -54,6 +84,18 @@ public final class WidgetPaneView extends FrameLayout {
     public interface CarryListener {
         void onCarryMove(float rawX, float rawY);
         void onCarryEnd(float rawX, float rawY, boolean canceled);
+    }
+
+    /**
+     * A layer pinned to the Home page on screen: it shows what belongs to that page (the Home
+     * floats), moves with the page's content while a swipe drags it and while the next page slides
+     * in, and keeps the page's swipe from starting on what it holds.
+     */
+    public interface PagePinnedLayer {
+        /** The Home page {@code page} is the one on screen now. */
+        void onHomePageShown(int page);
+        /** Whether a press at ({@code x}, {@code y}), in the pane's coordinates, lands on the layer. */
+        boolean holdsPoint(float x, float y);
     }
 
     /** Fraction of the pane width a released drag must cross to commit a page switch. */
@@ -77,10 +119,22 @@ public final class WidgetPaneView extends FrameLayout {
     private boolean pagingTracking;
     private boolean pagingDragging;
     private float pagingDownX, pagingDownY;
+    /** The seam out of Home, if the wall gave one, and whether the swipe under way is its. */
+    @Nullable private Seam seam;
+    private boolean seamDragging;
+    /** Where the finger went down on screen, and its speed on screen, for the seam's drag. */
+    private float pagingDownRawX;
+    @Nullable private VelocityTracker seamVelocity;
     private boolean pageCommitPending;
     private int pageCommitDirection;
     private float pageCommitDragX;
     @Nullable private VelocityTracker pagingVelocity;
+    /**
+     * The palette gesture: whether the press landed on the free area (no widget, no Home float,
+     * no picker, no edit chrome), and whether its vertical swipe is under way.
+     */
+    private boolean verticalCandidate;
+    private boolean verticalDragging;
 
     public WidgetPaneView(@NonNull Context context, AttributeSet attrs) { this(context); }
 
@@ -134,6 +188,34 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     private WidgetPickerAdapter.Listener providerListener;
+    @Nullable private View pinnedLayer;
+
+    /**
+     * Pins {@code layer} to the Home pages: drawn over the grid and under the page dots, the picker
+     * and the edit chrome, told which page is on screen and carried with the page's content.
+     */
+    public <T extends View & PagePinnedLayer> void setPagePinnedLayer(@Nullable T layer) {
+        if (pinnedLayer == layer) return;
+        if (pinnedLayer != null) removeView(pinnedLayer);
+        pinnedLayer = layer;
+        if (layer == null) return;
+        if (layer.getParent() instanceof ViewGroup) ((ViewGroup) layer.getParent()).removeView(layer);
+        addView(layer, indexOfChild(empty) + 1,
+            new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        layer.setTranslationX(grid.getTranslationX());
+        layer.onHomePageShown(currentPage);
+    }
+
+    private boolean pinnedLayerHolds(@NonNull MotionEvent event) {
+        return pinnedLayer instanceof PagePinnedLayer && pinnedLayer.getVisibility() == VISIBLE
+            && ((PagePinnedLayer) pinnedLayer).holdsPoint(event.getX(), event.getY());
+    }
+
+    /** The wall's seam: a forward swipe on the last Home page carries on into the row. */
+    public void setSeam(@Nullable Seam value) {
+        seam = value;
+    }
+
     public void setListener(@NonNull Listener value,
                             @NonNull WidgetPickerAdapter.Listener providers) {
         listener = value; providerListener = providers;
@@ -317,6 +399,8 @@ public final class WidgetPaneView extends FrameLayout {
         currentPage = Math.max(0, Math.min(pageCount - 1, current));
         dots.setVisibility(pageCount > 1 ? VISIBLE : GONE);
         dots.invalidate();
+        if (pinnedLayer instanceof PagePinnedLayer)
+            ((PagePinnedLayer) pinnedLayer).onHomePageShown(currentPage);
         if (pageCommitPending && currentPage != previousPage) {
             pageCommitPending = false;
             enterFromSide(pageCommitDirection, pageCommitDragX);
@@ -336,53 +420,94 @@ public final class WidgetPaneView extends FrameLayout {
     // The wall's own sideways drag is arbitrated above this page, from the status bar. This
     // intercept claims a stream only when horizontal travel wins the slop race inside the grid,
     // so the grid's own pages move without stealing a vertical scroll or a widget tap.
+    //
+    // The same slop race decides the palette gesture (HomeSwipePolicy): a press on the free area
+    // (the grid's empty cells and the air between widgets) that sets off mostly vertically is
+    // claimed here, and its lift is reported up or down. A widget keeps its own touches, a Home
+    // float its own, and the dock is never under this view's touch at all.
 
     @Override public boolean onInterceptTouchEvent(@NonNull MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 pagingDragging = false;
-                pagingTracking = pageCount > 1 && !picker.isOpen() && !widgetEditActive()
-                    && !insideNestedScrollingChild(this, event);
+                seamDragging = false;
+                verticalDragging = false;
+                boolean free = !picker.isOpen() && !widgetEditActive()
+                    && !insideNestedScrollingChild(this, event)
+                    // A swipe on a Home float is the float's (its terminal or its titlebar).
+                    && !pinnedLayerHolds(event);
+                // One page still tracks when the seam is open: its forward swipe is the wall's.
+                pagingTracking = (pageCount > 1 || seamOpen()) && free;
+                // A swipe on a widget is the widget's, whichever way it goes.
+                verticalCandidate = free && !onWidget(event);
                 pagingDownX = event.getX(); pagingDownY = event.getY();
-                if (pagingTracking) {
+                pagingDownRawX = event.getRawX();
+                if (pagingTracking || verticalCandidate) {
                     if (pagingVelocity == null) pagingVelocity = VelocityTracker.obtain();
                     pagingVelocity.clear();
                     pagingVelocity.addMovement(event);
                 }
                 break;
             case MotionEvent.ACTION_MOVE:
-                if (!pagingTracking || pagingDragging) break;
+                if ((!pagingTracking && !verticalCandidate) || pagingDragging || verticalDragging)
+                    break;
                 if (widgetEditActive()) {
                     // A hold turned this press into a widget drag after the page had started
                     // watching it; the drag owns the rest of the gesture, sideways included.
                     pagingTracking = false;
+                    verticalCandidate = false;
                     break;
                 }
                 if (pagingVelocity != null) pagingVelocity.addMovement(event);
                 float dx = event.getX() - pagingDownX;
                 float dy = event.getY() - pagingDownY;
-                if (Math.abs(dy) > touchSlop && Math.abs(dy) >= Math.abs(dx)) {
-                    pagingTracking = false; // vertical belongs to the pane pull gesture
-                } else if (Math.abs(dx) > touchSlop && Math.abs(dx) > Math.abs(dy)) {
+                HomeSwipePolicy.Axis axis = HomeSwipePolicy.axis(dx, dy, touchSlop);
+                if (axis == HomeSwipePolicy.Axis.VERTICAL) {
+                    pagingTracking = false;
+                    if (verticalCandidate) {
+                        // The palette gesture: the grid's long press is cancelled by the claim.
+                        verticalDragging = true;
+                        return true;
+                    }
+                } else if (axis == HomeSwipePolicy.Axis.HORIZONTAL) {
+                    verticalCandidate = false;
+                    if (!pagingTracking) break;
+                    if (com.termux.app.wall.WallRow.swipeLeavesHome(currentPage, pageCount,
+                            dx < 0 ? 1 : -1, seamOpen())) {
+                        // Forward off the last Home page: the swipe goes on into the row.
+                        pagingDragging = true;
+                        seamDragging = true;
+                        beginSeamDrag(event);
+                        return true;
+                    }
+                    if (pageCount <= 1) {
+                        // Nothing to page and no seam this way: the swipe is not Home's.
+                        pagingTracking = false;
+                        break;
+                    }
                     pagingDragging = true;
                     return true;
                 }
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
                 pagingTracking = false;
+                verticalCandidate = false;
                 break;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
                 pagingTracking = false;
+                verticalCandidate = false;
                 break;
             default:
                 break;
         }
-        return pagingDragging;
+        return pagingDragging || verticalDragging;
     }
 
     @Override public boolean onTouchEvent(@NonNull MotionEvent event) {
+        if (verticalDragging) return onVerticalTouch(event);
         if (!pagingDragging) return false;
+        if (seamDragging) return onSeamTouch(event);
         if (pagingVelocity != null) pagingVelocity.addMovement(event);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_MOVE:
@@ -399,6 +524,100 @@ public final class WidgetPaneView extends FrameLayout {
             default:
                 return true;
         }
+    }
+
+    /**
+     * The palette gesture's stream after its claim: nothing moves under the finger, and the lift
+     * asks up or down by the wall's keyboard swipe rule ({@link HomeSwipePolicy#release}).
+     */
+    private boolean onVerticalTouch(@NonNull MotionEvent event) {
+        if (pagingVelocity != null) pagingVelocity.addMovement(event);
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_UP: {
+                verticalDragging = false;
+                verticalCandidate = false;
+                float velocityY = 0f;
+                if (pagingVelocity != null) {
+                    pagingVelocity.computeCurrentVelocity(1000);
+                    velocityY = pagingVelocity.getYVelocity();
+                }
+                float density = getResources().getDisplayMetrics().density;
+                int way = HomeSwipePolicy.release(event.getY() - pagingDownY, velocityY,
+                    com.termux.app.wall.BorderDrag.KEYBOARD_COMMIT_DP * density,
+                    com.termux.app.wall.BorderDrag.KEYBOARD_FLING_DP_PER_SEC * density);
+                if (way != 0 && listener != null) listener.onFreeAreaVerticalSwipe(way < 0);
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                verticalDragging = false;
+                verticalCandidate = false;
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /** Whether a press lands on a widget on the page in view. */
+    private boolean onWidget(@NonNull MotionEvent event) {
+        if (grid.getVisibility() != VISIBLE) return false;
+        for (int i = grid.getChildCount() - 1; i >= 0; i--) {
+            View child = grid.getChildAt(i);
+            if (child instanceof WidgetCellView && child.getVisibility() == VISIBLE
+                && insideView(child, event)) return true;
+        }
+        return false;
+    }
+
+    private boolean seamOpen() {
+        return seam != null && seam.canLeaveForward();
+    }
+
+    private void beginSeamDrag(@NonNull MotionEvent event) {
+        if (seamVelocity == null) seamVelocity = VelocityTracker.obtain();
+        seamVelocity.clear();
+        addSeamMovement(event);
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        if (seam != null) seam.begin();
+    }
+
+    /** The seam's drag, read on screen: this view moves with the wall the finger is driving. */
+    private boolean onSeamTouch(@NonNull MotionEvent event) {
+        addSeamMovement(event);
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                if (seam != null) seam.drag(event.getRawX() - pagingDownRawX);
+                return true;
+            case MotionEvent.ACTION_UP: {
+                float velocityX = 0f;
+                if (seamVelocity != null) {
+                    seamVelocity.computeCurrentVelocity(1000);
+                    velocityX = seamVelocity.getXVelocity();
+                }
+                endSeamDrag();
+                if (seam != null) seam.end(velocityX);
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                endSeamDrag();
+                if (seam != null) seam.cancel();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private void endSeamDrag() {
+        pagingDragging = false;
+        pagingTracking = false;
+        seamDragging = false;
+    }
+
+    private void addSeamMovement(@NonNull MotionEvent event) {
+        if (seamVelocity == null) return;
+        MotionEvent screen = MotionEvent.obtain(event);
+        screen.setLocation(event.getRawX(), event.getRawY());
+        seamVelocity.addMovement(screen);
+        screen.recycle();
     }
 
     private float resistedDrag(float dx) {
@@ -454,11 +673,31 @@ public final class WidgetPaneView extends FrameLayout {
     private void setContentTranslationX(float value) {
         grid.setTranslationX(value);
         empty.setTranslationX(value);
+        if (pinnedLayer != null) {
+            pinnedLayer.animate().cancel();
+            pinnedLayer.setTranslationX(value);
+        }
+        if (listener != null) listener.onContentShifted();
+    }
+
+    /**
+     * How far the page's content stands off its rest, as a fraction of the pane's width,
+     * positive to the right: mid-swipe, and while a page slides in or back. 0 at rest.
+     */
+    public float contentShiftFraction() {
+        int width = getWidth();
+        return width <= 0 ? 0f : grid.getTranslationX() / width;
     }
 
     private void animateContentTranslationX() {
-        grid.animate().translationX(0f).setDuration(160).start();
+        // The grid's slide reports each frame, so the wallpaper pans on the page's own curve.
+        grid.animate().translationX(0f).setDuration(160)
+            .setUpdateListener(animation -> {
+                if (listener != null) listener.onContentShifted();
+            })
+            .start();
         empty.animate().translationX(0f).setDuration(160).start();
+        if (pinnedLayer != null) pinnedLayer.animate().translationX(0f).setDuration(160).start();
     }
 
     private static boolean insideNestedScrollingChild(@NonNull ViewGroup parent,
@@ -483,6 +722,7 @@ public final class WidgetPaneView extends FrameLayout {
 
     @Override protected void onDetachedFromWindow() {
         if (pagingVelocity != null) { pagingVelocity.recycle(); pagingVelocity = null; }
+        if (seamVelocity != null) { seamVelocity.recycle(); seamVelocity = null; }
         super.onDetachedFromWindow();
     }
 

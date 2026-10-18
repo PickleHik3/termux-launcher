@@ -38,7 +38,9 @@ import java.util.concurrent.RejectedExecutionException;
  * <p>One source per {@link BuiltinWidgetServices}. It runs only while a widget is subscribed:
  * the first subscriber registers a provider observer (debounced to one reload), the minute tick
  * (to reload when the day turns) and the permission listener; the last one to leave unregisters
- * all three, and every reload reads the kept months again too. The last result is kept across
+ * all three, the observer a turn later ({@link SourceLease}) so that a widget rebuilding in place
+ * keeps it rather than registering a new one in the system server, and every reload reads the
+ * kept months again too. The last result is kept across
  * that gap so a widget coming back draws at once.
  * While unsubscribed the source holds no reference to the services, so the weak map can let
  * both go with the page.</p>
@@ -147,6 +149,31 @@ final class CalendarEventsSource {
     @Nullable private LocalDate lastDay;
     @Nullable private ZoneId lastZone;
     @Nullable private ContentObserver observer;
+    @NonNull private final SourceLease observerLease = new SourceLease(SourceLease.on(main),
+        new SourceLease.Registration() {
+            @Override public boolean open() {
+                ContentObserver next = new ContentObserver(main) {
+                    @Override public void onChange(boolean selfChange) { scheduleReload(); }
+                };
+                try {
+                    context.getContentResolver().registerContentObserver(
+                        CalendarContract.CONTENT_URI, true, next);
+                    observer = next;
+                    return true;
+                } catch (RuntimeException ignored) {
+                    // No calendar provider: nothing will ever change, the tick still turns the day.
+                    return false;
+                }
+            }
+
+            @Override public void close() {
+                ContentObserver current = observer;
+                observer = null;
+                if (current == null) return;
+                try { context.getContentResolver().unregisterContentObserver(current); }
+                catch (RuntimeException ignored) { }
+            }
+        });
     private final MonthCache<MonthEvents> months = new MonthCache<>(MONTHS_KEPT);
     /** Months being read; a reload reads them again, under its own generation. */
     private final Set<YearMonth> monthsAsked = new HashSet<>();
@@ -197,7 +224,7 @@ final class CalendarEventsSource {
         main.removeCallbacks(reloadTask);
         generation++;
         monthsAsked.clear();
-        unregisterObserver();
+        observerLease.closeSoon();
     }
 
     private void onTick() {
@@ -222,13 +249,13 @@ final class CalendarEventsSource {
         lastDay = today;
         lastZone = zone;
         if (!hasPermission(context)) {
-            unregisterObserver();
+            observerLease.closeNow();
             months.clear();
             monthsAsked.clear();
             publish(new Snapshot(true, false, Collections.emptyList()));
             return;
         }
-        registerObserver();
+        observerLease.ensureOpen();
         Set<YearMonth> again = new LinkedHashSet<>(months.keySet());
         again.addAll(monthsAsked);
         monthsAsked.clear();
@@ -323,27 +350,5 @@ final class CalendarEventsSource {
         }
         Collections.sort(events, CalendarEvent.ORDER);
         return events;
-    }
-
-    private void registerObserver() {
-        if (observer != null) return;
-        ContentObserver next = new ContentObserver(main) {
-            @Override public void onChange(boolean selfChange) { scheduleReload(); }
-        };
-        try {
-            context.getContentResolver().registerContentObserver(CalendarContract.CONTENT_URI,
-                true, next);
-            observer = next;
-        } catch (RuntimeException ignored) {
-            // No calendar provider: nothing will ever change, the tick still turns the day.
-        }
-    }
-
-    private void unregisterObserver() {
-        ContentObserver current = observer;
-        observer = null;
-        if (current == null) return;
-        try { context.getContentResolver().unregisterContentObserver(current); }
-        catch (RuntimeException ignored) { }
     }
 }

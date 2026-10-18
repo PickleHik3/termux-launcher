@@ -352,6 +352,11 @@ final class FitStack extends ViewGroup {
         return count;
     }
 
+    /** Every child the stack measures, attached or left out. */
+    void collectAll(@NonNull List<View> out) {
+        for (Slot slot : slots) out.add(slot.view);
+    }
+
     /** The children the last measure kept, attached or about to be. */
     void collectShown(@NonNull List<View> out) {
         for (Slot slot : slots) if (slot.shown) out.add(slot.view);

@@ -4,16 +4,16 @@ This page lists every top-level row in Settings, in the order they appear, with 
 that explains it.
 
 Open Settings by holding a corner of the terminal and tapping the cog, by long-pressing the
-terminal and choosing **Settings**, or from the **Settings** shortcut on the app icon in another
-launcher. **Search settings** at the top finds any setting inside every page, so `fonts`,
-`ligatures` or `Shizuku` lead straight to the right place.
+terminal and choosing **Settings**, from **Settings** in the command palette on Home, or from the
+**Settings** shortcut on the app icon in another launcher. **Search settings** at the top finds any
+setting inside every page, so `fonts`, `ligatures` or `Shizuku` lead straight to the right place.
 
-## Launcher mode
+## Start in
 
-The first row: **Terminal**, **Terminal + Home** or **Terminal + Home + Display**. A preset that
-sets the apps row, A–Z index, drawer, widget page, Recents behaviour and the Linux display switch;
-it reads **Custom** once one of them differs. See
-[Get started](Get_Started.md#choose-how-you-will-use-it).
+The first row: **Home** (the default) or **Workspace**. Where the launcher opens after a restart;
+**Workspace** opens with one fresh shell window. See
+[Home screen and apps](Home_Screen_And_Apps.md#home-and-the-workspace). (It replaces the
+**Launcher mode** row of older versions.)
 
 ## Appearance
 
@@ -42,7 +42,7 @@ from `~/.termux/colors.properties`. See
 ## Apps
 
 "Dock, drawer and search": **Set as default launcher**, **Pinned apps**, **Swipe down for app
-drawer**, **Home widgets**, **Built-in widget style**, and the **Dock**, **Drawer layout**, **App
+drawer**, **Built-in widget style**, and the **Dock**, **Drawer layout**, **App
 search** and **Double-tap to lock** pages. See [Home screen and apps](Home_Screen_And_Apps.md) and
 [Widgets](Widgets.md).
 
@@ -75,9 +75,9 @@ covered on [launcherctl](LauncherCtl.md).
 
 ## Display
 
-"Desktop apps and touch controls": the **Display** switch for the Linux display, and its input,
-resolution, Linux apps, startup and troubleshooting pages. See
-[The Linux display](X11_Display.md).
+"Desktop apps and touch controls": the Linux display's input, resolution, Linux apps, startup and
+troubleshooting pages. There is nothing to switch on: the display starts when a Linux app or the
+**Display** entry in the app drawer asks for it. See [The Linux display](X11_Display.md).
 
 ## On-device AI
 

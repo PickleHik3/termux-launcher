@@ -228,6 +228,9 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         // every attached client goes.
         for (TermuxTerminalSessionActivityClient client : detachAllActivityClients())
             unsetTermuxTerminalSessionClient(client);
+        // An empty service kept running for the Home it showed has no reason to stay once the
+        // activity is gone: it stops, as plain Termux's does with its last shell.
+        updateNotification();
         return false;
     }
 
@@ -924,7 +927,8 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         // Refresh the text only while something keeps the service alive. The activity pushes this
         // during startup before the first session exists — entering updateNotification()'s empty
         // state there would requestStopService() and tear the whole app down mid-launch.
-        if (!mShellManager.mTermuxSessions.isEmpty() || !mShellManager.mTermuxTasks.isEmpty() || mWakeLock != null)
+        if (!mShellManager.mTermuxSessions.isEmpty() || !mShellManager.mTermuxTasks.isEmpty() || mWakeLock != null
+            || activityKeepsServiceWhenEmpty())
             updateNotification();
     }
 
@@ -988,12 +992,25 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      * Update the shown foreground service notification after making any changes that affect it.
      */
     private synchronized void updateNotification() {
-        if (mWakeLock == null && mShellManager.mTermuxSessions.isEmpty() && mShellManager.mTermuxTasks.isEmpty()) {
+        if (mWakeLock == null && mShellManager.mTermuxSessions.isEmpty() && mShellManager.mTermuxTasks.isEmpty()
+            && !activityKeepsServiceWhenEmpty()) {
             // Exit if we are updating after the user disabled all locks with no sessions or tasks running.
+            // Not while the launcher shows Home over an empty Workspace: the activity binds without
+            // BIND_AUTO_CREATE, so a stopped service disconnects it (onServiceDisconnected) and it
+            // finishes, dropping the user to another launcher (WallRow.lastShellClosedShowsHome).
             requestStopService();
         } else {
             ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
         }
+    }
+
+    /**
+     * Whether the attached activity outlives the last shell: Home stays on screen over an empty
+     * Workspace, and the activity finishes when this service stops. False with no activity attached.
+     */
+    private boolean activityKeepsServiceWhenEmpty() {
+        TermuxTerminalSessionActivityClient client = mTermuxTerminalSessionActivityClient;
+        return client != null && client.keepsServiceWhenEmpty();
     }
 
     private void setCurrentStoredTerminalSession(TerminalSession terminalSession) {

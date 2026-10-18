@@ -68,8 +68,53 @@ public class LauncherToolRegistryTest {
         // value rather than as a prompt, and by app.open_help, the command palette's door to help,
         // and by keyboard.clipboard, the keyboard's clipboard panel on a key or a chord, and by
         // keyboard.toggle_enabled, which turns the keyboard off so a tap no longer raises it, and by
-        // voice.dictate, the Dictate key that starts a dictation on any place.
-        assertEquals(84, registry.getUiTools().size());
+        // voice.dictate, the Dictate key that starts a dictation on any place, and by window.move
+        // with its palette pair window.move_left and window.move_right, which reorder the row, and
+        // by pane.consume and pane.expel, Niri's column moves on the row.
+        assertEquals(89, registry.getUiTools().size());
+    }
+
+    @Test
+    public void windowMove_isRemoteAndItsOneStepPairIsThePalettes() {
+        LauncherToolRegistry.ToolMetadata move = registry.getTool("window.move");
+        assertNotNull(move);
+        assertEquals("to", move.schema.optJSONArray("required").optString(0));
+        // Titled like every action ("Move window to…"); its one free-text argument is what the
+        // palette's argument row asks for.
+        assertEquals(com.termux.R.string.tool_window_move, move.titleRes);
+        for (String name : new String[]{"window.move", "window.move_left", "window.move_right"}) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
+            assertNotNull(name, tool);
+            assertEquals(name, LauncherToolRegistry.ToolExecutor.TERMINAL, tool.executor);
+            // Workspace only: Home has no row of windows to reorder.
+            assertTrue(name, tool.terminalOnly);
+        }
+        for (String name : new String[]{"window.move_left", "window.move_right"}) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
+            assertTrue(name + " needs a titleRes", tool.titleRes != 0);
+            assertEquals(name, null, tool.schema.optJSONArray("required"));
+        }
+    }
+
+    @Test
+    public void consumeAndExpel_arePlainPaneRowsOnNiriKeys() {
+        String[][] tools = {{"pane.consume", "from", "ctrl+alt+,"}, {"pane.expel", "to", "ctrl+alt+."}};
+        for (String[] spec : tools) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(spec[0]);
+            assertNotNull(spec[0], tool);
+            assertEquals(spec[0], LauncherToolRegistry.ToolExecutor.TERMINAL, tool.executor);
+            assertEquals(spec[0], LauncherToolRegistry.CATEGORY_PANE, tool.category);
+            assertTrue(spec[0] + " needs a titleRes", tool.titleRes != 0);
+            assertTrue(spec[0], tool.terminalOnly);
+            assertTrue(spec[0], tool.selfEvident);
+            // The side is optional, right by default, so the palette offers one plain row.
+            assertNull(spec[0], tool.schema.optJSONArray("required"));
+            JSONObject side = tool.schema.optJSONObject("properties").optJSONObject(spec[1]);
+            assertNotNull(spec[0], side);
+            assertEquals(spec[0], 2, side.optJSONArray("enum").length());
+            assertEquals(spec[0], 1, tool.defaultBindings.size());
+            assertEquals(spec[0], spec[2], tool.defaultBindings.get(0).stroke);
+        }
     }
 
     @Test

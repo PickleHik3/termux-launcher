@@ -34,7 +34,8 @@ apps first-class, but need a rootless server; a display window per X display giv
 feel today, and the drawer's Displays group lists the toplevels by name for raising.
 
 Consequences: the Layout editor edits two layouts, Home's (dock rows and keyboard only) and the
-Workspace's (normal and minimal), and Style, Corners, Margin and Minimal mode are Workspace-only.
+Workspace's (normal and minimal). Style, Corners and Margin are Home's own on Home (seeded from
+the Workspace's, amended by phase two slice 2); Minimal mode stays Workspace-only.
 Appearance stays one look. The usage-mode, Display-switch and per-place preferences migrate once,
 with no toggle back to the old wall. The word place leaves the glossary; page, Home page, window,
 display window, Workspace and wall take over, and the saved sets called workspaces become Saved

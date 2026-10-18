@@ -87,8 +87,6 @@ public final class X11LinuxAppRunner {
 
     /** What the runner needs from the activity. */
     public interface Host {
-        boolean isDisplayEnabled();
-        void turnOnDisplay();
         boolean isDisplayRunning();
         void startDisplay();
         /**
@@ -99,7 +97,11 @@ public final class X11LinuxAppRunner {
          * from a bare field afterwards.
          */
         boolean runScript(@NonNull String script, @NonNull ScriptExitListener onExit);
-        void showDisplayPlace();
+        /**
+         * Open the display window, or bring it up if it is open: on the row, and the wall on it.
+         * The display may not be running yet; {@link #startDisplay} starts it.
+         */
+        void showDisplayWindow();
         void showNotice(@NonNull String message);
         /**
          * Ask the user {@code message} — one plain sentence, already built — before a second
@@ -145,7 +147,7 @@ public final class X11LinuxAppRunner {
 
     /**
      * The drawer tapped {@code app}, or launcherctl asked for it. Always continues on the main
-     * thread: the host shows the Display place and reads the controller, both of which are the
+     * thread: the host shows the display window and reads the controller, both of which are the
      * activity's, and the API server calls in from a worker.
      */
     public void run(@NonNull LinuxAppCatalog.LinuxApp app) {
@@ -160,7 +162,7 @@ public final class X11LinuxAppRunner {
         if (app.session && runningSession != null) {
             if (runningSession.id.equals(app.id)) {
                 // Already the desktop on the display: the tap only has to show it.
-                host.showDisplayPlace();
+                host.showDisplayWindow();
                 return;
             }
             String message = context.getString(com.termux.R.string.termux_x11_session_replace,
@@ -168,8 +170,9 @@ public final class X11LinuxAppRunner {
             host.askBeforeReplacingSession(message, () -> replaceSession(app));
             return;
         }
-        if (!host.isDisplayEnabled()) host.turnOnDisplay();
-        host.showDisplayPlace();
+        // Nothing to switch on: the display window opens, and the display starts below if it is
+        // not running (ADR 0008).
+        host.showDisplayWindow();
         if (host.isDisplayRunning()) {
             launch(app, false);
             return;

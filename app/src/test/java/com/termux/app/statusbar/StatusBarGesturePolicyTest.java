@@ -162,4 +162,37 @@ public class StatusBarGesturePolicyTest {
         assertFalse(StatusBarGesturePolicy.expansionAllowed(Edge.LEFT));
         assertFalse(StatusBarGesturePolicy.expansionAllowed(Edge.RIGHT));
     }
+
+    /** The stream over a bar that has the capsule: resting as one, or able to fold to one. */
+    private static StatusBarGesturePolicy capsulePolicy(Edge edge, TopStatusBarState state,
+                                                        boolean capsule) {
+        return new StatusBarGesturePolicy(new StatusBarGesturePolicy.Down(0, 10, 10, 10, 10,
+            100, state, false, true, false, false,
+            StatusBarGesturePolicy.expansionAllowed(edge), 8, edge, capsule,
+            StatusBarFormPolicy.capsuleAllowed(edge)));
+    }
+
+    @Test public void theCapsuleOpensAwayFromItsEdgeAndCompactFoldsIntoIt() {
+        for (Edge edge : new Edge[]{Edge.TOP, Edge.BOTTOM}) {
+            float open = 40f * StatusBarGesturePolicy.expandSign(edge);
+            assertEquals(edge + ": the capsule opens",
+                StatusBarGesturePolicy.Claim.EXPAND_SWIPE,
+                across(capsulePolicy(edge, TopStatusBarState.COMPACT, true), edge, open));
+            assertEquals(edge + ": the capsule has nothing to fold",
+                StatusBarGesturePolicy.Claim.CHILD_OWNED,
+                across(capsulePolicy(edge, TopStatusBarState.COMPACT, true), edge, -open));
+            assertEquals(edge + ": compact folds into the capsule",
+                StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE,
+                across(capsulePolicy(edge, TopStatusBarState.COMPACT, false), edge, -open));
+            assertEquals(edge + ": expanded still folds",
+                StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE,
+                across(capsulePolicy(edge, TopStatusBarState.EXPANDED, false), edge, -open));
+        }
+        // A column has no capsule: compact there has nothing to fold, as before.
+        for (Edge edge : new Edge[]{Edge.LEFT, Edge.RIGHT}) {
+            float open = 40f * StatusBarGesturePolicy.expandSign(edge);
+            assertEquals(edge + "", StatusBarGesturePolicy.Claim.CHILD_OWNED,
+                across(capsulePolicy(edge, TopStatusBarState.COMPACT, false), edge, -open));
+        }
+    }
 }

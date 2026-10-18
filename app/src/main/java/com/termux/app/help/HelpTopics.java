@@ -472,7 +472,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_workspace_step1, R.string.help_topic_workspace_step2)
             .related("windows", "panes").terms("workspace", "session")
             .aliases(R.string.help_topic_workspace_aliases)
-            .doc("Panes_Windows_And_Sessions.md#workspaces"));
+            .doc("Panes_Windows_And_Sessions.md#saved-sessions"));
 
         // 6. Make it yours.
         b.add(topic("appearance_editor", Group.YOURS, R.string.help_topic_appearance_title,
@@ -538,7 +538,7 @@ public final class HelpTopics {
                 R.string.help_topic_gui_apps_step3)
             .related("display_apps", "tlstore", "fix_display").terms("place")
             .aliases(R.string.help_topic_gui_apps_aliases)
-            .doc("X11_Display.md#turn-it-on"));
+            .doc("X11_Display.md#set-it-up"));
         b.add(topic("touchpad", Group.DISPLAY, R.string.help_pad_title,
                 R.string.help_topic_touchpad_purpose, R.string.help_topic_touchpad_action)
             .steps(R.string.help_pad_one, R.string.help_pad_two, R.string.help_pad_three)

@@ -97,6 +97,11 @@ public final class StatusCardHost {
      */
     public void setDropEdge(@Nullable View dropEdge) {
         mDropEdge = dropEdge;
+        // The bar a card hangs off holds its form while the card is open: it never idles into
+        // the capsule from under one.
+        if (dropEdge instanceof StatusBarSwipeLayout) {
+            ((StatusBarSwipeLayout) dropEdge).setCardHost(this);
+        }
     }
 
     public boolean isShowing() {

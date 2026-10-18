@@ -32,6 +32,32 @@ public final class X11DisplayReceiver extends BroadcastReceiver {
     /** The last announcement nobody was there to take. */
     @Nullable private static Bundle pendingAnnouncement;
 
+    /**
+     * Told when a server announces itself and no controller is there to take it: a display started
+     * from a shell, or by Start with the launcher. The display window opens on demand (ADR 0008),
+     * so the activity builds its controller then, and the controller takes the kept announcement.
+     */
+    public interface UnclaimedListener {
+        void onUnclaimedAnnouncement();
+    }
+
+    @Nullable private static UnclaimedListener unclaimedListener;
+
+    /** The activity that opens the display window; null takes it out. */
+    public static void setUnclaimedListener(@Nullable UnclaimedListener listener) {
+        unclaimedListener = listener;
+    }
+
+    /** Take {@code listener} out, if it is still the one set; a newer activity's stays. */
+    public static void clearUnclaimedListener(@NonNull UnclaimedListener listener) {
+        if (unclaimedListener == listener) unclaimedListener = null;
+    }
+
+    /** Whether an announcement is waiting for a controller. */
+    public static boolean hasKeptAnnouncement() {
+        return pendingAnnouncement != null;
+    }
+
     /** The controller that owns the page now. */
     static void register(@NonNull X11DisplayHostController value) {
         controller = value;
@@ -71,6 +97,8 @@ public final class X11DisplayReceiver extends BroadcastReceiver {
             // keeps knocking every second anyway, so nothing is lost if this is stale by then.
             Logger.logVerbose(LOG_TAG, "A display server announced itself with no page attached");
             pendingAnnouncement = bundle;
+            UnclaimedListener listener = unclaimedListener;
+            if (listener != null) listener.onUnclaimedAnnouncement();
             return;
         }
         host.onServerAnnounced(bundle);

@@ -53,8 +53,8 @@ public class WidgetPaneFrameTapTest {
     private static final int HEIGHT = 800;
     /** The square each corner keeps, the same one a terminal pane holds. */
     private static final float CORNER_DP = CornerZones.PANE_SIZE_DP;
-    /** The resting tab: five 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
-    private static final float TAB_WIDTH_DP = 192f;
+    /** The resting tab: four 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
+    private static final float TAB_WIDTH_DP = 154f;
     private static final float TAB_INSET_DP = 0f;
     /** One button and the gap after it. */
     private static final float TAB_STEP_DP = 38f;
@@ -133,8 +133,8 @@ public class WidgetPaneFrameTapTest {
         return buttonX(activity, 2);
     }
 
-    /** The fourth button: minimal mode, the same door every place's tab carries. */
-    private static float minimalX(Activity activity) {
+    /** The fourth button: help. Home has no minimal mode, so no minimal button stands before it. */
+    private static float fourthX(Activity activity) {
         return buttonX(activity, 3);
     }
 
@@ -460,12 +460,11 @@ public class WidgetPaneFrameTapTest {
     }
 
     /**
-     * Minimal mode is one mode for every place, so Home's tab carries the same button in and
-     * out of it as the terminal's and the display's: a tap flips it and puts the tab away, and
-     * the next tap flips it back.
+     * Home has no minimal mode (ADR 0008): the tab carries no button in or out of it, and the
+     * fourth button, where the windows' tabs keep it, is help.
      */
     @Test
-    public void theTabCarriesTheMinimalModeButton() {
+    public void theTabCarriesNoMinimalModeButton() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
@@ -473,16 +472,9 @@ public class WidgetPaneFrameTapTest {
         holdCorner(page);
         RectF bounds = new RectF();
         page.controlsTab().tabBounds(bounds);
-        tap(page, minimalX(activity), bounds.centerY());
-        assertEquals(Collections.singletonList("minimal"), calls.log);
-        assertTrue(calls.minimal);
-        assertFalse(page.isControlsTabShown());
-
-        holdCorner(page);
-        tap(page, minimalX(activity), bounds.centerY());
-        assertEquals(Arrays.asList("minimal", "minimal"), calls.log);
-        assertFalse("the same button is the way back", calls.minimal);
-        assertFalse(page.isControlsTabShown());
+        tap(page, fourthX(activity), bounds.centerY());
+        assertEquals(Collections.singletonList("help"), calls.log);
+        assertFalse("minimal mode never flips from Home", calls.minimal);
     }
 
     /**

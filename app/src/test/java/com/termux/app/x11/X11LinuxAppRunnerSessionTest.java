@@ -203,11 +203,9 @@ public class X11LinuxAppRunnerSessionTest {
         int shown;
         int displayStarts;
 
-        @Override public boolean isDisplayEnabled() { return true; }
-        @Override public void turnOnDisplay() { }
         @Override public boolean isDisplayRunning() { return displayRunning; }
         @Override public void startDisplay() { displayStarts++; }
-        @Override public void showDisplayPlace() { shown++; }
+        @Override public void showDisplayWindow() { shown++; }
         @Override public void showNotice(@NonNull String message) { notices.add(message); }
 
         @Override public boolean runScript(@NonNull String script,

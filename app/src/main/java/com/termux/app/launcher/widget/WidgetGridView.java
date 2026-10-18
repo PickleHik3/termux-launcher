@@ -44,7 +44,12 @@ public final class WidgetGridView extends ViewGroup {
     private final Map<Integer, WidgetCellView> cells = new HashMap<>();
     private final Map<Integer, Long> committedSizes = new HashMap<>();
     private final Map<Integer, Long> deliveredSizes = new HashMap<>();
-    private final int edgePadding;
+    /** Widgets whose cell changed size since the last {@link #resyncSizes}. */
+    private final Set<Integer> resizedSinceResync = new HashSet<>();
+    /** Widgets a resync asked to be told their size again, whatever the ledger says. */
+    private final Set<Integer> retellSize = new HashSet<>();
+    /** The rim round the cells, in px: Home's Margin, pushed in through {@link #setEdgePadding}. */
+    private int edgePadding;
     private final int gap;
     private final int touchSlop;
     private final Runnable emptyLongPressFire = this::fireEmptyLongPress;
@@ -56,7 +61,6 @@ public final class WidgetGridView extends ViewGroup {
 
     public WidgetGridView(@NonNull Context context) {
         super(context);
-        edgePadding = Math.round(WidgetGridMetrics.EDGE_DP * getResources().getDisplayMetrics().density);
         gap = Math.round(WidgetGridMetrics.GAP_DP * getResources().getDisplayMetrics().density);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setClipChildren(true);
@@ -73,6 +77,19 @@ public final class WidgetGridView extends ViewGroup {
     }
 
     public void setListener(@Nullable Listener value) { listener = value; }
+
+    /**
+     * The rim between the page's edge and the cells, in px: Home's Margin, which the activity
+     * pushes in ({@code WidgetPaneController#setGridEdge}). A change re-lays the cells at once;
+     * the sizes reach the providers through the same settle any other layout change waits for.
+     */
+    public void setEdgePadding(int px) {
+        int wanted = Math.max(0, px);
+        if (edgePadding == wanted) return;
+        edgePadding = wanted;
+        requestLayout();
+        invalidate();
+    }
 
     /**
      * The page's frame says a corner square may still take this finger, so the grid and its cells
@@ -104,8 +121,7 @@ public final class WidgetGridView extends ViewGroup {
         }
         WidgetCellView cell = cells.remove(released);
         if (cell != null) removeView(cell);
-        committedSizes.remove(released);
-        deliveredSizes.remove(released);
+        forgetSizes(released);
     }
 
     public void refresh(@NonNull WidgetGridDefinition grid,
@@ -168,7 +184,7 @@ public final class WidgetGridView extends ViewGroup {
             }
         }
         for (int id : stale) {
-            cells.remove(id); committedSizes.remove(id); deliveredSizes.remove(id);
+            cells.remove(id); forgetSizes(id);
             if (id < 0 && builtinFactory != null) builtinFactory.release(id);
         }
         requestLayout();
@@ -223,7 +239,29 @@ public final class WidgetGridView extends ViewGroup {
 
     @NonNull public WidgetGridMetrics metrics() {
         return new WidgetGridMetrics(new Rect(0, 0, getWidth(), getHeight()), 0,
-            edgePadding, gap, definition, getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+            edgePadding, gap, definition, getLayoutDirection() == LAYOUT_DIRECTION_RTL,
+            reservedRows);
+    }
+
+    /** Rows kept empty under the grid for an always-on keyboard; see {@link #setReservedRows}. */
+    private int reservedRows;
+
+    /**
+     * The rows an always-on keyboard took off the grid ({@code WidgetPaneController
+     * #applyWantedGrid}). The grid keeps its whole height on Home, under the keyboard too, so the
+     * cells are still cut as if those rows were there: every cell keeps its height and the grid
+     * ends that many rows above the bottom, rather than its fewer rows stretching to fill it.
+     */
+    public void setReservedRows(int rows) {
+        int wanted = Math.max(0, rows);
+        if (reservedRows == wanted) return;
+        reservedRows = wanted;
+        requestLayout();
+        invalidate();
+    }
+
+    public int reservedRows() {
+        return reservedRows;
     }
 
     @Nullable public WidgetCellView cellForId(int id) { return cells.get(id); }
@@ -243,7 +281,8 @@ public final class WidgetGridView extends ViewGroup {
         int height = MeasureSpec.getSize(heightMeasureSpec);
         setMeasuredDimension(resolveSize(width, widthMeasureSpec), resolveSize(height, heightMeasureSpec));
         WidgetGridMetrics metrics = new WidgetGridMetrics(new Rect(0, 0, width, height), 0,
-            edgePadding, gap, definition, getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+            edgePadding, gap, definition, getLayoutDirection() == LAYOUT_DIRECTION_RTL,
+            reservedRows);
         for (LauncherWidgetRecord record : records) {
             WidgetCellView child = cells.get(record.appWidgetId);
             if (child == null) continue;
@@ -265,6 +304,9 @@ public final class WidgetGridView extends ViewGroup {
                 long packed = packSize(child.providerContentWidth(),
                     child.providerContentHeight(), orientation);
                 Long previous = committedSizes.put(record.appWidgetId, packed);
+                if (previous != null && previous.longValue() != packed) {
+                    resizedSinceResync.add(record.appWidgetId);
+                }
                 if (previous == null || previous.longValue() != packed
                     || packed != deliveredSizes.getOrDefault(record.appWidgetId, Long.MIN_VALUE)) {
                     sizeDeliveryPending = true;
@@ -287,9 +329,45 @@ public final class WidgetGridView extends ViewGroup {
 
     /** The wall came to rest on this page, or left it; a size held meanwhile goes out now. */
     public void setPageAtRest(boolean atRest) {
-        if (pageAtRest == atRest) return;
+        boolean arrived = atRest && !pageAtRest;
         pageAtRest = atRest;
-        if (atRest && sizeDeliveryPending) scheduleSizeDelivery();
+        // Held sizes go out on arrival, and on any later word that the wall rests here: a size
+        // held for a reason the grid cannot see (off screen, not yet attached) is not left behind.
+        if (atRest && (arrived || sizeDeliveryPending) && hasUndeliveredSize()) {
+            sizeDeliveryPending = true;
+            scheduleSizeDelivery();
+        }
+    }
+
+    /**
+     * A session that may have resized the cells several times has ended (the Appearance editor's
+     * Done, Undo or Discard): every widget whose cell changed size since the last resync is told
+     * its size again once the grid rests, even where the ledger says the provider has it. The
+     * cells can pass through several sizes in a session (each Margin tick, a Style's new chrome,
+     * the Undo back), a provider renders each asynchronously, and the widget must end on the size
+     * it is shown at, not on whichever render landed last (2026-10-18: a Clock drawn for the
+     * Margin before an Undo, kept until a restart). Widgets that did not move are not woken.
+     */
+    public void resyncSizes() {
+        retellSize.addAll(resizedSinceResync);
+        resizedSinceResync.clear();
+        sizeDeliveryPending = true;
+        scheduleSizeDelivery();
+    }
+
+    private boolean hasUndeliveredSize() {
+        if (!retellSize.isEmpty()) return true;
+        for (Map.Entry<Integer, Long> entry : committedSizes.entrySet()) {
+            if (!entry.getValue().equals(deliveredSizes.get(entry.getKey()))) return true;
+        }
+        return false;
+    }
+
+    private void forgetSizes(int appWidgetId) {
+        committedSizes.remove(appWidgetId);
+        deliveredSizes.remove(appWidgetId);
+        resizedSinceResync.remove(appWidgetId);
+        retellSize.remove(appWidgetId);
     }
 
     /**
@@ -322,15 +400,17 @@ public final class WidgetGridView extends ViewGroup {
         for (LauncherWidgetRecord record : records) {
             if (record.state != LauncherWidgetRecord.State.ACTIVE) continue;
             Long packed = committedSizes.get(record.appWidgetId);
-            if (packed == null
-                || packed == deliveredSizes.getOrDefault(record.appWidgetId, Long.MIN_VALUE)) {
+            boolean retell = retellSize.contains(record.appWidgetId);
+            if (packed == null || (!retell
+                && packed == deliveredSizes.getOrDefault(record.appWidgetId, Long.MIN_VALUE))) {
                 continue;
             }
             WidgetCellView child = cells.get(record.appWidgetId);
             if (child == null) continue;
             controller.onHostSizeCommitted(record.appWidgetId, child.providerContentWidth(),
-                child.providerContentHeight(), orientation);
+                child.providerContentHeight(), orientation, retell);
             deliveredSizes.put(record.appWidgetId, packed);
+            retellSize.remove(record.appWidgetId);
         }
     }
 
