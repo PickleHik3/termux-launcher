@@ -2707,16 +2707,6 @@
     <string name="tour_tip_float">Hold an empty spot on Home and tap Terminal for a Home float.</string>
     <string name="tour_tip_layout">Tap Layout in the same menu to arrange the dock.</string>
     <string name="tour_tip_replay">Replay this tour from Settings \u203A About &amp; help.</string>
-    <string name="tour_chapter_getting_around">Getting around</string>
-    <string name="tour_chapter_status_and_apps">Status bar and apps</string>
-    <string name="tour_chapter_commands_and_help">Commands and help</string>
-    <string name="tour_title_places">Slide between places</string>
-    <string name="tour_body_places">Hold the top or bottom border, then swipe left or right to switch places.</string>
-    <string name="tour_title_status_compact">Make it compact again</string>
-    <string name="tour_body_status_compact">Swipe up from the same edge.</string>
-    <string name="tour_card_return_to_terminal">Hold the top or bottom border, then swipe left or right to get back to the terminal and continue.</string>
-    <string name="tour_tip_wallpaper">Set your wallpaper: hold any corner and tap Appearance.</string>
-    <string name="tour_tip_shortcuts">Tap Ctrl, then Alt, to see every shortcut.</string>
     <!-- How far the offline models have downloaded: "Offline models · 1.2 GB of 3.1 GB". -->
     <string name="tour_models_progress">Offline models · %1$s of %2$s</string>
     <!-- The closing card's offer: "Offline voice & AI · 3.1 GB". -->
