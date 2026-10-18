@@ -110,9 +110,10 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    and anywhere (`find_action`: the palette from Home's free area or a corner tab, heard now from
    the palette's own funnel; `find_help`: a window's corner, then ?). Each stage names its half
    of the wall (`TourStep.Side`): a card read on the other half asks the way there, and a signal
-   heard there does not clear it. `resetHome` is the home press (Home page 1, keyboard down) and
-   leaves the Workspace's keyboard remembered up; with no window beside Home the seam lesson is
-   dropped, without Home both Home lessons. `border_drag` became `page_swipe` (help's practice
+   heard there does not clear it. Each lesson starts on its first stage's half (`TourRun.startSide`,
+   `HomeHost.resetFor`): Home page 1 as the home press leaves it, or the first window with its
+   keyboard up and the status bar folded; the closing card shows where the last lesson ended. With
+   no window beside Home the seam lesson is dropped, without Home both Home lessons. `border_drag` became `page_swipe` (help's practice
    too); `RUN_VERSION` 8. Unit tests green; emulator pass owed (device-checks, slice 6).
 7. **The icon grid on Home pages**: app icons, folders, drag between pages. Born on slice 2b's
    rule: its rim is Home's Margin, as the widget grid's is.

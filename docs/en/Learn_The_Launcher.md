@@ -115,8 +115,9 @@ None of these are needed for the launcher and terminal:
 
 The tour plays once, on the wall itself, when you tap **Take the tour** on the Welcome sheet. It
 starts on Home page 1. Each card glows the control it wants you to try and clears when you do the
-real gesture; **Skip** is on every card. Between lessons the wall goes back to Home page 1, so a
-lesson taught on a window first asks you to swipe across to it. Six lessons in three chapters:
+real gesture; **Skip** is on every card. Each lesson starts where it is taught: Home page 1, or
+your first window. If you wander to the other half mid-lesson, the card tells you the way back. Six
+lessons in three chapters:
 
 **Home**
 

@@ -644,18 +644,22 @@ Not seen: everything else listed under the sections below.
   the first card stands on Home page 1. Each lesson clears by its real gesture and the next card
   follows: swipe left on Home's free area onto the first window, then a sideways swipe right
   along the window's bottom border back to Home; swipe down on the apps row (the drawer opens);
-  on a window, keyboard swipe down then up; status bar slow pull down from the top border (opens
-  whole), quick swipe up (folds); swipe up on Home's free area (palette and keyboard); hold a
-  window's corner, tap ?; the closing card's **Start** ends it. A card taught on the other half
-  reads the way there ("Swipe left past your last Home page…", "…or press Home…") and glows
-  nothing.
+  then the wall slides to the first window by itself, keyboard up, and the keyboard card stands
+  there (no "swipe to your window" card): keyboard swipe down then up; the status card follows on
+  the same window with the bar folded: slow pull down from the top border (opens whole), quick
+  swipe up (folds); the wall slides back to Home page 1 for the palette card: swipe up on Home's
+  free area (palette and keyboard); then to the window again: hold its corner, tap ?; the closing
+  card shows over that window and its **Start** ends it.
 - Owed · the half rule: on the keyboard card, swipe back to Home with the keyboard up: the card
-  is not cleared (the log reads "ignored: it happened on the other half of the wall"), and going
-  back to the window still asks to put the keyboard away.
+  turns to the way back ("Swipe left past your last Home page…") and glows nothing, it is not
+  cleared (the log reads "ignored: it happened on the other half of the wall"), and back on the
+  window it still asks to put the keyboard away. On the apps card, a border drag onto a window
+  turns it to "…or press Home…".
 - Owed · **Skip** on a card moves to the next lesson; Settings › About & help › **Replay tour**
   plays the whole run again from the Welcome sheet; `adb shell am force-stop com.termux` mid-run
   (on the status card, say) and relaunch: the run resumes on the same lesson from its first half,
-  on Home page 1, with no Welcome sheet. The tour never opens a second shell (`ps -A | grep bash`
+  on the half it starts on (the window, for the status card), with no Welcome sheet. Help ›
+  **Try it** on the keyboard topic from Home lands on a window with the keyboard up. The tour never opens a second shell (`ps -A | grep bash`
   shows one before and after the run; the window bar shows one window).
 - Owed · the skip rules: Home is always on the wall (`isWidgetsPageWanted`), so there is no
   terminal-only install to try; the Home lessons' skip without Home is unit-tested
