@@ -543,6 +543,16 @@ Not seen: everything else listed under the sections below.
   on Home, a jump to a window from the drawer by id) snaps, as the page itself does; a session
   switch (vertical) re-spreads at once.
 
+- Seen 2026-10-18 (faf8596db, emulator, device-checker): 2 Home pages + 3 windows pan at even
+  135 px steps (640 → 100 px, the last window at the picture's right edge; 270 px steps with
+  3 pages); the mid-slide offset follows the finger through the seam with no jump; frost on the
+  dock and extra keys lines up with the backdrop; landscape: no pan; Low-memory on hides the
+  wallpaper (solid look), off: the pan returns; adding windows snaps by at most one step. Partial:
+  a window-bar jump from window 1 to 3 snapped 196 px in one frame then eased 58 px over four,
+  rather than panning over both steps (the nudge's departure window is probably not reaching
+  `nudgeTerminalPage`); a one-frame 40–50 px blip at a drag's end. Not seen: the Display page,
+  dark theme, keyboard up, Reduce motion. Once, three `sh` windows fell to one after a slow swipe
+  and taps, not reproduced.
 ### Wall rework phase two: slice 4, Saved sessions keep Home floats (feat/wall-rework-phase2)
 - Owed · commits "feat(wall): saved sessions record a Home float's page and shape (v4)" and
   "feat(wall): a saved Home float loads back as a Home float on its page" · emulator, portrait,
