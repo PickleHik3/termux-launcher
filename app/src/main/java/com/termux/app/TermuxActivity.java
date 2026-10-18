@@ -26332,6 +26332,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.moveWindow(from, to);
         }
 
+        @Override public boolean consumeWindow(boolean fromLeft) {
+            return TermuxActivity.this.consumeWindow(fromLeft);
+        }
+
+        @Override public boolean expelPane(boolean toLeft) {
+            return TermuxActivity.this.expelPane(toLeft);
+        }
+
         @Override public int currentWindowCount() {
             return getCurrentWindowCount();
         }

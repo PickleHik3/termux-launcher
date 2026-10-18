@@ -177,6 +177,8 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_WINDOW_MOVE = LauncherToolRegistry.TOOL_WINDOW_MOVE;
     public static final String TOOL_WINDOW_MOVE_LEFT = LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT;
     public static final String TOOL_WINDOW_MOVE_RIGHT = LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT;
+    public static final String TOOL_PANE_CONSUME = LauncherToolRegistry.TOOL_PANE_CONSUME;
+    public static final String TOOL_PANE_EXPEL = LauncherToolRegistry.TOOL_PANE_EXPEL;
     public static final String TOOL_WINDOW_RENAME = "window.rename";
     public static final String TOOL_SESSION_RENAME = "session.rename";
     public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
@@ -387,6 +389,8 @@ public final class TerminalActionDispatcher {
             case TOOL_WINDOW_MOVE:
             case TOOL_WINDOW_MOVE_LEFT:
             case TOOL_WINDOW_MOVE_RIGHT:
+            case TOOL_PANE_CONSUME:
+            case TOOL_PANE_EXPEL:
             case TOOL_WINDOW_RENAME:
             case TOOL_SESSION_RENAME:
             case TOOL_PANE_RENAME:
@@ -1400,6 +1404,46 @@ public final class TerminalActionDispatcher {
                     }
                     // Places counted from 1, as 'to' takes them.
                     return ok().put("from", from + 1).put("to", target + 1);
+                }
+
+                case TOOL_PANE_CONSUME: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    int side = ColumnPolicy.side(
+                        arguments.has("from") ? arguments.optString("from", "") : null);
+                    if (side == ColumnPolicy.INVALID) {
+                        return error(400, "bad_request", "Invalid 'from'; expected left or right");
+                    }
+                    boolean fromLeft = side == ColumnPolicy.LEFT;
+                    String named = fromLeft ? "left" : "right";
+                    int source = ColumnPolicy.consumeSource(host.currentWindowIndex(),
+                        host.currentWindowCount(), fromLeft);
+                    if (source == ColumnPolicy.INVALID || !host.consumeWindow(fromLeft)) {
+                        return error(409, "no_window",
+                            "There is no window to the " + named + " to consume");
+                    }
+                    // Places counted from 1, as window.move counts them.
+                    return ok().put("from", named).put("consumed", source + 1)
+                        .put("window", host.currentWindowIndex() + 1);
+                }
+
+                case TOOL_PANE_EXPEL: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    int side = ColumnPolicy.side(
+                        arguments.has("to") ? arguments.optString("to", "") : null);
+                    if (side == ColumnPolicy.INVALID) {
+                        return error(400, "bad_request", "Invalid 'to'; expected left or right");
+                    }
+                    boolean toLeft = side == ColumnPolicy.LEFT;
+                    if (ColumnPolicy.expelTarget(host.currentWindowIndex(),
+                            host.currentWindowCount(), toLeft) == ColumnPolicy.INVALID) {
+                        return error(409, "no_window", "There is no window to expel a pane from");
+                    }
+                    if (!host.expelPane(toLeft)) {
+                        return error(409, "single_pane",
+                            "Expelling requires a window with more than one pane");
+                    }
+                    return ok().put("to", toLeft ? "left" : "right")
+                        .put("window", host.currentWindowIndex() + 1);
                 }
 
                 case TOOL_WINDOW_RENAME: {
