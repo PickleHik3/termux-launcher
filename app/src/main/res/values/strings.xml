@@ -1972,6 +1972,9 @@
                 <!-- The chooser above the miniature. The header already says what is edited, so
                      this row only has to say which of its two layouts is on the picture. -->
                 <string name="termux_layout_editor_orientation">Orientation</string>
+                <!-- The Home filter beside the orientation toggle: on, the picture and every edit
+                     are Home's layout; off, the window's. -->
+                <string name="layout_editor_home_filter">Home layout</string>
                 <string name="termux_layout_editor_revert">Undo changes</string>
                 <string name="termux_layout_editor_unsaved_message">Discard your changes, or save them?</string>
                 <string name="termux_layout_editor_narrow_notice">With bars down the side there is not much room left.</string>

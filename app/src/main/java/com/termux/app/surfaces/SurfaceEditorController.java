@@ -710,6 +710,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (layout != null) {
             attachLayoutViews(content, layout);
             layout.setOnChangedListener(this::syncDirty);
+            // The Home filter moved the session between Home and its window: the shape the canvas
+            // draws, the Style pill and Corners and Margin are that page's from now on.
+            layout.setOnPlaceShownListener(() -> {
+                pushLayoutShape(layout);
+                syncHalfControls();
+            });
             // The canvas draws its first frame under the Style and the Corners and Margin the
             // user already has.
             pushLayoutShape(layout, place != null ? place : mHost.pageOnScreen());
@@ -853,7 +859,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // keyboard's tools are the sheet's: they take its Row B while the keyboard is selected.
             mLayoutViews = new LayoutEditorController.Views(frame, canvas, panel.keyboardTools(),
                 panel.keyboardForms(), panel.keyRadiusLabel(), panel.keyRadius(), move,
-                panel.orientationToggle(), panel.hiddenControl(), panel.hiddenHighlight(),
+                panel.orientationToggle(), panel.homeFilterToggle(), panel.hiddenControl(),
+                panel.hiddenHighlight(),
                 panel.hiddenTileGroup(), new LayoutEditorController.TilesHost() {
                     @Override public void setHiddenTilesOpen(boolean open) {
                         SurfaceEditorController.this.setHiddenTilesOpen(open);
@@ -1327,12 +1334,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         final int entryStop;
         final int stop;
         @NonNull final SessionCustom custom;
-        @Nullable final com.termux.app.place.PlaceArrangeSnapshot arrangement;
+        @Nullable final List<com.termux.app.place.PlaceArrangeSnapshot> arrangement;
 
         CarriedSession(@NonNull AppearanceSnapshot entry, @NonNull String entrySignature,
                        @Nullable String entryCustom, int entryStop, int stop,
                        @NonNull SessionCustom custom,
-                       @Nullable com.termux.app.place.PlaceArrangeSnapshot arrangement) {
+                       @Nullable List<com.termux.app.place.PlaceArrangeSnapshot> arrangement) {
             this.entry = entry;
             this.entrySignature = entrySignature;
             this.entryCustom = entryCustom;
@@ -3769,6 +3776,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (layout != null) {
             layout.end();
             layout.setOnChangedListener(null);
+            layout.setOnPlaceShownListener(null);
         }
         boolean wasLayout = mLayoutMode;
         if (mIconsMode)

@@ -50,9 +50,10 @@ import java.util.Locale;
 /**
  * Layout mode of the one editor (appearance-layout-editor SPEC §3.5, layout editor v2): the layout
  * canvas of the place the user is looking at, drawn at the full size of the editor's frame, with
- * the Portrait / Landscape toggle and eye-off in the editor's bottom area. The layout it edits is
- * every place's (ADR 0003), so it has no place to pick: a write lands on Home, the terminal and
- * the display alike.
+ * the Portrait / Landscape toggle, the Home filter and eye-off in the editor's bottom area. The
+ * Workspace's layout is every window's (ADR 0003): a write lands on the terminal and the display
+ * alike. Home has a layout of its own (ADR 0008), which the Home filter shows and edits, in either
+ * orientation, with Home's own Style, Corners and Margin.
  *
  * <p>This class owns no screen of its own. The editor that hosts it
  * ({@link com.termux.app.surfaces.SurfaceEditorController}) lends it the canvas, what stands over
@@ -200,6 +201,11 @@ public final class LayoutEditorController {
         @NonNull final Slider keyRadius;
         @NonNull final MaterialButton moveControl;
         @NonNull final MaterialButtonToggleGroup orientation;
+        /**
+         * The Home filter: one segment beside the orientation toggle, checked while the canvas
+         * shows a Home page and writes the Home layout ({@link LayoutEditorPlan#showHome}).
+         */
+        @NonNull final MaterialButtonToggleGroup homeFilter;
         /** Eye-off: the only hide drop target, the tiles' toggle, the count badge's anchor. */
         @NonNull final MaterialButton hiddenControl;
         /** The highlight behind eye-off, larger than its 48dp target: the drop area itself. */
@@ -212,6 +218,7 @@ public final class LayoutEditorController {
                      @NonNull TextView keyRadiusLabel, @NonNull Slider keyRadius,
                      @NonNull MaterialButton moveControl,
                      @NonNull MaterialButtonToggleGroup orientation,
+                     @NonNull MaterialButtonToggleGroup homeFilter,
                      @NonNull MaterialButton hiddenControl, @NonNull View hiddenHighlight,
                      @NonNull ChipGroup hiddenTiles, @NonNull TilesHost tilesHost) {
             this.canvasHost = canvasHost;
@@ -222,6 +229,7 @@ public final class LayoutEditorController {
             this.keyRadius = keyRadius;
             this.moveControl = moveControl;
             this.orientation = orientation;
+            this.homeFilter = homeFilter;
             this.hiddenControl = hiddenControl;
             this.hiddenHighlight = hiddenHighlight;
             this.hiddenTiles = hiddenTiles;
@@ -234,6 +242,11 @@ public final class LayoutEditorController {
     @Nullable private LayoutEditorPlan mPlan;
     /** Told whenever something may have moved, so the host's one Undo can show or go. */
     @Nullable private Runnable mOnChanged;
+    /**
+     * Told when the Home filter moved the session to another page, before the canvas is re-read,
+     * so the host can restate the Style, Corners and Margin that page wears.
+     */
+    @Nullable private Runnable mOnPlaceShown;
     /** True while a toggle, a chip group or a slider is being restated, so it writes nothing. */
     private boolean mRestatingToggle;
     /** The Style of the whole chrome, and the user's Corners and Margin in dp, which the canvas draws. */
@@ -301,6 +314,15 @@ public final class LayoutEditorController {
         mOnChanged = listener;
     }
 
+    /**
+     * The host's hook for the Home filter moving the session to another page ({@link
+     * #editedPlace} has changed): Home's own Style, Corners and Margin, or the Workspace's, are
+     * the editor's from then on, and the canvas is to be told them before it is redrawn.
+     */
+    public void setOnPlaceShownListener(@Nullable Runnable listener) {
+        mOnPlaceShown = listener;
+    }
+
     /** Key radius's owner; the control shows beside the type chips while the keyboard is selected. */
     public void setKeyRadius(@Nullable KeyRadius keyRadius) {
         mKeyRadius = keyRadius;
@@ -342,7 +364,7 @@ public final class LayoutEditorController {
      * replaced): Undo puts back what that session found. Ignored by a session already open.
      */
     public boolean begin(@Nullable PaneWallPage place,
-                         @Nullable PlaceArrangeSnapshot carriedEntry) {
+                         @Nullable List<PlaceArrangeSnapshot> carriedEntry) {
         PlaceLayoutStore places = mHost.places();
         if (places == null)
             return false;
@@ -367,10 +389,10 @@ public final class LayoutEditorController {
         return mPlan != null && mPlan.isDirty();
     }
 
-    /** The arrangement the open session found, or null with none open. */
+    /** The arrangements the open session found, every layout it reached, or null with none open. */
     @Nullable
-    public PlaceArrangeSnapshot entryArrangement() {
-        return mPlan == null ? null : mPlan.entry();
+    public List<PlaceArrangeSnapshot> entryArrangement() {
+        return mPlan == null ? null : mPlan.entries();
     }
 
     /** The dock's height scale in the orientation being edited, or -1 with no session. */
@@ -625,6 +647,36 @@ public final class LayoutEditorController {
             views.canvas.setSelectedBlock(null);
             sync();
         });
+        views.homeFilter.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (mRestatingToggle || checkedId != R.id.layout_editor_home_filter_home)
+                return;
+            showHome(isChecked);
+        });
+    }
+
+    /**
+     * The Home filter turned on or off: the session moves to a Home page or back to its window,
+     * the live wall goes with it so the place behind the editor still follows every write, and
+     * the host restates the shape that page wears before the canvas is re-read.
+     */
+    @VisibleForTesting
+    void showHome(boolean home) {
+        LayoutEditorPlan plan = mPlan;
+        if (plan == null || plan.showsHome() == home)
+            return;
+        PaneWallPage place = plan.showHome(home);
+        Views views = mViews;
+        if (views != null) {
+            // The selection and the tiles were the other page's.
+            views.canvas.cancelLift();
+            views.canvas.setSelectedBlock(null);
+            if (mTilesOpen)
+                setTilesOpen(views, false);
+        }
+        mHost.holdPaneWallOnPlace(place, true);
+        if (mOnPlaceShown != null)
+            mOnPlaceShown.run();
+        sync();
     }
 
     // ------------------------------------------------------------------------------- the drops
@@ -669,6 +721,10 @@ public final class LayoutEditorController {
         mRestatingToggle = true;
         views.orientation.check(plan.shownOrientation() == PlaceOrientation.LANDSCAPE
             ? R.id.layout_editor_orientation_landscape : R.id.layout_editor_orientation_portrait);
+        if (plan.showsHome())
+            views.homeFilter.check(R.id.layout_editor_home_filter_home);
+        else
+            views.homeFilter.uncheck(R.id.layout_editor_home_filter_home);
         mRestatingToggle = false;
         views.canvas.setShape(mStyle, mCornersDp, mMarginDp);
         views.canvas.setExtraKeyCount(mExtraKeyCount);

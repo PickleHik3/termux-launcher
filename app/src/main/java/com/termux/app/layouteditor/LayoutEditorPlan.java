@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.place.Element;
+import com.termux.app.place.HomeChromePolicy;
 import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.LayoutVariant;
@@ -15,7 +16,9 @@ import com.termux.app.place.Slot;
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * One Layout editor session, as decisions rather than views: which orientation the layout canvas is
@@ -34,10 +37,12 @@ import java.util.List;
  * on the toggle through the store's own setters, the same way a drop does, so the snapshot and the
  * dirty check see every one of them.
  *
- * <p>The layout is every place's (ADR 0003), so there is no place to pick and every write lands
- * everywhere. The session still knows which place it was opened over, because that is what the
- * layout canvas draws — Home's grid, the terminal's text, the display's screen — and what decides
- * the handles worth offering: the grid's only on Home.
+ * <p>The Workspace's layout is every window's (ADR 0003), so a write there lands on every window.
+ * Home has its own (ADR 0008): the session edits the layout of the page it stands on, and the Home
+ * filter ({@link #showHome}) moves it between a Home page and its window, each layout's arrangement
+ * at entry kept for Undo. The session knows which place it is on, because that is what the layout
+ * canvas draws — Home's grid, the terminal's text, the display's screen — and what decides the
+ * handles worth offering: the grid's only on Home.
  *
  * <p>Pure: a store in, an answer out, no views, so every case above is testable without a window.
  * {@link LayoutEditorController} is the wiring that draws it, in Layout mode of the one editor.
@@ -56,32 +61,63 @@ public final class LayoutEditorPlan {
         LIVE
     }
 
-    /** The store pinned to the variant being edited, so nothing here can reach the other one. */
-    @NonNull private final PlaceLayoutStore mPlaces;
-    @NonNull private final LayoutVariant mVariant;
+    /** The store every variant is reached through. */
+    @NonNull private final PlaceLayoutStore mRoot;
+    /**
+     * The store pinned to the variant being edited, so nothing here can reach another one. The
+     * Home filter ({@link #showHome}) is the only thing that moves it.
+     */
+    @NonNull private PlaceLayoutStore mPlaces;
+    @NonNull private LayoutVariant mVariant;
     /** The place the layout canvas draws and the live place behind the card; never a write target. */
     @NonNull private PaneWallPage mPlace;
-    /** The arrangement as the editor found it; what Discard and ↺ put back. */
-    @NonNull private final PlaceArrangeSnapshot mEntry;
-    @NonNull private final String mEntrySignature;
+    /**
+     * The window the Home filter hands back to when it is turned off: the window the editor was
+     * opened over, or the terminal when it was opened over Home.
+     */
+    @NonNull private PaneWallPage mWindowPlace;
+    /**
+     * The arrangement of every variant this session has edited, as the editor found it; what
+     * Discard and ↺ put back. The variant the session opened on first; another is taken the
+     * first time the Home filter shows it, before anything can have been written to it.
+     */
+    @NonNull private final EnumMap<LayoutVariant, PlaceArrangeSnapshot> mEntries =
+        new EnumMap<>(LayoutVariant.class);
+    @NonNull private final EnumMap<LayoutVariant, String> mEntrySignatures =
+        new EnumMap<>(LayoutVariant.class);
     @NonNull private PlaceOrientation mDeviceOrientation;
     @NonNull private PlaceOrientation mShownOrientation;
 
     private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull LayoutVariant variant,
                              @NonNull PaneWallPage place, @NonNull PlaceOrientation deviceOrientation,
-                             @Nullable PlaceArrangeSnapshot carriedEntry) {
+                             @Nullable List<PlaceArrangeSnapshot> carriedEntries) {
+        mRoot = places;
         mVariant = variant;
         mPlaces = places.forVariant(variant);
         mPlace = place;
+        mWindowPlace = HomeChromePolicy.isHome(place) ? PaneWallPage.TERMINAL : place;
         mDeviceOrientation = deviceOrientation;
         // The editor opens on what the user is looking at; the toggle is how the other one is asked
         // for.
         mShownOrientation = deviceOrientation;
-        // A session carried over an activity relaunch keeps the arrangement it opened on, as
-        // long as it was taken of the layout being edited now.
-        mEntry = carriedEntry != null && carriedEntry.variant() == variant ? carriedEntry
-            : PlaceArrangeSnapshot.capture(mPlaces, variant);
-        mEntrySignature = mEntry.signature();
+        // A session carried over an activity relaunch keeps the arrangements it opened on, every
+        // variant it had reached; the one being edited now is taken fresh if it had not.
+        if (carriedEntries != null) {
+            for (PlaceArrangeSnapshot entry : carriedEntries)
+                keepEntry(entry);
+        }
+        enterVariant(variant);
+    }
+
+    private void keepEntry(@NonNull PlaceArrangeSnapshot entry) {
+        mEntries.put(entry.variant(), entry);
+        mEntrySignatures.put(entry.variant(), entry.signature());
+    }
+
+    /** Takes the variant's arrangement as it stands, the first time the session reaches it. */
+    private void enterVariant(@NonNull LayoutVariant variant) {
+        if (!mEntries.containsKey(variant))
+            keepEntry(PlaceArrangeSnapshot.capture(mRoot, variant));
     }
 
     /**
@@ -107,22 +143,25 @@ public final class LayoutEditorPlan {
 
     /**
      * {@link #enter(PlaceLayoutStore, PaneWallPage, PlaceOrientation)} continuing a session whose
-     * arrangement at open was {@code carriedEntry} (an activity relaunch), so its Undo and its
-     * unsaved state are the same; a snapshot of another layout variant is ignored.
+     * arrangements at open were {@code carriedEntries} (an activity relaunch), so its Undo and its
+     * unsaved state are the same, for every variant it had reached.
      */
     @NonNull
     public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
                                          @NonNull PaneWallPage place,
                                          @NonNull PlaceOrientation deviceOrientation,
-                                         @Nullable PlaceArrangeSnapshot carriedEntry) {
-        return new LayoutEditorPlan(places, places.activeVariant(), place, deviceOrientation,
-            carriedEntry);
+                                         @Nullable List<PlaceArrangeSnapshot> carriedEntries) {
+        return new LayoutEditorPlan(places, places.variantFor(place), place, deviceOrientation,
+            carriedEntries);
     }
 
-    /** The arrangement as the editor found it, to carry the session over a relaunch. */
+    /**
+     * The arrangements as the editor found them, every variant the session has reached, to carry
+     * the session over a relaunch.
+     */
     @NonNull
-    public PlaceArrangeSnapshot entry() {
-        return mEntry;
+    public List<PlaceArrangeSnapshot> entries() {
+        return new ArrayList<>(mEntries.values());
     }
 
     /** Which layout the session is editing, which the card says so it is never a surprise. */
@@ -305,6 +344,32 @@ public final class LayoutEditorPlan {
      */
     public void showPlace(@NonNull PaneWallPage place) {
         mPlace = place;
+        if (!HomeChromePolicy.isHome(place))
+            mWindowPlace = place;
+    }
+
+    /** Whether the Home filter is on: the canvas is drawing a Home page. */
+    public boolean showsHome() {
+        return HomeChromePolicy.isHome(mPlace);
+    }
+
+    /**
+     * The Home filter, beside the Portrait / Landscape toggle: on, the canvas shows a Home page and
+     * every write lands on the Home layout; off, it shows the window the editor was opened over
+     * (the terminal when that was Home) and writes the Workspace's layout, the normal one or the
+     * minimal one as minimal mode says. The orientation stays as it was. Each layout's arrangement
+     * at entry is kept, so Undo and the unsaved question cover both.
+     *
+     * @return the place the canvas now shows, which the live wall is to stand on
+     */
+    @NonNull
+    public PaneWallPage showHome(boolean home) {
+        PaneWallPage place = home ? PaneWallPage.WIDGETS : mWindowPlace;
+        mPlace = place;
+        mVariant = mRoot.variantFor(place);
+        mPlaces = mRoot.forVariant(mVariant);
+        enterVariant(mVariant);
+        return place;
     }
 
     /** The Portrait / Landscape toggle. Moves the picture and the target of the next drop. */
@@ -380,13 +445,22 @@ public final class LayoutEditorPlan {
         return !liveFollows();
     }
 
-    /** Whether anything has moved since the editor opened — the unsaved-changes question. */
+    /**
+     * Whether anything has moved since the editor opened, in any layout the session has reached
+     * — the unsaved-changes question.
+     */
     public boolean isDirty() {
-        return !mEntrySignature.equals(PlaceArrangeSnapshot.capture(mPlaces).signature());
+        for (Map.Entry<LayoutVariant, String> entry : mEntrySignatures.entrySet()) {
+            if (!entry.getValue().equals(
+                    PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
+                return true;
+        }
+        return false;
     }
 
-    /** Puts the arrangement back the way the editor found it. */
+    /** Puts every layout the session reached back the way the editor found it. */
     public void revert() {
-        mEntry.restore(mPlaces);
+        for (PlaceArrangeSnapshot entry : mEntries.values())
+            entry.restore(mRoot);
     }
 }
