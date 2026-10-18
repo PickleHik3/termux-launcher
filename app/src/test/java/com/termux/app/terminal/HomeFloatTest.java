@@ -39,6 +39,7 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -343,6 +344,152 @@ public class HomeFloatTest {
         assertNotNull(back);
         assertEquals(FloatTitlebarPolicy.fullRoom(), back.frac);
         assertEquals(small, back.restoreFrac);
+    }
+
+    // --- Saved sessions ---
+
+    @Test
+    public void aSavedFloatLandsOnItsPageOrTheLastOneAndTiledWithoutHomePages() {
+        assertEquals(1, HomeFloatPolicy.restoredPage(1, 3));
+        assertEquals(0, HomeFloatPolicy.restoredPage(0, 1));
+        assertEquals("a page that is gone lands it on the last one", 2,
+            HomeFloatPolicy.restoredPage(5, 3));
+        assertEquals(0, HomeFloatPolicy.restoredPage(-3, 2));
+        assertEquals("no Home pages: a tiled window", HomeFloatPolicy.NOT_HOME_FLOAT,
+            HomeFloatPolicy.restoredPage(1, 0));
+    }
+
+    @Test
+    public void everySavedFloatFloatsEvenWhenTheRowIsLeftEmpty() {
+        boolean[] mixed = {false, true, false, true};
+        assertArrayEquals(mixed, HomeFloatPolicy.restoredAsFloats(mixed, true));
+        assertArrayEquals("no Home pages: every window loads tiled",
+            new boolean[]{false, false, false, false},
+            HomeFloatPolicy.restoredAsFloats(mixed, false));
+        assertArrayEquals("floats only: floats only, and the Workspace is empty",
+            new boolean[]{true, true, true},
+            HomeFloatPolicy.restoredAsFloats(new boolean[]{true, true, true}, true));
+        assertArrayEquals("floats only without Home pages: all in the row",
+            new boolean[]{false, false},
+            HomeFloatPolicy.restoredAsFloats(new boolean[]{true, true}, false));
+        assertEquals(0, HomeFloatPolicy.restoredAsFloats(new boolean[0], true).length);
+    }
+
+    @Test
+    public void theCurrentWindowIsCountedInTheRowWithoutTheFloats() {
+        boolean[] asFloat = {false, true, false, true, false};
+        assertEquals(0, HomeFloatPolicy.restoredRowIndex(asFloat, 0));
+        assertEquals("a float current leaves the row on the window before it", 0,
+            HomeFloatPolicy.restoredRowIndex(asFloat, 1));
+        assertEquals(1, HomeFloatPolicy.restoredRowIndex(asFloat, 2));
+        assertEquals(1, HomeFloatPolicy.restoredRowIndex(asFloat, 3));
+        assertEquals(2, HomeFloatPolicy.restoredRowIndex(asFloat, 4));
+        assertEquals("past the end: the last window", 2, HomeFloatPolicy.restoredRowIndex(asFloat, 9));
+        assertEquals("a float first: the row's first", 0,
+            HomeFloatPolicy.restoredRowIndex(new boolean[]{true, false}, 0));
+        assertEquals("floats only: no current window in the row", -1,
+            HomeFloatPolicy.restoredRowIndex(new boolean[]{true, true}, 1));
+        assertEquals(-1, HomeFloatPolicy.restoredRowIndex(new boolean[0], 0));
+    }
+
+    @Test
+    public void savedShapesKeepTheLiveShapeUnderItsOrientationAndTheRememberedOther() {
+        RectF portrait = new RectF(.1f, .1f, .6f, .5f);
+        RectF landscape = new RectF(.3f, .2f, .9f, .9f);
+        RectF[] none = HomeFloatPolicy.savedShapes(null, portrait, false);
+        assertEquals(portrait, none[0]);
+        assertNull(none[1]);
+
+        HomeFloatPolicy.ShapeMemory memory = new HomeFloatPolicy.ShapeMemory();
+        memory.turn(false, portrait, null);
+        memory.turn(true, portrait, null);
+        // Laid out in landscape now; portrait is what it left.
+        RectF[] both = HomeFloatPolicy.savedShapes(memory, landscape, false);
+        assertEquals(portrait, both[0]);
+        assertEquals("the memory's orientation wins over the screen's", landscape, both[1]);
+    }
+
+    @Test
+    public void aSeededShapeComesBackOnTheFirstTurnIntoItsOrientation() {
+        HomeFloatPolicy.ShapeMemory memory = new HomeFloatPolicy.ShapeMemory();
+        RectF landscape = new RectF(.3f, .2f, .9f, .9f);
+        memory.seed(true, landscape);
+        RectF portrait = new RectF(.1f, .1f, .6f, .5f);
+        assertNull(memory.turn(false, portrait, null));
+        assertEquals(landscape, memory.remembered(true));
+        assertNull("the live orientation keeps its shape on the float", memory.remembered(false));
+        HomeFloatPolicy.Shape back = memory.turn(true, portrait, null);
+        assertNotNull(back);
+        assertEquals(landscape, back.frac);
+        assertNull(back.restoreFrac);
+    }
+
+    @Test
+    public void aFloatSavedAndLoadedComesBackOnItsPageMinimisedAtItsShape() {
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 1);
+        RectF shaped = new RectF(.1f, .2f, .6f, .7f);
+        window.active.floatFrac = new RectF(shaped);
+        mController.minimiseHomeFloat(window);
+        TerminalWorkspace.Window saved = mController.snapshotWorkspaceWindow(window,
+            shell -> new TerminalWorkspace.Pane("/home", null, null));
+
+        assertNotNull(saved.homeFloat);
+        assertEquals(1, saved.homeFloat.page);
+        assertTrue(saved.homeFloat.minimised);
+        assertTrue(saved.root instanceof TerminalWorkspace.Pane);
+        assertTrue(saved.floats.isEmpty());
+        boolean landscape = landscapeScreen();
+        TerminalWorkspace.FloatShape live = landscape ? saved.homeFloat.landscape
+            : saved.homeFloat.portrait;
+        assertNotNull(live);
+        assertEquals(.1f, live.left, .001f);
+        assertEquals(.2f, live.top, .001f);
+        assertEquals(.5f, live.width, .001f);
+        assertEquals(.5f, live.height, .001f);
+        assertNull("never shaped in the other orientation",
+            landscape ? saved.homeFloat.portrait : saved.homeFloat.landscape);
+
+        TerminalSession shell = terminal();
+        TerminalPaneController.Window loaded = mController.newWorkspaceHomeFloat(saved,
+            java.util.Collections.singletonList(shell), 1);
+        assertTrue(loaded.isHomeFloat());
+        assertEquals(1, loaded.homePage());
+        assertTrue("it comes back as a chip", loaded.isMinimised());
+        assertSame(loaded, mController.windowOf(shell));
+        assertTrue(mController.homeFloats().contains(loaded));
+        assertNull("a loaded float takes no focus", mController.focusedHomeFloat());
+        RectF frac = loaded.active.floatFrac;
+        assertNotNull(frac);
+        assertEquals(shaped.left, frac.left, .001f);
+        assertEquals(shaped.top, frac.top, .001f);
+        assertEquals(shaped.right, frac.right, .001f);
+        assertEquals(shaped.bottom, frac.bottom, .001f);
+        assertEquals(View.GONE, containerOf(loaded).getVisibility());
+    }
+
+    @Test
+    public void aLoadedFloatSeedsTheOtherOrientationAndOneWithoutAShapeIsBornAsNew() {
+        TerminalPaneController.Window first = mController.openHomeFloat(terminal(), 0);
+        boolean landscape = landscapeScreen();
+        TerminalWorkspace.FloatShape other = new TerminalWorkspace.FloatShape(.2f, .1f, .5f, .6f);
+        TerminalWorkspace.Window definition = new TerminalWorkspace.Window(0,
+            new TerminalWorkspace.Pane("/", null, null), null, null,
+            new TerminalWorkspace.HomeFloat(0, false, landscape ? other : null,
+                landscape ? null : other));
+
+        TerminalPaneController.Window loaded = mController.newWorkspaceHomeFloat(definition,
+            java.util.Collections.singletonList(terminal()), 0);
+        assertFalse(loaded.isMinimised());
+        assertNotNull(loaded.active.shapeMemory);
+        RectF seeded = loaded.active.shapeMemory.remembered(!landscape);
+        assertNotNull("the other orientation's shape is remembered", seeded);
+        assertEquals(.2f, seeded.left, .001f);
+        assertEquals(.1f, seeded.top, .001f);
+        assertEquals(.7f, seeded.right, .001f);
+        assertEquals(.7f, seeded.bottom, .001f);
+        assertTrue("no shape for now: cascaded off the float shown on its page",
+            loaded.active.floatFrac.top > first.active.floatFrac.top);
+        assertEquals(View.VISIBLE, containerOf(loaded).getVisibility());
     }
 
     // --- Room, lift and the bar ---
@@ -894,6 +1041,11 @@ public class HomeFloatTest {
         view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
         view.layout(0, 0, width, height);
+    }
+
+    private static boolean landscapeScreen() {
+        return context().getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
     }
 
     @NonNull

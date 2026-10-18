@@ -18182,33 +18182,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public com.termux.app.terminal.TerminalWorkspace saveWorkspace(
             @NonNull String requestedName, boolean overwrite, boolean captureCommands)
             throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
-        if (mPaneController == null || mWSessions.isEmpty()) {
+        if (mPaneController == null
+            || (mWSessions.isEmpty() && mPaneController.homeFloatCount() == 0)) {
             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                 "no_session", "There are no terminal sessions to save");
         }
         String name = com.termux.app.terminal.TerminalWorkspaceStore.validateName(requestedName);
         java.util.List<com.termux.app.terminal.TerminalWorkspace.Session> sessions =
             new java.util.ArrayList<>();
+        com.termux.app.terminal.TerminalPaneController.WorkspacePaneCapture capture = shell -> {
+            String cwd = shell.getCwd();
+            if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
+            java.util.List<String> command = java.util.Collections.emptyList();
+            if (captureCommands && mWindowForegroundResolver != null) {
+                com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                    mWindowForegroundResolver.get(shell.getPid());
+                if (info != null && !info.idle) command = info.command;
+            }
+            return new com.termux.app.terminal.TerminalWorkspace.Pane(
+                cwd, shell.mSessionName, command);
+        };
+        // Home floats are windows of the current session (the drawer lists them under it): they
+        // are saved after its row's windows, in the order they were opened, as the chips run.
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> homeFloats =
+            chipFloats();
+        WSession floatsSession = mCurrentWSession != null && !mCurrentWSession.windows.isEmpty()
+            ? mCurrentWSession : null;
         for (WSession ws : mWSessions) {
             if (ws.windows.isEmpty()) continue;
+            if (floatsSession == null) floatsSession = ws;
             java.util.List<com.termux.app.terminal.TerminalWorkspace.Window> windows =
                 new java.util.ArrayList<>();
-            for (com.termux.app.terminal.TerminalPaneController.Window window : ws.windows) {
-                windows.add(mPaneController.snapshotWorkspaceWindow(window, shell -> {
-                    String cwd = shell.getCwd();
-                    if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
-                    java.util.List<String> command = java.util.Collections.emptyList();
-                    if (captureCommands && mWindowForegroundResolver != null) {
-                        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
-                            mWindowForegroundResolver.get(shell.getPid());
-                        if (info != null && !info.idle) command = info.command;
-                    }
-                    return new com.termux.app.terminal.TerminalWorkspace.Pane(
-                        cwd, shell.mSessionName, command);
-                }));
+            for (com.termux.app.terminal.TerminalPaneController.Window window : ws.windows)
+                windows.add(mPaneController.snapshotWorkspaceWindow(window, capture));
+            int currentWindow = Math.max(0, Math.min(ws.current, windows.size() - 1));
+            if (ws == floatsSession) {
+                for (com.termux.app.terminal.TerminalPaneController.Window window : homeFloats)
+                    windows.add(mPaneController.snapshotWorkspaceWindow(window, capture));
             }
             sessions.add(new com.termux.app.terminal.TerminalWorkspace.Session(ws.name,
-                Math.max(0, Math.min(ws.current, windows.size() - 1)), windows));
+                currentWindow, windows));
+        }
+        if (floatsSession == null && !homeFloats.isEmpty()) {
+            // An empty Workspace with Home floats: they are saved as a session of floats only,
+            // which loads back as floats only.
+            java.util.List<com.termux.app.terminal.TerminalWorkspace.Window> windows =
+                new java.util.ArrayList<>();
+            for (com.termux.app.terminal.TerminalPaneController.Window window : homeFloats)
+                windows.add(mPaneController.snapshotWorkspaceWindow(window, capture));
+            sessions.add(new com.termux.app.terminal.TerminalWorkspace.Session(null, 0, windows));
         }
         int current = Math.max(0, Math.min(
             mCurrentWSession == null ? 0 : mWSessions.indexOf(mCurrentWSession), sessions.size() - 1));
@@ -18349,6 +18371,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     + " terminals; the limit is "
                     + com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS);
         }
+        // Saved Home floats float again over Home's pages; with no Home pages (no widget pane)
+        // there is nothing to float over, and they load as tiled windows of the row.
+        int homePageCount = 0;
+        if (savesHomeFloats(workspace)) {
+            attachHomeFloatLayer();
+            if (mPaneController.homeFloatLayer() != null && mWidgetPaneController != null)
+                homePageCount = mWidgetPaneController.homePageCount();
+        }
 
         java.util.List<TerminalSession> createdShells = new java.util.ArrayList<>();
         java.util.List<java.util.List<TerminalSession>> windowShells = new java.util.ArrayList<>();
@@ -18390,19 +18420,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<WSession> restored = new java.util.ArrayList<>();
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> restoredWindows =
             new java.util.ArrayList<>();
+        java.util.Set<com.termux.app.terminal.TerminalPaneController.Window> restoredFloats =
+            new java.util.HashSet<>();
+        // The restored session the saved currentSession names, or null when it kept no window in
+        // the row (it was saved as floats only).
+        WSession savedCurrent = null;
         int shellWindowIndex = 0;
         try {
-            for (com.termux.app.terminal.TerminalWorkspace.Session savedSession : workspace.sessions) {
+            for (int s = 0; s < workspace.sessions.size(); s++) {
+                com.termux.app.terminal.TerminalWorkspace.Session savedSession = workspace.sessions.get(s);
                 WSession ws = new WSession();
                 ws.name = TerminalNamePolicy.normalizeSession(savedSession.name);
-                for (com.termux.app.terminal.TerminalWorkspace.Window savedWindow : savedSession.windows) {
+                boolean[] savedAsFloat = new boolean[savedSession.windows.size()];
+                for (int i = 0; i < savedAsFloat.length; i++)
+                    savedAsFloat[i] = savedSession.windows.get(i).homeFloat != null;
+                boolean[] asFloat = com.termux.app.terminal.HomeFloatPolicy.restoredAsFloats(
+                    savedAsFloat, homePageCount > 0);
+                for (int i = 0; i < asFloat.length; i++) {
+                    com.termux.app.terminal.TerminalWorkspace.Window savedWindow =
+                        savedSession.windows.get(i);
+                    java.util.List<TerminalSession> shells = windowShells.get(shellWindowIndex++);
+                    if (asFloat[i]) {
+                        // A Home float: out of the row, on its page (the last one if its page is
+                        // gone), minimised if it was, at its saved size and spot.
+                        com.termux.app.terminal.TerminalPaneController.Window window =
+                            mPaneController.newWorkspaceHomeFloat(savedWindow, shells,
+                                com.termux.app.terminal.HomeFloatPolicy.restoredPage(
+                                    savedWindow.homeFloat.page, homePageCount));
+                        restoredWindows.add(window);
+                        restoredFloats.add(window);
+                        continue;
+                    }
                     com.termux.app.terminal.TerminalPaneController.Window window =
-                        mPaneController.newWorkspaceWindow(savedWindow, windowShells.get(shellWindowIndex++));
+                        mPaneController.newWorkspaceWindow(savedWindow, shells);
                     ws.windows.add(window);
                     restoredWindows.add(window);
                 }
-                ws.current = savedSession.currentWindow;
+                // The row's current window; one saved as a float leaves the row on the window
+                // before it, and the wall stays where it is.
+                int rowIndex = com.termux.app.terminal.HomeFloatPolicy.restoredRowIndex(
+                    asFloat, savedSession.currentWindow);
+                // A session is its row's windows: one saved as floats only comes back as its
+                // floats alone, as after its last window closed, and is no session of the row.
+                if (rowIndex < 0) continue;
+                ws.current = rowIndex;
                 restored.add(ws);
+                if (s == workspace.currentSession) savedCurrent = ws;
             }
         } catch (RuntimeException e) {
             for (com.termux.app.terminal.TerminalPaneController.Window window : restoredWindows)
@@ -18412,8 +18475,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 "invalid_workspace", "Could not rebuild workspace topology: " + e.getMessage(), e);
         }
 
-        int firstRestoredIndex = mWSessions.size();
         if (replace) {
+            // The live Home floats are windows of the session being replaced: they go too, while
+            // the old sessions still stand for what their closing announces.
+            for (com.termux.app.terminal.TerminalPaneController.Window window :
+                    mPaneController.homeFloats()) {
+                if (restoredFloats.contains(window)) continue;
+                for (TerminalSession shell : mPaneController.removeWindow(window))
+                    mTermuxService.killTermuxSession(shell);
+            }
             java.util.List<WSession> oldSessions = new java.util.ArrayList<>(mWSessions);
             mWSessions.clear();
             mCurrentWSession = null;
@@ -18424,18 +18494,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mTermuxService.killTermuxSession(shell);
                 }
             }
-            firstRestoredIndex = 0;
         }
         mWSessions.addAll(restored);
-        int selected = firstRestoredIndex + workspace.currentSession;
-        mCurrentWSession = mWSessions.get(selected);
-        mPaneController.showWindow(mCurrentWSession.currentWindow());
+        WSession selected = savedCurrent != null ? savedCurrent
+            : restored.isEmpty() ? null : restored.get(0);
+        if (selected != null) {
+            mCurrentWSession = selected;
+            mPaneController.showWindow(mCurrentWSession.currentWindow());
+        } else if (mWSessions.isEmpty()) {
+            // Floats only, and nothing left in the row: the Workspace is empty, as after its last
+            // window closed. The wall stays on Home; off Home, the last Home page slides in.
+            mCurrentWSession = null;
+            if (mPaneWallController != null
+                && mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.TERMINAL)
+                mPaneWallController.goToLastHomePage(isVisible());
+        }
+        // Else floats only were added to a live Workspace: its current session stays.
         if (getTermuxTerminalSessionClient() != null)
             getTermuxTerminalSessionClient().checkForFontAndColors();
+        if (!restoredFloats.isEmpty()) onHomeFloatsChangedInActivity();
         rebuildDrawerSessions();
         return new com.termux.app.terminal.TerminalWorkspace.LoadResult(restored.size(), windowCount, paneCount,
             runCommands ? workspace.commandCount() : 0,
             runCommands ? 0 : workspace.commandCount(), replace);
+    }
+
+    /** Whether any window of {@code workspace} was saved as a Home float. */
+    private static boolean savesHomeFloats(
+            @NonNull com.termux.app.terminal.TerminalWorkspace workspace) {
+        for (com.termux.app.terminal.TerminalWorkspace.Session session : workspace.sessions)
+            for (com.termux.app.terminal.TerminalWorkspace.Window window : session.windows)
+                if (window.homeFloat != null) return true;
+        return false;
     }
 
     private static void collectWorkspacePanes(

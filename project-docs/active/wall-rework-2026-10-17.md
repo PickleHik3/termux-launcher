@@ -197,8 +197,9 @@ footer Save as workspace… It gains:
   (EWMH names, `X11WindowList`) nested; a tap on a toplevel raises it on that display.
 - A **Home** row in the footer, above the save row, that goes to Home page 1.
 - The rename: Save as workspace… becomes Save sessions…, the Saved tab lists Saved sessions.
-  `~/.termux/workspaces/` and the `launcherctl` verbs keep their names. Saved sessions record the
-  float flag in phase two; until then a saved float loads as a tiled window.
+  `~/.termux/workspaces/` and the `launcherctl` verbs keep their names. Saved sessions record a
+  Home float's flag, page and shape (phase two, slice 4): it loads back as a Home float on its page,
+  minimised if it was, or on the last Home page when its page is gone.
 
 ## 9. Entering, leaving, resuming
 
@@ -250,7 +251,7 @@ titlebar); `TerminalCommandPalette` (Home action set, Linux apps, floats); `Laun
   mode's default form. Agreed, everywhere on the wall; not phase one.
 - Drag-to-reorder of windows, and Niri's consume/expel of panes into and out of columns.
 - Per-toplevel X11 windows in the row (needs a rootless server).
-- Saved sessions recording the float flag and page.
+- Saved sessions recording the float flag and page (done in phase two, slice 4).
 - Rebuilding the row or the floats after a background kill beyond what Saved sessions restore.
 - A terminal or display window placed among the Home pages as a page.
 - The first-boot tour. It is switched off on this branch (`FirstBootTour.ENABLED`, 2026-10-18): it

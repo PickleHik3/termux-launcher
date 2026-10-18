@@ -289,8 +289,9 @@ where a window shows. The windows are the Workspace's pages: one row, the curren
 in order, then the display windows, paged by the border drag, with a new window landing right after
 the current one. A window can instead be a **Home float**: a real window of the current session
 drawn in a float layer over one Home page, never in the row, so chips, the drawer, the Ctrl+Alt
-shortcuts and Saved sessions all see it. Saved sessions load a float back as a tiled window until
-they record the float flag (phase two). Spec: `project-docs/active/wall-rework-2026-10-17.md` §4, §6.
+shortcuts and Saved sessions all see it. Saved sessions record its page, minimised flag and shape
+per orientation, and load it back as a Home float on that page (the last Home page when that page is
+gone); see `durable-workspaces.md`. Spec: `project-docs/active/wall-rework-2026-10-17.md` §4, §6.
 
 Every float wears one glass **titlebar** (`FloatTitlebarView`, `FloatTitlebarPolicy`): the drag
 handle plus Dock, Maximise and Close, and Minimise where the host has a target for it (the

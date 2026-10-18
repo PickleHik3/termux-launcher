@@ -876,6 +876,15 @@ public class TerminalPaneController {
     @NonNull
     public TerminalWorkspace.Window snapshotWorkspaceWindow(
         @NonNull Window window, @NonNull WorkspacePaneCapture capture) {
+        if (window.isHomeFloat() && window.active != null) {
+            // A Home float's one pane is saved as the window's root, so a build that knows no
+            // Home floats loads it as a tiled window; homeFloat carries its page and shape.
+            RectF[] shapes = HomeFloatPolicy.savedShapes(window.active.shapeMemory,
+                window.active.floatFrac, isLandscapeScreen());
+            return new TerminalWorkspace.Window(0, capture.capture(window.active.session), null,
+                window.name, new TerminalWorkspace.HomeFloat(window.homePage, window.minimised,
+                    savedShape(shapes[0]), savedShape(shapes[1])));
+        }
         List<Leaf> panes = allLeavesOf(window);
         int active = Math.max(0, panes.indexOf(window.active));
         List<TerminalWorkspace.FloatingPane> floats = new ArrayList<>();
@@ -920,6 +929,55 @@ public class TerminalPaneController {
         window.name = TerminalNamePolicy.normalizeWindow(definition.name);
         mWindows.add(window);
         return window;
+    }
+
+    /** A float's shape as Saved sessions keep it, or null when it has none they can keep. */
+    @Nullable
+    private static TerminalWorkspace.FloatShape savedShape(@Nullable RectF frac) {
+        if (frac == null || !TerminalWorkspace.FloatShape.isValid(frac.left, frac.top,
+            frac.width(), frac.height())) return null;
+        return new TerminalWorkspace.FloatShape(frac.left, frac.top, frac.width(), frac.height());
+    }
+
+    /**
+     * Rebuilds a saved Home float around {@code sessions}' one shell, floating over Home page
+     * {@code page} (already clamped to the pages there are), minimised if it was saved so. It
+     * takes its saved shape for the orientation the screen stands in, or is born there as a new
+     * float is (full-size, or cascaded off a float shown on that page); the other orientation's
+     * shape seeds its memory, so a turn brings that one back. It is neither focused nor animated
+     * in; the host announces the floats once the whole load is in.
+     */
+    @NonNull
+    public Window newWorkspaceHomeFloat(@NonNull TerminalWorkspace.Window definition,
+                                        @NonNull List<TerminalSession> sessions, int page) {
+        if (sessions.size() != 1 || !(definition.root instanceof TerminalWorkspace.Pane)
+            || !definition.floats.isEmpty())
+            throw new IllegalArgumentException("A Home float holds exactly one pane");
+        int floatPage = Math.max(0, page);
+        TerminalWorkspace.HomeFloat saved = definition.homeFloat;
+        boolean landscape = isLandscapeScreen();
+        TerminalWorkspace.FloatShape now = saved == null ? null
+            : landscape ? saved.landscape : saved.portrait;
+        TerminalWorkspace.FloatShape other = saved == null ? null
+            : landscape ? saved.portrait : saved.landscape;
+        Leaf leaf = new Leaf(sessions.get(0));
+        leaf.floatFrac = now != null ? sanitizedFloatFrac(now.left, now.top, now.width, now.height)
+            : homeFloatBirthFrac(floatPage);
+        if (other != null) {
+            leaf.shapeMemory = new HomeFloatPolicy.ShapeMemory();
+            leaf.shapeMemory.seed(!landscape,
+                sanitizedFloatFrac(other.left, other.top, other.width, other.height));
+        }
+        Window w = new Window(leaf);
+        w.root = null;
+        w.floating.add(leaf);
+        w.homePage = floatPage;
+        w.minimised = saved != null && saved.minimised;
+        w.name = TerminalNamePolicy.normalizeWindow(definition.name);
+        mWindows.add(w);
+        mHomeFloats.add(w);
+        attachHomeFloatContainer(w);
+        return w;
     }
 
     @NonNull
