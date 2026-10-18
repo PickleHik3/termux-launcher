@@ -18,11 +18,21 @@ import java.util.regex.Pattern;
  *       {@code *}, {@code ¶¶}, {@code .};</li>
  *   <li>consecutive text segments are joined with one space ({@link #join}).</li>
  * </ul>
+ *
+ * <p>The one exception is a cleanup's answer ({@link #cleanLines}): a Polished pass writes
+ * paragraphs and list items on lines of their own, and those breaks are the structure the user
+ * asked for. They are kept, one per break, all the way to the card, the clipboard and a shell
+ * that takes bracketed paste ({@code DictationMarks}); everywhere a line break could run
+ * something, the text goes in on one line ({@link #oneLine}).
  */
 public final class VoiceTextSanitizer {
 
     /** Every C0 control character, {@code \r} and {@code \n} included, plus DEL. */
     private static final Pattern CONTROL_CHARS = Pattern.compile("[\\x00-\\x1F\\x7F]+");
+    /** Every C0 control character but {@code \n}, plus DEL. */
+    private static final Pattern CONTROL_CHARS_BUT_NEWLINE = Pattern.compile("[\\x00-\\x09\\x0B-\\x1F\\x7F]+");
+    /** A line break with the blanks and blank lines around it. */
+    private static final Pattern LINE_BREAKS = Pattern.compile("[ ]*\\n[\\n ]*");
     /** {@code [...]}, {@code (...)} and {@code *...*} spans: bracketed asides and captions ASR emits for non-speech. */
     private static final Pattern BRACKETED_SPAN =
         Pattern.compile("\\[[^\\]]*\\]|\\([^)]*\\)|\\*[^*]*\\*");
@@ -37,6 +47,28 @@ public final class VoiceTextSanitizer {
         String text = CONTROL_CHARS.matcher(transcript).replaceAll(" ").trim().replaceAll("\\s+", " ");
         if (isNonSpeech(text)) return "";
         return text;
+    }
+
+    /**
+     * A cleanup's answer, cleaned as {@link #clean} does but keeping its line breaks: a carriage
+     * return is a line break, each run of breaks and blank lines becomes one {@code \n}, every
+     * other control character a space, and each line is trimmed. {@code ""} when there is no
+     * speech in it.
+     */
+    @NonNull
+    public static String cleanLines(@NonNull String text) {
+        String lines = text.replace("\r\n", "\n").replace('\r', '\n');
+        lines = CONTROL_CHARS_BUT_NEWLINE.matcher(lines).replaceAll(" ");
+        lines = lines.replaceAll("[ ]{2,}", " ");
+        lines = LINE_BREAKS.matcher(lines).replaceAll("\n").trim();
+        if (isNonSpeech(lines)) return "";
+        return lines;
+    }
+
+    /** {@code text} on one line: each line break, with the blanks around it, becomes one space. */
+    @NonNull
+    public static String oneLine(@NonNull String text) {
+        return text.replaceAll("\\s*\\r?\\n\\s*", " ").trim();
     }
 
     /** {@code text} as it is typed after the previous segment: one space between two text segments. */

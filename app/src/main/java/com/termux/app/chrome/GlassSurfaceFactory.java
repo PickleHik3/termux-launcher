@@ -54,25 +54,55 @@ public final class GlassSurfaceFactory {
         return new GlassSurfaceFactory(mSurfaces, mInk, look);
     }
 
-    /** The tint colour and rim every surface built here wears: the preset's, or the live one. */
+    /**
+     * The ink, rim and accent hue every surface built here wears: the preset's, or the live one,
+     * at amount 0. Its accent colours are resolved only once an amount asks for them
+     * ({@link #look(int)}).
+     */
     @NonNull
     public GlassLook look() {
-        GlassLook look = mLookOverride != null ? mLookOverride : GlassLook.of(mSurfaces.preferences());
-        if (!look.isMaterialRequested() || look.materialTint) return look;
-        android.content.Context context = mSurfaces.context();
-        int accent = mSurfaces.accentColor();
-        int container = com.google.android.material.color.MaterialColors.getColor(
-            context, com.google.android.material.R.attr.colorPrimaryContainer, accent);
-        int primary = com.google.android.material.color.MaterialColors.getColor(
-            context, androidx.appcompat.R.attr.colorPrimary, accent);
-        // M3's surface tint is the primary role; MDC exposes no colorSurfaceTint attribute.
-        return look.withMaterialColors(container, primary);
+        return mLookOverride != null ? mLookOverride : GlassLook.of(mSurfaces.preferences());
     }
 
-    /** This factory's look wearing {@code tintStrengthPercent} of its tint (the Tint control). */
+    /**
+     * This factory's look mixing in {@code tintAmountPercent} of its accent (the Tint control),
+     * with the accent's colours resolved from the theme whenever the amount is above 0, whatever
+     * the Look's ink: Clear and Mist take the accent exactly as the Tint Look does.
+     */
     @NonNull
-    public GlassLook look(int tintStrengthPercent) {
-        return look().withStrengthPercent(tintStrengthPercent);
+    public GlassLook look(int tintAmountPercent) {
+        GlassLook look = look().withAmountPercent(tintAmountPercent);
+        if (!look.needsAccentColors()) return look;
+        android.content.Context context = mSurfaces.context();
+        int accent = mSurfaces.accentColor();
+        int containerAttr;
+        int roleAttr;
+        switch (look.hue) {
+            case SECONDARY:
+                containerAttr = com.google.android.material.R.attr.colorSecondaryContainer;
+                roleAttr = com.google.android.material.R.attr.colorSecondary;
+                break;
+            case TERTIARY:
+                containerAttr = com.google.android.material.R.attr.colorTertiaryContainer;
+                roleAttr = com.google.android.material.R.attr.colorTertiary;
+                break;
+            case PRIMARY:
+            default:
+                containerAttr = com.google.android.material.R.attr.colorPrimaryContainer;
+                // M3's surface tint is the primary role; MDC exposes no colorSurfaceTint attribute.
+                roleAttr = androidx.appcompat.R.attr.colorPrimary;
+                break;
+        }
+        int container = com.google.android.material.color.MaterialColors.getColor(
+            context, containerAttr, accent);
+        int role = com.google.android.material.color.MaterialColors.getColor(
+            context, roleAttr, accent);
+        return look.withAccentColors(container, role);
+    }
+
+    /** The colour a surface mixing in {@code tintAmountPercent} of the accent draws its tint in. */
+    public int tintBase(int tintAmountPercent) {
+        return look(tintAmountPercent).tintBase(mSurfaces.glassBaseColor());
     }
 
     /** The dock's tint strength, percent: what every dock-material surface wears. */
@@ -189,6 +219,18 @@ public final class GlassSurfaceFactory {
     @NonNull
     public Drawable statusBarSurface(float barAlpha, float sliceStart, float sliceEnd,
                                      int strokeEdges, @Nullable GlassBackdropCache.Band band) {
+        return statusBarSurface(barAlpha, sliceStart, sliceEnd, strokeEdges, band, false);
+    }
+
+    /**
+     * @param glassDrawsEdge the frost under this bar draws its outline itself
+     *     ({@link #frostDrawsEdge}): the bar keeps the corner {@code strokeEdges} gives it and lays
+     *     no stroke, so the gathered light is its one edge
+     */
+    @NonNull
+    public Drawable statusBarSurface(float barAlpha, float sliceStart, float sliceEnd,
+                                     int strokeEdges, @Nullable GlassBackdropCache.Band band,
+                                     boolean glassDrawsEdge) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
             ? preferences.getStatusBarGrain()
@@ -198,8 +240,8 @@ public final class GlassSurfaceFactory {
         float cornerRadiusPx = strokeEdges != ChromeEdgeRule.NONE && mSurfaces.roundedDockStyle()
             ? mSurfaces.statusBarRimCornerRadiusPx()
             : 0f;
-        return surface(barAlpha, sliceStart, sliceEnd, true, grain, cornerRadiusPx, strokeEdges,
-            band, band, statusTintStrength());
+        return surface(barAlpha, sliceStart, sliceEnd, true, grain, cornerRadiusPx,
+            glassDrawsEdge ? ChromeEdgeRule.NONE : strokeEdges, band, band, statusTintStrength());
     }
 
     /** The dock's material: {@code grain} given, the tint the dock's. */
@@ -301,7 +343,7 @@ public final class GlassSurfaceFactory {
         int midSheenAlpha = DockGlassRendering.midSheenAlpha(clamped);
         int bottomFootAlpha = DockGlassRendering.footAlpha(clamped, withFoot);
         if (glassBand != null && mInk != null) {
-            mInk.noteBandGlass(glassBand, clamped, withFoot, sliceStart, sliceEnd);
+            mInk.noteBandGlass(glassBand, clamped, withFoot, sliceStart, sliceEnd, base);
         }
         GradientDrawable baseLayer = new GradientDrawable();
         baseLayer.setColor(SchemeTone.withAlpha(base, baseAlpha / 255f));
@@ -311,7 +353,7 @@ public final class GlassSurfaceFactory {
         int[] sliceColors = look.obsidianTint
             ? new int[] {GlassLook.wash(), GlassLook.wash()}
             : DockGlassRendering.lightModelSlice(accent, topSheenAlpha, midSheenAlpha,
-                bottomFootAlpha, sliceStart, sliceEnd, look.strength());
+                bottomFootAlpha, sliceStart, sliceEnd);
         GradientDrawable lightLayer = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM, sliceColors);
         lightLayer.setDither(true);
@@ -356,6 +398,14 @@ public final class GlassSurfaceFactory {
     }
 
     /**
+     * Tells the ink the blur {@code band}'s glass is drawn at ({@link ChromeInk#noteBandBlur}), so
+     * its rows are measured on the frame it really shows. Nothing for no band or no ink.
+     */
+    void noteBandBlur(@Nullable GlassBackdropCache.Band band, int blurRadiusDp) {
+        if (band != null && mInk != null) mInk.noteBandBlur(band, blurRadiusDp);
+    }
+
+    /**
      * {@code band}'s veil alone, as a layer for a view that stands over glass another surface
      * draws: the docked keyboard over the unified dock glass is the case. The unified glass spans
      * the dock rows and the keyboard, so its own veil would darken rows no key label stands on;
@@ -371,13 +421,31 @@ public final class GlassSurfaceFactory {
                                   float sliceStart, float sliceEnd, boolean withFoot) {
         if (mInk == null) return null;
         float clamped = barAlpha < 0f ? 0f : (barAlpha > 1f ? 1f : barAlpha);
-        mInk.noteBandGlass(band, clamped, withFoot, sliceStart, sliceEnd);
+        int base = tintBase(dockTintStrength());
+        mInk.noteBandGlass(band, clamped, withFoot, sliceStart, sliceEnd, base);
+        // The glass under it is the dock's, blurred at the dock's radius.
+        mInk.noteBandBlur(band, mSurfaces.effectiveDockBlurRadiusDp());
         int veil = mInk.bandVeil(band);
         if (Color.alpha(veil) <= 0) return null;
         GradientDrawable layer = new GradientDrawable();
         layer.setColor(veil);
         layer.setDither(true);
         return layer;
+    }
+
+    /**
+     * Tells the ink that {@code band}'s content stands on the dock's glass, drawn by another view
+     * at {@code barAlpha}: the A&ndash;Z letters on the dock, the plank or their own capsule, the
+     * extra keys on the dock. The base is the dock's tint at its Tint and hue, so an answer for the
+     * band is an answer on that face. Draws nothing.
+     *
+     * @return whether that face moved since it was last told; false with no ink to tell
+     */
+    public boolean noteDockGlassUnder(@NonNull GlassBackdropCache.Band band, float barAlpha) {
+        if (mInk == null) return false;
+        float clamped = barAlpha < 0f ? 0f : (barAlpha > 1f ? 1f : barAlpha);
+        int base = tintBase(dockTintStrength());
+        return mInk.noteBandGlass(band, clamped, false, 0f, 1f, base);
     }
 
     /**
@@ -393,6 +461,55 @@ public final class GlassSurfaceFactory {
         rim.setStroke(Math.max(1, Math.round(mSurfaces.dpToPx(1))),
             SchemeTone.withAlpha(mSurfaces.outlineColor(), RIM_ALPHA / 255f));
         return rim;
+    }
+
+    /**
+     * Whether the frost {@code frost} stands for draws its own outline: it is on screen and its
+     * {@link SharedFrameDrawable} runs the program, whose gathered light is then the edge, so the
+     * tint over it lays no rim of its own. Asked of the frost itself, never of the look, so a
+     * frost that is hidden, plain or refused by the driver leaves the tint its rim. Below Android
+     * 13 nothing refracts and every rim stays.
+     */
+    public static boolean frostDrawsEdge(@Nullable android.widget.ImageView frost) {
+        if (frost == null || frost.getVisibility() != android.view.View.VISIBLE) return false;
+        SharedFrameDrawable shared = SharedFrameDrawable.of(frost.getDrawable());
+        return shared != null && shared.refracts();
+    }
+
+    /**
+     * The dock's outline with nothing drawn: what its host wears in place of
+     * {@link #rimUnderGlass} while the dock's program draws its edge, so the capsule still clips to
+     * the shape the rim's outline gave it.
+     */
+    @NonNull
+    public Drawable outlineOnly(float cornerRadiusPx) {
+        return new OutlineOnlyDrawable(Math.max(0f, cornerRadiusPx));
+    }
+
+    /**
+     * Draws nothing and answers {@link GradientRimDrawable}'s outline, the same round rect at
+     * full alpha, so a view clipping to its background's outline clips exactly as it did.
+     */
+    private static final class OutlineOnlyDrawable extends Drawable {
+        private final float mRadiusPx;
+
+        OutlineOnlyDrawable(float radiusPx) {
+            mRadiusPx = radiusPx;
+        }
+
+        @Override public void draw(@NonNull android.graphics.Canvas canvas) {}
+
+        @Override public void getOutline(@NonNull android.graphics.Outline outline) {
+            outline.setRoundRect(getBounds(), mRadiusPx);
+        }
+
+        @Override public void setAlpha(int alpha) {}
+
+        @Override public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) {}
+
+        @Override public int getOpacity() {
+            return android.graphics.PixelFormat.TRANSPARENT;
+        }
     }
 
     /**

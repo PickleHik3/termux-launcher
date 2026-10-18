@@ -88,4 +88,36 @@ public class VoiceLanguageTest {
         assertEquals("en", unknownSetting.code);
         assertTrue(unknownSetting.fallback);
     }
+
+    @Test
+    public void theSettingIsForcedAndAutosGuessIsOnlyTheHint() {
+        VoiceLanguage.Resolution explicit = VoiceLanguage.resolve("de", "latn_azerty_fr", Locale.US);
+        assertTrue(explicit.explicit);
+        VoiceLanguage.Choice forced = VoiceLanguage.Choice.forWhisper(explicit);
+        assertEquals("de", forced.forced);
+        assertNull(forced.hint);
+
+        VoiceLanguage.Resolution auto = VoiceLanguage.resolve(VoiceLanguage.AUTO, "latn_qwerty_us", Locale.GERMANY);
+        assertFalse(auto.explicit);
+        VoiceLanguage.Choice listening = VoiceLanguage.Choice.forWhisper(auto);
+        assertNull(listening.forced);
+        assertEquals("en", listening.hint);
+
+        // Auto with nothing known still listens, with English as the hint rather than forced.
+        VoiceLanguage.Choice unknown = VoiceLanguage.Choice.forWhisper(
+            VoiceLanguage.resolve(null, "latn_dvorak", new Locale("tlh")));
+        assertNull(unknown.forced);
+        assertEquals("en", unknown.hint);
+
+        assertNull(VoiceLanguage.Choice.NONE.forced);
+        assertNull(VoiceLanguage.Choice.NONE.hint);
+    }
+
+    @Test
+    public void aCodeIsNamedInTheUsersLanguage() {
+        assertEquals("Spanish", VoiceLanguage.displayName("es", Locale.ENGLISH));
+        assertEquals("Spanisch", VoiceLanguage.displayName("es", Locale.GERMAN));
+        assertEquals("Javanese", VoiceLanguage.displayName("jw", Locale.ENGLISH));
+        assertEquals("Hawaiian", VoiceLanguage.displayName("haw", Locale.ENGLISH));
+    }
 }

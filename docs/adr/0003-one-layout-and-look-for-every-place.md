@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted; the "every place" scope is superseded by 0008 (Home has a layout of its own, places are gone)
 date: 2026-09-26
 supersedes: the per-place scope of 0001 (sizes stay in the layout store; the store stops being keyed by place)
 ---

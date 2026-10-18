@@ -10,6 +10,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.view.InputDevice;
+import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -395,6 +396,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             inspector.recordEvent(e, true);
         if (mHardwareModifiers.track(e))
             refreshKeybindHints();
+        // A key from a real keyboard breaks any take-back the in-app keys' touch engine is
+        // reading; the in-app keys' own events are virtual.
+        if (mInAppKeyboardController != null && e != null
+            && e.getDeviceId() != KeyCharacterMap.VIRTUAL_KEYBOARD)
+            mInAppKeyboardController.onOtherInput();
         // Every modal surface gets first refusal, in the order their claims outrank each other:
         // while one is up the stroke belongs to it and not to the shell behind it.
         if (mHost.overlaysConsumeKeyDown(keyCode, e))
@@ -1514,14 +1520,31 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         });
     }
 
+    /** Ctrl+Alt+V, the palette's and the local API's {@code clipboard.paste}: into the current pane. */
     public void doPaste() {
         TerminalSession session = mHost.currentSession();
         if (session == null)
             return;
         if (!session.isRunning())
             return;
-        String text = ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
-        if (text != null)
-            session.getEmulator().paste(text);
+        TerminalEmulator emulator = session.getEmulator();
+        if (emulator != null)
+            mTermuxTerminalSessionActivityClient.pasteClipboard(emulator);
+    }
+
+    /** A middle click or the accessibility paste on {@code view}: into that pane. */
+    @Override
+    public void onPasteRequest(TerminalView view) {
+        if (view.mEmulator != null)
+            mTermuxTerminalSessionActivityClient.pasteClipboard(view.mEmulator);
+    }
+
+    /** A picture the system keyboard inserted: pasted the way a picture on the clipboard is. */
+    @Override
+    public boolean onCommitContent(TerminalView view, Uri uri, String mime, Runnable release) {
+        if (view.mEmulator == null)
+            return false;
+        mTermuxTerminalSessionActivityClient.pasteContent(view.mEmulator, uri, mime, release);
+        return true;
     }
 }

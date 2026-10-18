@@ -100,10 +100,25 @@ public final class TerminalSheetController
         default com.termux.app.chrome.GlassMotion glassMotion() {
             return com.termux.app.chrome.GlassMotion.CLASSIC;
         }
+
+        /**
+         * Whether the plane's glass may light under a finger on a centred card's rows: Fancier
+         * Glass on, and nothing stopping its motions (lazy mode, battery saver). The system's
+         * animation setting and reduced motion are the light's own to ask. Off unless the host says.
+         */
+        default boolean glassTouchLightAllowed() {
+            return false;
+        }
     }
 
     /** The plane's live blur, when the backdrop is not a wallpaper frost. */
     @Nullable private com.github.mmin18.widget.RealtimeBlurView mLiveBlur;
+
+    /**
+     * The light a finger on a centred card's row casts into the plane's frost, built on the first
+     * such card; one serves every card, since one finger rests on one row at a time.
+     */
+    @Nullable private com.termux.app.chrome.GlassTouchLight mTouchLight;
 
     /** The foot panel's rise and sink; a centred card's own timings are {@code GlassMotion}'s. */
     private static final long ENTER_DURATION_MS = 170L;
@@ -600,6 +615,8 @@ public final class TerminalSheetController
     private void onEmptied() {
         mHost.setSheetInterceptorActive(false);
         if (mPlane != null) mPlane.setVisibility(View.INVISIBLE);
+        // The plane is shut: no light lingers on a frost about to be dropped.
+        if (mTouchLight != null) mTouchLight.reset();
         ImageView frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
         if (frost != null) {
             // Drop the full-screen frost bitmap while shut; the next show() rebuilds it.
@@ -872,8 +889,30 @@ public final class TerminalSheetController
         boolean centred = !mPendingPlacement.leading && !mPendingPlacement.foot
             && !mPendingPlacement.strip && mPendingPlacement.anchor == null;
         View built = finishCard(card, content, fillHeight);
-        if (centred) com.termux.app.chrome.GlassPress.attachClickables(card, mHost::glassMotion);
+        if (centred) {
+            // The rows also light the plane's frost under the finger (Fancier Glass only; the
+            // frost's program draws it). The frost is the plane-wide wallpaper ImageView behind
+            // every card, so the finger's position is carried into its coordinates.
+            ImageView frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
+            if (frost != null) {
+                com.termux.app.chrome.GlassPress.attachClickables(card, mHost::glassMotion,
+                    touchLight(frost), frost);
+            } else {
+                com.termux.app.chrome.GlassPress.attachClickables(card, mHost::glassMotion);
+            }
+        }
         return built;
+    }
+
+    /** The plane's one touch light, onto {@code frost}'s shared frame. */
+    @NonNull
+    private com.termux.app.chrome.GlassTouchLight touchLight(@NonNull ImageView frost) {
+        if (mTouchLight == null) {
+            mTouchLight = new com.termux.app.chrome.GlassTouchLight(frost.getContext(),
+                com.termux.app.chrome.GlassTouchLight.frostSink(frost),
+                mHost::glassTouchLightAllowed);
+        }
+        return mTouchLight;
     }
 
     /** The strip's flat material: an opaque borderless pill, no glass and no blur. */

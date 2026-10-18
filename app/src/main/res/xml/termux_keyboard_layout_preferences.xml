@@ -8,10 +8,6 @@
             app:summary="@string/settings_extra_keys_summary"
             app:title="@string/settings_extra_keys_title" />
         <Preference
-            app:key="in_app_keyboard_custom_layout"
-            app:summary="@string/termux_in_app_keyboard_custom_layout_summary"
-            app:title="@string/termux_in_app_keyboard_custom_layout_title" />
-        <Preference
             app:key="in_app_keyboard_layouts"
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardLayoutsFragment"
             app:persistent="false"

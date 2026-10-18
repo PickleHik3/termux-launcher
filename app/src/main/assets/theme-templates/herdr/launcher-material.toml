@@ -2,47 +2,63 @@
 #
 # Both palettes, in the two subtables herdr layers on top of the shared
 # [theme.custom] overrides when [theme] auto_switch is on: it picks the one
-# matching the light/dark appearance the host terminal reports. apply.sh
-# splices these into ~/.config/herdr/config.toml.
+# matching the light/dark appearance the host terminal reports; then the
+# sidebar's rows. apply.sh splices these into ~/.config/herdr/config.toml.
+#
+# Backgrounds are "reset" so the launcher glass shows through. herdr draws the
+# active tab label in panel_bg, so with a clear tab bar the accent is a mid tone.
 
 [theme.custom.dark]
-accent        = "{{ colors.primary.dark.hex }}"
-panel_bg      = "{{ colors.surface_container.dark.hex }}"
-sidebar_bg    = "{{ colors.surface_container_low.dark.hex }}"
+accent        = "{{ colors.inverse_primary.dark.hex }}"
+panel_bg      = "reset"
+sidebar_bg    = "reset"
 active_row_bg = "{{ colors.primary_container.dark.hex }}"
 selection_bg  = "{{ colors.secondary_container.dark.hex }}"
-surface0      = "{{ colors.surface_container_high.dark.hex }}"
-surface1      = "{{ colors.surface_container_highest.dark.hex }}"
-surface_dim   = "{{ colors.surface_dim.dark.hex }}"
-overlay0      = "{{ colors.outline_variant.dark.hex }}"
-overlay1      = "{{ colors.outline.dark.hex }}"
-text          = "{{ colors.on_surface.dark.hex }}"
-subtext0      = "{{ colors.on_surface_variant.dark.hex }}"
-mauve         = "{{ colors.tertiary.dark.hex }}"
+surface0      = "{{ colors.surface_container_highest.dark.hex }}"
+surface1      = "{{ colors.surface_bright.dark.hex }}"
+surface_dim   = "reset"
+overlay0      = "{{ colors.secondary.dark.hex }}"
+overlay1      = "{{ colors.primary.dark.hex }}"
+text          = "{{ colors.inverse_surface.dark.hex }}"
+subtext0      = "{{ colors.on_surface.dark.hex }}"
+mauve         = "{{ colors.terminal_bright_magenta.dark.hex }}"
 green         = "{{ colors.terminal_normal_green.dark.hex }}"
-yellow        = "{{ colors.terminal_normal_yellow.dark.hex }}"
-red           = "{{ colors.error.dark.hex }}"
-blue          = "{{ colors.primary.dark.hex }}"
-teal          = "{{ colors.terminal_normal_cyan.dark.hex }}"
-peach         = "{{ colors.terminal_bright_yellow.dark.hex }}"
+yellow        = "{{ colors.terminal_bright_yellow.dark.hex }}"
+red           = "{{ colors.terminal_bright_red.dark.hex }}"
+blue          = "{{ colors.terminal_bright_blue.dark.hex }}"
+teal          = "{{ colors.terminal_bright_cyan.dark.hex }}"
+peach         = "{{ colors.terminal_normal_yellow.dark.hex }}"
 
 [theme.custom.light]
-accent        = "{{ colors.primary.light.hex }}"
-panel_bg      = "{{ colors.surface_container.light.hex }}"
-sidebar_bg    = "{{ colors.surface_container_low.light.hex }}"
+accent        = "{{ colors.primary_container.light.hex }}"
+panel_bg      = "reset"
+sidebar_bg    = "reset"
 active_row_bg = "{{ colors.primary_container.light.hex }}"
 selection_bg  = "{{ colors.secondary_container.light.hex }}"
-surface0      = "{{ colors.surface_container_high.light.hex }}"
-surface1      = "{{ colors.surface_container_highest.light.hex }}"
-surface_dim   = "{{ colors.surface_dim.light.hex }}"
-overlay0      = "{{ colors.outline_variant.light.hex }}"
-overlay1      = "{{ colors.outline.light.hex }}"
+surface0      = "{{ colors.surface_container_highest.light.hex }}"
+surface1      = "{{ colors.surface_bright.light.hex }}"
+surface_dim   = "reset"
+overlay0      = "{{ colors.outline.light.hex }}"
+overlay1      = "{{ colors.primary.light.hex }}"
 text          = "{{ colors.on_surface.light.hex }}"
 subtext0      = "{{ colors.on_surface_variant.light.hex }}"
-mauve         = "{{ colors.tertiary.light.hex }}"
+mauve         = "{{ colors.terminal_normal_magenta.light.hex }}"
 green         = "{{ colors.terminal_normal_green.light.hex }}"
 yellow        = "{{ colors.terminal_normal_yellow.light.hex }}"
-red           = "{{ colors.error.light.hex }}"
-blue          = "{{ colors.primary.light.hex }}"
+red           = "{{ colors.terminal_normal_red.light.hex }}"
+blue          = "{{ colors.terminal_normal_blue.light.hex }}"
 teal          = "{{ colors.terminal_normal_cyan.light.hex }}"
 peach         = "{{ colors.terminal_bright_yellow.light.hex }}"
+
+# The sidebar's rows, coloured from the palette the terminal is wearing: herdr's row styles have
+# no light and dark variant, so these follow the current mode and re-render when it flips. One
+# line per value, so apply.sh can read each key whole.
+[ui.sidebar.spaces]
+rows = [["state_icon", { token = "workspace", fg = "{{ colors.primary.default.hex }}", bold = true }], [{ token = "branch", fg = "{{ colors.tertiary.default.hex }}" }, { token = "git_status", fg = "{{ colors.terminal_normal_green.default.hex }}" }]]
+
+[ui.sidebar.agents]
+rows = [["state_icon", { token = "terminal_title_stripped", fg = "{{ colors.primary.default.hex }}", bold = true }], [{ token = "machine", fg = "{{ colors.terminal_normal_cyan.default.hex }}" }, { token = "agent", fg = "{{ colors.tertiary.default.hex }}" }]]
+
+# Claude carries rows of its own, which win over the agents' rows unless they are set here too.
+[ui.sidebar.agents.rows_by_agent]
+claude = [["state_icon", { token = "terminal_title_stripped", fg = "{{ colors.primary.default.hex }}", bold = true }], [{ token = "machine", fg = "{{ colors.terminal_normal_cyan.default.hex }}" }, { token = "agent", fg = "{{ colors.tertiary.default.hex }}" }]]

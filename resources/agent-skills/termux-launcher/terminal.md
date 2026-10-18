@@ -1,7 +1,7 @@
 # Terminal features: graphics, notifications, text
 
-Depth: `docs/en/Terminal_Kitty_Protocols.md`, `docs/en/Terminal_Modernization.md`,
-`docs/en/Programs_Inside_The_Terminal.md`.
+Depth: `docs/Terminal_Kitty_Protocols.md`, `docs/Terminal_Modernization.md`,
+`docs/Programs_Inside_The_Terminal.md`.
 
 ## The one constraint that shapes everything here
 

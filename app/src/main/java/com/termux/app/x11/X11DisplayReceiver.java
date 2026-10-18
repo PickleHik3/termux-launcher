@@ -65,6 +65,9 @@ public final class X11DisplayReceiver extends BroadcastReceiver {
         }
         Bundle bundle = intent.getBundleExtra(null);
         if (bundle == null || bundle.getBinder(null) == null) return;
+        // The process hears the server is up whoever takes the announcement, so new shells get
+        // DISPLAY from the server itself rather than from whichever activity holds it.
+        X11DisplayServerState.onServerAnnounced(bundle.getBinder(null));
         X11DisplayHostController host = controller;
         if (host == null) {
             // The server is up and no page owns it yet. Kept for whoever comes next; the server

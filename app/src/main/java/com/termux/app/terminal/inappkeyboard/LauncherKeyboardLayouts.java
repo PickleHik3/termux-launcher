@@ -9,10 +9,13 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The catalogue of text layouts the in-app keyboard can hot-swap between, and the parsing of
@@ -25,6 +28,11 @@ import java.util.Set;
  * otherwise. It is loaded by {@link TermuxInAppKeyboardLayoutLoader} rather than from a
  * resource id, which is why its {@link Layout#xmlResId} is {@code 0}.
  *
+ * <p>The user's own layouts are files, {@code ~/.termux/keyboard/layouts/user-<slug>.xml} (see
+ * {@link KeyboardLayoutFiles}). They are not in the catalogue, which never touches the disk;
+ * their ids are recognised by {@link #USER_PREFIX} alone and their names are remembered here as
+ * whoever reads the file learns them, so the ring and the switch notice can show them.
+ *
  * <p>The modal pads — numeric and Greek/math — are deliberately not in here. They are reached
  * by their own keys and are not part of the ring, so cycling never lands on a pad the user
  * cannot type prose on.
@@ -36,6 +44,12 @@ public final class LauncherKeyboardLayouts {
     /** The launcher's own layout: {@code ~/.termux/keyboard/layout.xml}, else bundled QWERTY. */
     public static final String LAYOUT_MAIN = "main";
 
+    /**
+     * Id prefix of a user's own layout. Catalogue ids are resource names, which cannot hold a
+     * hyphen, so nothing shipped can ever start with it.
+     */
+    public static final String USER_PREFIX = "user-";
+
     /** Upper bound on ring size, so a hand-edited preference cannot make cycling useless. */
     public static final int MAX_SELECTION = 16;
 
@@ -43,7 +57,7 @@ public final class LauncherKeyboardLayouts {
     public static final class Layout {
         public final String id;
         public final String label;
-        /** Keyboard-module {@code R.xml} id, or {@code 0} for {@link #LAYOUT_MAIN}. */
+        /** Keyboard-module {@code R.xml} id, or {@code 0} for {@link #LAYOUT_MAIN} and user layouts. */
         public final int xmlResId;
 
         Layout(@NonNull String id, @NonNull String label, int xmlResId) {
@@ -61,7 +75,40 @@ public final class LauncherKeyboardLayouts {
     @Nullable
     private static volatile List<Layout> sCatalog;
 
+    /** Names of user layouts as last read from their files, keyed by id. */
+    private static final Map<String, String> sUserLabels = new ConcurrentHashMap<>();
+
     private LauncherKeyboardLayouts() {
+    }
+
+    /** Whether {@code id} names one of the user's own layouts. */
+    public static boolean isUserLayout(@Nullable String id) {
+        return KeyboardLayoutFiles.isUserId(id);
+    }
+
+    /** Records a user layout's name, read from its file, for {@link #labelFor}. */
+    public static void rememberUserLabel(@NonNull String id, @Nullable String label) {
+        if (!isUserLayout(id)) return;
+        if (label == null || label.trim().isEmpty()) sUserLabels.remove(id);
+        else sUserLabels.put(id, label.trim());
+    }
+
+    /**
+     * Whether every user layout among {@code ids} has a remembered name, so a list drawn from
+     * them now shows no id-shaped stand-in that a later redraw replaces.
+     */
+    public static boolean userLabelsKnown(@NonNull Collection<String> ids) {
+        for (String id : ids) {
+            if (isUserLayout(id) && !sUserLabels.containsKey(id)) return false;
+        }
+        return true;
+    }
+
+    /** What a user layout is called before its file has been read: its id, made readable. */
+    @NonNull
+    public static String fallbackUserLabel(@NonNull String id) {
+        String bare = id.startsWith(USER_PREFIX) ? id.substring(USER_PREFIX.length()) : id;
+        return bare.replace('-', ' ');
     }
 
     /** Every selectable layout, ring pseudo entry first, then the bundled catalogue. */
@@ -91,10 +138,18 @@ public final class LauncherKeyboardLayouts {
         return catalog;
     }
 
-    /** The catalogue entry for {@code id}, or null when nothing carries that id any more. */
+    /**
+     * The catalogue entry for {@code id}, or null when nothing carries that id any more. A user
+     * layout id always answers, with no resource: whether its file still exists is a question for
+     * the disk, which this never asks, and a missing one loads as the bundled QWERTY.
+     */
     @Nullable
     public static Layout find(@NonNull Resources resources, @Nullable String id) {
         if (id == null || id.isEmpty()) return null;
+        if (isUserLayout(id)) {
+            String label = sUserLabels.get(id);
+            return new Layout(id, label == null ? fallbackUserLabel(id) : label, 0);
+        }
         for (Layout layout : catalog(resources)) {
             if (layout.id.equals(id)) return layout;
         }

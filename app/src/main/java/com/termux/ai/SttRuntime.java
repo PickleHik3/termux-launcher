@@ -16,7 +16,9 @@ import java.io.File;
  * {@link TaiResidency.Kind#STT} after a load and deregisters on close. Every answer has the same
  * shape: {@code ok, text, model, language, duration, segments[], windowSeconds, biased, timings{loadMs,
  * melMs, encodeMs, decodeMs, decodeSteps, pieces}, _backend, _runtime}, or {@code ok: false} with an
- * {@code error} and {@code _statusCode}.
+ * {@code error} and {@code _statusCode}. Whisper adds how it chose the language
+ * ({@code languageSource}, and {@code detectedLanguage}/{@code languageProbability} when it
+ * listened for it; see {@link WhisperLanguageDetection}) and {@code timings.detectMs}.
  */
 interface SttRuntime extends AutoCloseable {
     /** Whether {@code modelId} is the graph held right now. */
@@ -34,6 +36,18 @@ interface SttRuntime extends AutoCloseable {
     @NonNull
     JSONObject transcribe(@NonNull TaiModelSpec spec, @NonNull File audioFile,
                           @Nullable String language, @Nullable String biasText) throws JSONException;
+
+    /**
+     * As {@link #transcribe(TaiModelSpec, File, String, String)}, with the language to fall back
+     * to when an engine that detects the language is not sure of it ({@link WhisperLanguageDetection});
+     * an engine that never asks ignores it.
+     */
+    @NonNull
+    default JSONObject transcribe(@NonNull TaiModelSpec spec, @NonNull File audioFile,
+                                  @Nullable String language, @Nullable String languageHint,
+                                  @Nullable String biasText) throws JSONException {
+        return transcribe(spec, audioFile, language, biasText);
+    }
 
     /** Releases the graph; waits for a running transcription. A no-op when nothing is loaded. */
     @Override

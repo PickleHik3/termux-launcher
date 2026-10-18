@@ -252,7 +252,7 @@ public class TermuxActivityPageIndicatorTest {
         DockLayout dock = activity.dockLayoutFor(layoutWithAppsOn(Edge.TOP));
         float density = activity.getResources().getDisplayMetrics().density;
         int airPx = DockLayoutPolicy.rowAirPx(true, true, density);
-        int stripPx = PageTickStrip.bandPx(density);
+        int stripPx = DockLayoutPolicy.stripBandPx(true, density);
         assertEquals("a lone row with ticks matches their band on the other side",
             stripPx, airPx);
         assertTrue("the row has to have a band for this to mean anything",

@@ -34,17 +34,11 @@ Sizes follow the study: **S** 2–5 days, **M** 1–3 weeks, **L** 4–8 weeks, 
 
 | Item | Size | State |
 |---|---|---|
-| Appearance and Layout editor | L | Spec approved 2026-09-30: `active/appearance-layout-editor/SPEC.md`. Items 1 and 2 of its §7 (Layout mode with handles and no rows; layout canvas from the element pack) are unblocked. Items 3–5 (bands for terminal and keyboard, the editor shell, the Looks) follow in order. |
+| Rebuild `libmnnllmapp.so` for MNN diffusion | S | CI or the local recipe, then update the SHA lines in `app/src/main/jniLibs/arm64-v8a/README.md`. Until then image routes answer `501 mnn_image_unavailable`. Record: `reference/voice-ai/mnn-diffusion.md`; its device checks are in `device-checks.md`. |
 
-There is no other unblocked implementation slice left from the feasibility study. The remaining projects
-below are gated on measurements, concrete client demand, security/UX design, or an explicit product
-decision.
-
-## Planned for the next release
-
-| Item | Size | State |
-|---|---|---|
-| In-app animated wallpapers over a live shared frame | L | Moved to the next release on 2026-09-30. Now being built under [#41](https://github.com/PickleHik3/termux-launcher/issues/41) as generated backgrounds with moments (the ten pre-made ones were removed 2026-10-04; living stills are the only animated backgrounds now) and a Material palette, gated behind Fancier Glass (API 34 is its own floor). The specs are `active/animated-wallpaper/SPEC.md` and `generated-backgrounds-issue.md`. Phase 0 (spec §10) comes first: a throwaway prototype whose numbers are measured on the real build on pong, and they decide whether the rest is kept. Spec questions 5, 6 and 8–11 are still open. |
+There is no other unblocked implementation slice left from the feasibility study. The remaining
+projects below are gated on measurements, concrete client demand, security/UX design, or an
+explicit product decision.
 
 ## Deferred on purpose
 
