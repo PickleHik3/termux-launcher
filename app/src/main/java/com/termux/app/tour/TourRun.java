@@ -21,8 +21,9 @@ import java.util.List;
  * float and the Layout editor are on the closing card; everything else is in help, and nothing here
  * opens a shell, a window or a session.
  *
- * <p>Every stage names the half of the wall its control stands on. The run puts the wall back on
- * Home page 1 between lessons, so a stage taught on a window starts by asking the way there.
+ * <p>Every stage names the half of the wall its control stands on. Before each lesson the run puts
+ * the wall on the half its first stage is taught on ({@link #startSide}): Home page 1, or the
+ * first window. A user who wanders to the other half mid-lesson is asked the way back.
  *
  * <p>The setup sheet that comes before the first lesson is not a step: it is offered before the
  * run and is never stored, so a run picked up after a process death goes straight to its lesson.
@@ -76,6 +77,18 @@ public final class TourRun {
     }
 
     /**
+     * Where the wall is put before {@code step} shows: the half its first stage is taught on.
+     * A first stage read on either half starts on Home, where its glow is (the palette's free
+     * area); the closing card, and no card at all, leave the wall where the last lesson ended.
+     */
+    @NonNull
+    public static TourStep.Side startSide(@androidx.annotation.Nullable TourStep step) {
+        if (step == null || step.isClosingCard()) return TourStep.Side.ANYWHERE;
+        TourStep.Side first = step.sideAt(0);
+        return first == TourStep.Side.ANYWHERE ? TourStep.Side.HOME : first;
+    }
+
+    /**
      * The lessons this wall has nothing for. Without a Workspace window to slide to there is no
      * seam to cross and no border to drag back; without Home there is neither the seam nor the
      * dock rows that float over Home.
@@ -123,8 +136,8 @@ public final class TourRun {
     }
 
     /**
-     * The keyboard swipe on a window, both ways round. The run leaves the Workspace's keyboard up
-     * for the window it lands on next, so the first half always has a keyboard to put away.
+     * The keyboard swipe on a window, both ways round. The run starts the lesson on a window with
+     * the keyboard up, so the first half always has a keyboard to put away.
      */
     private static TourStep keyboard() {
         return TourStep.lesson(KEYBOARD, 1, R.string.tour_chapter_workspace,

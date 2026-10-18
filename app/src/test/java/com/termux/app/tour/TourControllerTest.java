@@ -230,6 +230,40 @@ public class TourControllerTest {
         assertEquals(TourRun.CLOSING + ":0", current());
     }
 
+    // ---- where the next card starts --------------------------------------------------------------
+
+    @Test public void theUpcomingCardIsReadBeforeTheRunMoves() {
+        assertNull("no run", controller.upcomingStep());
+        controller.start();
+        assertEquals("the sheet's next is the first lesson", TourRun.PAGE_SWIPE,
+            controller.upcomingStep().id);
+        controller.showMeAround();
+        assertEquals(TourRun.FIND_APPS, controller.upcomingStep().id);
+        clearTheLesson();
+        doTheGesture();
+        assertTrue(controller.isCompleting());
+        assertEquals("while saying Got it", TourRun.KEYBOARD, controller.upcomingStep().id);
+        controller.continueAfterCompletion();
+        assertEquals(TourRun.KEYBOARD + ":0", current());
+    }
+
+    @Test public void theUpcomingCardWalksPastDroppedOnesAndEndsOnTheClosingCard() {
+        controller.dropStep(TourRun.PAGE_SWIPE);
+        controller.start();
+        assertEquals(TourRun.FIND_APPS, controller.upcomingStep().id);
+        controller.startAt(TourRun.FIND_HELP);
+        assertEquals(TourRun.CLOSING, controller.upcomingStep().id);
+        controller.endTour();
+        assertNull("the closing card is the last", controller.upcomingStep());
+    }
+
+    @Test public void practiceHasNoUpcomingCard() {
+        controller.startPractice(TourRun.KEYBOARD);
+        assertNull(controller.upcomingStep());
+        assertEquals(TourRun.KEYBOARD, controller.step(TourRun.KEYBOARD).id);
+        assertNull(controller.step("pin_apps"));
+    }
+
     // ---- a wall with nothing beside Home, or no Home ----------------------------------------------
 
     @Test public void aDroppedLessonIsWalkedPast() {

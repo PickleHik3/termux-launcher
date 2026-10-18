@@ -170,6 +170,26 @@ public class TourRunTest {
         assertEquals(TourStep.Side.ANYWHERE, step(TourRun.CLOSING).sideAt(0));
     }
 
+    @Test public void eachLessonStartsOnTheHalfItsFirstStageIsTaughtOn() {
+        assertEquals(TourStep.Side.HOME, TourRun.startSide(step(TourRun.PAGE_SWIPE)));
+        assertEquals(TourStep.Side.HOME, TourRun.startSide(step(TourRun.FIND_APPS)));
+        assertEquals(TourStep.Side.WORKSPACE, TourRun.startSide(step(TourRun.KEYBOARD)));
+        assertEquals(TourStep.Side.WORKSPACE, TourRun.startSide(step(TourRun.STATUS_SWIPE)));
+        // Read on either half, it starts where its glow is: Home's free area.
+        assertEquals(TourStep.Side.HOME, TourRun.startSide(step(TourRun.FIND_ACTION)));
+        assertEquals(TourStep.Side.WORKSPACE, TourRun.startSide(step(TourRun.FIND_HELP)));
+        // The closing card shows wherever the last lesson ended.
+        assertEquals(TourStep.Side.ANYWHERE, TourRun.startSide(step(TourRun.CLOSING)));
+        assertEquals(TourStep.Side.ANYWHERE, TourRun.startSide(null));
+    }
+
+    @Test public void noLessonStartsOnAHalfItsFirstStageIsNotReadOn() {
+        for (TourStep step : TourRun.steps(PHONE)) {
+            if (step.isClosingCard()) continue;
+            assertTrue(step.id, step.isTaughtOn(0, TourRun.startSide(step)));
+        }
+    }
+
     @Test public void aStageIsReadOnItsOwnHalfAndAnywhereWhileTheWallHasNotSaid() {
         TourStep pageSwipe = step(TourRun.PAGE_SWIPE);
         assertTrue(pageSwipe.isTaughtOn(0, TourStep.Side.HOME));

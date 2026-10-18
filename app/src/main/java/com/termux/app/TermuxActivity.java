@@ -2660,10 +2660,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 View decor = getWindow().getDecorView();
                 decor.post(this::maybeOfferTaiWelcomeCard);
             });
-            // Between lessons the home screen is put back the way every lesson starts.
+            // Before each lesson the wall is put on the half the lesson starts on.
             mFirstBootTour.setHomeHost(new FirstBootTour.HomeHost() {
-                @Override public void resetHome() {
-                    resetHomeForTour();
+                @Override public void resetFor(
+                        @NonNull com.termux.app.tour.TourStep.Side side) {
+                    resetWallForTour(side);
                 }
 
                 // No Workspace window beside Home: no seam to cross, no border to drag back.
@@ -2694,30 +2695,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The wall as every lesson of the run starts it, which is where the home press leaves it:
-     * help, the palette, the drawer, the corner tabs and the status bar's unfolded form closed,
-     * the wall on Home page 1 and the keyboard down there (unless always on keeps it). The
-     * Workspace remembers its keyboard up, so the window the next lesson lands on has one to put
-     * away. Each through the call the launcher already makes for it, so nothing here replays a
-     * gesture. A keyboard the user switched off stays off; the keyboard lesson can be skipped.
+     * The wall as a lesson of the run starting on {@code side} needs it. Help, the palette, the
+     * drawer, the corner tabs and the status bar's unfolded form close whatever the side (the
+     * status lesson starts folded). A Home lesson then gets what the home press does: Home page
+     * 1, the keyboard down there (unless always on keeps it). A Workspace lesson gets the first
+     * window, or the window already in front, with its keyboard up (the keyboard lesson's first
+     * half puts it away). Anywhere leaves the wall where it is: the closing card. Each through the
+     * call the launcher already makes for it, so nothing here replays a gesture. A keyboard the
+     * user switched off stays off; the keyboard lesson can be skipped.
      */
-    private void resetHomeForTour() {
+    private void resetWallForTour(@NonNull com.termux.app.tour.TourStep.Side side) {
         if (isFinishing() || isDestroyed()) return;
         dismissHelpOverlay();
         if (mCommandPalette != null && mCommandPalette.isOpen()) mCommandPalette.collapse();
         if (mAppDrawerController != null && isAppDrawerEngaged()) mAppDrawerController.close(true);
         if (mPaneController != null) mPaneController.dismissControlsForHelp();
         if (!isStatusBarCompact()) setTopStatusBarCollapsed(true, true);
-        PlaceLayoutStore store = placeLayoutStore();
-        if (store != null && mInAppKeyboard != null && mInAppKeyboard.isEnabled()
-                && !mInAppKeyboard.isTurnedOff()) {
-            store.setKeyboardOpen(com.termux.app.wall.PaneWallPage.TERMINAL, true);
-        }
         if (mPaneWallController == null) return;
         if (mPaneWallController.widgetsPage() != null)
             mPaneWallController.widgetsPage().dismissControls();
-        if (!mPaneWallController.hasWidgetsPage()) {
-            mPaneWallController.returnToTerminal(true);
+        if (side == com.termux.app.tour.TourStep.Side.ANYWHERE) return;
+        boolean hasWorkspace = mPaneWallController.pages()
+            .contains(com.termux.app.wall.PaneWallPage.TERMINAL);
+        boolean hasHome = mPaneWallController.hasWidgetsPage();
+        boolean toWorkspace = side == com.termux.app.tour.TourStep.Side.WORKSPACE
+            ? hasWorkspace : !hasHome;
+        if (toWorkspace) {
+            if (hasWorkspace) resetWorkspaceForTour();
             return;
         }
         // Already resting on Home, no slide lands the keyboard: one left up goes down here.
@@ -2725,6 +2729,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneWallController.goHome(true);
         if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
         if (restingOnHome && !isHomeKeyboardAlwaysOn()) lowerHomePaletteKeyboard();
+    }
+
+    /**
+     * A window with its keyboard up, for a lesson taught in the Workspace. Resting on a window
+     * already, the wall stays and the keyboard comes up there; from Home the wall slides onto the
+     * first window, the one beside the seam, which comes back with the keyboard the Workspace
+     * remembers, set up before the slide.
+     */
+    private void resetWorkspaceForTour() {
+        boolean keyboardWanted = mInAppKeyboard != null && mInAppKeyboard.isEnabled()
+            && !mInAppKeyboard.isTurnedOff();
+        com.termux.app.wall.PaneWallPage page = mPaneWallController.currentPage();
+        if (page == com.termux.app.wall.PaneWallPage.TERMINAL) {
+            if (keyboardWanted && !mInAppKeyboard.isVisible()) {
+                mInAppKeyboard.show(
+                    com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+            }
+            return;
+        }
+        PlaceLayoutStore store = placeLayoutStore();
+        // Minimal mode keeps its own keyboard rule; the memory is what leaving it brings back.
+        if (keyboardWanted && store != null && !store.isMinimal())
+            store.setKeyboardOpen(com.termux.app.wall.PaneWallPage.TERMINAL, true);
+        if (page == com.termux.app.wall.PaneWallPage.WIDGETS)
+            showWallInnerPage(com.termux.app.wall.PaneWallPage.TERMINAL, 0);
+        mPaneWallController.returnToTerminal(true);
     }
 
     /** The setup sheet the run is offered on, built the first time the run asks for it. */
