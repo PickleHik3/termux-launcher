@@ -28,6 +28,7 @@ Latest stable: v1.0.6.
 - Round icons in icon packs stay whole circles now that pack icons draw bigger.
 - The window bar names terminal-browser in full, with a globe.
 - The command palette's key strip under the search field has solid keys, and its last row stays readable above the rounded bottom.
+- The welcome message in a new session is a rounded card in your wallpaper's colours, with a tap-to-open link to the guide; it lays itself out to fit narrow panes.
 - Fixes that also shipped in v1.0.6: the Low-memory preset switch, smoother transcript scrolling, symbol icons in larger program text, kitty playback without flicker, icon packs that stay applied, the sessions drawer at large font sizes, and a wallpaper change that keeps your Look's blur.
 
 ## Experimental

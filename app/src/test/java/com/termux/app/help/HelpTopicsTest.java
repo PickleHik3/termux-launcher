@@ -253,7 +253,7 @@ public class HelpTopicsTest {
 
     @Test public void theSixLessonsAreReachedFromTheTopicsThatTeachThem() {
         assertEquals(HelpTopics.LESSON_FIND_HELP, HelpTopics.entry("corners").lessonId);
-        assertEquals(HelpTopics.LESSON_BORDER_DRAG, HelpTopics.entry("places").lessonId);
+        assertEquals(HelpTopics.LESSON_PAGE_SWIPE, HelpTopics.entry("places").lessonId);
         assertEquals(HelpTopics.LESSON_KEYBOARD, HelpTopics.entry("keyboard_swipe").lessonId);
         assertEquals(HelpTopics.LESSON_STATUS_SWIPE, HelpTopics.entry("status").lessonId);
         assertEquals(HelpTopics.LESSON_FIND_APPS, HelpTopics.entry("dock").lessonId);

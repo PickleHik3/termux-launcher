@@ -258,9 +258,11 @@ titlebar); `TerminalCommandPalette` (Home action set, Linux apps, floats); `Laun
 - Saved sessions recording the float flag and page (done in phase two, slice 4).
 - Rebuilding the row or the floats after a background kill beyond what Saved sessions restore.
 - A terminal or display window placed among the Home pages as a page.
-- The first-boot tour. It is switched off on this branch (`FirstBootTour.ENABLED`, 2026-10-18): it
-  teaches the three places and the border drag on Home. It needs a rewrite for the wall before the
-  branch ships; until then a first run gets the Welcome sheet and the permission flow only.
+- The first-boot tour (done in phase two, slice 6): rewritten for the wall and switched back on
+  (`FirstBootTour.ENABLED`). Six lessons in three chapters (Home: the seam and the border drag
+  back, the apps; the Workspace: the keyboard swipe, the status bar's fold; anywhere: the palette,
+  the corner tab's ?), each stage taught on its half of the wall, then the closing card with the
+  Home float and Layout.
 
 ## 13. Words
 
