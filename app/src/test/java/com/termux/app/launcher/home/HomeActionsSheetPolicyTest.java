@@ -16,7 +16,7 @@ import java.util.List;
 public class HomeActionsSheetPolicyTest {
 
     @Test public void notTheDefaultHomeOffersEveryRowInOrder() {
-        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_PAGE, EDIT_PAGES, LAYOUT,
+        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_PAGES, LAYOUT,
                 WALLPAPER, LOOK, LAUNCHER_SETTINGS, SET_DEFAULT_HOME, HELP),
             HomeActionsSheetPolicy.itemsFor(false, true, false, 1));
     }
@@ -24,7 +24,7 @@ public class HomeActionsSheetPolicyTest {
     @Test public void theDefaultHomeHidesSetAsDefault() {
         List<Item> items = HomeActionsSheetPolicy.itemsFor(true, true, false, 1);
         assertFalse(items.contains(SET_DEFAULT_HOME));
-        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_PAGE, EDIT_PAGES, LAYOUT,
+        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_PAGES, LAYOUT,
             WALLPAPER, LOOK, LAUNCHER_SETTINGS, HELP), items);
     }
 
@@ -42,7 +42,7 @@ public class HomeActionsSheetPolicyTest {
     }
 
     @Test public void removePageOnlyForAnEmptyPageThatIsNotTheLast() {
-        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_PAGE, EDIT_PAGES, LAYOUT,
+        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_PAGES, LAYOUT,
                 REMOVE_PAGE, WALLPAPER, LOOK, LAUNCHER_SETTINGS, HELP),
             HomeActionsSheetPolicy.itemsFor(true, true, true, 2));
         assertTrue(HomeActionsSheetPolicy.itemsFor(true, true, true, 5).contains(REMOVE_PAGE));
@@ -73,7 +73,7 @@ public class HomeActionsSheetPolicyTest {
             if (item.group == Group.LAUNCHER) seenLauncher = true;
             else assertFalse("a page row after a launcher row: " + item, seenLauncher);
         }
-        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_PAGE, EDIT_PAGES, LAYOUT,
+        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_PAGES, LAYOUT,
                 REMOVE_PAGE),
             HomeActionsSheetPolicy.inGroup(items, Group.PAGE));
         assertEquals(Arrays.asList(WALLPAPER, LOOK, LAUNCHER_SETTINGS, SET_DEFAULT_HOME, HELP),

@@ -15,6 +15,10 @@
     <string name="home_actions_close">Close</string>
     <string name="home_actions_terminal">Terminal</string>
     <string name="home_actions_add_widget">Add a widget</string>
+    <string name="home_actions_add_app">Add an app</string>
+    <!-- An app icon on a Home page: the drawer's long-press row, and the toast after either way in. -->
+    <string name="home_add_to_home">Add to Home</string>
+    <string name="home_app_added">Added to Home page %1$d</string>
     <string name="home_actions_add_page">Add a page</string>
     <string name="home_actions_edit_pages">Edit pages</string>
     <string name="home_actions_layout">Layout</string>
