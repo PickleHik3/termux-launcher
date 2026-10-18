@@ -7,15 +7,11 @@ import android.appwidget.AppWidgetHostView;
 import android.content.Context;
 import android.graphics.Paint;
 import android.graphics.RectF;
-import android.os.Bundle;
-import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
-import android.view.accessibility.AccessibilityManager;
-import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 
@@ -28,29 +24,9 @@ import androidx.core.view.ViewCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
-import com.termux.app.place.HomeChromePolicy;
 import com.termux.app.place.PlaceLayout.Edge;
-import com.termux.app.statusbar.StatusBarFormPolicy.Form;
-import com.termux.app.terminal.TerminalWindowBar.WindowItem;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-/**
- * Status pane gesture observer with a frozen DOWN snapshot and one-way claims, and the bar's
- * capsule.
- *
- * <p>The capsule ({@link Form#CAPSULE}) is a state of this view, not a window of its own: the bar
- * keeps the compact band's room, draws its glass in to a 36 dp pill at the centre of its edge
- * and paints the capsule's glyph, clock and dots inside it, its own content (lens, chips, pins)
- * fading out on the way. Compact and expanded stay the host's to land (the height, the terminal's
- * resize); the stretch between the capsule and compact is this view's alone, so folding to the
- * capsule never resizes a terminal. The idle fold ({@link StatusBarFormPolicy#idle}) runs here
- * too, since this is where every touch on the bar passes.
- */
+/** Status pane gesture observer with a frozen DOWN snapshot and one-way claims. */
 public final class StatusBarSwipeLayout extends FrameLayout implements NestedScrollingParent3 {
 
     public interface Listener {
@@ -73,61 +49,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         /** The fold drag's stream was cancelled under it: the bar goes back to the form it had. */
         default void onFoldDragCancelled() { }
         default boolean isStatusGestureBlocked() { return false; }
-        /**
-         * The bar's form changed, the capsule included (which the two-form callbacks above never
-         * see: the capsule rests compact for the host).
-         */
-        default void onFormChanged(@NonNull StatusBarFormPolicy.Form form) { }
-        /**
-         * A sheet hangs off the bar (a status card is seen without asking): the idle fold waits
-         * while it is open.
-         */
-        default boolean isSheetOpen() { return false; }
     }
-
-    // ---------------------------------------------------------------- the capsule's state
-
-    /** The form the bar rests in, or is landing in. */
-    @NonNull private Form mForm = Form.EXPANDED;
-    /** A row can be a capsule; a column cannot. */
-    private boolean mCapsuleAllowed = true;
-    /** How far into the capsule the bar is drawn: 0 its compact or expanded self, 1 the capsule. */
-    private float mCapsuleProgress;
-    @Nullable private ValueAnimator mCapsuleAnimator;
-    /** The compact-to-expanded travel the host lands; derived from the edge until it says. */
-    private int mFoldTravelPx = -1;
-    /** A drag across the bar is moving its form (any stop), from {@link #mDragStartPx}. */
-    private boolean mFormDragActive;
-    @NonNull private Form mDragStartForm = Form.COMPACT;
-    private float mDragStartPx;
-    private float mDragPositionPx;
-    private boolean mMinimal;
-    @NonNull private final StatusBarCapsuleDrawing mCapsule;
-    private final RectF mCapsuleRest = new RectF();
-    private final RectF mCapsuleNow = new RectF();
-    private final android.graphics.Path mCapsuleClip = new android.graphics.Path();
-
-    // ---------------------------------------------------------------- the idle fold's inputs
-
-    private long mLastTouchMs;
-    private long mLastNotificationMs;
-    private long mLastWindowChangeMs;
-    private boolean mFingerDown;
-    @Nullable private StatusCardHost mCardHost;
-    private final Runnable mIdleCheck = this::checkIdle;
-    private final Runnable mClockTick = this::tickClock;
-    private final TopPaneFeed.Observer mFeedObserver = this::onFeedChanged;
-    @NonNull private Set<String> mPinnedKeys = Collections.emptySet();
-    private long mPinnedLatestMs;
-    private boolean mPinnedKnown;
-    private int mPinnedCount;
-    @Nullable private StatusBarWindowColumn mWindowColumn;
-    /** The bar's glass layer: whether it has a drawable says glass or the plain panel. */
-    @Nullable private View mGlassBackground;
-    @Nullable private StatusBarLensView mLens;
-    /** Home or the window on screen, as the last content pass saw it; a change is a window change. */
-    @Nullable private String mWindowKey;
-    @Nullable private String mWindowSpoken;
 
     private final int mTouchSlop;
     private final NestedScrollingParentHelper mNestedParentHelper;
@@ -169,66 +91,14 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         super(context, attrs);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         mNestedParentHelper = new NestedScrollingParentHelper(this);
-        mCapsule = new StatusBarCapsuleDrawing(context);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-    }
-
-    @Override protected void onFinishInflate() {
-        super.onFinishInflate();
-        // The capsule reads what it shows from the bar's own children: the window column is
-        // handed the windows on every edge, and the lens knows the place on screen.
-        View column = findViewById(R.id.terminal_status_window_column);
-        if (column instanceof StatusBarWindowColumn) {
-            mWindowColumn = (StatusBarWindowColumn) column;
-            mWindowColumn.setWindowsObserver(this::refreshCapsuleContent);
-        }
-        mGlassBackground = findViewById(R.id.terminal_window_bar_background);
-        View lens = findViewById(R.id.terminal_status_lens);
-        if (lens instanceof StatusBarLensView) {
-            mLens = (StatusBarLensView) lens;
-            mLens.setCurrentObserver(this::refreshCapsuleContent);
-        }
     }
 
     public void setListener(@Nullable Listener listener) { mListener = listener; }
 
-    /**
-     * The host's two-form memory: folded or open. Open is always {@link Form#EXPANDED}; folded
-     * keeps a capsule a capsule, since the capsule rests compact for the host.
-     */
     public void setCollapsed(boolean collapsed) {
-        Form next = !collapsed ? Form.EXPANDED
-            : mForm == Form.CAPSULE ? Form.CAPSULE : Form.COMPACT;
         mState = TopStatusBarState.fromCollapsedPreference(collapsed);
-        if (next == mForm) return;
-        setFormInternal(next, isAttachedToWindow() && isLaidOut(), 0f);
     }
-
-    /** The form the bar rests in, or is landing in. */
-    @NonNull public Form form() { return mForm; }
-
-    /**
-     * The compact-to-expanded travel the host lands, in px ({@code expanded - compact}), so a
-     * slow swipe's nearest form is read on the host's own heights. Until it is set the edge's
-     * Docked heights stand in, a few dp off under Floating.
-     */
-    public void setFoldTravelPx(int foldTravelPx) { mFoldTravelPx = foldTravelPx; }
-
-    /**
-     * Minimal mode turned on or off: on, the bar folds to the capsule, its default form there;
-     * off, a capsule unfolds to compact. Pass false on Home, which has no Minimal mode.
-     */
-    public void setMinimalMode(boolean minimal) {
-        if (mMinimal == minimal) return;
-        mMinimal = minimal;
-        Form next = StatusBarFormPolicy.formOnMinimalChange(minimal, mForm, mCapsuleAllowed);
-        if (next == mForm) return;
-        if (next == Form.CAPSULE) foldToCapsule(false);
-        else setFormInternal(next, false, 0f);
-    }
-
-    /** The card host whose cards hang off this bar; an open card holds the bar's form. */
-    void setCardHost(@Nullable StatusCardHost host) { mCardHost = host; }
 
     public void setAnotherSurfaceEngaged(boolean engaged) { mAnotherSurfaceEngaged = engaged; }
 
@@ -249,12 +119,8 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (mEdge == edge) return;
         mEdge = edge;
         if (mGesture != null) mGesture.cancel();
-        cancelFormDrag();
+        cancelFoldDrag();
         requestStructuralReset();
-        mCapsuleAllowed = StatusBarFormPolicy.capsuleAllowed(edge);
-        // A column has no capsule: one standing as a capsule comes back compact on its new edge.
-        if (!mCapsuleAllowed && mForm == Form.CAPSULE) setFormInternal(Form.COMPACT, false, 0f);
-        else scheduleIdle();
     }
 
     /** Whether {@code claim} is the fold, in either direction. */
@@ -268,18 +134,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (!mFoldDragActive) return;
         mFoldDragActive = false;
         if (mListener != null) mListener.onFoldDragCancelled();
-    }
-
-    /**
-     * A form drag lost its stream: the capsule's morph goes back to the form the bar had, and the
-     * host puts back the height it was dragging, if it was.
-     */
-    private void cancelFormDrag() {
-        if (mFormDragActive) {
-            mFormDragActive = false;
-            animateCapsuleTo(mForm == Form.CAPSULE ? 1f : 0f, 0f);
-        }
-        cancelFoldDrag();
     }
 
     /** The finger's speed across the bar at release, positive the way the bar opens. */
@@ -396,87 +250,18 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     @Override protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
-        float progress = mCapsuleProgress;
-        if (progress <= 0f) {
-            super.dispatchDraw(canvas);
-            drawPullHint(canvas);
-            return;
-        }
-        // The bar's glass draws in from its whole band to the capsule's pill, centred on its
-        // edge: the band's rectangle walks to the capsule's and the corners round as it goes.
-        // The children are the glass and the content alike, so one clip shapes them all.
-        int width = getWidth();
-        int height = getHeight();
-        mCapsule.restingBounds(width, height, mCapsuleRest);
-        float radius = mCapsule.radiusPx(mCapsuleRest) * progress;
-        mCapsuleNow.set(lerp(0f, mCapsuleRest.left, progress),
-            lerp(0f, mCapsuleRest.top, progress), lerp(width, mCapsuleRest.right, progress),
-            lerp(height, mCapsuleRest.bottom, progress));
-        int saved = canvas.save();
-        mCapsuleClip.reset();
-        mCapsuleClip.addRoundRect(mCapsuleNow, radius, radius, android.graphics.Path.Direction.CW);
-        canvas.clipPath(mCapsuleClip);
         super.dispatchDraw(canvas);
-        syncCapsuleInk();
-        mCapsule.draw(canvas, mCapsuleNow, radius,
-            StatusBarFoldMotion.capsuleContentAlpha(progress));
-        canvas.restoreToCount(saved);
-    }
-
-    /**
-     * Folding into the capsule, the bar's own content (lens, chips, pins, widgets) fades out
-     * before the capsule's arrives ({@link StatusBarFoldMotion#barContentAlpha}); the glass
-     * layers stay whole, since they become the capsule's glass.
-     */
-    @Override protected boolean drawChild(@NonNull android.graphics.Canvas canvas,
-                                          @NonNull View child, long drawingTime) {
-        float progress = mCapsuleProgress;
-        if (progress <= 0f || isGlassLayer(child)) {
-            return super.drawChild(canvas, child, drawingTime);
-        }
-        float alpha = StatusBarFoldMotion.barContentAlpha(progress);
-        if (alpha <= 0f) return false;
-        int layer = canvas.saveLayerAlpha(0f, 0f, getWidth(), getHeight(),
-            Math.round(255 * alpha));
-        boolean more = super.drawChild(canvas, child, drawingTime);
-        canvas.restoreToCount(layer);
-        return more;
-    }
-
-    /**
-     * The capsule's ink follows the chrome's polarity, whether the bar is glass, and the band the
-     * window chips measured ({@link StatusBarFormPolicy#capsuleInk}); a cheap compare per frame.
-     */
-    private void syncCapsuleInk() {
-        boolean glass = mGlassBackground != null && mGlassBackground.getVisibility() == VISIBLE
-            && mGlassBackground.getBackground() != null;
-        com.termux.app.terminal.WindowChipInk.Palette chips =
-            mWindowColumn != null ? mWindowColumn.glassPalette() : null;
-        mCapsule.syncInk(glass, chips != null ? chips.band : 0);
-    }
-
-    private static boolean isGlassLayer(@NonNull View child) {
-        int id = child.getId();
-        return id == R.id.terminal_window_bar_wallpaper_backdrop
-            || id == R.id.terminal_window_bar_blur
-            || id == R.id.terminal_window_bar_background;
-    }
-
-    private static float lerp(float from, float to, float fraction) {
-        return from + (to - from) * fraction;
+        drawPullHint(canvas);
     }
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         mDispatchInProgress = true;
         try {
-            // The capsule's folded content is drawn away, so none of it takes a touch: the
-            // stream is the capsule's alone (a tap opens it, a swipe unfolds it). Read before
-            // the event lands, so the release that opens the capsule is still the capsule's.
-            boolean capsule = mForm == Form.CAPSULE;
+            int action = event.getActionMasked();
             observe(event);
-            if (capsule) return true;
-            return super.dispatchTouchEvent(event);
+            boolean handled = super.dispatchTouchEvent(event);
+            return handled;
         } finally {
             mDispatchInProgress = false;
             if (mDeferredReset) {
@@ -522,31 +307,22 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         }
     }
 
-    /** A click on the capsule (a tap, or an accessibility click) opens it to compact. */
-    @Override public boolean performClick() {
-        boolean handled = super.performClick();
-        if (mForm != Form.CAPSULE) return handled;
-        openCapsule();
-        return true;
-    }
+    @Override public boolean performClick() { return super.performClick(); }
 
     private void observe(@NonNull MotionEvent event) {
         if (mVelocityTracker != null) mVelocityTracker.addMovement(event);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                // Every touch on the bar, a chip's or a card's included, is an interaction: the
-                // idle fold waits for the finger to lift and then a whole quiet stretch.
-                mFingerDown = true;
-                mLastTouchMs = SystemClock.uptimeMillis();
                 begin(event);
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (mGesture != null) {
                     StatusBarGesturePolicy.Claim after = mGesture.move(event.getX(), event.getY());
-                    if (isFoldClaim(after)) {
+                    if (isFoldClaim(after) && mListener != null) {
                         // The fold is the finger's while the finger is down: the bar stands
                         // where the travel across it says, the way it opens being positive.
-                        dragForm(StatusBarGesturePolicy.acrossAxis(mEdge,
+                        mFoldDragActive = true;
+                        mListener.onFoldDrag(StatusBarGesturePolicy.acrossAxis(mEdge,
                             event.getRawX() - mGesture.down().rawX,
                             event.getRawY() - mGesture.down().rawY)
                             * StatusBarGesturePolicy.expandSign(mEdge));
@@ -558,89 +334,15 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                         break;
             case MotionEvent.ACTION_UP:
                 finish(event);
-                liftFinger();
                 break;
             case MotionEvent.ACTION_CANCEL:
-                cancelFormDrag();
+                cancelFoldDrag();
                 if (mGesture != null) mGesture.cancel();
                 requestStructuralReset();
-                liftFinger();
                 break;
             default:
                 break;
         }
-    }
-
-    private void liftFinger() {
-        mFingerDown = false;
-        mLastTouchMs = SystemClock.uptimeMillis();
-        scheduleIdle();
-    }
-
-    /**
-     * One move of a form drag. The finger moves the bar along the three stops' one axis
-     * ({@link StatusBarFoldMotion#stopPx}): between the capsule and compact the capsule's morph
-     * follows it here, past compact the host's height does ({@link Listener#onFoldDrag}), told
-     * only once the drag has reached the height's stretch, so a drag between the capsule and
-     * compact never takes the host's resize lease.
-     */
-    private void dragForm(float towardOpenPx) {
-        int capsuleTravel = capsuleTravelPx();
-        int foldTravel = foldTravelPx();
-        if (!mFormDragActive) {
-            // A landing still under way is taken over from where it has the capsule.
-            mFormDragActive = true;
-            cancelCapsuleAnimator();
-            mDragStartForm = mForm;
-            mDragStartPx = mForm == Form.EXPANDED
-                ? StatusBarFoldMotion.stopPx(Form.EXPANDED, capsuleTravel, foldTravel)
-                : (1f - mCapsuleProgress) * capsuleTravel;
-        }
-        mDragPositionPx = StatusBarFoldMotion.positionForDrag(mDragStartPx, towardOpenPx,
-            StatusBarFoldMotion.stopPx(lowestForm(), capsuleTravel, foldTravel),
-            StatusBarFoldMotion.stopPx(highestForm(), capsuleTravel, foldTravel));
-        setCapsuleProgress(StatusBarFoldMotion.capsuleProgress(mDragPositionPx, capsuleTravel));
-        float fold = StatusBarFoldMotion.foldTowardOpenPx(mDragStartPx, mDragPositionPx,
-            capsuleTravel);
-        if (mListener != null && (mFoldDragActive || fold != 0f)) {
-            mFoldDragActive = true;
-            mListener.onFoldDrag(fold);
-        }
-    }
-
-    /**
-     * The release of a form drag lands where {@link StatusBarFormPolicy#release} says: the
-     * nearest form for a slow swipe, one step for a quick one. Compact and expanded are the
-     * host's to land, as they always were; the capsule's morph is landed here. Whatever the host
-     * was dragging is always landed, so its lease is returned.
-     */
-    private void landForm(float velocityTowardOpenPxPerSec) {
-        float velocity = Float.isNaN(velocityTowardOpenPxPerSec) ? 0f : velocityTowardOpenPxPerSec;
-        boolean heightDragged = mFoldDragActive;
-        mFoldDragActive = false;
-        mFormDragActive = false;
-        Form lowest = lowestForm();
-        Form highest = highestForm();
-        Form nearest = StatusBarFoldMotion.nearest(mDragPositionPx, capsuleTravelPx(),
-            foldTravelPx(), lowest, highest);
-        float density = getResources().getDisplayMetrics().density;
-        Form target = StatusBarFormPolicy.release(mDragStartForm, nearest,
-            velocity / Math.max(0.1f, density), lowest, highest);
-        if (target == Form.EXPANDED) {
-            if (mForm == Form.CAPSULE) setFormInternal(Form.COMPACT, true, velocity);
-            else animateCapsuleTo(0f, velocity);
-            if (mListener != null) mListener.onCollapsedStateRequested(false, velocity);
-            return;
-        }
-        if (mListener != null && (heightDragged || mForm == Form.EXPANDED)) {
-            mListener.onCollapsedStateRequested(true, velocity);
-        }
-        // The host may hold the bar open (an editor does): then there is no capsule to land.
-        if (mForm == Form.EXPANDED) {
-            animateCapsuleTo(0f, 0f);
-            return;
-        }
-        setFormInternal(target, true, velocity);
     }
 
     private void begin(MotionEvent event) {
@@ -663,17 +365,12 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         // top bar that slot sits above the row and the veto never showed, because the finger comes
         // off the row. On a bottom bar the slot is the band the open bar grew upward into, so it
         // is exactly where a downward fold starts — and the bar could be opened but never closed.
-        //
-        // The capsule has no children to yield to: its content is drawn away and takes no touch.
-        boolean capsule = mForm == Form.CAPSULE;
-        boolean childOwnsFoldAxis = !capsule && isInsideFoldAxisOwner(this, event);
-        boolean formEligible = !blocked && !childOwnsFoldAxis
-            && (mExpansionAllowed || mCapsuleAllowed);
+        boolean childOwnsFoldAxis = isInsideFoldAxisOwner(this, event);
+        boolean formEligible = !blocked && !childOwnsFoldAxis && mExpansionAllowed;
         StatusBarGesturePolicy.Down down = new StatusBarGesturePolicy.Down(
             event.getPointerId(0), event.getRawX(), event.getRawY(), event.getX(), event.getY(),
-            event.getEventTime(), mState, inWindowBar && !capsule, interactive && !capsule,
-            nestedChildOwned && !capsule, blocked, formEligible, mTouchSlop, mEdge, capsule,
-            mCapsuleAllowed);
+            event.getEventTime(), mState, inWindowBar, interactive, nestedChildOwned,
+            blocked, formEligible, mTouchSlop, mEdge);
         mGesture = new StatusBarGesturePolicy(down);
         if (mVelocityTracker == null) mVelocityTracker = android.view.VelocityTracker.obtain();
         mVelocityTracker.clear();
@@ -683,22 +380,19 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private void finish(MotionEvent event) {
         StatusBarGesturePolicy gesture = mGesture;
         if (gesture != null && isFoldClaim(gesture.claim())) {
-            // The release lands the fold where the finger let it go, at the speed it let go.
-            if (mFormDragActive) landForm(foldVelocityTowardOpen());
-        } else if (gesture != null && gesture.claim() == StatusBarGesturePolicy.Claim.PENDING) {
-            if (gesture.down().capsule) {
-                // A tap on the capsule opens it; one on the bare band beside it is nobody's.
-                mCapsule.restingBounds(getWidth(), getHeight(), mCapsuleRest);
-                if (mCapsuleRest.contains(gesture.down().localX, gesture.down().localY)) {
-                    performClick();
-                }
-            } else {
-                // eligible() is the "this touch was the bar's own, not a child's" test — the
-                // form drag alone keeps a chip's stream PENDING too, and a chip tap must not
-                // answer with a hint.
-                if (gesture.down().eligible()) showPullHint();
-                performClick();
+            // The release lands the fold the way the claim said, from wherever the finger has
+            // the bar, at the speed it let go.
+            boolean collapsed = gesture.claim() == StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE;
+            mFoldDragActive = false;
+            if (mListener != null) {
+                mListener.onCollapsedStateRequested(collapsed, foldVelocityTowardOpen());
             }
+        } else if (gesture != null && gesture.claim() == StatusBarGesturePolicy.Claim.PENDING) {
+            // eligible() is the "this touch was the bar's own, not a child's" test — the
+            // form drag alone keeps a chip's stream PENDING too, and a chip tap must not
+            // answer with a hint.
+            if (gesture.down().eligible()) showPullHint();
+            performClick();
         }
         requestStructuralReset();
     }
@@ -715,326 +409,26 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private void clearTracking() {
         mGesture = null;
         mFoldDragActive = false;
-        mFormDragActive = false;
         if (mVelocityTracker != null) {
             mVelocityTracker.recycle();
             mVelocityTracker = null;
         }
     }
 
-    @Override protected void onAttachedToWindow() {
-        super.onAttachedToWindow();
-        TopPaneFeed.addObserver(mFeedObserver);
-        onFeedChanged();
-        refreshCapsuleContent();
-        // The bar on screen gets a whole quiet stretch before it folds by itself.
-        mLastTouchMs = SystemClock.uptimeMillis();
-        scheduleIdle();
-        if (mCapsuleProgress > 0f) tickClock();
-    }
-
     @Override protected void onDetachedFromWindow() {
         if (mGesture != null) mGesture.cancel();
         cancelPullHint();
         clearTracking();
-        mFingerDown = false;
-        TopPaneFeed.removeObserver(mFeedObserver);
-        removeCallbacks(mIdleCheck);
-        removeCallbacks(mClockTick);
-        // A landing cut short lands where it was going.
-        cancelCapsuleAnimator();
-        setCapsuleProgress(mForm == Form.CAPSULE ? 1f : 0f);
         super.onDetachedFromWindow();
-    }
-
-    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
-        // A bar first laid out after it came on screen starts its quiet stretch here.
-        if (oldw <= 0 && w > 0) scheduleIdle();
-    }
-
-    @Override public void onVisibilityAggregated(boolean isVisible) {
-        super.onVisibilityAggregated(isVisible);
-        // A bar coming on screen (Home's first float slides it in) shows for a whole quiet
-        // stretch before it folds; one going away has nothing to fold.
-        if (isVisible) {
-            mLastTouchMs = SystemClock.uptimeMillis();
-            scheduleIdle();
-        } else {
-            removeCallbacks(mIdleCheck);
-        }
     }
 
     @Override public void onWindowFocusChanged(boolean hasWindowFocus) {
         super.onWindowFocusChanged(hasWindowFocus);
         if (!hasWindowFocus) {
             if (mGesture != null) mGesture.cancel();
-            cancelFormDrag();
+            cancelFoldDrag();
             requestStructuralReset();
-            if (mFingerDown) liftFinger();
         }
-    }
-
-    // ---------------------------------------------------------------- forms
-
-    @NonNull private Form lowestForm() { return StatusBarFormPolicy.lowest(mCapsuleAllowed); }
-
-    @NonNull private Form highestForm() { return StatusBarFormPolicy.highest(mExpansionAllowed); }
-
-    private int capsuleTravelPx() {
-        return Math.round(StatusBarFoldMotion.CAPSULE_TRAVEL_DP
-            * getResources().getDisplayMetrics().density);
-    }
-
-    private int foldTravelPx() {
-        if (mFoldTravelPx > 0) return mFoldTravelPx;
-        float density = getResources().getDisplayMetrics().density;
-        return Math.max(0, StatusBarEdgeGeometry.thicknessPx(mEdge, false, false, density)
-            - StatusBarEdgeGeometry.thicknessPx(mEdge, false, true, density));
-    }
-
-    /**
-     * Moves the bar to {@code form}: the capsule's morph lands (animated, at the speed the finger
-     * let go, or at once), the accessibility node follows, and the host hears of it. A change of
-     * form the user or the host made restarts the idle fold's quiet stretch.
-     */
-    private void setFormInternal(@NonNull Form form, boolean animate,
-                                 float velocityTowardOpenPxPerSec) {
-        Form previous = mForm;
-        mForm = form;
-        mState = form.state();
-        float target = form == Form.CAPSULE ? 1f : 0f;
-        if (animate) {
-            animateCapsuleTo(target, form == Form.CAPSULE
-                ? -velocityTowardOpenPxPerSec : velocityTowardOpenPxPerSec);
-        } else {
-            cancelCapsuleAnimator();
-            setCapsuleProgress(target);
-        }
-        if (previous == form) return;
-        if (form != Form.CAPSULE) mLastTouchMs = SystemClock.uptimeMillis();
-        refreshCapsuleAccessibility();
-        if (mListener != null) mListener.onFormChanged(form);
-        scheduleIdle();
-    }
-
-    /**
-     * Folds the bar to the capsule, by itself (idle) or for Minimal mode. An expanded bar is the
-     * host's to fold first; a host that holds it open keeps it open.
-     */
-    private void foldToCapsule(boolean animate) {
-        if (!mCapsuleAllowed || mForm == Form.CAPSULE) return;
-        if (mForm == Form.EXPANDED) {
-            if (mListener != null) mListener.onCollapsedStateRequested(true, 0f);
-            if (mForm == Form.EXPANDED) return;
-        }
-        setFormInternal(Form.CAPSULE, animate, 0f);
-    }
-
-    /**
-     * The capsule opens to compact: a tap, an accessibility click, or the host (a Home float
-     * minimising into its chip lands on a compact bar, spec §4.4). Nothing for any other form.
-     */
-    public void openCapsule() {
-        if (mForm != Form.CAPSULE) return;
-        setFormInternal(Form.COMPACT, true, 0f);
-    }
-
-    private void setCapsuleProgress(float progress) {
-        float clamped = Math.max(0f, Math.min(1f, progress));
-        if (clamped == mCapsuleProgress) return;
-        boolean appearing = mCapsuleProgress <= 0f && clamped > 0f;
-        mCapsuleProgress = clamped;
-        invalidate();
-        if (appearing) {
-            mCapsule.refreshColors();
-            tickClock();
-        }
-    }
-
-    /** The capsule's morph lands at {@code target}, on the settle curve, like the fold. */
-    private void animateCapsuleTo(float target, float velocityTowardTargetPxPerSec) {
-        cancelCapsuleAnimator();
-        float from = mCapsuleProgress;
-        if (from == target) return;
-        if (!isAttachedToWindow() || !isLaidOut()
-            || com.termux.app.ReducedMotion.isEnabled(getContext())) {
-            setCapsuleProgress(target);
-            return;
-        }
-        int travel = Math.max(1, capsuleTravelPx());
-        long duration = StatusBarFoldMotion.durationMs(Math.abs(target - from),
-            velocityTowardTargetPxPerSec / travel);
-        ValueAnimator animator = ValueAnimator.ofFloat(from, target);
-        animator.setDuration(duration);
-        animator.setInterpolator(com.termux.app.terminal.Motion.settle());
-        animator.addUpdateListener(value -> setCapsuleProgress((float) value.getAnimatedValue()));
-        animator.addListener(new AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(Animator animation) {
-                if (mCapsuleAnimator == animation) mCapsuleAnimator = null;
-            }
-        });
-        mCapsuleAnimator = animator;
-        animator.start();
-    }
-
-    private void cancelCapsuleAnimator() {
-        ValueAnimator animator = mCapsuleAnimator;
-        if (animator == null) return;
-        mCapsuleAnimator = null;
-        animator.cancel();
-    }
-
-    // ---------------------------------------------------------------- the idle fold
-
-    /** Looks at the idle rule now and acts on it, or asks again when it says. */
-    private void scheduleIdle() {
-        removeCallbacks(mIdleCheck);
-        checkIdle();
-    }
-
-    private void checkIdle() {
-        removeCallbacks(mIdleCheck);
-        if (!isAttachedToWindow() || !isShown() || getWidth() <= 0) return;
-        long now = SystemClock.uptimeMillis();
-        StatusBarFormPolicy.Idle idle = StatusBarFormPolicy.idle(mForm, mCapsuleAllowed,
-            mLastTouchMs, mLastNotificationMs, mLastWindowChangeMs, now,
-            mFingerDown || mFormDragActive, isCardOpen(), isFormHeld(), isTouchExploring());
-        if (idle.held) mLastTouchMs = now;
-        if (idle.fold) {
-            foldToCapsule(true);
-            return;
-        }
-        if (idle.delayMs >= 0L) postDelayed(mIdleCheck, idle.delayMs);
-    }
-
-    private boolean isCardOpen() {
-        return (mCardHost != null && mCardHost.isShowing())
-            || (mListener != null && mListener.isSheetOpen());
-    }
-
-    /** Another surface has the bar (the palette, the drawer, an editor): its form is held. */
-    private boolean isFormHeld() {
-        return mAnotherSurfaceEngaged
-            || (mListener != null && mListener.isStatusGestureBlocked());
-    }
-
-    private boolean isTouchExploring() {
-        AccessibilityManager manager = getContext().getSystemService(AccessibilityManager.class);
-        return manager != null && manager.isEnabled() && manager.isTouchExplorationEnabled();
-    }
-
-    /** The pinned feed moved: an arrival restarts the quiet stretch, and the dots recount. */
-    private void onFeedChanged() {
-        List<PinnedNotification> pinned = TopPaneFeed.getPinned();
-        Set<String> keys = new HashSet<>();
-        long latest = 0L;
-        for (PinnedNotification notification : pinned) {
-            keys.add(notification.key);
-            latest = Math.max(latest, notification.postTime);
-        }
-        boolean arrived = mPinnedKnown && StatusBarFormPolicy.notificationArrived(mPinnedKeys,
-            mPinnedLatestMs, keys, latest);
-        mPinnedKeys = keys;
-        mPinnedLatestMs = latest;
-        mPinnedKnown = true;
-        mPinnedCount = pinned.size();
-        if (arrived) {
-            mLastNotificationMs = SystemClock.uptimeMillis();
-            scheduleIdle();
-        }
-        refreshCapsuleContent();
-    }
-
-    /**
-     * Reads what the capsule shows from the bar's children (StatusBarFormPolicy#content): Home or
-     * the window on screen, its glyph, the attention cues among the windows, and the pins. A move
-     * to another window, or between Home and the Workspace, is a window change.
-     */
-    private void refreshCapsuleContent() {
-        boolean onHome = mLens != null && HomeChromePolicy.isHome(mLens.current());
-        List<WindowItem> windows = mWindowColumn != null
-            ? mWindowColumn.windows() : Collections.<WindowItem>emptyList();
-        int selected = mWindowColumn != null ? mWindowColumn.selectedIndex() : -1;
-        WindowItem current = selected >= 0 && selected < windows.size()
-            ? windows.get(selected) : null;
-        int attention = 0;
-        for (WindowItem window : windows) {
-            if (window.attention) attention++;
-        }
-        String key = (onHome ? "home" : "window") + ":" + selected + "/" + windows.size();
-        if (mWindowKey != null && !mWindowKey.equals(key)) {
-            mLastWindowChangeMs = SystemClock.uptimeMillis();
-            scheduleIdle();
-        }
-        mWindowKey = key;
-        mWindowSpoken = onHome ? getResources().getString(R.string.status_bar_capsule_home)
-            : current != null ? current.spokenLabel : null;
-        if (mCapsule.setContent(StatusBarFormPolicy.content(onHome,
-            current != null ? current.label : null, mPinnedCount, attention))) {
-            if (mCapsuleProgress > 0f) invalidate();
-        }
-        refreshCapsuleAccessibility();
-    }
-
-    /** The capsule's clock follows the minute while any of the capsule shows. */
-    private void tickClock() {
-        removeCallbacks(mClockTick);
-        if (!isAttachedToWindow() || mCapsuleProgress <= 0f) return;
-        if (mCapsule.refreshClock()) {
-            invalidate();
-            refreshCapsuleAccessibility();
-        }
-        long now = System.currentTimeMillis();
-        postDelayed(mClockTick, 60_000L - now % 60_000L + 50L);
-    }
-
-    // ---------------------------------------------------------------- accessibility
-
-    /**
-     * As the capsule, the bar is one node: what it shows, said in words, and a click that opens
-     * it. Otherwise the bar itself is not a node and its children speak for themselves.
-     */
-    private void refreshCapsuleAccessibility() {
-        boolean capsule = mForm == Form.CAPSULE;
-        setImportantForAccessibility(capsule ? IMPORTANT_FOR_ACCESSIBILITY_YES
-            : IMPORTANT_FOR_ACCESSIBILITY_NO);
-        setContentDescription(capsule ? capsuleLabel() : null);
-    }
-
-    @NonNull
-    private String capsuleLabel() {
-        android.content.res.Resources resources = getResources();
-        String where = mWindowSpoken != null ? mWindowSpoken : "";
-        String label = resources.getString(R.string.status_bar_capsule_description, where,
-            mCapsule.clock());
-        int count = mCapsule.content().count;
-        if (count <= 0) return label;
-        return label + ", " + resources.getQuantityString(R.plurals.status_bar_capsule_alerts,
-            count, count);
-    }
-
-    @Override public void addChildrenForAccessibility(ArrayList<View> outChildren) {
-        // The capsule's folded content is not on screen, so it is not read either.
-        if (mForm == Form.CAPSULE) return;
-        super.addChildrenForAccessibility(outChildren);
-    }
-
-    @Override public void onInitializeAccessibilityNodeInfo(@NonNull AccessibilityNodeInfo info) {
-        super.onInitializeAccessibilityNodeInfo(info);
-        if (mForm != Form.CAPSULE) return;
-        info.setClickable(true);
-        info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
-            AccessibilityNodeInfo.ACTION_CLICK,
-            getResources().getString(R.string.status_bar_capsule_open)));
-    }
-
-    @Override public boolean performAccessibilityAction(int action, @Nullable Bundle arguments) {
-        if (mForm == Form.CAPSULE && action == AccessibilityNodeInfo.ACTION_CLICK) {
-            mLastTouchMs = SystemClock.uptimeMillis();
-            return performClick();
-        }
-        return super.performAccessibilityAction(action, arguments);
     }
 
     private boolean isInsideInteractiveChild(ViewGroup parent, MotionEvent event) {

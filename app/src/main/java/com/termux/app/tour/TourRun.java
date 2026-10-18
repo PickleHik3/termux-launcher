@@ -152,9 +152,7 @@ public final class TourRun {
     }
 
     /**
-     * The status swipe off a window's top border: a slow pull lands the bar on the form nearest
-     * where the finger lets go, so a long one opens it whole; a quick swipe up folds it one form.
-     * The bar folding to the capsule on its own counts too: it is folded either way.
+     * The status swipe off a window's top border: a pull down opens the bar, a swipe up folds it.
      */
     private static TourStep statusSwipe() {
         return TourStep.lesson(STATUS_SWIPE, 1, R.string.tour_chapter_workspace,

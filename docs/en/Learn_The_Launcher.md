@@ -129,8 +129,7 @@ lessons in three chapters:
 **The Workspace**
 
 3. Swipe down from the window's bottom border to put the keyboard away, then up to bring it back.
-4. Pull down slowly from the window's top border to open the status bar, then swipe up quickly to
-   fold it a step (or leave it: it folds to the capsule by itself).
+4. Pull down from the window's top border to open the status bar, then swipe up to fold it.
 
 **Anywhere**
 

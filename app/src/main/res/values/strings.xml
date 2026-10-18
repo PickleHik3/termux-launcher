@@ -2688,9 +2688,9 @@
     <string name="tour_title_keyboard_back">Bring it back</string>
     <string name="tour_body_keyboard_back">Swipe up from the same border. The Workspace remembers which you chose.</string>
     <string name="tour_title_status">Pull down the status bar</string>
-    <string name="tour_body_status">Pull down slowly from the window\'s top border and let go low: the capsule opens into the full bar.</string>
+    <string name="tour_body_status">Pull down from the window\'s top border to open the full bar.</string>
     <string name="tour_title_status_fold">Fold it back</string>
-    <string name="tour_body_status_fold">Swipe up quickly from the same border to fold it a step. Left alone, it folds to the capsule by itself.</string>
+    <string name="tour_body_status_fold">Swipe up from the same border to fold it.</string>
     <string name="tour_title_apps">Open your apps</string>
     <string name="tour_body_apps">Your pinned apps and the A–Z index float over Home. Swipe down on the apps row for all of them.</string>
     <string name="tour_body_apps_left_rail">Your pinned apps and the A–Z index float over Home. Swipe right on the apps rail for all of them.</string>
@@ -3322,14 +3322,5 @@
     <plurals name="tai_import_saved_failed">
         <item quantity="one">%1$d couldn\'t be added.</item>
         <item quantity="other">%1$d couldn\'t be added.</item>
-    </plurals>
-
-    <!-- The status bar folded to its capsule: what it shows, spoken (window or Home, then the time). -->
-    <string name="status_bar_capsule_description">Status bar folded: %1$s, %2$s</string>
-    <string name="status_bar_capsule_home">Home</string>
-    <string name="status_bar_capsule_open">Open status bar</string>
-    <plurals name="status_bar_capsule_alerts">
-        <item quantity="one">%1$d alert</item>
-        <item quantity="other">%1$d alerts</item>
     </plurals>
 </resources>

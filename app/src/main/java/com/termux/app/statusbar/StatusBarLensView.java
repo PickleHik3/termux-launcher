@@ -152,22 +152,12 @@ public final class StatusBarLensView extends View {
     /** The wall's places, the one on screen, and how far the wall has moved from its rest. */
     public void setWallState(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
                              float offsetPx, int wallWidthPx) {
-        boolean pageChanged = mCurrent != current;
         mPages = pages;
         mCurrent = current;
         mOffsetPx = offsetPx;
         mWallWidthPx = wallWidthPx;
         invalidate();
-        if (pageChanged && mCurrentObserver != null) mCurrentObserver.run();
     }
-
-    /** Told when the place on screen changes; the bar's capsule shows Home's house from it. */
-    @Nullable private Runnable mCurrentObserver;
-
-    void setCurrentObserver(@Nullable Runnable observer) { mCurrentObserver = observer; }
-
-    /** The place on screen, as the wall last said. */
-    @NonNull PaneWallPage current() { return mCurrent; }
 
     /** How far the bar is unfolded: 0 compact, 1 expanded. The icons grow and rise with it. */
     public void setExpansion(float expansion) {

@@ -18,6 +18,11 @@ checks stay owed here too. When #82 lands on `pre`, merge `pre` into this branch
    Minimal mode's default form. Everywhere on the wall (Home with floats, the Workspace).
    Status 2026-10-18: merged at 1458207d8 + d3f2fa8e7 (StatusBarFormPolicy, fold motion, gesture,
    view); seen on the emulator; ink fix and the Minimal-mode bar owed.
+   Status 2026-10-18 (later): **removed.** The developer chose two looks instead: the window pages
+   keep the bar's compact and expanded forms as before the capsule, and Home pages wear the Home
+   pills (below). `StatusBarFormPolicy`, `StatusBarCapsuleDrawing`, the idle fold, the capsule's
+   stop on the swipe, Minimal mode's capsule start and the float landing's unfold are gone; Minimal
+   mode does what it did before.
 2. **Style, Corners and Margin on Home** as Home's own settings (today global).
    Status 2026-10-18: built on a worker branch (keys `home_layout_style`,
    `home_surface_corner_radius`, `home_surface_side_gap`, seeded from the Workspace's while unset;

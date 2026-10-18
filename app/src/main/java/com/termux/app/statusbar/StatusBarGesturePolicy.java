@@ -41,13 +41,6 @@ public final class StatusBarGesturePolicy {
         public final int touchSlop;
         /** The edge the bar stands on, which is what decides the two axes. */
         @NonNull public final Edge edge;
-        /**
-         * The bar rests as the capsule ({@link StatusBarFormPolicy.Form#CAPSULE}); {@link #state}
-         * then reads compact, the memory the capsule rests in.
-         */
-        public final boolean capsule;
-        /** The bar can fold from compact to the capsule (a row, not a column). */
-        public final boolean capsuleAllowed;
 
         /** The shape every stream starts from, with the fold not armed. */
         public Down(int pointerId, float rawX, float rawY, float localX, float localY,
@@ -76,18 +69,6 @@ public final class StatusBarGesturePolicy {
                     boolean insideInteractiveChild, boolean nestedChildOwned,
                     boolean anotherSurfaceEngaged, boolean formEligible, int touchSlop,
                     @NonNull Edge edge) {
-            this(pointerId, rawX, rawY, localX, localY, uptimeMillis, state, insideWindowBar,
-                insideInteractiveChild, nestedChildOwned, anotherSurfaceEngaged, formEligible,
-                touchSlop, edge, false, false);
-        }
-
-        /** The full shape, with the bar's capsule: whether it rests as one, and may fold to one. */
-        public Down(int pointerId, float rawX, float rawY, float localX, float localY,
-                    long uptimeMillis, @NonNull TopStatusBarState state,
-                    boolean insideWindowBar,
-                    boolean insideInteractiveChild, boolean nestedChildOwned,
-                    boolean anotherSurfaceEngaged, boolean formEligible, int touchSlop,
-                    @NonNull Edge edge, boolean capsule, boolean capsuleAllowed) {
             this.pointerId = pointerId;
             this.rawX = rawX;
             this.rawY = rawY;
@@ -102,8 +83,6 @@ public final class StatusBarGesturePolicy {
             this.formEligible = formEligible;
             this.touchSlop = Math.max(0, touchSlop);
             this.edge = edge;
-            this.capsule = capsule;
-            this.capsuleAllowed = capsuleAllowed;
         }
 
         public boolean eligible() {
@@ -164,17 +143,12 @@ public final class StatusBarGesturePolicy {
             // One gesture across the bar with two directions: away from the bar's edge opens it,
             // back towards the edge folds it. Both share the same vetoes, so both work along the
             // bar's entire length.
-            // Three forms since the capsule: away from the edge grows the capsule or a compact
-            // bar, towards it shrinks an expanded bar or a compact one that can be a capsule.
             if (!down.formEligible) claim = Claim.CHILD_OWNED;
             else if (across * expandSign(down.edge) > 0f) {
-                claim = down.capsule || down.state == TopStatusBarState.COMPACT
+                claim = down.state == TopStatusBarState.COMPACT
                     ? Claim.EXPAND_SWIPE : Claim.CHILD_OWNED;
-            } else if (down.capsule) {
-                claim = Claim.CHILD_OWNED;
             } else {
                 claim = down.state == TopStatusBarState.EXPANDED
-                    || (down.state == TopStatusBarState.COMPACT && down.capsuleAllowed)
                     ? Claim.COLLAPSE_SWIPE : Claim.CHILD_OWNED;
             }
         } else if (aAlong > down.touchSlop && aAlong > aAcross) {

@@ -20555,9 +20555,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 (com.termux.app.statusbar.StatusBarSwipeLayout) host;
             swipeHost.setExpansionAllowed(
                 com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
-            // Minimal mode opens in the capsule (StatusBarFormPolicy); Home keeps its own rule.
-            swipeHost.setMinimalMode(isMinimalMode()
-                && !com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage));
         }
         if (host != null && host.getAlpha() != 1f) host.setAlpha(1f);
         View row = findViewById(R.id.terminal_status_row);
@@ -23648,9 +23645,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
                 (com.termux.app.statusbar.StatusBarSwipeLayout) statusBarHost;
             swipeHost.setCollapsed(isStatusBarCompact());
-            // The compact-to-expanded stretch in pixels, so the three forms share one axis.
-            swipeHost.setFoldTravelPx(targetStatusBarHeightPx(isRoundedDockStyle(), false)
-                - targetStatusBarHeightPx(isRoundedDockStyle(), true));
             swipeHost.setExpansionAllowed(
                 com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
             swipeHost.setListener(new com.termux.app.statusbar.StatusBarSwipeLayout.Listener() {
@@ -26235,13 +26229,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
         scheduleArrangementAutosave();
-        // A float that just flew into its chip (or a new one) needs the chip in sight: a bar
-        // folded to the capsule opens to compact (spec §4.4; StatusBarFormPolicy).
-        if (exist) {
-            View host = findViewById(R.id.terminal_window_bar_host);
-            if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout)
-                ((com.termux.app.statusbar.StatusBarSwipeLayout) host).openCapsule();
-        }
     }
 
     /**
