@@ -158,7 +158,11 @@ public final class WidgetGridView extends ViewGroup {
                 }
             });
             View content = null;
-            if (record.isBuiltin()) {
+            if (record.isApp()) {
+                // An app icon: the launcher's own view, like a built-in, asked for on every render
+                // so an icon pack or an uninstall reaches the one on screen.
+                content = appIconFactory == null ? null : appIconFactory.viewFor(record);
+            } else if (record.isBuiltin()) {
                 // The launcher's own view, asked for on every render so a resize or a settings
                 // change reaches the one already on screen.
                 content = builtinFactory == null ? null : builtinFactory.viewFor(record);
@@ -186,6 +190,7 @@ public final class WidgetGridView extends ViewGroup {
         for (int id : stale) {
             cells.remove(id); forgetSizes(id);
             if (id < 0 && builtinFactory != null) builtinFactory.release(id);
+            if (id < 0 && appIconFactory != null) appIconFactory.release(id);
         }
         requestLayout();
     }
@@ -275,6 +280,18 @@ public final class WidgetGridView extends ViewGroup {
     }
 
     public void setBuiltinFactory(@Nullable BuiltinFactory value) { builtinFactory = value; }
+
+    /** Supplies the views of the app icons on Home; the same shape as {@link BuiltinFactory}. */
+    public interface AppIconFactory {
+        /** The live icon view for {@code record}, brought up to date with its app. */
+        @Nullable View viewFor(@NonNull LauncherWidgetRecord record);
+        /** The cell for {@code id} left this page; its view may be dropped. */
+        default void release(int id) { }
+    }
+
+    @Nullable private AppIconFactory appIconFactory;
+
+    public void setAppIconFactory(@Nullable AppIconFactory value) { appIconFactory = value; }
 
     @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int width = MeasureSpec.getSize(widthMeasureSpec);

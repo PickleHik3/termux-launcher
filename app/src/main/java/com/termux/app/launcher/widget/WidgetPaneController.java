@@ -80,6 +80,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private final WidgetProviderCatalogLoader catalog;
     private final Host host;
     @NonNull private final BuiltinWidgetHost builtins;
+    /** The app icons' views; inert until the first icon is drawn. */
+    @NonNull private final HomeAppIconFactory appIcons;
     private String liveOrigin;
     private boolean awaitingExternal;
     private int currentPage;
@@ -106,6 +108,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 @Override public boolean glass() { return host.isWidgetSurfaceGlass(); }
             });
         pane.grid().setBuiltinFactory(builtins);
+        appIcons = new HomeAppIconFactory(pane.getContext(), this::onUnavailableAppTapped);
+        pane.grid().setAppIconFactory(appIcons);
         catalog.setBuiltinSource(builtins);
         pane.grid().addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> onWallLayout());
         pane.grid().bind(widgets); pane.picker().setReducedMotion(host.reducedMotion());
@@ -375,6 +379,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
     public void destroy() {
         builtins.destroy();
+        appIcons.destroy();
         abortCarry(false);
         pane.removeCallbacks(edgeFlip);
         widgets.setListener(null); catalog.cancel();
@@ -435,6 +440,25 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     /** Whether the Home page on screen holds no widget. */
     public boolean currentPageEmpty() {
         return widgets.repository().recordsOnPage(currentPage).isEmpty();
+    }
+
+    /**
+     * Puts {@code app} on Home as an icon: the page in front when it has room, else the first page
+     * that has, else a new page after the last. Returns the page it landed on, counting from 0,
+     * or -1 when it could not be written. The page in front stays in front.
+     */
+    public int addApp(@NonNull com.termux.app.launcher.model.LauncherAppEntry app) {
+        LauncherWidgetRecord placed = widgets.addApp(app.appRef, app.label, currentPage);
+        return placed == null ? -1 : placed.page;
+    }
+
+    /**
+     * A tap on an app icon whose app is gone: the page's edit mode opens on it, without a drag,
+     * so its remove chip is one press away.
+     */
+    private void onUnavailableAppTapped(int id) {
+        if (pane.widgetEditActive()) return;
+        beginEditSession(id);
     }
 
     /** Home's long-press sheet's Remove page: the page on screen goes, if it may. */
@@ -749,7 +773,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             editSnapshot = new EditSnapshot(widgets.repository().records(),
                 widgets.repository().pageCount(), widgets.repository().freshPages());
         }
-        AppWidgetProviderInfo info = widgets.providerInfo(appWidgetId);
+        // Only an app widget has a provider to ask; an app icon is 1×1 with no handles.
+        AppWidgetProviderInfo info = record.hasPlatformId()
+            ? widgets.providerInfo(appWidgetId) : null;
         WidgetGridMetrics metrics = pane.grid().metrics();
         int minColumns = 1, minRows = 1;
         int maxColumns = 0, maxRows = 0;
@@ -1535,6 +1561,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         java.util.Set<Integer> live = new java.util.HashSet<>();
         for (LauncherWidgetRecord record : widgets.repository().records()) live.add(record.appWidgetId);
         builtins.retainOnly(live);
+        appIcons.retainOnly(live);
         // A render hides the edit chrome. While a session is open and its widget is still on the
         // page - after a commit, a grid resize from the page's own tab, another widget arriving -
         // the chrome comes straight back at the widget's new bounds, and the host never hears the
