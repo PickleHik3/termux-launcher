@@ -6,11 +6,14 @@ import android.text.InputType;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
@@ -23,8 +26,9 @@ import java.util.Map;
 
 /**
  * The settings dialog of a built-in widget: one text field per {@link BuiltinWidgetView.ConfigField},
- * seeded from the record's bundle, written back whole on Save. Material by construction, so it
- * follows the scheme like every other dialog.
+ * seeded from the record's bundle, and the Glass switch every built-in carries
+ * ({@link BuiltinWidgetGlass}), written back on Save; anything stored that the sheet does not offer
+ * is kept. Material by construction, so it follows the scheme like every other dialog.
  */
 public final class BuiltinWidgetConfigSheet {
     public interface Listener { void onSaved(@NonNull Bundle config); }
@@ -76,6 +80,22 @@ public final class BuiltinWidgetConfigSheet {
             column.addView(box, params);
             inputs.add(input);
         }
+        // Every built-in widget's Glass, per widget (BuiltinWidgetGlass): a switch and one line.
+        MaterialSwitch glass = new MaterialSwitch(context);
+        glass.setText(R.string.builtin_widget_glass);
+        glass.setChecked(BuiltinWidgetGlass.isOn(current.getString(BuiltinWidgetGlass.CONFIG_KEY)));
+        LinearLayout.LayoutParams glassParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        glassParams.topMargin = Math.round((fields.isEmpty() ? 4 : 16) * density);
+        column.addView(glass, glassParams);
+        TextView glassSummary = new TextView(context);
+        glassSummary.setText(R.string.builtin_widget_glass_summary);
+        glassSummary.setTextAppearance(com.google.android.material.R.style
+            .TextAppearance_Material3_BodySmall);
+        glassSummary.setTextColor(MaterialColors.getColor(glass,
+            com.google.android.material.R.attr.colorOnSurfaceVariant));
+        column.addView(glassSummary, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         ScrollView scroll = new ScrollView(context);
         scroll.addView(column);
         new MaterialAlertDialogBuilder(context)
@@ -83,7 +103,14 @@ public final class BuiltinWidgetConfigSheet {
             .setView(scroll)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.builtin_widget_settings_save, (dialog, which) -> {
+                // What the sheet does not offer (a widget's own state, kept in its settings)
+                // stays as it was; what it offers is written whole.
                 Map<String, String> values = new LinkedHashMap<>();
+                for (String key : current.keySet()) {
+                    Object kept = current.get(key);
+                    if (kept instanceof String) values.put(key, (String) kept);
+                }
+                BuiltinWidgetGlass.write(values, glass.isChecked());
                 for (TextInputEditText input : inputs) {
                     CharSequence text = input.getText();
                     values.put(String.valueOf(input.getTag()), text == null ? "" : text.toString().trim());

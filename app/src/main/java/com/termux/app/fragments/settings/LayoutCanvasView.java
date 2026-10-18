@@ -1623,8 +1623,9 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * Home's widget area inside the pane's opening, as {@link #drawHomeGrid} lays it: Home's Margin
-     * in on every side, to scale, as the live grid's rim is ({@link HomeCanvasGeometry}); or null.
+     * Home's widget area inside the pane's opening, as {@link #drawHomeGrid} lays it: below the
+     * pills' band, then Home's Margin in on every side, to scale, as the live grid's is
+     * ({@link HomeCanvasGeometry}); or null.
      */
     @Nullable
     private RectF gridArea() {
@@ -1638,7 +1639,7 @@ public final class LayoutCanvasView extends View {
     private boolean gridAreaIn(@NonNull RectF pane, @NonNull RectF out) {
         float[] area = mHomeScratch;
         if (!HomeCanvasGeometry.gridArea(pane.left, pane.top, pane.right, pane.bottom,
-                mCanvasScale, mMarginDp, area)) return false;
+                mCanvasScale, mMarginDp, mStyle == LayoutStyle.FLOATING, area)) return false;
         out.set(area[0], area[1], area[2], area[3]);
         return true;
     }
@@ -2887,8 +2888,8 @@ public final class LayoutCanvasView extends View {
     /**
      * Home's widget grid, as the layout counts it: one faint tile per cell, and on the first two
      * a clock face and a few lines, so the tiles read as widgets rather than as a grid. Its rim is
-     * Home's Margin and its gaps the live grid's, to scale; Home's two status pills float over
-     * its top ({@link #drawHomePills}).
+     * Home's Margin and its gaps the live grid's, to scale; Home's two status pills stand in the
+     * band above it ({@link #drawHomePills}).
      */
     private void drawHomeGrid(@NonNull Canvas canvas, @NonNull RectF pane) {
         if (mLayout == null) return;
@@ -2926,8 +2927,8 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * Home's status pills over the top of the grid: the windows pill at the start and the system
-     * readout at the end, a Margin in from the page's corners, at their real height to scale
+     * Home's status pills in their band above the grid: the windows pill at the start and the
+     * system readout at the end, a Margin in from the page's sides, at their real height to scale
      * ({@link HomeCanvasGeometry#pills}). Fully rounded cards in the pack's surface, each with a
      * dim line or two of text, so they read as status rather than as widgets. Not elements: they
      * cannot be lifted, selected or put away.
@@ -2935,7 +2936,7 @@ public final class LayoutCanvasView extends View {
     private void drawHomePills(@NonNull Canvas canvas, @NonNull RectF pane) {
         float[] pills = mHomeScratch;
         if (!HomeCanvasGeometry.pills(pane.left, pane.top, pane.right, pane.bottom, mCanvasScale,
-                mMarginDp, pills)) return;
+                mMarginDp, mStyle == LayoutStyle.FLOATING, pills)) return;
         for (int i = 0; i < 2; i++) {
             RectF pill = mScratchRectB;
             pill.set(pills[4 * i], pills[4 * i + 1], pills[4 * i + 2], pills[4 * i + 3]);
@@ -4465,8 +4466,11 @@ public final class LayoutCanvasView extends View {
         if (rect == null || rect.isEmpty() || mCanvasScale <= 0f) {
             return WidgetGridCaps.unbounded();
         }
-        return WidgetGridCaps.forWall(rect.width() / mCanvasScale, rect.height() / mCanvasScale,
-            mMarginDp);
+        // The grid stands below the pills' band, as the live one does.
+        float bandDp = HomeCanvasGeometry.bandPx(rect.top, rect.bottom, mCanvasScale,
+            mStyle == LayoutStyle.FLOATING) / mCanvasScale;
+        return WidgetGridCaps.forWall(rect.width() / mCanvasScale,
+            rect.height() / mCanvasScale - bandDp, mMarginDp);
     }
 
     private boolean canStepGrid(int columnStep, int rowStep) {

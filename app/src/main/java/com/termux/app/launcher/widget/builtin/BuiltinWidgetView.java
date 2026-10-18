@@ -58,9 +58,29 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         }
     }
 
+    /**
+     * Where a widget whose Glass is on gets the launcher's glass: the page it stands on, which
+     * re-feeds every registered widget on each frost refresh ({@link #onGlassStyle}) and re-aims
+     * them as the wall slides ({@link #onGlassMoved}). A widget registers only while attached with
+     * its switch on, so the page's work is the glass widgets and nothing else.
+     */
+    public interface GlassSource {
+        @Nullable com.termux.app.terminal.PaneSurfaceStyle widgetGlassStyle();
+        void addGlassWidget(@NonNull BuiltinWidgetView widget);
+        void removeGlassWidget(@NonNull BuiltinWidgetView widget);
+    }
+
     @NonNull protected final BuiltinWidgetKind kind;
     @NonNull protected final BuiltinWidgetServices services;
+    /** The page's look, as the host resolved it. */
+    @NonNull private BuiltinWidgetStyle hostStyle;
+    /** The look drawn: {@link #hostStyle}, or its glass variant while this widget's Glass is on. */
     @NonNull private BuiltinWidgetStyle style;
+    /** This widget's own Glass switch, from its settings ({@link BuiltinWidgetGlass}). */
+    private boolean glassOn;
+    /** The wallpaper's blur under the card while Glass is on; made the first time it is wanted. */
+    @Nullable private com.termux.app.terminal.PaneGlassBackdropView slab;
+    @Nullable private GlassSource glassSource;
     @NonNull private BuiltinWidgetSpan span = BuiltinWidgetSpan.ONE_BY_ONE;
     /** The cells the widget spans on its grid; the bucket is chosen from them and the room. */
     private int cellColumns = 1, cellRows = 1;
@@ -100,6 +120,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         super(context);
         this.kind = kind;
         this.services = services;
+        this.hostStyle = style;
         this.style = style;
         background = new View(context);
         background.setId(android.R.id.background);
@@ -130,7 +151,21 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         Bundle nextConfig = config == null ? new Bundle() : new Bundle(config);
         boolean changed = !built || !sameConfig(this.config, nextConfig);
         this.config = nextConfig;
-        if (changed) rebuild();
+        if (!changed) return;
+        boolean glass = BuiltinWidgetGlass.isOn(nextConfig.getString(BuiltinWidgetGlass.CONFIG_KEY));
+        if (glass != glassOn) {
+            glassOn = glass;
+            resolveStyle();
+            applyChrome();
+            syncGlassRegistration();
+        }
+        rebuild();
+    }
+
+    /** The look drawn, from the page's and this widget's Glass switch. */
+    private void resolveStyle() {
+        style = BuiltinWidgetGlass.cardGlass(hostStyle.glass, glassOn)
+            ? hostStyle.glassVariant(getContext()) : hostStyle;
     }
 
     /** The cells the widget spans on its grid, from its record. */
@@ -178,6 +213,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         int height = MeasureSpec.getSize(heightMeasureSpec);
         setZoom(zoomFor(width, height));
         background.measure(widthMeasureSpec, heightMeasureSpec);
+        if (slab != null) slab.measure(widthMeasureSpec, heightMeasureSpec);
         measureContent(width, height, zoom);
         setMeasuredDimension(width, height);
     }
@@ -218,6 +254,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
                 post(this::requestLayout);
             }
         }
+        if (slab != null) slab.layout(0, 0, right - left, bottom - top);
         background.layout(0, 0, right - left, bottom - top);
         content.layout(0, 0, content.getMeasuredWidth(), content.getMeasuredHeight());
     }
@@ -316,9 +353,84 @@ public abstract class BuiltinWidgetView extends FrameLayout {
 
     /** The look changed under the widget: a theme, a Look, the direction setting. */
     public final void applyStyle(@NonNull BuiltinWidgetStyle next) {
-        style = next;
+        hostStyle = next;
+        resolveStyle();
         applyChrome();
+        dressSlab();
         if (built) rebuild();
+    }
+
+    // ----- glass ----------------------------------------------------------------------------
+
+    /** Whether this widget's own Glass switch is on. */
+    public final boolean isGlassOn() { return glassOn; }
+
+    /**
+     * The launcher's glass, from the page: the wallpaper's shared blur under the card. Called on
+     * every frost refresh; a re-feed with what the slab already wears costs nothing.
+     */
+    public final void onGlassStyle(@Nullable com.termux.app.terminal.PaneSurfaceStyle source) {
+        dressSlab(source);
+    }
+
+    /** The wall moved the page, or the wallpaper panned: the slab re-aims at what is behind it. */
+    public final void onGlassMoved() {
+        if (slab != null && slab.getVisibility() == VISIBLE) slab.invalidateGlassPosition();
+    }
+
+    private void syncGlassRegistration() {
+        GlassSource source = isAttachedToWindow() && glassOn && !preview ? findGlassSource() : null;
+        if (glassSource != null && glassSource != source) glassSource.removeGlassWidget(this);
+        if (source != null && source != glassSource) source.addGlassWidget(this);
+        glassSource = source;
+        dressSlab();
+    }
+
+    @Nullable private GlassSource findGlassSource() {
+        for (android.view.ViewParent parent = getParent(); parent != null;
+             parent = parent.getParent()) {
+            if (parent instanceof GlassSource) return (GlassSource) parent;
+        }
+        return null;
+    }
+
+    private void dressSlab() {
+        dressSlab(glassSource == null ? null : glassSource.widgetGlassStyle());
+    }
+
+    /**
+     * Shows the slab, fed from {@code source}, or puts it away. The slab draws the one shared
+     * frame through a matrix, so it holds no pixels of its own; it carries no tint (the
+     * see-through card over it is the tint, in the scheme's surface colour), and it is cut at the
+     * card's own corner radius.
+     */
+    private void dressSlab(@Nullable com.termux.app.terminal.PaneSurfaceStyle source) {
+        boolean shown = BuiltinWidgetGlass.slabShown(glassOn, preview,
+            com.termux.app.terminal.PaneGlass.isActive(source));
+        if (!shown) {
+            if (slab != null && slab.getVisibility() != GONE) slab.setVisibility(GONE);
+            return;
+        }
+        if (slab == null) {
+            slab = new com.termux.app.terminal.PaneGlassBackdropView(getContext());
+            slab.setClipToOutline(true);
+            slab.setOutlineProvider(new ViewOutlineProvider() {
+                @Override public void getOutline(View view, Outline out) {
+                    out.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
+                        style.cornerRadiusPx);
+                }
+            });
+            com.termux.app.terminal.PaneGlass.followLayout(slab);
+            addView(slab, 0, new LayoutParams(LayoutParams.MATCH_PARENT,
+                LayoutParams.MATCH_PARENT));
+        }
+        slab.setGlass(source.paneGlassBlurFrame(), source.paneGlassBlurFrameRect(),
+            android.graphics.Color.TRANSPARENT, source.paneGlassGrainLayer(),
+            source.paneGlassGrainStrength(), style.cornerRadiusPx,
+            source.paneGlassFrostFilter(), source.paneGlassCrossfade());
+        slab.setParallax(source.wallpaperParallax());
+        slab.invalidateOutline();
+        if (slab.getVisibility() != VISIBLE) slab.setVisibility(VISIBLE);
     }
 
     /** Render as a picker card: no live subscriptions, sample data where there is none. */
@@ -396,10 +508,15 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     @Override @CallSuper protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (!preview) startInternal();
+        syncGlassRegistration();
     }
 
     @Override @CallSuper protected void onDetachedFromWindow() {
         stopInternal();
+        if (glassSource != null) {
+            glassSource.removeGlassWidget(this);
+            glassSource = null;
+        }
         super.onDetachedFromWindow();
     }
 

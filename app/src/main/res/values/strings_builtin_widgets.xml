@@ -16,6 +16,8 @@
 
     <string name="builtin_widget_settings_save">Save</string>
     <string name="builtin_widget_settings_title">%1$s settings</string>
+    <string name="builtin_widget_glass">Glass</string>
+    <string name="builtin_widget_glass_summary">Let the wallpaper show through this widget.</string>
 
     <!-- Settings: the look shared by every built-in widget. -->
     <string name="settings_builtin_widget_style_title">Built-in widget style</string>

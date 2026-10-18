@@ -153,6 +153,14 @@ public final class BuiltinWidgetStyle {
         return new BuiltinWidgetStyle(context, direction, glass, monoFace);
     }
 
+    /**
+     * This look on a see-through card ({@link BuiltinWidgetGlass}): the same direction, scheme and
+     * faces, with the glass card and rim. Itself when it already is glass.
+     */
+    @NonNull public BuiltinWidgetStyle glassVariant(@NonNull Context context) {
+        return glass ? this : new BuiltinWidgetStyle(context, direction, true, mono);
+    }
+
     public boolean isPane() { return direction == Direction.PANE; }
 
     public int dp(float value) { return Math.round(value * density); }
