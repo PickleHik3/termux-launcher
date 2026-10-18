@@ -192,32 +192,29 @@ public final class HomeFloatPolicy {
     }
 
     /**
-     * Which of a saved session's windows load back as Home floats: the ones saved as floats
-     * ({@code savedAsFloat}), while there are Home pages to float over ({@code homePages}). A
-     * session's row is never left empty: when every one of its windows was a float, the first
-     * loads into the row as a tiled window and the rest float.
+     * Which of a saved session's windows load back as Home floats: every one saved as a float
+     * ({@code savedAsFloat}), while there are Home pages to float over ({@code homePages});
+     * without them all load into the row. A session saved as floats only loads as floats only,
+     * leaving no window in the row: the Workspace may be empty.
      */
     @NonNull
     public static boolean[] restoredAsFloats(@NonNull boolean[] savedAsFloat, boolean homePages) {
         boolean[] asFloat = new boolean[savedAsFloat.length];
         if (!homePages) return asFloat;
-        boolean rowKept = false;
-        for (int i = 0; i < savedAsFloat.length; i++) {
-            asFloat[i] = savedAsFloat[i];
-            if (!savedAsFloat[i]) rowKept = true;
-        }
-        if (!rowKept && asFloat.length > 0) asFloat[0] = false;
+        System.arraycopy(savedAsFloat, 0, asFloat, 0, savedAsFloat.length);
         return asFloat;
     }
 
     /**
      * The index in the row of a saved session's current window {@code savedCurrent}, once the
      * windows marked in {@code asFloat} have gone to Home: the same window when it stays in the
-     * row, else the row's window before it (its first when none is before it). The wall is not
-     * slid to Home for a current window that floats.
+     * row, else the row's window before it (its first when none is before it), or -1 when no
+     * window is left in the row. The wall is not slid to Home for a current window that floats.
      */
     public static int restoredRowIndex(@NonNull boolean[] asFloat, int savedCurrent) {
-        if (asFloat.length == 0) return 0;
+        int row = 0;
+        for (boolean floats : asFloat) if (!floats) row++;
+        if (row == 0) return -1;
         int current = Math.max(0, Math.min(savedCurrent, asFloat.length - 1));
         int before = 0;
         for (int i = 0; i < current; i++) if (!asFloat[i]) before++;

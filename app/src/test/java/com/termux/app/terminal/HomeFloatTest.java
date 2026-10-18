@@ -360,15 +360,18 @@ public class HomeFloatTest {
     }
 
     @Test
-    public void aSavedSessionsRowIsNeverLeftEmpty() {
+    public void everySavedFloatFloatsEvenWhenTheRowIsLeftEmpty() {
         boolean[] mixed = {false, true, false, true};
         assertArrayEquals(mixed, HomeFloatPolicy.restoredAsFloats(mixed, true));
         assertArrayEquals("no Home pages: every window loads tiled",
             new boolean[]{false, false, false, false},
             HomeFloatPolicy.restoredAsFloats(mixed, false));
-        assertArrayEquals("all floats: the first stays in the row",
-            new boolean[]{false, true, true},
+        assertArrayEquals("floats only: floats only, and the Workspace is empty",
+            new boolean[]{true, true, true},
             HomeFloatPolicy.restoredAsFloats(new boolean[]{true, true, true}, true));
+        assertArrayEquals("floats only without Home pages: all in the row",
+            new boolean[]{false, false},
+            HomeFloatPolicy.restoredAsFloats(new boolean[]{true, true}, false));
         assertEquals(0, HomeFloatPolicy.restoredAsFloats(new boolean[0], true).length);
     }
 
@@ -384,6 +387,9 @@ public class HomeFloatTest {
         assertEquals("past the end: the last window", 2, HomeFloatPolicy.restoredRowIndex(asFloat, 9));
         assertEquals("a float first: the row's first", 0,
             HomeFloatPolicy.restoredRowIndex(new boolean[]{true, false}, 0));
+        assertEquals("floats only: no current window in the row", -1,
+            HomeFloatPolicy.restoredRowIndex(new boolean[]{true, true}, 1));
+        assertEquals(-1, HomeFloatPolicy.restoredRowIndex(new boolean[0], 0));
     }
 
     @Test
