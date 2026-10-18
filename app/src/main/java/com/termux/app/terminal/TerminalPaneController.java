@@ -133,6 +133,15 @@ public class TerminalPaneController {
     private static final String STATE_FLOAT_RESTORE_TOP = "float_restore_top";
     private static final String STATE_FLOAT_RESTORE_WIDTH = "float_restore_width";
     private static final String STATE_FLOAT_RESTORE_HEIGHT = "float_restore_height";
+    private static final String STATE_HOME_FLOAT_PAGE = "home_float_page";
+    private static final String STATE_HOME_FLOAT_MINIMISED = "home_float_minimised";
+    /** The orientation a Home float's live shape was laid out in: true for landscape. */
+    private static final String STATE_HOME_FLOAT_LANDSCAPE = "home_float_landscape";
+    /** The shape a Home float keeps for the other orientation, when it has one. */
+    private static final String STATE_HOME_FLOAT_OTHER_LEFT = "home_float_other_left";
+    private static final String STATE_HOME_FLOAT_OTHER_TOP = "home_float_other_top";
+    private static final String STATE_HOME_FLOAT_OTHER_WIDTH = "home_float_other_width";
+    private static final String STATE_HOME_FLOAT_OTHER_HEIGHT = "home_float_other_height";
     private static final String STATE_SCRATCHPAD_LEFT = "scratchpad_left";
     private static final String STATE_SCRATCHPAD_TOP = "scratchpad_top";
     private static final String STATE_SCRATCHPAD_WIDTH = "scratchpad_width";
@@ -1089,6 +1098,108 @@ public class TerminalPaneController {
         window.focusShareV = restoredFocusShare(state.getFloat(STATE_WINDOW_FOCUS_SHARE_V, 0f));
         mWindows.add(window);
         return window;
+    }
+
+    /**
+     * A Home float's state across an activity recreate, keyed by its shell's handle: its page,
+     * whether it is minimised, its name and pane zoom, and its shape in the orientation it was
+     * laid out in and in the other one it remembers. The shell itself stays in the service.
+     */
+    @NonNull
+    public Bundle saveHomeFloat(@NonNull Window window) {
+        Bundle state = new Bundle();
+        Leaf leaf = window.active;
+        if (leaf == null) return state;
+        state.putString(STATE_NODE_SESSION, leaf.session.mHandle);
+        state.putInt(STATE_HOME_FLOAT_PAGE, Math.max(0, window.homePage));
+        state.putBoolean(STATE_HOME_FLOAT_MINIMISED, window.minimised);
+        if (window.name != null) state.putString(STATE_WINDOW_NAME, window.name);
+        if (leaf.fontSize > 0) state.putInt(STATE_NODE_FONT_SIZE, leaf.fontSize);
+        Boolean laidOut = leaf.shapeMemory == null ? null : leaf.shapeMemory.orientation();
+        boolean landscape = laidOut != null ? laidOut : isLandscapeScreen();
+        state.putBoolean(STATE_HOME_FLOAT_LANDSCAPE, landscape);
+        RectF frac = leaf.floatFrac;
+        if (frac != null) {
+            state.putFloat(STATE_FLOAT_LEFT, frac.left);
+            state.putFloat(STATE_FLOAT_TOP, frac.top);
+            state.putFloat(STATE_FLOAT_WIDTH, frac.width());
+            state.putFloat(STATE_FLOAT_HEIGHT, frac.height());
+        }
+        RectF restore = leaf.floatRestoreFrac;
+        if (restore != null) {
+            state.putFloat(STATE_FLOAT_RESTORE_LEFT, restore.left);
+            state.putFloat(STATE_FLOAT_RESTORE_TOP, restore.top);
+            state.putFloat(STATE_FLOAT_RESTORE_WIDTH, restore.width());
+            state.putFloat(STATE_FLOAT_RESTORE_HEIGHT, restore.height());
+        }
+        RectF other = leaf.shapeMemory == null ? null : leaf.shapeMemory.remembered(!landscape);
+        if (other != null) {
+            state.putFloat(STATE_HOME_FLOAT_OTHER_LEFT, other.left);
+            state.putFloat(STATE_HOME_FLOAT_OTHER_TOP, other.top);
+            state.putFloat(STATE_HOME_FLOAT_OTHER_WIDTH, other.width());
+            state.putFloat(STATE_HOME_FLOAT_OTHER_HEIGHT, other.height());
+        }
+        return state;
+    }
+
+    /**
+     * Counterpart of {@link #saveHomeFloat}: the float comes back around its still-running shell,
+     * on its page (the last one if its page is gone), minimised if it was, at the shape it had.
+     * A turn while the activity was away is met as a live turn meets it: the shape remembered
+     * for the new orientation, else the float as it was. Built as Saved sessions build a float
+     * ({@link #newWorkspaceHomeFloat}), with the shell already there. Null when the shell is gone
+     * or already in a window, or there is no Home page to float over; the host then adopts the
+     * shell as a window of the row.
+     */
+    @Nullable
+    public Window restoreHomeFloat(@Nullable Bundle state,
+                                   @NonNull Map<String, TerminalSession> sessionsByHandle,
+                                   int homeCount) {
+        if (state == null) return null;
+        TerminalSession session = sessionsByHandle.get(state.getString(STATE_NODE_SESSION));
+        if (session == null || windowOf(session) != null) return null;
+        int page = HomeFloatPolicy.restoredPage(state.getInt(STATE_HOME_FLOAT_PAGE, 0), homeCount);
+        if (page < 0) return null;
+        boolean laidOutLandscape = state.getBoolean(STATE_HOME_FLOAT_LANDSCAPE, isLandscapeScreen());
+        TerminalWorkspace.FloatShape live = savedShape(stateFrac(state, STATE_FLOAT_LEFT,
+            STATE_FLOAT_TOP, STATE_FLOAT_WIDTH, STATE_FLOAT_HEIGHT));
+        TerminalWorkspace.FloatShape other = savedShape(stateFrac(state, STATE_HOME_FLOAT_OTHER_LEFT,
+            STATE_HOME_FLOAT_OTHER_TOP, STATE_HOME_FLOAT_OTHER_WIDTH, STATE_HOME_FLOAT_OTHER_HEIGHT));
+        boolean turned = laidOutLandscape != isLandscapeScreen();
+        // Turned with nothing remembered for the new orientation: the float keeps its shape, as a
+        // live turn into an orientation it was never shaped in keeps it.
+        boolean keepsLiveShape = !turned || other == null;
+        TerminalWorkspace.FloatShape now = keepsLiveShape ? live : other;
+        TerminalWorkspace.FloatShape left = turned ? live : other;
+        boolean landscapeNow = isLandscapeScreen();
+        TerminalWorkspace.Window definition = new TerminalWorkspace.Window(0,
+            new TerminalWorkspace.Pane(null, session.mSessionName, null), null,
+            state.getString(STATE_WINDOW_NAME), new TerminalWorkspace.HomeFloat(page,
+                state.getBoolean(STATE_HOME_FLOAT_MINIMISED, false),
+                landscapeNow ? left : now, landscapeNow ? now : left));
+        Window window = newWorkspaceHomeFloat(definition,
+            java.util.Collections.singletonList(session), page);
+        Leaf leaf = window.active;
+        if (leaf != null) {
+            leaf.fontSize = Math.max(0, state.getInt(STATE_NODE_FONT_SIZE, 0));
+            RectF restore = stateFrac(state, STATE_FLOAT_RESTORE_LEFT, STATE_FLOAT_RESTORE_TOP,
+                STATE_FLOAT_RESTORE_WIDTH, STATE_FLOAT_RESTORE_HEIGHT);
+            // Maximised, it stays so: its Restore returns to the shape it had before.
+            if (keepsLiveShape && restore != null)
+                leaf.floatRestoreFrac = sanitizedFloatFrac(restore.left, restore.top,
+                    restore.width(), restore.height());
+        }
+        return window;
+    }
+
+    /** The fractions saved under these keys, or null when one is missing. */
+    @Nullable
+    private static RectF stateFrac(@NonNull Bundle state, @NonNull String left, @NonNull String top,
+                                   @NonNull String width, @NonNull String height) {
+        if (!state.containsKey(left) || !state.containsKey(top) || !state.containsKey(width)
+            || !state.containsKey(height)) return null;
+        float l = state.getFloat(left), t = state.getFloat(top);
+        return new RectF(l, t, l + state.getFloat(width), t + state.getFloat(height));
     }
 
     private static float restoredFocusShare(float share) {
