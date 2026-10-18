@@ -516,6 +516,28 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         return placed;
     }
 
+    /**
+     * Takes an app out of a folder onto Home as an icon, the page in front first
+     * ({@link LauncherWidgetRepository#removeFromFolder}). The icon as placed, or null when
+     * nothing changed.
+     */
+    @Nullable
+    public LauncherWidgetRecord removeFromFolder(int folderId, @NonNull String stableId,
+                                                 int preferredPage) {
+        LauncherWidgetRecord placed = repository.removeFromFolder(folderId, stableId,
+            preferredPage);
+        if (placed != null) notifyChanged(AddResult.IGNORED);
+        return placed;
+    }
+
+    /** Renames a folder on Home; false when there is no such folder or the write failed. */
+    public boolean renameFolder(int folderId, @Nullable String name,
+                                @NonNull String fallbackName) {
+        boolean renamed = repository.renameFolder(folderId, name, fallbackName);
+        if (renamed) notifyChanged(AddResult.IGNORED);
+        return renamed;
+    }
+
     /** Replaces a built-in widget's own settings; a no-op for anything else. */
     public boolean updateBuiltinConfig(int appWidgetId, @NonNull Bundle config) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
