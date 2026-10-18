@@ -3193,8 +3193,8 @@
     <string name="help_practice_start">Start</string>
     <string name="help_lesson_find_help_title">Find help</string>
     <string name="help_lesson_find_help_summary">Open help from a page\'s corner tab.</string>
-    <string name="help_lesson_border_drag_title">Change place</string>
-    <string name="help_lesson_border_drag_summary">Hold the top or bottom border, then swipe left or right to the next place.</string>
+    <string name="help_lesson_border_drag_title">Reach the Workspace</string>
+    <string name="help_lesson_border_drag_summary">Swipe left on an empty spot of Home to reach your first window, then swipe right along its bottom border to come back.</string>
     <string name="help_lesson_status_swipe_title">Open the status bar</string>
     <string name="help_lesson_status_swipe_summary">Swipe down from the top border to open the status bar.</string>
     <string name="help_lesson_find_apps_title">Open your apps</string>
