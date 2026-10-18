@@ -694,6 +694,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             boolean selected = i == selectedIndex;
             TextView tab = createTab(item, selected);
             tab.setOnClickListener(v -> onChipTapped(index));
+            // A long press on any chip is the bar's. One that cannot lift (a Home float's, the
+            // Display's) is swallowed here, so it never reaches the terminal's text selection.
+            tab.setOnLongClickListener(v -> !canLiftChip(index));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
             if (i > 0) params.setMarginStart(dp(3));
@@ -760,6 +763,13 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             if (x >= chip.getLeft() && x < chip.getRight()) return i;
         }
         return -1;
+    }
+
+    /** Whether a long press on chip {@code index} would lift it, as the policy reads it. */
+    private boolean canLiftChip(int index) {
+        int count = chipCount();
+        return mMoveListener != null
+            && WindowReorderPolicy.canLift(index, count, movableMask(count));
     }
 
     /** A DOWN on a chip that can move starts the long press that lifts it. */
