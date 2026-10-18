@@ -807,6 +807,17 @@ Not seen: everything else listed under the sections below.
   made; after a force-stop one live window came back. Owed: a shell spawned by the rebuild must
   be owned like any launcher window (close on exit, empty Workspace → Home). Saved sessions showed
   none because the earlier `pm clear` wiped the files, not a bug. Parallax card re-check not done.
+- Fixed 2026-10-18 (worker branch, "fix(wall): a rebuilt or loaded arrangement takes its current
+  window like any shell"): cause not confirmed off the device. A rebuilt window is held exactly
+  as one opened by hand (newWorkspaceWindow puts it in the pane controller and its session in
+  the row, so `exit` takes the FINISHED_WINDOW path); the one difference found is that
+  restoreArrangement (rebuild and Saved sessions Load alike) only showed the current window and
+  never ran activateSessionInPanes (focusSession, fonts, session list); it now does. `launcherctl
+  window close` answering not_owned is by design: it closes only windows opened through
+  window.open in this process (AgentPaneRegistry, not saved), as for any window opened by hand.
+  Re-check owed: after a force-stop rebuild, type `exit` with the in-app keyboard in each rebuilt
+  window (and a rebuilt float): each closes, the last leaves Home over an empty Workspace, and a
+  second force-stop comes back empty; if the drawer still opens, capture logcat and the screen.
 ### Wall rework phase two: slice 7b, folders on Home pages (feat/wall-rework-phase2)
 - Owed · commits "feat(home): folders as a Home item kind in the widget store (schema v7)" and
   "feat(home): folder cells, the folder popup and drop-to-merge on Home pages" · emulator,
@@ -862,6 +873,17 @@ Not seen: everything else listed under the sections below.
   overlay, or the keyboard inside the popup's touch path. Also: the popup's title and member
   labels are dark on dark glass, near unreadable. Not reached: Add to Home from the drawer (the
   checker could not open the drawer), the empty page being dropped.
+- Fixed 2026-10-18 (worker branch, "fix(home): the Home folder popup is a layer over the Home
+  pane…" and "…title, labels and rename read on light and dark glass"): the popup was a
+  PopupWindow, so the keyboard below got only ACTION_OUTSIDE and the window's dim covered it;
+  it is now a view over the Home pane (HomeFolderOverlay), under the in-app keyboard, the dock
+  and the status bar, dimming the pane only. A tap on the dim closes it without reaching Home
+  under it; a tap outside the pane closes it unless it is a rename key. The dock's folder popup
+  is unchanged (still a window). The title, labels and rename take the capsule's ink rule on the
+  chrome's polarity while the wallpaper shows through (dock opacity below 50). Re-check owed:
+  Home folder rename typed with the in-app keyboard, keyboard undimmed, Enter commits; tap on the
+  dim and on the dock each close it; the title and labels read on a dark and a light wallpaper,
+  in both themes, and with the dock opacity at 80.
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners

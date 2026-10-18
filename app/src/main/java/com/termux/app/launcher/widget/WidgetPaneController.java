@@ -549,6 +549,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     /**
+     * A press anywhere in the activity's window, before any view sees it: the Home folder popup,
+     * shown inside the Home pane, closes for one outside the pane as it did as a window of its own
+     * ({@link HomeFolderPopup#onWindowTouchDown}).
+     */
+    public void onWindowTouchDown(float rawX, float rawY) {
+        if (folderPopup != null) folderPopup.onWindowTouchDown(rawX, rawY);
+    }
+
+    /**
      * Remove from folder: the app goes on Home as an icon, the page in front first, and what is
      * left of the folder follows the folder rules. The page it landed on is named when it is not
      * the one on screen.

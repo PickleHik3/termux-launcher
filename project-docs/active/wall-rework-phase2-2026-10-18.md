@@ -149,6 +149,10 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    popup: the dock's (menu module, `LauncherFolderPopupController`, `FolderRenameTitleView` and
    the activity's `FolderRenameController` for rename). No drag out of the popup: Remove from
    folder places the app instead. Unit tests green; emulator pass owed (device-checks, slice 7b).
+   Status 2026-10-18 (emulator pass fixes): the Home folder popup is now a view over the Home
+   pane (`HomeFolderOverlay`), not a window, so the in-app keyboard types into its rename and is
+   not dimmed; its title, labels and rename take the capsule's ink rule. The dock's folder popup
+   is unchanged. Re-check owed (device-checks, slice 7b).
    **Slice 7 complete.**
 8. **Per-toplevel X11 windows** (needs a rootless server).
    Status 2026-10-18: not started; a developer decision. The display is the vendored termux-x11
@@ -171,6 +175,9 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    shells in the saved folders, never replaying a command, then a notice. Docs:
    `durable-workspaces.md` › Autosave and recovery, the user guide's After a restart, spec §9.
    Unit tests green; emulator pass owed (device-checks, slice 9).
+   Status 2026-10-18 (emulator pass fix): a rebuilt window stayed on `exit`. Rebuild and Load now
+   take their current window through `activateSessionInPanes` like any shell; the cause is not
+   confirmed off the device. Re-check owed (device-checks, slice 9).
 
 ## Rules carried over
 
