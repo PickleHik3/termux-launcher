@@ -132,7 +132,8 @@ public final class TourRun {
         return TourStep.lesson(FIND_APPS, 0, R.string.tour_chapter_home,
             TourStep.Placement.AUTO,
             new TourStep.Stage(TourStep.Side.HOME, R.string.tour_title_apps, body,
-                TourTargets.DOCK, TourSignals.DRAWER_OPENED, TourGesture.DRAG_DOWN));
+                TourTargets.DOCK, TourSignals.DRAWER_OPENED, TourSignals.AZ_APPS_SHOWN,
+                TourGesture.DRAG_DOWN));
     }
 
     /**

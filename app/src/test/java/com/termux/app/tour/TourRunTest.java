@@ -81,6 +81,28 @@ public class TourRunTest {
         return signals;
     }
 
+    /**
+     * The apps lesson clears on the drawer's pull and on a tap on the dock's A-Z letters, which
+     * lays the letter's apps out in the row; nothing else does, and no other lesson takes either.
+     */
+    @Test public void theAppsLessonClearsOnTheDrawerOrTheLetters() {
+        TourStep apps = step(TourRun.FIND_APPS);
+        assertTrue(apps.clearedBy(0, TourSignals.DRAWER_OPENED));
+        assertTrue(apps.clearedBy(0, TourSignals.AZ_APPS_SHOWN));
+        assertEquals(TourSignals.AZ_APPS_SHOWN, apps.alsoSignalAt(0));
+        assertFalse(apps.clearedBy(0, TourSignals.APP_LAUNCHED));
+        assertFalse(apps.clearedBy(0, null));
+        assertFalse("past the last stage", apps.clearedBy(1, TourSignals.DRAWER_OPENED));
+        for (String id : Arrays.asList(TourRun.PAGE_SWIPE, TourRun.KEYBOARD, TourRun.STATUS_SWIPE,
+                TourRun.FIND_ACTION, TourRun.FIND_HELP)) {
+            TourStep other = step(id);
+            for (int i = 0; i < other.stageCount(); i++) {
+                assertNull(id, other.alsoSignalAt(i));
+                assertFalse(id, other.clearedBy(i, TourSignals.AZ_APPS_SHOWN));
+            }
+        }
+    }
+
     @Test public void eachStageHasItsOwnTitleSentenceControlAndGesture() {
         TourStep pageSwipe = step(TourRun.PAGE_SWIPE);
         assertEquals(R.string.tour_title_to_workspace, pageSwipe.titleResAt(0));

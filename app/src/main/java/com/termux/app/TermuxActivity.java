@@ -1411,6 +1411,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the suggestion bar, the three FX layers and the {@code Choreographer} loop below.
      */
     private final AzScrubGesture mAzGesture = new AzScrubGesture(SystemClock::uptimeMillis);
+    /** The touch on the A-Z letters now under way laid a letter's apps out (for the tour). */
+    private boolean mAzAppsShownThisTouch;
     @Nullable private Choreographer.FrameCallback mAzEdgePagingFrameCallback;
     @Nullable private SuggestionBarView.AzDragFocusResult mAzCurrentFocusResult;
     @Nullable private Runnable mAzOverflowRefreshRunnable;
@@ -10895,6 +10897,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         AzScrubGesture.Decision decision;
         switch (phase) {
             case DOWN:
+                mAzAppsShownThisTouch = false;
                 decision = mAzGesture.onDown(letter, selectionIndex, touchX, touchY,
                     canonicalX, canonicalY, eventTimeMs, geometry);
                 break;
@@ -10940,9 +10943,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (decision.persistPreview) {
             if (standalone) {
-                syncAzStandaloneStrip(decision.previewLetter, true);
+                // No strip: the letter matched nothing, so nothing was laid out.
+                if (syncAzStandaloneStrip(decision.previewLetter, true) != null)
+                    mAzAppsShownThisTouch = true;
             } else {
                 mSuggestionBarView.persistAzPreview(decision.previewLetter, decision.previewSelectionIndex);
+                mAzAppsShownThisTouch = true;
             }
         }
         updateAzOverflowAffordance();
@@ -10973,6 +10979,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : mSuggestionBarView.launchAzFocusedEntry(focusResult);
             }
             if (launched && mFirstBootTour != null) mFirstBootTour.onAppLaunchedFromScrub();
+            // A tap on a letter lays its apps out in the row and leaves them there: the apps found
+            // from the dock, as the drawer's pull finds them, so the apps lesson counts it.
+            else if (mAzAppsShownThisTouch && mFirstBootTour != null) mFirstBootTour.onAzAppsShown();
+            mAzAppsShownThisTouch = false;
             resetAzGestureState(false);
             updateAzOverflowAffordance();
             if (!launched) {
