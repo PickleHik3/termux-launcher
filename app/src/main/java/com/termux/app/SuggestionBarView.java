@@ -371,6 +371,9 @@ public final class SuggestionBarView extends GridLayout
         }
     };
     private final MenuRowFactory menuRows = new MenuRowFactory(getContext(), menuTheme);
+
+    /** The dock's menu look, lent to the popup a folder on Home opens so the two match. */
+    @NonNull public AnchoredMenuTheme menuTheme() { return menuTheme; }
     /** The app/folder context menu, and the shortcuts menu that opens beside it. */
     private final AnchoredMenu appContextMenu = new AnchoredMenu(this, menuTheme);
     private final AnchoredMenu shortcutsMenu = new AnchoredMenu(this, menuTheme);

@@ -775,6 +775,39 @@ Not seen: everything else listed under the sections below.
   the same. With Start in = Workspace either way: one fresh shell window.
 - Owed · an explicit Saved sessions Load (Replace) still works, and a force-stop 2 s after it
   brings back the loaded arrangement, not the one before. The Saved tab never lists `.autosave`.
+### Wall rework phase two: slice 7b, folders on Home pages (feat/wall-rework-phase2)
+- Owed · commits "feat(home): folders as a Home item kind in the widget store (schema v7)" and
+  "feat(home): folder cells, the folder popup and drop-to-merge on Home pages" · emulator,
+  portrait, two or three apps on a Home page as icons (slice 7a's Add to Home). Install the build
+  over a slice 7a build with icons on Home (a v6 wall): every icon and widget is where it was.
+- Owed · long-press icon A, rest it on icon B: after about a third of a second B swells and the
+  ghost sits on it; let go: one folder in B's cell, named after A, showing A and B in its 2×2
+  miniature with the name under it. Edit mode stays open with the folder selected. Let go before
+  the swell instead: A moves as before (B slides aside). Rest A on a widget: nothing swells.
+- Owed · tap the folder (edit mode closed): the dock-style popup opens with A and B as icons with
+  labels, the screen behind dimmed. Tap B: B opens and the popup closes.
+- Owed · rest a third icon C on the folder and let go: the miniature shows three apps and the
+  popup lists A, B, C.
+- Owed · in the popup tap the folder's name: the caret appears; type a new name and Enter (the
+  in-app keyboard, then the Android keyboard): the title and the cell's name change, and keep
+  after the app is killed and reopened.
+- Owed · in the popup hold C › **Remove from folder**: C is an icon on the page in front again,
+  and the folder lists A and B. Then hold A › Remove from folder: the folder turns into B's icon
+  in the same cell, and A is an icon on the page.
+- Owed · make a folder again, long-press it and carry it against the page's edge to another page
+  (and past the last page): it lands there whole and opens with its apps; the page it left goes if
+  it is empty. Its remove chip takes the folder off.
+- Owed · Appearance › Layout on Home › Margin · Home at 24: folder cells are inset like icons and
+  widgets; back at the old Margin all return.
+- Owed · an app in a folder uninstalled or disabled: its mini and its popup entry go faint; a tap
+  on it offers Remove from folder.
+- Owed · rotate to landscape and back with a folder on Home: each orientation keeps its layout and
+  the folder stays a folder.
+- Owed · a v7 blob with a malformed folder (developer, `run-as` edit of
+  `shared_prefs/launcher_widget_repository.xml`: a folder record with no readable app): the app
+  starts, that cell is empty and the rest of Home stands (covered by unit tests; seen on device
+  once).
+
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners

@@ -107,15 +107,16 @@ public final class WidgetGridView extends ViewGroup {
     /**
      * The widget a finger is carrying to another page. Its cell stays attached through the flip,
      * hidden and unplaced, because the gesture the user is still making is being delivered through
-     * that view: removing it with the page it left would cancel the drag mid-air. -1 for none.
+     * that view: removing it with the page it left would cancel the drag mid-air. 0 for none: no
+     * key is 0, and the launcher's own items (built-ins, app icons, folders) have negative keys.
      */
-    private int dragPinnedId = -1;
+    private int dragPinnedId = 0;
 
     public void setDragPinned(int appWidgetId) {
         if (dragPinnedId == appWidgetId) return;
         int released = dragPinnedId;
         dragPinnedId = appWidgetId;
-        if (released < 0) return;
+        if (released == 0) return;
         for (LauncherWidgetRecord record : records) {
             if (record.appWidgetId == released) return; // it landed on the page showing now
         }
@@ -158,9 +159,9 @@ public final class WidgetGridView extends ViewGroup {
                 }
             });
             View content = null;
-            if (record.isApp()) {
-                // An app icon: the launcher's own view, like a built-in, asked for on every render
-                // so an icon pack or an uninstall reaches the one on screen.
+            if (record.isApp() || record.isFolder()) {
+                // An app icon or a folder: the launcher's own view, like a built-in, asked for on
+                // every render so an icon pack or an uninstall reaches the one on screen.
                 content = appIconFactory == null ? null : appIconFactory.viewFor(record);
             } else if (record.isBuiltin()) {
                 // The launcher's own view, asked for on every render so a resize or a settings
@@ -180,7 +181,7 @@ public final class WidgetGridView extends ViewGroup {
             if (cell.getChildCount() != 1 || cell.getChildAt(0) != content) cell.setContent(content);
         }
         // The widget in the air belongs to no page while it crosses; its cell stays all the same.
-        if (dragPinnedId >= 0) live.add(dragPinnedId);
+        if (dragPinnedId != 0) live.add(dragPinnedId);
         ArrayList<Integer> stale = new ArrayList<>();
         for (Map.Entry<Integer, WidgetCellView> entry : cells.entrySet()) {
             if (!live.contains(entry.getKey())) {

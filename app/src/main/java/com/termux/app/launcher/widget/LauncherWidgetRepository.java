@@ -53,6 +53,13 @@ public final class LauncherWidgetRepository {
      * else an app widget.
      */
     private static final int APP_ITEM_VERSION = 6;
+    /**
+     * Written while a Home page holds a folder: the v6 payload, with each folder carrying its name
+     * and its apps. A v6 build would drop the folders one by one and keep the rest, which would
+     * lose the apps in them on its next write; the newer number makes it go read-only instead.
+     * v6 and older load unchanged.
+     */
+    private static final int FOLDER_VERSION = 7;
     /** v3 is read as v4 with no orientation named and no shelf: identical bytes, nothing moves. */
     private static final int LEGACY_PAGED_VERSION = 3;
     private static final String PREFS = "launcher_widget_repository";
@@ -140,11 +147,118 @@ public final class LauncherWidgetRepository {
     }
 
     /**
+     * Drops the app icon {@code draggedId} on {@code targetId} ({@link HomeFolderPolicy}): onto
+     * another app icon, the two become one folder in the target's cell, under the target's key (so
+     * a turned screen's shelved layout still places it), named after the dropped app ({@code fallbackName} when it has no label); onto a folder, the app
+     * joins it at the end. The dropped icon goes in the same commit. Returns the folder as stored,
+     * or null when the drop is not a merge (see {@link HomeFolderPolicy#canTarget}) or the write
+     * failed, with nothing changed.
+     */
+    @Nullable
+    public synchronized LauncherWidgetRecord mergeIntoFolder(int draggedId, int targetId,
+                                                             @NonNull String fallbackName) {
+        LauncherWidgetRecord dragged = records.get(draggedId);
+        LauncherWidgetRecord target = records.get(targetId);
+        if (dragged == null || !HomeFolderPolicy.canTarget(dragged, target)) return null;
+        LauncherWidgetRecord.FolderApp app = HomeFolderPolicy.entryOf(dragged);
+        if (app == null) return null;
+        LauncherWidgetRecord folder;
+        if (target.isFolder()) {
+            List<LauncherWidgetRecord.FolderApp> apps = HomeFolderPolicy.add(target.folderApps(),
+                app);
+            if (apps == null) return null;
+            folder = target.withFolder(target.folderName(), apps);
+        } else {
+            LauncherWidgetRecord.FolderApp other = HomeFolderPolicy.entryOf(target);
+            HomeFolderPolicy.Contents contents = other == null ? null
+                : HomeFolderPolicy.merge(app, other, fallbackName);
+            if (contents == null) return null;
+            folder = LauncherWidgetRecord.folder(targetId, contents.name, contents.apps,
+                target.cell, target.page);
+        }
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
+        next.remove(draggedId);
+        next.remove(targetId);
+        next.put(folder.appWidgetId, folder);
+        return commitValidated(next, pending, grid, pageCount, revision + 1) ? folder : null;
+    }
+
+    /**
+     * Takes the app {@code stableId} out of the folder {@code folderId} and puts it on Home as an
+     * icon: the page in front when it has room, else the first page that has, else a new page.
+     * What is left of the folder follows {@link HomeFolderPolicy#remove}: still a folder, the last
+     * app's own icon in the folder's cell under the folder's key, or nothing. One commit. Returns the
+     * icon as placed, or null when the app was not there or the write failed, with nothing
+     * changed.
+     */
+    @Nullable
+    public synchronized LauncherWidgetRecord removeFromFolder(int folderId,
+                                                              @NonNull String stableId,
+                                                              int preferredPage) {
+        LauncherWidgetRecord folder = records.get(folderId);
+        if (folder == null || !folder.isFolder()) return null;
+        HomeFolderPolicy.Removal removal = HomeFolderPolicy.remove(folder.folderApps(), stableId);
+        if (removal.taken == null) return null;
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
+        switch (removal.outcome) {
+            case FOLDER:
+                next.put(folderId, folder.withFolder(folder.folderName(), removal.remaining));
+                break;
+            case ICON:
+                next.put(folderId, appRecord(folderId, removal.lastApp, folder.cell, folder.page));
+                break;
+            case GONE:
+            default:
+                next.remove(folderId);
+                break;
+        }
+        int key = allocateBuiltinId();
+        final Map<Integer, LauncherWidgetRecord> settled = next;
+        HomeItemPlacementPolicy.Choice choice = HomeItemPlacementPolicy.place(grid, pageCount,
+            preferredPage, page -> occupancyOnPage(settled, page), 1, 1);
+        if (choice == null) return null;
+        LauncherWidgetRecord placed = appRecord(key, removal.taken, choice.cell, choice.page);
+        next.put(placed.appWidgetId, placed);
+        int nextPages = choice.appendsPage ? pageCount + 1 : pageCount;
+        return commitValidated(next, pending, grid, nextPages, revision + 1) ? placed : null;
+    }
+
+    /**
+     * Renames the folder {@code folderId}: {@code name} trimmed and capped
+     * ({@link HomeFolderPolicy#name}), {@code fallbackName} when blank. False when there is no
+     * such folder or the write failed.
+     */
+    public synchronized boolean renameFolder(int folderId, @Nullable String name,
+                                             @NonNull String fallbackName) {
+        LauncherWidgetRecord folder = records.get(folderId);
+        if (folder == null || !folder.isFolder()) return false;
+        String settledName = HomeFolderPolicy.name(name, fallbackName);
+        if (settledName.equals(folder.folderName())) return true;
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
+        next.put(folderId, folder.withFolder(settledName, folder.folderApps()));
+        return commitValidated(next, pending, grid, pageCount, revision + 1);
+    }
+
+    @NonNull
+    private static LauncherWidgetRecord appRecord(int id, @NonNull LauncherWidgetRecord.FolderApp app,
+                                                  @NonNull WidgetCellRect cell, int page) {
+        Bundle options = new Bundle();
+        options.putString(LauncherWidgetRecord.APP_LABEL, app.label);
+        return LauncherWidgetRecord.app(id, app.app(), cell, page, options);
+    }
+
+    /**
      * What stands on a page for a placement to avoid: its records and, on its page, the cell an
      * add in flight has reserved, which no record holds yet.
      */
     @NonNull private List<LauncherWidgetRecord> occupancyOnPage(int page) {
-        ArrayList<LauncherWidgetRecord> out = new ArrayList<>(recordsOnPage(page));
+        return occupancyOnPage(records, page);
+    }
+
+    /** The same, measured against {@code values} rather than the records as they stand. */
+    @NonNull private List<LauncherWidgetRecord> occupancyOnPage(
+            @NonNull Map<Integer, LauncherWidgetRecord> values, int page) {
+        ArrayList<LauncherWidgetRecord> out = new ArrayList<>(recordsOnPage(values, page));
         WidgetAddTransaction held = pending;
         if (held != null && held.page == page && held.appWidgetId > 0
             && !records.containsKey(held.appWidgetId)) {
@@ -840,7 +954,8 @@ public final class LauncherWidgetRepository {
             // shelves no layout, so it is adopted as it stands and rewritten as v4 on the next
             // commit. Nothing moves for a user who never turns the screen.
             if (version != SCHEMA_VERSION && version != LEGACY_PAGED_VERSION
-                && version != BUILTIN_VERSION && version != APP_ITEM_VERSION) {
+                && version != BUILTIN_VERSION && version != APP_ITEM_VERSION
+                && version != FOLDER_VERSION) {
                 readOnlyUnknownVersion = true;
                 return;
             }
@@ -942,7 +1057,8 @@ public final class LauncherWidgetRepository {
         if (array == null) return loaded;
         for (int i = 0; i < array.length(); i++) {
             LauncherWidgetRecord record = decodeRecord(array.getJSONObject(i), hasCell, 0, 0);
-            // A kind this build cannot hold (a folder, before folders) leaves its cell empty.
+            // A kind this build cannot hold, or a folder that cannot be read, leaves its cell
+            // empty and the rest of the wall stands.
             if (record == null) continue;
             if (loaded.put(record.appWidgetId, record) != null) throw new JSONException("duplicate widget ID");
         }
@@ -958,8 +1074,9 @@ public final class LauncherWidgetRepository {
                                  @Nullable RowSnapshot snapshot, long revision) {
         try {
             JSONObject root = new JSONObject();
-            boolean writeKind = holdsApp(values.values());
-            root.put("version", writeKind ? APP_ITEM_VERSION
+            boolean holdsFolder = holdsFolder(values.values());
+            boolean writeKind = holdsFolder || holdsApp(values.values());
+            root.put("version", holdsFolder ? FOLDER_VERSION : writeKind ? APP_ITEM_VERSION
                 : holdsBuiltin(values.values()) ? BUILTIN_VERSION : SCHEMA_VERSION);
             root.put("revision", revision);
             root.put("grid", encodeGrid(definition));
@@ -1092,6 +1209,67 @@ public final class LauncherWidgetRepository {
         return false;
     }
 
+    private static boolean holdsFolder(@NonNull Collection<LauncherWidgetRecord> values) {
+        for (LauncherWidgetRecord record : values) if (record.isFolder()) return true;
+        return false;
+    }
+
+    @NonNull
+    private static JSONObject encodeAppRef(@NonNull com.termux.app.launcher.model.AppRef app)
+        throws JSONException {
+        return new JSONObject().put("package", app.packageName)
+            .put("activity", app.activityName).put("user", app.userId)
+            .put("serial", app.userSerialNumber).put("cloned", app.clonedProfile)
+            .put("profileLabel", app.profileLabel);
+    }
+
+    @NonNull
+    private static com.termux.app.launcher.model.AppRef decodeAppRef(@NonNull JSONObject app)
+        throws JSONException {
+        return new com.termux.app.launcher.model.AppRef(app.getString("package"),
+            app.getString("activity"), app.optInt("user", -1), app.optLong("serial", -1L),
+            app.optBoolean("cloned", false), app.optString("profileLabel", ""));
+    }
+
+    /**
+     * A stored folder, read leniently: an app entry that cannot be read is left out, a folder of
+     * one app comes back as that app's icon under the folder's key (the rule a removal follows),
+     * and a folder with no readable app, or no folder block at all, is null so its cell is left
+     * empty and the rest of the wall stands.
+     */
+    @Nullable
+    private static LauncherWidgetRecord decodeFolder(@NonNull JSONObject value,
+                                                     @NonNull WidgetCellRect cell) {
+        try {
+            int id = value.getInt("id");
+            int page = Math.max(0, value.optInt("page", 0));
+            JSONObject folder = value.getJSONObject("folder");
+            JSONArray array = folder.getJSONArray("apps");
+            List<LauncherWidgetRecord.FolderApp> apps = new ArrayList<>();
+            java.util.HashSet<String> seen = new java.util.HashSet<>();
+            for (int i = 0; i < array.length() && apps.size() < HomeFolderPolicy.MAX_APPS; i++) {
+                JSONObject entry = array.optJSONObject(i);
+                if (entry == null) continue;
+                try {
+                    LauncherWidgetRecord.FolderApp app = new LauncherWidgetRecord.FolderApp(
+                        decodeAppRef(entry), entry.optString("label", ""));
+                    if (seen.add(app.stableId())) apps.add(app);
+                } catch (JSONException | IllegalArgumentException unreadable) {
+                    // This app is left out; the folder keeps the others.
+                }
+            }
+            if (apps.isEmpty()) throw new JSONException("a folder with no app");
+            if (apps.size() == 1) return appRecord(id, apps.get(0), cell, page);
+            return LauncherWidgetRecord.folder(id,
+                HomeFolderPolicy.name(folder.optString("name", ""), HomeFolderPolicy.DEFAULT_NAME),
+                apps, cell, page);
+        } catch (JSONException | IllegalArgumentException malformed) {
+            android.util.Log.w("LauncherWidgets", "dropping a Home folder that cannot be read: "
+                + malformed.getMessage());
+            return null;
+        }
+    }
+
     /** {@code writeKind}: a v6 payload, where every record names its kind. */
     private static JSONObject encodeRecord(LauncherWidgetRecord record, boolean writeKind)
         throws JSONException {
@@ -1101,11 +1279,14 @@ public final class LauncherWidgetRepository {
         value.put("provider", record.provider.flattenToString());
         if (record.builtinKind != null) value.put("builtin", record.builtinKind);
         com.termux.app.launcher.model.AppRef app = record.appRef();
-        if (app != null) {
-            value.put("app", new JSONObject().put("package", app.packageName)
-                .put("activity", app.activityName).put("user", app.userId)
-                .put("serial", app.userSerialNumber).put("cloned", app.clonedProfile)
-                .put("profileLabel", app.profileLabel));
+        if (app != null) value.put("app", encodeAppRef(app));
+        if (record.isFolder()) {
+            JSONArray apps = new JSONArray();
+            for (LauncherWidgetRecord.FolderApp member : record.folderApps()) {
+                apps.put(encodeAppRef(member.app()).put("label", member.label));
+            }
+            value.put("folder", new JSONObject().put("name", record.folderName())
+                .put("apps", apps));
         }
         value.put("profile", record.profileSerial);
         value.put("state", record.state.name());
@@ -1117,8 +1298,8 @@ public final class LauncherWidgetRepository {
     }
 
     /**
-     * One stored record, or null for a kind this build cannot hold (folders, before folders),
-     * which the caller leaves out. A record with no {@code kind} (v5 and older) is a built-in when
+     * One stored record, or null for a kind this build cannot hold or a folder that cannot be
+     * read ({@link #decodeFolder}), which the caller leaves out. A record with no {@code kind} (v5 and older) is a built-in when
      * it names one and an app widget otherwise, exactly as those versions read it.
      */
     @Nullable
@@ -1137,16 +1318,13 @@ public final class LauncherWidgetRepository {
             } catch (IllegalArgumentException unknown) {
                 kind = null;
             }
-            if (kind == null || kind == LauncherWidgetRecord.Kind.FOLDER) {
+            if (kind == null) {
                 android.util.Log.w("LauncherWidgets", "dropping Home item of kind " + kindName);
                 return null;
             }
+            if (kind == LauncherWidgetRecord.Kind.FOLDER) return decodeFolder(value, cell);
             if (kind == LauncherWidgetRecord.Kind.APP) {
-                JSONObject app = value.getJSONObject("app");
-                com.termux.app.launcher.model.AppRef ref = new com.termux.app.launcher.model.AppRef(
-                    app.getString("package"), app.getString("activity"), app.optInt("user", -1),
-                    app.optLong("serial", -1L), app.optBoolean("cloned", false),
-                    app.optString("profileLabel", ""));
+                com.termux.app.launcher.model.AppRef ref = decodeAppRef(value.getJSONObject("app"));
                 return LauncherWidgetRecord.app(value.getInt("id"), ref, cell,
                     Math.max(0, value.optInt("page", 0)),
                     decodeBundle(value.optJSONObject("options")));

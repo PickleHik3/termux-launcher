@@ -136,7 +136,20 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    and the Home sheet's **Add an app** (`HomeAppPicker`): the page in front, else the first with
    room, else a new page (`HomeItemPlacementPolicy`). A gone app's icon stays, faint, until
    removed, and revives if the app returns. Unit tests green; emulator pass owed (device-checks,
-   slice 7a). **7b next**: folders (the reserved `FOLDER` kind).
+   slice 7a).
+   **7b done** (folders): a Home item of kind FOLDER (schema v7 while one exists; v6 and older
+   unchanged): a name and an ordered list of apps with their labels, 1×1, same negative keys,
+   under a synthetic provider. Rules in `HomeFolderPolicy`: an icon rested 300 ms on another icon
+   and released makes a folder named after the dropped app (dropped app first); on a folder it
+   joins at the end; cap 16; Remove from folder puts the app on the page in front (else the first
+   with room, else a new page); one app left turns the folder back into its icon, none removes
+   it; names trimmed, capped at 40 code points. A merge keeps the target's key, a collapse the
+   folder's. A malformed stored folder is dropped, the rest of the wall stands; a folder of one
+   loads as that app's icon. Cell: the drawer folder's 2×2 miniature on a plate, name under it;
+   popup: the dock's (menu module, `LauncherFolderPopupController`, `FolderRenameTitleView` and
+   the activity's `FolderRenameController` for rename). No drag out of the popup: Remove from
+   folder places the app instead. Unit tests green; emulator pass owed (device-checks, slice 7b).
+   **Slice 7 complete.**
 8. **Per-toplevel X11 windows** (needs a rootless server).
    Status 2026-10-18: not started; a developer decision. The display is the vendored termux-x11
    Xlorie server (`x11-server/`, prebuilt `libXlorie.so` built by `build_x11_native.yml`, source
