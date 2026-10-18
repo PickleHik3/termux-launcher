@@ -65,6 +65,9 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    196 px first step: the departure was already passed; the nudge now starts before the re-sync.
    Likely the emulator's slow first frame on the settle curve; re-check owed with a 1 → 2 jump
    beside it.
+   Status 2026-10-18 (fix round 3): the bar jump's wrong-way start was the departure card's
+   glass ground drawn without the parallax offset (Home's stretch of the picture under any
+   window); fixed in `wallpaperGlassGround`. Re-check owed (device-checks, slice 3).
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.
    Status 2026-10-18: built on a worker branch. File version 4: a window may carry `homeFloat`
    { page, minimised, portrait?, landscape? }; absent, or malformed, it is a window of the row, so
@@ -158,6 +161,16 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    window per toplevel, map/unmap/geometry from the X connection) only after that. Options: fund the
    server work, or keep one display window per X display and drop this slice.
 9. **Rebuilding the row and the floats after a background kill** beyond Saved sessions.
+9. **Rebuilding the row and the floats after a background kill** beyond Saved sessions. Done in
+   code: `ArrangementRecovery` decides each start (recreate, adopt, rebuild, empty, fresh). An
+   activity recreate with the service alive brings the floats back with the row's trees around
+   the same shells (keyed by `TerminalSession.mHandle`; the process keeps the last layout for an
+   activity that returns without instance state). The arrangement is autosaved in the version 4
+   model to the hidden `~/.termux/workspaces/.autosave.json` (1.5 s debounce, at once when empty,
+   on stop; Exit writes the empty one), and a cold start with no live shell rebuilds it with fresh
+   shells in the saved folders, never replaying a command, then a notice. Docs:
+   `durable-workspaces.md` › Autosave and recovery, the user guide's After a restart, spec §9.
+   Unit tests green; emulator pass owed (device-checks, slice 9).
 
 ## Rules carried over
 

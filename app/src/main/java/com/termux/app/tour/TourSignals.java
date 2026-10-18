@@ -56,6 +56,12 @@ public interface TourSignals {
     String DRAWER_OPENED = "drawer.opened";
     /** The app drawer settled closed again. */
     String DRAWER_CLOSED = "drawer.closed";
+    /**
+     * A tap (or a scrub) on the dock's A-Z letters laid a letter's apps out in the apps row, or
+     * in the floating strip where the place has no row: the apps found by their letter, which the
+     * apps lesson counts like the drawer's pull.
+     */
+    String AZ_APPS_SHOWN = "launcher.az_apps_shown";
     /** The A-Z row's scrub launched an app. */
     String APP_LAUNCHED_FROM_SCRUB = "launcher.scrub_launch";
     /** An Android app was launched from the launcher, however the user found it. */

@@ -263,6 +263,14 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      */
     private void actionStopService() {
         mWantsToStop = true;
+        // Exit is itself the arrangement (wall rework slice 9): the next cold start shows exactly
+        // what Exit leaves, an empty Workspace. Written before the shells die; the activity's
+        // autosave stands down once mWantsToStop is set.
+        try {
+            new com.termux.app.terminal.TerminalWorkspaceStore().saveAutosave(null);
+        } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
+            Logger.logWarn(LOG_TAG, "Could not autosave the empty arrangement on exit: " + e.getMessage());
+        }
         killAllTermuxExecutionCommands();
         requestStopService();
     }
