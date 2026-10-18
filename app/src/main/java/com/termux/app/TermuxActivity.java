@@ -662,11 +662,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.wall.PaneWallController mPaneWallController;
     /** The saved state an activity recreation brings the wall's row position back from. */
     @Nullable private Bundle mPendingWallState;
-    /**
-     * Set by onStop, cleared by onResume: a home press that finds it set is a return from another
-     * app (nothing moves), one that finds it clear came while the launcher was in front.
-     */
-    private boolean mStoppedSinceResume;
+    /** Whether a home press came while the launcher was in front, or brings it back from away. */
+    private final com.termux.app.wall.HomePress mHomePress = new com.termux.app.wall.HomePress();
     @Nullable private com.termux.app.x11.X11DisplayHostController mX11Display;
     @Nullable private com.termux.app.x11.X11KeyboardBridge mX11KeyboardBridge;
     /**
@@ -2182,7 +2179,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
             // A home press while the launcher is in front lands on Home page 1, from a window or
             // from another Home page; a return from another app finds the page it left.
-            if (!mStoppedSinceResume && mPaneWallController != null) {
+            if (mHomePress.goesHome() && mPaneWallController != null) {
                 mPaneWallController.goHome(isVisible());
                 // Home floats stay on their pages; a focused one gives the keyboard back.
                 if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
@@ -2440,7 +2437,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onResume() {
         super.onResume();
-        mStoppedSinceResume = false;
+        mHomePress.onResume();
         Logger.logVerbose(LOG_TAG, "onResume");
         // Text left waiting in the pill holds the screen again, its idle release started over.
         mVoiceScreenMayHold = true;
@@ -9193,7 +9190,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onStop() {
         super.onStop();
-        mStoppedSinceResume = true;
+        mHomePress.onStop();
         Logger.logDebug(LOG_TAG, "onStop");
         // The Appearance surface survives a stop (the overlay registry's STOP keeps it, as it kept
         // the editor); only a HOME press closes it.
