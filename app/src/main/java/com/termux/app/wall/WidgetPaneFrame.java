@@ -41,8 +41,9 @@ import com.termux.view.HoldTiming;
  *
  * <p>A <em>hold</em> on one of the page's four corners drops the same tab the Display page's
  * corners drop, with the page's own buttons: the pencil that starts editing the widgets, the plus
- * that adds a page, and the four doors every place carries — Appearance, Layout, Wallpaper and
- * minimal mode.
+ * that adds a page, the wallpaper and help. Home has no minimal mode (ADR 0008,
+ * {@link com.termux.app.place.HomeChromePolicy#minimalModeApplies}), so the minimal button every
+ * window's tab carries is not here.
  * It comes out of the corner that was touched, so the tab lands under the thumb that asked for it.
  * While a widget is being edited those buttons are replaced by the grid's size, which opens the
  * wheels that change it. Everything between the corners is the widgets': a grid that reaches the
@@ -231,14 +232,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
                 getContext().getString(R.string.pane_controls_add_page)),
             PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.APPEARANCE,
                 getContext().getString(R.string.pane_controls_wallpaper_style)),
-            // Minimal mode is one mode for every place, so Home carries the same door in and
-            // out as the terminal and the display; the mark reads the state as it draws.
-            PaneControlsView.Action.drawn(ACTION_MINIMAL, com.termux.app.chrome.MinimalModeGlyph
-                .mark(getContext(), () -> mHost != null && mHost.isMinimalMode()),
-                PaneControlsView.TINT_PRIMARY, () -> getContext().getString(
-                    mHost != null && mHost.isMinimalMode()
-                        ? R.string.pane_controls_leave_minimal_mode
-                        : R.string.pane_controls_enter_minimal_mode)),
+            // No minimal button: minimal mode is the Workspace's, and a Home page never enters it.
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
                 getContext().getString(R.string.pane_controls_help)));
     }
@@ -334,12 +328,28 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         else if (id == ACTION_EDIT && !mHost.editWidgets()) openGridSizePopup();
     }
 
+    /**
+     * The pencil, asked for from outside the tab (Home's long-press sheet's Edit pages): edit the
+     * widgets, or on a page with none, the grid's wheels hanging off {@code anchor}, a rectangle in
+     * this page's own coordinates.
+     */
+    public void runPencil(@NonNull android.graphics.RectF anchor) {
+        if (mHost == null) return;
+        dismissControls();
+        if (!mHost.editWidgets()) openGridSizePopup(anchor);
+    }
+
     /** The wheels, hanging off the tab that opened them. */
     private void openGridSizePopup() {
         if (mHost == null || mControls == null) return;
-        dismissGridSizePopup();
         android.graphics.RectF tab = new android.graphics.RectF();
         mControls.tabBounds(tab);
+        openGridSizePopup(tab);
+    }
+
+    private void openGridSizePopup(@NonNull android.graphics.RectF tab) {
+        if (mHost == null) return;
+        dismissGridSizePopup();
         mGridSizePopup = com.termux.app.launcher.widget.WidgetGridSizePopup.show(this, tab,
             mHost.widgetGridColumns(), mHost.widgetGridRows(), mHost.widgetGridCaps(),
             (columns, rows) -> {
@@ -588,12 +598,15 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         mStyle = style;
         float density = getResources().getDisplayMetrics().density;
         float requestedRadiusPx = PaneGlass.radiusPx(style, density);
-        boolean glass = PaneGlass.apply(style, this, mGlass, requestedRadiusPx);
+        // A Home page wears no frame (ADR 0008): no slab, no line, the widgets straight on the
+        // wallpaper as on any launcher. The style still dresses the corner tab below.
+        boolean framed = com.termux.app.place.HomeChromePolicy.bordersShown(PaneWallPage.WIDGETS);
+        boolean glass = PaneGlass.apply(framed ? style : null, this, mGlass, requestedRadiusPx);
         // The page's frame line: the slab's lit rim on glass, the terminal's plain stroke while
         // the border preference is on without it. Drawn on the page itself, so it moves with the
         // page and fades with the other pages' rims, and so the border drag that pages the wall
         // (BorderDrag) has the same line to find here as on the terminal. Off both, no line.
-        boolean border = glass || PaneRim.plainBorderWanted(style);
+        boolean border = framed && (glass || PaneRim.plainBorderWanted(style));
         float radiusPx = border ? requestedRadiusPx : 0f;
         float strokePx = glass ? com.termux.app.GlassRimRenderer.strokePx(density)
             : border ? PaneRim.stockStrokePx(density) : 0f;

@@ -5,8 +5,8 @@ import android.appwidget.AppWidgetProviderInfo;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.view.View;
-import android.widget.PopupWindow;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -57,8 +57,48 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         /** True while the widgets page is glass, so built-in cards go translucent with a rim. */
         default boolean isWidgetSurfaceGlass() { return false; }
+        /**
+         * A long press on the page's free area: the host puts up Home's long-press sheet, whose
+         * rows act on the page on screen. The raw point is where the finger rested.
+         */
+        default void onHomeLongPressed(float rawX, float rawY) { }
+        /**
+         * The palette gesture on the page's free area let go: up opens the palette with the
+         * keyboard, down puts them away (spec §5.1).
+         */
+        default void onHomePaletteSwipe(boolean up) { }
+        /**
+         * The Home page's content moved sideways under Home's own swipe, or as a page slides in
+         * or back; {@link #homePageShiftFraction} says where it stands. Per frame of the motion.
+         */
+        default void onHomePageShifted() { }
         /** The activity-side services the built-in widgets need; null keeps them inert. */
         @Nullable default BuiltinWidgetServices.Host builtinWidgetHost() { return null; }
+        /**
+         * The launcher's menu look (the dock's), for the popup a folder on Home opens; null
+         * draws it in a plain one.
+         */
+        @Nullable default com.termux.app.launcher.popup.AnchoredMenuTheme homeMenuTheme() {
+            return null;
+        }
+        /**
+         * A tap on a Home folder popup's title: start the dock's focusless rename, drawing the
+         * draft into {@code title} and committing through {@code target}. Without a host for it
+         * the title stays as it is.
+         */
+        default void beginHomeFolderRename(@NonNull String name,
+                                           @NonNull com.termux.app.launcher.folder.FolderRenameTitleView title,
+                                           @NonNull HomeFolderRenameTarget target) { }
+        /** The Home folder popup went away: a rename in progress ends with it. */
+        default void cancelHomeFolderRename() { }
+    }
+
+    /** Where a Home folder's rename lands; the activity's rename intake commits through it. */
+    public interface HomeFolderRenameTarget {
+        /** Stores {@code name} (trimmed, never blank); false when the folder is gone. */
+        boolean rename(@NonNull String name);
+        /** The folder's name as stored now, for the title once the rename ends. */
+        @NonNull String currentName();
     }
 
     private final WidgetPaneView pane;
@@ -66,11 +106,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private final WidgetProviderCatalogLoader catalog;
     private final Host host;
     @NonNull private final BuiltinWidgetHost builtins;
+    /** The app icons' and folders' views; inert until the first icon is drawn. */
+    @NonNull private final HomeAppIconFactory appIcons;
+    /** The popup a folder on Home opens; made on the first tap. */
+    @Nullable private HomeFolderPopup folderPopup;
     private String liveOrigin;
     private boolean awaitingExternal;
     private int currentPage;
     private boolean editorFocusActive;
-    @Nullable private PopupWindow paneMenu;
 
     public WidgetPaneController(@NonNull WidgetPaneView pane,
                                 @NonNull LauncherWidgetHostController widgets,
@@ -93,6 +136,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 @Override public boolean glass() { return host.isWidgetSurfaceGlass(); }
             });
         pane.grid().setBuiltinFactory(builtins);
+        appIcons = new HomeAppIconFactory(pane.getContext(), new HomeAppIconFactory.Listener() {
+            @Override public void onUnavailableAppTapped(int id) {
+                WidgetPaneController.this.onUnavailableAppTapped(id);
+            }
+            @Override public void onFolderTapped(int id, @NonNull View anchor) {
+                openFolder(id, anchor);
+            }
+        });
+        pane.grid().setAppIconFactory(appIcons);
         catalog.setBuiltinSource(builtins);
         pane.grid().addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> onWallLayout());
         pane.grid().bind(widgets); pane.picker().setReducedMotion(host.reducedMotion());
@@ -113,7 +165,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 if (edit != null && edit.appWidgetId == appWidgetId) endMoveDrag(canceled);
             }
             @Override public void onEmptySpaceLongPressed(float rawX, float rawY) {
-                showPaneMenu(rawX, rawY);
+                host.onHomeLongPressed(rawX, rawY);
             }
             @Override public void onWidgetEditorFocusChanged(View editor) {
                 relayEditorFocus(editor);
@@ -124,6 +176,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             @Override public void onWidgetEditCommit() { commitEditSession(); }
             @Override public void onWidgetEditDiscard() { discardEditSession(); }
             @Override public void onWidgetAddPage() { menuAddPage(); }
+            @Override public void onFreeAreaVerticalSwipe(boolean up) {
+                host.onHomePaletteSwipe(up);
+            }
+            @Override public void onContentShifted() { host.onHomePageShifted(); }
         }, new WidgetPickerAdapter.Listener() {
             @Override public void onProviderSelected(@NonNull WidgetProviderItem item) {
                 selectProvider(item);
@@ -143,6 +199,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     /** The grid the user asked for on this orientation, before the wall's caps; 0 until asked. */
     private int wantedRows, wantedColumns;
+    /** The rows always on gives the keyboard, taken off the capped grid; 0 while it is off. */
+    private int keyboardRows;
     /**
      * The largest the wall has measured in each orientation. The caps come from this, not from
      * the live size: the keyboard or a sheet shrinking the wall for a while must not shrink the
@@ -151,17 +209,41 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      */
     private int portraitWallWidth, portraitWallHeight, landscapeWallWidth, landscapeWallHeight;
     @Nullable private WidgetGridCaps appliedCaps;
+    /**
+     * Home's Margin as last settled, in dp: the rim the caps are worked out with. The grid's live
+     * rim follows a Margin drag tick by tick ({@link #setGridEdge}); the caps wait for it to
+     * settle, because a cap that falls reflows the widgets and a reflow is kept.
+     */
+    private float gridEdgeDp;
 
     /**
-     * What this wall can hold, from the largest it has been in this orientation; unbounded before
-     * its first layout. The grid is the wall as far as cells go, so this is the answer for the
-     * wheels and the apply.
+     * What this wall can hold, from the largest it has been in this orientation and Home's
+     * Margin as last settled; unbounded before its first layout. The grid is the wall as far as
+     * cells go, so this is the answer for the wheels and the apply.
      */
     @NonNull public WidgetGridCaps gridCaps() {
         boolean landscape = isLandscape();
         float density = pane.getResources().getDisplayMetrics().density;
         return WidgetGridCaps.forWallPx(landscape ? landscapeWallWidth : portraitWallWidth,
-            landscape ? landscapeWallHeight : portraitWallHeight, density);
+            landscape ? landscapeWallHeight : portraitWallHeight, density, gridEdgeDp);
+    }
+
+    /**
+     * Home's Margin, the rim between the page's edge and the cells, in dp; the activity pushes it
+     * in, since the pane has no preferences of its own. The rim moves at once. With
+     * {@code settled} (anything but a tick of a Margin drag) the caps are worked out again with
+     * it, and a grid that no longer fits, or now fits more, is applied through the same path a
+     * resized wall takes ({@link #applyWantedGrid}); a drag's ticks leave that to its release.
+     */
+    public void setGridEdge(float edgeDp, boolean settled) {
+        float edge = edgeDp > 0f ? edgeDp : 0f;
+        float density = pane.getResources().getDisplayMetrics().density;
+        pane.grid().setEdgePadding(Math.round(edge * density));
+        if (!settled || Float.compare(edge, gridEdgeDp) == 0) return;
+        gridEdgeDp = edge;
+        if (wantedRows > 0 && !gridCaps().equals(appliedCaps)) {
+            applyWantedGrid(wantedRows, wantedColumns);
+        }
     }
 
     /**
@@ -170,12 +252,42 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * larger, so a wider orientation or a smaller font later gets the full count back.
      */
     public void applyWantedGrid(int rows, int columns) {
+        applyWantedGrid(rows, columns, keyboardRows);
+    }
+
+    /**
+     * {@link #applyWantedGrid(int, int, int)} with Home's Margin as the rim, taken in the same
+     * pass: the caps are worked out once, with the rim the grid is about to wear, so a pass that
+     * changes both the grid and the Margin (a launch, a turn of the screen) reflows at most once.
+     */
+    public void applyWantedGrid(int rows, int columns, int takenRows, float edgeDp) {
+        float edge = edgeDp > 0f ? edgeDp : 0f;
+        float density = pane.getResources().getDisplayMetrics().density;
+        pane.grid().setEdgePadding(Math.round(edge * density));
+        gridEdgeDp = edge;
+        applyWantedGrid(rows, columns, takenRows);
+    }
+
+    /**
+     * The same, with {@code takenRows} of the capped grid given to an always-on keyboard
+     * ({@code LauncherWidgetRepository#shrinkGridRows}): the grid is applied that much shorter on
+     * every later pass, so a pass that re-reads the layout never grows it back under the keyboard.
+     */
+    public void applyWantedGrid(int rows, int columns, int takenRows) {
         wantedRows = rows;
         wantedColumns = columns;
+        keyboardRows = Math.max(0, takenRows);
         rememberWall();
         WidgetGridCaps caps = gridCaps();
         appliedCaps = caps;
-        widgets.applyGrid(caps.clampRows(rows), caps.clampColumns(columns));
+        // The rows given away stay part of the grid's height, so the cells keep their size.
+        pane.grid().setReservedRows(keyboardRows);
+        widgets.applyGrid(caps.clampRows(rows) - keyboardRows, caps.clampColumns(columns));
+    }
+
+    /** The grid's height as last laid out, in px: what always on measures a keyboard row by. */
+    public int gridHeightPx() {
+        return pane.grid().getHeight();
     }
 
     private boolean isLandscape() {
@@ -228,8 +340,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     /** The built-in widgets' services, for the activity to reach a widget's sources. */
     @NonNull public BuiltinWidgetHost builtins() { return builtins; }
     public void onStop() {
+        dismissFolderPopup();
         abortCarry(true);
-        catalog.cancel(); pane.picker().closeImmediate(); dismissPaneMenu();
+        catalog.cancel(); pane.picker().closeImmediate();
     }
     public void onPackageOrProfileChanged() {
         catalog.invalidate();
@@ -245,26 +358,69 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * wall mid-slide, and that is the size a provider must not hear.
      */
     public void onWallPageLeaving() {
+        dismissFolderPopup();
         pane.grid().setPageAtRest(false);
+    }
+
+    /**
+     * The Appearance editor's session ended. The cells may have passed through several sizes in
+     * it (a Margin's ticks, a Style's chrome, an Undo back) while Home's settled Margin ends where
+     * it began, so no rim change is left to deliver them: each widget whose cell moved is told
+     * its size again once the wall rests here ({@link WidgetGridView#resyncSizes}).
+     */
+    public void onEditorSessionEnded() {
+        pane.grid().resyncSizes();
     }
 
     public void onWallPageShown(boolean shown) {
         // Sizes reach the providers only while the wall rests here; see WidgetGridView.
         pane.grid().setPageAtRest(shown);
         if (shown) return;
-        dismissPaneMenu();
-        if (currentPage != 0) { currentPage = 0; render(); }
+        // Home waits on its last page while the wall is elsewhere: that is the page next to the
+        // seam, the one a border drag back off the first window arrives on (ADR 0008). The home
+        // press turns it to page 1 itself (showHomePage).
+        int last = Math.max(0, widgets.repository().pageCount() - 1);
+        if (currentPage != last) { currentPage = last; render(); }
+    }
+
+    /** How many Home pages there are. */
+    public int homePageCount() {
+        return Math.max(1, widgets.repository().pageCount());
+    }
+
+    /** Which Home page is in front, counting from 0. */
+    public int homePageIndex() {
+        return currentPage;
+    }
+
+    /**
+     * How far the Home page in front stands off its rest while Home's swipe turns it, as a
+     * fraction of a page width, positive to the right; 0 at rest.
+     */
+    public float homePageShiftFraction() {
+        return pane.contentShiftFraction();
+    }
+
+    /** Turn Home to page {@code page} (clamped), without the swipe's slide. */
+    public void showHomePage(int page) {
+        setCurrentPage(page);
+    }
+
+    /** The wall's seam out of the last Home page; see {@link WidgetPaneView.Seam}. */
+    public void setSeam(@Nullable WidgetPaneView.Seam seam) {
+        pane.setSeam(seam);
     }
     public boolean onBackPressed() {
-        if (paneMenu != null && paneMenu.isShowing()) { dismissPaneMenu(); return true; }
         if (pane.widgetEditActive()) { exitEditMode(); return true; }
         return pane.onBackPressed();
     }
     public void destroy() {
+        if (folderPopup != null) folderPopup.dismissImmediate();
         builtins.destroy();
+        appIcons.destroy();
         abortCarry(false);
         pane.removeCallbacks(edgeFlip);
-        widgets.setListener(null); catalog.cancel(); dismissPaneMenu();
+        widgets.setListener(null); catalog.cancel();
     }
 
     int currentPage() { return currentPage; }
@@ -281,35 +437,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
     }
 
-    /** Empty-surface long-press menu; the policy decides which rows this state offers. */
-    private void showPaneMenu(float rawX, float rawY) {
-        dismissPaneMenu();
-        List<WidgetPaneMenuPolicy.Item> items = WidgetPaneMenuPolicy.itemsFor(
-            widgets.capability() == LauncherWidgetHostController.Capability.AVAILABLE,
-            widgets.repository().pageCount(),
-            widgets.repository().recordsOnPage(currentPage).isEmpty());
-        if (items.isEmpty()) return;
-        paneMenu = WidgetPaneMenu.show(pane, items, rawX, rawY, this::onMenuItemSelected);
-    }
-
-    private void dismissPaneMenu() {
-        if (paneMenu != null) {
-            if (paneMenu.isShowing()) paneMenu.dismiss();
-            paneMenu = null;
-        }
-    }
-
-    void onMenuItemSelected(@NonNull WidgetPaneMenuPolicy.Item item) {
-        dismissPaneMenu();
-        switch (item) {
-            case ADD_WIDGET: openPicker(); break;
-            case EDIT_WIDGETS: menuEditWidgets(); break;
-            case REMOVE_PAGE: menuRemovePage(); break;
-        }
-    }
-
     /**
-     * The Widgets page's edit pencil: the same entry the long-press menu's Edit widgets takes,
+     * The Widgets page's edit pencil, and Home's long-press sheet's Edit pages: one entry,
      * with the same gestures and the same ways out.
      */
     public boolean editWidgets() {
@@ -344,6 +473,107 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         currentPage = appended;
         render();
+    }
+
+    /** Whether the Home page on screen holds no widget. */
+    public boolean currentPageEmpty() {
+        return widgets.repository().recordsOnPage(currentPage).isEmpty();
+    }
+
+    /**
+     * Puts {@code app} on Home as an icon: the page in front when it has room, else the first page
+     * that has, else a new page after the last. Returns the page it landed on, counting from 0,
+     * or -1 when it could not be written. The page in front stays in front.
+     */
+    public int addApp(@NonNull com.termux.app.launcher.model.LauncherAppEntry app) {
+        LauncherWidgetRecord placed = widgets.addApp(app.appRef, app.label, currentPage);
+        return placed == null ? -1 : placed.page;
+    }
+
+    /**
+     * A tap on an app icon whose app is gone: the page's edit mode opens on it, without a drag,
+     * so its remove chip is one press away.
+     */
+    private void onUnavailableAppTapped(int id) {
+        if (pane.widgetEditActive()) return;
+        beginEditSession(id);
+    }
+
+    // ---- Folders on Home ---------------------------------------------------------------------
+
+    /** A tap on a folder: its popup, unless the page is being edited. */
+    private void openFolder(int id, @NonNull View anchor) {
+        if (pane.widgetEditActive()) return;
+        LauncherWidgetRecord folder = widgets.repository().get(id);
+        if (folder == null || !folder.isFolder()) return;
+        folderPopup().show(folder, anchor);
+    }
+
+    @NonNull private HomeFolderPopup folderPopup() {
+        HomeFolderPopup popup = folderPopup;
+        if (popup != null) return popup;
+        com.termux.app.launcher.popup.AnchoredMenuTheme theme = host.homeMenuTheme();
+        if (theme == null) theme = PLAIN_MENU_THEME;
+        popup = new HomeFolderPopup(pane, theme, appIcons, new HomeFolderPopup.Callbacks() {
+            @Override public void onRemoveFromFolder(int folderId, @NonNull String stableId) {
+                removeFromFolder(folderId, stableId);
+            }
+            @Override public void onBeginRename(int folderId, @NonNull String name,
+                                                @NonNull com.termux.app.launcher.folder.FolderRenameTitleView title) {
+                // The name as stored now: the popup may have outlived a rename already.
+                LauncherWidgetRecord held = widgets.repository().get(folderId);
+                if (held == null || !held.isFolder()) return;
+                host.beginHomeFolderRename(held.folderName(), title, new HomeFolderRenameTarget() {
+                    @Override public boolean rename(@NonNull String value) {
+                        return widgets.renameFolder(folderId, value, folderFallbackName());
+                    }
+                    @Override @NonNull public String currentName() {
+                        LauncherWidgetRecord now = widgets.repository().get(folderId);
+                        return now != null && now.isFolder() ? now.folderName() : name;
+                    }
+                });
+            }
+            @Override public void onPopupDismissed() { host.cancelHomeFolderRename(); }
+        });
+        folderPopup = popup;
+        return popup;
+    }
+
+    private void dismissFolderPopup() {
+        if (folderPopup != null && folderPopup.isShowing()) folderPopup.dismiss();
+    }
+
+    /**
+     * Remove from folder: the app goes on Home as an icon, the page in front first, and what is
+     * left of the folder follows the folder rules. The page it landed on is named when it is not
+     * the one on screen.
+     */
+    private void removeFromFolder(int folderId, @NonNull String stableId) {
+        LauncherWidgetRecord placed = widgets.removeFromFolder(folderId, stableId, currentPage);
+        if (placed == null) return;
+        if (placed.page != currentPage) {
+            pane.showNotice(pane.getContext().getString(R.string.home_app_added, placed.page + 1));
+        }
+    }
+
+    /** The name a folder takes when its first app has no label. */
+    @NonNull private String folderFallbackName() {
+        return pane.getContext().getString(R.string.home_folder_default_name);
+    }
+
+    /** The folder popup's look when the host lends none: light ink on the default glass. */
+    private static final com.termux.app.launcher.popup.AnchoredMenuTheme PLAIN_MENU_THEME =
+        new com.termux.app.launcher.popup.AnchoredMenuTheme() {
+            @Override public int textColor() { return 0xFFFFFFFF; }
+            @Override public int selectedTextColor() { return 0xFFFFFFFF; }
+            @Override public int opacityPercent() { return 85; }
+            @Override public boolean blurEnabled() { return false; }
+            @Override public int blurRadiusDp() { return 0; }
+        };
+
+    /** Home's long-press sheet's Remove page: the page on screen goes, if it may. */
+    public void removeCurrentPage() {
+        menuRemovePage();
     }
 
     void menuRemovePage() {
@@ -521,6 +751,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         /** True once the widget has been taken out of the grid to cross pages. */
         boolean lifted;
         float lastRawX, lastRawY;
+        /**
+         * The icon or folder the dragged app icon rests over, or 0 for none ({@link
+         * HomeFolderPolicy}): released there after the hover, the two merge. No real key is 0.
+         */
+        int mergeTargetId;
+        /** When the rest over {@link #mergeTargetId} began, in uptime milliseconds. */
+        long mergeSince;
         EditState(int appWidgetId, int minColumnSpan, int minRowSpan,
                   int maxColumnSpan, int maxRowSpan,
                   boolean horizontalResizable, boolean verticalResizable) {
@@ -574,6 +811,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private static final int EDGE_BAND_DP = 24;
 
     private final Runnable edgeFlip = this::flipDragPage;
+    /** The hover over a merge target has lasted long enough: say so with the ghost. */
+    private final Runnable mergeArm = this::armMergeTarget;
+    /** How much a merge target swells once a release would merge into it. */
+    private static final float MERGE_TARGET_SCALE = 1.12f;
     private final int[] paneLocation = new int[2];
 
     /** The layout as the edit session found it; the cross on the border tab puts it back. */
@@ -634,6 +875,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * mode, or a press on one of the outlined widgets while a session is open.
      */
     private void enterEditMode(int appWidgetId, float rawX, float rawY) {
+        dismissFolderPopup();
         // Anything the outgoing selection was previewing belongs to a plan that is now over.
         clearDisplacementPreview(false);
         if (!beginEditSession(appWidgetId)) return;
@@ -653,7 +895,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             editSnapshot = new EditSnapshot(widgets.repository().records(),
                 widgets.repository().pageCount(), widgets.repository().freshPages());
         }
-        AppWidgetProviderInfo info = widgets.providerInfo(appWidgetId);
+        // Only an app widget has a provider to ask; an app icon is 1×1 with no handles.
+        AppWidgetProviderInfo info = record.hasPlatformId()
+            ? widgets.providerInfo(appWidgetId) : null;
         WidgetGridMetrics metrics = pane.grid().metrics();
         int minColumns = 1, minRows = 1;
         int maxColumns = 0, maxRows = 0;
@@ -756,6 +1000,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     private void exitEditMode() {
         pane.removeCallbacks(edgeFlip);
+        clearMergeTarget();
         if (edit != null && edit.lifted) returnDraggedCell(edit.appWidgetId);
         pane.releaseWidgetDragLayer();
         clearDisplacementPreview(false);
@@ -876,6 +1121,21 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             widgets.repository().recordsOnPage(edit.turn.page), edit.appWidgetId, record.cell,
             dragged);
         WidgetEditOverlayView overlay = pane.widgetEditOverlay();
+        LauncherWidgetRecord over = mergeTargetUnder(record, dragged.centerX(), dragged.centerY());
+        if (over != null) {
+            // Resting over an icon or a folder: the page holds still under it, so the target does
+            // not slide out from under the finger. The ghost marks it once a release would merge.
+            if (edit.mergeTargetId != over.appWidgetId) {
+                clearMergeTarget();
+                edit.mergeTargetId = over.appWidgetId;
+                edit.mergeSince = SystemClock.uptimeMillis();
+                pane.postDelayed(mergeArm, HomeFolderPolicy.MERGE_HOVER_MS);
+                overlay.setGhostBounds(null);
+            }
+            previewDisplacement(Collections.emptyMap());
+            return;
+        }
+        clearMergeTarget();
         if (edit.moveCandidate.valid) {
             overlay.setGhostBounds(paneBounds(edit.moveCandidate.rect), true);
         } else if (edit.turn.page != record.page) {
@@ -1001,7 +1261,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             cell.setTranslationZ(0f);
             cell.setVisibility(View.VISIBLE);
         }
-        pane.grid().setDragPinned(-1);
+        pane.grid().setDragPinned(0);
         if (edit != null) edit.lifted = false;
     }
 
@@ -1066,6 +1326,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         SafeLauncherAppWidgetHostView hostView = safeHostViewFor(appWidgetId);
         if (hostView != null) hostView.endDeferringUpdates();
         LauncherWidgetRecord record = widgets.repository().get(appWidgetId);
+        if (!canceled && record != null && edit.mergeTargetId != 0) {
+            LauncherWidgetRecord target = widgets.repository().get(edit.mergeTargetId);
+            HomeFolderPolicy.Drop drop = HomeFolderPolicy.dropAction(record, target,
+                SystemClock.uptimeMillis() - edit.mergeSince);
+            if (drop != HomeFolderPolicy.Drop.MOVE && finishMerge(record, target)) return;
+        }
+        clearMergeTarget();
         WidgetEditPolicy.Candidate candidate = edit.moveCandidate;
         int target = edit.turn.page;
         edit.moveCandidate = null;
@@ -1121,6 +1388,95 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (blocked) {
             pane.showNotice(pane.getContext().getString(R.string.widget_no_room_on_page));
         }
+    }
+
+    /**
+     * The app icon or folder whose cell, on the page the drag is over, holds the dragged icon's
+     * centre and could take it ({@link HomeFolderPolicy#canTarget}); null over anything else.
+     */
+    @Nullable
+    private LauncherWidgetRecord mergeTargetUnder(@NonNull LauncherWidgetRecord dragged,
+                                                  int centerX, int centerY) {
+        if (!dragged.isApp()) return null;
+        WidgetGridMetrics metrics = pane.grid().metrics();
+        for (LauncherWidgetRecord other : widgets.repository().recordsOnPage(edit.turn.page)) {
+            if (other.appWidgetId == dragged.appWidgetId) continue;
+            if (!metrics.boundsFor(other.cell).contains(centerX, centerY)) continue;
+            return HomeFolderPolicy.canTarget(dragged, other) ? other : null;
+        }
+        return null;
+    }
+
+    /** The hover lasted: the target swells and the ghost sits on it, so a release reads as a merge. */
+    private void armMergeTarget() {
+        if (edit == null || edit.mergeTargetId == 0) return;
+        LauncherWidgetRecord dragged = widgets.repository().get(edit.appWidgetId);
+        LauncherWidgetRecord target = widgets.repository().get(edit.mergeTargetId);
+        if (dragged == null || HomeFolderPolicy.dropAction(dragged, target,
+            SystemClock.uptimeMillis() - edit.mergeSince) == HomeFolderPolicy.Drop.MOVE) return;
+        pane.widgetEditOverlay().setGhostBounds(paneBounds(target.cell), true);
+        WidgetCellView cell = pane.grid().cellForId(target.appWidgetId);
+        if (cell == null) return;
+        if (host.reducedMotion()) {
+            cell.setScaleX(MERGE_TARGET_SCALE); cell.setScaleY(MERGE_TARGET_SCALE);
+        } else {
+            cell.animate().scaleX(MERGE_TARGET_SCALE).scaleY(MERGE_TARGET_SCALE)
+                .setDuration(120).start();
+        }
+    }
+
+    /** Forgets the merge target, if any, and lets it settle back to its size. */
+    private void clearMergeTarget() {
+        pane.removeCallbacks(mergeArm);
+        if (edit == null || edit.mergeTargetId == 0) return;
+        WidgetCellView cell = pane.grid().cellForId(edit.mergeTargetId);
+        if (cell != null) {
+            cell.animate().scaleX(1f).scaleY(1f).setDuration(host.reducedMotion() ? 0 : 120)
+                .start();
+        }
+        edit.mergeTargetId = 0;
+        edit.mergeSince = 0L;
+    }
+
+    /**
+     * The drop merged: the dragged icon and {@code target} become one folder, or the icon joins
+     * the folder ({@link LauncherWidgetRepository#mergeIntoFolder}), in one commit. The session
+     * carries on with the folder selected; the dragged icon is gone, so the cross on the border
+     * tab does not bring it back, as it does not bring back a widget dropped in the bin.
+     */
+    private boolean finishMerge(@NonNull LauncherWidgetRecord record,
+                                @NonNull LauncherWidgetRecord target) {
+        int appWidgetId = record.appWidgetId;
+        boolean lifted = edit.lifted;
+        clearMergeTarget();
+        // Straight to the store, as a move commits: the session settles the page itself below.
+        LauncherWidgetRecord folder = widgets.repository().mergeIntoFolder(appWidgetId,
+            target.appWidgetId, folderFallbackName());
+        if (folder == null) return false;
+        edit.moveCandidate = null;
+        edit.dragStartBounds = null;
+        edit.turn.createdPage = -1;
+        if (lifted) returnDraggedCell(appWidgetId);
+        clearDisplacementPreview(false);
+        WidgetCellView cell = pane.grid().cellForId(target.appWidgetId);
+        if (cell != null) { cell.animate().cancel(); cell.setScaleX(1f); cell.setScaleY(1f); }
+        // A page the drag made, or one the icon was the last thing on, goes again.
+        widgets.repository().trimEmptyPages();
+        LauncherWidgetRecord settled = widgets.repository().get(folder.appWidgetId);
+        if (settled != null) currentPage = settled.page;
+        clampCurrentPage();
+        WidgetEditOverlayView overlay = pane.widgetEditOverlay();
+        overlay.setDragging(false);
+        overlay.setGhostBounds(null);
+        edit = null;
+        render();
+        if (settled != null) beginEditSession(settled.appWidgetId);
+        if (edit == null) exitEditMode();
+        if (lifted) {
+            pane.widgetDragLayer().drop(settled == null ? null : paneBounds(settled.cell),
+                !host.reducedMotion());
+        }
+        return true;
     }
 
     /** One atomic commit for the dragged widget and everything it pushed aside. */
@@ -1439,6 +1795,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         java.util.Set<Integer> live = new java.util.HashSet<>();
         for (LauncherWidgetRecord record : widgets.repository().records()) live.add(record.appWidgetId);
         builtins.retainOnly(live);
+        appIcons.retainOnly(live);
         // A render hides the edit chrome. While a session is open and its widget is still on the
         // page - after a commit, a grid resize from the page's own tab, another widget arriving -
         // the chrome comes straight back at the widget's new bounds, and the host never hears the

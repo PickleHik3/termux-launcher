@@ -38,6 +38,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * #forVariant} pins it to one. The minimal layout is seeded from the normal one the first time it
  * is used ({@link MinimalMode#apply}), and is the user's from then on.
  *
+ * <p>Home has a third, the Home layout ({@link LayoutVariant#HOME}, ADR 0008), under
+ * {@code layout.home.<portrait|landscape>.<key>}: the dock's rows and the keyboard are its only
+ * elements, so the status bar and the extra keys always resolve put away there. It is seeded from
+ * the normal layout the first time it is used, with those two put away, and its keyboard element
+ * is its own ({@code layout.home.keyboard_shown}, absent is put away): shown, it is always on
+ * ({@link #isHomeKeyboardAlwaysOn}). The widget grid is Home's alone, so its columns and rows
+ * live in the Home layout whichever variant asks for them.
+ *
  * <p>The arrangement used to be kept per place as well as per orientation. Version 6 of the
  * migration folds that into the shared keys, seeding each orientation from the place the value
  * showed on — the terminal's for everything the terminal draws — and then drops every place's own
@@ -122,6 +130,17 @@ public final class PlaceLayoutStore {
 
     private static final String KEY_KEYBOARD_OPEN = "keyboard_open";
     /**
+     * The Home layout's keyboard element, one value for both orientations like the Workspace's:
+     * {@code layout.home.keyboard_shown}. Shown is always on; absent is put away, which is what the
+     * Home layout is seeded with.
+     */
+    private static final String KEY_HOME_KEYBOARD = "keyboard_shown";
+    /**
+     * How many rows always on took from the widget grid when it was turned on, so the grid is
+     * applied at the same height on every later pass: {@code layout.home.keyboard_rows}.
+     */
+    private static final String KEY_HOME_KEYBOARD_ROWS = "keyboard_rows";
+    /**
      * Minimal mode, one flag for the whole launcher: {@code place.minimal}. Before version 7 each
      * place kept its own under {@code place.<p>.minimal}, which is the same unscoped key.
      */
@@ -204,8 +223,14 @@ public final class PlaceLayoutStore {
      */
     @Nullable private final LayoutVariant mFixedVariant;
 
-    /** Per orientation, whether the minimal layout has been checked for its first seeding. */
-    @NonNull private final boolean[] mMinimalSeeded;
+    /**
+     * Per variant and orientation, whether a seeded layout (the minimal one, the Home one) has
+     * been checked for its first seeding. Shared by every view of one store.
+     */
+    @NonNull private final boolean[][] mSeeded;
+
+    /** The views {@link #forVariant} hands out, one per variant, shared by every view. */
+    @NonNull private final PlaceLayoutStore[] mVariantViews;
 
     /**
      * Any write to the launcher's preferences can change what the layout resolves to — the shared
@@ -224,7 +249,8 @@ public final class PlaceLayoutStore {
         mStore = preferences.getSharedPreferences();
         mRevision = new AtomicInteger();
         mFixedVariant = null;
-        mMinimalSeeded = new boolean[PlaceOrientation.values().length];
+        mSeeded = new boolean[LayoutVariant.values().length][PlaceOrientation.values().length];
+        mVariantViews = new PlaceLayoutStore[LayoutVariant.values().length];
         migrateIfNeeded();
         if (mStore != null) mStore.registerOnSharedPreferenceChangeListener(mChangeListener);
     }
@@ -234,7 +260,8 @@ public final class PlaceLayoutStore {
         mStore = root.mStore;
         mRevision = root.mRevision;
         mFixedVariant = variant;
-        mMinimalSeeded = root.mMinimalSeeded;
+        mSeeded = root.mSeeded;
+        mVariantViews = root.mVariantViews;
     }
 
     /**
@@ -253,7 +280,23 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public PlaceLayoutStore forVariant(@NonNull LayoutVariant variant) {
-        return mFixedVariant == variant ? this : new PlaceLayoutStore(this, variant);
+        if (mFixedVariant == variant) return this;
+        PlaceLayoutStore view = mVariantViews[variant.ordinal()];
+        if (view == null) {
+            view = new PlaceLayoutStore(this, variant);
+            mVariantViews[variant.ordinal()] = view;
+        }
+        return view;
+    }
+
+    /**
+     * The variant a page's chrome is arranged by, and the one the Layout editor opened on it
+     * edits: the Home layout on a Home page, the Workspace's (normal or minimal) on a window
+     * ({@link HomeChromePolicy#variant}).
+     */
+    @NonNull
+    public LayoutVariant variantFor(@NonNull PaneWallPage page) {
+        return HomeChromePolicy.variant(page, isMinimal());
     }
 
     /**
@@ -279,8 +322,14 @@ public final class PlaceLayoutStore {
     /** As {@link #resolve(PlaceOrientation, LayoutVariant)}, for the variant this store is on. */
     @NonNull
     public PlaceLayout resolve(@NonNull PlaceOrientation orientation) {
+        LayoutVariant variant = activeVariant();
         EnumMap<Element, Slot> slots = new EnumMap<>(Element.class);
-        for (Element element : Element.values()) slots.put(element, slot(orientation, element));
+        for (Element element : Element.values()) {
+            Slot slot = slot(orientation, element);
+            // An element the variant does not offer is never shown on it, whatever is stored: the
+            // Home layout has no status bar and no extra keys.
+            slots.put(element, variant.offers(element) ? slot : slot.withHidden(true));
+        }
         // The terminal's own toolbar switch can still have put the extra keys away everywhere.
         if (!mPreferences.shouldShowTerminalToolbar()) {
             slots.put(Element.EXTRA_KEYS, slots.get(Element.EXTRA_KEYS).withHidden(true));
@@ -303,6 +352,7 @@ public final class PlaceLayoutStore {
      * that stance holds until it is switched on again.
      */
     public boolean isKeyboardShown() {
+        if (activeVariant() == LayoutVariant.HOME) return isHomeKeyboardAlwaysOn();
         return !mPreferences.isKeyboardTurnedOff();
     }
 
@@ -313,9 +363,38 @@ public final class PlaceLayoutStore {
      * the next tap when shown again.
      */
     public void setKeyboardShown(boolean shown) {
+        if (activeVariant() == LayoutVariant.HOME) {
+            if (isHomeKeyboardAlwaysOn() != shown) writeBoolean(homeKey(KEY_HOME_KEYBOARD), shown);
+            return;
+        }
         if (mPreferences.isKeyboardTurnedOff() == !shown) return;
         mPreferences.setKeyboardTurnedOff(!shown);
         mRevision.incrementAndGet();
+    }
+
+    /**
+     * Always on (the Home keyboard): the Home layout's keyboard element shown rather than put
+     * away, which keeps the keyboard up on every Home page and gives it rows of the widget grid.
+     * Off until the user shows the element in the Layout editor opened on a Home page.
+     */
+    public boolean isHomeKeyboardAlwaysOn() {
+        return mStore != null && mStore.getBoolean(homeKey(KEY_HOME_KEYBOARD), false);
+    }
+
+    /** The rows always on took from the grid when it was turned on; 0 while it is off. */
+    public int homeKeyboardRows() {
+        return mStore == null ? 0 : Math.max(0, mStore.getInt(homeKey(KEY_HOME_KEYBOARD_ROWS), 0));
+    }
+
+    public void setHomeKeyboardRows(int rows) {
+        writeInt(homeKey(KEY_HOME_KEYBOARD_ROWS), Math.max(0, rows));
+    }
+
+    /** {@code layout.home.<key>}: the Home layout's own, for both orientations. */
+    @VisibleForTesting
+    @NonNull
+    static String homeKey(@NonNull String key) {
+        return LAYOUT_PREFIX + LayoutVariant.HOME.keyScope() + key;
     }
 
     // ---------------------------------------------------------------- slots
@@ -570,27 +649,27 @@ public final class PlaceLayoutStore {
     }
 
     public int widgetColumns(@NonNull PlaceOrientation orientation) {
-        return clamp(readInt(orientation, KEY_WIDGET_COLUMNS,
+        return clamp(readGridInt(orientation, KEY_WIDGET_COLUMNS,
                 mPreferences.getAppLauncherWidgetGridColumns()),
             TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
             TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS);
     }
 
     public void setWidgetColumns(@NonNull PlaceOrientation orientation, int columns) {
-        writeInt(variantKey(orientation, KEY_WIDGET_COLUMNS),
+        writeInt(gridKey(orientation, KEY_WIDGET_COLUMNS),
             clamp(columns, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
                 TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS));
     }
 
     public int widgetRows(@NonNull PlaceOrientation orientation) {
-        return clamp(readInt(orientation, KEY_WIDGET_ROWS,
+        return clamp(readGridInt(orientation, KEY_WIDGET_ROWS,
                 mPreferences.getAppLauncherWidgetGridRows()),
             TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
             TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS);
     }
 
     public void setWidgetRows(@NonNull PlaceOrientation orientation, int rows) {
-        writeInt(variantKey(orientation, KEY_WIDGET_ROWS),
+        writeInt(gridKey(orientation, KEY_WIDGET_ROWS),
             clamp(rows, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
                 TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS));
     }
@@ -660,7 +739,7 @@ public final class PlaceLayoutStore {
         SharedPreferences.Editor editor = mStore.edit();
         for (String key : ARRANGEMENT_KEYS) editor.remove(layoutKey(variant, orientation, key));
         editor.apply();
-        mMinimalSeeded[orientation.ordinal()] = false;
+        mSeeded[variant.ordinal()][orientation.ordinal()] = false;
         mRevision.incrementAndGet();
     }
 
@@ -825,35 +904,61 @@ public final class PlaceLayoutStore {
     @NonNull
     private String variantKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
         LayoutVariant variant = activeVariant();
-        if (variant == LayoutVariant.MINIMAL) seedMinimalIfNeeded(orientation);
+        seedIfNeeded(variant, orientation);
         return layoutKey(variant, orientation, key);
     }
 
     /**
-     * Gives the minimal layout of an orientation its starting point, the first time it is used and
-     * has stored nothing: the normal layout as it stands, with {@link MinimalMode#apply} taken
-     * off it, which is what minimal mode looked like before it had a layout of its own. Only what
-     * the normal layout has actually stored is copied, so a default that still moves - the dock's
-     * height with its style - keeps moving. Written once; from then on the user's edits are the
-     * layout, and {@link #clear} puts it back to this.
+     * Where the widget grid's columns and rows are kept: the Home layout's keys, whichever variant
+     * asks. The grid is Home's content and nothing else draws one, so a Workspace variant changing
+     * underneath (minimal mode) never re-cuts it.
      */
-    private void seedMinimalIfNeeded(@NonNull PlaceOrientation orientation) {
-        if (mStore == null || mMinimalSeeded[orientation.ordinal()]) return;
-        mMinimalSeeded[orientation.ordinal()] = true;
+    @NonNull
+    private String gridKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
+        seedIfNeeded(LayoutVariant.HOME, orientation);
+        return layoutKey(LayoutVariant.HOME, orientation, key);
+    }
+
+    private int readGridInt(@NonNull PlaceOrientation orientation, @NonNull String key,
+                            int fallback) {
+        String home = gridKey(orientation, key);
+        return mStore != null && mStore.contains(home) ? mStore.getInt(home, fallback) : fallback;
+    }
+
+    /**
+     * Gives a seeded layout of an orientation its starting point, the first time it is used and
+     * has stored nothing: the normal layout as it stands, with the variant's own changes taken off
+     * it. The minimal layout is the normal one with {@link MinimalMode#apply}, which is what
+     * minimal mode looked like before it had a layout of its own; the Home layout is the normal
+     * one with the elements it does not offer (the status bar, the extra keys) put away, its
+     * keyboard element put away by having no key yet. Only what the normal layout has actually
+     * stored is copied, so a default that still moves - the dock's height with its style - keeps
+     * moving. Written once; from then on the user's edits are the layout, and {@link #clear} puts
+     * it back to this.
+     */
+    private void seedIfNeeded(@NonNull LayoutVariant variant, @NonNull PlaceOrientation orientation) {
+        if (mStore == null || variant == LayoutVariant.NORMAL
+            || mSeeded[variant.ordinal()][orientation.ordinal()]) return;
+        mSeeded[variant.ordinal()][orientation.ordinal()] = true;
         for (String key : ARRANGEMENT_KEYS) {
-            if (mStore.contains(layoutKey(LayoutVariant.MINIMAL, orientation, key))) return;
+            if (mStore.contains(layoutKey(variant, orientation, key))) return;
         }
         Map<String, ?> all = mStore.getAll();
         SharedPreferences.Editor editor = mStore.edit();
         for (String key : ARRANGEMENT_KEYS) {
             Object value = all.get(layoutKey(LayoutVariant.NORMAL, orientation, key));
-            if (value != null) put(editor, layoutKey(LayoutVariant.MINIMAL, orientation, key), value);
+            if (value != null) put(editor, layoutKey(variant, orientation, key), value);
         }
         editor.apply();
-        PlaceLayoutStore minimal = forVariant(LayoutVariant.MINIMAL);
-        PlaceLayout seeded = MinimalMode.apply(minimal.resolve(orientation));
+        PlaceLayoutStore seededStore = forVariant(variant);
+        // The Home layout's resolve already puts away what it does not offer.
+        PlaceLayout seeded = variant == LayoutVariant.MINIMAL
+            ? MinimalMode.apply(seededStore.resolve(orientation))
+            : seededStore.resolve(orientation);
         for (Element element : Element.values()) {
-            if (seeded.slot(element).hidden) minimal.setSlot(orientation, element, seeded.slot(element));
+            Slot stored = seededStore.slot(orientation, element);
+            if (seeded.slot(element).hidden && !stored.hidden)
+                seededStore.setSlot(orientation, element, stored.withHidden(true));
         }
     }
 

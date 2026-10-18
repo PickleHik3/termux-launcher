@@ -88,6 +88,16 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void finishActivityIfNotFinishing();
 
+    /**
+     * Whether Home stays on screen once the Workspace's last shell has closed, and so whether the
+     * terminal service keeps running with no shell
+     * ({@link com.termux.app.wall.WallRow#lastShellClosedShowsHome}). False, plain Termux's end,
+     * for a host with no Home.
+     */
+    default boolean staysWhenWorkspaceEmpty() {
+        return false;
+    }
+
     void runOnUiThread(@NonNull Runnable runnable);
 
     // --- Font size ---
@@ -473,6 +483,26 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     void switchWindow(boolean forward);
 
     boolean selectWindow(int index);
+
+    /**
+     * Moves the window at {@code from} to {@code to} in the current session's row, both counted
+     * from 0; the current window stays current. False when either is outside the row.
+     */
+    boolean moveWindow(int from, int to);
+
+    /**
+     * Consume ({@link ColumnPolicy}): the current window's neighbour in the row, on the left when
+     * {@code fromLeft} and on the right otherwise, joins it as panes beside its focused pane and
+     * leaves the row; the current window stays current. False when there is no such neighbour.
+     */
+    boolean consumeWindow(boolean fromLeft);
+
+    /**
+     * Expel ({@link ColumnPolicy}): the current window's focused pane leaves into a new window of
+     * its own, right after the current one (right before it when {@code toLeft}), which becomes
+     * current. False for a window of one pane, or while a Home float has the focus.
+     */
+    boolean expelPane(boolean toLeft);
 
     int currentWindowCount();
 

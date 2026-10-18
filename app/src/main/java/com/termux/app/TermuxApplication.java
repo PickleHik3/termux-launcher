@@ -101,6 +101,8 @@ public class TermuxApplication extends Application {
             surfacePreferences.migrateSurfaceInheritance();
             // An install still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.SurfacePresets.readoptMovedLooks(surfacePreferences);
+            // An install from before the wall rework takes Start in from its usage mode, once.
+            WallReworkMigration.migrateIfNeeded(surfacePreferences.getSharedPreferences());
         }
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);

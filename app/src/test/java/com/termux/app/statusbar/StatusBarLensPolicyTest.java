@@ -19,18 +19,19 @@ import static org.junit.Assert.assertTrue;
 /** The place icons: where each sits and how present it is as the wall moves. */
 public class StatusBarLensPolicyTest {
 
-    private static final List<PaneWallPage> RING = Arrays.asList(PaneWallPage.WIDGETS,
+    private static final List<PaneWallPage> ROW = Arrays.asList(PaneWallPage.WIDGETS,
         PaneWallPage.TERMINAL, PaneWallPage.DISPLAY);
 
     @Test public void neighboursRestOneWidthAwayOnTheSideTheySlideInFrom() {
-        assertEquals(-1f, StatusBarLensPolicy.distance(RING, PaneWallPage.TERMINAL,
+        assertEquals(-1f, StatusBarLensPolicy.distance(ROW, PaneWallPage.TERMINAL,
             PaneWallPage.WIDGETS, 0f, 400), 0.001f);
-        assertEquals(1f, StatusBarLensPolicy.distance(RING, PaneWallPage.TERMINAL,
+        assertEquals(1f, StatusBarLensPolicy.distance(ROW, PaneWallPage.TERMINAL,
             PaneWallPage.DISPLAY, 0f, 400), 0.001f);
-        assertEquals(0f, StatusBarLensPolicy.distance(RING, PaneWallPage.TERMINAL,
+        assertEquals(0f, StatusBarLensPolicy.distance(ROW, PaneWallPage.TERMINAL,
             PaneWallPage.TERMINAL, 0f, 400), 0.001f);
-        // On the ring the far place waits on the near side: from Display, Widgets is to the right.
-        assertEquals(1f, StatusBarLensPolicy.distance(RING, PaneWallPage.DISPLAY,
+        // The wall is a line, not a ring (ADR 0008): from the Display, Home is two widths to the
+        // left, where it is.
+        assertEquals(-2f, StatusBarLensPolicy.distance(ROW, PaneWallPage.DISPLAY,
             PaneWallPage.WIDGETS, 0f, 400), 0.001f);
     }
 
@@ -198,7 +199,7 @@ public class StatusBarLensPolicyTest {
     private static List<Mark> landscapeMarks(TopStatusBarState state, boolean displayRunning) {
         int height = state == TopStatusBarState.COMPACT ? COMPACT_H : EXPANDED_H;
         return StatusBarLensMetrics.marks(Bar.of(BAR_W, height, DENSITY, false, state),
-            RING, PaneWallPage.TERMINAL, 0f, BAR_W, displayRunning);
+            ROW, PaneWallPage.TERMINAL, 0f, BAR_W, displayRunning);
     }
 
     private static Mark markFor(List<Mark> marks, PaneWallPage page) {
@@ -290,7 +291,7 @@ public class StatusBarLensPolicyTest {
         // At home it reads exactly as it always has: 0.6 of full ink says nothing is running.
         List<Mark> atHome = StatusBarLensMetrics.marks(
             Bar.of(BAR_W, EXPANDED_H, DENSITY, false, TopStatusBarState.EXPANDED),
-            RING, PaneWallPage.DISPLAY, 0f, BAR_W, false);
+            ROW, PaneWallPage.DISPLAY, 0f, BAR_W, false);
         assertEquals(StatusBarLensMetrics.STOPPED_DISPLAY_INK,
             markFor(atHome, PaneWallPage.DISPLAY).ink, 0.001f);
         // Peeking, 0.6 of an already drained mark used to leave 0.37 ink and 0.19 on the glass.
@@ -311,7 +312,7 @@ public class StatusBarLensPolicyTest {
         int columnH = 600;
         List<Mark> marks = StatusBarLensMetrics.marks(
             Bar.of(columnW, columnH, DENSITY, true, TopStatusBarState.COMPACT),
-            RING, PaneWallPage.TERMINAL, 0f, columnH, true);
+            ROW, PaneWallPage.TERMINAL, 0f, columnH, true);
         assertEquals(2, marks.size());
         Mark above = markFor(marks, PaneWallPage.WIDGETS);
         assertEquals(columnW / 2f, above.centerX, 0.01f);
@@ -327,7 +328,7 @@ public class StatusBarLensPolicyTest {
         // Two widths away the leaving mark has dissolved; nothing of it is reported.
         List<Mark> marks = StatusBarLensMetrics.marks(
             Bar.of(BAR_W, EXPANDED_H, DENSITY, false, TopStatusBarState.EXPANDED),
-            RING, PaneWallPage.TERMINAL, BAR_W, BAR_W, true);
+            ROW, PaneWallPage.TERMINAL, BAR_W, BAR_W, true);
         for (Mark mark : marks) assertTrue(mark.page != PaneWallPage.DISPLAY);
     }
 

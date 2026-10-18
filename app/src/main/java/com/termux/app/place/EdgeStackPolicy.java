@@ -431,6 +431,53 @@ public final class EdgeStackPolicy {
             stackThicknessPx(layout, Edge.BOTTOM, metrics));
     }
 
+    /**
+     * How far the content reaches up under the top edge's stack: the status bar's band while the
+     * bar stands on the top edge and overlays the page ({@link HomeChromePolicy#statusOverlays}),
+     * and nothing otherwise. Applied to the canvas by {@link EdgeStackView#overlayFollowing}, it
+     * hands back exactly the band the bar took, so the content keeps the bounds it has without the bar and the bar
+     * draws over it. Every other band on the top edge keeps taking its room.
+     *
+     * <p>What covers the content from the top is still the whole stack: {@link #stackThicknessPx}
+     * of the top edge is where the room under the bar begins.
+     */
+    public static int topOverlapPx(@NonNull PlaceLayout layout, @NonNull Metrics metrics,
+                                   boolean statusOverlays) {
+        if (!statusOverlays || !stack(layout, Edge.TOP).contains(Element.STATUS)) return 0;
+        return thicknessPx(Element.STATUS, Edge.TOP, metrics);
+    }
+
+    /**
+     * Where a side stack's bands start below its top, while the canvas reaches up under the status
+     * bar ({@link #topOverlapPx}): by exactly that overlap, so a side column (a dock rail in
+     * landscape on Home) starts at the bar's edge, as it does on the Workspace where the bar takes
+     * its own row, and never stands under the bar's chips. 0 for an empty side and wherever the
+     * bar does not overlay.
+     */
+    public static int sideStackTopInsetPx(@NonNull PlaceLayout layout, @NonNull Edge side,
+                                          @NonNull Metrics metrics, boolean statusOverlays) {
+        if (!side.isOnSide() || stack(layout, side).isEmpty()) return 0;
+        return topOverlapPx(layout, metrics, statusOverlays);
+    }
+
+    /**
+     * Where a side stack's bands end above its bottom, while the canvas reaches down under the
+     * bottom stack ({@code HomeChromePolicy.dockOverlays}): by exactly that reach — the bottom
+     * stack and the margin under it, {@code KeyboardOverlayPolicy.overlapPx} — so a side column
+     * (the A&#8211;Z rail in landscape on Home) ends above the dock with the frame's own gap, as
+     * it does on the Workspace, where the dock takes its own row below the canvas and every side
+     * column stops above it. The dock keeps the whole width either way. 0 for an empty side and
+     * wherever the dock does not overlay.
+     *
+     * @param bottomReachPx how far the canvas reaches under the bottom stack: its height plus the
+     *     margin under it, the keyboard included while it is up on Home
+     */
+    public static int sideStackBottomInsetPx(@NonNull PlaceLayout layout, @NonNull Edge side,
+                                             boolean dockOverlays, int bottomReachPx) {
+        if (!dockOverlays || !side.isOnSide() || stack(layout, side).isEmpty()) return 0;
+        return Math.max(0, bottomReachPx);
+    }
+
     // ---------------------------------------------------------------- drop targets
 
     /**

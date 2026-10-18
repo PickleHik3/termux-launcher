@@ -71,7 +71,7 @@ termux-reload-settings
 | `~/.termux/material-colors.sh`, `.properties` | The launcher's current colour roles, for prompts and scripts |
 | `~/.termux/material-colors-dark.sh`, `.properties` and `material-colors-light.sh`, `.properties` | The same roles for each mode |
 | `~/.termux/theme-templates/.applied` | The list of templates the launcher has applied |
-| `~/.termux/workspaces/<name>.json` | Saved workspaces ([Panes, windows and sessions](Panes_Windows_And_Sessions.md#workspaces)) |
+| `~/.termux/workspaces/<name>.json` | Saved sessions ([Panes, windows and sessions](Panes_Windows_And_Sessions.md#saved-sessions)) |
 | `~/.termux/shell-integration/termux-launcher.bash`, `.zsh` | Prompt marks for bash and zsh; source one from your rc file ([Touch, links and the clipboard](Touch_Links_And_Clipboard.md#jump-between-prompts)) |
 | `~/.termux/launcher/examples/` | The reference copies above |
 | `~/.launcherctl/endpoint`, `~/.launcherctl/token` | Where `launcherctl` finds the app ([LauncherCtl](LauncherCtl.md)) |

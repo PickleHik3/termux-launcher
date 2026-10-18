@@ -2,6 +2,7 @@ package com.termux.app.activities;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -59,35 +60,40 @@ public class RootPreferencesSearchIndexTest {
         return (SettingsActivity.RootPreferencesFragment) fragment;
     }
 
-    /** The search box, then the usage mode row on its own, then the first task group. */
+    /**
+     * The search box, then the Start in row on its own, then the first task group. The usage
+     * mode row is gone (ADR 0008).
+     */
     @Test
-    public void theUsageModeRowStandsAboveTheLauncherHeader() {
+    public void theStartInRowStandsAboveTheLauncherHeader() {
         SettingsActivity.RootPreferencesFragment root = launch();
         PreferenceScreen screen = root.getPreferenceScreen();
         assertEquals("settings_search", screen.getPreference(0).getKey());
-        Preference useAs = screen.getPreference(1);
-        assertEquals("app_launcher_use_case_mode", useAs.getKey());
-        assertTrue(useAs instanceof androidx.preference.ListPreference);
-        assertEquals("a fresh install is the terminal with the home screen",
-            useAs.getContext().getString(R.string.settings_use_as_home),
-            String.valueOf(useAs.getSummary()));
+        Preference startIn = screen.getPreference(1);
+        assertEquals("app_launcher_start_in", startIn.getKey());
+        assertTrue(startIn instanceof androidx.preference.ListPreference);
+        assertEquals("a fresh install starts in Home",
+            startIn.getContext().getString(R.string.settings_start_in_home),
+            String.valueOf(startIn.getSummary()));
         assertTrue(screen.getPreference(2) instanceof PreferenceCategory);
+        assertNull("the usage mode row is retired",
+            root.findPreference("app_launcher_use_case_mode"));
     }
 
     @Test
-    public void searchingForModeFindsTheUsageModeRow() {
+    public void searchingForStartInFindsTheStartInRow() {
         SettingsActivity.RootPreferencesFragment root = launch();
         SettingsSearchPreference search = root.findPreference("settings_search");
-        search.getOnQueryChangedListener().onQueryChanged("mode");
+        search.getOnQueryChangedListener().onQueryChanged("start in");
 
-        assertTrue(isVisible(root, "app_launcher_use_case_mode"));
+        assertTrue(isVisible(root, "app_launcher_start_in"));
         assertFalse("no page below carries the words", isVisible(root, "status_bar"));
 
         search.getOnQueryChangedListener().onQueryChanged("");
-        Preference useAs = root.findPreference("app_launcher_use_case_mode");
+        Preference startIn = root.findPreference("app_launcher_start_in");
         assertEquals("the summary survives a cleared search",
-            useAs.getContext().getString(R.string.settings_use_as_home),
-            String.valueOf(useAs.getSummary()));
+            startIn.getContext().getString(R.string.settings_start_in_home),
+            String.valueOf(startIn.getSummary()));
     }
 
     @Test
@@ -95,6 +101,7 @@ public class RootPreferencesSearchIndexTest {
         SettingsActivity.RootPreferencesFragment root = launch();
         PreferenceScreen screen = root.getPreferenceScreen();
         for (int g = 0; g < EXPECTED_GROUPS.length; g++) {
+            // After the search box and the Start in row.
             PreferenceCategory group = (PreferenceCategory) screen.getPreference(2 + g);
             assertEquals(EXPECTED_GROUPS[g], group.getKey());
             assertEquals(EXPECTED_ROWS[g].length, group.getPreferenceCount());

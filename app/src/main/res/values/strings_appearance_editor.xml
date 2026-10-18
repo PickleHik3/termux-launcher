@@ -65,6 +65,9 @@
     <string name="appearance_editor_corners_description">Corner radius</string>
     <string name="appearance_editor_margin">Margin · %1$d dp</string>
     <string name="appearance_editor_margin_description">Margin</string>
+    <!-- The same two over a Home page, which has its own Corners and Margin apart from the Workspace's. -->
+    <string name="appearance_editor_corners_home">Corner radius · Home · %1$d dp</string>
+    <string name="appearance_editor_margin_home">Margin · Home · %1$d dp</string>
 
     <!-- The doors. -->
     <string name="settings_look_appearance_editor_title">Surface style</string>

@@ -29,11 +29,19 @@ import java.util.List;
  * constantly and a card cleared by a state the user never put it in is the failure mode the whole
  * run is built against.
  *
- * <p>Between lessons the home screen is put back the way every lesson starts — {@link
- * HomeHost#resetHome()} — through the launcher's own calls rather than by replaying gestures.
+ * <p>Before each lesson the wall is put on the half the lesson starts on — {@link
+ * HomeHost#resetFor} with {@link TourRun#startSide} — through the launcher's own calls rather than
+ * by replaying gestures.
  */
 public final class FirstBootTour implements TourController.Listener, TourOverlayView.Callbacks,
     TourSignals.Listener, TourViewTargets.ViewFinder {
+
+    /**
+     * The gate on the whole run: while false the activity builds no tour (every caller handles
+     * the null) and Settings' "Replay tour" does nothing. On since the run was rewritten for the
+     * wall (ADR 0008; phase two, slice 6).
+     */
+    public static final boolean ENABLED = true;
 
     /** How long a cleared lesson's card says "Got it" before the run moves on. */
     static final long GOT_IT_MS = 1100L;
@@ -83,17 +91,28 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         }
     }
 
-    /** The home screen, for the two things the run asks of it. */
+    /** The wall, for the things the run asks of it. */
     public interface HomeHost {
         /**
-         * Back to how every lesson starts: the terminal place, the keyboard up, and the drawer,
-         * the palette, the status shade, help and the corner menu closed. Each through the
-         * launcher's own call for it, animated as the launcher animates it.
+         * The wall as a lesson starting on {@code side} needs it. Always: the palette, the drawer,
+         * the status bar's unfolded form, help and the corner tabs closed. Then, for {@link
+         * TourStep.Side#HOME}, what the home press does: Home page 1, the keyboard down there;
+         * for {@link TourStep.Side#WORKSPACE}, the first window (or the window already in front)
+         * with its keyboard up; for {@link TourStep.Side#ANYWHERE}, the wall left where it is.
+         * Each through the launcher's own call for it, animated as the launcher animates it.
          */
-        void resetHome();
+        void resetFor(@NonNull TourStep.Side side);
 
-        /** Whether the wall has one place only, so there is nowhere to drag the border to. */
+        /**
+         * Whether the wall has no Workspace window beside Home to slide to, so there is no seam
+         * to cross and no border to drag back.
+         */
         boolean hasOnePlace();
+
+        /** Whether Home is on the wall, with its free area and the dock rows over it. */
+        default boolean hasHome() {
+            return true;
+        }
     }
 
     /** The setup sheet the run is offered on. The activity owns it: it asks for permissions. */
@@ -115,8 +134,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         void onSkipTheTour();
     }
 
-    /** The place the run is taught on: the wall's own home page. */
-    public static final String HOME_PLACE = com.termux.app.wall.PaneWallPolicy.homePage().name();
+    /**
+     * Home's page on the wall, where the run starts and where it puts the wall back between
+     * lessons; every other page is the Workspace.
+     */
+    public static final String HOME_PLACE = com.termux.app.wall.PaneWallPage.WIDGETS.name();
 
     @NonNull private final Activity mActivity;
     @NonNull private final TourController mController;
@@ -250,7 +272,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         if (waitForHelpToClose(() -> startPractice(lessonId))) return true;
         cancelCompletion();
         rebuildRunForThisPhone();
-        resetHome();
+        resetFor(TourRun.startSide(mController.step(lessonId)));
         boolean started = mController.startPractice(lessonId);
         mPracticeRun = started;
         return started;
@@ -275,13 +297,16 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
 
     /**
      * The run, built for the phone it is about to run on: the apps row's edge decides the drawer
-     * lesson's sentence, and a wall with one place has no border to drag across.
+     * lesson's sentence, a wall with no Workspace window has no seam to cross, and a wall without
+     * Home has no Home lessons at all.
      */
     private void rebuildRunForThisPhone() {
         mController.setSteps(TourRun.steps(new TourRun.RunContext(
             mChromeProbe == null ? com.termux.app.place.PlaceLayout.Edge.BOTTOM
                 : mChromeProbe.appsEdge())));
-        if (mHomeHost != null && mHomeHost.hasOnePlace()) mController.dropStep(TourRun.BORDER_DRAG);
+        if (mHomeHost == null) return;
+        for (String dropped : TourRun.droppedFor(mHomeHost.hasHome(), !mHomeHost.hasOnePlace()))
+            mController.dropStep(dropped);
     }
 
     /**
@@ -294,9 +319,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         if (waitForHelpToClose(this::resumeIfInProgress)) return false;
         rebuildRunForThisPhone();
         boolean resumed = mController.resumeIfInProgress();
-        // The lesson starts over from its first half, on a home screen put back the way every
-        // lesson starts. Nothing the reset settles is what a first half waits for.
-        if (resumed) resetHome();
+        // The lesson starts over from its first half, on the half of the wall it starts on.
+        // Nothing the reset settles is what a first half waits for.
+        if (resumed) resetFor(TourRun.startSide(mController.currentStep()));
         return resumed;
     }
 
@@ -305,8 +330,13 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         return mController.isRunning();
     }
 
-    private void resetHome() {
-        if (mHomeHost != null) mHomeHost.resetHome();
+    private void resetFor(@NonNull TourStep.Side side) {
+        if (mHomeHost != null) mHomeHost.resetFor(side);
+    }
+
+    /** The wall put where the card the run shows next starts, before it shows. */
+    private void resetForUpcoming() {
+        resetFor(TourRun.startSide(mController.upcomingStep()));
     }
 
     // ---- what the launcher reports -------------------------------------------------------------
@@ -439,8 +469,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         if (overlay == null) return;
         TourStep step = mController.currentStep();
         java.util.EnumSet<TourChrome> chrome = chromeUp();
-        int presentation = TourCardVisibility.decide(step, chrome, mSignals.isOnHomePlace(),
-            mController.isCompleting());
+        int presentation = TourCardVisibility.decide(step, mController.currentStage(), chrome,
+            mSignals.wallSide(), mController.isCompleting());
         if (presentation != mPresentation) {
             mPresentation = presentation;
             TourLog.d("card " + (step == null ? "none" : step.id + ":" + mController.currentStage())
@@ -468,7 +498,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @NonNull
     private static String describePresentation(int presentation) {
         if (presentation == TourCardVisibility.HIDDEN) return "hidden";
-        if (presentation == TourCardVisibility.AWAY) return "asking for the way back to the terminal";
+        if (presentation == TourCardVisibility.AWAY) return "asking the way to the other half";
         if (presentation == TourCardVisibility.COMPLETED) return "saying it is done";
         return "against its control";
     }
@@ -501,7 +531,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         TourLog.d("setup sheet left: " + (showMeAround ? "show me around" : "skip the tour"));
         if (showMeAround) {
             rebuildRunForThisPhone();
-            resetHome();
+            resetForUpcoming();
             mController.showMeAround();
         } else {
             mController.skipTheTour();
@@ -532,7 +562,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     /**
      * The lesson is cleared. The card says so where it stands — over whatever the gesture opened,
      * help included, which stands higher than everything else — and the run moves on once it has,
-     * putting the home screen back on the way.
+     * putting the wall where the next card starts on the way (the closing card shows wherever
+     * the last lesson ended).
      */
     @Override
     public void onTourStepCompleted(@NonNull TourStep step) {
@@ -555,7 +586,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     private void finishCompletion() {
         mCompletion = null;
         if (mOverlay != null) mOverlay.setTranslationZ(0f);
-        if (!mController.isPracticing()) resetHome();
+        if (!mController.isPracticing()) resetForUpcoming();
         mController.continueAfterCompletion();
     }
 
@@ -585,7 +616,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     public void onTourCloseTapped() {
         TourLog.d("close tapped on card " + describeCurrent());
         cancelCompletion();
-        if (!mController.isPracticing()) resetHome();
+        // Straight to the closing card, which shows wherever the wall is: only the chrome closes.
+        if (!mController.isPracticing()) resetFor(TourStep.Side.ANYWHERE);
         mController.endTour();
     }
 
@@ -593,7 +625,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     public void onTourSkipTapped() {
         TourLog.d("skip tapped on card " + describeCurrent());
         if (mController.isCompleting()) return;
-        resetHome();
+        resetForUpcoming();
         mController.skip();
     }
 
@@ -749,6 +781,14 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
 
     @Override
     public void onTourSignal(String signalId) {
+        // A stage is cleared only by a gesture made on the half of the wall it is taught on: the
+        // keyboard going down as the wall slides to Home is not the keyboard swipe on a window.
+        TourStep step = mController.currentStep();
+        if (step != null && !step.isTaughtOn(mController.currentStage(), mSignals.sideOfSignal())) {
+            TourLog.d("signal " + signalId + " while card " + describeCurrent()
+                + " — ignored: it happened on the other half of the wall");
+            return;
+        }
         if (!TourLog.enabled()) {
             mController.onSignal(signalId);
             return;

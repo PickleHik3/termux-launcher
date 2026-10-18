@@ -10,8 +10,28 @@
 <resources>
     <string name="widget_add">Add widget</string>
     <string name="widget_empty_hint">Long-press to add widgets</string>
-    <string name="widget_menu_edit_widgets">Edit widgets</string>
-    <string name="widget_menu_remove_page">Remove page</string>
+    <!-- Home's long-press sheet (HomeActionsSheet). -->
+    <string name="home_actions_title">Termux Launcher</string>
+    <string name="home_actions_close">Close</string>
+    <string name="home_actions_terminal">Terminal</string>
+    <string name="home_actions_add_widget">Add a widget</string>
+    <string name="home_actions_add_app">Add an app</string>
+    <!-- An app icon on a Home page: the drawer's long-press row, and the toast after either way in. -->
+    <string name="home_add_to_home">Add to Home</string>
+    <string name="home_app_added">Added to Home page %1$d</string>
+    <!-- A folder on a Home page: the name it takes when its first app has no label, and the row a
+         long press on one of its apps offers. -->
+    <string name="home_folder_default_name">Folder</string>
+    <string name="home_folder_remove_app">Remove from folder</string>
+    <string name="home_actions_add_page">Add a page</string>
+    <string name="home_actions_edit_pages">Edit pages</string>
+    <string name="home_actions_layout">Layout</string>
+    <string name="home_actions_remove_page">Remove page</string>
+    <string name="home_actions_wallpaper">Wallpaper</string>
+    <string name="home_actions_look">Look</string>
+    <string name="home_actions_launcher_settings">Launcher settings</string>
+    <string name="home_actions_set_default_home">Set as default home app</string>
+    <string name="home_actions_help">Help</string>
     <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
     <string name="widget_remove_failed">Widget couldn\'t be removed</string>
     <string name="widget_add_busy">Finish adding the current widget first</string>
@@ -185,7 +205,7 @@
     </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_wallpaper_parallax_title">Wallpaper parallax</string>
-    <string name="settings_wallpaper_parallax_summary">The wallpaper pans a little as the places slide. Needs a wallpaper set through the launcher\'s picker; off in landscape and with animations off.</string>
+    <string name="settings_wallpaper_parallax_summary">The wallpaper pans a little as the pages and windows of the wall slide. Needs a wallpaper set through the launcher\'s picker; off in landscape and with animations off.</string>
     <string name="settings_adaptive_glass_title">Adaptive glass</string>
     <string name="settings_adaptive_glass_summary">Edges catch the wallpaper\'s own light.</string>
     <string name="settings_wallpaper_alignment_title">Wallpaper alignment</string>
@@ -297,6 +317,28 @@
     <string name="settings_use_as_display">Terminal + Home + Display</string>
     <string name="settings_use_as_display_description">Also run Linux desktop apps</string>
     <string name="settings_use_as_custom">Custom</string>
+    <string name="settings_start_in_title">Start in</string>
+    <string name="settings_start_in_home">Home</string>
+    <string name="settings_start_in_workspace">Workspace</string>
+    <string-array name="settings_start_in_entries" translatable="false">
+        <item>@string/settings_start_in_home</item>
+        <item>@string/settings_start_in_workspace</item>
+    </string-array>
+    <string-array name="settings_start_in_values" translatable="false">
+        <item>home</item>
+        <item>workspace</item>
+    </string-array>
+    <string name="settings_home_palette_gesture_title">Palette gesture on Home</string>
+    <string name="settings_home_palette_gesture_swipe_up">Swipe up</string>
+    <string name="settings_home_palette_gesture_off">Off</string>
+    <string-array name="settings_home_palette_gesture_entries" translatable="false">
+        <item>@string/settings_home_palette_gesture_swipe_up</item>
+        <item>@string/settings_home_palette_gesture_off</item>
+    </string-array>
+    <string-array name="settings_home_palette_gesture_values" translatable="false">
+        <item>swipe_up</item>
+        <item>off</item>
+    </string-array>
     <string name="settings_use_as_still_home_title">Termux Launcher is still your home screen</string>
     <string name="settings_use_as_still_home_message">Pressing Home keeps opening the terminal. You can choose another home app now, or keep it this way.</string>
     <string name="settings_use_as_choose_home">Choose another home app</string>
@@ -380,6 +422,12 @@
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
     <string name="termux_x11_app_launch_failed">This app could not be opened.</string>
     <string name="termux_x11_app_gone">That app is no longer installed.</string>
+    <!-- The launcher's own drawer entries, listed with the Linux apps (ADR 0008). -->
+    <string name="launcher_entry_terminal">Terminal</string>
+    <string name="launcher_entry_display">Display</string>
+    <string name="launcher_entry_new_float">New float here</string>
+    <string name="window_chip_home_float">Home float, page %1$d</string>
+    <string name="launcher_entry_new_window">New window</string>
     <string name="termux_x11_session_failed">This desktop could not be opened.</string>
     <string name="termux_x11_session_replace">Stop %1$s and open %2$s instead?</string>
     <string name="termux_x11_session_replace_confirm">Open</string>
@@ -2054,7 +2102,7 @@
     <string name="palette_category_pane">Pane</string>
     <string name="settings_keyboard_shapes_header">Floating and split</string>
     <string name="settings_keyboard_form_title">Keyboard type</string>
-    <string name="settings_keyboard_form_summary">Docked, floating or split, on every place.</string>
+    <string name="settings_keyboard_form_summary">Docked, floating or split, on Home and in the Workspace.</string>
     <string name="settings_keyboard_floating_width_title">Floating keyboard width</string>
     <string name="settings_keyboard_floating_width_summary">Percent of the screen width. Set separately for portrait and landscape.</string>
     <string name="settings_keyboard_floating_height_title">Floating keyboard height</string>
@@ -2094,6 +2142,31 @@
     <string name="palette_contacts_allow">Search contacts too</string>
     <string name="palette_contacts_allow_hint">Allow contact access to find people by name or number</string>
     <string name="palette_category_contacts">Contacts</string>
+    <string name="palette_category_home">Home</string>
+    <string name="palette_category_linux_apps">Linux apps</string>
+    <string name="palette_category_windows">Windows</string>
+    <string name="palette_home_open_terminal">Open terminal here</string>
+    <string name="palette_home_open_terminal_hint">A terminal floating over this page</string>
+    <string name="palette_home_go_to_workspace">Go to Workspace</string>
+    <string name="palette_home_go_to_workspace_hint">Slide over to your windows</string>
+    <string name="palette_home_new_window">New window</string>
+    <string name="palette_home_minimise_floats">Minimise all floats</string>
+    <string name="palette_home_minimise_floats_hint">Tuck every floating terminal into its chip</string>
+    <string name="palette_home_restore_floats">Restore floats</string>
+    <string name="palette_home_restore_floats_hint">Bring back every minimised floating terminal</string>
+    <string name="palette_home_add_widget_hint">Place a widget on this page</string>
+    <string name="palette_home_wallpaper">Wallpaper</string>
+    <string name="palette_home_layout">Layout</string>
+    <string name="palette_home_layout_hint">Arrange what Home and the Workspace show</string>
+    <string name="palette_home_appearance">Appearance</string>
+    <string name="palette_home_settings">Settings</string>
+    <string name="palette_jump_window_unnamed">Window %1$d</string>
+    <string name="palette_jump_window">Window %1$d</string>
+    <string name="palette_jump_window_current">Window %1$d · current</string>
+    <string name="palette_jump_float">Float</string>
+    <string name="palette_jump_float_page">Float · page %1$d</string>
+    <string name="palette_linux_app_row_subtitle">Linux app · hold to bind a key</string>
+    <string name="palette_launcher_entry_row_subtitle">Hold to bind a key</string>
     <string name="palette_contact_open_failed">Couldn\'t open this contact</string>
     <string name="palette_contact_call_failed">Couldn\'t dial this number</string>
     <string name="palette_argument_notice">TYPE A VALUE FOR %1$s, ⏎ TO APPLY</string>
@@ -2164,6 +2237,11 @@
     <string name="tool_terminal_share_transcript">Share transcript</string>
     <string name="tool_clipboard_paste">Paste</string>
     <string name="tool_window_select">Switch to window</string>
+    <string name="tool_window_move">Move window to…</string>
+    <string name="tool_window_move_left">Move window left</string>
+    <string name="tool_window_move_right">Move window right</string>
+    <string name="tool_pane_consume">Consume next window into this pane</string>
+    <string name="tool_pane_expel">Expel pane to its own window</string>
     <string name="tool_window_rename">Rename window</string>
     <string name="tool_session_rename">Rename session</string>
     <string name="tool_pane_rename">Rename pane</string>
@@ -2208,14 +2286,14 @@
     <string name="tool_desc_terminal_toggle_scratchpad">Show or hide a dedicated floating terminal; its shell keeps running while hidden.</string>
     <string name="tool_desc_workspace_picker">Pick a saved workspace and load it into the current layout or in place of it.</string>
     <string name="tool_desc_workspace_save_prompt">Prompt for a name and save the current sessions, windows, and panes.</string>
-    <string name="workspace_delete_description">Delete workspace %1$s</string>
-    <string name="workspace_delete_message">The saved workspace file is removed. Running sessions are not affected.</string>
+    <string name="workspace_delete_description">Delete %1$s</string>
+    <string name="workspace_delete_message">These saved sessions are removed. Running sessions are not affected.</string>
     <string name="workspace_delete_confirm">Delete</string>
     <string name="workspace_deleted">Deleted “%1$s”</string>
-    <string name="workspace_picker_empty">No saved workspaces</string>
+    <string name="workspace_picker_empty">No saved sessions</string>
     <string name="workspace_picker_replace">Replace</string>
-    <string name="workspace_picker_loaded">Workspace “%1$s” loaded</string>
-    <string name="workspace_picker_failed">Could not load workspace: %1$s</string>
+    <string name="workspace_picker_loaded">Loaded “%1$s”</string>
+    <string name="workspace_picker_failed">Could not load saved sessions: %1$s</string>
     <string name="tool_desc_window_new">Create a new window with a fresh shell in the current session.</string>
     <string name="tool_desc_window_close">Close the current window and every pane in it.</string>
     <string name="tool_desc_window_next">Switch to the next window, or the next app on the display.</string>
@@ -2283,7 +2361,7 @@
     <string name="tool_desc_appearance_surface_editor">Tune the dock, keyboard, status bar, and terminal surfaces.</string>
     <string name="tool_desc_app_open_settings">Open the launcher settings screen.</string>
     <string name="tool_app_open_help">Help</string>
-    <string name="tool_desc_app_open_help">Open help for the place you are on.</string>
+    <string name="tool_desc_app_open_help">Open help for where you are: Home or the Workspace.</string>
     <string name="tool_desc_app_open_look_and_feel">Open the look and feel settings.</string>
     <string name="tool_desc_app_open_apps_bar">Open the apps bar settings.</string>
     <string name="tool_desc_app_command_palette">Open the searchable command palette.</string>
@@ -2462,11 +2540,11 @@
     <string name="session_browser_close">Close</string>
     <string name="session_browser_close_title">Close %1$s?</string>
     <string name="termux_window_close_running_message">Something is still running in this window.</string>
-    <string name="session_browser_workspace_name">Workspace name</string>
+    <string name="session_browser_workspace_name">Name</string>
     <string name="workspace_save_capture_commands">Also save what is running</string>
-    <string name="session_browser_workspace_saved">Saved workspace %1$s</string>
+    <string name="session_browser_workspace_saved">Saved “%1$s”</string>
     <string name="session_browser_workspace_overwrite_title">Replace %1$s?</string>
-    <string name="session_browser_workspace_overwrite_message">A workspace with this name already exists.</string>
+    <string name="session_browser_workspace_overwrite_message">Saved sessions with this name already exist.</string>
     <string name="session_browser_overwrite">Replace</string>
     <string name="session_browser_action_failed">Could not complete the session action</string>
 
@@ -2474,13 +2552,21 @@
     <string name="sessions_panel_empty">No sessions</string>
     <string name="sessions_panel_new">New session</string>
     <string name="sessions_drawer_live">Live</string>
-    <string name="sessions_drawer_saved">Saved</string>
+    <string name="sessions_drawer_saved">Saved sessions</string>
     <string name="sessions_drawer_done">Done</string>
     <string name="sessions_drawer_keep">Keep</string>
     <string name="sessions_drawer_end">End</string>
     <string name="sessions_drawer_close_question">End this session?</string>
     <string name="sessions_drawer_add_to_current">Add to current</string>
-    <string name="sessions_drawer_save_workspace">Save as workspace…</string>
+    <string name="sessions_drawer_save_workspace">Save sessions…</string>
+    <string name="sessions_drawer_home">Home</string>
+    <string name="sessions_drawer_displays">Displays</string>
+    <string name="sessions_drawer_float">Float</string>
+    <string name="sessions_drawer_float_page">Float · page %1$d</string>
+    <plurals name="sessions_drawer_toplevel_count">
+        <item quantity="one">%1$d app window</item>
+        <item quantity="other">%1$d app windows</item>
+    </plurals>
     <string name="sessions_drawer_run_commands">Also start what was running</string>
     <string name="sessions_drawer_session_name">Session name</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
@@ -2587,42 +2673,47 @@
     <string name="weather_card_unavailable_location">Weather needs a location fix</string>
     <string name="weather_card_unavailable_place">Can\'t find %1$s. Check Settings → Status bar.</string>
 
-    <!-- First-boot tour: six gestures in three chapters, taught on the real home screen -->
+    <!-- First-boot tour: six gestures in three chapters, taught on the wall itself -->
     <string name="tour_skip">Skip</string>
     <string name="tour_end_practice">End practice</string>
     <string name="tour_close_description">End the tour</string>
     <string name="tour_got_it">Got it</string>
     <string name="tour_card_kicker">Termux Launcher</string>
-    <!-- The chapter label, shown in capitals: "1 of 3 · Getting around". -->
+    <!-- The chapter label, shown in capitals: "1 of 3 · Home". -->
     <string name="tour_chapter_label">%1$d of %2$d · %3$s</string>
-    <string name="tour_chapter_getting_around">Getting around</string>
-    <string name="tour_chapter_status_and_apps">Status bar and apps</string>
-    <string name="tour_chapter_commands_and_help">Commands and help</string>
-    <string name="tour_title_places">Slide between places</string>
-    <string name="tour_body_places">Hold the top or bottom border, then swipe left or right to switch places.</string>
+    <string name="tour_chapter_home">Home</string>
+    <string name="tour_chapter_workspace">The Workspace</string>
+    <string name="tour_chapter_anywhere">Anywhere</string>
+    <string name="tour_title_to_workspace">Swipe to the Workspace</string>
+    <string name="tour_body_to_workspace">Swipe left on an empty spot of Home. Past your last Home page, your first window slides in.</string>
+    <string name="tour_title_border_drag">Border drag back</string>
+    <string name="tour_body_border_drag">Swipe right along the window\'s bottom border, below the text, to slide back to Home.</string>
     <string name="tour_title_keyboard_away">Put the keyboard away</string>
-    <string name="tour_body_keyboard_away">Swipe down from the bottom edge of the page.</string>
+    <string name="tour_body_keyboard_away">Swipe down from the window\'s bottom border, at the grabber.</string>
     <string name="tour_title_keyboard_back">Bring it back</string>
-    <string name="tour_body_keyboard_back">Swipe up from the same edge.</string>
+    <string name="tour_body_keyboard_back">Swipe up from the same border. The Workspace remembers which you chose.</string>
     <string name="tour_title_status">Pull down the status bar</string>
-    <string name="tour_body_status">Swipe down from the top edge for the clock, weather and notifications.</string>
-    <string name="tour_title_status_compact">Make it compact again</string>
-    <string name="tour_body_status_compact">Swipe up from the same edge.</string>
+    <string name="tour_body_status">Pull down slowly from the window\'s top border and let go low: the capsule opens into the full bar.</string>
+    <string name="tour_title_status_fold">Fold it back</string>
+    <string name="tour_body_status_fold">Swipe up quickly from the same border to fold it a step. Left alone, it folds to the capsule by itself.</string>
     <string name="tour_title_apps">Open your apps</string>
-    <string name="tour_body_apps">Swipe down on the apps row to open the drawer.</string>
-    <string name="tour_body_apps_left_rail">Swipe right on the apps rail to open the drawer.</string>
-    <string name="tour_body_apps_right_rail">Swipe left on the apps rail to open the drawer.</string>
+    <string name="tour_body_apps">Your pinned apps and the A–Z index float over Home. Swipe down on the apps row for all of them.</string>
+    <string name="tour_body_apps_left_rail">Your pinned apps and the A–Z index float over Home. Swipe right on the apps rail for all of them.</string>
+    <string name="tour_body_apps_right_rail">Your pinned apps and the A–Z index float over Home. Swipe left on the apps rail for all of them.</string>
     <string name="tour_title_palette">Run anything</string>
-    <string name="tour_body_palette">Swipe up on the space bar to search apps, settings and commands.</string>
+    <string name="tour_body_palette">Swipe up on an empty spot of Home for the command palette: apps, settings and commands. On a window, it\'s in the corner tab.</string>
     <string name="tour_title_corner">Hold a corner</string>
-    <string name="tour_body_corner">Every pane keeps a menu in its corners. Press and hold the top-left one.</string>
+    <string name="tour_body_corner">Every window keeps a corner tab. Press and hold a corner of this window.</string>
     <string name="tour_title_help">Tap ?</string>
-    <string name="tour_body_help">Help mode explains whatever you touch next. It lives in every corner menu.</string>
-    <string name="tour_card_return_to_terminal">Hold the top or bottom border, then swipe left or right to get back to the terminal and continue.</string>
+    <string name="tour_body_help">Help explains whatever you touch next. Every corner tab has it, Home\'s too.</string>
+    <!-- A card taught on a window, read while the wall rests on Home. -->
+    <string name="tour_card_go_to_workspace">Swipe left past your last Home page to reach your window and continue.</string>
+    <!-- A card taught on Home, read while the wall rests on a window. -->
+    <string name="tour_card_go_home">Swipe right along the window\'s bottom border, or press Home, to get back to Home and continue.</string>
     <string name="tour_closing_title">You\'re set</string>
     <string name="tour_tip_help">Hold any corner and tap ? to learn what something does.</string>
-    <string name="tour_tip_wallpaper">Set your wallpaper: hold any corner and tap Appearance.</string>
-    <string name="tour_tip_shortcuts">Tap Ctrl, then Alt, to see every shortcut.</string>
+    <string name="tour_tip_float">Hold an empty spot on Home and tap Terminal for a Home float.</string>
+    <string name="tour_tip_layout">Tap Layout in the same menu to arrange the dock.</string>
     <string name="tour_tip_replay">Replay this tour from Settings \u203A About &amp; help.</string>
     <!-- How far the offline models have downloaded: "Offline models · 1.2 GB of 3.1 GB". -->
     <string name="tour_models_progress">Offline models · %1$s of %2$s</string>
@@ -2716,7 +2807,7 @@
     <string name="help_topic_az_purpose">The A–Z index picks an app by its first letter.</string>
     <string name="help_topic_az_action">Slide along it, then drag up to the app you want.</string>
     <string name="help_topic_az_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
-    <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows which place you are on.</string>
+    <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows whether you are on Home or in the Workspace.</string>
     <string name="help_topic_status_action">Swipe down from the page\'s top border, or drag the bar down, to expand it.</string>
     <string name="help_topic_status_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_stats_purpose">The status widgets show how the phone is doing.</string>
@@ -2762,7 +2853,7 @@
     <string name="help_show_gesture">Show gesture</string>
     <string name="help_try_it">Try it</string>
     <string name="help_settings_title">Help</string>
-    <string name="help_settings_summary">Open help for the place you are on.</string>
+    <string name="help_settings_summary">Open help for where you are: Home or the Workspace.</string>
     <string name="help_topic_stats_title">Status widgets</string>
     <string name="help_topic_corners_title">Pane corners</string>
     <string name="help_topic_keys_title">Extra keys</string>
@@ -2971,7 +3062,7 @@
     <string name="help_topic_pinned_reveal">A card appears when a notification matches one of your rules.</string>
     <string name="help_topic_pinned_aliases">pinned notification, essential notifications, notification card, card, mute, dismiss, rule</string>
     <string name="help_topic_kswipe_title">Keyboard swipe</string>
-    <string name="help_topic_kswipe_summary">One swipe opens or closes the keyboard on every place.</string>
+    <string name="help_topic_kswipe_summary">One swipe opens or closes the keyboard on Home and in the Workspace.</string>
     <string name="help_topic_kswipe_action">Swipe up from the bottom border to open the keyboard, and down to put it away.</string>
     <string name="help_topic_kswipe_step1">It turns a keyboard that was switched off back on.</string>
     <string name="help_topic_kswipe_step2">The small pill on the border marks where to start.</string>
@@ -3110,8 +3201,8 @@
     <string name="help_practice_start">Start</string>
     <string name="help_lesson_find_help_title">Find help</string>
     <string name="help_lesson_find_help_summary">Open help from a page\'s corner tab.</string>
-    <string name="help_lesson_border_drag_title">Change place</string>
-    <string name="help_lesson_border_drag_summary">Hold the top or bottom border, then swipe left or right to the next place.</string>
+    <string name="help_lesson_border_drag_title">Reach the Workspace</string>
+    <string name="help_lesson_border_drag_summary">Swipe left on an empty spot of Home to reach your first window, then swipe right along its bottom border to come back.</string>
     <string name="help_lesson_status_swipe_title">Open the status bar</string>
     <string name="help_lesson_status_swipe_summary">Swipe down from the top border to open the status bar.</string>
     <string name="help_lesson_find_apps_title">Open your apps</string>
@@ -3136,6 +3227,25 @@
     <string name="pane_corner_tab_close_description">Close pane</string>
     <string name="pane_corner_tab_move_description">Move pane</string>
     <string name="pane_corner_tab_maximise_description">Maximise pane</string>
+
+    <!-- A float's titlebar: its buttons, read by TalkBack. -->
+    <string name="titlebar_minimise_description">Minimise</string>
+    <string name="titlebar_maximise_description">Maximise</string>
+    <string name="titlebar_restore_description">Restore size</string>
+    <string name="titlebar_close_description">Close</string>
+    <!-- The titlebar's drag handle, read by TalkBack, and the menu a long press on it opens. -->
+    <string name="titlebar_handle_description">Move window</string>
+    <string name="titlebar_handle_menu_action">Window menu</string>
+    <string name="titlebar_menu_dock">Dock</string>
+
+    <!-- Always on (the Home keyboard): the notice when the grid gives the keyboard its rows. Keep
+         each short enough for one line of the notice on a 360dp phone. -->
+    <string name="home_always_on_nothing_moved">Keyboard always on. Nothing moved.</string>
+    <string name="home_always_on_no_rows">Keyboard always on. No room on Home.</string>
+    <plurals name="home_always_on_moved">
+        <item quantity="one">Keyboard always on. %1$d widget moved.</item>
+        <item quantity="other">Keyboard always on. %1$d widgets moved.</item>
+    </plurals>
 
     <!-- On-device AI: the diagnostics share row. -->
     <string name="termux_ai_share_diagnostics_title">Share diagnostics log</string>
@@ -3214,5 +3324,14 @@
     <plurals name="tai_import_saved_failed">
         <item quantity="one">%1$d couldn\'t be added.</item>
         <item quantity="other">%1$d couldn\'t be added.</item>
+    </plurals>
+
+    <!-- The status bar folded to its capsule: what it shows, spoken (window or Home, then the time). -->
+    <string name="status_bar_capsule_description">Status bar folded: %1$s, %2$s</string>
+    <string name="status_bar_capsule_home">Home</string>
+    <string name="status_bar_capsule_open">Open status bar</string>
+    <plurals name="status_bar_capsule_alerts">
+        <item quantity="one">%1$d alert</item>
+        <item quantity="other">%1$d alerts</item>
     </plurals>
 </resources>

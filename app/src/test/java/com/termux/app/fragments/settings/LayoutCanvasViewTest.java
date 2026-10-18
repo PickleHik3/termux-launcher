@@ -816,6 +816,33 @@ public class LayoutCanvasViewTest {
         assertTrue(putAway[0]);
     }
 
+    /**
+     * Home with always on: the Home layout's keyboard element is a block on the canvas, as the
+     * dock's rows are, and dragged to the tray it is put away, which is how always on is turned
+     * off again.
+     */
+    @Test
+    public void homesAlwaysOnKeyboardIsOnTheCanvasAndGoesToTheTray() {
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT, PaneWallPage.WIDGETS);
+        boolean[] putAway = {false};
+        view.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
+            @Override public void onKeyboardPutAway() {
+                putAway[0] = true;
+            }
+        });
+        RectF keyboard = view.keyboardRect();
+        assertNotNull("always on stands on Home's canvas", keyboard);
+        RectF tray = view.trayRect();
+        touch(view, MotionEvent.ACTION_DOWN, keyboard.centerX(), keyboard.centerY());
+        touch(view, MotionEvent.ACTION_MOVE, tray.centerX(), tray.centerY());
+        assertEquals(LayoutCanvasView.Block.KEYBOARD, view.draggedBar());
+        touch(view, MotionEvent.ACTION_UP, tray.centerX(), tray.centerY());
+        assertTrue(putAway[0]);
+    }
+
     @Test
     public void aCornerHandleSnapsToWholeCells() {
         // The first cell's corner at a third of the way across a 300px area with a 6px gap.
@@ -1053,7 +1080,11 @@ public class LayoutCanvasViewTest {
         assertTrue("and it takes a real share of the phone", keyboard.height() > canvas.height() * 0.3f);
 
         view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.WIDGETS);
-        assertNull("Home's keyboard opens over the page, so the picture keeps the page",
+        assertNotNull("Home's keyboard element shown is always on: a block of the page",
+            view.keyboardRect());
+        view.setLayout(arrangement.withKeyboardShown(false), PlaceOrientation.PORTRAIT,
+            PaneWallPage.WIDGETS);
+        assertNull("always on off, Home's keyboard opens over the page, so the picture keeps it",
             view.keyboardRect());
 
         view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.DISPLAY);
@@ -1187,8 +1218,9 @@ public class LayoutCanvasViewTest {
     public void withNoKeyboardDrawnThereIsNothingToBeUnder() {
         LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
-        // Home: the keyboard opens over the page, so the picture draws none.
-        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+        // Home with always on off: the keyboard opens over the page, so the picture draws none.
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM)
+                .withKeyboardShown(false),
             PlaceOrientation.PORTRAIT, PaneWallPage.WIDGETS);
         assertNull(view.keyboardRect());
         lift(view, LayoutCanvasView.Block.APPS_ROW);

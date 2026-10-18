@@ -27,6 +27,11 @@ Parallax runs across the whole row. The seam is continuous but never silent: the
 with the first window (status bar, extra keys, corner tabs, borders), so the user sees which half
 they are in.
 
+Status 2026-10-18 (phase two, slice 3): parallax across the whole row built. The spare width is
+spread linearly over the row's pages (`WallParallax.offsetPx`); the live row position composes the
+wall's offset, Home's own swipe and a window's arrival (`PaneWallController.rowPosition`). A count
+change snaps. Unit tests green; emulator pass owed (device-checks, slice 3).
+
 ## 3. Home
 
 - **Content**: today's widget grid, already multi-page (`LauncherWidgetRepository`). Long press on an
@@ -48,7 +53,8 @@ they are in.
   editor and the same put-away machinery, with the element set reduced to the dock's rows (pinned
   apps, A–Z) and the keyboard. The keyboard element is the **always on** toggle (§5.3). Seeded from
   the normal layout with the status bar, extra keys and borders removed and the keyboard put away.
-  Style, Corners, Margin and Minimal mode do not apply to Home.
+  Style, Corners and Margin are Home's own on Home, seeded from the Workspace's (phase two,
+  slice 2); Minimal mode stays Workspace-only.
 
 ## 4. Home floats
 
@@ -58,7 +64,8 @@ page, not in the strip.
 
 ### 4.1 Birth, move, size
 
-- Born full-size: the room between the status bar (§4.4) and the dock. Chrome draws over floats.
+- Born full-size: the room between the status bar (§4.4) and the dock, with Home's Margin of air
+  inside it on all four sides (the same air as the widget grid's rim). Chrome draws over floats.
 - Moved by its **titlebar**, resized at its bottom-right corner, as today's floating pane
   (`TerminalPaneController`), with the titlebar replacing the top-left move corner and the pill.
 - Pinned to the Home page it was opened on and scrolls with it. Any number of floats; a tap brings
@@ -70,30 +77,36 @@ page, not in the strip.
 ### 4.2 Titlebar
 
 One translucent glass strip along the float's top, designed to the launcher's look, carrying the
-drag handle and four buttons: **Minimise**, **Maximise**, **Close**, **Dock**.
+drag handle and three buttons at the trailing end: **Minimise** (a chevron down), **Maximise** (a
+square), **Close** (an X). **Dock** is in the menu a long press on the drag handle opens, with the
+window's name, so no glyph on the strip can read as Split (developer, 2026-10-18).
 
 - Maximise toggles full-size and remembers the previous size and spot.
 - Minimise flies the float, animated, into its chip in the status bar.
 - Dock sends a Home float into the strip as a tiled window right after the current window and
   slides to the Workspace. On a window's floating pane it tiles the pane back, as Dock does today.
-- Ctrl+Alt+F on a strip window floats it onto the Home page last shown; on a float it docks it.
+- Ctrl+Alt+F on a one-pane window floats it onto the Home page last shown; on a window of several
+  panes it floats the focused pane inside the window, as before; on a float it docks it.
 - This is the one floating-pane design: window floating panes and the scratchpad get the same
-  titlebar. The pill goes.
+  titlebar. The pill goes. On the scratchpad, Minimise hides it (as its toggle does) and Close ends
+  its shell, like Close anywhere.
 
 ### 4.3 Focus and the keyboard
 
 - A tap inside a float focuses it; a tap on Home outside any float focuses Home.
 - A float born on Home grabs focus and raises the keyboard overlay; a tap outside the float closes
   the keyboard (§5). Minimising or closing the focused float closes it too.
-- The keyboard overlays a float and never resizes it. A focused float is lifted so its cursor row
-  stays above the keyboard and put back when the keyboard closes (new: today floats are not
-  lifted).
+- The keyboard overlays a float the user has placed smaller than the room: that float is lifted so
+  its cursor row stays above the keyboard, never past the room's top, and put back when the
+  keyboard closes. A full-size float behaves like a tiled pane while the keyboard is up: its height
+  shrinks to the room above the keyboard and grows back after (developer, 2026-10-18).
 
 ### 4.4 The status bar on Home
 
 - Home has no launcher status bar until the first float opens; then the bar slides down from the
   top, in its compact form, and stays while any float is open or minimised. It slides up when the
-  last float closes.
+  last float closes. The bar overlays the page: the widget grid keeps its size, and floats are born
+  below the bar's edge (developer, 2026-10-18).
 - Chips on Home are floats only, across all pages; a chip carries its page's dot. Tapping a chip
   pages Home to that float's page and restores it. Workspace windows are not chips on Home; the
   Terminal entry reaches them.
@@ -104,8 +117,9 @@ drag handle and four buttons: **Minimise**, **Maximise**, **Close**, **Dock**.
 
 ### 5.1 Transient keyboard
 
-- Default: no keyboard on Home. A configurable gesture, default swipe up from the bottom edge
-  (today's keyboard swipe), opens the **command palette** and the keyboard together as one
+- Default: no keyboard on Home. A configurable gesture, default an up swipe on the page's free
+  area (the grid's empty cells and the air between widgets; not a widget, the dock or a Home
+  float; the first movement past the slop decides vertical against paging), opens the **command palette** and the keyboard together as one
   overlay. Both close on Esc, on focus loss (a tap outside), or when a palette action completes.
 - The keyboard is an overlay on Home (already: `KeyboardOverlayPolicy`) and never changes the
   grid.
@@ -144,7 +158,9 @@ keyboard layouts) shown with a Home action set:
   window. Ctrl+Alt+V and Ctrl+Alt+H split inside a window; Ctrl+Alt+C opens a window; Ctrl+Alt+Shift+C
   opens a session. Nothing about panes changes.
 - **Insertion**: a new window (Ctrl+Alt+C, a Terminal=true Linux app, Dock on a Home float) lands
-  right after the current window. No drag-to-reorder in phase one.
+  right after the current window. No drag-to-reorder in phase one; phase two's slice 5a adds it (a
+  long press lifts a window's chip in the window bar, a drag moves the window along the row, and
+  `window.move` does it from keys and scripts).
 - **Switching**: the border drag, the window chips in the status bar (display windows are chips
   too; Home floats are chips marked as floats), the Ctrl+Alt shortcuts and the drawer. The screen
   glyph jumps to the first display window, or starts the display if none is up.
@@ -152,7 +168,10 @@ keyboard layouts) shown with a Home action set:
   Corners, Margin, status bar, dock with extra keys, corner tabs, keyboard swipe, status swipe.
   Display windows wear the same chrome as terminal windows.
 - **Lifetime**: the Workspace exists while the row has at least one window (terminal or display).
-  Closing the last one slides Home back in. Home floats do not keep it alive and do not need it.
+  Closing the last one slides Home back in, and no shell is started behind it: the old
+  session-recovery (`showNextSessionAfterClose`, `maybeRecoverFromEmptySession`) retires
+  (developer, 2026-10-18). The Terminal entry opens a window when there is none; Start in =
+  Workspace opens one on a cold start. Home floats do not keep it alive and do not need it.
 
 ## 7. Display
 
@@ -180,8 +199,9 @@ footer Save as workspace… It gains:
   (EWMH names, `X11WindowList`) nested; a tap on a toplevel raises it on that display.
 - A **Home** row in the footer, above the save row, that goes to Home page 1.
 - The rename: Save as workspace… becomes Save sessions…, the Saved tab lists Saved sessions.
-  `~/.termux/workspaces/` and the `launcherctl` verbs keep their names. Saved sessions record the
-  float flag in phase two; until then a saved float loads as a tiled window.
+  `~/.termux/workspaces/` and the `launcherctl` verbs keep their names. Saved sessions record a
+  Home float's flag, page and shape (phase two, slice 4): it loads back as a Home float on its page,
+  minimised if it was, or on the last Home page when its page is gone.
 
 ## 9. Entering, leaving, resuming
 
@@ -201,7 +221,7 @@ footer Save as workspace… It gains:
 ## 10. Settings and migration
 
 - **Start in**: Home | Workspace. New, under the launcher's settings.
-- **Palette gesture on Home**: beside the other gestures, default swipe up from the bottom edge.
+- **Palette gesture on Home**: beside the other gestures, default an up swipe on the page's free area.
 - **Gone**: Usage mode (Terminal alone, with Home, with Display); the Display switch.
 - **Migration, once**: Terminal alone → Start in = Workspace; the other two → Home. Display on →
   nothing (on demand now). The normal and minimal layouts become the Workspace layouts unchanged;
@@ -226,16 +246,24 @@ titlebar); `TerminalCommandPalette` (Home action set, Linux apps, floats); `Laun
 ## 12. Out of scope (phase two and later)
 
 - The icon grid on Home pages: app icons, folders, drag and drop between pages. Home stays a widget
-  canvas with a dock and a drawer in phase one.
+  canvas with a dock and a drawer in phase one. (Phase two slice 7a put app icons on the widget
+  grid, 2026-10-18; folders are slice 7b.)
 - The status bar's **capsule** form: a third form beside compact and expanded, a thin material
   capsule at the top centre; a continuous swipe sizes the bar by where the finger lets go, quick
   swipes step one form, the bar folds to the capsule after a short idle, and the capsule is Minimal
   mode's default form. Agreed, everywhere on the wall; not phase one.
-- Drag-to-reorder of windows, and Niri's consume/expel of panes into and out of columns.
+- Drag-to-reorder of windows (done in phase two, slice 5a), and Niri's consume/expel of panes
+  into and out of columns (done in phase two, slice 5b: `pane.consume` and `pane.expel`, the
+  row's windows being the columns).
 - Per-toplevel X11 windows in the row (needs a rootless server).
-- Saved sessions recording the float flag and page.
+- Saved sessions recording the float flag and page (done in phase two, slice 4).
 - Rebuilding the row or the floats after a background kill beyond what Saved sessions restore.
 - A terminal or display window placed among the Home pages as a page.
+- The first-boot tour (done in phase two, slice 6): rewritten for the wall and switched back on
+  (`FirstBootTour.ENABLED`). Six lessons in three chapters (Home: the seam and the border drag
+  back, the apps; the Workspace: the keyboard swipe, the status bar's fold; anywhere: the palette,
+  the corner tab's ?), each stage taught on its half of the wall, then the closing card with the
+  Home float and Layout.
 
 ## 13. Words
 

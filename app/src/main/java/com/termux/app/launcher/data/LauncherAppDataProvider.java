@@ -89,6 +89,8 @@ public final class LauncherAppDataProvider {
                 public LauncherIconStore.Artwork loadArtwork(@NonNull AppRef ref) {
                     if (com.termux.app.x11.X11Apps.isLinuxApp(ref))
                         return LauncherIconStore.Artwork.kept(linuxAppIcon(ref));
+                    if (com.termux.app.launcher.LauncherEntries.isEntry(ref))
+                        return LauncherIconStore.Artwork.kept(launcherEntryIcon(ref));
                     LauncherIconResolver.ResolvedIcon resolved = iconResolver.resolveDetailed(ref, null, null);
                     return resolved.provisional ? LauncherIconStore.Artwork.standIn(resolved.drawable)
                         : LauncherIconStore.Artwork.kept(resolved.drawable);
@@ -149,20 +151,130 @@ public final class LauncherAppDataProvider {
         return androidx.core.content.ContextCompat.getDrawable(context, com.termux.R.drawable.ic_symbol_terminal);
     }
 
+    /** The mark the launcher's own entries wear: a prompt for Terminal, a screen for Display. */
+    @Nullable
+    private Drawable launcherEntryIcon(@NonNull AppRef ref) {
+        int icon = com.termux.app.launcher.LauncherEntries.DISPLAY.equals(
+            com.termux.app.launcher.LauncherEntries.idOf(ref))
+            ? com.termux.R.drawable.ic_symbol_desktop_windows : com.termux.R.drawable.ic_symbol_terminal;
+        return androidx.core.content.ContextCompat.getDrawable(context, icon);
+    }
+
     /**
-     * The Linux apps in the prefix and in every installed distro container, when the display is
-     * switched on and the user wants them listed. They
-     * are catalogue entries like any other — ranked, pinnable, searchable — under the reserved
-     * package {@link com.termux.app.x11.X11Apps#PACKAGE}; a tap runs them on the display.
+     * The launcher's own entries, listed with the Linux apps (ADR 0008): Terminal always, and
+     * Display wherever Linux apps are listed — a build with the server and Show Linux apps in
+     * drawer on.
+     */
+    private void addLauncherEntries(@NonNull Snapshot snapshot) {
+        addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.terminal(),
+            context.getString(com.termux.R.string.launcher_entry_terminal));
+        if (!listsLinuxApps(com.termux.BuildConfig.X11_SERVER, showLinuxApps())) return;
+        addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.display(),
+            context.getString(com.termux.R.string.launcher_entry_display));
+    }
+
+    /** Show Linux apps in drawer, at its default when the preferences cannot be read. */
+    private boolean showLinuxApps() {
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
+        return prefs == null
+            ? com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                .DEFAULT_X11_DRAWER_APPS
+            : prefs.isX11DrawerAppsEnabled();
+    }
+
+    /**
+     * Whether the catalogue lists Linux apps and the Display entry: a build with the server and
+     * Show Linux apps in drawer on. Nothing else decides it — not whether a display runs (ADR 0008).
+     */
+    static boolean listsLinuxApps(boolean x11Server, boolean showLinuxApps) {
+        return x11Server && showLinuxApps;
+    }
+
+    /**
+     * What the desktop files looked like when the catalogue last listed the Linux apps, as
+     * {@link com.termux.app.x11.LinuxAppCatalog#signature}; {@link #UNLISTED} before any listing.
+     */
+    private volatile long linuxAppsSignature = UNLISTED;
+    private static final long UNLISTED = Long.MIN_VALUE;
+
+    /**
+     * Whether desktop files came or went since the catalogue listed the Linux apps. A loaded
+     * catalogue only; a build without the server, or with Show Linux apps off, is never stale.
+     * File work (a stat per directory): call off the main thread.
+     */
+    boolean linuxAppsStale() {
+        synchronized (this) {
+            if (!loaded) return false;
+        }
+        if (!listsLinuxApps(com.termux.BuildConfig.X11_SERVER, showLinuxApps())) return false;
+        return com.termux.app.x11.LinuxAppCatalog.signature(
+            com.termux.app.x11.LinuxAppCatalog.roots()) != linuxAppsSignature;
+    }
+
+    /**
+     * Re-list the catalogue in the background if desktop files changed since it last listed the
+     * Linux apps — a {@code pkg install} in a pane leaves no broadcast and no resume behind — and
+     * run {@code onChanged} on the main thread once the new catalogue is in. Nothing happens when
+     * nothing changed, so a surface about to show the catalogue (the palette) can ask every time.
+     */
+    public void refreshIfLinuxAppsChanged(@Nullable Runnable onChanged) {
+        if (!com.termux.BuildConfig.X11_SERVER) return;
+        executor.execute(() -> {
+            if (linuxAppsStale()) refreshAsync(null, onChanged);
+        });
+    }
+
+    /**
+     * {@link #getAllAppsBlocking()}, re-listed first when desktop files changed since the last
+     * listing, for a caller that resolves one app by name now (launcherctl) and must not answer
+     * "not found" for one installed a moment ago. Blocks on the scan; never call it on the main
+     * thread.
+     */
+    @NonNull
+    public List<LauncherAppEntry> getAllAppsWithCurrentLinuxAppsBlocking() {
+        List<LauncherAppEntry> apps = getAllAppsBlocking();
+        if (!linuxAppsStale()) return apps;
+        Snapshot snapshot = loadSnapshot();
+        synchronized (this) {
+            // A newer load is not overtaken; this one simply lands first.
+            applySnapshotLocked(snapshot);
+            return visibleOnly(cachedApps);
+        }
+    }
+
+    private void addLauncherEntry(@NonNull Snapshot snapshot, @NonNull AppRef ref,
+                                  @NonNull String label) {
+        if (snapshot.byId.containsKey(ref.stableId())) return;
+        iconStore.prime(ref, launcherEntryIcon(ref));
+        LauncherAppEntry entry = new LauncherAppEntry(ref, label, null, false,
+            ApplicationInfo.CATEGORY_UNDEFINED, 0L);
+        snapshot.apps.add(entry);
+        snapshot.byId.put(ref.stableId(), entry);
+        char key = normalizeLetter(label.isEmpty() ? '#' : label.charAt(0));
+        List<LauncherAppEntry> bucket = snapshot.letterBuckets.get(key);
+        if (bucket == null) {
+            bucket = new ArrayList<>();
+            snapshot.letterBuckets.put(key, bucket);
+        }
+        bucket.add(entry);
+    }
+
+    /**
+     * The Linux apps in the prefix and in every installed distro container, when the user wants
+     * them listed (Show Linux apps in drawer); nothing else decides it. They are catalogue entries
+     * like any other — ranked, pinnable, searchable — under the reserved package
+     * {@link com.termux.app.x11.X11Apps#PACKAGE}; a tap runs them on the display, opening a
+     * display window if none is up.
      */
     private void addLinuxApps(@NonNull Snapshot snapshot) {
         linuxAppsById = Collections.emptyMap();
-        if (!com.termux.BuildConfig.X11_SERVER) return;
-        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
-        if (prefs == null || !prefs.isX11DisplayEnabled() || !prefs.isX11DrawerAppsEnabled()) return;
+        if (!listsLinuxApps(com.termux.BuildConfig.X11_SERVER, showLinuxApps())) return;
+        List<com.termux.app.x11.LinuxAppCatalog.Root> roots = com.termux.app.x11.LinuxAppCatalog.roots();
+        // Read before the scan: a file landing during it shows as a change next time, not as none.
+        linuxAppsSignature = com.termux.app.x11.LinuxAppCatalog.signature(roots);
         Map<String, com.termux.app.x11.LinuxAppCatalog.LinuxApp> byId = new HashMap<>();
         for (com.termux.app.x11.LinuxAppCatalog.LinuxApp app
-                : com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots())) {
+                : com.termux.app.x11.LinuxAppCatalog.scan(roots)) {
             byId.put(app.id, app);
             AppRef ref = com.termux.app.x11.X11Apps.ref(app.id);
             if (snapshot.byId.containsKey(ref.stableId())) continue;
@@ -247,6 +359,7 @@ public final class LauncherAppDataProvider {
     public synchronized void invalidate() {
         refreshGeneration++;
         iconPackIdentity = null;
+        terminalEntry = null;
         loading = false;
         loaded = false;
         refreshing = false;
@@ -558,7 +671,25 @@ public final class LauncherAppDataProvider {
     @Nullable
     public synchronized LauncherAppEntry findByRef(@NonNull AppRef ref) {
         LauncherAppEntry entry = cachedById.get(ref.stableId());
+        if (entry == null && com.termux.app.launcher.LauncherEntries.isAlwaysListed(ref)) {
+            // Terminal is in every catalogue, so it resolves even while none is loaded (before
+            // the first load, after an invalidate): the dock's prune of unresolvable pins must
+            // never take the way back to the Workspace off the row.
+            entry = terminalEntry();
+        }
         return entry;
+    }
+
+    @Nullable private LauncherAppEntry terminalEntry;
+
+    @NonNull
+    private LauncherAppEntry terminalEntry() {
+        if (terminalEntry == null) {
+            terminalEntry = new LauncherAppEntry(com.termux.app.launcher.LauncherEntries.terminal(),
+                context.getString(com.termux.R.string.launcher_entry_terminal), null, false,
+                ApplicationInfo.CATEGORY_UNDEFINED, 0L);
+        }
+        return terminalEntry;
     }
 
     @Nullable
@@ -665,6 +796,7 @@ public final class LauncherAppDataProvider {
         addProfileApps(snapshot, packageManager, defaultComponentsByPackage,
             previousById, changedPackages);
         addLinuxApps(snapshot);
+        addLauncherEntries(snapshot);
         return snapshot;
     }
 

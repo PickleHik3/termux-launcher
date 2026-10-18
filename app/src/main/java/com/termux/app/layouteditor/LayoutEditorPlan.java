@@ -81,14 +81,15 @@ public final class LayoutEditorPlan {
     }
 
     /**
-     * Opens a session over one place, showing the orientation the phone is in, on the layout the
-     * launcher is standing in: the minimal one while minimal mode is on.
+     * Opens a session over one page, showing the orientation the phone is in, on the layout that
+     * page is arranged by: the Home layout on a Home page, and on a window the Workspace layout
+     * the launcher is standing in, the minimal one while minimal mode is on.
      */
     @NonNull
     public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
                                          @NonNull PaneWallPage place,
                                          @NonNull PlaceOrientation deviceOrientation) {
-        return enter(places, places.activeVariant(), place, deviceOrientation);
+        return enter(places, places.variantFor(place), place, deviceOrientation);
     }
 
     /** Opens a session over one variant of the layout. */
@@ -236,7 +237,9 @@ public final class LayoutEditorPlan {
 
     /**
      * What the tray holds for the shown orientation, in the order it lists them: the bars the
-     * arrangement puts away, then the keyboard while it is switched off.
+     * arrangement puts away, then the keyboard while it is switched off. Only what the layout
+     * being edited offers: the Home layout's tray never holds the status bar or the extra keys,
+     * and its keyboard chip, brought back, turns always on on.
      */
     @NonNull
     public List<TrayItem> trayItems() {
@@ -245,7 +248,7 @@ public final class LayoutEditorPlan {
         for (TrayItem item : TrayItem.values()) {
             if (item.element == null) {
                 if (!layout.keyboardShown) items.add(item);
-            } else if (layout.slot(item.element).hidden) {
+            } else if (mVariant.offers(item.element) && layout.slot(item.element).hidden) {
                 items.add(item);
             }
         }
@@ -261,6 +264,8 @@ public final class LayoutEditorPlan {
     public Drop restore(@NonNull TrayItem item) {
         if (item.element == null)
             return setKeyboardShown(true);
+        if (!mVariant.offers(item.element))
+            return Drop.NONE;
         Slot slot = mPlaces.slot(mShownOrientation, item.element);
         if (!slot.hidden && !shownLayout().slot(item.element).hidden)
             return Drop.NONE;

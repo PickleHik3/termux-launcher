@@ -316,7 +316,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public void onSingleTapUp(MotionEvent e) {
-        TerminalEmulator term = mHost.currentSession().getEmulator();
+        // The Workspace may be empty (no shell at all); a tap then has nothing to reach.
+        TerminalSession session = mHost.currentSession();
+        TerminalEmulator term = session == null ? null : session.getEmulator();
+        if (term == null) return;
         if (!term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
             // Switched off, a tap is only a tap: the keyboard waits for its own key.
             if (isKeyboardTurnedOff()) return;

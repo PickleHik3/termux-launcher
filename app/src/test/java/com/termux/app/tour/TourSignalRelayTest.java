@@ -31,13 +31,13 @@ public class TourSignalRelayTest {
 
     @Test
     public void theFirstPlaceSeenIsTheOneToComeBackTo() {
-        relay.onPlaceSettled("TERMINAL");
-        assertTrue(signals.isEmpty());
         relay.onPlaceSettled("WIDGETS");
+        assertTrue(signals.isEmpty());
         relay.onPlaceSettled("TERMINAL");
-        assertEquals(2, signals.size());
-        assertEquals(TourSignals.PLACE_CHANGED, signals.get(0));
-        assertEquals(TourSignals.PLACE_RETURNED, signals.get(1));
+        relay.onPlaceSettled("WIDGETS");
+        assertEquals(java.util.Arrays.asList(TourSignals.PLACE_CHANGED,
+            TourSignals.SEAM_TO_WORKSPACE, TourSignals.PLACE_RETURNED, TourSignals.SEAM_TO_HOME),
+            signals);
     }
 
     @Test
@@ -141,30 +141,30 @@ public class TourSignalRelayTest {
     public void theHomePlaceCanBeSetUpFront() {
         // The first settle only says where the wall is — the launcher primes the relay with it
         // when the run is built — and the move after it is the swipe.
-        relay.setHomePlace("TERMINAL");
+        relay.setHomePlace("WIDGETS");
+        relay.onPlaceSettled("WIDGETS");
         relay.onPlaceSettled("TERMINAL");
-        relay.onPlaceSettled("DISPLAY");
-        assertEquals(1, signals.size());
-        assertEquals(TourSignals.PLACE_CHANGED, signals.get(0));
+        assertEquals(java.util.Arrays.asList(TourSignals.PLACE_CHANGED,
+            TourSignals.SEAM_TO_WORKSPACE), signals);
     }
 
     @Test
     public void everyOtherPlaceIsAChangeAndOnlyHomeIsAReturn() {
-        relay.setHomePlace("TERMINAL");
-        relay.onPlaceSettled("TERMINAL");
+        relay.setHomePlace("WIDGETS");
         relay.onPlaceSettled("WIDGETS");
-        relay.onPlaceSettled("DISPLAY");
         relay.onPlaceSettled("TERMINAL");
-        assertEquals(3, signals.size());
-        assertEquals(TourSignals.PLACE_CHANGED, signals.get(0));
-        assertEquals(TourSignals.PLACE_CHANGED, signals.get(1));
-        assertEquals(TourSignals.PLACE_RETURNED, signals.get(2));
+        relay.onPlaceSettled("DISPLAY");
+        relay.onPlaceSettled("WIDGETS");
+        // Window to display stays inside the Workspace: a change, but no seam.
+        assertEquals(java.util.Arrays.asList(TourSignals.PLACE_CHANGED,
+            TourSignals.SEAM_TO_WORKSPACE, TourSignals.PLACE_CHANGED,
+            TourSignals.PLACE_RETURNED, TourSignals.SEAM_TO_HOME), signals);
     }
 
     @Test
     public void aPlaceThatIsNotThereYetIsNotASignal() {
         relay.onPlaceSettled(null);
-        relay.setHomePlace("TERMINAL");
+        relay.setHomePlace("WIDGETS");
         relay.onPlaceSettled(null);
         assertTrue(signals.isEmpty());
     }
@@ -194,8 +194,8 @@ public class TourSignalRelayTest {
     @Test
     public void nothingIsEmittedWithoutSomeoneListening() {
         relay.setTourSignalListener(null);
-        relay.setHomePlace("TERMINAL");
-        relay.onPlaceSettled("WIDGETS");
+        relay.setHomePlace("WIDGETS");
+        relay.onPlaceSettled("TERMINAL");
         relay.onStatusBarCollapsedSettled(true);
         relay.onStatusBarCollapsedSettled(false);
         assertTrue(signals.isEmpty());
@@ -372,36 +372,69 @@ public class TourSignalRelayTest {
 
     @Test
     public void thePinnedHomePlaceIsTheOneToComeBackToWhereverTheWallWasFound() {
-        // Replay from Settings can find the wall resting on the display; the run is still taught
-        // on the terminal, so arriving there is the return and not the change.
-        relay.setHomePlace("TERMINAL");
-        relay.onPlaceSettled("DISPLAY");
+        // Replay from Settings can find the wall resting on a window; the run still starts on
+        // Home, so arriving there is the return and the seam crossed back.
+        relay.setHomePlace("WIDGETS");
+        relay.onPlaceSettled("TERMINAL");
         assertTrue(signals.isEmpty());
         assertFalse(relay.isOnHomePlace());
-        relay.onPlaceSettled("TERMINAL");
-        assertEquals(1, signals.size());
-        assertEquals(TourSignals.PLACE_RETURNED, signals.get(0));
-        assertTrue(relay.isOnHomePlace());
         relay.onPlaceSettled("WIDGETS");
-        assertEquals(TourSignals.PLACE_CHANGED, signals.get(1));
+        assertEquals(java.util.Arrays.asList(TourSignals.PLACE_RETURNED,
+            TourSignals.SEAM_TO_HOME), signals);
+        assertTrue(relay.isOnHomePlace());
+        relay.onPlaceSettled("TERMINAL");
+        assertEquals(TourSignals.PLACE_CHANGED, signals.get(2));
+        assertEquals(TourSignals.SEAM_TO_WORKSPACE, signals.get(3));
         assertFalse(relay.isOnHomePlace());
     }
 
     @Test
     public void aPlaceSettlingWhereItAlreadyWasIsNotASwipe() {
         // A rotation re-settles the place the wall is already on.
-        relay.setHomePlace("TERMINAL");
+        relay.setHomePlace("WIDGETS");
+        relay.onPlaceSettled("WIDGETS");
         relay.onPlaceSettled("TERMINAL");
-        relay.onPlaceSettled("DISPLAY");
-        relay.onPlaceSettled("DISPLAY");
-        relay.onPlaceSettled("DISPLAY");
-        assertEquals(1, signals.size());
+        relay.onPlaceSettled("TERMINAL");
+        relay.onPlaceSettled("TERMINAL");
+        assertEquals(2, signals.size());
     }
 
     @Test
     public void untilTheWallHasSaidWhereItIsTheRunIsAtHome() {
-        relay.setHomePlace("TERMINAL");
+        relay.setHomePlace("WIDGETS");
         assertTrue(relay.isOnHomePlace());
+        assertEquals(null, relay.wallSide());
+    }
+
+    @Test
+    public void theWallsSideIsHomeOnHomesPlaceAndTheWorkspaceEverywhereElse() {
+        relay.setHomePlace("WIDGETS");
+        relay.onPlaceSettled("WIDGETS");
+        assertEquals(TourStep.Side.HOME, relay.wallSide());
+        relay.onPlaceSettled("TERMINAL");
+        assertEquals(TourStep.Side.WORKSPACE, relay.wallSide());
+        relay.onPlaceSettled("DISPLAY");
+        assertEquals(TourStep.Side.WORKSPACE, relay.wallSide());
+    }
+
+    @Test
+    public void aSeamCrossingIsHeardOnTheSideTheWallLeft() {
+        // The card waiting for the crossing is taught on the side it starts from; everything else
+        // is heard where the wall rests.
+        List<TourStep.Side> heardOn = new ArrayList<>();
+        relay.setTourSignalListener(signal -> heardOn.add(relay.sideOfSignal()));
+        relay.setHomePlace("WIDGETS");
+        relay.onPlaceSettled("WIDGETS");
+        relay.onPlaceSettled("TERMINAL");
+        assertEquals(java.util.Arrays.asList(TourStep.Side.HOME, TourStep.Side.HOME), heardOn);
+        heardOn.clear();
+        relay.onPlaceSettled("WIDGETS");
+        assertEquals(java.util.Arrays.asList(TourStep.Side.WORKSPACE, TourStep.Side.WORKSPACE),
+            heardOn);
+        heardOn.clear();
+        relay.onKeyboardShownSettled(true);
+        relay.onKeyboardShownSettled(false);
+        assertEquals(java.util.Collections.singletonList(TourStep.Side.HOME), heardOn);
     }
 
     // Help, the keyboard, and the trip out to an Android app.
@@ -531,21 +564,21 @@ public class TourSignalRelayTest {
         for (String signal : signals) assertEquals(TourSignals.PINNED_APPS_SAVED, signal);
     }
 
-    // The three border lessons: the border drag, the keyboard swipe and the status swipe.
+    // The three border lessons: the seam and the border drag, the keyboard swipe and the status
+    // swipe.
 
     @Test
-    public void theBorderDragIsAChangeOfPlaceAndAReturnToTheOneTheRunIsTaughtOn() {
-        relay.setHomePlace("TERMINAL");
-        relay.onPlaceSettled("TERMINAL");
-        assertTrue(relay.isOnHomePlace());
-        // Any other place is a change, whichever border the user dragged towards.
+    public void theSeamIsCrossedForwardOffHomeAndBackOntoIt() {
+        relay.setHomePlace("WIDGETS");
         relay.onPlaceSettled("WIDGETS");
-        assertFalse(relay.isOnHomePlace());
-        relay.onPlaceSettled("DISPLAY");
-        relay.onPlaceSettled("TERMINAL");
         assertTrue(relay.isOnHomePlace());
-        assertEquals(java.util.Arrays.asList(TourSignals.PLACE_CHANGED, TourSignals.PLACE_CHANGED,
-            TourSignals.PLACE_RETURNED), signals);
+        relay.onPlaceSettled("TERMINAL");
+        assertFalse(relay.isOnHomePlace());
+        relay.onPlaceSettled("WIDGETS");
+        assertTrue(relay.isOnHomePlace());
+        signals.removeIf(signal -> !signal.startsWith("wall.seam"));
+        assertEquals(java.util.Arrays.asList(TourSignals.SEAM_TO_WORKSPACE,
+            TourSignals.SEAM_TO_HOME), signals);
     }
 
     @Test

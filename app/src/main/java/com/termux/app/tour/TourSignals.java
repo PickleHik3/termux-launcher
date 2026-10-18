@@ -16,6 +16,16 @@ public interface TourSignals {
     String PLACE_CHANGED = "place.changed";
     /** The place the run started on is showing again. */
     String PLACE_RETURNED = "place.returned";
+    /**
+     * The wall settled on the Workspace, having rested on Home: the seam was crossed forward, by
+     * the plain swipe off the last Home page or any other way there.
+     */
+    String SEAM_TO_WORKSPACE = "wall.seam_to_workspace";
+    /**
+     * The wall settled on Home, having rested on the Workspace: the seam was crossed back, by the
+     * border drag off the first window, the home press or any other way there.
+     */
+    String SEAM_TO_HOME = "wall.seam_to_home";
     /** The status bar settled expanded. */
     String STATUS_BAR_EXPANDED = "status_bar.expanded";
     /** The status bar settled compact again. */

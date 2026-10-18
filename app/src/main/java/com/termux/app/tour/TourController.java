@@ -33,7 +33,7 @@ import java.util.Set;
 public final class TourController {
 
     /** Bumped when the run changes enough that a run in progress has to be restarted on this one. */
-    public static final int RUN_VERSION = 7;
+    public static final int RUN_VERSION = 8;
 
     /**
      * The run before the welcome card. It is what the legacy migration records, so an install
@@ -422,6 +422,26 @@ public final class TourController {
         if (!mRunning || mShowingSetup) return;
         if (mPracticing) finishPractice();
         else end();
+    }
+
+    /**
+     * The card the run shows next: the first lesson while the sheet is up, else the one after the
+     * card that is up (the closing card included). Null in practice, which ends rather than moves
+     * on, when nothing follows, and when no run is going. Read before the run moves, so the wall
+     * can be put where that card is taught before it shows.
+     */
+    @Nullable
+    public TourStep upcomingStep() {
+        if (!mRunning || mPracticing) return null;
+        int next = mShowingSetup ? shownFrom(0) : shownFrom(mStepIndex + 1);
+        return next < mSteps.size() ? mSteps.get(next) : null;
+    }
+
+    /** The card named {@code stepId} in this run, dropped or not; null when there is none. */
+    @Nullable
+    public TourStep step(@Nullable String stepId) {
+        int index = indexOf(stepId);
+        return index < 0 ? null : mSteps.get(index);
     }
 
     private int indexOf(@Nullable String stepId) {

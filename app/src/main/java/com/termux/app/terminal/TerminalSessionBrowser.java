@@ -36,6 +36,7 @@ public final class TerminalSessionBrowser {
         mActivity = activity;
         mView = new SessionsDrawerView(activity);
         mView.setListener(new DrawerListener());
+        mView.setHost(activity.sessionsDrawerHost());
     }
 
     /** True while the drawer is the card on the plane. */
@@ -60,8 +61,9 @@ public final class TerminalSessionBrowser {
     /** The workspace picker's entry: the drawer, already showing what was saved. */
     public static void showWorkspacePicker(@NonNull TermuxActivity activity) {
         if (isOpen(activity)) {
-            sOpen.mView.setTab(SessionsDrawerView.Tab.SAVED);
-            sOpen.reload();
+            // Moving over reads the saved files itself (onSavedTabShown); already there, re-read.
+            if (sOpen.mView.tab() == SessionsDrawerView.Tab.SAVED) sOpen.reload();
+            else sOpen.mView.setTab(SessionsDrawerView.Tab.SAVED);
             return;
         }
         open(activity, SessionsDrawerView.Tab.SAVED, false);
@@ -81,8 +83,9 @@ public final class TerminalSessionBrowser {
         TerminalSheetController sheet = activity.getTerminalSheetController();
         TerminalSessionBrowser drawer = new TerminalSessionBrowser(activity);
         drawer.mView.setDress(sheet.dress());
+        // Opening on Saved reads the saved files through onSavedTabShown; the live half is bound here.
         drawer.mView.setTab(tab);
-        drawer.reload();
+        drawer.mView.bindLive(activity.getSessionBrowserSessions());
         // The title lives in the drawer's own header, next to the segments and the +, so the card
         // adds none of its own.
         if (!sheet.show("", drawer.mView, true, drawer.mView,
@@ -228,6 +231,12 @@ public final class TerminalSessionBrowser {
 
         @Override public void onTypingStarted() {
             mActivity.getTerminalSheetController().requestTypingKeyboard();
+        }
+
+        // The Saved segment tapped on a drawer the list key opened on Live: it had never been
+        // given the saved files, and showed "No saved sessions" over a full directory.
+        @Override public void onSavedTabShown() {
+            mView.bindSaved(readSaved());
         }
     }
 

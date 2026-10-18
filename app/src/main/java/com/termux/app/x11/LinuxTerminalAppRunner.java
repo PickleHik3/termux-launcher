@@ -15,9 +15,10 @@ import java.io.FileReader;
 import java.io.IOException;
 
 /**
- * Runs a {@code Terminal=true} Linux app (D5) in a terminal pane instead of on the display: the
- * same in-app pane route {@code launcherctl pane open}/{@code pane focus}/{@code pane write}
- * already drive through {@link TerminalActionDispatcher}, not a second one. Never touches the
+ * Runs a {@code Terminal=true} Linux app (D5) in a new terminal window, right after the current
+ * one, instead of on the display (ADR 0008): the same route {@code launcherctl window open}/
+ * {@code pane focus}/{@code pane write} already drive through {@link TerminalActionDispatcher},
+ * not a second one. Where windows are off (no split panes) it opens a pane instead. Never touches the
  * embedded X server or {@link X11LinuxAppRunner} — a container app's whole
  * {@code proot-distro login …} line runs inside the pane's shell exactly as
  * {@link LinuxAppCatalog.LinuxApp#command()} built it.
@@ -249,8 +250,15 @@ public final class LinuxTerminalAppRunner {
         }
     }
 
+    /**
+     * A new window for the app, landing right after the current one; a pane in the current
+     * window only where there are no windows to open (split panes off).
+     */
     private static boolean openFresh(@NonNull TerminalActionDispatcher dispatcher,
                                      @NonNull LinuxAppCatalog.LinuxApp app) {
+        JSONObject window = dispatcher.execute(TerminalActionDispatcher.TOOL_WINDOW_OPEN,
+            openArguments(app));
+        if (window.optBoolean("ok", false)) return true;
         JSONObject opened = dispatcher.execute(TerminalActionDispatcher.TOOL_PANE_OPEN, openArguments(app));
         return opened.optBoolean("ok", false);
     }

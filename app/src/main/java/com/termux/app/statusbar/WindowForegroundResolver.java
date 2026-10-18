@@ -26,9 +26,12 @@ import java.util.Set;
  *
  * Detection reads {@code /proc/<pid>/stat} (field tpgid) to find the pane's foreground process
  * group, then {@code /proc/<tpgid>/cmdline} for its name and arguments and {@code /proc/<tpgid>/stat}
- * again for its CPU time. The reads are funnelled through the launcher's privileged backend (Shizuku
- * or su/rish) so they work past Android's hidepid/ptrace restrictions. Results are cached; refreshes
- * are throttled and coalesced so the privileged IPC does not run more than once per
+ * again for its CPU time. The shells and what runs in them belong to the app's own uid, so the app
+ * reads those files itself ({@link #readDirect}); only a foreground it cannot see (a program of
+ * another uid that hidepid hides) sends the same reads through the privileged backend (Shizuku or
+ * su/rish), and then no more than once per {@link #PRIVILEGED_MIN_INTERVAL_MS}. On Shizuku every
+ * privileged command is a remote process with its own binder proxy and death registration, which is
+ * why the direct read comes first. Results are cached; refreshes are throttled to one per
  * {@link #MIN_INTERVAL_MS}.
  *
  * <p>A shebang-launched tool (npm's {@code codex}, pip's console-script entry points, ...) reports
@@ -142,6 +145,21 @@ public final class WindowForegroundResolver {
 
     private static final long MIN_INTERVAL_MS = 1500L;
 
+    /**
+     * The fastest the privileged fallback runs. Only a pane whose foreground the app cannot read
+     * itself needs it, and its label and ring can afford a few seconds.
+     */
+    static final long PRIVILEGED_MIN_INTERVAL_MS = 5000L;
+
+    /** Direct procfs reads run here, off the main thread. */
+    private static final java.util.concurrent.Executor READER =
+        java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "WindowForeground");
+            thread.setDaemon(true);
+            thread.setPriority(Thread.MIN_PRIORITY);
+            return thread;
+        });
+
     /** How long one poll may be outstanding before the next one is allowed to go anyway. */
     private static final long IN_FLIGHT_TIMEOUT_MS = 8000L;
 
@@ -165,6 +183,8 @@ public final class WindowForegroundResolver {
     @Nullable private final Listener mListener;
 
     private long mLastRunAt;
+    /** When the privileged fallback last ran; touched on the reader thread only. */
+    private volatile long mLastPrivilegedAt = Long.MIN_VALUE / 2;
     private boolean mInFlight;
     private long mInFlightSince;
 
@@ -178,9 +198,9 @@ public final class WindowForegroundResolver {
     }
 
     /**
-     * Request a refresh for the given shell pids. No-op when the privileged backend is unavailable,
-     * a refresh is already in flight, or the throttle window has not elapsed. On completion the
-     * listener fires only if any cached entry changed.
+     * Request a refresh for the given shell pids. No-op when a refresh is already in flight or the
+     * throttle window has not elapsed. On completion, on the main thread, the listener fires only
+     * if any cached entry changed.
      */
     public void refresh(@NonNull List<Integer> pids, long nowMs) {
         if (pids.isEmpty()) return;
@@ -190,21 +210,171 @@ public final class WindowForegroundResolver {
         // cache.
         if (mInFlight && nowMs - mInFlightSince < IN_FLIGHT_TIMEOUT_MS) return;
         if (nowMs - mLastRunAt < MIN_INTERVAL_MS) return;
-        PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
-        if (!manager.isPrivilegedAvailable()) return;
 
         mLastRunAt = nowMs;
         mInFlight = true;
         mInFlightSince = nowMs;
-        String command = buildCommand(pids);
-        java.util.List<Integer> asked = new ArrayList<>(pids);
-        manager.executeCommand(command).whenComplete((output, error) -> {
-            boolean changed = error == null && output != null && applyOutput(output, asked, nowMs);
-            mMainHandler.post(() -> {
-                mInFlight = false;
-                if (changed && mListener != null) mListener.onForegroundResolved();
-            });
+        List<Integer> asked = new ArrayList<>(pids);
+        READER.execute(() -> {
+            DirectRead direct = readDirect(asked, ProcSource.SYSTEM);
+            Route route = route(direct.complete, nowMs - mLastPrivilegedAt);
+            if (route == Route.DIRECT) {
+                deliver(direct.output, asked, nowMs);
+                return;
+            }
+            if (route == Route.WAIT) {
+                // An incomplete direct reading would drop the hidden pane's label until the next
+                // privileged round brought it back: a pill that flickers. Keep the cache instead.
+                deliver(null, asked, nowMs);
+                return;
+            }
+            PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+            if (!manager.isPrivilegedAvailable()) {
+                // No backend at all: the direct reading is the best there is.
+                deliver(direct.output, asked, nowMs);
+                return;
+            }
+            mLastPrivilegedAt = nowMs;
+            manager.executeSharedReadCommand(buildCommand(asked)).whenComplete(
+                (output, error) -> deliver(error == null ? output : null, asked, nowMs));
         });
+    }
+
+    /** Applies a reading on the main thread, where the cache is read, and ends the poll. */
+    private void deliver(@Nullable String output, @NonNull List<Integer> asked, long nowMs) {
+        mMainHandler.post(() -> {
+            mInFlight = false;
+            boolean changed = output != null && applyOutput(output, asked, nowMs);
+            if (changed && mListener != null) mListener.onForegroundResolved();
+        });
+    }
+
+    /** Where one poll gets its reading. */
+    enum Route { DIRECT, PRIVILEGED, WAIT }
+
+    /**
+     * A complete direct reading is always used. One that could not see a pane's foreground goes to
+     * the privileged backend, unless that ran within {@link #PRIVILEGED_MIN_INTERVAL_MS}, in which
+     * case this poll keeps the cache as it is.
+     */
+    @NonNull
+    @VisibleForTesting
+    static Route route(boolean directComplete, long sincePrivilegedMs) {
+        if (directComplete) return Route.DIRECT;
+        return sincePrivilegedMs >= PRIVILEGED_MIN_INTERVAL_MS ? Route.PRIVILEGED : Route.WAIT;
+    }
+
+    /** procfs as the app sees it; a seam for tests. */
+    interface ProcSource {
+        /** The file's contents, or null when it is missing or refused. */
+        @Nullable String read(@NonNull String path);
+
+        /** The numeric entries of /proc the app can see. */
+        @NonNull int[] pids();
+
+        ProcSource SYSTEM = new ProcSource() {
+            @Nullable
+            @Override
+            public String read(@NonNull String path) {
+                try (java.io.FileInputStream in = new java.io.FileInputStream(path)) {
+                    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(256);
+                    byte[] buffer = new byte[4096];
+                    int n;
+                    while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+                    return new String(out.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+                } catch (java.io.IOException | RuntimeException e) {
+                    return null;
+                }
+            }
+
+            @NonNull
+            @Override
+            public int[] pids() {
+                String[] names = new java.io.File("/proc").list();
+                if (names == null) return new int[0];
+                int[] out = new int[names.length];
+                int count = 0;
+                for (String name : names) {
+                    if (name.isEmpty() || !Character.isDigit(name.charAt(0))) continue;
+                    int pid = parseInt(name);
+                    if (pid > 0) out[count++] = pid;
+                }
+                return Arrays.copyOf(out, count);
+            }
+        };
+    }
+
+    /** A direct reading in {@link #buildCommand}'s output format, and whether it saw everything. */
+    static final class DirectRead {
+        @NonNull final String output;
+        /** False when some pane's foreground process could not be read from here. */
+        final boolean complete;
+
+        DirectRead(@NonNull String output, boolean complete) {
+            this.output = output;
+            this.complete = complete;
+        }
+    }
+
+    /**
+     * What {@link #buildCommand}'s script prints, read by the app itself: one {@code pid|x|},
+     * {@code pid|idle|} or {@code pid|fg|tpgid|argv} row per shell, then one {@code g|pgrp|ticks}
+     * row per visible process in any of those foreground groups. The output goes through the same
+     * {@link #applyOutput}, so both routes label a pane the same way.
+     *
+     * <p>Incomplete when a shell names a foreground group whose leader's cmdline cannot be read:
+     * the leader runs as another uid (su, sudo) and hidepid hides it, or a command just exited.
+     */
+    @NonNull
+    @VisibleForTesting
+    static DirectRead readDirect(@NonNull List<Integer> pids, @NonNull ProcSource fs) {
+        StringBuilder out = new StringBuilder();
+        Set<Integer> groups = new HashSet<>();
+        boolean complete = true;
+        for (int pid : pids) {
+            if (pid < 1) continue;
+            String[] fields = statFields(fs.read("/proc/" + pid + "/stat"));
+            if (fields == null) {
+                out.append(pid).append("|x|\n");
+                continue;
+            }
+            int tpgid = fields.length > 5 ? parseInt(fields[5]) : -1;
+            if (tpgid < 1 || tpgid == pid) {
+                out.append(pid).append("|idle|\n");
+                continue;
+            }
+            String cmdline = fs.read("/proc/" + tpgid + "/cmdline");
+            if (cmdline == null || cmdline.isEmpty()) complete = false;
+            String argv = cmdline == null ? "" : cmdline.replace('\0', '\t').trim();
+            groups.add(tpgid);
+            out.append(pid).append("|fg|").append(tpgid).append('|').append(argv).append('\n');
+        }
+        if (!groups.isEmpty()) {
+            for (int pid : fs.pids()) {
+                String[] fields = statFields(fs.read("/proc/" + pid + "/stat"));
+                if (fields == null || fields.length < 13) continue;
+                int group = parseInt(fields[2]);
+                if (!groups.contains(group)) continue;
+                long utime = parseLong(fields[11]);
+                long stime = parseLong(fields[12]);
+                if (utime < 0 || stime < 0) continue;
+                out.append("g|").append(group).append('|').append(utime + stime).append('\n');
+            }
+        }
+        return new DirectRead(out.toString(), complete);
+    }
+
+    /**
+     * The fields after {@code (comm)}, state first, or null when there is no stat. Split after the
+     * last ") ", as the script does, so a comm holding spaces or parentheses cannot shift columns.
+     */
+    @Nullable
+    private static String[] statFields(@Nullable String stat) {
+        if (stat == null) return null;
+        int close = stat.lastIndexOf(") ");
+        if (close < 0) return null;
+        String rest = stat.substring(close + 2).trim();
+        return rest.isEmpty() ? null : rest.split("\\s+");
     }
 
     public void clear() {

@@ -13,8 +13,9 @@ Related: [`CONTEXT.md`](../CONTEXT.md) (a pointer to this file), [`docs/adr/`](a
 ### The wall and its chrome
 
 The wall rework (ADR 0008, agreed 2026-10-17, spec `project-docs/active/wall-rework-2026-10-17.md`)
-is not built yet. The entries here give the agreed words; the code still has three places until the
-rework lands, and the retired words are kept under _Avoid_ so the old prose can be read.
+is built on `feat/wall-rework-phase2`, and the entries here are its words. Some code names still
+say place, Widgets and Terminal (`PaneWallPage`); the retired words are kept under _Avoid_ so the
+old prose can be read.
 
 **A–Z index**:
 The row or column of letters along an edge that jumps the app list to the apps beginning with a
@@ -25,9 +26,12 @@ _Avoid_: alphabet bar (the Layout editor's file names still say `alphabets`), fa
 **Border drag**:
 The one-finger gesture that pages the wall from a **window**, in every mode. It starts on the
 current window's border: the frame line on any of its four sides and the air between it and the next
-thing out, less the corner squares. On the top and bottom air it is a plain sideways swipe. On the
-side borders, and wherever the border reaches into the window, it is a hold and then a sideways drag.
-The edge lights in the accent colour where a finger can page. A **Home page** has no border: it pages
+thing out, less the corner squares. Anywhere on it outside the window's text (the air on all four
+sides, and the side borders' 2 dp of clearance inside the frame) it is a plain sideways swipe that
+pages at once, past the touch slop, with no hold. A hold there still starts it too. Where the border
+reaches further into the window (a window almost flush with the wall) it is a hold and then a
+sideways drag, and a drag that starts in the terminal's text is the terminal's. The edge lights in
+the accent colour inside the frame where a finger can page. A **Home page** has no border: it pages
 by a plain swipe anywhere on it, as any launcher does. Reach, hold, glow and tilt are
 specified in `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: edge swipe, status bar swipe, page swipe
@@ -207,8 +211,9 @@ _Avoid_: terminal icon (in prose), Create Pane, Open Workspace
 
 **Titlebar**:
 The translucent glass strip along the top of every floating pane, Home float and the scratchpad:
-the drag handle and Minimise, Maximise, Close and Dock. It replaces the floating pane's move corner
-and pill; resizing stays at the bottom-right corner.
+the drag handle and Minimise, Maximise and Close; Dock is in the menu a long press on the handle
+opens. It replaces the floating pane's move corner and pill; resizing stays at the bottom-right
+corner.
 _Avoid_: pill (the retired control; the dictation pill is another thing), header, handle bar
 
 **Wall**:

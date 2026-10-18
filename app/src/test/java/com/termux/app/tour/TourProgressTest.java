@@ -52,10 +52,31 @@ public class TourProgressTest {
 
     @Test public void aDroppedLessonIsNotDrawnAndItsChapterRecounts() {
         TourProgress progress = TourProgress.of(RUN,
-            Collections.singleton(TourRun.BORDER_DRAG), 1, false);
+            Collections.singleton(TourRun.PAGE_SWIPE), 1, false);
         assertEquals(Arrays.asList(Collections.singletonList(C), Arrays.asList(T, T),
             Arrays.asList(T, T)), progress.groups);
         assertEquals(1, progress.chapterNumber);
         assertEquals(3, progress.chapterCount);
+    }
+
+    @Test public void aWallWithoutHomeShowsTwoChaptersFromTheWorkspace() {
+        TourProgress progress = TourProgress.of(RUN,
+            new java.util.HashSet<>(TourRun.droppedFor(false, true)), 2, false);
+        assertEquals(Arrays.asList(Arrays.asList(C, T), Arrays.asList(T, T)), progress.groups);
+        assertEquals(1, progress.chapterNumber);
+        assertEquals(2, progress.chapterCount);
+        // Chapter one of that run is the Workspace, and its first lesson starts on a window.
+        assertEquals(TourStep.Side.WORKSPACE, TourRun.startSide(RUN.get(2)));
+    }
+
+    @Test public void eachChapterStartsOnOneHalf() {
+        // Home's chapter starts on Home, the Workspace's on a window; the chapter label and the
+        // half the wall is put on agree at every chapter's first lesson.
+        assertEquals(TourStep.Side.HOME, TourRun.startSide(RUN.get(0)));
+        assertEquals(1, TourProgress.of(RUN, null, 0, false).chapterNumber);
+        assertEquals(TourStep.Side.WORKSPACE, TourRun.startSide(RUN.get(2)));
+        assertEquals(2, TourProgress.of(RUN, null, 2, false).chapterNumber);
+        assertEquals(3, TourProgress.of(RUN, null, 4, false).chapterNumber);
+        assertEquals(TourStep.Side.WORKSPACE, TourRun.startSide(RUN.get(5)));
     }
 }

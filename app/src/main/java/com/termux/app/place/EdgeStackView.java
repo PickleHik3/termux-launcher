@@ -131,6 +131,33 @@ public class EdgeStackView extends LinearLayout {
     }
 
     /**
+     * Lets {@code content}, the weighted sibling after this stack in a vertical
+     * {@link LinearLayout} column, reach up under the stack by {@code overlapPx}
+     * ({@link EdgeStackPolicy#topOverlapPx}), with the stack raised one Z step so it draws and takes
+     * touches over what it covers. 0 gives the content its own row back.
+     *
+     * <p>A negative top margin alone only slides the content up: {@code LinearLayout} clamps a
+     * negative margin out of the length it hands the weighted children, so the content kept losing
+     * the stack's height at its bottom. The content therefore asks for the overlap as its base
+     * height as well — base plus margin cost the column nothing, and the weight adds the rest — so
+     * it keeps exactly the bounds it has without the stack.
+     *
+     * @return whether the content's layout changed
+     */
+    public boolean overlayFollowing(@NonNull View content, int overlapPx) {
+        int overlap = Math.max(0, overlapPx);
+        float z = overlap > 0 ? 1f : 0f;
+        if (getTranslationZ() != z) setTranslationZ(z);
+        if (!(content.getLayoutParams() instanceof LinearLayout.LayoutParams)) return false;
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) content.getLayoutParams();
+        if (params.topMargin == -overlap && params.height == overlap) return false;
+        params.topMargin = -overlap;
+        params.height = overlap;
+        content.setLayoutParams(params);
+        return true;
+    }
+
+    /**
      * The hairline's look: the dock's own outline colour at the material's alpha, a hairline thick,
      * and held off the sheet's sides by the same inset the bands themselves keep.
      */

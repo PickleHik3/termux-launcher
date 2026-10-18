@@ -280,6 +280,70 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         setAppLauncherDockStyle(style.storageValue());
     }
 
+    // ---- Style, Corners and Margin per half of the wall (ADR 0008) ----
+    //
+    // The Workspace's are the keys every surface always read; Home's are their own keys beside
+    // them (TERMUX_APP.KEY_HOME_*). A Home value never written reads the Workspace's, so an
+    // upgrade looks as it did and Home follows the Workspace until the user sets Home apart.
+
+    /** Whether Home's value under {@code key} has been written, and so no longer follows the Workspace's. */
+    private boolean isHomeShapeSet(@NonNull String key) {
+        return mSharedPreferences != null && mSharedPreferences.contains(key);
+    }
+
+    /** The Style a half wears: Home's for {@code home}, else the Workspace's {@link #getLayoutStyle()}. */
+    @NonNull
+    public LayoutStyle getLayoutStyle(boolean home) {
+        if (!home || !isHomeShapeSet(TERMUX_APP.KEY_HOME_LAYOUT_STYLE))
+            return getLayoutStyle();
+        return LayoutStyle.parse(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_HOME_LAYOUT_STYLE, TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_STYLE, true));
+    }
+
+    public void setLayoutStyle(boolean home, @NonNull LayoutStyle style) {
+        if (!home) {
+            setLayoutStyle(style);
+            return;
+        }
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_HOME_LAYOUT_STYLE,
+            style.storageValue(), false);
+    }
+
+    /** Corners for a half, in dp as stored (-1 is auto): Home's for {@code home}, else Base's. */
+    public int getLayoutCornersDp(boolean home) {
+        return homeOrBase(home, TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS,
+            SurfaceProperty.CORNER_RADIUS);
+    }
+
+    public void setLayoutCornersDp(boolean home, int dp) {
+        writeHomeOrBase(home, TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS,
+            SurfaceProperty.CORNER_RADIUS, dp);
+    }
+
+    /** Margin for a half, in dp as stored: Home's for {@code home}, else Base's side gap. */
+    public int getLayoutMarginDp(boolean home) {
+        return homeOrBase(home, TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, SurfaceProperty.SIDE_GAP);
+    }
+
+    public void setLayoutMarginDp(boolean home, int dp) {
+        writeHomeOrBase(home, TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, SurfaceProperty.SIDE_GAP, dp);
+    }
+
+    private int homeOrBase(boolean home, @NonNull String homeKey, @NonNull SurfaceProperty property) {
+        int base = getSurfaceBaseValue(property);
+        if (!home || !isHomeShapeSet(homeKey))
+            return base;
+        return SharedPreferenceUtils.getInt(mSharedPreferences, homeKey, base);
+    }
+
+    private void writeHomeOrBase(boolean home, @NonNull String homeKey,
+                                 @NonNull SurfaceProperty property, int dp) {
+        if (home)
+            SharedPreferenceUtils.setInt(mSharedPreferences, homeKey, dp, false);
+        else
+            setSurfaceBaseValue(property, dp);
+    }
+
     /**
      * The Style of the whole chrome: Docked joins every piece flush into one frame around the
      * pane's opening; Floating sets each card apart with Margin's air between.
@@ -1139,16 +1203,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, value, false);
     }
 
-    public boolean isX11DisplayEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_X11_DISPLAY_ENABLED, TERMUX_APP.DEFAULT_X11_DISPLAY_ENABLED);
-    }
-
-    public void setX11DisplayEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_X11_DISPLAY_ENABLED, value, false);
-    }
-
     @NonNull
     public String getX11DisplayCommand() {
         String value = SharedPreferenceUtils.getString(mSharedPreferences,
@@ -1289,17 +1343,41 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_DEFAULTS_APPLIED, value, false);
     }
 
-    /** The name of the wall place last rested on, or null when none was recorded. */
-    @Nullable
-    public String getWallLastPage() {
+    /** Start in: {@code home} (Home page 1, the default) or {@code workspace}. */
+    @NonNull
+    public String getLauncherStartIn() {
         String value = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_WALL_LAST_PAGE, null, false);
-        return value == null || value.trim().isEmpty() ? null : value.trim();
+            TERMUX_APP.KEY_LAUNCHER_START_IN, TERMUX_APP.DEFAULT_LAUNCHER_START_IN, true);
+        return TERMUX_APP.LAUNCHER_START_IN_WORKSPACE.equals(value)
+            ? TERMUX_APP.LAUNCHER_START_IN_WORKSPACE : TERMUX_APP.LAUNCHER_START_IN_HOME;
     }
 
-    public void setWallLastPage(@Nullable String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_WALL_LAST_PAGE,
-            value == null ? "" : value, false);
+    public void setLauncherStartIn(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_LAUNCHER_START_IN,
+            TERMUX_APP.LAUNCHER_START_IN_WORKSPACE.equals(value)
+                ? TERMUX_APP.LAUNCHER_START_IN_WORKSPACE : TERMUX_APP.LAUNCHER_START_IN_HOME,
+            false);
+    }
+
+    /** The palette gesture on Home: {@code swipe_up} (the default) or {@code off}. */
+    @NonNull
+    public String getHomePaletteGesture() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_HOME_PALETTE_GESTURE, TERMUX_APP.DEFAULT_HOME_PALETTE_GESTURE, true);
+        return TERMUX_APP.HOME_PALETTE_GESTURE_OFF.equals(value)
+            ? TERMUX_APP.HOME_PALETTE_GESTURE_OFF : TERMUX_APP.HOME_PALETTE_GESTURE_SWIPE_UP;
+    }
+
+    public void setHomePaletteGesture(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_HOME_PALETTE_GESTURE,
+            TERMUX_APP.HOME_PALETTE_GESTURE_OFF.equals(value)
+                ? TERMUX_APP.HOME_PALETTE_GESTURE_OFF : TERMUX_APP.HOME_PALETTE_GESTURE_SWIPE_UP,
+            false);
+    }
+
+    /** Whether the keyboard swipe up on a Home page opens the palette. */
+    public boolean isHomePaletteGestureEnabled() {
+        return !TERMUX_APP.HOME_PALETTE_GESTURE_OFF.equals(getHomePaletteGesture());
     }
 
     /** Whether the user has ever set the display's text size; unset reads as the default 0. */
@@ -1320,40 +1398,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             value == null ? TERMUX_APP.DEFAULT_X11_RUNTIME_BADGE : value.trim(), false);
     }
 
-    /**
-     * The stored usage mode as written, or null when nothing was ever stored. Raw on purpose: the
-     * older two-way switch's "launcher" and any unknown value are mapped by
-     * {@code LauncherUseCaseMode}, which is the one reader that knows what they mean.
-     */
-    @Nullable
-    public String getAppLauncherUseCaseMode() {
-        String value = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE, null, true);
-        return value == null || value.trim().isEmpty() ? null : value.trim();
-    }
-
-    public void setAppLauncherUseCaseMode(@Nullable String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE,
-            value == null ? TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_MODE : value.trim(), false);
-    }
-
-    /** The terminal-alone mode, read straight off the store; the mapped answer is {@code LauncherUseCaseMode}'s. */
-    public boolean isTerminalOnlyUseCase() {
-        return TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(getAppLauncherUseCaseMode());
-    }
-
-    public String getAppLauncherUseCaseSnapshot() {
-        return SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT, true);
-    }
-
-    public void setAppLauncherUseCaseSnapshot(String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT,
-            value == null ? TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT : value, false);
-    }
 
     public boolean isAppLauncherNotificationDotsEnabled() {
         return isAppLauncherAppsRowEnabled() && SharedPreferenceUtils.getBoolean(

@@ -8,7 +8,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Which places the wall has, and where a horizontal drag lands. Pure and tested; the layout is
+ * Which stretches the row has, and where a horizontal drag lands. Pure and tested; the layout is
  * dumb enough to just apply the answer.
  *
  * <p>The commit thresholds are the ones the status bar's pull-down already uses, so a page swipe
@@ -45,11 +45,8 @@ public final class PaneWallPolicy {
     private PaneWallPolicy() {}
 
     /**
-     * The places this install has, in spatial order. The terminal is always there — it is the
-     * home screen. The usage mode decides the rest: terminal mode is the terminal alone; a home
-     * screen adds the Widgets place while the widget pane is on; the display mode adds the
-     * Display place. A place is on the wall only while its own switch is on — the Display place
-     * is not built at all while the display is off, whatever the build carries.
+     * The page kinds of the old three-place wall, for the callers that still ask by usage mode
+     * (the extra keys' wall row). The wall itself is built from {@link #rowPages}.
      *
      * @param terminalOnly   the terminal-only usage mode: no home surfaces at all
      * @param widgetsEnabled the widget pane is switched on
@@ -65,21 +62,80 @@ public final class PaneWallPolicy {
         return Collections.unmodifiableList(pages);
     }
 
-    /** The page {@code pages} shows at rest on a cold start, and where Home returns to. */
+    /**
+     * The wall's row, by the kind of page that stands in each stretch of it (ADR 0008): the Home
+     * pages first, always there; then the Workspace's windows, only while the current session
+     * has one; then the display window while a display is up. A Home page and a window are each
+     * one entry here however many of them there are: the Home pages page inside the widget grid
+     * and the windows inside the terminal ({@link WallRow}), and the wall only slides between the
+     * stretches.
+     *
+     * @param hasWindow the current session has at least one window
+     * @param displayUp a display is up: running, or asked for and starting. Nothing switches it
+     *                  on; it comes and goes with the display itself.
+     */
     @NonNull
-    public static PaneWallPage homePage() {
-        return PaneWallPage.TERMINAL;
+    public static List<PaneWallPage> rowPages(boolean hasWindow, boolean displayUp) {
+        List<PaneWallPage> pages = new ArrayList<>(3);
+        pages.add(PaneWallPage.WIDGETS);
+        if (hasWindow) pages.add(PaneWallPage.TERMINAL);
+        if (displayUp) pages.add(PaneWallPage.DISPLAY);
+        return Collections.unmodifiableList(pages);
     }
 
     /**
-     * Whether the wall wraps. Three places make a ring — past the Display page comes the Widgets
-     * page, and the other way round — so every place is one step from every other and the two
-     * tiles in the status bar are always "the place to my left" and "the place to my right".
-     * Two places cannot form a ring (the one other page cannot be on both sides at once), so a
-     * two-page wall stays a line with an end.
+     * Where the wall goes when the page it rests on leaves the row: the nearest page to its left
+     * that is still there. The display going down lands on the windows, or on Home when there is
+     * no window; the last window closing lands on Home. A page the old row did not have hands
+     * over to Home.
+     *
+     * @param before the row as it was
+     * @param after  the row as it is now
+     * @param gone   the page the wall rested on, no longer in {@code after}
+     */
+    @NonNull
+    public static PaneWallPage pageAfterRemoval(@NonNull List<PaneWallPage> before,
+                                                @NonNull List<PaneWallPage> after,
+                                                @NonNull PaneWallPage gone) {
+        for (int i = before.indexOf(gone) - 1; i >= 0; i--) {
+            if (after.contains(before.get(i))) return before.get(i);
+        }
+        if (after.contains(homePage())) return homePage();
+        return after.isEmpty() ? homePage() : after.get(0);
+    }
+
+    /** The stretch the home press lands on, and where a page taken away hands the wall: Home. */
+    @NonNull
+    public static PaneWallPage homePage() {
+        return PaneWallPage.WIDGETS;
+    }
+
+    /**
+     * How far {@code page} stands in from the wall's edge on one side, in px, from the terminal
+     * page's margin there ({@code terminalMarginPx}, the chrome shape's opening plus the terminal
+     * border's own air) and that air ({@code terminalFrameAirPx}). A window keeps its whole
+     * margin. The Display page stands at the opening itself, the margin less the air. A Home page
+     * has no frame (HomeChromePolicy#bordersShown), so it stands at none: it reaches the wall's
+     * edge and its content keeps Home's Margin as its own rim, the widget grid's, which makes the
+     * air from the screen's edge to the first cell exactly one Margin, as the dock's cards and the
+     * Home floats' room have it. Standing it in the opening as well had the grid's rim inside the
+     * opening's Margin: two Margins of air, and the caps worked out on a grid a Margin narrower.
+     * {@code null} is a page the wall does not know, kept at the opening as before.
+     */
+    public static int pageInsetPx(@Nullable PaneWallPage page, int terminalMarginPx,
+                                  int terminalFrameAirPx) {
+        if (page == PaneWallPage.TERMINAL) return terminalMarginPx;
+        if (page == homePage()) return 0;
+        return Math.max(0, terminalMarginPx - Math.max(0, terminalFrameAirPx));
+    }
+
+    /**
+     * Whether the wall wraps. It used to, with three places; the row is a line now, Home pages on
+     * the left and the Workspace on the right, so it never does. Kept so the arithmetic below
+     * reads the same for a line of any length.
      */
     public static boolean isRing(@NonNull List<PaneWallPage> pages) {
-        return pages.size() >= 3;
+        return false;
     }
 
     /**
@@ -246,10 +302,12 @@ public final class PaneWallPolicy {
                 return neighbour(pages, current, -1);
             case "right":
                 return neighbour(pages, current, 1);
+            case "home":
             case "widgets":
                 return pages.contains(PaneWallPage.WIDGETS) ? PaneWallPage.WIDGETS : null;
+            case "workspace":
             case "terminal":
-                return PaneWallPage.TERMINAL;
+                return pages.contains(PaneWallPage.TERMINAL) ? PaneWallPage.TERMINAL : null;
             case "display":
                 return pages.contains(PaneWallPage.DISPLAY) ? PaneWallPage.DISPLAY : null;
             default:
