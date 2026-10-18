@@ -33,7 +33,7 @@ import java.util.Set;
 public final class TourController {
 
     /** Bumped when the run changes enough that a run in progress has to be restarted on this one. */
-    public static final int RUN_VERSION = 7;
+    public static final int RUN_VERSION = 8;
 
     /**
      * The run before the welcome card. It is what the legacy migration records, so an install

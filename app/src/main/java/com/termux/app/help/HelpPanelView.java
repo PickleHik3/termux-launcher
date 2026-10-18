@@ -525,7 +525,7 @@ public final class HelpPanelView extends FrameLayout {
     private static int lessonTitle(String lessonId) {
         switch (lessonId) {
             case HelpTopics.LESSON_FIND_HELP: return R.string.help_lesson_find_help_title;
-            case HelpTopics.LESSON_BORDER_DRAG: return R.string.help_lesson_border_drag_title;
+            case HelpTopics.LESSON_PAGE_SWIPE: return R.string.help_lesson_border_drag_title;
             case HelpTopics.LESSON_STATUS_SWIPE: return R.string.help_lesson_status_swipe_title;
             case HelpTopics.LESSON_FIND_APPS: return R.string.help_lesson_find_apps_title;
             case HelpTopics.LESSON_KEYBOARD: return R.string.help_lesson_keyboard_title;
@@ -537,7 +537,7 @@ public final class HelpPanelView extends FrameLayout {
     private static int lessonSummary(String lessonId) {
         switch (lessonId) {
             case HelpTopics.LESSON_FIND_HELP: return R.string.help_lesson_find_help_summary;
-            case HelpTopics.LESSON_BORDER_DRAG: return R.string.help_lesson_border_drag_summary;
+            case HelpTopics.LESSON_PAGE_SWIPE: return R.string.help_lesson_border_drag_summary;
             case HelpTopics.LESSON_STATUS_SWIPE: return R.string.help_lesson_status_swipe_summary;
             case HelpTopics.LESSON_FIND_APPS: return R.string.help_lesson_find_apps_summary;
             case HelpTopics.LESSON_KEYBOARD: return R.string.help_lesson_keyboard_summary;

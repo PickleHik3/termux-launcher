@@ -91,17 +91,27 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         }
     }
 
-    /** The home screen, for the two things the run asks of it. */
+    /** The wall, for the things the run asks of it. */
     public interface HomeHost {
         /**
-         * Back to how every lesson starts: the terminal place, the keyboard up, and the drawer,
-         * the palette, the status shade, help and the corner menu closed. Each through the
-         * launcher's own call for it, animated as the launcher animates it.
+         * Back to how every lesson starts, which is what the home press does: Home page 1, the
+         * keyboard down there, and the palette, the drawer, the status bar's unfolded form, help
+         * and the corner tabs closed. The Workspace's keyboard is left up for the window the run
+         * lands on next. Each through the launcher's own call for it, animated as the launcher
+         * animates it.
          */
         void resetHome();
 
-        /** Whether the wall has one place only, so there is nowhere to drag the border to. */
+        /**
+         * Whether the wall has no Workspace window beside Home to slide to, so there is no seam
+         * to cross and no border to drag back.
+         */
         boolean hasOnePlace();
+
+        /** Whether Home is on the wall, with its free area and the dock rows over it. */
+        default boolean hasHome() {
+            return true;
+        }
     }
 
     /** The setup sheet the run is offered on. The activity owns it: it asks for permissions. */
@@ -124,10 +134,10 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     /**
-     * The page the run is taught on: the Workspace's window, as before the wall rework (the home
-     * press lands on Home now, but the tour teaches the terminal).
+     * Home's page on the wall, where the run starts and where it puts the wall back between
+     * lessons; every other page is the Workspace.
      */
-    public static final String HOME_PLACE = com.termux.app.wall.PaneWallPage.TERMINAL.name();
+    public static final String HOME_PLACE = com.termux.app.wall.PaneWallPage.WIDGETS.name();
 
     @NonNull private final Activity mActivity;
     @NonNull private final TourController mController;
@@ -286,13 +296,16 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
 
     /**
      * The run, built for the phone it is about to run on: the apps row's edge decides the drawer
-     * lesson's sentence, and a wall with one place has no border to drag across.
+     * lesson's sentence, a wall with no Workspace window has no seam to cross, and a wall without
+     * Home has no Home lessons at all.
      */
     private void rebuildRunForThisPhone() {
         mController.setSteps(TourRun.steps(new TourRun.RunContext(
             mChromeProbe == null ? com.termux.app.place.PlaceLayout.Edge.BOTTOM
                 : mChromeProbe.appsEdge())));
-        if (mHomeHost != null && mHomeHost.hasOnePlace()) mController.dropStep(TourRun.BORDER_DRAG);
+        if (mHomeHost == null) return;
+        for (String dropped : TourRun.droppedFor(mHomeHost.hasHome(), !mHomeHost.hasOnePlace()))
+            mController.dropStep(dropped);
     }
 
     /**
@@ -450,8 +463,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         if (overlay == null) return;
         TourStep step = mController.currentStep();
         java.util.EnumSet<TourChrome> chrome = chromeUp();
-        int presentation = TourCardVisibility.decide(step, chrome, mSignals.isOnHomePlace(),
-            mController.isCompleting());
+        int presentation = TourCardVisibility.decide(step, mController.currentStage(), chrome,
+            mSignals.wallSide(), mController.isCompleting());
         if (presentation != mPresentation) {
             mPresentation = presentation;
             TourLog.d("card " + (step == null ? "none" : step.id + ":" + mController.currentStage())
@@ -479,7 +492,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @NonNull
     private static String describePresentation(int presentation) {
         if (presentation == TourCardVisibility.HIDDEN) return "hidden";
-        if (presentation == TourCardVisibility.AWAY) return "asking for the way back to the terminal";
+        if (presentation == TourCardVisibility.AWAY) return "asking the way to the other half";
         if (presentation == TourCardVisibility.COMPLETED) return "saying it is done";
         return "against its control";
     }
@@ -760,6 +773,14 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
 
     @Override
     public void onTourSignal(String signalId) {
+        // A stage is cleared only by a gesture made on the half of the wall it is taught on: the
+        // keyboard going down as the wall slides to Home is not the keyboard swipe on a window.
+        TourStep step = mController.currentStep();
+        if (step != null && !step.isTaughtOn(mController.currentStage(), mSignals.sideOfSignal())) {
+            TourLog.d("signal " + signalId + " while card " + describeCurrent()
+                + " — ignored: it happened on the other half of the wall");
+            return;
+        }
         if (!TourLog.enabled()) {
             mController.onSignal(signalId);
             return;

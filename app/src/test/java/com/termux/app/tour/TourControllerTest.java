@@ -94,8 +94,8 @@ public class TourControllerTest {
         controller.start();
         assertTrue(controller.showMeAround());
         assertFalse(controller.isShowingSetup());
-        assertEquals(TourRun.BORDER_DRAG + ":0", current());
-        assertEquals(cardNumber(TourRun.BORDER_DRAG), prefs.stepIndex);
+        assertEquals(TourRun.PAGE_SWIPE + ":0", current());
+        assertEquals(cardNumber(TourRun.PAGE_SWIPE), prefs.stepIndex);
         assertEquals(TourController.RUN_VERSION, prefs.runVersion);
         assertEquals(0, prefs.completedVersion);
     }
@@ -116,19 +116,18 @@ public class TourControllerTest {
         controller.showMeAround();
         assertFalse(controller.showMeAround());
         assertFalse(controller.skipTheTour());
-        assertEquals(TourRun.BORDER_DRAG + ":0", current());
+        assertEquals(TourRun.PAGE_SWIPE + ":0", current());
     }
 
     // ---- lessons ---------------------------------------------------------------------------------
 
     @Test public void aClearedLessonSaysGotItBeforeTheRunMovesOn() {
-        controller.start();
-        controller.showMeAround();
+        controller.startAt(TourRun.FIND_APPS);
         doTheGesture();
         assertTrue(controller.isCompleting());
-        assertEquals(Arrays.asList(TourRun.BORDER_DRAG), listener.completed);
+        assertEquals(Arrays.asList(TourRun.FIND_APPS), listener.completed);
         // Still the same card while it says so, and the stored card has already moved on.
-        assertEquals(TourRun.BORDER_DRAG + ":1", current());
+        assertEquals(TourRun.FIND_APPS + ":1", current());
         assertEquals(cardNumber(TourRun.KEYBOARD), prefs.stepIndex);
         controller.continueAfterCompletion();
         assertEquals(TourRun.KEYBOARD + ":0", current());
@@ -138,14 +137,26 @@ public class TourControllerTest {
     @Test public void aTwoStageLessonSwapsWithoutCelebratingItsFirstHalf() {
         controller.start();
         controller.showMeAround();
-        clearTheLesson();
-        assertEquals(TourRun.KEYBOARD + ":0", current());
+        assertEquals(TourRun.PAGE_SWIPE + ":0", current());
         arm();
+        controller.onSignal(TourSignals.SEAM_TO_WORKSPACE);
+        assertEquals(TourRun.PAGE_SWIPE + ":1", current());
+        assertFalse(controller.isCompleting());
+        assertTrue(listener.completed.isEmpty());
+        assertEquals(1, prefs.stage);
+        arm();
+        controller.onSignal(TourSignals.SEAM_TO_HOME);
+        assertTrue(controller.isCompleting());
+        assertEquals(Arrays.asList(TourRun.PAGE_SWIPE), listener.completed);
+    }
+
+    @Test public void theKeyboardLessonIsTheSwipeAwayThenBack() {
+        controller.startAt(TourRun.KEYBOARD);
+        arm();
+        controller.onSignal(TourSignals.KEYBOARD_SHOWN);
+        assertEquals("bring it back is the second half", TourRun.KEYBOARD + ":0", current());
         controller.onSignal(TourSignals.KEYBOARD_HIDDEN);
         assertEquals(TourRun.KEYBOARD + ":1", current());
-        assertFalse(controller.isCompleting());
-        assertEquals(Arrays.asList(TourRun.BORDER_DRAG), listener.completed);
-        assertEquals(1, prefs.stage);
         arm();
         controller.onSignal(TourSignals.KEYBOARD_SHOWN);
         assertTrue(controller.isCompleting());
@@ -176,14 +187,13 @@ public class TourControllerTest {
     }
 
     @Test public void signalsWhileArmingWhileSayingGotItOrOutOfTurnAreIgnored() {
-        controller.start();
-        controller.showMeAround();
-        controller.onSignal(TourSignals.PLACE_CHANGED);
-        assertEquals("still arming", TourRun.BORDER_DRAG + ":0", current());
+        controller.startAt(TourRun.FIND_APPS);
+        controller.onSignal(TourSignals.DRAWER_OPENED);
+        assertEquals("still arming", TourRun.FIND_APPS + ":0", current());
         arm();
         controller.onSignal(TourSignals.KEYBOARD_HIDDEN);
-        assertEquals("not this card's", TourRun.BORDER_DRAG + ":0", current());
-        controller.onSignal(TourSignals.PLACE_CHANGED);
+        assertEquals("not this card's", TourRun.FIND_APPS + ":0", current());
+        controller.onSignal(TourSignals.DRAWER_OPENED);
         assertTrue(controller.isCompleting());
         arm();
         controller.onSignal(TourSignals.KEYBOARD_HIDDEN);
@@ -195,17 +205,16 @@ public class TourControllerTest {
         controller.start();
         controller.showMeAround();
         controller.skip();
-        assertEquals(TourRun.KEYBOARD + ":0", current());
+        assertEquals(TourRun.FIND_APPS + ":0", current());
         assertTrue(controller.wasSkipped());
         assertTrue(listener.completed.isEmpty());
     }
 
     @Test public void skipIsIgnoredWhileSayingGotIt() {
-        controller.start();
-        controller.showMeAround();
+        controller.startAt(TourRun.FIND_APPS);
         doTheGesture();
         controller.skip();
-        assertEquals(TourRun.BORDER_DRAG + ":1", current());
+        assertEquals(TourRun.FIND_APPS + ":1", current());
         assertFalse(controller.wasSkipped());
     }
 
@@ -221,14 +230,21 @@ public class TourControllerTest {
         assertEquals(TourRun.CLOSING + ":0", current());
     }
 
-    // ---- a phone with one place ------------------------------------------------------------------
+    // ---- a wall with nothing beside Home, or no Home ----------------------------------------------
 
     @Test public void aDroppedLessonIsWalkedPast() {
-        controller.dropStep(TourRun.BORDER_DRAG);
+        controller.dropStep(TourRun.PAGE_SWIPE);
+        controller.start();
+        controller.showMeAround();
+        assertEquals(TourRun.FIND_APPS + ":0", current());
+        assertFalse(controller.startPractice(TourRun.PAGE_SWIPE));
+    }
+
+    @Test public void withoutHomeTheRunStartsInTheWorkspace() {
+        for (String id : TourRun.droppedFor(false, true)) controller.dropStep(id);
         controller.start();
         controller.showMeAround();
         assertEquals(TourRun.KEYBOARD + ":0", current());
-        assertFalse(controller.startPractice(TourRun.BORDER_DRAG));
     }
 
     // ---- resume and the version rule -------------------------------------------------------------
@@ -236,16 +252,15 @@ public class TourControllerTest {
     @Test public void aRunIsPickedUpOnItsCardFromItsFirstHalf() {
         controller.start();
         controller.showMeAround();
-        clearTheLesson();
         arm();
-        controller.onSignal(TourSignals.KEYBOARD_HIDDEN);
+        controller.onSignal(TourSignals.SEAM_TO_WORKSPACE);
         assertEquals(1, prefs.stage);
 
         controller = newController();
         listener.shown.clear();
         assertTrue(controller.resumeIfInProgress());
-        assertEquals(TourRun.KEYBOARD + ":0", current());
-        assertEquals(Arrays.asList(TourRun.KEYBOARD + ":0"), listener.shown);
+        assertEquals(TourRun.PAGE_SWIPE + ":0", current());
+        assertEquals(Arrays.asList(TourRun.PAGE_SWIPE + ":0"), listener.shown);
         assertEquals("the sheet is not shown again", 1, listener.setupShown);
     }
 
@@ -253,9 +268,11 @@ public class TourControllerTest {
         controller.start();
         controller.showMeAround();
         doTheGesture();
+        doTheGesture();
+        assertTrue(controller.isCompleting());
         controller = newController();
         assertTrue(controller.resumeIfInProgress());
-        assertEquals(TourRun.KEYBOARD + ":0", current());
+        assertEquals(TourRun.FIND_APPS + ":0", current());
     }
 
     @Test public void anOlderRunInProgressRestartsAtTheFirstLessonWithoutTheSheet() {
@@ -263,7 +280,7 @@ public class TourControllerTest {
         prefs.stepIndex = 4;
         prefs.stage = 1;
         assertTrue(controller.resumeIfInProgress());
-        assertEquals(TourRun.BORDER_DRAG + ":0", current());
+        assertEquals(TourRun.PAGE_SWIPE + ":0", current());
         assertEquals(0, listener.setupShown);
         assertEquals(TourController.RUN_VERSION, prefs.runVersion);
     }
@@ -285,7 +302,7 @@ public class TourControllerTest {
         assertTrue(controller.start());
         assertTrue(controller.isShowingSetup());
         controller.showMeAround();
-        assertEquals(TourRun.BORDER_DRAG + ":0", current());
+        assertEquals(TourRun.PAGE_SWIPE + ":0", current());
     }
 
     @Test public void nothingToResumeWritesNothing() {
@@ -333,7 +350,7 @@ public class TourControllerTest {
         controller.start();
         controller.showMeAround();
         assertFalse(controller.startPractice(TourRun.KEYBOARD));
-        assertEquals(TourRun.BORDER_DRAG + ":0", current());
+        assertEquals(TourRun.PAGE_SWIPE + ":0", current());
     }
 
     // ---- progress --------------------------------------------------------------------------------

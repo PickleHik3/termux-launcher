@@ -52,10 +52,18 @@ public class TourProgressTest {
 
     @Test public void aDroppedLessonIsNotDrawnAndItsChapterRecounts() {
         TourProgress progress = TourProgress.of(RUN,
-            Collections.singleton(TourRun.BORDER_DRAG), 1, false);
+            Collections.singleton(TourRun.PAGE_SWIPE), 1, false);
         assertEquals(Arrays.asList(Collections.singletonList(C), Arrays.asList(T, T),
             Arrays.asList(T, T)), progress.groups);
         assertEquals(1, progress.chapterNumber);
         assertEquals(3, progress.chapterCount);
+    }
+
+    @Test public void aWallWithoutHomeShowsTwoChaptersFromTheWorkspace() {
+        TourProgress progress = TourProgress.of(RUN,
+            new java.util.HashSet<>(TourRun.droppedFor(false, true)), 2, false);
+        assertEquals(Arrays.asList(Arrays.asList(C, T), Arrays.asList(T, T)), progress.groups);
+        assertEquals(1, progress.chapterNumber);
+        assertEquals(2, progress.chapterCount);
     }
 }

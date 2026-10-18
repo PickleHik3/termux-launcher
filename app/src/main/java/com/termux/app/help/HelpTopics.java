@@ -60,8 +60,8 @@ public final class HelpTopics {
 
     /** Hold a corner, then tap ? — the lesson that teaches where help lives. */
     public static final String LESSON_FIND_HELP = "find_help";
-    /** Hold the page's border and drag sideways to the next place. */
-    public static final String LESSON_BORDER_DRAG = "border_drag";
+    /** Swipe across the seam into the Workspace, and border-drag back to Home. */
+    public static final String LESSON_PAGE_SWIPE = "page_swipe";
     /** Pull the apps row away from its edge to open the drawer. */
     public static final String LESSON_FIND_APPS = "find_apps";
     /** Put the keyboard away with a swipe off the bottom border, and bring it back. */
@@ -72,7 +72,7 @@ public final class HelpTopics {
     public static final String LESSON_FIND_ACTION = "find_action";
     /** The only lessons a topic may hand practice to: the run's own, under the run's ids. */
     public static final List<String> LESSON_IDS = Collections.unmodifiableList(Arrays.asList(
-        LESSON_FIND_HELP, LESSON_BORDER_DRAG, LESSON_KEYBOARD, LESSON_STATUS_SWIPE,
+        LESSON_FIND_HELP, LESSON_PAGE_SWIPE, LESSON_KEYBOARD, LESSON_STATUS_SWIPE,
         LESSON_FIND_APPS, LESSON_FIND_ACTION));
 
     /** One topic, and everything help knows to say about it. */
@@ -210,7 +210,7 @@ public final class HelpTopics {
             .wayBack(R.string.help_topic_places_back)
             .target("border", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS)
             .gesture(TourGesture.HOLD_DRAG)
-            .lesson(LESSON_BORDER_DRAG)
+            .lesson(LESSON_PAGE_SWIPE)
             .related("status", "corners", "keyboard_swipe").terms("place", "border_drag")
             .aliases(R.string.help_topic_places_aliases)
             .doc("Widgets.md"));
