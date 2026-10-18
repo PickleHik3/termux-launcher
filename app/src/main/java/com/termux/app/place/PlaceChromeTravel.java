@@ -33,10 +33,21 @@ public final class PlaceChromeTravel {
         public final boolean keyboardUp;
         /** Whether the place is in minimal mode, which puts the dock and the keyboard away. */
         public final boolean minimal;
+        /**
+         * Whether the page's layout has a status bar at all: a window's does, a Home page's never
+         * ({@link HomeChromePolicy#statusShownAtRest}), so the bar's content fades out on the way
+         * to Home and arrives with the window on the way back.
+         */
+        public final boolean statusShown;
 
         public Rest(boolean keyboardUp, boolean minimal) {
+            this(keyboardUp, minimal, true);
+        }
+
+        public Rest(boolean keyboardUp, boolean minimal, boolean statusShown) {
             this.keyboardUp = keyboardUp;
             this.minimal = minimal;
+            this.statusShown = statusShown;
         }
 
         /** How much of the keyboard shows: all of it or none, at rest. */
@@ -49,24 +60,29 @@ public final class PlaceChromeTravel {
             return minimal ? 0f : 1f;
         }
 
-        /** How much of the status bar's content shows: none on a minimal place's strip. */
+        /**
+         * How much of the status bar's content shows: none on a minimal place's strip, and none
+         * on a page whose layout has no status bar.
+         */
         public float statusReveal() {
-            return minimal ? 0f : 1f;
+            return minimal || !statusShown ? 0f : 1f;
         }
 
         @Override public boolean equals(Object other) {
             if (this == other) return true;
             if (!(other instanceof Rest)) return false;
             Rest that = (Rest) other;
-            return keyboardUp == that.keyboardUp && minimal == that.minimal;
+            return keyboardUp == that.keyboardUp && minimal == that.minimal
+                && statusShown == that.statusShown;
         }
 
         @Override public int hashCode() {
-            return (keyboardUp ? 1 : 0) * 2 + (minimal ? 1 : 0);
+            return (keyboardUp ? 1 : 0) * 4 + (minimal ? 1 : 0) * 2 + (statusShown ? 1 : 0);
         }
 
         @NonNull @Override public String toString() {
-            return "Rest{keyboard=" + keyboardUp + ", minimal=" + minimal + "}";
+            return "Rest{keyboard=" + keyboardUp + ", minimal=" + minimal
+                + ", status=" + statusShown + "}";
         }
     }
 

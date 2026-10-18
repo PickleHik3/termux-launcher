@@ -38,7 +38,10 @@ in-app keyboard is NOT yet routed to the multiplexer — needs a hook in Termina
 The middle tmux level. User's binds for it (currently pass through to the shell, NOT intercepted):
 - `Alt+1..9` → select-window
 - `Alt+Left / Alt+Right` → prev/next window
-- `Alt+Shift+Left / Right` → swap-window
+- `Alt+Shift+Left / Right` → swap-window (never bound. Reordering arrived in wall phase two,
+  slice 5a, as a drag of the window's chip along the window bar, plus the `window.move` action and
+  its palette pair `window.move_left` / `window.move_right`, which have no default stroke: Alt+Arrow
+  went to pane focus, and Alt+Shift+Arrow is word selection in many editors.)
 Needs a Window model (each window owns its own pane layout, many windows per session) + a switch UI (window bar or just the keybinds).
 
 ## Historical Phase 2a result (verified on-device, 2026-07-22)
@@ -281,3 +284,41 @@ basename, then foreground process, then terminal title/CWD fallback. The strip s
 surface's Material color, opacity, blur, square/capsule style, and collapse behavior. It disappears
 in single-pane compatibility mode. This supersedes the historical “no persistent visual list” note
 immediately above; that note remains only as round-3 chronology.
+
+## Windows on the wall, floats and the titlebar (ADR 0008, 2026-10-17)
+
+The session › window › pane-tree model above is unchanged by the wall rework; what changed is
+where a window shows. The windows are the Workspace's pages: one row, the current session's windows
+in order, then the display windows, paged by the border drag, with a new window landing right after
+the current one. A window can instead be a **Home float**: a real window of the current session
+drawn in a float layer over one Home page, never in the row, so chips, the drawer, the Ctrl+Alt
+shortcuts and Saved sessions all see it. Saved sessions record its page, minimised flag and shape
+per orientation, and load it back as a Home float on that page (the last Home page when that page is
+gone); see `durable-workspaces.md`. Spec: `project-docs/active/wall-rework-2026-10-17.md` §4, §6.
+
+Every float wears one glass **titlebar** (`FloatTitlebarView`, `FloatTitlebarPolicy`): the drag
+handle plus Dock, Maximise and Close, and Minimise where the host has a target for it (the
+scratchpad hides as its toggle does; a Home float flies into its chip in the status bar). It
+replaces the floating pane's move corner and pill; the resize corner stays at the bottom-right
+(`TerminalPaneController`). The strip sits above the pane's content, so it never covers the first
+row, samples the shared frame like the pane's own glass, and wears the active rim when the float is
+focused. Maximise remembers the earlier fractions and a second tap restores them. Dock on a window's
+floating pane tiles it back; on a Home float it moves the window into the row after the current
+one and slides to the Workspace.
+
+### Consume and expel (wall phase two, slice 5b)
+
+Niri's column moves, with the row's windows as the columns. `ColumnPolicy` is the arithmetic:
+`pane.consume` (`from=right|left`, default right, `Ctrl+Alt+,`) names the current window's
+neighbour (nothing at the row's end or with one window); `TerminalPaneController.consumeWindow`
+joins that window's whole tree beside the focused pane as one split, on the axis `splitAuto` would
+take (the pane's longer side under dwindle, the screen's longer side otherwise), before the pane
+when it came from the left, moves its floats over and gives its focused pane the focus; the window
+leaves the controller and `TermuxActivity.consumeWindow` takes it out of `WSession.windows`, with
+the current index following the current window. `pane.expel` (`to=right|left`, default right,
+`Ctrl+Alt+.`) runs `expelPane`: the focused pane is detached (`detachLeaf`; a focused float is
+undocked, a lone tiled pane beside floats lets the first float dock in its place) into a new window
+whose root is that leaf; the activity inserts it right after the current window (before it with
+`to=left`), makes it current, as Niri keeps focus with the expelled window, and slides to it like a
+new window. A one-pane window and a focused scratchpad refuse. Neither closes a session; Home floats
+are outside the row and take no part.

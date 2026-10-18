@@ -194,14 +194,10 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_APP_LAUNCHER_WIDGET_GRID_ROWS = 12;
 
         /**
-         * Defines the key for the embedded Linux display: the wall's Display page, the
-         * {@code termux-x11} command the launcher writes into the prefix, and the display
-         * settings. Off until the user asks for it — a home screen that never wants a display
-         * should pay nothing for one.
+         * The retired Display switch: the display comes up on demand now (ADR 0008). Removed by
+         * {@code WallReworkMigration}; nothing reads it.
          */
         public static final String KEY_X11_DISPLAY_ENABLED = "x11_display_enabled";
-
-        public static final boolean DEFAULT_X11_DISPLAY_ENABLED = false;
 
         /** Command line the "Start display" button and the start-up opt-in run. */
         public static final String KEY_X11_DISPLAY_COMMAND = "x11_display_command";
@@ -291,16 +287,36 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_X11_RUNTIME_BADGE = "termux";
 
-        /** The place the pane wall last rested on; the home screen comes back to it. */
+        /**
+         * The place the pane wall last rested on; read by nothing since Start in (ADR 0008), kept
+         * so {@code WallReworkMigration} can remove it.
+         */
         public static final String KEY_WALL_LAST_PAGE = "wall_last_page";
 
+        /** The version {@code WallReworkMigration} last brought this install to; absent is 0. */
+        public static final String KEY_WALL_MIGRATION_VERSION = "wall_migration_version";
+
+        /** Start in: the page a cold start shows, Home page 1 or the Workspace (ADR 0008). */
+        public static final String KEY_LAUNCHER_START_IN = "app_launcher_start_in";
+        public static final String LAUNCHER_START_IN_HOME = "home";
+        public static final String LAUNCHER_START_IN_WORKSPACE = "workspace";
+        public static final String DEFAULT_LAUNCHER_START_IN = LAUNCHER_START_IN_HOME;
+
         /**
-         * Defines the key for the usage mode the user picked: the terminal alone, the terminal
-         * with the home screen, or both with the Linux display. Stored rather than derived from
-         * the surface switches: the surfaces stay individually settable after a mode is picked,
-         * and a derived mode would jump between presets the moment one is flipped. The value
-         * {@link #APP_LAUNCHER_USE_CASE_MODE_LAUNCHER} is what the older two-way switch wrote;
-         * it is read once and mapped by {@code LauncherUseCaseMode}, never written again.
+         * The palette gesture on Home: the keyboard swipe up from a Home page's bottom edge opens
+         * the command palette with the keyboard ({@code swipe_up}, the default), or nothing
+         * ({@code off}).
+         */
+        public static final String KEY_HOME_PALETTE_GESTURE = "app_launcher_home_palette_gesture";
+        public static final String HOME_PALETTE_GESTURE_SWIPE_UP = "swipe_up";
+        public static final String HOME_PALETTE_GESTURE_OFF = "off";
+        public static final String DEFAULT_HOME_PALETTE_GESTURE = HOME_PALETTE_GESTURE_SWIPE_UP;
+
+        /**
+         * The retired usage mode: the terminal alone, the terminal with the home screen, or both
+         * with the Linux display; {@link #APP_LAUNCHER_USE_CASE_MODE_LAUNCHER} is what the older
+         * two-way switch wrote. Read once by {@code WallReworkMigration}, which maps it to Start in
+         * and removes it; nothing else reads or writes it (ADR 0008).
          */
         public static final String KEY_APP_LAUNCHER_USE_CASE_MODE = "app_launcher_use_case_mode";
 
@@ -308,18 +324,13 @@ public final class TermuxPreferenceConstants {
         public static final String APP_LAUNCHER_USE_CASE_MODE_TERMINAL = "terminal";
         public static final String APP_LAUNCHER_USE_CASE_MODE_HOME = "home";
         public static final String APP_LAUNCHER_USE_CASE_MODE_DISPLAY = "display";
-        public static final String DEFAULT_APP_LAUNCHER_USE_CASE_MODE =
-            APP_LAUNCHER_USE_CASE_MODE_HOME;
 
         /**
-         * Defines the key holding the launcher surface states captured when the user switched to
-         * terminal-only mode, so switching back restores the layout they had. Encoded by
-         * {@code LauncherUseCaseMode}; an empty value means nothing was captured yet.
+         * The retired usage mode's snapshot of the home surfaces, taken on the way into the
+         * terminal alone. Removed by {@code WallReworkMigration}; nothing reads it.
          */
         public static final String KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT =
             "app_launcher_use_case_snapshot";
-
-        public static final String DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT = "";
 
         /**
          * Defines the key for showing active-notification dots on apps bar icons.
@@ -417,6 +428,17 @@ public final class TermuxPreferenceConstants {
 
         /** Set once the Style migration has renamed the style values and dropped the retired keys. */
         public static final String KEY_LAYOUT_STYLE_MIGRATED = "layout_style_migrated";
+
+        /**
+         * Home's own Style, Corners and Margin (ADR 0008): what the Home pages' chrome wears, apart
+         * from the Workspace's {@link #KEY_APP_LAUNCHER_DOCK_STYLE},
+         * {@link #KEY_SURFACE_BASE_CORNER_RADIUS} and {@link #KEY_SURFACE_BASE_SIDE_GAP}, in the same
+         * stored forms. While one is unset it reads the Workspace's value, so an upgrade changes
+         * nothing on screen; the first write to it pins it.
+         */
+        public static final String KEY_HOME_LAYOUT_STYLE = "home_layout_style";
+        public static final String KEY_HOME_SURFACE_CORNER_RADIUS = "home_surface_corner_radius";
+        public static final String KEY_HOME_SURFACE_SIDE_GAP = "home_surface_side_gap";
 
         /** Custom capsule corner radius in dp, or -1 to follow the selected dock style. */
         public static final String KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS =

@@ -1,14 +1,17 @@
 # Command palette and actions
 
-The command palette is a searchable list of everything the launcher can do from the terminal. The
-same actions sit behind keyboard shortcuts, extra keys and keyboard swipes, so this page also lists
-every action id you can use in those places.
+The command palette is a searchable list of everything the launcher can do, from the terminal and
+from Home. The same actions sit behind keyboard shortcuts, extra keys and keyboard swipes, so this
+page also lists every action id you can use in those places.
 
 ## Open it
 
 - Swipe up on the space bar of the [built-in keyboard](Keyboard.md).
 - Press `Ctrl+Alt+Shift+P`, or `Ctrl+Alt+Space` then `P`.
 - Hold the terminal, tap **More**, then **Command palette**.
+- On Home, swipe up on the page's free area (anywhere but a widget or the dock). The palette and the keyboard open together, and both
+  close on **Esc**, on a tap outside, or once the action is done. With the
+  [keyboard always on](Widgets.md#keyboard-always-on), just start typing.
 
 ## Use it
 
@@ -26,7 +29,7 @@ every action id you can use in those places.
 - With nothing typed, press **↓** to browse by category. Arrow keys move, **Enter** runs, **Esc**
   closes.
 - If nothing matches, **Enter** runs what you typed in the shell.
-- Rows marked **›** open a list of choices (a layout, a place, an edge). Some rows ask you to type a
+- Rows marked **›** open a list of choices (a layout, an edge). Some rows ask you to type a
   value, such as a new window name, then **Enter** applies it.
 - Actions that end shells (**Kill focused pane**, **Close window**, **Close session**) ask first.
 - An action that cannot run right now stays in the list, greyed, with the reason, for example
@@ -41,6 +44,17 @@ Besides the actions, the palette has three sections of its own:
 - **Sessions**: two rows per session, one to switch to it and one to rename it.
 - **Keyboard**: a row per keyboard type and, once you cycle through more than one layout, a row per
   layout, with the one in use marked.
+
+### On Home
+
+On Home the palette leads with a **Home** section: **Open terminal here** (a
+[Home float](Panes_Windows_And_Sessions.md#home-floats) on this page), **Go to Workspace**, **New
+window**, **Minimise all floats**, **Restore floats**, **Add widget**, **Wallpaper**, **Layout**,
+**Appearance** and **Settings**. Apps, **Linux apps** and contacts follow, and **Windows** lists the
+current session's windows and Home floats by name: a window takes you to it in the Workspace, a float
+goes to its Home page and comes back to the front. Actions that work on a terminal pane (its text,
+splits, clipboard and mouse mode, and moving between windows) are left out on Home, and
+**Enter** runs the top match.
 
 The shorter **Terminal actions** sheet (`Ctrl+Alt+M`, or hold the terminal and tap **More**) has
 **Command palette**, **Select URL**, **Share transcript**, **Appearance**, **Enable Wallpaper** or
@@ -72,6 +86,8 @@ Pane, window, session-browser and workspace actions need **Split-pane controls**
 | `pane.rotate` | Rotate pane layout | `direction`: `clockwise` (default), `counterclockwise` | |
 | `pane.move_to_edge` | Move pane to edge | `edge`: `left`, `right`, `up`, `down` (required) | |
 | `pane.toggle_float` | Float / dock pane | | `Ctrl+Alt+F` (on) |
+| `pane.consume` | Consume next window into this pane | `from`: `right` (default), `left` | `Ctrl+Alt+,` (on) |
+| `pane.expel` | Expel pane to its own window | `to`: `right` (default), `left` | `Ctrl+Alt+.` (on) |
 | `pane.rename` | Rename pane | `name` (required; empty restores the default) | |
 | `pane.rename_prompt` | Rename pane… | | `Ctrl+Alt+R` (off) |
 
@@ -84,10 +100,19 @@ Pane, window, session-browser and workspace actions need **Split-pane controls**
 | `window.next` | Next window | | `Ctrl+Alt+]`, `Ctrl+Alt+Right` (on) |
 | `window.previous` | Previous window | | `Ctrl+Alt+[`, `Ctrl+Alt+Left` (on) |
 | `window.select` | Switch to window | `index`: 0 to 64, counted from 0 (required) | `Ctrl+Alt+1` to `9` (on) |
+| `window.move` | Move window to… | `to`: `left`, `right`, or a place in the row counted from 1 (required) | |
+| `window.move_left` | Move window left | | |
+| `window.move_right` | Move window right | | |
 | `window.rename` | Rename window | `name`: up to 14 characters; empty restores the automatic label (required) | |
 | `window.rename_prompt` | Rename window… | | `Ctrl+Alt+R` (on) |
 
-`window.next` and `window.previous` step through the open apps on the Display place.
+`window.next` and `window.previous` step through the open apps on a display window.
+`window.move`, `window.move_left` and `window.move_right` move the current window along the
+Workspace's row and keep it current; dragging a window's chip in the window bar does the same.
+`pane.consume` pulls the neighbouring window of the row (on the right unless `from=left`) into the
+current window as panes beside the focused one, and `pane.expel` pushes the focused pane out into
+a new window right after the current one (before it with `to=left`), which becomes current. Neither
+closes a shell; see [Columns](Panes_Windows_And_Sessions.md#columns-consume-and-expel).
 
 ### Session and workspace
 
@@ -154,7 +179,7 @@ not.
 | `voice.dictate` | Dictate | | |
 | `mouse.toggle` | Mouse mode | | |
 
-### Places
+### Wall
 
 | Id | Title | Arguments | Default shortcut |
 |---|---|---|---|

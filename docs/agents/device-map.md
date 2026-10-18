@@ -96,3 +96,96 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - `-s emulator-5554` does not resolve until the emulator is up: `ad -s emu emu start` first.
 - The Appearance editor reopens on its last page; the Icon pack page's switch is `icon_pack_pinned_only` (about 935,2030).
 - The only AVD is tl16 (API 36); there is none for API 29/30.
+
+## The wall rework (feat/wall-rework, 2026-10-18)
+
+- Home's palette gesture: `ad swipe 540 1700 540 900 700` (an up swipe on the page's free area).
+  A Home float opens from `ad long 540 1000` (a free cell) then the Terminal row of the Home actions
+  sheet that slides up (`ad tap Terminal`; the sheet's rows are real nodes, unlike the old menu); on a
+  full-size float Close is about 1006,283 and Minimise about 796,283.
+- The Terminal entry's menu is a long press at 76,2190 on the dock (New float here / New window).
+  The dock's edit sheet is a long press at 540,2180; the Terminal entry is under MOST USED there.
+- Layout editor on Home without the corner tab:
+  `am start -n com.termux/.app.TermuxActivity --ez com.termux.app.extra.LAYOUT_EDITOR true --es com.termux.app.extra.LAYOUT_EDITOR_PLACE widgets`.
+  Its tray chips are Status bar, Extra keys, Keyboard; the keyboard chip toggles always on.
+- Ctrl+Alt+F over adb: `adb shell input keycombination 113 57 34` (C=31, V=47, H=36).
+- Migration seeding: force-stop, then `sed -i` through `ad runas` on
+  `/data/data/com.termux/shared_prefs/com.termux_preferences.xml` (insert before `</map>`:
+  `app_launcher_use_case_mode`, remove `app_launcher_start_in`, set `wall_migration_version` to 0),
+  then `ad launch` for a cold start (`am start` into a live instance does not re-land).
+- Always run `ad logcat` and `ad crash` under `timeout`; they follow forever. A crash is read with
+  `adb -s emulator-5554 logcat -d -b crash`.
+- Injected swipes release with zero velocity: use 600–800 ms for page drags, past the middle of the
+  screen. A border drag from a side border is a plain `input swipe` starting in the air beside the
+  window (no hold needed); a hold is still `input motionevent DOWN x y`, a 500 ms pause, then MOVE
+  and UP.
+- Export `AD_RUNAS_PRELUDE` in every bash call; a new call loses it and `launcherctl` reports
+  "inaccessible". `launcherctl` is also unavailable while no window exists.
+- Ctrl+Alt+F over adb needs a prior tap on the terminal for focus.
+- Home's corner tab: long press at 1040,175 on the free page; its plus (804,198) adds a page, and a
+  long press on an empty cell then offers Remove page.
+- The sessions drawer opens from the list key at 990,1700 in the Workspace's key row (the grid key
+  at 810,1700 opens a split). In the drawer: the chevron at 102,542 expands a session, Home at
+  118,1245, the session's Float row under it.
+- The display's controls appear from a long press at 1030,262 on the display window; power at 604,285.
+- Layout editor on Home: Done at 993,221; the tray's eye at 970,1726; the Keyboard chip at 864,1873.
+  Dragging a canvas block needs `input motionevent DOWN`, a 1.2 s hold, MOVE steps and UP;
+  `ad swipe` does not drag it.
+- The prefix's gtk3 desktop files ship with `NoDisplay=true`, so they are not Linux apps in the
+  drawer or the palette and `launcherctl launch gtk3-demo` answers 404 until that flag is false.
+- Display stop: long press 1030,262 on the display window, power at 604,285, confirm Stop at
+  841,1420. The display's chip sits at about 298,177 in the window bar.
+- In the Home widget edit frame the X at 77,212 removes the widget; it does not exit edit mode.
+- `ad home` while a window is showing stays on that window on the emulator's first press; press
+  twice to reach Home page 1. Display Stop lands on the terminal window, not Home.
+- A release build for the emulator: `scripts/dev-install.sh` keeps arm64 libs only and is for pong.
+  For the emulator zipalign the universal release APK and sign it with
+  `app/testkey_untrusted.jks` (alias `alias`, the password in dev-install.sh), then
+  `adb install -r --no-incremental`; the unsigned APK fails with INSTALL_PARSE_FAILED_NO_CERTIFICATES.
+- Popup menus (the dock's long-press menus, the float handle menu) are not in `ad ui`; read the
+  screenshot and tap by coordinates. From the Terminal pin's menu, New float here is about 190,1746.
+- `ad long` is `input swipe x y x y 800`. Before 31803120e that still press on a dock pin ran
+  Unpin (the gesture took the screen corner as its origin); a pin that vanishes on a long press is
+  that bug, not the store.
+- A blind end-user review: `ad codex "<goal>" -c model_reasoning_effort=medium`, one area per run
+  (Home, Workspace, floats, Settings), 6–35 min each; the goal text and answers of the 2026-10-18
+  run are in the session scratchpad `codex-review/` and under ~/reports/wall-rework-2026-10-18/blind/.
+
+## Wall rework phase two (feat/wall-rework-phase2, 2026-10-18)
+
+- Home's long-press sheet (a long press on a free cell) has Terminal, Add a widget, Add a page,
+  Edit pages, Layout, Wallpaper and Look; Layout opens the Appearance editor in Layout mode.
+- The corner long-press toolbar hangs off the page's corner, not the screen's. On a window it is
+  the window's (Appearance, minimal, tiling, settings, help); on Home it is Home's (pencil, plus,
+  palette, help), whose palette is the button described "Appearance" and opens the Overview. A
+  window's corner moves in with the Workspace's Margin. Home's page reaches the screen's edges
+  since 9980f4a6d, so its corner squares sit at the screen's corners whatever the Margin.
+- A Home float drawn over most of a Home page looks like a window. Which toolbar a corner hold
+  brings out (above) tells them apart.
+- Widget grid size: enter edit mode (long press a widget), tap the "4 × 5" chip, then the column
+  wheel.
+- The Margin slider drags relatively: aim from the thumb, read the label after each drag and
+  correct.
+- The Appearance editor reopens on the page it was last left on.
+- Read the log with `adb shell logcat -d` rather than `ad logcat`. `ad -s emu stop PKG`
+  force-stops a package.
+- After `am force-stop com.termux` on the emulator the app is back within about 3 s, because it
+  is the default home. A true cold start needs the stock home set first, or a launch from the
+  app's icon.
+- A Home page shows a house-icon status pill, the widget grid and the pin dock. A window shows a
+  terminal-icon pill and the extra keys.
+- The corner toolbar comes out on a long press at (40,262). Its palette button is at (84,284).
+- The Home editor's Margin slider spans about x 600–1010 at y 1916, and it drags relatively.
+- In widget edit mode the "5 × 5" chip is at (706,178), keep at (828,178) and discard at
+  (927,178).
+- In the editor, Back steps through the pages and Done closes it. A Layout page left over Home
+  and brought back from a window opens on the window's own place (590ff4c8b).
+- Long-press at about (540,1000) on empty Home opens the launcher's sheet; Layout at about
+  (240,1925) opens the Appearance editor on its Layout page. The editor's Undo button is
+  `appearance_page_undo` at about (855,220), shown only after a change; the Unsaved-changes
+  dialog is not in `ui`, its Discard is at about (642,1418).
+- The Margin slider gives roughly 8 px per dp from the thumb. For an exact value drag fully left
+  to 0 (swipe 700→560 at y 1916), then swipe 633→678 for 8. Read the label with
+  `zoom 400,1800,1080,1900`.
+- `ad -s emu adb shell cmd package set-home-activity com.termux/.app.TermuxActivity` sets the
+  launcher as home before a check.

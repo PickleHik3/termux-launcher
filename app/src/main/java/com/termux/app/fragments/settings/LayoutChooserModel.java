@@ -58,6 +58,10 @@ public final class LayoutChooserModel {
                                     @NonNull MiniatureDragPolicy.Bar bar, @Nullable Edge edge,
                                     int index, boolean underKeyboard) {
         Element element = bar.element();
+        // The Home layout offers the dock's rows alone: a status bar or extra keys dropped on it
+        // stand nowhere.
+        if (!places.activeVariant().offers(element))
+            return false;
         if (underKeyboard && (edge != Edge.BOTTOM || !element.underKeyboardAllowed()))
             return false;
         PlaceLayout layout = places.resolve(orientation);

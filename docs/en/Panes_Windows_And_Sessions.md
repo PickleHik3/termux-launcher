@@ -1,22 +1,23 @@
 # Panes, windows and sessions
 
 The terminal runs several shells at once without tmux. This page covers splitting it into panes,
-grouping panes into windows and windows into sessions, arranging them, and saving the whole set as
-a workspace.
+grouping panes into windows and windows into sessions, arranging them, floating them over Home, and
+saving the whole set to load again later.
 
 ## How it fits together
 
 ```text
 Session
-└── Window
+└── Window   (a page of the Workspace, or a Home float)
     ├── Pane   (one shell)
     ├── Pane
     └── Floating pane
 ```
 
 - A **pane** is one shell. Panes split in either direction, as deep as you like.
-- A **window** is one set of panes. Only the current window is on screen; the window chips in the
-  status bar switch between them.
+- A **window** is one set of panes. The **Workspace**, to the right of Home, shows the windows one
+  at a time in a row; a window can also float over a Home page as a
+  [Home float](#home-floats).
 - A **session** holds windows. The numbered badge in the status bar is the current session.
 
 Switching away from a pane, window or session leaves its shells running. Closing one ends them.
@@ -43,7 +44,22 @@ goes to the shell when there is no pane that way. The full list is in
 
 ## Windows
 
+The Workspace is one row: the current session's windows in order, then any
+[display window](X11_Display.md). A new window opens right after the one you are on. Switching
+session swaps the terminal windows and leaves the display windows where they are. Closing the last
+window slides Home back in.
+
+- Drag sideways from a window's border to move to the next or previous window. Dragging right from
+  the first window goes back to the last Home page.
 - Tap a window chip in the status bar to switch to it; tap `+` to make a new one.
+- Hold a window chip until it lifts, then drag it along the bar to move that window to another
+  place in the row. The other chips make room, and letting go drops it there. The window you are
+  on stays the one you are on, and the border drag, the drawer, the `Ctrl+Alt` window keys and
+  Saved sessions all follow the new order. The display's chip and a Home float's chip stay where
+  they are. The palette's **Move window left** and **Move window right** do the same one place at
+  a time, and the `window.move` action takes `to=left`, `to=right` or a place counted from 1 (for
+  a key in [Custom keybindings](Custom_Keybindings.md), such as
+  `map ctrl+alt+shift+m window.move to=1`).
 - `Ctrl+Alt+C` makes a window, `Ctrl+Alt+[` / `Ctrl+Alt+]` or `Ctrl+Alt+Left` / `Ctrl+Alt+Right`
   step through them, `Ctrl+Alt+1` to `9` jump to one, and `Ctrl+Alt+X` closes the current window
   after asking.
@@ -54,6 +70,26 @@ A chip also shows what its window is doing: a ring while a program is using the 
 when it rang, a tick or cross when a command finished while you were elsewhere, and a coloured dot
 when an AI agent in it is working or waiting for you ([Agent status](Agent_Status.md)). More on the
 status bar in [Status bar](Status_Bar.md).
+
+### Columns: consume and expel
+
+Borrowed from the Niri window manager, where each window of a row is a *column* that can hold
+several panes. Here the column is simply a window of the Workspace's row, and two actions move
+panes between windows:
+
+- **Consume next window into this pane** (`Ctrl+Alt+,`) pulls the window to the right of the one
+  you are on into it: its panes sit beside your focused pane, split the way **New pane** would
+  split it, and that window leaves the row. You stay on your window, and the pane that was focused
+  in the pulled window has the focus. `pane.consume from=left` pulls the window on the left
+  instead. At the end of the row there is nothing to pull, and nothing happens.
+- **Expel pane to its own window** (`Ctrl+Alt+.`) pushes your focused pane out into a new window
+  of its own, right after the one you are on. The focus goes with it: the new window becomes the
+  current one and the Workspace slides to it, as when a window is made. `pane.expel to=left` puts
+  the new window right before instead. A window with one pane has nothing to expel, and nothing
+  happens.
+
+No shell is closed by either; the bar, the drawer and Saved sessions follow the new row. Home
+floats are not in the row, so they are never consumed and cannot be expelled.
 
 ## The pane corner tab
 
@@ -121,17 +157,51 @@ you drag stay where you put them.
 opening a new one.") starts every new window under `dwindle`. The lone pane's corner tab switches
 it too.
 
+## Home floats
+
+A terminal opened from Home floats over the Home page instead of taking you to the Workspace. Open
+one with **Terminal** in a Home page's long-press menu, **New float here** on the Terminal entry,
+or **Open terminal here** in the command palette on Home. It is a window of the current session,
+so the window chips, the sessions drawer and the shortcuts all see it.
+
+- It opens full size, between the status bar and the dock, takes focus and brings the keyboard up.
+- It stays on the Home page it was opened on and moves with that page. Open as many as you like;
+  tap one to bring it to the front. The focused float wears the active rim.
+- Drag its **titlebar** to move it and its bottom-right corner to resize it. Each float remembers
+  its size and spot in each orientation until the launcher restarts.
+- The titlebar's buttons: **Minimise** tucks the float into its chip in the status bar,
+  **Maximise** fills the room and becomes **Restore size**, and **Close** closes it and its shell.
+  Long press the titlebar's handle for its menu: **Dock** moves the float into the Workspace as a
+  window right after the current one and takes you there.
+- A float that fills the room makes way for the keyboard as a tiled pane does: it shortens to the
+  room above the keyboard and grows back when it closes. A float you made smaller keeps its size
+  and lifts so the cursor's line stays above the keyboard, never past the top of the room, and
+  settles back when it closes. A tap on the page outside any float puts the keyboard away, as does
+  minimising or closing the focused float.
+- While a float is open or minimised, the status bar slides down onto Home. Its chips are your
+  floats, from every page, each marked with its page's dot; tap one to go to its page and bring it
+  back. The bar slides away again when the last float closes.
+
+A float does not keep the Workspace open, and the Workspace's windows are not chips on Home: the
+Terminal entry takes you to them.
+
 ## Floating panes
 
-**Float / dock pane** (`Ctrl+Alt+F`) lifts the focused pane above the others. Move it by its
-top-left corner and resize it from its bottom-right corner. Tap the pill at its top for **Close**
-and **Dock**, or run the action again to dock it. The last tiled pane in a window cannot float.
-Inside the pane, touch works as usual: a hold-and-drag still goes to the running program.
+**Float / dock pane** (`Ctrl+Alt+F`) lifts the focused pane above the others. A floating pane wears
+a **titlebar**, a glass strip along its top: drag the strip to move the pane, and resize it from
+its bottom-right corner. The titlebar's buttons are **Maximise**, which fills the window and becomes
+**Restore size** to put the pane back where it was, and **Close**, which closes its shell. Long
+press the titlebar's handle for its menu, where **Dock** puts the pane back among the others;
+running the action again also docks it. The last
+tiled pane in a window cannot float. Inside the pane, touch works as usual: a hold-and-drag still
+goes to the running program. (The titlebar replaces the pill and the move corner floating panes
+used to have.)
 
 ## The scratchpad
 
-**Toggle scratchpad** (``Ctrl+Alt+` ``) shows or hides a floating terminal of its own. Hiding it
-does not close it; its shell keeps running.
+**Toggle scratchpad** (``Ctrl+Alt+` ``) shows or hides a floating terminal of its own. It wears the
+same titlebar as a floating pane, with one more button: **Minimise** hides it, as the toggle does.
+Hiding it does not close it; its shell keeps running. **Close** ends its shell.
 
 ## Sessions
 
@@ -140,10 +210,16 @@ badge in the status bar, the **Sessions** key on the extra-keys row, **Sessions*
 sessions** in the palette, or `Ctrl+Alt+Shift+S`.
 
 - The **Live** tab lists sessions with their window and pane counts. Tap a session to switch to
-  it; tap **›** to list its windows and tap one to go there.
+  it; tap **›** to list its windows and tap one to go there. A Home float is marked **Float**, with
+  its Home page when there is one ("Float · page 2"); tapping it pages Home there and brings the
+  float to front.
+- While a display is running, **Displays** follows the sessions: one row per display, with the
+  app windows open on it listed underneath. Tap the display to go to it, or an app window to raise
+  it.
 - Tap **⋯** on a session for **Clone with CWD**, **Rename** and **End** ("End this session?",
   **End** or **Keep**).
 - Tap **+** for a new session; hold **+** for a named one.
+- **Home** at the bottom of either tab goes to the first Home page.
 
 `Ctrl+Alt+Up` / `Ctrl+Alt+Down` step through sessions, `Ctrl+Alt+Shift+1` to `9` jump to one, and
 `Ctrl+Alt+Shift+R` renames the current one. The palette also lists every session twice, once to
@@ -154,24 +230,27 @@ Cloning starts a fresh shell in the current pane's folder. It does not copy the 
 the shell's state, the scrollback or the layout. Ending the last session starts a fresh one, so the
 terminal is never empty.
 
-## Workspaces
+## Saved sessions
 
-A workspace saves the sessions, windows, pane layout and split sizes, floating panes, focus,
-titles and each pane's folder, so you can rebuild them later.
+Saved sessions keep the sessions, windows, pane layout and split sizes, floating panes, focus,
+titles and each pane's folder, so you can rebuild them later. A Home float is saved with its page
+and shape, and loads back as a float on that page (minimised if it was); a page that no longer
+exists lands it on the last Home page. Sessions saved with only Home floats load back as those
+floats alone, with the Workspace empty.
 
-- **Save**: at the bottom of the **Live** tab tap **Save as workspace…**, type a name and save.
+- **Save**: at the bottom of the **Live** tab tap **Save sessions…**, type a name and save.
   Tick **Also save what is running** to record the program in each busy pane. Saving over a name
   asks first. **Save workspace** in the palette opens the same field.
-- **Load**: on the **Saved** tab tap a workspace, then **Add to current** or **Replace**. If it
-  recorded programs, **Also start what was running** decides whether they run again. **Load
+- **Load**: on the **Saved sessions** tab tap a name, then **Add to current** or **Replace**. If
+  it recorded programs, **Also start what was running** decides whether they run again. **Load
   workspace** in the palette opens this tab.
-- **Delete**: tap **⋯** on a saved workspace, then **Delete**. Running sessions are not affected.
+- **Delete**: tap **⋯** on saved sessions, then **Delete**. Running sessions are not affected.
 
-A workspace rebuilds structure, not processes. Each recorded program starts again from the
+Loading rebuilds structure, not processes. Each recorded program starts again from the
 beginning in your normal shell. **Replace** builds the new terminals before removing the old ones,
 but it still ends the old shells. Review a hand-edited file before letting it start programs.
 
-Workspaces are files at `~/.termux/workspaces/<name>.json`. A name is up to 64 characters, starts
+Saved sessions are files at `~/.termux/workspaces/<name>.json`. A name is up to 64 characters, starts
 with a letter or digit, and may contain letters, digits, spaces, `_`, `-` and `.`. The
 `workspace.save`, `workspace.load`, `workspace.list` and `workspace.delete` actions are available
 to [custom keybindings](Custom_Keybindings.md).

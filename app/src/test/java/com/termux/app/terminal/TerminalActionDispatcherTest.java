@@ -69,7 +69,8 @@ public class TerminalActionDispatcherTest {
             "keyboard.cycle_layout", "keyboard.select_layout",
             "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide",
             "keyboard.clipboard", "keyboard.toggle_enabled", "voice.dictate",
-            "pane.open", "pane.list", "pane.focus", "pane.close", "pane.write", "pane.read", "pane.split"};
+            "pane.open", "pane.list", "pane.focus", "pane.close", "pane.write", "pane.read", "pane.split",
+            "window.move", "window.move_left", "window.move_right", "pane.consume", "pane.expel"};
         for (String name : handled) {
             assertTrue(name, TerminalActionDispatcher.handles(name));
         }
@@ -824,6 +825,90 @@ public class TerminalActionDispatcherTest {
         assertEquals(1, dispatcher.execute("window.select", new JSONObject().put("index", 1))
             .getInt("index"));
         assertEquals(Integer.valueOf(1), host.lastSelectedWindow);
+    }
+
+    @Test
+    public void windowMoveTakesLeftRightOrAPlaceCountedFromOne() throws Exception {
+        FakeTerminalHost host = attach();
+        host.windowCount = 3;
+        host.windowIndex = 0;
+
+        assertEquals(400, dispatcher.execute("window.move", new JSONObject()).getInt("_statusCode"));
+        assertEquals(400, dispatcher.execute("window.move", new JSONObject().put("to", "0"))
+            .getInt("_statusCode"));
+        assertEquals(400, dispatcher.execute("window.move", new JSONObject().put("to", "up"))
+            .getInt("_statusCode"));
+        assertEquals(null, host.lastMovedWindow);
+
+        JSONObject last = dispatcher.execute("window.move", new JSONObject().put("to", 3));
+        assertEquals(3, last.getInt("to"));
+        assertEquals(0, host.lastMovedWindow[0]);
+        assertEquals(2, host.lastMovedWindow[1]);
+
+        host.windowIndex = 2;
+        dispatcher.execute("window.move_left", new JSONObject());
+        assertEquals(2, host.lastMovedWindow[0]);
+        assertEquals(1, host.lastMovedWindow[1]);
+        dispatcher.execute("window.move", new JSONObject().put("to", "right"));
+        assertEquals(2, host.lastMovedWindow[1]);
+
+        host.windowCount = 0;
+        host.windowIndex = -1;
+        assertEquals(409, dispatcher.execute("window.move_right", new JSONObject())
+            .getInt("_statusCode"));
+    }
+
+    @Test
+    public void paneConsumePullsTheRightNeighbourUnlessTheLeftIsAsked() throws Exception {
+        FakeTerminalHost host = attach();
+        host.windowCount = 3;
+        host.windowIndex = 1;
+
+        JSONObject right = dispatcher.execute("pane.consume", new JSONObject());
+        assertEquals("right", right.getString("from"));
+        assertEquals(3, right.getInt("consumed"));
+        assertEquals(Boolean.FALSE, host.lastConsumedFromLeft);
+        dispatcher.execute("pane.consume", new JSONObject().put("from", "left"));
+        assertEquals(Boolean.TRUE, host.lastConsumedFromLeft);
+        assertEquals(400, dispatcher.execute("pane.consume", new JSONObject().put("from", "up"))
+            .getInt("_statusCode"));
+
+        // Nothing to the right of the row's last window, and nothing beside a lone one.
+        host.lastConsumedFromLeft = null;
+        host.windowIndex = 2;
+        assertEquals(409, dispatcher.execute("pane.consume", new JSONObject())
+            .getInt("_statusCode"));
+        host.windowCount = 1;
+        host.windowIndex = 0;
+        assertEquals(409, dispatcher.execute("pane.consume", new JSONObject().put("from", "left"))
+            .getInt("_statusCode"));
+        assertEquals(null, host.lastConsumedFromLeft);
+    }
+
+    @Test
+    public void paneExpelGoesRightByDefaultAndRefusesALonePane() throws Exception {
+        FakeTerminalHost host = attach();
+        host.windowCount = 2;
+        host.windowIndex = 0;
+
+        assertEquals("right", dispatcher.execute("pane.expel", new JSONObject()).getString("to"));
+        assertEquals(Boolean.FALSE, host.lastExpelledToLeft);
+        dispatcher.execute("pane.expel", new JSONObject().put("to", "left"));
+        assertEquals(Boolean.TRUE, host.lastExpelledToLeft);
+        assertEquals(400, dispatcher.execute("pane.expel", new JSONObject().put("to", "2"))
+            .getInt("_statusCode"));
+
+        host.expelPaneResult = false;
+        assertEquals(409, dispatcher.execute("pane.expel", new JSONObject())
+            .getInt("_statusCode"));
+
+        host.expelPaneResult = true;
+        host.lastExpelledToLeft = null;
+        host.windowCount = 0;
+        host.windowIndex = -1;
+        assertEquals(409, dispatcher.execute("pane.expel", new JSONObject())
+            .getInt("_statusCode"));
+        assertEquals(null, host.lastExpelledToLeft);
     }
 
     @Test

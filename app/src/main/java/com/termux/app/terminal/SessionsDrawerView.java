@@ -109,6 +109,7 @@ public final class SessionsDrawerView extends LinearLayout
     private static final float ACTION_SP = 12.5f;
     private static final int ROW_HEIGHT_DP = 44;
     private static final int WINDOW_ROW_HEIGHT_DP = 36;
+    private static final int FOOTER_ROW_HEIGHT_DP = 40;
     /** The tint a row's own surface carries, over whatever the drawer is painted with. */
     private static final int ROW_FILL_ALPHA = 14;
     private static final int ROW_CURRENT_FILL_ALPHA = 34;
@@ -121,6 +122,9 @@ public final class SessionsDrawerView extends LinearLayout
     private static final int TEXT_PADDING_DP = 4;
 
     @Nullable private Listener mListener;
+    @NonNull private SessionsDrawerHost mHost = SessionsDrawerHost.NONE;
+    /** What the host last reported; read on a bind, not on every rebuild a tap causes. */
+    @NonNull private List<SessionsDrawerHost.Display> mDisplays = new ArrayList<>();
     @NonNull private TerminalDress mDress;
     @NonNull private Tab mTab = Tab.LIVE;
     @NonNull private List<SessionBrowserModel.Session> mSessions = new ArrayList<>();
@@ -181,7 +185,9 @@ public final class SessionsDrawerView extends LinearLayout
         segments.setOrientation(HORIZONTAL);
         mLiveTab = segment(R.string.sessions_drawer_live, Tab.LIVE);
         mSavedTab = segment(R.string.sessions_drawer_saved, Tab.SAVED);
-        segments.addView(mLiveTab, new LayoutParams(0, dp(32), 1f));
+        // Live takes its label's width; Saved sessions takes the rest of the drawer's 153dp row
+        // (about 110dp), which holds the whole label at font scale 1.0 and ellipsizes it above.
+        segments.addView(mLiveTab, new LayoutParams(LayoutParams.WRAP_CONTENT, dp(32)));
         LayoutParams savedParams = new LayoutParams(0, dp(32), 1f);
         savedParams.setMarginStart(dp(4));
         segments.addView(mSavedTab, savedParams);
@@ -215,6 +221,13 @@ public final class SessionsDrawerView extends LinearLayout
 
     public void setListener(@Nullable Listener listener) {
         mListener = listener;
+    }
+
+    /** Where the drawer asks about floats and displays, and sends Home; null means nobody. */
+    public void setHost(@Nullable SessionsDrawerHost host) {
+        mHost = host == null ? SessionsDrawerHost.NONE : host;
+        mDisplays = readDisplays();
+        rebuild();
     }
 
     /** Colours everything from what the terminal is wearing; there is no second palette here. */
@@ -265,6 +278,7 @@ public final class SessionsDrawerView extends LinearLayout
      */
     public void bindLive(@NonNull List<SessionBrowserModel.Session> sessions) {
         mSessions = new ArrayList<>(sessions);
+        mDisplays = readDisplays();
         if (mExpandedSessionId != null && findSession(mExpandedSessionId) == null)
             mExpandedSessionId = null;
         if (mActiveRowId != null && findSession(mActiveRowId) == null) collapseRow();
@@ -378,12 +392,15 @@ public final class SessionsDrawerView extends LinearLayout
         if (mTab == Tab.LIVE) buildLiveRows();
         else buildSavedRows();
 
-        boolean empty = mTab == Tab.LIVE ? mSessions.isEmpty() : mSaved.isEmpty();
+        boolean empty = mTab == Tab.LIVE ? mSessions.isEmpty() && mDisplays.isEmpty()
+            : mSaved.isEmpty();
         mEmpty.setText(mTab == Tab.LIVE ? R.string.sessions_panel_empty
             : R.string.workspace_picker_empty);
         mEmpty.setVisibility(empty ? VISIBLE : GONE);
         mScroll.setVisibility(empty ? GONE : VISIBLE);
 
+        // Home is a way out of the drawer whichever half is showing; saving only means the live one.
+        buildHomeFooter();
         if (mTab == Tab.LIVE) buildSaveFooter();
     }
 
@@ -400,6 +417,7 @@ public final class SessionsDrawerView extends LinearLayout
                     i == session.windows.size() - 1), rowParams());
             }
         }
+        buildDisplayRows();
     }
 
     @NonNull
@@ -502,13 +520,7 @@ public final class SessionsDrawerView extends LinearLayout
     @NonNull
     private View buildWindowRow(@NonNull SessionBrowserModel.Session session,
                                 @NonNull SessionBrowserModel.Window window, boolean last) {
-        LinearLayout row = baseRow(false, CORNERS_ALL);
-        row.setMinimumHeight(dp(WINDOW_ROW_HEIGHT_DP));
-        row.setPaddingRelative(dp(24), dp(1), dp(6), dp(1));
-        TextView connector = label(12f, mDress.subTextColor);
-        connector.setText(last ? "└" : "├");
-        connector.setGravity(Gravity.CENTER);
-        row.addView(connector, new LayoutParams(dp(18), LayoutParams.MATCH_PARENT));
+        LinearLayout row = nestedRow(last);
 
         boolean focused = session.current && window.current;
         LinearLayout text = textBlock();
@@ -517,7 +529,10 @@ public final class SessionsDrawerView extends LinearLayout
         title.setTypeface(Typeface.create("sans-serif-medium",
             focused ? Typeface.BOLD : Typeface.NORMAL));
         TextView subtitle = twoLines(label(COUNTS_SP, mDress.subTextColor));
-        subtitle.setText(getResources().getQuantityString(R.plurals.session_browser_pane_count,
+        // A float has one pane by definition, so its line says where it is instead of how many.
+        boolean isFloat = window.isFloat();
+        subtitle.setText(isFloat ? floatSubtitle(window.id)
+            : getResources().getQuantityString(R.plurals.session_browser_pane_count,
             window.panes.size(), window.panes.size()));
         text.addView(title);
         text.addView(subtitle);
@@ -525,8 +540,76 @@ public final class SessionsDrawerView extends LinearLayout
 
         row.setContentDescription(windowTitle(window) + " · " + subtitle.getText());
         row.setOnClickListener(view -> {
-            if (mListener != null) mListener.onActivateWindow(session.id, window.id);
+            if (isFloat) mHost.restoreFloat(window.id);
+            else if (mListener != null) mListener.onActivateWindow(session.id, window.id);
         });
+        return row;
+    }
+
+    /**
+     * The Displays group under the sessions: a caption, one row per display window, and its open
+     * toplevels nested under it the way a session's windows are. Absent while no display is up.
+     */
+    private void buildDisplayRows() {
+        if (mDisplays.isEmpty()) return;
+        TextView caption = label(SUBTITLE_SP, mDress.subTextColor);
+        caption.setText(R.string.sessions_drawer_displays);
+        caption.setPaddingRelative(dp(8), dp(10), dp(8), dp(2));
+        mRows.addView(caption, rowParams());
+        for (SessionsDrawerHost.Display display : mDisplays) {
+            mRows.addView(buildDisplayRow(display), rowParams());
+            for (int i = 0; i < display.toplevels.size(); i++) {
+                mRows.addView(buildToplevelRow(display, display.toplevels.get(i),
+                    i == display.toplevels.size() - 1), rowParams());
+            }
+        }
+    }
+
+    @NonNull
+    private View buildDisplayRow(@NonNull SessionsDrawerHost.Display display) {
+        LinearLayout row = baseRow(false, CORNERS_ALL);
+        row.setMinimumHeight(dp(ROW_HEIGHT_DP));
+        row.setPaddingRelative(dp(12), dp(2), dp(6), dp(2));
+        LinearLayout text = textBlock();
+        TextView title = twoLines(label(TITLE_SP, mDress.textColor));
+        title.setText(display.label);
+        TextView subtitle = twoLines(label(COUNTS_SP, mDress.subTextColor));
+        subtitle.setText(getResources().getQuantityString(R.plurals.sessions_drawer_toplevel_count,
+            display.toplevels.size(), display.toplevels.size()));
+        text.addView(title);
+        text.addView(subtitle);
+        row.addView(text, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
+        row.setContentDescription(display.label + " · " + subtitle.getText());
+        row.setOnClickListener(view -> mHost.goToDisplay(display.id));
+        return row;
+    }
+
+    @NonNull
+    private View buildToplevelRow(@NonNull SessionsDrawerHost.Display display,
+                                  @NonNull SessionsDrawerHost.Toplevel toplevel, boolean last) {
+        LinearLayout row = nestedRow(last);
+        String name = toplevel.label.isEmpty()
+            ? getContext().getString(R.string.sessions_panel_window_fallback) : toplevel.label;
+        LinearLayout text = textBlock();
+        TextView title = twoLines(label(SUBTITLE_SP + 1.5f, mDress.textColor));
+        title.setText(name);
+        text.addView(title);
+        row.addView(text, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
+        row.setContentDescription(name);
+        row.setOnClickListener(view -> mHost.raiseToplevel(display.id, toplevel.id));
+        return row;
+    }
+
+    /** A row hung under another by a tree connector: a session's window, a display's toplevel. */
+    @NonNull
+    private LinearLayout nestedRow(boolean last) {
+        LinearLayout row = baseRow(false, CORNERS_ALL);
+        row.setMinimumHeight(dp(WINDOW_ROW_HEIGHT_DP));
+        row.setPaddingRelative(dp(24), dp(1), dp(6), dp(1));
+        TextView connector = label(12f, mDress.subTextColor);
+        connector.setText(last ? "└" : "├");
+        connector.setGravity(Gravity.CENTER);
+        row.addView(connector, new LayoutParams(dp(18), LayoutParams.MATCH_PARENT));
         return row;
     }
 
@@ -623,25 +706,21 @@ public final class SessionsDrawerView extends LinearLayout
         return column;
     }
 
-    /** The Live footer: one line that becomes a name field when it is asked to. */
+    /** The footer's first line: back to Home page 1, on either half. */
+    private void buildHomeFooter() {
+        mFooter.addView(footerEntry(R.string.sessions_drawer_home, () -> mHost.goHome()),
+            footerParams());
+    }
+
+    /** The Live footer's save line, which becomes a name field when it is asked to. */
     private void buildSaveFooter() {
         if (!mSaveFieldOpen) {
-            TextView entry = label(ACTION_SP, mDress.textColor);
-            twoLines(entry).setText(R.string.sessions_drawer_save_workspace);
-            entry.setGravity(Gravity.CENTER_VERTICAL);
-            entry.setMinHeight(dp(40));
-            // Vertical padding only shows once the label wraps; one line still sits in the 40dp.
-            entry.setPaddingRelative(dp(8), dp(TEXT_PADDING_DP), dp(8), dp(TEXT_PADDING_DP));
-            entry.setBackground(rowSurface(false, CORNERS_ALL));
-            entry.setOnClickListener(view -> {
+            mFooter.addView(footerEntry(R.string.sessions_drawer_save_workspace, () -> {
                 collapseAll();
                 mSaveFieldOpen = true;
                 beginTyping("");
                 rebuild();
-            });
-            LayoutParams params = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
-            params.topMargin = dp(6);
-            mFooter.addView(entry, params);
+            }), footerParams());
             return;
         }
         LinearLayout column = new LinearLayout(getContext());
@@ -658,9 +737,29 @@ public final class SessionsDrawerView extends LinearLayout
             }), new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         column.addView(checkBox(R.string.workspace_save_capture_commands, mCaptureCommands,
             checked -> mCaptureCommands = checked));
+        mFooter.addView(column, footerParams());
+    }
+
+    /** One footer line: a label on a row surface, which wraps before it clips. */
+    @NonNull
+    private TextView footerEntry(int labelRes, @NonNull Runnable onClick) {
+        TextView entry = label(ACTION_SP, mDress.textColor);
+        twoLines(entry).setText(labelRes);
+        entry.setGravity(Gravity.CENTER_VERTICAL);
+        entry.setMinHeight(dp(FOOTER_ROW_HEIGHT_DP));
+        // Vertical padding only shows once the label wraps; one line still sits in the minimum.
+        entry.setPaddingRelative(dp(8), dp(TEXT_PADDING_DP), dp(8), dp(TEXT_PADDING_DP));
+        entry.setBackground(rowSurface(false, CORNERS_ALL));
+        entry.setOnClickListener(view -> onClick.run());
+        return entry;
+    }
+
+    /** The first footer line stands off the list; the next sits as close as rows do. */
+    @NonNull
+    private LayoutParams footerParams() {
         LayoutParams params = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
-        params.topMargin = dp(6);
-        mFooter.addView(column, params);
+        params.topMargin = dp(mFooter.getChildCount() == 0 ? 6 : 2);
+        return params;
     }
 
     // ------------------------------------------------------------------ pieces
@@ -873,10 +972,9 @@ public final class SessionsDrawerView extends LinearLayout
         view.setText(labelRes);
         view.setGravity(Gravity.CENTER);
         view.setMinWidth(0);
-        // A segment carries one word in a space the font scale can halve, so it shrinks its text
-        // rather than clipping it.
-        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
-            view, 9, Math.round(ACTION_SP), 1, TypedValue.COMPLEX_UNIT_SP);
+        view.setPaddingRelative(dp(6), 0, dp(6), 0);
+        // No autosize: with a wrapped width it measured the label at its smallest size and
+        // ellipsized it. The label keeps its size and the row's widths above make it fit.
         view.setOnClickListener(ignored -> setTab(tab));
         return view;
     }
@@ -992,6 +1090,20 @@ public final class SessionsDrawerView extends LinearLayout
             session.windows.size(), session.windows.size()) + " · "
             + getResources().getQuantityString(R.plurals.session_browser_pane_count,
             session.paneCount(), session.paneCount());
+    }
+
+    /** "Float · page 2" when the host knows the page, "Float" when it does not. */
+    @NonNull
+    private String floatSubtitle(long windowId) {
+        int page = mHost.homeFloatPage(windowId);
+        return page < 0 ? getContext().getString(R.string.sessions_drawer_float)
+            : getContext().getString(R.string.sessions_drawer_float_page, page + 1);
+    }
+
+    @NonNull
+    private List<SessionsDrawerHost.Display> readDisplays() {
+        List<SessionsDrawerHost.Display> displays = mHost.displays();
+        return displays == null ? new ArrayList<>() : new ArrayList<>(displays);
     }
 
     @NonNull

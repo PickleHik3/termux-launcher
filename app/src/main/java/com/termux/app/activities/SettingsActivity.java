@@ -27,7 +27,6 @@ import com.termux.R;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.SettingsMaterialDialogs;
 import com.termux.app.fragments.settings.SettingsSearchPreference;
-import com.termux.app.launcher.LauncherUseCaseMode;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
@@ -688,15 +687,15 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         // "Contains: X, Y, Z" summary swapped in during a search can be restored afterwards.
         private final Map<String, CharSequence> mOriginalSummaries = new HashMap<>();
 
-        /** The usage mode row, which is the one root row that writes a preference. */
-        private static final String KEY_USE_AS = "app_launcher_use_case_mode";
+        /** The Start in row, the one root row that writes a preference. */
+        private static final String KEY_START_IN = "app_launcher_start_in";
 
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             Context context = getContext();
             if (context == null)
                 return;
-            // The mode row reads and writes through the launcher's store, the same path the
+            // The Start in row reads and writes through the launcher's store, the same path the
             // Appearance and Launcher pages take; every other root row only navigates.
             getPreferenceManager().setPreferenceDataStore(
                 com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment
@@ -706,7 +705,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             Preference display = findPreference("display");
             if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
             SettingsLayoutUtils.applyRootLayout(this);
-            configureUseAsRow(context);
+            configureStartInRow();
             configureSearch();
         }
 
@@ -716,14 +715,12 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             if (getActivity() != null) {
                 getActivity().setTitle(R.string.title_activity_termux_settings);
             }
-            // A switch on a page below can have moved the surfaces off the preset.
-            refreshUseAsSummary();
         }
 
         @Override
         public void onDisplayPreferenceDialog(@NonNull Preference preference) {
-            // The mode picker is the rich radio list the other pages' choices use: a bold name
-            // with its one line under it, rather than the platform's plain single-choice list.
+            // The Start in picker is the rich radio list the other pages' choices use: a bold
+            // name with its one line under it, rather than the platform's plain single-choice list.
             if (getContext() != null && SettingsMaterialDialogs.show(getContext(), preference)) {
                 return;
             }
@@ -731,81 +728,24 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         }
 
         /**
-         * The "Use as" row: a quiet row above the destinations, whose summary names the preset
-         * the launcher is in — or "Custom" once a switch below has moved it off one. Its picker
-         * lists the modes this build offers, each with its one-line description.
+         * The Start in row (ADR 0008): a quiet row above the destinations, its summary the choice.
+         * A destination row carries an icon tile; this one is a setting, so it takes the plain row
+         * every page below uses, with the chevron a chooser promises. The summary is set by hand
+         * rather than by a summary provider, since the search box writes every root row's summary.
          */
-        private void configureUseAsRow(@NonNull Context context) {
-            ListPreference row = findPreference(KEY_USE_AS);
+        private void configureStartInRow() {
+            ListPreference row = findPreference(KEY_START_IN);
             if (row == null) return;
-            // A destination row carries an icon tile; this one is a setting, so it takes the
-            // plain row every page below uses, with the chevron a chooser promises.
             row.setLayoutResource(R.layout.preference_settings_row);
             row.setWidgetLayoutResource(R.layout.preference_widget_chevron);
-            List<String> modes = LauncherUseCaseMode.offeredModes(com.termux.BuildConfig.X11_SERVER);
-            CharSequence[] entries = new CharSequence[modes.size()];
-            CharSequence[] values = new CharSequence[modes.size()];
-            for (int i = 0; i < modes.size(); i++) {
-                String mode = modes.get(i);
-                values[i] = mode;
-                // A choice with nothing to add is the bare title: no empty second line.
-                String description = context.getString(LauncherUseCaseMode.descriptionRes(mode));
-                entries[i] = description.isEmpty()
-                    ? context.getString(LauncherUseCaseMode.titleRes(mode))
-                    : context.getString(LauncherUseCaseMode.titleRes(mode)) + "\n" + description;
-            }
-            row.setEntries(entries);
-            row.setEntryValues(values);
+            row.setSummary(row.getEntry());
             row.setOnPreferenceChangeListener((preference, newValue) -> {
-                boolean terminal = LauncherUseCaseMode.MODE_TERMINAL.equals(newValue);
-                // The store applies the preset as the value lands; the summary is read back
-                // after that write, and the home-screen question is asked once the picker is down.
-                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                    refreshUseAsSummary();
-                    if (terminal && isDefaultHomeApp(context)) offerAnotherHomeApp(context);
-                });
+                int index = row.findIndexOfValue(String.valueOf(newValue));
+                CharSequence summary = index < 0 ? null : row.getEntries()[index];
+                row.setSummary(summary);
+                mOriginalSummaries.put(KEY_START_IN, summary);
                 return true;
             });
-            refreshUseAsSummary();
-        }
-
-        private void refreshUseAsSummary() {
-            ListPreference row = findPreference(KEY_USE_AS);
-            Context context = getContext();
-            if (row == null || context == null) return;
-            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
-                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
-                    .build(context, true);
-            if (preferences == null) return;
-            String mode = LauncherUseCaseMode.summaryMode(preferences, com.termux.BuildConfig.X11_SERVER);
-            CharSequence summary = context.getString(LauncherUseCaseMode.titleRes(mode));
-            row.setSummary(summary);
-            // The search box restores this when a query is cleared, so it has to follow the mode.
-            mOriginalSummaries.put(KEY_USE_AS, summary);
-        }
-
-        /**
-         * Terminal mode was picked while this launcher is the phone's home app. Nothing is forced:
-         * the terminal keeps answering Home, and the way to another home screen is offered once.
-         */
-        private void offerAnotherHomeApp(@NonNull Context context) {
-            if (!isAdded()) return;
-            new com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
-                .setTitle(R.string.settings_use_as_still_home_title)
-                .setMessage(R.string.settings_use_as_still_home_message)
-                .setNegativeButton(R.string.settings_use_as_keep_home, null)
-                .setPositiveButton(R.string.settings_use_as_choose_home,
-                    (dialog, which) -> com.termux.app.HomeAppChooser.open(context))
-                .show();
-        }
-
-        /** Whether this package answers the phone's Home intent right now. */
-        private static boolean isDefaultHomeApp(@NonNull Context context) {
-            Intent home = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME);
-            android.content.pm.ResolveInfo resolved = context.getPackageManager()
-                .resolveActivity(home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
-            return resolved != null && resolved.activityInfo != null
-                && context.getPackageName().equals(resolved.activityInfo.packageName);
         }
 
         private void configureSearch() {

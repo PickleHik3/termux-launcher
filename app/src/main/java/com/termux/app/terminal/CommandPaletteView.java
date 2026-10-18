@@ -81,6 +81,16 @@ public final class CommandPaletteView extends View {
         void onOutsideTapped();
     }
 
+    /**
+     * Where the in-app keyboard, the floating keyboard's frame and the dock stand at a touch, as
+     * {@code left, top, right, bottom} quadruples in this view's coordinates. Asked on each
+     * touch-down, since a floating keyboard can be dragged while the palette is open.
+     */
+    public interface PassThroughSource {
+        @Nullable
+        float[] passThroughRects();
+    }
+
     public static final int KIND_CATEGORY = 0;
     public static final int KIND_ENTRY = 1;
     public static final int KIND_NOTICE = 2;
@@ -369,6 +379,10 @@ public final class CommandPaletteView extends View {
      * into.
      */
     private final RectF mModalBounds = new RectF();
+    /** {@link #mModalBounds} packed for {@link CommandPaletteTouchPolicy}. */
+    private final float[] mModalQuad = new float[4];
+    /** The keyboard and the dock, which take their own touches even inside the modal bounds. */
+    @Nullable private PassThroughSource mPassThrough;
     /** The caps' rects for the current draw; only the first {@link #mCapCount} are live. */
     private final List<RectF> mCapRects = new ArrayList<>();
     private int mCapCount;
@@ -534,6 +548,15 @@ public final class CommandPaletteView extends View {
      */
     public void setModalBounds(@NonNull RectF bounds) {
         mModalBounds.set(bounds);
+        mModalQuad[0] = bounds.left;
+        mModalQuad[1] = bounds.top;
+        mModalQuad[2] = bounds.right;
+        mModalQuad[3] = bounds.bottom;
+    }
+
+    /** What lies inside the modal bounds and still takes its own touches (see the source). */
+    public void setPassThroughSource(@Nullable PassThroughSource source) {
+        mPassThrough = source;
     }
 
     public void setRows(@NonNull List<Row> rows, int focusIndex) {
@@ -1415,14 +1438,21 @@ public final class CommandPaletteView extends View {
 
     /** Whether the palette owns this point, or it belongs to whatever is underneath. */
     private boolean isModalAt(float x, float y) {
+        float[] passThrough = mPassThrough != null ? mPassThrough.passThroughRects() : null;
+        return CommandPaletteTouchPolicy.classify(x, y, isOnCard(x, y),
+            mModalBounds.isEmpty() ? null : mModalQuad, passThrough)
+            != CommandPaletteTouchPolicy.Target.PASS_THROUGH;
+    }
+
+    /** Whether this point is on the glass or one of its keycaps. */
+    private boolean isOnCard(float x, float y) {
         if (mFrame.contains(x, y)) return true;
         for (int i = 0; i < mCapCount; i++) {
             RectF cap = mCapRects.get(i);
             if (x >= cap.left && x <= cap.right
                 && y >= cap.top + mStripOffset && y <= cap.bottom + mStripOffset) return true;
         }
-        // No bounds set yet: behave as a full-screen scrim rather than leaking every tap.
-        return mModalBounds.isEmpty() || mModalBounds.contains(x, y);
+        return false;
     }
 
     private boolean inList(float x, float y) {

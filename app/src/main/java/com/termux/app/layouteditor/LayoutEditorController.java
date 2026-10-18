@@ -583,7 +583,13 @@ public final class LayoutEditorController {
         };
         views.hiddenControl.addOnLayoutChangeListener(trayMoved);
         views.hiddenHighlight.addOnLayoutChangeListener(trayMoved);
-        mTiles = new HiddenTiles(views.canvas, views.hiddenTiles, this::restore);
+        mTiles = new HiddenTiles(views.canvas, views.hiddenTiles, this::restore,
+            // The tiles list what the tray (and its badge) counts: on Home, not the bars it puts away.
+            block -> {
+                LayoutEditorPlan current = mPlan;
+                LayoutEditorPlan.TrayItem item = trayItemOf(block);
+                return current != null && item != null && current.trayItems().contains(item);
+            });
         views.hiddenControl.setOnClickListener(tapped -> {
             // Nothing hidden: there is nothing to list, and the tiles stay shut.
             boolean open = !mTilesOpen && mTiles != null && !mTiles.isEmpty();

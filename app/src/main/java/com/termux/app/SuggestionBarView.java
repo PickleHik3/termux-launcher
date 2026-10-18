@@ -527,6 +527,8 @@ public final class SuggestionBarView extends GridLayout
     private int swipePreviewPageIndex = -1;
     @NonNull private List<LauncherAppEntry> swipePreviewEntries = Collections.emptyList();
     @NonNull private List<PinnedItem> swipePreviewPinnedItems = Collections.emptyList();
+    /** Each column the last pinned render drew, as its index in the stored pin list. */
+    @Nullable private int[] drawnPinnedIndices;
     @NonNull private List<List<LauncherAppEntry>> swipePreviewFolderEntries = Collections.emptyList();
     /**
      * The two swipe-preview animations are kept apart on purpose. The settle commits a page; the
@@ -748,7 +750,11 @@ public final class SuggestionBarView extends GridLayout
         attachNotificationBadgeListener();
         // Renders parked while the window was away, for cells still waiting on them.
         iconBinder.resumeAll();
-        if (configRepository != null) configRepository.addListener(configListener);
+        if (configRepository != null) {
+            configRepository.addListener(configListener);
+            // The listener was off while the row was away: catch up on any pin written meanwhile.
+            syncPinnedItemsWithStore();
+        }
         LauncherAppDataProvider.getInstance(getContext()).addIconArtworkListener(iconArtworkListener);
         // A catalogue swap can land on a detached row; re-render on the way back in, since the
         // views still hold whatever drawables they were last bound with.
@@ -1288,8 +1294,39 @@ public final class SuggestionBarView extends GridLayout
         this.configRepository = configRepository;
         if (this.configRepository != null) {
             this.configRepository.addListener(configListener);
-            this.pinnedItems = this.configRepository.loadPinnedItems();
+            syncPinnedItemsWithStore();
         }
+    }
+
+    /**
+     * Re-reads the pins from the store and asks for a render when they differ from what the row
+     * holds. The store is the row's only source of truth, but the row hears about writes through
+     * a listener it drops while detached, and the first render can come before the store is
+     * handed over; either way a render of the old list (an empty one shows the "pin your apps"
+     * hint) would otherwise stand until something unrelated re-rendered the row.
+     */
+    private void syncPinnedItemsWithStore() {
+        if (configRepository == null) return;
+        List<PinnedItem> stored = configRepository.loadPinnedItems();
+        boolean changed = !pinsFingerprint(stored).equals(pinsFingerprint(pinnedItems));
+        pinnedItems = stored;
+        if (changed) scheduleCatalogRefreshRender();
+    }
+
+    /** What the row draws from a pin list: its refs and folders in order. */
+    @NonNull
+    static String pinsFingerprint(@Nullable List<PinnedItem> items) {
+        if (items == null) return "";
+        StringBuilder out = new StringBuilder();
+        for (PinnedItem item : items) {
+            if (item instanceof PinnedAppItem) {
+                out.append(((PinnedAppItem) item).appRef.stableId());
+            } else if (item instanceof PinnedFolderItem) {
+                out.append(buildFolderRenderKey((PinnedFolderItem) item));
+            }
+            out.append('\n');
+        }
+        return out.toString();
     }
 
     @NonNull
@@ -1402,6 +1439,9 @@ public final class SuggestionBarView extends GridLayout
                 pendingCatalogRefreshRender = false;
                 post(() -> reloadWithInput(lastInput, lastTerminalView));
             }
+            // A render dropped while hidden is otherwise re-issued only by a layout pass, and
+            // coming back into view need not lay the row out again.
+            if (renderLostWhileUnstable) post(this::reissueLostRender);
             scheduleStableDrawReleaseIfPossible();
             return;
         }
@@ -1603,9 +1643,11 @@ public final class SuggestionBarView extends GridLayout
      * This prevents stale "ghost" pinned slots after apps are uninstalled.
      */
     private void pruneUnavailablePinnedItems() {
-        if (configRepository == null || pinnedItems == null || pinnedItems.isEmpty() || allApps == null || allApps.isEmpty()) {
-            return;
-        }
+        if (configRepository == null || allApps == null || allApps.isEmpty()) return;
+        // Prune what the store holds, not the row's copy: the cleaned list is written back whole,
+        // so a copy that missed a write would take those pins off the dock with the unresolved.
+        pinnedItems = configRepository.loadPinnedItems();
+        if (pinnedItems.isEmpty()) return;
 
         List<PinnedItem> cleaned = new ArrayList<>();
         boolean changed = false;
@@ -1613,6 +1655,12 @@ public final class SuggestionBarView extends GridLayout
         for (PinnedItem item : pinnedItems) {
             if (item instanceof PinnedAppItem) {
                 PinnedAppItem appItem = (PinnedAppItem) item;
+                // The launcher's own entries (Terminal, Display) are not installed apps: a catalogue
+                // reload that has not resolved them yet must not take them off the dock.
+                if (com.termux.app.launcher.LauncherEntries.isEntry(appItem.appRef)) {
+                    cleaned.add(appItem);
+                    continue;
+                }
                 AppRef normalizedRef = resolveNormalizedPinnedRef(appItem.appRef);
                 if (normalizedRef == null) {
                     changed = true;
@@ -1633,7 +1681,8 @@ public final class SuggestionBarView extends GridLayout
                 List<PinnedAppItem> normalizedFolderApps = new ArrayList<>();
                 for (int i = folder.apps.size() - 1; i >= 0; i--) {
                     PinnedAppItem folderApp = folder.apps.get(i);
-                    AppRef normalizedRef = resolveNormalizedPinnedRef(folderApp.appRef);
+                    AppRef normalizedRef = com.termux.app.launcher.LauncherEntries.isEntry(folderApp.appRef)
+                        ? folderApp.appRef : resolveNormalizedPinnedRef(folderApp.appRef);
                     if (normalizedRef == null) {
                         changed = true;
                         continue;
@@ -1678,8 +1727,10 @@ public final class SuggestionBarView extends GridLayout
             return;
         }
 
-        pinnedItems = cleaned;
-        configRepository.savePinnedItems(pinnedItems);
+        configRepository.savePinnedItems(cleaned);
+        // Read back rather than keep `cleaned`: a write that did not land leaves the store as it
+        // was, and the row must not draw a dock the store does not hold.
+        pinnedItems = configRepository.loadPinnedItems();
         pinnedPageIndex = DockPagingModel.clampPage(pinnedPageIndex, getPinnedPagesCount());
     }
 
@@ -3011,6 +3062,9 @@ public final class SuggestionBarView extends GridLayout
         int buttonCount = Math.max(1, maxButtonCount);
         int renderStartCol = 0;
         List<PinnedItem> pinnedForSlots = new ArrayList<>();
+        // Where in pinnedForSlots each drawn entry came from: a pin that does not resolve is not
+        // drawn, so the drawn column and the pin's position part ways after it.
+        List<Integer> drawnSlotPositions = new ArrayList<>();
         int pinnedPageOffset = 0;
         Set<String> azFreshPageEntryKeys = Collections.emptySet();
 
@@ -3038,6 +3092,12 @@ public final class SuggestionBarView extends GridLayout
             renderStartCol = 0;
         }
 
+        if (!azPreview && TextUtils.isEmpty(lastInput.trim())
+            && (pinnedItems == null || pinnedItems.isEmpty()) && configRepository != null) {
+            // An empty list here draws the "pin your apps" hint, so it must be the store's answer,
+            // not a copy the row failed to refresh.
+            pinnedItems = configRepository.loadPinnedItems();
+        }
         boolean pinnedSurface = !azPreview && TextUtils.isEmpty(lastInput.trim()) && pinnedItems != null && !pinnedItems.isEmpty();
         if (pinnedSurface) {
             pinnedItemsPerPage = computePinnedItemsPerPage();
@@ -3055,8 +3115,13 @@ public final class SuggestionBarView extends GridLayout
                     PinnedItem item = pinnedItems.get(i);
                     if (item != null) pinnedForSlots.add(item);
                 }
-                entries = entriesForPinnedItems(pinnedForSlots);
+                entries = entriesForPinnedItems(pinnedForSlots, drawnSlotPositions);
             }
+        }
+        if (!azPreview) {
+            int[] drawn = new int[drawnSlotPositions.size()];
+            for (int i = 0; i < drawn.length; i++) drawn[i] = pinnedPageOffset + drawnSlotPositions.get(i);
+            drawnPinnedIndices = drawn;
         }
         // Nothing else writes the pinned row's paging. The A-Z matches, a typed line's suggestions
         // and an empty row all borrow the same slots, and each of them used to reset
@@ -3138,9 +3203,13 @@ public final class SuggestionBarView extends GridLayout
                 view.setAlpha(0.38f);
             }
 
-            if (!azPreview && col < pinnedForSlots.size()) {
-                final int pinnedIndex = pinnedPageOffset + col;
-                final PinnedItem pinnedItem = pinnedForSlots.get(col);
+            if (!azPreview && col < drawnSlotPositions.size()) {
+                // The column's own pin, never the one at the same column of the stored list: with
+                // an unresolved pin before it, that is the neighbour, and Unpin, a drag or a new
+                // icon would land on the neighbour (the Terminal entry, when it sat first).
+                int slotPosition = drawnSlotPositions.get(col);
+                final int pinnedIndex = pinnedPageOffset + slotPosition;
+                final PinnedItem pinnedItem = pinnedForSlots.get(slotPosition);
                 if (pinnedItem instanceof PinnedFolderItem) {
                     view = createFolderPreviewButton((PinnedFolderItem) pinnedItem);
                     view.setLayoutParams(param);
@@ -3830,8 +3899,10 @@ public final class SuggestionBarView extends GridLayout
         }
         if (playRipple) dispatchLaunchRipple(entry, launchSourceView);
         Context context = getContext();
-        if (com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)) {
-            // A Linux app: the display's runner takes it, with the same bookkeeping a launch gets.
+        if (com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)
+                || com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef)) {
+            // A Linux app, or the launcher's own Terminal or Display entry: the launcher's runner
+            // takes it, with the same bookkeeping a launch gets.
             if (!LauncherAppLauncher.launchEntry(context, entry)) return;
             if (activeAzLetter != null) clearAzPreview();
             getUsageStatsStore().recordLaunch(entry.appRef.stableId());
@@ -4019,17 +4090,29 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private List<LauncherAppEntry> entriesForPinnedItems(@NonNull List<PinnedItem> source) {
+        return entriesForPinnedItems(source, null);
+    }
+
+    /**
+     * The entries a pin list draws, in order, skipping pins that do not resolve.
+     *
+     * @param positions when given, receives each drawn entry's position in {@code source}
+     */
+    private List<LauncherAppEntry> entriesForPinnedItems(@NonNull List<PinnedItem> source,
+                                                         @Nullable List<Integer> positions) {
         List<LauncherAppEntry> out = new ArrayList<>();
-        for (PinnedItem item : source) {
+        if (positions != null) positions.clear();
+        for (int i = 0; i < source.size(); i++) {
+            PinnedItem item = source.get(i);
+            LauncherAppEntry entry = null;
             if (item instanceof PinnedAppItem) {
-                LauncherAppEntry entry = resolvePinnedApp((PinnedAppItem) item);
-                if (entry != null) {
-                    out.add(entry);
-                }
+                entry = resolvePinnedApp((PinnedAppItem) item);
             } else if (item instanceof PinnedFolderItem) {
-                LauncherAppEntry synthetic = folderSyntheticEntry((PinnedFolderItem) item);
-                out.add(synthetic);
+                entry = folderSyntheticEntry((PinnedFolderItem) item);
             }
+            if (entry == null) continue;
+            out.add(entry);
+            if (positions != null) positions.add(i);
         }
         return out;
     }
@@ -4131,6 +4214,9 @@ public final class SuggestionBarView extends GridLayout
                 return exact;
             }
         }
+        // The launcher's entries share one made-up package: the by-package fallbacks below would
+        // answer a Display pin the catalogue does not list with the Terminal entry.
+        if (com.termux.app.launcher.LauncherEntries.isEntry(ref)) return null;
         if (injectedSuggestionButtons == null) {
             LauncherAppEntry resolved = appDataProvider.findDefaultByPackage(ref.packageName);
             if (resolved != null) {
@@ -4988,10 +5074,38 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void removePinnedAt(int index) {
-        if (index >= 0 && index < pinnedItems.size()) {
+        if (index < 0 || index >= pinnedItems.size()) return;
+        PinnedItem target = pinnedItems.get(index);
+        if (configRepository != null) {
+            // The index is into the row as drawn; the write starts from what the store holds now.
+            // Saving the row's own copy with one item gone also wrote every pin that copy had
+            // missed as gone: a copy holding only the Terminal entry emptied the dock.
+            List<PinnedItem> stored = configRepository.loadPinnedItems();
+            int storedIndex = indexOfSamePin(stored, target);
+            pinnedItems = stored;
+            if (storedIndex < 0) {
+                reloadWithInput("", lastTerminalView);
+                return;
+            }
+            stored.remove(storedIndex);
+        } else {
             pinnedItems.remove(index);
-            persistPinsAndReload();
         }
+        persistPinsAndReload();
+    }
+
+    /** Where {@code target} sits in {@code items}: the same app ref, or the same folder id. */
+    static int indexOfSamePin(@NonNull List<PinnedItem> items, @NonNull PinnedItem target) {
+        for (int i = 0; i < items.size(); i++) {
+            PinnedItem item = items.get(i);
+            if (target instanceof PinnedAppItem && item instanceof PinnedAppItem) {
+                if (((PinnedAppItem) target).appRef.stableId()
+                    .equals(((PinnedAppItem) item).appRef.stableId())) return i;
+            } else if (target instanceof PinnedFolderItem && item instanceof PinnedFolderItem) {
+                if (((PinnedFolderItem) target).id.equals(((PinnedFolderItem) item).id)) return i;
+            }
+        }
+        return -1;
     }
 
     private void persistPinsAndReload() {
@@ -5145,6 +5259,7 @@ public final class SuggestionBarView extends GridLayout
             LongPressPickupState state = activeLongPressPickupState;
             if (state == null || state.sourceView != pressTarget) {
                 state = new LongPressPickupState(pressTarget, pinnedIndex, 0f, 0f);
+                state.downKnown = false;
                 activeLongPressPickupState = state;
             }
             state.menuShown = true;
@@ -5201,6 +5316,11 @@ public final class SuggestionBarView extends GridLayout
                 if (state != null && state.sourceView == pressTarget && state.menuShown && !state.dragStarted) {
                     float rawX = event.getRawX();
                     float rawY = event.getRawY();
+                    if (!state.downKnown) {
+                        state.downRawX = rawX;
+                        state.downRawY = rawY;
+                        state.downKnown = true;
+                    }
                     float dx = rawX - state.downRawX;
                     float dy = rawY - state.downRawY;
                     float absDx = Math.abs(dx);
@@ -5211,6 +5331,7 @@ public final class SuggestionBarView extends GridLayout
                     if (absDy >= yIntentThreshold) {
                         state.definitiveYMovement = true;
                     }
+                    state.maxTravelPx = Math.max(state.maxTravelPx, Math.max(absDx, absDy));
                     if (!state.selectionArmed && Math.max(absDx, absDy) >= (slop * MENU_SELECTION_ARM_SLOP_FACTOR)) {
                         state.selectionArmed = true;
                     }
@@ -5288,7 +5409,8 @@ public final class SuggestionBarView extends GridLayout
                         return true;
                     }
                     if (action == MotionEvent.ACTION_UP && state.menuShown && !state.dragStarted) {
-                        if (state.selectionArmed) {
+                        if (menuReleaseCommits(state.selectionArmed, state.maxTravelPx,
+                                ViewConfiguration.get(getContext()).getScaledTouchSlop())) {
                             menuHighlight.updateForRaw(event.getRawX(), event.getRawY(), true, true);
                             menuHighlight.commitHighlighted();
                         }
@@ -5303,6 +5425,15 @@ public final class SuggestionBarView extends GridLayout
             }
             return false;
         });
+    }
+
+    /**
+     * Whether lifting the finger off a long press runs the menu row it is on: only once the
+     * finger has slid toward the menu. A press held still never runs a row, whatever lies under
+     * it, so it can never unpin, delete or uninstall on its own.
+     */
+    static boolean menuReleaseCommits(boolean selectionArmed, float maxTravelPx, int touchSlopPx) {
+        return selectionArmed && maxTravelPx >= touchSlopPx * MENU_SELECTION_ARM_SLOP_FACTOR;
     }
 
     private void cancelPendingContextLongPresses() {
@@ -5320,7 +5451,9 @@ public final class SuggestionBarView extends GridLayout
 
     private void showAppContextPopup(@NonNull AppMenuContext context) {
         dismissAppContextPopup();
-        boolean linuxApp = com.termux.app.x11.X11Apps.isLinuxApp(context.entry.appRef);
+        // A Linux app and the launcher's own entries have no Android package behind them.
+        boolean linuxApp = com.termux.app.x11.X11Apps.isLinuxApp(context.entry.appRef)
+            || com.termux.app.launcher.LauncherEntries.isEntry(context.entry.appRef);
         List<ShortcutInfo> shortcuts = linuxApp ? java.util.Collections.<ShortcutInfo>emptyList()
             : queryEntryShortcuts(context.entry);
         boolean hasShortcuts = !shortcuts.isEmpty();
@@ -5357,6 +5490,29 @@ public final class SuggestionBarView extends GridLayout
             ? (sourceFolder.tintColor & 0x00FFFFFF)
             : (inheritedTintColor & 0x00FFFFFF);
         menuHighlight.setTintBase(tintBase);
+
+        // The Terminal entry's long press: a Home float on the page in view, then a new window,
+        // first, the way an app's shortcuts lead.
+        if (com.termux.app.launcher.LauncherEntries.hasHomeFloat(context.entry.appRef)) {
+            Runnable newFloat = () -> {
+                dismissAppContextPopup();
+                LauncherAppLauncher.launchEntryHomeFloat(context.entry);
+            };
+            TextView newFloatRow = menuRows.addActionRow(shell,
+                getResources().getString(R.string.launcher_entry_new_float),
+                R.drawable.ic_symbol_add, false, tintBase, newFloat);
+            pendingMenuRows.add(new MenuRow(newFloatRow, newFloat, false));
+        }
+        if (com.termux.app.launcher.LauncherEntries.hasAlternate(context.entry.appRef)) {
+            Runnable newWindow = () -> {
+                dismissAppContextPopup();
+                LauncherAppLauncher.launchEntryAlternate(context.entry);
+            };
+            TextView newWindowRow = menuRows.addActionRow(shell,
+                getResources().getString(R.string.launcher_entry_new_window),
+                R.drawable.ic_symbol_add, false, tintBase, newWindow);
+            pendingMenuRows.add(new MenuRow(newWindowRow, newWindow, false));
+        }
 
         // Uninstall and App info ask Android about a package; a Linux app has none.
         if (!linuxApp) {
@@ -6361,8 +6517,16 @@ public final class SuggestionBarView extends GridLayout
     private static final class LongPressPickupState {
         final View sourceView;
         final int pinnedIndex;
-        final float downRawX;
-        final float downRawY;
+        float downRawX;
+        float downRawY;
+        /**
+         * Whether {@link #downRawX}/{@link #downRawY} are where this finger went down. A state the
+         * long press had to make itself saw no DOWN, so it takes the first MOVE as its origin
+         * rather than the screen's corner, which read as a long drag the moment the menu opened.
+         */
+        boolean downKnown = true;
+        /** The farthest the finger has got from its origin since the menu opened, in px. */
+        float maxTravelPx = 0f;
         boolean menuShown = false;
         boolean dragStarted = false;
         long menuShownAtMs = 0L;
@@ -6658,7 +6822,8 @@ public final class SuggestionBarView extends GridLayout
         float dropXRatio = slotWidth <= 0f ? 0.5f : Math.max(0f, Math.min(1f, (contentX - slotStartX) / slotWidth));
 
         int pageOffset = Math.max(0, pinnedPageIndex) * Math.max(1, pinnedItemsPerPage);
-        int targetIndex = clamp(pageOffset + hoveredSlot, 0, pinnedItems == null ? 0 : pinnedItems.size());
+        int targetIndex = clamp(pinnedIndexAtDrawnSlot(drawnPinnedIndices, hoveredSlot, pageOffset),
+            0, pinnedItems == null ? 0 : pinnedItems.size());
         PinnedItem targetItem = null;
         if (pinnedItems != null && targetIndex >= 0 && targetIndex < pinnedItems.size()) {
             targetItem = pinnedItems.get(targetIndex);
@@ -6697,6 +6862,19 @@ public final class SuggestionBarView extends GridLayout
             default:
                 return false;
         }
+    }
+
+    /**
+     * The pin a drop over drawn column {@code slot} lands on: the pin that column draws, or just
+     * past the last drawn pin for a column beyond it. A pin that does not resolve is not drawn, so
+     * the column alone (the page offset plus the column) would name its neighbour.
+     *
+     * @param drawn each drawn column's index in the stored list, or null before a pinned render
+     */
+    static int pinnedIndexAtDrawnSlot(@Nullable int[] drawn, int slot, int pageOffset) {
+        if (drawn == null || drawn.length == 0) return pageOffset + slot;
+        if (slot < drawn.length) return drawn[Math.max(0, slot)];
+        return drawn[drawn.length - 1] + 1 + (slot - drawn.length);
     }
 
     private boolean applyPinnedDrop(@NonNull PinnedDragState dragState, int targetIndex, @Nullable PinnedItem targetItem, float dropXRatio) {

@@ -17,20 +17,23 @@ import androidx.annotation.Nullable;
 /**
  * The border's glow: the border a finger is on, lit along that one edge of the page, so the press
  * answers before it takes. It comes up the moment a finger lands where it could page the wall
- * ({@link BorderDrag#holdPages}) — "you are on it". On the top and bottom borders out in the air,
- * where a sideways slide pages at once ({@link BorderDrag#slidePages}), it is full from the touch
- * ({@link #light}): nothing is waiting to happen there. On the side borders and inside the page,
- * where only the hold pages, it brightens over the hold ({@link #press}), so a glow nearly full
- * says it is about to take. Once the wall claims the finger it stays full until the drag ends; a
- * press given up or claimed by a swipe first (moved, joined, lifted, left to the content, handed
+ * ({@link BorderDrag#holdPages}) — "you are on it". On a border outside the page's text, where a
+ * sideways slide pages at once ({@link BorderDrag#slidePages}), it is full from the touch
+ * ({@link #light}): nothing is waiting to happen there. Where the band reaches past the
+ * clearance into the page, and only the hold pages, it brightens over the hold ({@link #press}),
+ * so a glow nearly full says it is about to take. Once the wall claims the finger it stays full
+ * until the drag ends; a press given up or claimed by a swipe first (moved, joined, lifted, left to the content, handed
  * to a grabber) fades it out quickly. A press that can only become the keyboard's or the status
  * bar's swipe has its grabber ({@link BorderGrabber}) and no glow. Under reduced motion it is
  * full at once and gone at once.
  *
  * <p>Drawn by the wall ({@link PaneWallLayout#dispatchDraw}) in the accent the grabbers use, as a
- * band along the held edge of the page as drawn — slid and sunk with it — lit through the page's
- * clearance before its text and fading out into the air beyond, stopping short of the corner
- * squares, which are the corner tabs'. It asks for frames only while it rises or fades; at rest
+ * band along the held edge of the page as drawn — slid and sunk with it — lit at the edge and
+ * through the page's clearance before its text, and fading out inward. It lies wholly inside the
+ * page's frame ({@link #band}) and is clipped to it: it never spills into the air, the status bar
+ * or the dock beyond. And it stays on the edge the finger pressed: should the page grow after the
+ * press (the content reaching under the dock or the keyboard), the glow keeps the frame it was
+ * lit on ({@link #heldExtent}). It asks for frames only while it rises or fades; at rest
  * and at full nothing repaints. Its level is a function of the clock, so the timing is pure and
  * tested without a view.
  */
@@ -42,11 +45,14 @@ public final class BorderGlow {
     static final long FADE_MS = 140L;
     /** Its alpha at full, under the accent's own. */
     static final float FULL_ALPHA = 0.8f;
-    /** How far out from the page's edge it spreads, in dp, into the air the border lives in. */
-    public static final float SPREAD_DP = 10f;
     /**
-     * How far inside the page's edge it is lit, in dp: the clearance a pane keeps before its text,
-     * the same reach the side borders take into it.
+     * How far inside the page's edge it reaches in all, in dp: lit through {@link #INSET_DP} and
+     * fading to nothing over the rest. Never outside the edge.
+     */
+    public static final float DEPTH_DP = 10f;
+    /**
+     * How far inside the page's edge it is lit at full, in dp: the clearance a pane keeps before
+     * its text, the same reach the side borders take into it.
      */
     public static final float INSET_DP = BorderDrag.SIDE_REACH_DP;
     /**
@@ -87,7 +93,7 @@ public final class BorderGlow {
         mColor = color;
         int clear = color & 0x00FFFFFF;
         int[] colors = {color, color, clear};
-        float[] stops = {0f, INSET_DP / (INSET_DP + SPREAD_DP), 1f};
+        float[] stops = {0f, INSET_DP / DEPTH_DP, 1f};
         mDown = new LinearGradient(0f, 0f, 0f, 1f, colors, stops, Shader.TileMode.CLAMP);
         mAcross = new LinearGradient(0f, 0f, 1f, 0f, colors, stops, Shader.TileMode.CLAMP);
         if (mPhase != Phase.REST) mHost.invalidate();
@@ -200,17 +206,17 @@ public final class BorderGlow {
         float density = mHost.getResources().getDisplayMetrics().density;
         if (!band(mRect, mSide, left, top, right, bottom, scale, density)) return false;
         boolean down = mSide == BorderDrag.Border.TOP || mSide == BorderDrag.Border.BOTTOM;
-        // From the inner side of the band, lit, to its outer side, clear.
-        float inner;
-        float outer;
+        // From the page's edge, lit, inward to the band's far side, clear.
+        float lit;
+        float clear;
         switch (mSide) {
-            case TOP: inner = mRect.bottom; outer = mRect.top; break;
-            case BOTTOM: inner = mRect.top; outer = mRect.bottom; break;
-            case LEFT: inner = mRect.right; outer = mRect.left; break;
-            default: inner = mRect.left; outer = mRect.right; break;
+            case TOP: lit = mRect.top; clear = mRect.bottom; break;
+            case BOTTOM: lit = mRect.bottom; clear = mRect.top; break;
+            case LEFT: lit = mRect.left; clear = mRect.right; break;
+            default: lit = mRect.right; clear = mRect.left; break;
         }
-        mMatrix.setScale(down ? 1f : outer - inner, down ? outer - inner : 1f);
-        mMatrix.postTranslate(down ? 0f : inner, down ? inner : 0f);
+        mMatrix.setScale(down ? 1f : clear - lit, down ? clear - lit : 1f);
+        mMatrix.postTranslate(down ? 0f : lit, down ? lit : 0f);
         Shader shader = down ? mDown : mAcross;
         shader.setLocalMatrix(mMatrix);
         // The ends fade along the edge: the lit-to-clear gradient across it, kept only where the
@@ -225,7 +231,11 @@ public final class BorderGlow {
         mPaint.setShader(new ComposeShader(shader, along, PorterDuff.Mode.DST_IN));
         mPaint.setAlpha(Math.round(255f * alpha(level, visibility)));
         float radius = Math.min(mRect.width(), mRect.height()) / 2f;
+        // Clipped to the frame, so not even the rounding's edge pixels fall outside it.
+        int save = canvas.save();
+        canvas.clipRect(left, top, right, bottom);
         canvas.drawRoundRect(mRect, radius, radius, mPaint);
+        canvas.restoreToCount(save);
         boolean more = needsFrame(nowMs);
         if (more) mHost.postInvalidateOnAnimation();
         return more;
@@ -251,39 +261,51 @@ public final class BorderGlow {
     }
 
     /**
-     * The band along {@code side} of a page drawn at {@code left, top, right, bottom} and
-     * {@code scale}: from {@link #INSET_DP} inside the edge to {@link #SPREAD_DP} outside it, and
-     * along the whole edge, corner to corner ({@link #TAPER_DP} fades its ends). False, with
+     * The band along {@code side} of a page framed at {@code left, top, right, bottom} and drawn
+     * at {@code scale}: from that edge {@link #DEPTH_DP} inward (never past the middle of the
+     * page), and along the whole edge, corner to corner ({@link #TAPER_DP} fades its ends). It
+     * lies wholly inside the frame: nothing of it is outside the edge it lights. False, with
      * {@code out} untouched, where there is none.
      */
     static boolean band(@NonNull RectF out, @NonNull BorderDrag.Border side, float left, float top,
                         float right, float bottom, float scale, float density) {
         if (!(right > left) || !(bottom > top)) return false;
         float s = Float.isNaN(scale) || scale <= 0f ? 1f : scale;
-        float inset = INSET_DP * density * s;
-        float spread = SPREAD_DP * density * s;
+        float depth = DEPTH_DP * density * s;
         float l;
         float t;
         float r;
         float b;
         switch (side) {
             case TOP:
-                l = left; r = right; t = top - spread; b = top + inset;
+                l = left; r = right; t = top; b = top + Math.min(depth, (bottom - top) / 2f);
                 break;
             case BOTTOM:
-                l = left; r = right; t = bottom - inset; b = bottom + spread;
+                l = left; r = right; t = bottom - Math.min(depth, (bottom - top) / 2f); b = bottom;
                 break;
             case LEFT:
-                l = left - spread; r = left + inset; t = top; b = bottom;
+                l = left; r = left + Math.min(depth, (right - left) / 2f); t = top; b = bottom;
                 break;
             case RIGHT:
-                l = right - inset; r = right + spread; t = top; b = bottom;
+                l = right - Math.min(depth, (right - left) / 2f); r = right; t = top; b = bottom;
                 break;
             default: return false;
         }
         if (!(r > l) || !(b > t)) return false;
         out.set(l, t, r, b);
         return true;
+    }
+
+    /**
+     * How far the frame the glow is drawn in reaches along one axis: the page's extent when the
+     * press lit it ({@code atPressPx}), or its extent now ({@code nowPx}) where that is less. A
+     * page that grows after the press — the content reaching under the dock or the keyboard —
+     * leaves the glow on the edge the finger pressed instead of carrying it off to the new one;
+     * one that shrinks keeps it inside itself. With no extent recorded, the extent now.
+     */
+    static float heldExtent(float atPressPx, float nowPx) {
+        if (!(atPressPx > 0f)) return nowPx;
+        return Math.min(atPressPx, nowPx);
     }
 
     /**
