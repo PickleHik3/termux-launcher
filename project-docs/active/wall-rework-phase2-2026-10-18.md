@@ -18,6 +18,21 @@ checks stay owed here too. When #82 lands on `pre`, merge `pre` into this branch
    Minimal mode's default form. Everywhere on the wall (Home with floats, the Workspace).
    Status 2026-10-18: merged at 1458207d8 + d3f2fa8e7 (StatusBarFormPolicy, fold motion, gesture,
    view); seen on the emulator; ink fix and the Minimal-mode bar owed.
+   Status 2026-10-18 (later): **removed.** The developer chose two looks instead: the window pages
+   keep the bar's compact and expanded forms as before the capsule, and Home pages wear the Home
+   pills (below). `StatusBarFormPolicy`, `StatusBarCapsuleDrawing`, the idle fold, the capsule's
+   stop on the swipe, Minimal mode's capsule start and the float landing's unfold are gone; Minimal
+   mode does what it did before.
+   **Home pills** (same day): on a Home page, while a Home float exists and the bar stands along
+   the top or the bottom, the bar shows two pills on its own glass instead of itself
+   (`HomePillsPolicy`, `HomePillsView`; the bar clips its glass layers to them). The windows pill
+   at the start has a section per Home float (its chip's glyph; the focused one adds its name and
+   the sections move once, 180 ms, when the focus moves); a tap shows that float, paging Home to
+   it. The stats pill at the end has CPU, RAM and the weather as the bar's settings show them, from
+   the bar's own samplers; no clock, battery or notification dots. With no float there are no
+   pills, as there was no bar. The windows pill wins the room: the name gives way first, then the
+   stats pill steps aside. A bar down a side keeps its column of float chips on Home. Unit tests
+   green; emulator pass owed.
 2. **Style, Corners and Margin on Home** as Home's own settings (today global).
    Status 2026-10-18: built on a worker branch (keys `home_layout_style`,
    `home_surface_corner_radius`, `home_surface_side_gap`, seeded from the Workspace's while unset;

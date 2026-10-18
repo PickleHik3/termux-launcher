@@ -111,7 +111,7 @@ window's name, so no glyph on the strip can read as Split (developer, 2026-10-18
   pages Home to that float's page and restores it. Workspace windows are not chips on Home; the
   Terminal entry reaches them.
 - Minimising unfolds the bar to compact for the landing if it was folded. The compact and expanded
-  forms and the status swipe are today's; the capsule form is phase two (§12).
+  forms and the status swipe are today's; the capsule form was tried in phase two and removed (§12).
 
 ## 5. The keyboard and the palette on Home
 
@@ -254,7 +254,8 @@ titlebar); `TerminalCommandPalette` (Home action set, Linux apps, floats); `Laun
 - The status bar's **capsule** form: a third form beside compact and expanded, a thin material
   capsule at the top centre; a continuous swipe sizes the bar by where the finger lets go, quick
   swipes step one form, the bar folds to the capsule after a short idle, and the capsule is Minimal
-  mode's default form. Agreed, everywhere on the wall; not phase one.
+  mode's default form. Built in phase two and removed again (2026-10-18): the bar keeps its two
+  forms, and Home wears the Home pills instead.
 - Drag-to-reorder of windows (done in phase two, slice 5a), and Niri's consume/expel of panes
   into and out of columns (done in phase two, slice 5b: `pane.consume` and `pane.expel`, the
   row's windows being the columns).

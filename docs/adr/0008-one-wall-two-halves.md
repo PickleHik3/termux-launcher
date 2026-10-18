@@ -53,5 +53,5 @@ session; it was rejected so that chips, the drawer, the shortcuts and Saved sess
 of window. The launcher's status bar therefore does come to Home, but only while a float exists.
 The Home keyboard is transient by default: a gesture opens the command palette and the keyboard as
 one overlay, and the Home layout's keyboard element is the **always on** toggle, which shrinks the
-grid with today's reflow behind a snapshot. The capsule form of the status bar is agreed and
-deferred. The spec's §4, §5 and §12 carry the detail.
+grid with today's reflow behind a snapshot. The capsule form of the status bar was tried in
+phase two and removed; Home wears its own pills instead. The spec's §4, §5 and §12 carry the detail.

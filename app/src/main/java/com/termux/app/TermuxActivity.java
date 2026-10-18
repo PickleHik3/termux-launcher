@@ -8768,11 +8768,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
     }
 
+    /** Whether the bar is showing Home's pills rather than itself. */
+    private boolean isShowingHomePills() {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        return host instanceof com.termux.app.statusbar.StatusBarSwipeLayout
+            && ((com.termux.app.statusbar.StatusBarSwipeLayout) host).isShowingHomePills();
+    }
+
     /** The lead the strip behind the system status bar continues, or NONE while it is not shown. */
     @NonNull
     private com.termux.app.chrome.ChromeEdgeRule.TopLead statusInsetStripLead() {
         // Under a joined Docked frame the frame's glass runs up under the system bar: no strip.
         if (frameStandsDown()) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
+        // Home's pills float on their own: nothing runs on from them under the system bar.
+        if (isShowingHomePills()) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
         return com.termux.app.chrome.ChromeEdgeRule.statusInsetLead(isRoundedDockStyle(),
             !shouldEnableSeamlessStatusBackground(), mLastStatusBarInsetTop, topEdgeStackLead());
     }
@@ -20561,9 +20570,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 (com.termux.app.statusbar.StatusBarSwipeLayout) host;
             swipeHost.setExpansionAllowed(
                 com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
-            // Minimal mode opens in the capsule (StatusBarFormPolicy); Home keeps its own rule.
-            swipeHost.setMinimalMode(isMinimalMode()
-                && !com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage));
         }
         if (host != null && host.getAlpha() != 1f) host.setAlpha(1f);
         View row = findViewById(R.id.terminal_status_row);
@@ -22756,7 +22762,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The icon resolver, built the first time the Display place needs it. It outlives a display
+     * The icon resolver, built the first time the display's chip needs it. It outlives a display
      * stopping and starting, since what an app's icon looks like does not depend on the server.
      */
     @Nullable
@@ -22765,7 +22771,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mDisplayWindowIcons == null) {
             mDisplayWindowIcons = new com.termux.app.x11.X11WindowIconResolver(getResources(),
                 (wmClass, icon) -> {
-                    if (icon == null || !isDisplayPageShowing() || !isSplitPanesEnabled()) return;
+                    if (icon == null || !isDisplayUp() || !isSplitPanesEnabled()) return;
                     com.termux.app.terminal.TerminalWindowBar bar =
                         findViewById(R.id.terminal_window_bar);
                     if (bar != null) syncWindowBarItems(bar);
@@ -22774,13 +22780,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mDisplayWindowIcons;
     }
 
+    /** The display's front app's icon, or null while none is known. */
+    @Nullable
+    private android.graphics.Bitmap displayChipIcon() {
+        if (mDisplayActiveWindow < 0 || mDisplayActiveWindow >= mDisplayWindows.size()) return null;
+        com.termux.app.x11.X11WindowIconResolver icons = displayWindowIcons();
+        return icons == null ? null
+            : icons.iconFor(mDisplayWindows.get(mDisplayActiveWindow).wmClass);
+    }
+
     private void onDisplayWindowsChanged(
             @NonNull java.util.List<com.termux.app.x11.X11WindowList.Window> windows, int active) {
         mDisplayWindows = windows;
         mDisplayActiveWindow = active;
         // A stop in progress is waiting for exactly this: the last app closing itself.
         if (mDisplayStop != null) mDisplayStop.onWindowsChanged(windows.size());
-        if (!isDisplayPageShowing() || !isSplitPanesEnabled()) return;
+        // The display's chip wears its front app's icon, so a new front app re-dresses it.
+        if (!isDisplayUp() || !isSplitPanesEnabled()) return;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) syncWindowBarItems(bar);
     }
@@ -23543,22 +23559,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         if (isWidgetsPageShowing()) return;
-        if (isDisplayPageShowing()) {
-            // On the Display place the chips are the display's apps: a tap brings one to the front.
-            if (mX11Windows != null && index >= 0 && index < mDisplayWindows.size()) {
-                mX11Windows.activate(mDisplayWindows.get(index).id);
-            }
-            return;
+        if (mPaneController == null || mCurrentWSession == null) return;
+        // The display's chip brings the display window in front the way any window's chip brings
+        // its window, and the bar keeps the Workspace's chips there. The wall keeps the display as
+        // its last stop, so bringing it in front is the wall's move to it (and back, for a
+        // terminal window's chip tapped over the display).
+        com.termux.app.statusbar.WindowChipTarget target =
+            com.termux.app.statusbar.WindowChipTarget.of(index, isDisplayPageShowing(),
+                mCurrentWSession.windows.size(), isDisplayUp(), chipFloats().size());
+        switch (target.kind) {
+            case DISPLAY:
+                if (target.moveWall && mPaneWallController != null) {
+                    mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, true);
+                }
+                return;
+            case WINDOW:
+                if (!target.moveWall) {
+                    showWindowFromBar(target.index);
+                    return;
+                }
+                showWallInnerPage(com.termux.app.wall.PaneWallPage.TERMINAL, target.index);
+                if (mPaneWallController != null) {
+                    mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, true);
+                }
+                return;
+            default:
+                return;
         }
-        // The display's chip, after the terminal windows: the wall goes to the display window.
-        if (mCurrentWSession != null && index == mCurrentWSession.windows.size() && isDisplayUp()
-                && mPaneWallController != null) {
-            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, true);
-            return;
-        }
-        if (mPaneController == null || mCurrentWSession == null
-            || index < 0 || index >= mCurrentWSession.windows.size()) return;
-        showWindowFromBar(index);
     }
 
     /**
@@ -23576,11 +23603,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         if (isWidgetsPageShowing()) return;
-        if (isDisplayPageShowing()) {
-            // The app shows its own "save before closing?" when it has something to ask.
-            closeDisplayWindow(index);
-            return;
-        }
         if (mPaneController == null || mCurrentWSession == null
             || index < 0 || index >= mCurrentWSession.windows.size()) return;
         if (windowHasForegroundJob(index)) confirmCloseWindow(index);
@@ -23635,9 +23657,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // it was. Only the Workspace's windows' chips lift (setMovableChipCount below).
         bar.setOnWindowChipMovedListener(this::moveWindow);
         bar.setOnCreateWindowListener(() -> {
-            // On the Display place the chips are the display's apps, and the plus meant
-            // "open another app"; the app drawer has no programmatic open yet, so the plus
-            // rests there instead of raising a terminal window under the display.
+            // On the display window the plus rests: a terminal window opened from there would
+            // land out of sight, behind the display, on the wall.
             if (!isDisplayPageShowing()) createNewWindow();
         });
         applyLazyMode();
@@ -23654,9 +23675,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
                 (com.termux.app.statusbar.StatusBarSwipeLayout) statusBarHost;
             swipeHost.setCollapsed(isStatusBarCompact());
-            // The compact-to-expanded stretch in pixels, so the three forms share one axis.
-            swipeHost.setFoldTravelPx(targetStatusBarHeightPx(isRoundedDockStyle(), false)
-                - targetStatusBarHeightPx(isRoundedDockStyle(), true));
             swipeHost.setExpansionAllowed(
                 com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
             swipeHost.setListener(new com.termux.app.statusbar.StatusBarSwipeLayout.Listener() {
@@ -24291,29 +24309,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
             new java.util.ArrayList<>();
         java.util.List<Integer> foregroundPids = new java.util.ArrayList<>();
+        // The Home pills' windows: the Home floats' sections, filled on Home only.
+        java.util.List<com.termux.app.statusbar.HomePillsPolicy.Section> homeSections =
+            new java.util.ArrayList<>();
         int selected = -1;
         // Whether the chips below stand for this session's terminal windows at all. The row is
         // shared with the other places, which fill it with something else entirely.
         boolean terminalWindows = false;
-        if (isDisplayPageShowing()) {
-            // The display's apps, front one selected; the terminal's marks (busy, attention,
-            // done) have no meaning for them.
-            com.termux.app.x11.X11WindowIconResolver icons = displayWindowIcons();
-            for (com.termux.app.x11.X11WindowList.Window window : mDisplayWindows) {
-                String label = window.label.isEmpty()
-                    ? getString(R.string.termux_x11_window_unnamed) : window.label;
-                // No icon yet, or none at all: the chip draws its generic app glyph, and a
-                // resolution that lands later syncs the bar again with the icon attached.
-                items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(label, label)
-                    .withIcon(icons == null ? null : icons.iconFor(window.wmClass)));
-            }
-            selected = mDisplayActiveWindow;
-        } else if (isWidgetsPageShowing()) {
+        // The display window wears the Workspace's chips like any window, its own selected: the
+        // bar once swapped them for the display's apps there (the old Display place), so a tap on
+        // the display's chip left a bar of one chip.
+        if (isWidgetsPageShowing()) {
             // On Home the chips are the Home floats, from every page, each with its page; the
             // focused one is selected. Without a float there is no bar here at all.
             selected = -1;
             if (mPaneController != null) {
-                addHomeFloatChips(items, foregroundPids);
+                addHomeFloatChips(items, foregroundPids, homeSections);
                 com.termux.app.terminal.TerminalPaneController.Window focused =
                     mPaneController.focusedHomeFloat();
                 if (focused != null) selected = chipFloats().indexOf(focused);
@@ -24321,20 +24332,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else if (mCurrentWSession != null && mPaneController != null) {
             terminalWindows = true;
             long now = android.os.SystemClock.uptimeMillis();
-            selected = Math.max(0, Math.min(mCurrentWSession.current,
-                mCurrentWSession.windows.size() - 1));
+            boolean onDisplay = isDisplayPageShowing() && isDisplayUp();
+            selected = com.termux.app.statusbar.WindowChipTarget.selectedChip(onDisplay, true,
+                mCurrentWSession.current, mCurrentWSession.windows.size());
             for (int i = 0; i < mCurrentWSession.windows.size(); i++) {
                 com.termux.app.terminal.TerminalPaneController.Window window =
                     mCurrentWSession.windows.get(i);
                 TerminalSession session = mPaneController.windowActiveSession(window);
                 // Looking at the window is the acknowledgement: whatever it wanted, the user is here.
-                if (i == selected) clearWindowAttention(window);
+                if (i == selected && !onDisplay) clearWindowAttention(window);
                 com.termux.terminal.TerminalEmulator progress = windowProgressReporter(window, now);
                 // Agents first: observeWindowPhases reads back what this refresh's agent pass wrote,
                 // so a title that has just turned the ring on must not be a refresh behind.
                 com.termux.app.terminal.AgentStatus.State agentState = observeWindowAgents(window, now);
                 for (TerminalSession shell : mPaneController.shellsOf(window)) syncPaneAttention(shell);
-                int phases = observeWindowPhases(window, i == selected, now);
+                int phases = observeWindowPhases(window, i == selected && !onDisplay, now);
                 items.add(buildWindowItem(session, i, foregroundPids,
                     mPaneController.windowName(window))
                     .withBusy(progress != null || (phases & PHASE_WORKING) != 0)
@@ -24353,10 +24365,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // after the terminal windows while a display is up, where its page stands on the row.
             if (isDisplayUp()) {
                 String display = getString(R.string.launcher_entry_display);
-                items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(display, display));
+                // It wears the front app's icon once one resolves, the way a window's chip wears
+                // its program's glyph; until then the chip's generic glyph.
+                items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(display, display)
+                    .withIcon(displayChipIcon()));
             }
             // Home floats are windows of the session too: chips after the row's, marked as floats.
-            addHomeFloatChips(items, foregroundPids);
+            addHomeFloatChips(items, foregroundPids, null);
         }
         // Only the row's own windows can be dragged to reorder: not the display's chip or the
         // Home floats' after them, and nothing on the places that fill the row with other things.
@@ -24374,6 +24389,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setWindows(items, selected);
+        syncHomePills(homeSections, selected);
         syncBackgroundProcessStack();
         scheduleShellPhaseJudgement();
         java.util.List<Integer> pids = collectAllPanePids();
@@ -25123,6 +25139,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mStatsCardView != null && mStatusCardHost.isShowing()) {
             mStatsCardView.bind(stats);
         }
+        syncHomePillsStats();
     }
 
     private void toggleStatsCard(@NonNull View anchor) {
@@ -25295,6 +25312,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWeatherCardView != null && mStatusCardHost.isShowing()) {
             mWeatherCardView.bind(weather);
         }
+        syncHomePillsStats();
     }
 
     private void toggleWeatherCard(@NonNull View anchor) {
@@ -26108,8 +26126,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Switch to the next/previous window (Ctrl+Alt+] / [): a window of the current session, or on
-     * the Display place the next app on the display — the same list the status bar's chips stand
-     * for, so a keyboard step and a chip tap agree on the order.
+     * the display window the next app on the display, which the display's own window manager
+     * stacks (the chips there are the Workspace's, as on any window).
      */
     void switchWindow(boolean forward) {
         if (isDisplayPageShowing()) {
@@ -26241,13 +26259,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
         scheduleArrangementAutosave();
-        // A float that just flew into its chip (or a new one) needs the chip in sight: a bar
-        // folded to the capsule opens to compact (spec §4.4; StatusBarFormPolicy).
-        if (exist) {
-            View host = findViewById(R.id.terminal_window_bar_host);
-            if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout)
-                ((com.termux.app.statusbar.StatusBarSwipeLayout) host).openCapsule();
-        }
     }
 
     /**
@@ -26327,25 +26338,112 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The float a chip stands for, or null when the chip is a window's. */
     @Nullable
     private com.termux.app.terminal.TerminalPaneController.Window floatOfChip(int index) {
-        if (isDisplayPageShowing()) return null;
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
         int at = index - firstFloatChipIndex();
         return at >= 0 && at < floats.size() ? floats.get(at) : null;
     }
 
-    /** One chip per Home float, each carrying its page, appended to {@code items}. */
+    /**
+     * One chip per Home float, each carrying its page, appended to {@code items}; and, given
+     * {@code sections}, the Home pills' section for each (the chip's glyph and name, without the
+     * page mark, and the chip's spoken label).
+     */
     private void addHomeFloatChips(
             @NonNull java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items,
-            @NonNull java.util.List<Integer> foregroundPids) {
+            @NonNull java.util.List<Integer> foregroundPids,
+            @Nullable java.util.List<com.termux.app.statusbar.HomePillsPolicy.Section> sections) {
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
         for (int i = 0; i < floats.size(); i++) {
             com.termux.app.terminal.TerminalPaneController.Window window = floats.get(i);
             TerminalSession session = mPaneController.windowActiveSession(window);
-            items.add(buildWindowItem(session, items.size(), foregroundPids,
-                mPaneController.windowName(window))
+            com.termux.app.terminal.TerminalWindowBar.WindowItem item = buildWindowItem(session,
+                items.size(), foregroundPids, mPaneController.windowName(window))
                 .withHomeFloat(window.homePage(),
-                    getString(R.string.window_chip_home_float, window.homePage() + 1)));
+                    getString(R.string.window_chip_home_float, window.homePage() + 1));
+            items.add(item);
+            if (sections != null) {
+                String mark = com.termux.app.terminal.HomeFloatPolicy.chipPageMark(
+                    window.homePage());
+                String label = item.label.endsWith(mark)
+                    ? item.label.substring(0, item.label.length() - mark.length()) : item.label;
+                sections.add(com.termux.app.statusbar.HomePillsPolicy.Section.of(label,
+                    item.spokenLabel));
+            }
         }
+    }
+
+    /**
+     * Home's look: on a Home page with the bar along the top or the bottom, the bar shows the
+     * Home pills (HomePillsPolicy) instead of itself, with the floats' sections, the focused one
+     * expanded, and the stats; anywhere else the bar is itself.
+     */
+    private void syncHomePills(
+            @NonNull java.util.List<com.termux.app.statusbar.HomePillsPolicy.Section> sections,
+            int focused) {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        com.termux.app.statusbar.HomePillsView pills = findViewById(R.id.terminal_home_pills);
+        if (!(host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) || pills == null) {
+            return;
+        }
+        boolean on = com.termux.app.statusbar.HomePillsPolicy.shown(isWidgetsPageShowing(),
+            mStatusBarEdge);
+        com.termux.app.statusbar.StatusBarSwipeLayout bar =
+            (com.termux.app.statusbar.StatusBarSwipeLayout) host;
+        boolean was = bar.isShowingHomePills();
+        bar.setHomePills(on);
+        // The bar's glass was dressed for the other look this pass (the strip behind the system
+        // bar runs on from the bar, never from the pills): dress it again, once, after this pass.
+        if (was != bar.isShowingHomePills()) host.post(this::refreshTerminalWindowBar);
+        if (!on) return;
+        if (pills.getTag() == null) {
+            pills.setTag("wired");
+            pills.setListener(index -> {
+                java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats =
+                    chipFloats();
+                if (index >= 0 && index < floats.size()) showHomeFloat(floats.get(index));
+            });
+        }
+        pills.setAnimationsEnabled(!isReducedMotionEnabled());
+        int inset = statusBarContentEdgeInsetPx(isRoundedDockStyle());
+        pills.setHorizontalInsets(inset, inset);
+        pills.setWindows(sections, focused);
+        syncHomePillsStats();
+    }
+
+    /**
+     * The stats pill's readings: CPU and RAM from the bar's own smoothers, the weather from the
+     * weather's cache, each only while the status bar's settings show it. The same samplers the
+     * bar reads; the pills add none.
+     */
+    private void syncHomePillsStats() {
+        com.termux.app.statusbar.HomePillsView pills = findViewById(R.id.terminal_home_pills);
+        if (pills == null || pills.getVisibility() != View.VISIBLE) return;
+        boolean cpuOn = com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
+            mPreferences != null && mPreferences.isStatusWidgetCpuEnabled(),
+            PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
+        boolean ramOn = mPreferences != null && mPreferences.isStatusWidgetRamEnabled();
+        boolean weatherOn = mPreferences != null && mPreferences.isStatusWidgetWeatherEnabled();
+        String cpu = cpuOn ? mBarCpuSmoother.text() : null;
+        String ram = ramOn ? mBarMemorySmoother.text() : null;
+        String weatherGlyph = null;
+        String weather = null;
+        if (weatherOn) {
+            com.termux.app.statusbar.WeatherController.Weather cached =
+                mWeatherController == null ? null : mWeatherController.cache();
+            if (cached != null && cached.valid) {
+                weatherGlyph = com.termux.app.statusbar.WeatherController.glyphFor(
+                    cached.currentCode);
+                weather = com.termux.app.statusbar.WeatherController.formatTemp(cached.currentC,
+                    mPreferences != null && mPreferences.isStatusWidgetWeatherFahrenheit());
+            } else {
+                weather = "--°";
+            }
+        }
+        java.util.List<String> spoken = new java.util.ArrayList<>(3);
+        if (cpu != null) spoken.add(getString(R.string.home_pills_cpu, cpu));
+        if (ram != null) spoken.add(getString(R.string.home_pills_memory, ram));
+        if (weather != null) spoken.add(getString(R.string.home_pills_weather, weather));
+        pills.setStats(cpu, ram, weatherGlyph, weather, android.text.TextUtils.join(", ", spoken));
     }
 
     /**

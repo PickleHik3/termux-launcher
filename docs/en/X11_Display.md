@@ -62,7 +62,9 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   clipboard** keeps them apart.
 - **Switching apps.** The keyboard's window actions work on the display's apps: swipe the space
   bar from its top corners (**Next window** at the top right, **Previous window** at the top
-  left) to step through the apps the status bar lists, in the same order as its chips. The same
+  left) to step through the display's apps, in the order the sessions drawer lists them. Over the
+  display the status bar keeps your windows' chips, with the display's own selected and wearing
+  its front app's icon. The same
   actions on the extra-keys row, a key chord or `launcherctl` do the same while a display window
   is showing.
 - **The keyboard follows text fields.** In Touchscreen touch mode, tapping a text field on the

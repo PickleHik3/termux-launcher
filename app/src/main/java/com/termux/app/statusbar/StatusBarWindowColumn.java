@@ -243,22 +243,7 @@ public final class StatusBarWindowColumn extends ScrollView {
         mItems = new ArrayList<>(items);
         mSelected = selected;
         rebuild();
-        if (mWindowsObserver != null) mWindowsObserver.run();
     }
-
-    /**
-     * Told after every list that changed. The column is handed the windows on every edge, so the
-     * bar's capsule reads the current window and the attention cues from here.
-     */
-    @Nullable private Runnable mWindowsObserver;
-
-    void setWindowsObserver(@Nullable Runnable observer) { mWindowsObserver = observer; }
-
-    /** The windows as last handed over. */
-    @NonNull List<WindowItem> windows() { return mItems; }
-
-    /** The window on screen, or -1. */
-    int selectedIndex() { return mSelected; }
 
     private void rebuild() {
         measureBand();

@@ -85,6 +85,14 @@ its chip in the status bar and docked into the row by the titlebar's Dock. It is
 Home opens. Chips, the drawer and the shortcuts see it like any window.
 _Avoid_: floating terminal (in prose), scratchpad (that is the toggled one), popup
 
+**Home pills**:
+The status bar's look on a **Home page**, there while a **Home float** exists: two pills on the
+bar's glass instead of the bar. The windows pill, at the start, has one section per Home float
+showing its glyph, the focused one its name too; a tap brings that float in front, paging Home to
+it. The stats pill, at the end, has CPU, RAM and the weather as the status bar's settings show
+them, and no clock, battery or notification dots. A bar down a side keeps its column of chips.
+_Avoid_: capsule (the removed form), Home bar
+
 **Keyboard swipe**:
 The one way to the keyboard in the **Workspace**: an up or down swipe that starts on the window's
 bottom border, or at its **grabber**, before the border drag's hold takes. Up opens the keyboard
@@ -178,9 +186,8 @@ _Avoid_: default place, start page, usage mode
 
 **Status swipe**:
 The keyboard swipe's mirror on the top border: down unfolds the status bar, up folds it. It is there
-only while the status bar stands along the top and can unfold. A third, smaller form, the
-**capsule** at the top centre, is agreed for later (`project-docs/active/wall-rework-2026-10-17.md`
-§12). A press in Android's own strip at
+only while the status bar stands along the top and can unfold. The bar has these two forms only (a
+third, the capsule, was tried in phase two and removed). A press in Android's own strip at
 the top of the screen is never taken, so the notification shade still pulls down. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: status bar swipe (the retired page swipe on the bar), pull-down
