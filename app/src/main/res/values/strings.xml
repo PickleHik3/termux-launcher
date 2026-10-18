@@ -2665,42 +2665,47 @@
     <string name="weather_card_unavailable_location">Weather needs a location fix</string>
     <string name="weather_card_unavailable_place">Can\'t find %1$s. Check Settings → Status bar.</string>
 
-    <!-- First-boot tour: six gestures in three chapters, taught on the real home screen -->
+    <!-- First-boot tour: six gestures in three chapters, taught on the wall itself -->
     <string name="tour_skip">Skip</string>
     <string name="tour_end_practice">End practice</string>
     <string name="tour_close_description">End the tour</string>
     <string name="tour_got_it">Got it</string>
     <string name="tour_card_kicker">Termux Launcher</string>
-    <!-- The chapter label, shown in capitals: "1 of 3 · Getting around". -->
+    <!-- The chapter label, shown in capitals: "1 of 3 · Home". -->
     <string name="tour_chapter_label">%1$d of %2$d · %3$s</string>
-    <string name="tour_chapter_getting_around">Getting around</string>
-    <string name="tour_chapter_status_and_apps">Status bar and apps</string>
-    <string name="tour_chapter_commands_and_help">Commands and help</string>
-    <string name="tour_title_places">Slide between places</string>
-    <string name="tour_body_places">Hold the top or bottom border, then swipe left or right to switch places.</string>
+    <string name="tour_chapter_home">Home</string>
+    <string name="tour_chapter_workspace">The Workspace</string>
+    <string name="tour_chapter_anywhere">Anywhere</string>
+    <string name="tour_title_to_workspace">Swipe to the Workspace</string>
+    <string name="tour_body_to_workspace">Swipe left on an empty spot of Home. Past your last Home page, your first window slides in.</string>
+    <string name="tour_title_border_drag">Border drag back</string>
+    <string name="tour_body_border_drag">Swipe right along the window\'s bottom border, below the text, to slide back to Home.</string>
     <string name="tour_title_keyboard_away">Put the keyboard away</string>
-    <string name="tour_body_keyboard_away">Swipe down from the bottom edge of the page.</string>
+    <string name="tour_body_keyboard_away">Swipe down from the window\'s bottom border, at the grabber.</string>
     <string name="tour_title_keyboard_back">Bring it back</string>
-    <string name="tour_body_keyboard_back">Swipe up from the same edge.</string>
+    <string name="tour_body_keyboard_back">Swipe up from the same border. The Workspace remembers which you chose.</string>
     <string name="tour_title_status">Pull down the status bar</string>
-    <string name="tour_body_status">Swipe down from the top edge for the clock, weather and notifications.</string>
-    <string name="tour_title_status_compact">Make it compact again</string>
-    <string name="tour_body_status_compact">Swipe up from the same edge.</string>
+    <string name="tour_body_status">Pull down slowly from the window\'s top border and let go low: the capsule opens into the full bar.</string>
+    <string name="tour_title_status_fold">Fold it back</string>
+    <string name="tour_body_status_fold">Swipe up quickly from the same border to fold it a step. Left alone, it folds to the capsule by itself.</string>
     <string name="tour_title_apps">Open your apps</string>
-    <string name="tour_body_apps">Swipe down on the apps row to open the drawer.</string>
-    <string name="tour_body_apps_left_rail">Swipe right on the apps rail to open the drawer.</string>
-    <string name="tour_body_apps_right_rail">Swipe left on the apps rail to open the drawer.</string>
+    <string name="tour_body_apps">Your pinned apps and the A–Z index float over Home. Swipe down on the apps row for all of them.</string>
+    <string name="tour_body_apps_left_rail">Your pinned apps and the A–Z index float over Home. Swipe right on the apps rail for all of them.</string>
+    <string name="tour_body_apps_right_rail">Your pinned apps and the A–Z index float over Home. Swipe left on the apps rail for all of them.</string>
     <string name="tour_title_palette">Run anything</string>
-    <string name="tour_body_palette">Swipe up on the space bar to search apps, settings and commands.</string>
+    <string name="tour_body_palette">Swipe up on an empty spot of Home for the command palette: apps, settings and commands. On a window, it\'s in the corner tab.</string>
     <string name="tour_title_corner">Hold a corner</string>
-    <string name="tour_body_corner">Every pane keeps a menu in its corners. Press and hold the top-left one.</string>
+    <string name="tour_body_corner">Every window keeps a corner tab. Press and hold a corner of this window.</string>
     <string name="tour_title_help">Tap ?</string>
-    <string name="tour_body_help">Help mode explains whatever you touch next. It lives in every corner menu.</string>
-    <string name="tour_card_return_to_terminal">Hold the top or bottom border, then swipe left or right to get back to the terminal and continue.</string>
+    <string name="tour_body_help">Help explains whatever you touch next. Every corner tab has it, Home\'s too.</string>
+    <!-- A card taught on a window, read while the wall rests on Home. -->
+    <string name="tour_card_go_to_workspace">Swipe left past your last Home page to reach your window and continue.</string>
+    <!-- A card taught on Home, read while the wall rests on a window. -->
+    <string name="tour_card_go_home">Swipe right along the window\'s bottom border, or press Home, to get back to Home and continue.</string>
     <string name="tour_closing_title">You\'re set</string>
     <string name="tour_tip_help">Hold any corner and tap ? to learn what something does.</string>
-    <string name="tour_tip_wallpaper">Set your wallpaper: hold any corner and tap Appearance.</string>
-    <string name="tour_tip_shortcuts">Tap Ctrl, then Alt, to see every shortcut.</string>
+    <string name="tour_tip_float">Hold an empty spot on Home and tap Terminal for a Home float.</string>
+    <string name="tour_tip_layout">Tap Layout in the same menu to arrange the dock.</string>
     <string name="tour_tip_replay">Replay this tour from Settings \u203A About &amp; help.</string>
     <!-- How far the offline models have downloaded: "Offline models · 1.2 GB of 3.1 GB". -->
     <string name="tour_models_progress">Offline models · %1$s of %2$s</string>
@@ -3188,8 +3193,8 @@
     <string name="help_practice_start">Start</string>
     <string name="help_lesson_find_help_title">Find help</string>
     <string name="help_lesson_find_help_summary">Open help from a page\'s corner tab.</string>
-    <string name="help_lesson_border_drag_title">Change place</string>
-    <string name="help_lesson_border_drag_summary">Hold the top or bottom border, then swipe left or right to the next place.</string>
+    <string name="help_lesson_border_drag_title">Reach the Workspace</string>
+    <string name="help_lesson_border_drag_summary">Swipe left on an empty spot of Home to reach your first window, then swipe right along its bottom border to come back.</string>
     <string name="help_lesson_status_swipe_title">Open the status bar</string>
     <string name="help_lesson_status_swipe_summary">Swipe down from the top border to open the status bar.</string>
     <string name="help_lesson_find_apps_title">Open your apps</string>

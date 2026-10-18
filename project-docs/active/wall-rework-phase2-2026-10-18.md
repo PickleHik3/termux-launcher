@@ -110,6 +110,19 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    `window.move` got its title ("Move window to…"). Unit tests green; emulator pass owed
    (device-checks, slice 5b). Slice 5 done.
 6. **The first-boot tour**, rewritten for the wall (switched off since 651ea9d7f).
+   Status 2026-10-18 (slice 6): built on a worker branch and switched back on. Six lessons in
+   three chapters, the engine kept (`TourRun`, `TourController`, the overlay): Home
+   (`page_swipe`: a plain swipe across the seam, cleared by the new `wall.seam_to_workspace`, then
+   a border drag back, cleared by `wall.seam_to_home`; `find_apps`: the drawer off the dock over
+   Home), the Workspace (`keyboard`, `status_swipe`: a slow pull open, a quick swipe up to fold)
+   and anywhere (`find_action`: the palette from Home's free area or a corner tab, heard now from
+   the palette's own funnel; `find_help`: a window's corner, then ?). Each stage names its half
+   of the wall (`TourStep.Side`): a card read on the other half asks the way there, and a signal
+   heard there does not clear it. Each lesson starts on its first stage's half (`TourRun.startSide`,
+   `HomeHost.resetFor`): Home page 1 as the home press leaves it, or the first window with its
+   keyboard up and the status bar folded; the closing card shows where the last lesson ended. With
+   no window beside Home the seam lesson is dropped, without Home both Home lessons. `border_drag` became `page_swipe` (help's practice
+   too); `RUN_VERSION` 8. Unit tests green; emulator pass owed (device-checks, slice 6).
 7. **The icon grid on Home pages**: app icons, folders, drag between pages. Born on slice 2b's
    rule: its rim is Home's Margin, as the widget grid's is.
 8. **Per-toplevel X11 windows** (needs a rootless server).
