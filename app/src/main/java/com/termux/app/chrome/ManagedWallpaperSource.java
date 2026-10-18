@@ -134,9 +134,36 @@ public final class ManagedWallpaperSource {
         return mSizeWidth > 0 && mSizeHeight > 0;
     }
 
+    /**
+     * Bitmaps lent out to a reader off the main thread (the blur worker drawing the wallpaper into
+     * a capture), with how many loans each has out. A lent bitmap is not recycled under its reader:
+     * {@link #clear} leaves it to the last {@link #release}.
+     */
+    @NonNull private final java.util.IdentityHashMap<Bitmap, Integer> mLoans =
+        new java.util.IdentityHashMap<>();
+
+    /** Main thread: lends {@code bitmap} (one {@link #obtain} returned) to a reader on another thread. */
+    public void lend(@NonNull Bitmap bitmap) {
+        Integer loans = mLoans.get(bitmap);
+        mLoans.put(bitmap, loans == null ? 1 : loans + 1);
+    }
+
+    /** Main thread: the reader is done; a bitmap cleared meanwhile is recycled with the last loan. */
+    public void release(@NonNull Bitmap bitmap) {
+        Integer loans = mLoans.get(bitmap);
+        if (loans == null) return;
+        if (loans > 1) {
+            mLoans.put(bitmap, loans - 1);
+            return;
+        }
+        mLoans.remove(bitmap);
+        if (bitmap != mBitmap && !bitmap.isRecycled()) bitmap.recycle();
+    }
+
     /** Drops the held bitmap; the next call reads again. */
     public void clear() {
-        if (mBitmap != null && !mBitmap.isRecycled()) mBitmap.recycle();
+        if (mBitmap != null && !mBitmap.isRecycled() && !mLoans.containsKey(mBitmap))
+            mBitmap.recycle();
         mBitmap = null;
         mPath = null;
     }

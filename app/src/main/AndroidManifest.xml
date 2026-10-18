@@ -278,6 +278,17 @@
             android:grantUriPermissions="true"
             android:permission="${TERMUX_PACKAGE_NAME}.permission.RUN_COMMAND" />
 
+        <!-- Pictures a program copied to the clipboard; the clipboard grants each reader access. -->
+        <provider
+            android:name=".app.terminal.ClipboardFileProvider"
+            android:authorities="${TERMUX_PACKAGE_NAME}.clipboard"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/clipboard_file_paths" />
+        </provider>
+
 
         <receiver
             android:name=".app.TermuxOpenReceiver"
@@ -350,6 +361,11 @@
 
         <service
             android:name=".app.launcher.data.LauncherCategorySortService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
+
+        <service
+            android:name=".app.settings.backup.ModelExportService"
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 

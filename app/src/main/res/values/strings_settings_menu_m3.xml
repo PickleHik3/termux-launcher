@@ -30,7 +30,7 @@
     <string name="settings_keyboard_layout_keys_header">Layouts and keys</string>
     <string name="settings_keyboard_docs_credits_header">Documentation and credits</string>
     <string name="settings_keyboard_sub_layout_title">Layouts</string>
-    <string name="settings_keyboard_sub_layout_summary">Languages, extra keys and custom layout</string>
+    <string name="settings_keyboard_sub_layout_summary">Layouts, extra keys and documentation</string>
     <string name="settings_keyboard_sub_size_title">Size and position</string>
     <string name="settings_keyboard_sub_size_summary">Floating and split keyboard, in percent</string>
     <string name="settings_keyboard_sub_typing_title">Typing and feedback</string>

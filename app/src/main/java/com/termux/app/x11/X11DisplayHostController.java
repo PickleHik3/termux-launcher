@@ -124,8 +124,22 @@ public final class X11DisplayHostController {
         if (kept != null) onServerAnnounced(kept);
     }
 
+    /**
+     * Who hears the display start and stop. A listener set while a server already runs is told
+     * so: a relaunched activity's controller takes the kept announcement in its constructor,
+     * before the activity can hand it a listener, so the change to running happened with nobody
+     * listening — and the page would stay on its empty state, the surface hidden, over a display
+     * that never stopped. The replay is posted, so the activity finishes building the chrome it
+     * syncs first, and it is dropped if the listener was replaced or the display stopped (which
+     * that listener then hears on its own) in the meantime.
+     */
     public void setListener(@Nullable Listener listener) {
         this.listener = listener;
+        if (listener == null || !running) return;
+        handler.post(() -> {
+            if (destroyed || this.listener != listener || !running) return;
+            listener.onDisplayRunningChanged(true);
+        });
     }
 
     /** True while a display server is up — announced and alive — attached to the page or not. */
@@ -232,6 +246,7 @@ public final class X11DisplayHostController {
         clipboardSync.deactivate();
         LorieView live = view;
         if (live != null) live.connect(-1);
+        X11DisplayServerState.onServerDied();
         setRunning(false);
     }
 

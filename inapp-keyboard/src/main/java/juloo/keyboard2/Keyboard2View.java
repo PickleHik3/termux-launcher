@@ -38,6 +38,24 @@ public class Keyboard2View extends View
   private KeyboardData.Key _compose_key;
   /** The host is listening for voice input: the voice key draws as pressed. */
   private boolean _voiceTypingActive;
+  /**
+   * Paste will put in a picture (one on the clipboard, or a fresh screenshot the launcher offers):
+   * the paste keys draw {@link #PASTE_PICTURE_GLYPH}.
+   */
+  private boolean _pasteShowsPicture;
+
+  /**
+   * Nerd Font nf-md-image, the paste keys' glyph while paste will put in a picture. A private-use
+   * code point without the key-font flag, so it is drawn in the symbols face ({@link LabelFace}).
+   */
+  static final String PASTE_PICTURE_GLYPH = new String(Character.toChars(0xF02E9));
+
+  /**
+   * [PASTE_PICTURE_GLYPH]'s size against the key's own: the Nerd Font picture fills its whole em
+   * square, where the key font's clipboard is 0.75 em wide, so at full size it towers over the
+   * glyphs beside it.
+   */
+  static final float PASTE_PICTURE_SCALE = 0.78f;
 
   private Pointers _pointers;
 
@@ -99,22 +117,63 @@ public class Keyboard2View extends View
   private final ArrayList<TouchFx> _releasedTouchFx = new ArrayList<TouchFx>();
 
   /**
-   * Host hook that may move a press onto a neighbouring key before it is
-   * committed, and that is told where every tap landed. Local addition, see
-   * UPSTREAM.md. Consulted only for real touches, never for the colour-editor
-   * paint path.
+   * Host hook that may send a plain tap as a neighbouring key, and that is
+   * told about every release. Local addition, see UPSTREAM.md. Consulted only
+   * for real touches, never for the colour-editor paint path.
+   *
+   * <p>A press always holds the key under the finger-down point (the raw
+   * key): its highlight, swipe legends, long press and key repeat are that
+   * key's. Only a press released as a plain tap is offered to
+   * [resolveTap], just before the key is sent.
    */
   public interface TapResolver
   {
     /**
-     * Returns the index in [geometry] of the key the press should resolve to.
-     * Returning [rawIndex] or an invalid index leaves the press alone.
+     * A plain tap on [rawIndex] is being released; returns the index in
+     * [geometry] of the key to send. Returning [rawIndex] or an invalid index
+     * sends the raw key.
      */
     int resolveTap(TapGeometry geometry, int rawIndex, float x, float y);
 
-    /** A press has been released. [swiped] is true when the finger travelled. */
-    void observeTap(TapGeometry geometry, int rawIndex, float x, float y,
-        boolean swiped);
+    /** A press has been released, or cancelled. */
+    void observeTap(TapGeometry geometry, TapRelease release);
+  }
+
+  /**
+   * One released press, for [TapResolver.observeTap]. Positions and contact
+   * size are in [TapGeometry] units; times are [SystemClock.uptimeMillis].
+   */
+  public static final class TapRelease
+  {
+    public final int rawIndex;
+    /** The key that was sent; differs from [rawIndex] only on a corrected tap. */
+    public final int committedIndex;
+    /** The finger-down point. */
+    public final float x;
+    public final float y;
+    /** Released where it went down: no swipe, long press, repeat or slide. */
+    public final boolean plain;
+    /** Ctrl or Alt was held. */
+    public final boolean modified;
+    public final long downAtMs;
+    public final long upAtMs;
+    /** [MotionEvent.getTouchMajor] at finger-down; 0 when not reported. */
+    public final float contactSize;
+
+    public TapRelease(int rawIndex, int committedIndex, float x, float y,
+        boolean plain, boolean modified, long downAtMs, long upAtMs,
+        float contactSize)
+    {
+      this.rawIndex = rawIndex;
+      this.committedIndex = committedIndex;
+      this.x = x;
+      this.y = y;
+      this.plain = plain;
+      this.modified = modified;
+      this.downAtMs = downAtMs;
+      this.upAtMs = upAtMs;
+      this.contactSize = contactSize;
+    }
   }
 
   private TapResolver _tapResolver;
@@ -1103,10 +1162,10 @@ public class Keyboard2View extends View
       {
         KeyValue kv = key.keys[i] == null ? null : modifyKey(key.keys[i], _mods);
         ringLabels[i] = popupLabel(kv);
-        ringKeyFont[i] = kv != null && kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT);
+        ringKeyFont[i] = kv != null && drawnInKeyFont(kv);
       }
       KeyPopupInfo info = new KeyPopupInfo(bounds, label,
-          value.hasFlagsAny(KeyValue.FLAG_KEY_FONT), ringLabels, ringKeyFont, latchable);
+          drawnInKeyFont(value), ringLabels, ringKeyFont, latchable);
       _keyPopups.put(pointerId, info);
       listener.onKeyPopupShow(pointerId, info);
     }
@@ -1121,7 +1180,7 @@ public class Keyboard2View extends View
       if (label == null)
         return;
       listener.onKeyPopupTarget(pointerId, label,
-          value != null && value.hasFlagsAny(KeyValue.FLAG_KEY_FONT), slot);
+          value != null && drawnInKeyFont(value), slot);
     }
 
     @Override
@@ -1161,7 +1220,7 @@ public class Keyboard2View extends View
     if (kv == null)
       return null;
     kv = shiftedKeyeventLabel(kv);
-    String label = kv.getString();
+    String label = drawnString(kv);
     if (label == null || label.isEmpty())
       return null;
     // Same clamp the caps use, so a long macro reads the same in both places.
@@ -1254,8 +1313,8 @@ public class Keyboard2View extends View
     Vertical v = LABEL_POSITION_V[sub_index];
     Theme.Computed.Key tc_key = themeKeyFor(k.role);
     float textSize = scaleTextSize(kv, false);
-    Paint p = tc_key.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), kv.getString(),
-        tc_key.subLabelColor, textSize, a);
+    String label = drawnString(kv);
+    Paint p = tc_key.sublabel_paint(drawnInKeyFont(kv), label, tc_key.subLabelColor, textSize, a);
     float subPadding = _config.keyPaddingPx;
     if (a != Paint.Align.CENTER && v != Vertical.CENTER)
       subPadding += tc_key.border_radius * 0.3f;
@@ -1269,7 +1328,6 @@ public class Keyboard2View extends View
       anchor += keyW / 2f;
     else
       anchor += (a == Paint.Align.LEFT) ? subPadding : keyW - subPadding;
-    String label = kv.getString();
     int label_len = label.length();
     if (label_len > 3 && kv.getKind() == KeyValue.Kind.String)
       label_len = 3;
@@ -1409,6 +1467,68 @@ public class Keyboard2View extends View
     invalidate();
   }
 
+  /**
+   * Draws the paste keys with a photo glyph while paste will put in a picture, so the user can see
+   * it will insert one. Only the glyph changes; the keys still send paste.
+   */
+  public void setPasteShowsPicture(boolean showsPicture)
+  {
+    requireMainThread();
+    if (_pasteShowsPicture == showsPicture)
+      return;
+    _pasteShowsPicture = showsPicture;
+    invalidate();
+  }
+
+  /**
+   * Whether [kv], already modified, is a paste the photo glyph stands in for. A modifier turns
+   * paste into pasteAsPlainText, which swaps too: a clipboard picture pastes all the same, while
+   * the launcher has plain paste put in the clipboard rather than an offered screenshot.
+   */
+  private boolean showsPictureGlyph(KeyValue kv)
+  {
+    if (!_pasteShowsPicture || kv.getKind() != KeyValue.Kind.Editing)
+      return false;
+    KeyValue.Editing editing = kv.getEditing();
+    return editing == KeyValue.Editing.PASTE || editing == KeyValue.Editing.PASTE_PLAIN;
+  }
+
+  /** The text a cap, corner or popup draws for [kv], already modified. */
+  private String drawnString(KeyValue kv)
+  {
+    return showsPictureGlyph(kv) ? PASTE_PICTURE_GLYPH : kv.getString();
+  }
+
+  /** Whether [kv], already modified, is drawn in the bundled key font. */
+  private boolean drawnInKeyFont(KeyValue kv)
+  {
+    return kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT) && !showsPictureGlyph(kv);
+  }
+
+  /** The label [drawLabel] and [drawSubLabel] draw for the layout value [kv]; for tests. */
+  String labelForDrawing(KeyValue kv)
+  {
+    kv = modifyKey(kv, _mods);
+    return kv == null ? null : drawnString(shiftedKeyeventLabel(kv));
+  }
+
+  /** The size [drawLabel] or [drawSubLabel] draws the layout value [kv] at; for tests. */
+  float labelSizeForDrawing(KeyValue kv, boolean mainLabel)
+  {
+    kv = modifyKey(kv, _mods);
+    return kv == null ? 0f : scaleTextSize(shiftedKeyeventLabel(kv), mainLabel);
+  }
+
+  /** The face [labelForDrawing] is drawn in; for tests. */
+  LabelFace labelFaceForDrawing(KeyValue kv)
+  {
+    kv = modifyKey(kv, _mods);
+    if (kv == null)
+      return null;
+    kv = shiftedKeyeventLabel(kv);
+    return LabelFace.of(drawnInKeyFont(kv), drawnString(kv));
+  }
+
   private static boolean isVoiceTypingKey(KeyboardData.Key k)
   {
     for (KeyValue kv : k.keys)
@@ -1533,7 +1653,7 @@ public class Keyboard2View extends View
       case MotionEvent.ACTION_UP:
       case MotionEvent.ACTION_POINTER_UP:
         p = event.getActionIndex();
-        observeTap(_touchFx.get(event.getPointerId(p)));
+        settleTap(event.getPointerId(p));
         finishTouchFx(event.getPointerId(p));
         _pointers.onTouchUp(event.getPointerId(p));
         _trails.remove(event.getPointerId(p));
@@ -1547,11 +1667,10 @@ public class Keyboard2View extends View
         float ty = event.getY(p);
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN)
           requestDisallowIntercept(true);
-        KeyboardData.Key rawKey = getKeyAtPosition(tx, ty);
-        KeyboardData.Key key = resolveTap(rawKey, tx, ty);
+        KeyboardData.Key key = getKeyAtPosition(tx, ty);
         if (key != null)
         {
-          startTouchFx(event.getPointerId(p), key, rawKey, tx, ty);
+          startTouchFx(event.getPointerId(p), key, tx, ty, event.getTouchMajor(p));
           _pointers.onTouchDown(tx, ty, event.getPointerId(p), key);
           if (_config.swipeTrailEnabled)
             _trails.put(event.getPointerId(p), new Trail(tx, ty));
@@ -1568,6 +1687,7 @@ public class Keyboard2View extends View
         }
         break;
       case MotionEvent.ACTION_CANCEL:
+        reportCancelledTaps();
         finishAllTouchFx();
         _pointers.onTouchCancelCommit();
         _trails.clear();
@@ -1580,13 +1700,15 @@ public class Keyboard2View extends View
     return (true);
   }
 
-  private void startTouchFx(int pointerId, KeyboardData.Key key,
-      KeyboardData.Key rawKey, float x, float y)
+  private void startTouchFx(int pointerId, KeyboardData.Key key, float x, float y,
+      float contactPx)
   {
     TouchFx previous = _touchFx.get(pointerId);
     if (previous != null)
       releaseTouchFx(previous, SystemClock.uptimeMillis());
-    _touchFx.put(pointerId, new TouchFx(key, rawKey, x, y, SystemClock.uptimeMillis()));
+    TouchFx fx = new TouchFx(key, x, y, SystemClock.uptimeMillis());
+    fx.contactPx = contactPx > 0f ? contactPx : 0f;
+    _touchFx.put(pointerId, fx);
   }
 
   /** Lazily rebuilds the tap geometry for the current layout and measurement. */
@@ -1604,35 +1726,60 @@ public class Keyboard2View extends View
     return (py - getPaddingTop() - _config.marginTopPx) / _keyWidth;
   }
 
-  /** The key a real press resolves to: [rawKey] unless the resolver moves it. */
-  private KeyboardData.Key resolveTap(KeyboardData.Key rawKey, float tx, float ty)
+  /**
+   * Called on release, before [Pointers.onTouchUp] sends the key. A plain tap
+   * may be sent as the key the resolver names; every release is reported.
+   */
+  private void settleTap(int pointerId)
   {
-    if (rawKey == null || _tapResolver == null)
-      return rawKey;
+    TouchFx fx = _touchFx.get(pointerId);
+    if (fx == null || fx.key == null || _tapResolver == null)
+      return;
     TapGeometry geometry = tapGeometry();
     if (geometry == null)
-      return rawKey;
-    int rawIndex = geometry.indexOf(rawKey);
+      return;
+    int rawIndex = geometry.indexOf(fx.key);
     if (rawIndex < 0)
-      return rawKey;
-    int index = _tapResolver.resolveTap(geometry, rawIndex, tapUnitsX(tx), tapUnitsY(ty));
-    if (index < 0 || index >= geometry.keyCount)
-      return rawKey;
-    return geometry.keys[index];
+      return;
+    float x = tapUnitsX(fx.downX);
+    float y = tapUnitsY(fx.downY);
+    Pointers.Modifiers mods = fx.swiped ? null : _pointers.plainTapModifiers(pointerId);
+    boolean plain = mods != null;
+    boolean modified = plain && Pointers.holdsCtrlOrAlt(mods);
+    int committed = rawIndex;
+    // A shortcut is never guessed at: with Ctrl or Alt held the raw key is sent.
+    if (plain && !modified)
+    {
+      int index = _tapResolver.resolveTap(geometry, rawIndex, x, y);
+      if (index != rawIndex && index >= 0 && index < geometry.keyCount
+          && geometry.keys[index] != null
+          && _pointers.retargetPlainTap(pointerId, geometry.keys[index]))
+        committed = index;
+    }
+    _tapResolver.observeTap(geometry, new TapRelease(rawIndex, committed, x, y,
+          plain, modified, fx.downAt,
+          SystemClock.uptimeMillis(), fx.contactPx / _keyWidth));
   }
 
-  private void observeTap(TouchFx fx)
+  /** The system took the touch stream; nothing pressed was a plain tap. */
+  private void reportCancelledTaps()
   {
-    if (fx == null || fx.rawKey == null || _tapResolver == null)
+    if (_tapResolver == null || _touchFx.size() == 0)
       return;
     TapGeometry geometry = tapGeometry();
     if (geometry == null)
       return;
-    int rawIndex = geometry.indexOf(fx.rawKey);
-    if (rawIndex < 0)
-      return;
-    _tapResolver.observeTap(geometry, rawIndex, tapUnitsX(fx.downX),
-        tapUnitsY(fx.downY), fx.swiped);
+    long now = SystemClock.uptimeMillis();
+    for (int i = 0; i < _touchFx.size(); i++)
+    {
+      TouchFx fx = _touchFx.valueAt(i);
+      int rawIndex = fx == null ? -1 : geometry.indexOf(fx.key);
+      if (rawIndex < 0)
+        continue;
+      _tapResolver.observeTap(geometry, new TapRelease(rawIndex, rawIndex,
+            tapUnitsX(fx.downX), tapUnitsY(fx.downY), false, false, fx.downAt,
+            now, fx.contactPx / _keyWidth));
+    }
   }
 
   private void updateTouchFx(int pointerId, float x, float y)
@@ -2243,9 +2390,9 @@ public class Keyboard2View extends View
     kv = shiftedKeyeventLabel(kv);
     float textSize = scaleTextSize(kv, true);
     int color = hasColorOverride ? colorOverride : labelColor(kv, isKeyDown, false, tc);
-    Paint p = tc.label_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), kv.getString(), color,
-        textSize);
-    canvas.drawText(kv.getString(), x, (keyH - p.ascent() - p.descent()) / 2f + y, p);
+    String label = drawnString(kv);
+    Paint p = tc.label_paint(drawnInKeyFont(kv), label, color, textSize);
+    canvas.drawText(label, x, (keyH - p.ascent() - p.descent()) / 2f + y, p);
   }
 
   private void drawSubLabel(Canvas canvas, KeyValue kv, float x, float y,
@@ -2260,8 +2407,8 @@ public class Keyboard2View extends View
     kv = shiftedKeyeventLabel(kv);
     float textSize = scaleTextSize(kv, false);
     int color = hasColorOverride ? colorOverride : labelColor(kv, isKeyDown, true, tc);
-    Paint p = tc.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), kv.getString(), color,
-        textSize, a);
+    String label = drawnString(kv);
+    Paint p = tc.sublabel_paint(drawnInKeyFont(kv), label, color, textSize, a);
     float subPadding = _config.keyPaddingPx;
     // Corner-anchored sublabels sit where a large corner radius cuts the key
     // fill away; pull them inward with the radius so they stay on the cap.
@@ -2275,7 +2422,6 @@ public class Keyboard2View extends View
       x += keyW / 2f;
     else
       x += (a == Paint.Align.LEFT) ? subPadding : keyW - subPadding;
-    String label = kv.getString();
     int label_len = label.length();
     // Limit the label of string keys to 3 characters
     if (label_len > 3 && kv.getKind() == KeyValue.Kind.String)
@@ -2298,7 +2444,8 @@ public class Keyboard2View extends View
   {
     float smaller_font = k.hasFlagsAny(KeyValue.FLAG_SMALLER_FONT) ? 0.75f : 1.f;
     float label_size = main_label ? _mainLabelSize : _subLabelSize;
-    return label_size * smaller_font;
+    float picture = showsPictureGlyph(k) ? PASTE_PICTURE_SCALE : 1.f;
+    return label_size * smaller_font * picture;
   }
 
   private static final class Trail
@@ -2323,12 +2470,13 @@ public class Keyboard2View extends View
 
   private static final class TouchFx
   {
+    /** The key under the finger-down point, which the press holds throughout. */
     final KeyboardData.Key key;
-    /** The key the static grid resolved, before any tap correction. */
-    final KeyboardData.Key rawKey;
     final float downX;
     final float downY;
     final long downAt;
+    /** Contact size at finger-down, in px; 0 when the screen reports none. */
+    float contactPx;
     float x;
     float y;
     boolean swiped;
@@ -2337,10 +2485,9 @@ public class Keyboard2View extends View
     double angularTravel;
     long releasedAt = -1L;
 
-    TouchFx(KeyboardData.Key key, KeyboardData.Key rawKey, float x, float y, long downAt)
+    TouchFx(KeyboardData.Key key, float x, float y, long downAt)
     {
       this.key = key;
-      this.rawKey = rawKey;
       downX = x;
       downY = y;
       this.x = x;

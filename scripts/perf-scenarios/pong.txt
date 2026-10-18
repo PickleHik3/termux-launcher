@@ -1,0 +1,14 @@
+# Pong's terminal place with the keyboard up, Floating style (1080x2412). Coordinates are
+# thousandths of the screen; re-measure from a screenshot when the layout changes.
+# Page to Home and back by the sideways swipe on the top border's air (between the status bar
+# and the page), clear of the corner squares.
+swipe 250 91 750 91 300
+sleep 1
+swipe 750 91 250 91 300
+sleep 1
+# Scroll the terminal's scrollback down and up, mid-page.
+repeat 3
+swipe 500 500 500 200 250
+swipe 500 200 500 500 250
+end
+sleep 1

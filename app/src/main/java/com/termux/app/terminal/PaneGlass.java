@@ -125,6 +125,11 @@ public final class PaneGlass {
         if (!isActive(style)) {
             backdrop.setVeilSource(null);
             backdrop.setVisibility(View.GONE);
+            // A terminal pane with no slab (Solid: no blur, no grain) still stands on its tint,
+            // folded into the wall's ground, and its ink is chosen against what the pane band
+            // measures. Measured here, in the pass every tint, opacity and Shade change runs, or
+            // the band kept the ground of the last Look that wore a slab and the ink with it.
+            if (terminalPane && style != null) measureBarePane(style, frame);
             return false;
         }
         // Against the frame's own size, not the window's: after four or five splits a pane is a
@@ -139,10 +144,35 @@ public final class PaneGlass {
         // gradient rim here as well would put two borders on a lone pane.
         backdrop.setRim(NO_RIM, style);
         backdrop.setParallax(style.wallpaperParallax());
-        backdrop.setRefraction(style.paneGlassRefraction());
+        // The slab's gathered light is drawn under its tint (Shade folded in), so it is raised by
+        // what that tint covers.
+        com.termux.app.chrome.GlassRefraction.Look refraction = style.paneGlassRefraction();
+        backdrop.setRefraction(refraction == null ? null
+            : refraction.withCover((style.paneGlassTintColor() >>> 24) / 255f));
+        backdrop.setClearFrame(style.paneGlassClearFrame());
         backdrop.setVisibility(View.VISIBLE);
         backdrop.setVeilSource(terminalPane ? style : null);
         return true;
+    }
+
+    /** Scratch for {@link #measureBarePane}; main thread only, as every dress pass is. */
+    private static final int[] sBareLocation = new int[2];
+    private static final int[] sBareRootLocation = new int[2];
+    private static final android.graphics.Rect sBareRect = new android.graphics.Rect();
+
+    /**
+     * Asks {@code style} about a terminal pane that wears no slab, at the frame's laid-out rect,
+     * so the pane band's ground (what the palette's ink is chosen on) is the tint this pane is
+     * drawn under now. The answer's veil is not drawn: there is no slab to draw it on, and the
+     * veil is capped at none anyway. Nothing before the frame is laid out.
+     */
+    static void measureBarePane(@NonNull PaneSurfaceStyle style, @NonNull View frame) {
+        if (frame.getWidth() <= 0 || frame.getHeight() <= 0) return;
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(frame, sBareLocation,
+            sBareRootLocation);
+        sBareRect.set(sBareLocation[0], sBareLocation[1],
+            sBareLocation[0] + frame.getWidth(), sBareLocation[1] + frame.getHeight());
+        style.paneGlassVeil(sBareRect);
     }
 
     /**

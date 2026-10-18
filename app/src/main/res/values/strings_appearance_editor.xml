@@ -2,7 +2,7 @@
 <!--
   The Appearance editor (appearance-layout-editor SPEC §3): the frame's tap targets, the bottom
   area's mode pill, Look slider, the Custom row's vertical sliders, Layout mode's Style toggle and
-  Corners / Margin sliders, and the doors that open it. Kept in their own file so the editor's copy travels
+  Corner radius / Margin sliders, and the doors that open it. Kept in their own file so the editor's copy travels
   together.
 -->
 <resources>
@@ -33,15 +33,20 @@
     <string name="appearance_editor_target_description">Tune %1$s</string>
 
     <!-- Row 2's controls; the number is the control's own read-out. -->
-    <string name="appearance_editor_blur">Blur · %1$d dp</string>
     <string name="appearance_editor_legibility_low">Contrast · Softer</string>
     <string name="appearance_editor_legibility_unavailable">Contrast · off</string>
+    <!-- The keyboard's key caps: how solid they are, from clear to opaque. -->
+    <string name="appearance_editor_key_opacity">Keys · %1$d%%</string>
     <string name="appearance_editor_key_corners">Radius · %1$d dp</string>
     <string name="appearance_editor_legibility_normal">Contrast · Default</string>
     <string name="appearance_editor_legibility_high">Contrast · Harder</string>
     <!-- The terminal's two menu pills: the heading over the chosen option. -->
     <string name="appearance_editor_trail_title">Cursor trail</string>
     <string name="appearance_editor_effect_title">Terminal effect</string>
+    <!-- The global set's menu pill, beside its name: which accent Tint mixes in. Short, so it
+         fits beside "All surfaces" on a 360dp phone. -->
+    <string name="appearance_editor_tint_hue_title">Hue</string>
+    <string name="appearance_editor_tint_hue_description">Tint colour, %1$s</string>
     <!-- The status bar's button: opens the clock face and position popup. -->
     <string name="appearance_editor_clock">Clock</string>
     <!-- The Custom row's own legends; the number is the slider's read-out. -->
@@ -51,15 +56,22 @@
     <string name="appearance_editor_trail_description">Cursor trail, %1$s</string>
     <string name="appearance_editor_effect_description">Terminal effect, %1$s</string>
     <!-- The global row (layout editor v2): the base values every surface follows. -->
+    <!-- Frost: clear to frosted, how much the glass blurs what is behind it, and its grain with it. -->
+    <string name="appearance_editor_glass">Frost · %1$d%%</string>
     <string name="appearance_editor_opacity">Opacity · %1$d%%</string>
-    <string name="appearance_editor_grain">Grain · %1$d%%</string>
     <string name="appearance_editor_tint">Tint · %1$d%%</string>
     <string name="appearance_editor_tint_name">Tint</string>
+    <!-- While the glass edge is drawn: the coloured light along the glass's edge, from none to bold. -->
+    <string name="appearance_editor_edge">Edge · %1$d%%</string>
+    <!-- How colourful the wallpaper looks through the glass; 1.00× is as it is. -->
+    <string name="appearance_editor_vibrancy">Vibrancy · %1$s×</string>
+    <!-- The global set's last slider, while the glass edge is drawn: how thick it looks. -->
+    <string name="appearance_editor_depth">Depth · %1$d%%</string>
     <!-- The keyboard's door to its theme page in Settings; also that page's title. -->
     <string name="appearance_editor_keyboard_theme">Keyboard theme</string>
 
     <!-- Layout mode's global shape: no Look sets these. -->
-    <string name="appearance_editor_corners">Corners · %1$d dp</string>
+    <string name="appearance_editor_corners">Corner radius · %1$d dp</string>
     <string name="appearance_editor_corners_description">Corner radius</string>
     <string name="appearance_editor_margin">Margin · %1$d dp</string>
     <string name="appearance_editor_margin_description">Margin</string>

@@ -218,6 +218,50 @@ public final class Pointers implements Handler.Callback
     previewUp(pointerId);
   }
 
+  /**
+   * The modifiers a live pointer was pressed with, if releasing it now would
+   * be a plain tap: it never left its centre, never long-pressed or repeated,
+   * never slid, and is not a modifier or a latched key. [null] otherwise.
+   * Local addition, see UPSTREAM.md.
+   */
+  Modifiers plainTapModifiers(int pointerId)
+  {
+    Pointer ptr = getPtr(pointerId);
+    if (ptr == null || ptr.pointerId < 0 || ptr.gesture != null || ptr.held
+        || ptr.value == null
+        || ptr.hasFlagsAny(FLAG_P_SLIDING | FLAG_P_LATCHABLE | FLAG_P_LATCHED
+          | FLAG_P_GESTURE_LOCKED)
+        || getLatched(ptr) != null)
+      return null;
+    return ptr.modifiers;
+  }
+
+  /**
+   * Makes a plain tap about to be released send [key] instead of the key it
+   * was pressed on, under the same modifiers. Refused (false) when the press
+   * is not a plain tap, or when [key] would not be one either.
+   * Local addition, see UPSTREAM.md.
+   */
+  boolean retargetPlainTap(int pointerId, KeyboardData.Key key)
+  {
+    if (key == null || plainTapModifiers(pointerId) == null)
+      return false;
+    Pointer ptr = getPtr(pointerId);
+    KeyValue value = _handler.modifyKey(key.keys[0], ptr.modifiers);
+    if (value == null || pointer_flags_of_kv(value) != 0)
+      return false;
+    ptr.key = key;
+    ptr.value = value;
+    return true;
+  }
+
+  /** Whether [mods] holds Ctrl or Alt. */
+  static boolean holdsCtrlOrAlt(Modifiers mods)
+  {
+    return mods != null
+      && (mods.has(KeyValue.Modifier.CTRL) || mods.has(KeyValue.Modifier.ALT));
+  }
+
   public void onTouchCancel()
   {
     reset();
@@ -519,6 +563,7 @@ public final class Pointers implements Handler.Callback
   /** A pointer is long pressing. */
   private void handleLongPress(Pointer ptr)
   {
+    ptr.held = true;
     // Long press toggle lock on modifiers
     if ((ptr.flags & FLAG_P_LATCHABLE) != 0)
     {
@@ -651,8 +696,10 @@ public final class Pointers implements Handler.Callback
   {
     /** -1 when latched. */
     public int pointerId;
-    /** The Key pressed by this Pointer */
-    public final KeyboardData.Key key;
+    /** The Key pressed by this Pointer. Changed only by [retargetPlainTap], just before release. */
+    public KeyboardData.Key key;
+    /** The long-press timer fired: a long press or key repeat, never a plain tap. */
+    public boolean held;
     /** Gesture state, see [Gesture]. [null] means the pointer has not moved out of the center region. */
     public Gesture gesture;
     /** Selected value with [modifiers] applied. */

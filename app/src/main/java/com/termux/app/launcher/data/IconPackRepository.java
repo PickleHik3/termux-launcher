@@ -10,6 +10,7 @@ import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
 import android.os.Build;
+import android.os.Looper;
 import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
@@ -26,6 +27,10 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public final class IconPackRepository {
     private static final long CACHE_VERSION_RECHECK_MS = 10_000L;
@@ -53,11 +58,19 @@ public final class IconPackRepository {
     private static final int MAX_PARSED_PACKS = 2;
     /**
      * The parsed packs, shared by every thread that resolves icons (the icon store's, the main
-     * thread's, the Icons mode's warm-up): a pack is parsed once, and a thread asking while
-     * another parses it waits for that parse. See {@link ParsedIconPackCache}.
+     * thread's, the Icons mode's warm-up): a pack is parsed once, a background thread asking
+     * while another parses it waits for that parse, and the main thread never parses or waits.
+     * See {@link ParsedIconPackCache}.
      */
     private final ParsedIconPackCache parsedPacks =
-        new ParsedIconPackCache(MAX_PARSED_PACKS, CACHE_VERSION_RECHECK_MS);
+        new ParsedIconPackCache(MAX_PARSED_PACKS, CACHE_VERSION_RECHECK_MS, SystemClock::elapsedRealtime);
+    /**
+     * Where a pack the main thread asked for is parsed: one thread, gone when idle. Shared by
+     * every repository, since the work is rare and never parallel.
+     */
+    private static final ExecutorService PARSE_EXECUTOR = newIdleFriendlyExecutor();
+    /** Told, on the parse thread, when a pack the main thread was answered "pending" for lands. */
+    @Nullable private volatile Runnable packLandedListener;
     private final ParsedIconPackCache.Source parseSource = new ParsedIconPackCache.Source() {
         @Nullable @Override
         public IconPackInfo installed(@NonNull String packageName) {
@@ -142,15 +155,73 @@ public final class IconPackRepository {
         return packIdentity(globalPackPackage) + "/" + packIdentity(pinnedPackPackage);
     }
 
+    /** A pack lookup's answer: the pack, or none, or "still being read". */
+    public static final class Lookup {
+        static final Lookup NONE = new Lookup(null, false);
+        static final Lookup PENDING = new Lookup(null, true);
+
+        /** The parsed pack; null when there is none, or while {@link #pending}. */
+        @Nullable public final IconPack pack;
+        /**
+         * The pack is being parsed off the main thread, which asked: anything drawn from this
+         * answer is a stand-in to show now and never keep. The listener set with
+         * {@link #setPackLandedListener} is told when the parse lands.
+         */
+        public final boolean pending;
+
+        Lookup(@Nullable IconPack pack, boolean pending) {
+            this.pack = pack;
+            this.pending = pending;
+        }
+    }
+
     /**
-     * {@code packageName}'s parsed pack, or null when it is not installed or cannot be read. Slow
-     * the first time and after an upgrade: the parse runs on the calling thread, and a thread
-     * asking while another parses the same pack waits for it.
+     * {@code packageName}'s parsed pack. Off the main thread it parses (slow the first time and
+     * after an upgrade), or waits for the thread already parsing it. On the main thread it never
+     * parses and never waits: a pack not parsed yet answers {@link Lookup#pending} and is parsed
+     * in the background.
+     */
+    @NonNull
+    public Lookup lookupIconPack(@Nullable String packageName) {
+        if (packageName == null || packageName.trim().isEmpty()) return Lookup.NONE;
+        if (!Looper.getMainLooper().isCurrentThread()) {
+            IconPack pack = parsedPacks.get(packageName, parseSource);
+            return pack == null ? Lookup.NONE : new Lookup(pack, false);
+        }
+        ParsedIconPackCache.Answer answer = parsedPacks.getNow(packageName, parseSource,
+            PARSE_EXECUTOR, this::onPackLanded);
+        if (answer.pending) return Lookup.PENDING;
+        return answer.pack == null ? Lookup.NONE : new Lookup(answer.pack, false);
+    }
+
+    /**
+     * {@code packageName}'s parsed pack, or null when it is not installed, cannot be read, or (on
+     * the main thread) is still being parsed. See {@link #lookupIconPack}.
      */
     @Nullable
     public IconPack loadIconPack(@Nullable String packageName) {
-        if (packageName == null || packageName.trim().isEmpty()) return null;
-        return parsedPacks.get(packageName, SystemClock.elapsedRealtime(), parseSource);
+        return lookupIconPack(packageName).pack;
+    }
+
+    /**
+     * Who redraws when a pack the main thread was told is pending lands: the catalogue provider,
+     * which has every surface drop its stand-ins. Runs on the parse thread.
+     */
+    public void setPackLandedListener(@Nullable Runnable listener) {
+        packLandedListener = listener;
+    }
+
+    private void onPackLanded() {
+        Runnable listener = packLandedListener;
+        if (listener != null) listener.run();
+    }
+
+    @NonNull
+    private static ExecutorService newIdleFriendlyExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+            0, 1, 15L, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
     }
 
     @Nullable
@@ -206,8 +277,13 @@ public final class IconPackRepository {
         }
     }
 
+    /**
+     * Drops the pack resources and has every pack's installed version checked again on its next
+     * use. A pack that did not change keeps its parse: parsing it again only reopened, for
+     * seconds with a large pack, the window in which the main thread draws stand-ins.
+     */
     public void clearCache() {
-        parsedPacks.clear();
+        parsedPacks.expire();
         packResources.clear();
     }
 

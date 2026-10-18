@@ -120,8 +120,47 @@ public final class X11LinuxAppRunner {
         return thread;
     });
 
+    /**
+     * The one runner of this process, shared by every activity instance in turn. What it keeps —
+     * the desktop on the display, the watches on launches still settling, the window manager it
+     * owes the display when a desktop ends — is about processes {@code TermuxService} runs, which
+     * outlive any activity. An activity relaunched for a configuration change (a new wallpaper's
+     * Material You colours) only lends it a new {@link Host}; nothing it started is stopped,
+     * restarted or forgotten on the way.
+     */
+    @Nullable private static X11LinuxAppRunner sShared;
+
+    /** The process's runner, built the first time it is asked for. Main thread only. */
+    @NonNull
+    public static X11LinuxAppRunner shared(@NonNull Context context) {
+        if (sShared == null) sShared = new X11LinuxAppRunner(context, null, false);
+        return sShared;
+    }
+
+    @VisibleForTesting
+    static void resetSharedForTest() {
+        sShared = null;
+    }
+
+    /** A script asked for while no activity was there to run it. */
+    private static final class QueuedScript {
+        @NonNull final String script;
+        @NonNull final ScriptExitListener onExit;
+
+        QueuedScript(@NonNull String script, @NonNull ScriptExitListener onExit) {
+            this.script = script;
+            this.onExit = onExit;
+        }
+    }
+
     @NonNull private final Context context;
-    @NonNull private final Host host;
+    /** The activity lending its shell and its screen; null between one activity and the next. */
+    @Nullable private Host host;
+    /**
+     * Scripts this runner owed while it had no host — the window manager coming back after a
+     * desktop ended mid-relaunch, say. Run, in order, once a host can run them.
+     */
+    @NonNull private final List<QueuedScript> queued = new java.util.ArrayList<>();
     @NonNull private final Handler handler = new Handler(Looper.getMainLooper());
     @NonNull private final X11ElectronSandboxStore sandboxStore;
     @Nullable private LinuxAppCatalog.LinuxApp pending;
@@ -134,13 +173,85 @@ public final class X11LinuxAppRunner {
     private void giveUp() {
         if (pending == null) return;
         pending = null;
-        host.showNotice(context.getString(com.termux.R.string.termux_x11_app_display_failed));
+        notice(context.getString(com.termux.R.string.termux_x11_app_display_failed));
     }
 
     public X11LinuxAppRunner(@NonNull Context context, @NonNull Host host) {
+        this(context, host, false);
+    }
+
+    private X11LinuxAppRunner(@NonNull Context context, @Nullable Host host, boolean unused) {
         this.context = context.getApplicationContext();
         this.host = host;
         this.sandboxStore = new X11ElectronSandboxStore(this.context);
+    }
+
+    /**
+     * An activity lends its shell and screen to this runner. A later activity simply takes over
+     * from an earlier one — two can overlap for a moment while one is being replaced — and
+     * anything owed while there was none is run now if this one can run it.
+     */
+    public void attach(@NonNull Host host) {
+        this.host = host;
+        runQueued();
+    }
+
+    /**
+     * {@code host}'s activity is going. Only its own loan ends: the runner keeps everything it
+     * knows, because the processes it describes keep running, and a destroy — a configuration
+     * relaunch above all — must never stop, restart or orphan any of them. A host that has
+     * already been replaced changes nothing.
+     */
+    public void detach(@NonNull Host host) {
+        if (this.host != host) return;
+        this.host = null;
+    }
+
+    /**
+     * The host can run scripts now — its service connected after it attached. Runs what was owed
+     * while it could not.
+     */
+    public void onHostReady() {
+        runQueued();
+    }
+
+    /** Whether an activity currently lends this runner its shell and screen. */
+    @VisibleForTesting
+    boolean hasHost() {
+        return host != null;
+    }
+
+    private void runQueued() {
+        Host current = host;
+        while (current != null && !queued.isEmpty()) {
+            QueuedScript next = queued.get(0);
+            // The service is not bound yet: keep the rest for onHostReady.
+            if (!current.runScript(next.script, next.onExit)) return;
+            queued.remove(0);
+        }
+    }
+
+    /**
+     * Runs {@code script} through the host. With no host — between one activity and the next —
+     * the script waits for the next one and counts as started: what asks for a script while
+     * detached is always something already under way (a desktop ending, a retry, a safety net),
+     * never a tap waiting on an answer.
+     */
+    private boolean runScript(@NonNull String script, @NonNull ScriptExitListener onExit) {
+        Host current = host;
+        if (current == null) {
+            Logger.logInfo(LOG_TAG, "No activity to run a script in; it runs when one comes");
+            queued.add(new QueuedScript(script, onExit));
+            return true;
+        }
+        return current.runScript(script, onExit);
+    }
+
+    /** Tells the user {@code message}, when there is an activity to tell it in. */
+    private void notice(@NonNull String message) {
+        Host current = host;
+        if (current != null) current.showNotice(message);
+        else Logger.logInfo(LOG_TAG, "Notice with no activity to show it: " + message);
     }
 
     /**
@@ -153,6 +264,12 @@ public final class X11LinuxAppRunner {
             handler.post(() -> run(app));
             return;
         }
+        Host current = host;
+        if (current == null) {
+            // Only an activity asks, through its own hook, so this is a race with its going.
+            Logger.logWarn(LOG_TAG, "No activity to run " + app.id + " from; nothing was started");
+            return;
+        }
         // D2: a desktop takes the whole display, so a second one asks first. Two desktops on one
         // display is nothing X or the desktops themselves refuse — it just leaves two panels and
         // two settings daemons fighting over the same screen — so this is the only thing standing
@@ -160,17 +277,17 @@ public final class X11LinuxAppRunner {
         if (app.session && runningSession != null) {
             if (runningSession.id.equals(app.id)) {
                 // Already the desktop on the display: the tap only has to show it.
-                host.showDisplayPlace();
+                current.showDisplayPlace();
                 return;
             }
             String message = context.getString(com.termux.R.string.termux_x11_session_replace,
                 runningSession.name, app.name);
-            host.askBeforeReplacingSession(message, () -> replaceSession(app));
+            current.askBeforeReplacingSession(message, () -> replaceSession(app));
             return;
         }
-        if (!host.isDisplayEnabled()) host.turnOnDisplay();
-        host.showDisplayPlace();
-        if (host.isDisplayRunning()) {
+        if (!current.isDisplayEnabled()) current.turnOnDisplay();
+        current.showDisplayPlace();
+        if (current.isDisplayRunning()) {
             launch(app, false);
             return;
         }
@@ -178,7 +295,7 @@ public final class X11LinuxAppRunner {
         pending = app;
         handler.removeCallbacks(giveUp);
         handler.postDelayed(giveUp, START_TIMEOUT_MS);
-        host.startDisplay();
+        current.startDisplay();
     }
 
     /** The controller's running state changed. */
@@ -192,8 +309,14 @@ public final class X11LinuxAppRunner {
         launch(app, true);
     }
 
+    /**
+     * Forget everything, for a runner that is truly done with. Not what an activity's destroy
+     * does: that is {@link #detach}, which keeps the bookkeeping for the next activity.
+     */
     public void destroy() {
         pending = null;
+        host = null;
+        queued.clear();
         // A desktop on the display outlives this runner — the display does too — but nothing here
         // will hear of its exit any more, so the bookkeeping goes rather than growing stale.
         runningSession = null;
@@ -224,7 +347,7 @@ public final class X11LinuxAppRunner {
         }
         Logger.logInfo(LOG_TAG, "Stopping " + runningSession.id + " to make room for " + app.id);
         takeOver = app;
-        boolean started = host.runScript(stopSessionScript(), exitCode -> {
+        boolean started = runScript(stopSessionScript(), exitCode -> {
             LinuxAppCatalog.LinuxApp next = takeOver;
             takeOver = null;
             runningSession = null;
@@ -232,7 +355,7 @@ public final class X11LinuxAppRunner {
         });
         if (started) return;
         takeOver = null;
-        host.showNotice(context.getString(com.termux.R.string.termux_x11_session_failed));
+        notice(context.getString(com.termux.R.string.termux_x11_session_failed));
     }
 
     /**
@@ -248,7 +371,7 @@ public final class X11LinuxAppRunner {
         // D1: the manager that stood down comes back — unless another desktop is on its way in,
         // which would only have to stand it down again.
         if (windowManagerRestart == null || takeOver != null) return;
-        host.runScript(windowManagerRestart, ignored -> { });
+        runScript(windowManagerRestart, ignored -> { });
     }
 
     /**
@@ -355,7 +478,7 @@ public final class X11LinuxAppRunner {
         // Anything but the desktop still on the display is stale: it ended, or a take-over moved
         // on from it, and either way its window manager is not this net's business any more.
         if (runningSession != app) return;
-        host.runScript(windowManagerRestart, ignored -> { });
+        runScript(windowManagerRestart, ignored -> { });
     }
 
     /**
@@ -381,7 +504,10 @@ public final class X11LinuxAppRunner {
 
         void start(@NonNull String script, boolean noSandbox) {
             this.noSandbox = noSandbox;
-            boolean started = host.runScript(script, exitCode -> {
+            boolean started = runScript(script, exitCode -> {
+                // Said for every app, at info so a release build's logcat has it: 128 + n is the
+                // app ended by signal n (143 SIGTERM, 137 SIGKILL), anything else is its own exit.
+                if (!app.session) Logger.logInfo(LOG_TAG, app.id + " exited with " + exitCode);
                 // A desktop's exit is news whenever it comes, not only inside the window: it is
                 // what says the display is free again and the window manager can come back.
                 if (app.session) onSessionExited(app, exitCode, windowManagerRestart);
@@ -397,7 +523,7 @@ public final class X11LinuxAppRunner {
             // never simply do nothing: this is the one path that used to end in silence.
             decided = true;
             Logger.logWarn(LOG_TAG, "No shell to run " + app.id + " in; nothing was started");
-            host.showNotice(failureNotice(app));
+            notice(failureNotice(app));
         }
 
         /**
@@ -428,12 +554,12 @@ public final class X11LinuxAppRunner {
                 // display — exactly D7's shape, and nothing D7's flag can help with. The user is
                 // told; nothing is retried and nothing is remembered.
                 Logger.logWarn(LOG_TAG, "Desktop " + app.id + " did not start");
-                host.showNotice(failureNotice(app));
+                notice(failureNotice(app));
                 return;
             }
             if (noSandbox) {
                 sandboxStore.forget(app.id);
-                host.showNotice(context.getString(com.termux.R.string.termux_x11_app_launch_failed));
+                notice(context.getString(com.termux.R.string.termux_x11_app_launch_failed));
                 return;
             }
             Logger.logInfo(LOG_TAG, "Retrying " + app.id + " on the display with --no-sandbox");

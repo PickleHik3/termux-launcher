@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
@@ -16,7 +17,6 @@ import com.termux.R;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
-import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.shell.TermuxShellManager;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
@@ -29,7 +29,9 @@ import com.termux.shared.logger.Logger;
 import com.termux.app.theme.LauncherSchemeTheme;
 import com.termux.app.theme.templates.PaletteSet;
 import com.termux.app.theme.templates.ThemeTemplates;
+import com.termux.terminal.KittyClipboard;
 import com.termux.terminal.TerminalColors;
+import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 import java.io.File;
@@ -37,6 +39,7 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -118,6 +121,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     @NonNull private final ShellSignals mSignals;
 
+    /** Pastes, and a program's picture reads and writes: see {@link TerminalClipboard}. */
+    @NonNull private final TerminalClipboard mClipboard;
+
     public TermuxTerminalSessionActivityClient(@NonNull Context context, @NonNull TerminalHost host) {
         this.mContext = context;
         this.mHost = host;
@@ -130,6 +136,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 setCurrentSession(session);
             }
         });
+        this.mClipboard = TerminalClipboard.create(context, mSignals);
         this.mForegroundTerminalRefreshRunnable = () -> {
             mForegroundRefreshPending = false;
             if (!mHost.isVisible()) return;
@@ -479,13 +486,55 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (text != null) mSignals.clipboardWrite(text);
     }
 
+    /**
+     * The selection toolbar's Paste, the keyboards' paste keys and the extra-keys PASTE: the
+     * clipboard into the focused pane, while the launcher is on screen. What the paste is — text,
+     * a picture's path, a paste event — is {@link TerminalClipboard#paste}'s to decide.
+     */
     @Override
     public void onPasteTextFromClipboard(@Nullable TerminalSession session) {
         if (!mHost.isVisible())
             return;
-        String text = ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
-        if (text != null)
-            mHost.focusedView().mEmulator.paste(text);
+        com.termux.view.TerminalView view = mHost.focusedView();
+        if (view != null && view.mEmulator != null)
+            mClipboard.paste(view.mEmulator);
+    }
+
+    /**
+     * A picture the in-app keyboard's paste offers in place of the clipboard (a fresh screenshot),
+     * into the focused pane while the launcher is on screen; saved and pasted like a clipboard one.
+     */
+    public void pasteContentIntoFocused(@NonNull Uri uri, @NonNull String mime) {
+        if (!mHost.isVisible())
+            return;
+        com.termux.view.TerminalView view = mHost.focusedView();
+        if (view != null && view.mEmulator != null)
+            mClipboard.pasteContent(view.mEmulator, uri, mime, () -> {});
+    }
+
+    /** Paste the clipboard into {@code emulator}'s pane; for callers that already chose the pane. */
+    public void pasteClipboard(@NonNull TerminalEmulator emulator) {
+        mClipboard.paste(emulator);
+    }
+
+    /** A picture a keyboard inserted into {@code emulator}'s pane; see {@link TerminalClipboard#pasteContent}. */
+    public void pasteContent(@NonNull TerminalEmulator emulator, @NonNull Uri uri, @NonNull String mime,
+                             @NonNull Runnable release) {
+        mClipboard.pasteContent(emulator, uri, mime, release);
+    }
+
+    /** An OSC 5522 read: text at once, a picture from the worker. See {@link TerminalClipboard#read}. */
+    @Override
+    public void onReadClipboard(@NonNull TerminalSession session, boolean pasted,
+                                @NonNull KittyClipboard.ReadCallback callback) {
+        mClipboard.read(session.getEmulator(), pasted, callback);
+    }
+
+    /** An OSC 5522 write that carried pictures; text alone still arrives at {@link #onCopyTextToClipboard}. */
+    @Override
+    public void onWriteClipboard(@NonNull TerminalSession session, @NonNull Map<String, byte[]> images,
+                                 @Nullable String text) {
+        mClipboard.write(images, text);
     }
 
     /**

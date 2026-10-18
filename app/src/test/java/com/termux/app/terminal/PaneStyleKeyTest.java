@@ -40,6 +40,7 @@ public class PaneStyleKeyTest {
         Bitmap wallBehind;
         int wallBehindColor = 0x40000000;
         com.termux.app.chrome.GlassRefraction.Look refraction;
+        Bitmap clearFrame;
         int grainLayersBuilt;
 
         @Override public boolean isPaneGlassActive() { return glass; }
@@ -62,6 +63,7 @@ public class PaneStyleKeyTest {
         @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look paneGlassRefraction() {
             return refraction;
         }
+        @Nullable @Override public Bitmap paneGlassClearFrame() { return clearFrame; }
     }
 
     @Test
@@ -139,6 +141,11 @@ public class PaneStyleKeyTest {
         style.refraction = new com.termux.app.chrome.GlassRefraction.Look(9, 20, 60);
         assertNotEquals(refracting, PaneStyleKey.of(style));
         style.refraction = null;
+
+        // The edge's clear frame landing, or going, re-dresses the slabs too.
+        style.clearFrame = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888);
+        assertNotEquals(base, PaneStyleKey.of(style));
+        style.clearFrame = null;
 
         assertEquals("and back where it started", base, PaneStyleKey.of(style));
     }

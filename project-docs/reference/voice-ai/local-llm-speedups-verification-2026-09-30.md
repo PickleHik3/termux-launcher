@@ -30,7 +30,7 @@ Both repos were cloned at those tags, and docs and source were read there, not o
 2. **MNN `power: "high"`** (claim 2). Add one key in `MnnTaiRuntime.mergedConfigJson` next to the `thread_num` default (`MnnTaiRuntime.java:1208`): `if (!json.has("power")) json.put("power", "high");`. Consider adding it to `overridesJson` too (`:1250-1262`).
 3. **Check that KV reuse actually happens** (claim 3). No code: run the two-turn script in the measurement plan below. If turn 2 does not drop, find out why before changing anything.
 4. **MNN n-gram lookahead as an opt-in** (claim 5). This is a small code change: a load-time option writes `speculative_type: "lookahead"` in `mergedConfigJson` (`MnnTaiRuntime.java:1229`, `:1245-1248`). It is meant for the voice-cleanup and rewrite paths.
-5. **Smaller Qwen3-0.6B LiteRT file** (claim 1). This is a catalogue change: use `Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm` (329 MB, 4096 context) instead of `qwen3_0_6b_mixed_int4.litertlm` (475 MiB, 2048 context) in `project-docs/active/benchmark/recommended-catalog-draft.json:86`, if it passes the bench and the sanity questions.
+5. **Smaller Qwen3-0.6B LiteRT file** (claim 1). This is a catalogue change: use `Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm` (329 MB, 4096 context) instead of `qwen3_0_6b_mixed_int4.litertlm` (475 MiB, 2048 context) in `project-docs/reference/voice-ai/benchmark/recommended-catalog-draft.json:86`, if it passes the bench and the sanity questions.
 6. **Pin LiteRT-LM CPU threads** (claim 2). This is real work: native affinity for `:tai_runtime` before `Engine.initialize()`. It is **unverified** that pinning inherits into XNNPACK's worker threads.
 7. **Split prefill and decode across backends** (claim 4). Neither bundled runtime supports it. Leave it.
 
@@ -153,7 +153,7 @@ Both repos were cloned at those tags, and docs and source were read there, not o
 
 **What TAI does**
 - LiteRT-LM: the schema default is `GPU` (`TaiSettings.java:563`). Auto tries GPU first and falls back to CPU at the floor context (`LiteRtTaiRuntime.java:644-689`).
-- MNN: Auto maps to `cpu` (`MnnTaiRuntime.java:1427-1430`). That fits TAI's pong measurement (memory note `mnn-update-tai-reload-2026-09-28`, and the draft set in `project-docs/active/benchmark/recommended-set.md`): Qwen3-VL-2B MNN decoded at 21 tok/s on CPU and 15 on OpenCL.
+- MNN: Auto maps to `cpu` (`MnnTaiRuntime.java:1427-1430`). That fits TAI's pong measurement (memory note `mnn-update-tai-reload-2026-09-28`, and the draft set in `project-docs/reference/voice-ai/benchmark/recommended-set.md`): Qwen3-VL-2B MNN decoded at 21 tok/s on CPU and 15 on OpenCL.
 - The catalogue ships only the standard Gemma 4 files (`TaiModelCatalog.java:176-186`).
 
 **Gap and fix**
@@ -353,5 +353,5 @@ printf '%s' "$T2" | jq '{turn:2, ms:.tai.elapsedMs, prompt:.tai.usage.prompt_tok
 - `project-docs/reference/voice-ai/gallery-gpu-loading-comparison.md`: Gallery's allowlist flags.
 - `project-docs/backlog.md:108-115`.
 - `docs/en/On_Device_AI_Backends.md`: EAGLE-3 off by default.
-- `project-docs/active/benchmark/recommended-set.md`: pong figures for Qwen3-VL-2B on CPU and GPU.
+- `project-docs/reference/voice-ai/benchmark/recommended-set.md`: pong figures for Qwen3-VL-2B on CPU and GPU.
 - Earlier research: `local-llm-inference-speed-2026-09-30.md`.

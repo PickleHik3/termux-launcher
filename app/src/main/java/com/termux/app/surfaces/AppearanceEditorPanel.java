@@ -58,7 +58,7 @@ import java.util.Map;
  *
  * <p>The layout is one ConstraintLayout: each
  * mode's rows are a {@link Group}, and a mode switch shows one and hides the other. Row B at
- * Appearance is the Custom row: a heading row with the selection's buttons over up to six
+ * Appearance is the Custom row: a heading row with the selection's buttons over up to seven
  * vertical {@link LegendSlider}s (for the terminal, two pills in the heading's place). It is GONE at a Look stop, so the sheet's height follows its
  * content: {@link #measureFor} is the height for what shows now, and {@link #measureTallest} the
  * height with Row B up, which the frame stands above. Row B is one height whatever is selected.</p>
@@ -93,10 +93,12 @@ final class AppearanceEditorPanel {
         void onSliderReleased();
         /** A button of the heading row: Keyboard theme, or Clock (with the button to anchor to). */
         void onDoor(@NonNull Door door, @NonNull View anchor);
-        /** The terminal's Trail menu: the cursor-trail style id the user chose. */
+        /** The terminal's Trail menu: the id the user chose, a style or {@link CursorTrailChoice#OFF}. */
         void onTrailStyle(@NonNull String id);
         /** The terminal's Effect menu: the retro effect id the user chose. */
         void onRetroEffect(@NonNull String id);
+        /** The global set's Tint colour menu: the hue id the user chose. */
+        default void onTintHue(@NonNull String id) {}
     }
 
     /**
@@ -180,7 +182,6 @@ final class AppearanceEditorPanel {
     private final View mEffect;
     private final TextView mTrailValue;
     private final TextView mEffectValue;
-
     private final MaterialButtonToggleGroup mOrientation;
     private final MaterialButtonToggleGroup mStyle;
     private final MaterialButton mHidden;
@@ -211,6 +212,14 @@ final class AppearanceEditorPanel {
     private boolean mRow2Shown;
     @NonNull private String mTrailId = "default";
     @NonNull private String mEffectId = "none";
+    @NonNull private String mTintHueId = "primary";
+    /**
+     * The two pills hold the terminal's Cursor trail and Terminal effect, or the first holds the
+     * global set's Tint colour: the same card, headed and wired for whichever set is shown.
+     */
+    private boolean mGlassPills;
+    private final TextView mTrailTitle;
+    private final TextView mEffectTitle;
     /** Whether the hidden tiles stand in Layout's Row B, in Corner radius and Margin's place. */
     private boolean mHiddenTilesOpen;
     /** Whether the keyboard's tools stand there (the keyboard is selected); the tiles win. */
@@ -249,6 +258,8 @@ final class AppearanceEditorPanel {
         mEffect = root.findViewById(R.id.appearance_editor_effect);
         mTrailValue = root.findViewById(R.id.appearance_editor_trail_value);
         mEffectValue = root.findViewById(R.id.appearance_editor_effect_value);
+        mTrailTitle = root.findViewById(R.id.appearance_editor_trail_title);
+        mEffectTitle = root.findViewById(R.id.appearance_editor_effect_title);
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mStyle = root.findViewById(R.id.appearance_editor_style);
         mHidden = root.findViewById(R.id.layout_editor_hidden);
@@ -499,9 +510,9 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * The selected segment of an icon toggle in primaryContainer with its glyph in
-     * onPrimaryContainer, the others clear with the glyph in onSurfaceVariant (DECISIONS item 12):
-     * theme roles only, resolved against the active scheme.
+     * The selected segment of a toggle in primaryContainer with its glyph (and word, on a text
+     * segment) in onPrimaryContainer, the others clear with theirs in onSurfaceVariant (DECISIONS
+     * item 12): theme roles only, resolved against the active scheme.
      */
     private void paintSelectedSegments(@NonNull MaterialButtonToggleGroup group) {
         int container = MaterialColors.getColor(mRoot,
@@ -523,6 +534,7 @@ final class AppearanceEditorPanel {
             MaterialButton button = (MaterialButton) child;
             button.setBackgroundTintList(fill);
             button.setIconTint(ink);
+            button.setTextColor(ink);
         }
     }
 
@@ -753,20 +765,33 @@ final class AppearanceEditorPanel {
                 if (mListener != null) mListener.onSliderReleased();
             }
         });
-        mTrail.setOnClickListener(view -> showChoiceMenu(mTrail,
-            R.array.settings_terminal_cursor_trail_style_entries,
-            R.array.settings_terminal_cursor_trail_style_values, mTrailId, id -> {
-                mTrailId = id;
-                restateTrail();
-                if (mListener != null) mListener.onTrailStyle(id);
-            }));
-        mEffect.setOnClickListener(view -> showChoiceMenu(mEffect,
-            R.array.settings_terminal_retro_effect_entries,
-            R.array.settings_terminal_retro_effect_values, mEffectId, id -> {
-                mEffectId = id;
-                restateEffect();
-                if (mListener != null) mListener.onRetroEffect(id);
-            }));
+        mTrail.setOnClickListener(view -> {
+            if (mGlassPills) {
+                showChoiceMenu(mTrail, R.array.appearance_editor_tint_hue_entries,
+                    R.array.appearance_editor_tint_hue_values, mTintHueId, id -> {
+                        mTintHueId = id;
+                        restateTrail();
+                        if (mListener != null) mListener.onTintHue(id);
+                    });
+                return;
+            }
+            showChoiceMenu(mTrail,
+                R.array.appearance_editor_cursor_trail_entries,
+                R.array.appearance_editor_cursor_trail_values, mTrailId, id -> {
+                    mTrailId = id;
+                    restateTrail();
+                    if (mListener != null) mListener.onTrailStyle(id);
+                });
+        });
+        mEffect.setOnClickListener(view -> {
+            showChoiceMenu(mEffect,
+                R.array.settings_terminal_retro_effect_entries,
+                R.array.settings_terminal_retro_effect_values, mEffectId, id -> {
+                    mEffectId = id;
+                    restateEffect();
+                    if (mListener != null) mListener.onRetroEffect(id);
+                });
+        });
     }
 
     // ------------------------------------------------------------- Trail and Effect menus
@@ -809,27 +834,48 @@ final class AppearanceEditorPanel {
      * The terminal's Trail and Effect at the stored ids. An id this build does not know reads as
      * the first option, as the preference's own getter does.
      */
-    void setTerminalLooks(@NonNull String trailId, @NonNull String effectId) {
-        mTrailId = trailId;
+    void setTerminalLooks(boolean trailEnabled, @NonNull String trailId, @NonNull String effectId) {
+        mTrailId = CursorTrailChoice.menuId(trailEnabled, trailId);
         mEffectId = effectId;
         restateTrail();
         restateEffect();
     }
 
+    /**
+     * The global set's Tint colour at the stored id. An id this build does not know reads as the
+     * first option.
+     */
+    void setGlassLooks(@NonNull String tintHueId) {
+        mTintHueId = tintHueId;
+        restateTrail();
+    }
+
     private void restateTrail() {
-        String label = optionLabel(R.array.settings_terminal_cursor_trail_style_entries,
-            R.array.settings_terminal_cursor_trail_style_values, mTrailId);
+        String label = mGlassPills
+            ? optionLabel(R.array.appearance_editor_tint_hue_entries,
+                R.array.appearance_editor_tint_hue_values, mTintHueId)
+            : optionLabel(R.array.appearance_editor_cursor_trail_entries,
+                R.array.appearance_editor_cursor_trail_values, mTrailId);
+        setTextIfChanged(mTrailTitle, mContext.getString(mGlassPills
+            ? R.string.appearance_editor_tint_hue_title : R.string.appearance_editor_trail_title));
         mTrailValue.setText(label);
-        mTrail.setContentDescription(
-            mContext.getString(R.string.appearance_editor_trail_description, label));
+        mTrail.setContentDescription(mContext.getString(mGlassPills
+            ? R.string.appearance_editor_tint_hue_description
+            : R.string.appearance_editor_trail_description, label));
     }
 
     private void restateEffect() {
         String label = optionLabel(R.array.settings_terminal_retro_effect_entries,
             R.array.settings_terminal_retro_effect_values, mEffectId);
+        setTextIfChanged(mEffectTitle, mContext.getString(R.string.appearance_editor_effect_title));
         mEffectValue.setText(label);
-        mEffect.setContentDescription(
-            mContext.getString(R.string.appearance_editor_effect_description, label));
+        mEffect.setContentDescription(mContext.getString(
+            R.string.appearance_editor_effect_description, label));
+    }
+
+    private static void setTextIfChanged(@NonNull TextView view, @NonNull CharSequence text) {
+        if (!android.text.TextUtils.equals(view.getText(), text))
+            view.setText(text);
     }
 
     // ------------------------------------------------------------------------------ the modes
@@ -1161,20 +1207,31 @@ final class AppearanceEditorPanel {
     /**
      * Shows exactly these buttons in the heading row, in the layout's order. The terminal's
      * pills (Cursor trail, Terminal effect) own the row: the name gives way and they share the
-     * width equally, or Cursor trail takes all of it where Terminal effect is not offered.
+     * width equally, or Cursor trail takes all of it where Terminal effect is not offered. The
+     * global set's Hue is the first card, after its name, taking what is left.
      */
     void setDoors(@NonNull List<Door> doors) {
-        boolean pills = doors.contains(Door.TRAIL) || doors.contains(Door.EFFECT);
-        mRow2Name.setVisibility(pills ? View.GONE : View.VISIBLE);
+        boolean glassPills = doors.contains(Door.TINT_HUE);
+        boolean left = doors.contains(Door.TRAIL) || doors.contains(Door.TINT_HUE);
+        boolean right = doors.contains(Door.EFFECT);
+        boolean pills = left || right;
+        // The terminal's pills own the row; the global set's stand beside its name.
+        boolean nameShown = !doors.contains(Door.TRAIL) && !doors.contains(Door.EFFECT);
+        if (glassPills != mGlassPills) {
+            mGlassPills = glassPills;
+            restateTrail();
+        }
+        mRow2Name.setVisibility(nameShown ? View.VISIBLE : View.GONE);
         mKeyboardTheme.setVisibility(doors.contains(Door.KEYBOARD_THEME) ? View.VISIBLE : View.GONE);
         mClock.setVisibility(doors.contains(Door.CLOCK) ? View.VISIBLE : View.GONE);
-        mTrail.setVisibility(doors.contains(Door.TRAIL) ? View.VISIBLE : View.GONE);
+        mTrail.setVisibility(left ? View.VISIBLE : View.GONE);
         View space = mRoot.findViewById(R.id.appearance_editor_row2_space);
         if (space != null)
             space.setVisibility(pills ? View.GONE : View.VISIBLE);
-        mEffect.setVisibility(doors.contains(Door.EFFECT) ? View.VISIBLE : View.GONE);
-        // Cursor trail leads the row when it is the first pill; Terminal effect alone does too.
-        setMarginStart(mEffect, doors.contains(Door.TRAIL) ? Math.round(dp(8)) : 0);
+        mEffect.setVisibility(right ? View.VISIBLE : View.GONE);
+        // The first pill leads the row, or follows the name 8dp on; the second, 8dp after it.
+        setMarginStart(mTrail, nameShown && left ? Math.round(dp(8)) : 0);
+        setMarginStart(mEffect, left || nameShown ? Math.round(dp(8)) : 0);
     }
 
     private static void setMarginStart(@NonNull View view, int marginPx) {
@@ -1204,7 +1261,7 @@ final class AppearanceEditorPanel {
         java.util.ArrayList<Door> out = new java.util.ArrayList<>();
         if (mKeyboardTheme.getVisibility() == View.VISIBLE) out.add(Door.KEYBOARD_THEME);
         if (mClock.getVisibility() == View.VISIBLE) out.add(Door.CLOCK);
-        if (mTrail.getVisibility() == View.VISIBLE) out.add(Door.TRAIL);
+        if (mTrail.getVisibility() == View.VISIBLE) out.add(mGlassPills ? Door.TINT_HUE : Door.TRAIL);
         if (mEffect.getVisibility() == View.VISIBLE) out.add(Door.EFFECT);
         return out;
     }

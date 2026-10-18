@@ -92,6 +92,24 @@ public class AppearanceSnapshotTest {
         assertEquals("none", preferences.getTerminalRetroEffect());
     }
 
+    /**
+     * Shade is retired: a stray stored value is no part of the snapshot, so it neither dirties the
+     * editor nor is written back, and the snapshot still round-trips.
+     */
+    @Test
+    public void aRetiredShadeIsNoPartOfTheSnapshot() {
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String signature = entry.signature();
+        store.edit().putInt(SurfacePresets.RETIRED_SHADE_KEY, 70).commit();
+        assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
+
+        store.edit().remove(SurfacePresets.RETIRED_SHADE_KEY).commit();
+        preferences.setFancierGlassDispersionPercent(65);
+        entry.restore(preferences);
+        assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
+        assertFalse(store.contains(SurfacePresets.RETIRED_SHADE_KEY));
+    }
+
     /** A key radius the theme owned (no key at all) comes back as no key, not today's default. */
     @Test
     public void anAbsentKeyRadiusComesBackAbsent() {
@@ -127,10 +145,12 @@ public class AppearanceSnapshotTest {
         preferences.setFancierGlassSpecularPercent(70);
         assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
         preferences.setFancierGlassDispersionPercent(40);
+        preferences.setFancierGlassClarityPercent(65);
         entry.restore(preferences);
 
         assertEquals(0, preferences.getFancierGlassSpecularPercent());
         assertEquals(0, preferences.getFancierGlassDispersionPercent());
+        assertEquals(0, preferences.getFancierGlassClarityPercent());
         assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
     }
 

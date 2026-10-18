@@ -53,18 +53,22 @@ public abstract class AppearanceEditorPanelFitBase {
     }
 
     /**
-     * Every selection's Custom row at its widest legends: its sliders are whole columns inside the
-     * sheet, 12dp apart, one height, each wider than the 28dp track (36dp at the least); each legend fits its track
-     * (or is cut to it); the buttons are 48dp touch targets inside the sheet.
+     * Every selection's Custom row at its widest legends, the global set with Depth and without: its
+     * sliders are whole columns inside the sheet, 12dp apart, one height, each wider than the 28dp
+     * track (36dp at the least); each legend fits its track (or is cut to it); the buttons are
+     * 48dp touch targets inside the sheet.
      */
     @Test
     public void everySelectionsCustomRowFits() {
-        for (AppearanceLooks.Target target : targets()) {
-            showControls(target);
+        StringBuilder overruns = new StringBuilder();
+        for (Selection selection : selections()) {
+            AppearanceLooks.Target target = selection.target;
+            showControls(target, selection.glassEdge);
             layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
             assertFits();
-            List<AppearanceLooks.Control> expected = AppearanceLooks.controls(target);
-            assertEquals(String.valueOf(target), expected, mPanel.shownControls());
+            List<AppearanceLooks.Control> expected =
+                AppearanceLooks.controls(target, selection.glassEdge);
+            assertEquals(String.valueOf(selection), expected, mPanel.shownControls());
             float density = mPanel.view().getResources().getDisplayMetrics().density;
             int track = Math.round(36 * density);
             int gap = Math.round(12 * density);
@@ -83,7 +87,7 @@ public abstract class AppearanceEditorPanelFitBase {
                     assertEquals("the first column starts at the content edge", 0,
                         slider.getLeft());
                 previous = slider;
-                assertLegendFits(slider, control);
+                overruns.append(legendOverrun(slider, control));
             }
             for (AppearanceLooks.Door door : AppearanceLooks.doors(target)) {
                 View button = doorView(door);
@@ -104,11 +108,16 @@ public abstract class AppearanceEditorPanelFitBase {
                 assertEquals("the terminal's pills own the heading row: no name", View.GONE,
                     name.getVisibility());
                 assertPillsShareTheRow();
+            } else if (target == null) {
+                assertEquals(selection + " keeps its name", View.VISIBLE, name.getVisibility());
+                assertGlassPillsFollowTheName(AppearanceLooks.doors(null));
             } else {
                 assertEquals(String.valueOf(target) + " keeps its name", View.VISIBLE,
                     name.getVisibility());
             }
         }
+        assertEquals("every legend fits its track (or is cut to it):" + overruns, 0,
+            overruns.length());
     }
 
     /**
@@ -146,12 +155,33 @@ public abstract class AppearanceEditorPanelFitBase {
     }
 
     /**
+     * The global set's pills stand after its name, 8dp on, and share the rest of the row: the
+     * first 8dp after the name, a second 8dp after the first and ending at the row's end, or the
+     * one alone running to it; the name and their headings whole.
+     */
+    private void assertGlassPillsFollowTheName(List<AppearanceLooks.Door> doors) {
+        View root = mPanel.view();
+        View head = root.findViewById(R.id.appearance_editor_row2_head);
+        View name = root.findViewById(R.id.appearance_editor_row2_name);
+        View trail = root.findViewById(R.id.appearance_editor_trail);
+        View effect = root.findViewById(R.id.appearance_editor_effect);
+        int gap = Math.round(8 * root.getResources().getDisplayMetrics().density);
+        assertEquals(View.VISIBLE, name.getVisibility());
+        assertEquals("Hue follows the name", name.getRight() + gap, trail.getLeft(), 1);
+        assertEquals("no second pill: Edge is a slider", View.GONE, effect.getVisibility());
+        assertEquals("the row ends with the pill", head.getWidth(), trail.getRight(), 1);
+        for (AppearanceLooks.Door door : doors)
+            assertPillLinesFit(door);
+    }
+
+    /**
      * A pill's heading is whole (never ellipsized) and each of its two lines is one line,
      * inside the pill.
      */
     private void assertPillLinesFit(AppearanceLooks.Door door) {
         View root = mPanel.view();
-        boolean trail = door == AppearanceLooks.Door.TRAIL;
+        boolean trail = door == AppearanceLooks.Door.TRAIL
+            || door == AppearanceLooks.Door.TINT_HUE;
         View pill = doorView(door);
         TextView title = root.findViewById(trail ? R.id.appearance_editor_trail_title
             : R.id.appearance_editor_effect_title);
@@ -202,8 +232,8 @@ public abstract class AppearanceEditorPanelFitBase {
         java.util.List<Integer> sheets = new java.util.ArrayList<>();
         for (EditorMode page : EditorMode.values())
             sheets.add(mPanel.measureResting(page, mWidthPx));
-        for (AppearanceLooks.Target target : targets()) {
-            showControls(target);
+        for (Selection target : selections()) {
+            showControls(target.target, target.glassEdge);
             int content = mPanel.measureFor(EditorMode.LOOK, mWidthPx);
             sheets.add(Math.min(content, reserve));
             layOut(reserve);
@@ -226,14 +256,91 @@ public abstract class AppearanceEditorPanelFitBase {
         }
     }
 
-    /** The global set's six columns show six legends reading upward. */
+    /**
+     * The global set has six columns, and a seventh, Depth, last, while the glass edge is drawn;
+     * no buttons either way.
+     */
     @Test
-    public void theGlobalSetHasSixColumnsAndNoButtons() {
-        showControls(null);
+    public void theGlobalSetEndsInDepthOnlyWithTheGlassEdge() {
+        showControls(null, false);
         layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
-        assertEquals(6, mPanel.shownControls().size());
-        assertTrue(mPanel.shownDoors().isEmpty());
+        assertEquals(4, mPanel.shownControls().size());
+        assertTrue("no Edge or Depth without the glass edge",
+            !mPanel.shownControls().contains(AppearanceLooks.Control.DEPTH)
+                && !mPanel.shownControls().contains(AppearanceLooks.Control.EDGE));
+        assertEquals("Tint colour alone",
+            java.util.Collections.singletonList(AppearanceLooks.Door.TINT_HUE),
+            mPanel.shownDoors());
         assertFits();
+        assertPillLinesFit(AppearanceLooks.Door.TINT_HUE);
+        assertGlassPillsFollowTheName(AppearanceLooks.doors(null));
+        showControls(null, true);
+        layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
+        List<AppearanceLooks.Control> shown = mPanel.shownControls();
+        assertEquals(6, shown.size());
+        assertEquals("Edge follows Tint", AppearanceLooks.Control.EDGE, shown.get(3));
+        assertEquals("Depth is the last column", AppearanceLooks.Control.DEPTH,
+            shown.get(shown.size() - 1));
+        assertEquals(java.util.Collections.singletonList(AppearanceLooks.Door.TINT_HUE),
+            mPanel.shownDoors());
+        assertFits();
+        assertGlassPillsFollowTheName(AppearanceLooks.doors(null));
+        for (AppearanceLooks.Target target : AppearanceLooks.Target.values()) {
+            showControls(target, true);
+            assertTrue(target + " never shows Edge or Depth",
+                !mPanel.shownControls().contains(AppearanceLooks.Control.DEPTH)
+                    && !mPanel.shownControls().contains(AppearanceLooks.Control.EDGE));
+        }
+    }
+
+    /**
+     * The global set's legends, with Depth and without, are whole at their widest values: the
+     * name the developer chose is read in full, at most shrunk to LegendSlider's floor, never cut.
+     */
+    @Test
+    public void theGlobalSetsLegendsAreWhole() {
+        StringBuilder cut = new StringBuilder();
+        for (boolean glassEdge : new boolean[] {false, true}) {
+            showControls(null, glassEdge);
+            layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
+            for (AppearanceLooks.Control control : AppearanceLooks.controls(null, glassEdge)) {
+                LegendSlider slider = mPanel.sliderFor(control);
+                assertNotNull(control.name(), slider);
+                cut.append(legendOverrun(slider, control));
+                String whole = slider.legendText().toString();
+                String shown = slider.shownLegend().toString();
+                if (!whole.equals(shown))
+                    cut.append(" \"").append(whole).append("\" reads \"").append(shown)
+                        .append('"');
+            }
+        }
+        assertEquals("every legend is whole:" + cut, 0, cut.length());
+    }
+
+    /**
+     * No heading row holds a group toggle: the global set is one list, so its heading row is the
+     * name alone, whole, and every selection's row is the same height.
+     */
+    @Test
+    public void noHeadingRowHoldsAGroupToggle() {
+        for (Selection selection : selections()) {
+            showControls(selection.target, selection.glassEdge);
+            layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
+            assertFits();
+            ViewGroup head = mPanel.view().findViewById(R.id.appearance_editor_row2_head);
+            for (int i = 0; i < head.getChildCount(); i++)
+                assertTrue(selection + ": no toggle in the heading row", !(head.getChildAt(i)
+                    instanceof com.google.android.material.button.MaterialButtonToggleGroup));
+            if (selection.target != null)
+                continue;
+            TextView name = mPanel.view().findViewById(R.id.appearance_editor_row2_name);
+            Layout nameLayout = name.getLayout();
+            assertNotNull(nameLayout);
+            assertEquals("\"" + name.getText() + "\" is whole", 0,
+                nameLayout.getEllipsisCount(0));
+            for (AppearanceLooks.Door door : AppearanceLooks.doors(null))
+                assertPillLinesFit(door);
+        }
     }
 
     /** A hidden column leaves no gap: the remaining ones share the width. */
@@ -241,15 +348,12 @@ public abstract class AppearanceEditorPanelFitBase {
     public void fewerColumnsShareTheWidthEqually() {
         showControls(AppearanceLooks.Target.STATUS);
         layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
-        LegendSlider a = mPanel.sliderFor(AppearanceLooks.Control.BLUR);
-        LegendSlider b = mPanel.sliderFor(AppearanceLooks.Control.GRAIN);
+        LegendSlider b = mPanel.sliderFor(AppearanceLooks.Control.GLASS);
         LegendSlider c = mPanel.sliderFor(AppearanceLooks.Control.OPACITY);
         LegendSlider d = mPanel.sliderFor(AppearanceLooks.Control.TINT);
-        assertNotNull(a);
         assertNotNull(b);
         assertNotNull(c);
         assertNotNull(d);
-        assertEquals(a.getWidth(), b.getWidth(), 1);
         assertEquals(b.getWidth(), c.getWidth(), 1);
         assertEquals(c.getWidth(), d.getWidth(), 1);
         View row = mPanel.view().findViewById(R.id.appearance_editor_sliders);
@@ -265,10 +369,10 @@ public abstract class AppearanceEditorPanelFitBase {
         showControls(null);
         int height = mPanel.measureFor(EditorMode.LOOK, mWidthPx);
         layOut(height);
-        LegendSlider blur = mPanel.sliderFor(AppearanceLooks.Control.BLUR);
+        LegendSlider blur = mPanel.sliderFor(AppearanceLooks.Control.GLASS);
         int left = blur.getLeft();
         int top = blur.getTop();
-        mPanel.setSliderValue(AppearanceLooks.Control.BLUR, 48);
+        mPanel.setSliderValue(AppearanceLooks.Control.GLASS, 48);
         layOut(height);
         assertEquals(left, blur.getLeft());
         assertEquals(top, blur.getTop());
@@ -383,8 +487,8 @@ public abstract class AppearanceEditorPanelFitBase {
         assertEquals("the anchor does not depend on Row B's state",
             tallest, mPanel.measureTallest(EditorMode.LOOK, mWidthPx));
 
-        for (AppearanceLooks.Target target : targets()) {
-            showControls(target);
+        for (Selection target : selections()) {
+            showControls(target.target, target.glassEdge);
             assertEquals("every selection is one height: " + target, tallest,
                 mPanel.measureFor(EditorMode.LOOK, mWidthPx));
             assertEquals(tallest, mPanel.measureTallest(EditorMode.LOOK, mWidthPx));
@@ -492,10 +596,33 @@ public abstract class AppearanceEditorPanelFitBase {
         assertEquals(View.GONE, root.findViewById(R.id.appearance_editor_icons_slot).getVisibility());
     }
 
-    private static java.util.List<AppearanceLooks.Target> targets() {
-        java.util.List<AppearanceLooks.Target> out = new java.util.ArrayList<>();
-        out.add(null);
-        out.addAll(java.util.Arrays.asList(AppearanceLooks.Target.values()));
+    /** A selection and whether the glass edge is drawn, which adds Depth to the global set. */
+    private static final class Selection {
+        final AppearanceLooks.Target target;
+        final boolean glassEdge;
+
+        Selection(AppearanceLooks.Target target, boolean glassEdge) {
+            this.target = target;
+            this.glassEdge = glassEdge;
+        }
+
+        @Override
+        public String toString() {
+            return target == null ? "all surfaces" + (glassEdge ? " with Depth" : "")
+                : target.name();
+        }
+    }
+
+    /**
+     * Every Custom row: the global set without Depth and with it, then each element's own set
+     * (with the glass edge drawn, which an element's set ignores).
+     */
+    private static java.util.List<Selection> selections() {
+        java.util.List<Selection> out = new java.util.ArrayList<>();
+        out.add(new Selection(null, false));
+        out.add(new Selection(null, true));
+        for (AppearanceLooks.Target target : AppearanceLooks.Target.values())
+            out.add(new Selection(target, true));
         return out;
     }
 
@@ -514,33 +641,44 @@ public abstract class AppearanceEditorPanelFitBase {
     private String widest(AppearanceLooks.Control control) {
         android.content.Context context = mPanel.view().getContext();
         switch (control) {
-            case BLUR: return context.getString(R.string.appearance_editor_blur, 48);
-            case GRAIN: return context.getString(R.string.appearance_editor_grain, 100);
+            case GLASS: return context.getString(R.string.appearance_editor_glass, 100);
             case OPACITY: return context.getString(R.string.appearance_editor_opacity, 100);
             case TINT: return context.getString(R.string.appearance_editor_tint, 100);
-            case MARGIN: return context.getString(R.string.appearance_editor_margin, 48);
-            case CORNER_RADIUS: return context.getString(R.string.appearance_editor_corners, 40);
+            case EDGE: return context.getString(R.string.appearance_editor_edge, 100);
+            case VIBRANCY: return context.getString(R.string.appearance_editor_vibrancy, "1.50");
+            case KEY_OPACITY: return context.getString(R.string.appearance_editor_key_opacity, 100);
             case KEY_RADIUS: return context.getString(R.string.appearance_editor_key_corners, 24);
             case KEY_SPACING: return context.getString(R.string.appearance_editor_key_spacing, "8.0");
             case ICON_SIZE: return context.getString(R.string.appearance_editor_icon_size, 48);
             case APP_ICONS: return context.getString(R.string.appearance_editor_app_icons, 10);
+            case DEPTH: return context.getString(R.string.appearance_editor_depth, control.max);
             default: return context.getString(R.string.appearance_editor_legibility_unavailable);
         }
     }
 
-    /** The Custom row for a selection, as the controller states it, at the widest legends. */
+    /** The Custom row for a selection, with the glass edge drawn (the global set's widest). */
     private void showControls(AppearanceLooks.Target target) {
+        showControls(target, true);
+    }
+
+    /**
+     * The Custom row for a selection, as the controller states it, at the widest legends, the
+     * global set ending in Depth where {@code glassEdge}.
+     */
+    private void showControls(AppearanceLooks.Target target, boolean glassEdge) {
         mPanel.showAppearanceMode();
         mPanel.showRow2(nameOfTarget(target));
         java.util.List<AppearanceEditorPanel.SliderState> states = new java.util.ArrayList<>();
-        for (AppearanceLooks.Control control : AppearanceLooks.controls(target)) {
+        for (AppearanceLooks.Control control : AppearanceLooks.controls(target, glassEdge)) {
             final String legend = widest(control);
             states.add(new AppearanceEditorPanel.SliderState(control, control.max,
                 control != AppearanceLooks.Control.CONTRAST, value -> legend));
         }
         mPanel.setSliders(states);
         mPanel.setDoors(AppearanceLooks.doors(target));
-        mPanel.setTerminalLooks("default", "none");
+        mPanel.setTerminalLooks(true, "default", "none");
+        if (target == null)
+            mPanel.setGlassLooks("secondary");
     }
 
     private View doorView(AppearanceLooks.Door door) {
@@ -548,19 +686,25 @@ public abstract class AppearanceEditorPanelFitBase {
         switch (door) {
             case KEYBOARD_THEME: return root.findViewById(R.id.appearance_editor_door_keyboard_theme);
             case CLOCK: return root.findViewById(R.id.appearance_editor_door_clock);
-            case TRAIL: return root.findViewById(R.id.appearance_editor_trail);
+            case TRAIL:
+            case TINT_HUE: return root.findViewById(R.id.appearance_editor_trail);
             default: return root.findViewById(R.id.appearance_editor_effect);
         }
     }
 
-    /** Draws the slider and holds the legend it fitted against the track it has. */
-    private static void assertLegendFits(LegendSlider slider, AppearanceLooks.Control control) {
+    /**
+     * Draws the slider and holds the legend it fitted against the track it has: empty when it
+     * fits, or a line naming it, so a test can name every one that does not in one run.
+     */
+    private static String legendOverrun(LegendSlider slider, AppearanceLooks.Control control) {
         Bitmap bitmap = Bitmap.createBitmap(Math.max(1, slider.getWidth()),
             Math.max(1, slider.getHeight()), Bitmap.Config.ARGB_8888);
         slider.draw(new Canvas(bitmap));
-        assertTrue(control + " legend \"" + slider.shownLegend() + "\" fits its track",
-            slider.legendFits());
         assertTrue("the legend keeps a name", slider.shownLegend().length() > 0);
+        if (slider.legendFits())
+            return "";
+        return " " + control + " \"" + slider.shownLegend() + "\" at "
+            + slider.legendTextSizePx() + "px overruns " + slider.getHeight() + "px;";
     }
 
     private void layOut(int heightPx) {

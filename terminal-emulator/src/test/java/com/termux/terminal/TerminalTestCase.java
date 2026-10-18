@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -60,6 +61,28 @@ public abstract class TerminalTestCase extends TestCase {
         public String onReadTextFromClipboard() {
             return clipboardContents;
         }
+
+		/** What an OSC 5522 read is offered; null falls back to {@link #clipboardContents} as text. */
+		public ClipboardOffer clipboardOffer = null;
+
+		/** For each OSC 5522 read, whether it redeemed a paste event's password. */
+		public final List<Boolean> clipboardReadsPasted = new ArrayList<>();
+
+		/** The pictures of each finished OSC 5522 write; its text goes to {@link #clipboardPuts}. */
+		public final List<Map<String, byte[]>> clipboardImagePuts = new ArrayList<>();
+
+		@Override
+		public void onReadClipboard(boolean pasted, KittyClipboard.ReadCallback callback) {
+			clipboardReadsPasted.add(pasted);
+			if (clipboardOffer != null) callback.onOffer(clipboardOffer);
+			else super.onReadClipboard(pasted, callback);
+		}
+
+		@Override
+		public void onWriteClipboard(Map<String, byte[]> images, String text) {
+			clipboardImagePuts.add(images);
+			super.onWriteClipboard(images, text);
+		}
 
 		/** Whole OSC 99 requests handed over, in the order they finished. */
 		public final List<KittyNotification> kittyNotifications = new ArrayList<>();

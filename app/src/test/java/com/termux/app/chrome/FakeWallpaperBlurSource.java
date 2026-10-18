@@ -63,8 +63,23 @@ final class FakeWallpaperBlurSource implements WallpaperBlurCache.Source {
         Bitmap bitmap = Bitmap.createBitmap(Math.max(1, frameRect.width()),
             Math.max(1, frameRect.height()), Bitmap.Config.ARGB_8888);
         captured.add(bitmap);
+        if (borrowing) {
+            // As the managed wallpaper's capture does: the decode reads a picture lent for it.
+            loansOut++;
+            return WallpaperBlurCache.FrameCapture.deferred(() -> bitmap, () -> {
+                loansOut--;
+                loansReturned++;
+            });
+        }
         return WallpaperBlurCache.FrameCapture.ready(bitmap);
     }
+
+    /** When set, each capture is a deferred decode that borrows, and gives back, a loan. */
+    boolean borrowing;
+    /** Loans taken and not yet given back. */
+    int loansOut;
+    /** Times a loan was given back; more than one per capture is a double release. */
+    int loansReturned;
 
     @Nullable
     @Override
@@ -85,5 +100,21 @@ final class FakeWallpaperBlurSource implements WallpaperBlurCache.Source {
     @Override
     public void onCacheCleared() {
         clearedCount++;
+    }
+
+    /** The frame tint the glass asks the frames for; none unless a test sets one. */
+    int frameTint = GlassFrameTint.NONE;
+
+    @Override
+    public int glassFrameTint() {
+        return frameTint;
+    }
+
+    /** The Vibrancy the glass asks the frames for; 100, the default, bakes nothing. */
+    int vibrancyPercent = 100;
+
+    @Override
+    public int glassVibrancyPercent() {
+        return vibrancyPercent;
     }
 }

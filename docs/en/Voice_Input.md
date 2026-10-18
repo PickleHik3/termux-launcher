@@ -55,6 +55,11 @@ from the start, in three parts.
 room). A soft bar stands in for a phrase while it transcribes. Text as heard, while a cleanup is
 still to come or after undo, is *italic* and dimmer; cleaned text is upright.
 
+**Tap the text to fix a word** before you use it. A cursor appears where you tapped and the
+keyboard types into the card; press Enter or tap outside the text when you are done. Tapping while
+the card listens pauses it, and an edit made before the cleanup lands keeps your text as it is.
+**Undo** takes you back to the text before your edit.
+
 **The control bar** is there from the start:
 
 - **Pause**, carrying your voice's waveform, closes the microphone. Phrases still transcribing
@@ -90,10 +95,14 @@ On **Home** with no search or field open, nothing takes typing, so the text is c
 
 ## Cleanup
 
-Cleanup is one pass a chat model makes over the whole dictation once it stops. It fixes
-punctuation, capitals, fillers and grammar, and resolves self-corrections ("at five, no, six"
-becomes "at six"). Changed and added words show in the accent colour and removed words struck
-through; **Insert** and **Copy** use the plain cleaned text.
+Cleanup removes hesitations like "uh" and "um" on its own, then rewrites only the sentences that
+need it (a stumble, a self-correction, a spoken list) and leaves the rest exactly as you said it.
+It writes in the language you spoke and keeps your spelling. A dictation with nothing to fix is
+kept as heard. Where it rewrites, it reads the passage and writes what you meant: misheard words replaced from context, broken sentences
+put back together, run-ons split, fillers removed and self-corrections resolved ("at five, no,
+six" becomes "at six"). It keeps your points and adds nothing you did not say. Changed and added
+words show in the accent colour and removed words struck through; **Insert** and **Copy** use the
+plain cleaned text.
 
 The settings are in the **Dictation cleanup** group of **Settings → Keyboard → Voice input**:
 
@@ -101,14 +110,19 @@ The settings are in the **Dictation cleanup** group of **Settings → Keyboard �
 | --- | --- | --- |
 | **Clean up dictation** | on or off | on |
 | **Cleanup model** | Opens the **Tidy dictation** picker: **Automatic**, an installed model, a **Remote** model, or **Raw text** (no model) | Automatic |
-| **Cleanup level** | **Light: punctuation, fillers and grammar, in your words. Runs on this phone.** or **Polished: also paragraphs and lists. Uses your remote model when one is set up.** | Polished |
+| **Cleanup level** | **Light**: one cleaned-up paragraph. **Polished**: also paragraphs and lists | Polished |
 | **Cleanup details** | What cleanup does, and shell commands | |
 
 **Automatic** uses Gemma 4 E2B, then E4B, then raw text. On a phone with 6 GB of RAM or less it
 means **Raw text**. The model loads while you speak, so the pass at the end does not wait for it.
-**Polished** uses the [remote model](On_Device_AI.md#remote-model) whenever one is set up, and the
-cleanup model otherwise. A Polished result's line breaks are pasted only into programs that accept
-bracketed paste; elsewhere they are joined with spaces.
+When cleanup runs on the phone's graphics chip or a remote model, it also tidies your words at
+natural pauses while you talk, so your cleaned text is ready a moment after you stop. The card
+shows what you said until then.
+Both levels use the cleanup model. That is the [remote model](On_Device_AI.md#remote-model) when
+you pick it, when **Automatic** meets a remote model set to **Prefer remote**, or when a remote
+model set to **Only when no local model fits** steps in for a local model with no room. A Polished
+result's line breaks are pasted only into programs that accept bracketed paste; elsewhere they are
+joined with spaces.
 
 The text is **Kept as heard** when the dictation has fewer than 4 words, when it is a spoken
 command, when the model's answer looks like a reply instead of a cleanup (or drops most of your
@@ -157,8 +171,11 @@ whether cleanup is on or off. The strip says **Cleaned up** and **Undo** takes i
   is. The first speech model to finish becomes the one in use. With several installed, choose with
   **Use for…** in the Model centre, or **Settings → Keyboard → Voice input → Speech model**, which
   also offers **Change window** and **Unload after idle** (2 minutes by default).
-- **Voice language** (Speech group) applies to the multilingual Whisper models only. **Auto** takes
-  the keyboard layout's language, then the phone's. Parakeet detects the language itself.
+- **Voice language** (Speech group) applies to the multilingual Whisper models only.
+  **Auto-detect** listens to your first phrase and keeps that language for the rest of the
+  dictation. Until it is sure, it uses your keyboard layout's language, then your phone's. When it
+  hears a language other than those, the card names it beside Listening. Parakeet detects the
+  language itself.
 
 ## Listening settings
 

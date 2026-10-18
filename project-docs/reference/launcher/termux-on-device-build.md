@@ -5,8 +5,8 @@ because the route is not obvious: Google ships the NDK and the build-tools host 
 **linux-x86_64 ELF only**, so `sdkmanager --install ndk` gets you a toolchain that cannot execute,
 and the failure it produces later is `Exec format error` a long way from its cause.
 
-AGENTS.md owns the build commands and everything about the branch and release model; nothing here
-restates them. What follows is only what is specific to an aarch64 Android host.
+AGENTS.md owns the build commands and `docs/agents/releasing.md` the branch and release model;
+nothing here restates them. What follows is only what is specific to an aarch64 Android host.
 
 ## Recommended minimum specs
 

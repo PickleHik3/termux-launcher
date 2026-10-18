@@ -18,11 +18,16 @@ import java.util.List;
  * <p>The Look slider has five stops: the four Looks in {@link SurfacePresets#presets()} order —
  * Clear, Mist, Tint, Solid — and Custom last. At Custom the sheet shows a row of vertical sliders
  * whose set follows the selection ({@link #controls}): the global set with nothing tapped, or the
- * tapped element's own, with the buttons above them ({@link #doors}). Blur, Grain and Opacity are
- * the shared glass on the global set and the element's own values on an element.</p>
+ * tapped element's own, with the buttons above them ({@link #doors}). Glass (blur and grain as
+ * one, {@link GlassControls}), Opacity and Tint are the shared glass on the global set and the
+ * element's own values on an element. The global set adds Vibrancy, and, where the glass edge is
+ * drawn at all, the edge's two sliders: Edge (its colour split, no fringe to a bold coloured
+ * edge) after Tint and Depth at the end; its pill is Tint colour. Those are global and never an
+ * element's.</p>
  *
  * <p>Layout mode's Corners and Margin (SPEC §3.5) are here too: the global shape, which no Look
- * sets (2026-10-01); the Custom row's Margin and Corner radius write the same keys.</p>
+ * sets (2026-10-01). They are Layout's alone since the glass controls took the Custom row's
+ * columns (2026-10-17): seven columns are all a 360 dp phone holds at the 36 dp floor.</p>
  *
  * <p>No views and no {@code Context}, so the rules are held by JVM tests.</p>
  */
@@ -121,22 +126,28 @@ public final class AppearanceLooks {
      * A vertical slider of the Custom row, with the integer range its stored value maps onto.
      * Icon size is the pinned icon in dp, and its slider runs over the range the dock gives under
      * the Style ({@link #iconSizeRangeDp}); the bounds here are only the ones no dock passes, the
-     * icon's floor and the deepest row. Key spacing is the key margin scale in tenths; the others
-     * are their own units (dp, percent, a count, a stop).
+     * icon's floor and the deepest row. Key spacing is the key margin scale in tenths; Keys the
+     * caps' opacity in percent (stored -1 leaves it to the theme); the others are their own units (dp, percent, a count, a stop). Glass is 0 to 100 over blur and grain
+     * ({@link GlassControls}); Vibrancy the frame's saturation in percent, 70 to 150. Edge and
+     * Depth are the glass edge's: Edge the stored dispersion itself, 0 (no fringe) to 100 (a bold
+     * coloured edge), Glint at 40; Depth 0 to 100 over the bend and the edge width
+     * ({@link GlassEdgeControls}).
      */
     public enum Control {
-        BLUR(0, BLUR_MAX_DP, 1),
-        GRAIN(0, GRAIN_MAX, 1),
+        GLASS(GlassControls.GLASS_MIN, GlassControls.GLASS_MAX, 1),
         OPACITY(0, OPACITY_MAX, 1),
         TINT(0, TINT_MAX, 1),
-        MARGIN(0, MARGIN_MAX_DP, 1),
-        CORNER_RADIUS(0, CORNERS_MAX_DP, 1),
+        EDGE(TERMUX_APP.MIN_FANCIER_GLASS_DISPERSION, TERMUX_APP.MAX_FANCIER_GLASS_DISPERSION, 1),
+        VIBRANCY(TERMUX_APP.MIN_SURFACE_GLASS_VIBRANCY, TERMUX_APP.MAX_SURFACE_GLASS_VIBRANCY, 1),
+        KEY_OPACITY(TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_OPACITY,
+            TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_OPACITY, 1),
         KEY_RADIUS(0, KEY_CORNERS_MAX_DP, 1),
         KEY_SPACING(0, KEY_SPACING_MAX_TENTHS, 1),
         ICON_SIZE(Math.round(DockLayoutPolicy.MIN_DOCK_ICON_DP),
             DockLayoutPolicy.maxRowBandPx(1f), 1),
         APP_ICONS(APP_ICONS_MIN, APP_ICONS_MAX, 1),
-        CONTRAST(0, 2, 1);
+        CONTRAST(0, 2, 1),
+        DEPTH(GlassEdgeControls.MIN, GlassEdgeControls.MAX, 1);
 
         public final int min;
         public final int max;
@@ -162,7 +173,9 @@ public final class AppearanceLooks {
         KEYBOARD_THEME,
         CLOCK,
         TRAIL,
-        EFFECT
+        EFFECT,
+        /** The global set's pill: which accent Tint mixes in (primary, secondary, tertiary). */
+        TINT_HUE
     }
 
     /** Key spacing is the key margin scale, 0.0 to 8.0, in tenths. */
@@ -172,38 +185,52 @@ public final class AppearanceLooks {
     public static final int APP_ICONS_MIN = 3;
     public static final int APP_ICONS_MAX = 10;
 
-    /**
-     * The sliders of the Custom row for a selection, in legend order (left to right): the global
-     * set for nothing tapped (null), or the element's own. Blur, Grain, Opacity and Tint come first for
-     * everything, so the same four columns stay under the user's thumb as the selection changes.
-     */
+    /** The Custom row's sliders for a selection, the global set without Depth. */
     @NonNull
     public static List<Control> controls(@Nullable Target target) {
+        return controls(target, false);
+    }
+
+    /**
+     * The sliders of the Custom row for a selection, in legend order (left to right): the global
+     * set for nothing tapped (null), or the element's own. Glass, Opacity and Tint come first, so
+     * the same three columns stay under the user's thumb as the selection changes. The global set
+     * adds Vibrancy and, while the glass edge is drawn ({@code glassEdge}), Edge after Tint and
+     * Depth at the end: the edge is not drawn otherwise, so neither is offered. An element never
+     * has those.
+     */
+    @NonNull
+    public static List<Control> controls(@Nullable Target target, boolean glassEdge) {
         if (target == null)
-            return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
-                Control.MARGIN, Control.CORNER_RADIUS);
+            return glassEdge
+                ? Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT, Control.EDGE,
+                    Control.VIBRANCY, Control.DEPTH)
+                : Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
+                    Control.VIBRANCY);
         switch (target) {
             case KEYBOARD:
-                return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
-                    Control.TINT, Control.KEY_RADIUS, Control.KEY_SPACING);
+                return Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
+                    Control.KEY_OPACITY, Control.KEY_RADIUS, Control.KEY_SPACING);
             case DOCK:
-                return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
-                    Control.TINT, Control.ICON_SIZE, Control.APP_ICONS);
+                return Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
+                    Control.ICON_SIZE, Control.APP_ICONS);
             case TERMINAL:
-                return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
-                    Control.TINT, Control.CONTRAST);
+                return Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
+                    Control.CONTRAST);
             case STATUS:
             default:
-                return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
-                    Control.TINT);
+                return Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT);
         }
     }
 
-    /** The buttons above the sliders for a selection, in order; none for the global set. */
+    /**
+     * The buttons above the sliders for a selection, in order. The global set's is one pill, Tint
+     * colour, after its name.
+     */
     @NonNull
     public static List<Door> doors(@Nullable Target target) {
         if (target == null)
-            return Collections.emptyList();
+            return Collections.singletonList(Door.TINT_HUE);
         switch (target) {
             case KEYBOARD:
                 return Collections.singletonList(Door.KEYBOARD_THEME);
@@ -217,7 +244,11 @@ public final class AppearanceLooks {
         }
     }
 
-    /** The most sliders any selection has: the columns the sheet is built for. */
+    /**
+     * The most sliders any selection has (the global set with the glass edge, and the
+     * keyboard's): the sheet's columns. Seven would still fit a 360 dp phone at the 36 dp floor;
+     * eight would not.
+     */
     public static final int MAX_CONTROLS = 6;
 
     /** The name in a legend such as "Blur · 12 dp": the part before the separator. */
@@ -230,25 +261,27 @@ public final class AppearanceLooks {
 
     /**
      * The Icon size slider's ends, {@code {min, max}} in dp: the smallest and largest pinned icon
-     * the dock draws under the Style on a screen of this density. The stored dock height scale
+     * the dock draws under the Style on a screen of this density, for a row that stands
+     * {@code alone} in its container or shares it. The stored dock height scale
      * moves the icon only between {@link DockLayoutPolicy#minUsefulScale} and
      * {@link DockLayoutPolicy#maxUsefulScale}, so a slider over these ends moves it everywhere.
      */
     @NonNull
-    public static int[] iconSizeRangeDp(boolean floating, float density) {
+    public static int[] iconSizeRangeDp(boolean floating, boolean alone, float density) {
         float d = safeDensity(density);
         return new int[] {
-            iconDp(DockLayoutPolicy.iconPxForScale(floating,
+            iconDp(DockLayoutPolicy.iconPxForScale(floating, alone,
                 DockLayoutPolicy.minUsefulScale(), d), d),
-            iconDp(DockLayoutPolicy.iconPxForScale(floating,
+            iconDp(DockLayoutPolicy.iconPxForScale(floating, alone,
                 DockLayoutPolicy.maxUsefulScale(floating), d), d)};
     }
 
     /** Where the Icon size slider stands for a stored dock height scale: the icon it draws. */
-    public static int iconSizeValueFor(boolean floating, float scale, float density) {
+    public static int iconSizeValueFor(boolean floating, boolean alone, float scale,
+                                       float density) {
         float d = safeDensity(density);
-        int[] range = iconSizeRangeDp(floating, d);
-        return clamp(iconDp(DockLayoutPolicy.iconPxForScale(floating,
+        int[] range = iconSizeRangeDp(floating, alone, d);
+        return clamp(iconDp(DockLayoutPolicy.iconPxForScale(floating, alone,
             DockLayoutPolicy.clampToUsefulScale(floating, scale), d), d), range[0], range[1]);
     }
 
@@ -257,18 +290,19 @@ public final class AppearanceLooks {
      * shipped preset that reads as this value is preferred, so the slider brought back to the
      * default's reading stores the default rather than a scale a pixel away from it.
      */
-    public static float dockScaleForIconSize(boolean floating, int iconDp, float density) {
+    public static float dockScaleForIconSize(boolean floating, boolean alone, int iconDp,
+                                             float density) {
         float d = safeDensity(density);
-        int[] range = iconSizeRangeDp(floating, d);
+        int[] range = iconSizeRangeDp(floating, alone, d);
         int dp = clamp(iconDp, range[0], range[1]);
         for (int i = 0; i < DockLayoutPolicy.sizePresetCount(); i++) {
             float preset = DockLayoutPolicy.sizePreset(i);
             if (preset >= DockLayoutPolicy.minUsefulScale()
                 && preset <= DockLayoutPolicy.maxUsefulScale(floating)
-                && iconSizeValueFor(floating, preset, d) == dp)
+                && iconSizeValueFor(floating, alone, preset, d) == dp)
                 return preset;
         }
-        return DockLayoutPolicy.scaleForIconPx(floating, Math.round(dp * d), d);
+        return DockLayoutPolicy.scaleForIconPx(floating, alone, Math.round(dp * d), d);
     }
 
     private static int iconDp(int px, float density) {
@@ -298,7 +332,7 @@ public final class AppearanceLooks {
     public enum Row {
         /** Down: a Look stop. */
         NONE,
-        /** The global Blur, Opacity and Grain: the Custom stop with nothing tapped. */
+        /** The global glass: the Custom stop with nothing tapped. */
         GLOBAL,
         /** The tapped element's own controls. */
         ELEMENT
@@ -342,14 +376,17 @@ public final class AppearanceLooks {
         return clamp(value, 0, GRAIN_MAX);
     }
 
-    /** Tint is how much of the Material colour tint a surface wears, in percent; 100 is as before. */
+    /**
+     * Tint is how much accent colour a surface mixes in, in percent: 0 the Look's own colour, 35
+     * the Material blend the Tint Look wears, 100 the accent's container.
+     */
     public static final int TINT_MAX = 100;
 
     public static int tintPercent(int value) {
         return clamp(value, 0, TINT_MAX);
     }
 
-    /** Blur is one value for every surface, in dp. */
+    /** Blur is one value for every surface, in dp; Glass writes it ({@link GlassControls}). */
     public static final int BLUR_MAX_DP = 48;
 
     public static int blurDp(int value) {
