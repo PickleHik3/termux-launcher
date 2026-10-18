@@ -9559,6 +9559,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzScrubLettersAndTint();
             syncPinnedAppsHost();
         });
+        // The app menu's Add to Home, offered while there are Home pages to take the icon.
+        mSuggestionBarView.setAddToHomeListener(new SuggestionBarView.AddToHomeListener() {
+            @Override public boolean canAddToHome() { return mWidgetPaneController != null; }
+            @Override public void onAddToHome(
+                    @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+                addAppToHome(entry);
+            }
+        });
         mSuggestionBarView.setFolderRenameHost(new SuggestionBarView.FolderRenameHost() {
             @Override public void beginFolderRename(long revision, @NonNull String folderId,
                                                    @NonNull String title,
@@ -21570,12 +21578,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             hasPages ? mWidgetPaneController.homePageCount() : 0));
     }
 
+    /**
+     * Puts an app on Home as an icon, from the app menu's Add to Home or the sheet's Add an app:
+     * the page in front when it has room, else the first that has, else a new page. A toast names
+     * the page, since it may not be the one on screen.
+     */
+    private void addAppToHome(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+        if (mWidgetPaneController == null) return;
+        int page = mWidgetPaneController.addApp(entry);
+        if (page < 0) {
+            Logger.logWarn(LOG_TAG, "Add to Home failed for " + entry.appRef.stableId());
+            return;
+        }
+        android.widget.Toast.makeText(this, getString(R.string.home_app_added, page + 1),
+            android.widget.Toast.LENGTH_SHORT).show();
+    }
+
     /** Each row runs what the corner tab, the palette and Settings already run for it. */
     private void runHomeAction(@NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) {
         switch (item) {
             case TERMINAL: openHomeFloatHere(); break;
             case ADD_WIDGET:
                 if (mWidgetPaneController != null) mWidgetPaneController.openPicker();
+                break;
+            case ADD_APP:
+                if (mWidgetPaneController != null) {
+                    com.termux.app.launcher.home.HomeAppPicker.show(this, this::addAppToHome);
+                }
                 break;
             case ADD_PAGE: {
                 View pane = findViewById(R.id.widget_pane);

@@ -1,7 +1,7 @@
 # Home screen and apps
 
-This page covers Home and launching apps: the pinned apps row, folders, the A–Z index, the app
-drawer, the Terminal entry, searching from the shell prompt and making the launcher your home app.
+This page covers Home and launching apps: app icons on Home, the pinned apps row, folders, the A–Z
+index, the app drawer, the Terminal entry, searching from the shell prompt and making the launcher your home app.
 Widgets have their own page, [Widgets](Widgets.md).
 
 Most of these settings are on **Settings → Apps** ("Dock, drawer and search").
@@ -35,6 +35,27 @@ Workspace only. See
 (Older versions had a usage mode and three places, Widgets, Terminal and Display, on a pane wall.
 Home and the Workspace replace them.)
 
+## App icons on Home
+
+A Home page holds app icons beside its widgets. Each icon takes one cell of the widget grid, with
+the app's label under it, and wears the same icon as the drawer and the dock, icon pack included.
+
+- **Add one from the drawer:** hold an app and choose **Add to Home**. The same row is in a pinned
+  app's menu.
+- **Add one from Home:** hold an empty spot on a Home page and choose **Add an app**, then tap the
+  app in the list (it has a search field).
+- Either way the icon goes on the Home page you are on, in its first free cell. When that page is
+  full it goes on the first page with room, and when every page is full on a new page after the
+  last. A message names the page.
+- **Tap** an icon to open the app.
+- **Hold** an icon to pick it up, as you would a widget: move it on the page, or hold it against
+  the page's edge to carry it to another page (past the last page, a new one is made). Its remove
+  chip takes it off Home. Icons have no resize handles.
+- An app you uninstall or disable leaves its icon where it was, faint, under its old label. Tap it
+  to select it and take it off with the remove chip; it comes back to life if the app returns.
+
+Icons follow Home's grid and its **Margin**, exactly as widgets do. Folders on Home are coming.
+
 ## The Terminal entry
 
 **Terminal** is the launcher's own entry in the app drawer, beside the Linux apps, and it is pinned
@@ -52,7 +73,7 @@ The apps row in the dock holds the apps you pin.
 - **Tap** an app to open it.
 - **Hold an empty spot** in the apps row to choose which apps are pinned, then tap **Done**.
 - **Hold an app** for its menu: **App info**, **Uninstall**, **Change app icon**, **Change dock
-  icon** and **Unpin**.
+  icon**, **Unpin** and **Add to Home** (see [App icons on Home](#app-icons-on-home)).
 - **Drag** a pinned app along the row to reorder it.
 - **Drag one app onto another** to make a folder. Tap a folder to open it; its popup can rename the
   folder.
@@ -94,6 +115,9 @@ bottom. On a side rail, swipe right on a left rail or left on a right rail. The 
 
 You can also put an **App drawer** key on the extra-keys row; see
 [Extra keys](Extra_Keys.md).
+
+Hold an app in the drawer for its menu; **Add to Home** puts it on a Home page (see
+[App icons on Home](#app-icons-on-home)).
 
 Beside your Android apps, the drawer lists the **Terminal** entry and, under **Linux Apps**, the
 Linux apps installed in Termux or in a distro, with a **Display** entry that opens the bare Linux
