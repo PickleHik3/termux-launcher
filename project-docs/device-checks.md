@@ -636,6 +636,31 @@ Not seen: everything else listed under the sections below.
 - Owed · with a Home float open, consume on the row's last window does nothing (the float's chip
   after the row's is never consumed); with the Home float focused, `Ctrl+Alt+.` does nothing.
   Neither action is offered in the Home palette.
+### Wall rework phase two: slice 6, the first-boot tour for the wall (feat/wall-rework-phase2)
+- Owed · commits "feat(tour): six lessons for the wall, each taught on its half" and
+  "feat(tour): switch the tour back on, with the wall's hooks" · emulator, portrait, slow injected
+  swipes (`adb shell input swipe … 600`), a debug build so `adb logcat -s TermuxTour` carries the
+  signal log. Fresh data (`adb shell pm clear com.termux`), launch, Welcome › **Take the tour**:
+  the first card stands on Home page 1. Each lesson clears by its real gesture and the next card
+  follows: swipe left on Home's free area onto the first window, then a sideways swipe right
+  along the window's bottom border back to Home; swipe down on the apps row (the drawer opens);
+  on a window, keyboard swipe down then up; status bar slow pull down from the top border (opens
+  whole), quick swipe up (folds); swipe up on Home's free area (palette and keyboard); hold a
+  window's corner, tap ?; the closing card's **Start** ends it. A card taught on the other half
+  reads the way there ("Swipe left past your last Home page…", "…or press Home…") and glows
+  nothing.
+- Owed · the half rule: on the keyboard card, swipe back to Home with the keyboard up: the card
+  is not cleared (the log reads "ignored: it happened on the other half of the wall"), and going
+  back to the window still asks to put the keyboard away.
+- Owed · **Skip** on a card moves to the next lesson; Settings › About & help › **Replay tour**
+  plays the whole run again from the Welcome sheet; `adb shell am force-stop com.termux` mid-run
+  (on the status card, say) and relaunch: the run resumes on the same lesson from its first half,
+  on Home page 1, with no Welcome sheet. The tour never opens a second shell (`ps -A | grep bash`
+  shows one before and after the run; the window bar shows one window).
+- Owed · the skip rules: Home is always on the wall (`isWidgetsPageWanted`), so there is no
+  terminal-only install to try; the Home lessons' skip without Home is unit-tested
+  (`TourRun.droppedFor`). If the session can be left with no window (the row without a
+  Workspace), Replay then leaves the seam lesson out and opens on **Open your apps**.
 
 ## Developer
 

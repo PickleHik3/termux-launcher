@@ -55,8 +55,8 @@ unless you have a backup: Android deletes the app's private data on uninstall.
      builds that have the display.
 
    Allow what you want, then tap **Continue**. Everything here can be changed later in Settings.
-3. A welcome card offers **Take the tour** or **Not now**. The tour runs over the real home screen;
-   [Learn the launcher](Learn_The_Launcher.md#the-tour) lists its steps.
+3. A welcome card offers **Take the tour** or **Not now**. The tour runs on the wall itself,
+   starting on Home; [Learn the launcher](Learn_The_Launcher.md#the-tour) lists its steps.
 4. After the tour, an On-device AI card, **Models for this phone**, shows what your phone can run
    offline and offers downloads. Tick what you want and tap **Download selected**, or tap **Later**.
    You can reopen it from **Settings → On-device AI → Models for this phone**. See

@@ -13,8 +13,9 @@ Related: [`CONTEXT.md`](../CONTEXT.md) (a pointer to this file), [`docs/adr/`](a
 ### The wall and its chrome
 
 The wall rework (ADR 0008, agreed 2026-10-17, spec `project-docs/active/wall-rework-2026-10-17.md`)
-is not built yet. The entries here give the agreed words; the code still has three places until the
-rework lands, and the retired words are kept under _Avoid_ so the old prose can be read.
+is built on `feat/wall-rework-phase2`, and the entries here are its words. Some code names still
+say place, Widgets and Terminal (`PaneWallPage`); the retired words are kept under _Avoid_ so the
+old prose can be read.
 
 **A–Z index**:
 The row or column of letters along an edge that jumps the app list to the apps beginning with a
