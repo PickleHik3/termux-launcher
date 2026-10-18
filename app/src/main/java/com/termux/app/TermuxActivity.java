@@ -18925,7 +18925,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : restored.isEmpty() ? null : restored.get(0);
         if (selected != null) {
             mCurrentWSession = selected;
-            mPaneController.showWindow(mCurrentWSession.currentWindow());
+            // Taken the way every other shell is (activateSessionInPanes): the window shown, its
+            // pane focused through focusSession, the fonts, clipboard and session list set, so
+            // a rebuilt or loaded window is the launcher's like one opened by hand.
+            TerminalSession focused =
+                mPaneController.windowActiveSession(mCurrentWSession.currentWindow());
+            if (focused == null)
+                mPaneController.showWindow(mCurrentWSession.currentWindow());
+            else
+                activateSessionInPanes(focused);
         } else if (mWSessions.isEmpty()) {
             // Floats only, and nothing left in the row: the Workspace is empty, as after its last
             // window closed. The wall stays on Home; off Home, the last Home page slides in.
