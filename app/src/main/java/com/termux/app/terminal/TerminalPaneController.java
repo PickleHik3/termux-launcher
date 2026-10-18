@@ -954,7 +954,7 @@ public class TerminalPaneController {
      * Rebuilds a saved Home float around {@code sessions}' one shell, floating over Home page
      * {@code page} (already clamped to the pages there are), minimised if it was saved so. It
      * takes its saved shape for the orientation the screen stands in, or is born there as a new
-     * float is (full-size, or cascaded off a float shown on that page); the other orientation's
+     * float is (a window inside the room, or cascaded off a float shown on that page); the other orientation's
      * shape seeds its memory, so a turn brings that one back. It is neither focused nor animated
      * in; the host announces the floats once the whole load is in.
      */
@@ -1355,6 +1355,32 @@ public class TerminalPaneController {
             for (Leaf leaf : allLeavesOf(w))
                 if (leaf.session == shell) return w;
         return null;
+    }
+
+    /**
+     * The tiled pane of the window on screen whose bottom border is at {@code x}, in the pane
+     * host's own pixels ({@link com.termux.app.wall.PaneEdges}): its frame's {@code left, right,
+     * bottom}, as laid out. Panes off the host (a maximised pane's siblings) are not candidates.
+     */
+    public boolean bottomPaneEdgeAt(float x, @NonNull float[] out) {
+        if (mActiveWindow == null) return false;
+        List<RectF> frames = new ArrayList<>();
+        for (Leaf leaf : leavesOf(mActiveWindow.root)) {
+            View frame = mPaneFrames.get(leaf.session);
+            if (frame == null || frame.getWidth() <= 0 || frame.getHeight() <= 0) continue;
+            float left = frame.getLeft();
+            float top = frame.getTop();
+            android.view.ViewParent parent = frame.getParent();
+            while (parent instanceof View && parent != mHostView) {
+                View view = (View) parent;
+                left += view.getLeft() - view.getScrollX();
+                top += view.getTop() - view.getScrollY();
+                parent = view.getParent();
+            }
+            if (parent != mHostView) continue;
+            frames.add(new RectF(left, top, left + frame.getWidth(), top + frame.getHeight()));
+        }
+        return com.termux.app.wall.PaneEdges.pick(frames, x, out);
     }
 
     /** All shells of {@code w}: tiled leaves first, then floating panes. */
@@ -2920,7 +2946,8 @@ public class TerminalPaneController {
 
     /**
      * Opens a Home float around {@code shell} on Home page {@code page}: a window of its own whose
-     * one pane floats over that page, born full-size, raised and focused. It is never in the
+     * one pane floats over that page, born a window inside the room
+     * ({@link HomeFloatPolicy#birthFrac()}), raised and focused. It is never in the
      * Workspace's row and never keeps the Workspace alive; the host keeps the row and only hears
      * that the floats changed.
      */
@@ -2945,8 +2972,9 @@ public class TerminalPaneController {
     }
 
     /**
-     * The shape a float born on Home page {@code page} takes: full-size on a page that shows no
-     * float, else cascaded off the topmost one shown there by its titlebar's band, so a second
+     * The shape a float born on Home page {@code page} takes: a window inside the room
+     * ({@link HomeFloatPolicy#birthFrac(int, int, int, int, int)}) on a page that shows no float,
+     * else cascaded off the topmost one shown there by its titlebar's band, so a second
      * float never hides the first one's titlebar. Read before the new float joins the floats.
      */
     @NonNull
@@ -3107,7 +3135,7 @@ public class TerminalPaneController {
 
     /**
      * Ctrl+Alt+F on a window of the row that holds one pane: the window floats onto Home page
-     * {@code page} as a Home float, born full-size and focused. False for a window of several
+     * {@code page} as a Home float, born a window inside the room and focused. False for a window of several
      * panes, whose focused pane floats inside it instead ({@link #toggleFloatActivePane}). The host
      * takes it out of the row.
      */

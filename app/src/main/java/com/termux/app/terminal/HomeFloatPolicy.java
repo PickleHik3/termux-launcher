@@ -20,12 +20,51 @@ public final class HomeFloatPolicy {
     public static final int NOT_HOME_FLOAT = -1;
 
     /**
-     * The shape a Home float is born with: the whole room, between the status bar and the dock
-     * with Home's Margin of air inside them ({@link #room}).
+     * A new Home float's width, as a share of its room's: centred, with the wallpaper showing on
+     * either side. On a phone about 390 dp wide (a room of about 374 dp inside an 8 dp Margin) that
+     * is about 322 dp, 26 dp of air each side; in landscape (a room of about 800 dp) about 688 dp.
+     */
+    public static final float BIRTH_WIDTH_FRAC = 0.86f;
+    /**
+     * How far below its room's top a new Home float's titlebar starts, as a share of the room's
+     * height: about 64 dp of wallpaper above it in a portrait room of about 640 dp, 30 dp in a
+     * landscape one of about 300 dp.
+     */
+    public static final float BIRTH_TOP_FRAC = 0.1f;
+
+    /**
+     * The shape a Home float is born with in a room not measured yet: a window, never the whole
+     * room. {@link #BIRTH_WIDTH_FRAC} of the room's width, centred, its top {@link #BIRTH_TOP_FRAC}
+     * down, and its bottom on the room's bottom ({@link #reachesBottom}), so the keyboard that
+     * comes up with it shrinks it to sit above the keyboard rather than covering its lower rows
+     * ({@link #keyboardRoom}); with the keyboard down it ends Home's Margin above the dock.
+     * Maximise still fills the whole room ({@link FloatTitlebarPolicy#fullRoom}).
      */
     @NonNull
     public static RectF birthFrac() {
-        return FloatTitlebarPolicy.fullRoom();
+        float side = (1f - BIRTH_WIDTH_FRAC) / 2f;
+        return new RectF(side, BIRTH_TOP_FRAC, 1f - side, 1f);
+    }
+
+    /**
+     * {@link #birthFrac()} in a room {@code roomWidthPx} by {@code roomHeightPx}: never narrower
+     * than {@code minWidthPx}, still centred, and never shorter than {@code minHeightPx} or the
+     * titlebar's band {@code titlebarBandPx}, its top coming up toward the room's top to keep that
+     * height, so the titlebar always lies wholly in the room. A room smaller than the least size
+     * gives the whole room on that axis. A room not measured yet (zero size) gives
+     * {@link #birthFrac()}.
+     */
+    @NonNull
+    public static RectF birthFrac(int roomWidthPx, int roomHeightPx, int minWidthPx,
+                                  int minHeightPx, int titlebarBandPx) {
+        if (roomWidthPx <= 0 || roomHeightPx <= 0) return birthFrac();
+        float minWidth = Math.min(roomWidthPx, Math.max(1, minWidthPx));
+        float width = Math.min(roomWidthPx, Math.max(minWidth, BIRTH_WIDTH_FRAC * roomWidthPx));
+        float left = (roomWidthPx - width) / 2f;
+        float minHeight = Math.min(roomHeightPx,
+            Math.max(1, Math.max(minHeightPx, titlebarBandPx)));
+        float top = Math.max(0f, Math.min(BIRTH_TOP_FRAC * roomHeightPx, roomHeightPx - minHeight));
+        return new RectF(left / roomWidthPx, top / roomHeightPx, (left + width) / roomWidthPx, 1f);
     }
 
     /** The small step right a float born over another takes, beside the step down its titlebar sets. */
@@ -33,19 +72,22 @@ public final class HomeFloatPolicy {
 
     /**
      * The shape a new Home float is born with, as fractions of a room {@code roomWidthPx} by
-     * {@code roomHeightPx}: full-size ({@link #birthFrac}) on a page that shows no float, else
+     * {@code roomHeightPx}: a window ({@link #birthFrac(int, int, int, int, int)}, with
+     * {@code stepDownPx} as the titlebar's band) on a page that shows no float, else
      * cascaded off {@code under}, the topmost float shown there. The cascade keeps {@code under}'s
      * size and steps {@code stepDownPx} down (the titlebar's band, so the titlebar under it stays in
      * sight) and {@code stepRightPx} right, clamped to the room: a float that runs past the room's
      * right or bottom edge ends there, and one that would then be smaller than
      * {@code minWidthPx} by {@code minHeightPx} slides back toward the room's top-left at that size.
-     * A room not measured yet (zero size) gives the full-size birth.
+     * A room not measured yet (zero size) gives {@link #birthFrac()}.
      */
     @NonNull
     public static RectF cascadeFrac(@Nullable RectF under, int roomWidthPx, int roomHeightPx,
                                     int stepRightPx, int stepDownPx, int minWidthPx,
                                     int minHeightPx) {
-        if (under == null || roomWidthPx <= 0 || roomHeightPx <= 0) return birthFrac();
+        if (roomWidthPx <= 0 || roomHeightPx <= 0) return birthFrac();
+        if (under == null)
+            return birthFrac(roomWidthPx, roomHeightPx, minWidthPx, minHeightPx, stepDownPx);
         float[] x = cascadeSpan(under.left * roomWidthPx, under.right * roomWidthPx, roomWidthPx,
             stepRightPx, minWidthPx);
         float[] y = cascadeSpan(under.top * roomHeightPx, under.bottom * roomHeightPx, roomHeightPx,
@@ -219,6 +261,41 @@ public final class HomeFloatPolicy {
     /** Whether a room this size is a landscape one, which is what a float's memory is keyed by. */
     public static boolean isLandscape(float widthPx, float heightPx) {
         return widthPx > heightPx;
+    }
+
+    // --- Launching ---
+
+    /** What asked for a new terminal, for {@link #launchesAsFloat}. */
+    public enum Launch {
+        /**
+         * A tap on the Terminal entry (the dock, the drawer): it goes to the Workspace while there
+         * is one, so it launches a terminal only when the Workspace is empty.
+         */
+        ENTRY_TAP,
+        /** A new terminal or window: a keybind, the palette, the local API, Home's own Terminal items. */
+        NEW_TERMINAL,
+        /** The Terminal entry's New window: a window of the row, by name. */
+        NEW_WINDOW
+    }
+
+    /**
+     * Whether a new terminal asked for by {@code launch} opens as a Home float on the page in view
+     * instead of as a window of the Workspace's row. Every terminal launched while Home is in front
+     * ({@code homeInFront}) is a Home float, the first one included and with no window anywhere,
+     * so a launch from Home never takes the screen. A tap on the Terminal entry launches only into
+     * an empty Workspace ({@code workspaceOnRow} false); with a Workspace it goes there. New window
+     * names a window and stays one. Where Home cannot carry a float ({@code canFloat} false:
+     * compatibility mode, no Home pages) the row takes it as before.
+     */
+    public static boolean launchesAsFloat(@NonNull Launch launch, boolean homeInFront,
+                                          boolean workspaceOnRow, boolean canFloat) {
+        if (!canFloat || !homeInFront) return false;
+        switch (launch) {
+            case ENTRY_TAP: return !workspaceOnRow;
+            case NEW_TERMINAL: return true;
+            case NEW_WINDOW:
+            default: return false;
+        }
     }
 
     // --- Saved sessions ---

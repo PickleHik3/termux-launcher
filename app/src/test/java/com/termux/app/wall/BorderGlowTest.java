@@ -255,6 +255,43 @@ public class BorderGlowTest {
         assertEquals(1500f - BorderGlow.DEPTH_DP * DENSITY, band.top, EPS);
     }
 
+    /**
+     * The regression: the bottom border's glow lit a band inside the terminal, over its last
+     * rows. It lies below the pane pressed instead, in the gap before the dock, the keyboard or
+     * the screen's edge: from the pane's bottom edge down, across that pane only, never inside it
+     * and never past the air.
+     */
+    @Test
+    public void theBottomBordersGlowLiesInTheAirBelowThePanePressed() {
+        RectF band = new RectF();
+        float depth = BorderGlow.DEPTH_DP * DENSITY;
+        // The right half of a side-by-side split, its bottom edge at 1500, air down to 1560.
+        assertTrue(BorderGlow.belowBand(band, 500f, 1000f, 1500f, 1560f, 1f, DENSITY));
+        assertEquals("starts at the pane's edge, nothing of it inside the pane", 1500f, band.top,
+            EPS);
+        assertEquals(1500f + depth, band.bottom, EPS);
+        assertEquals("under the pane pressed only", 500f, band.left, EPS);
+        assertEquals(1000f, band.right, EPS);
+        // Less air than its depth (the keyboard close under the pane): it ends at the keyboard.
+        assertTrue(BorderGlow.belowBand(band, 0f, 1000f, 1500f, 1510f, 1f, DENSITY));
+        assertEquals(1500f, band.top, EPS);
+        assertEquals("never past the air", 1510f, band.bottom, EPS);
+        // Sunk with its page, it is shallower.
+        assertTrue(BorderGlow.belowBand(band, 0f, 1000f, 1500f, 1600f, PageSink.SCALE, DENSITY));
+        assertEquals(1500f + depth * PageSink.SCALE, band.bottom, EPS);
+    }
+
+    /** A page flush with what is below it has no air to light: the glow keeps its frame's band. */
+    @Test
+    public void withNoAirBelowTheBottomBordersGlowHasNoBandThere() {
+        RectF band = new RectF(1f, 2f, 3f, 4f);
+        assertFalse(BorderGlow.belowBand(band, 0f, 1000f, 1500f, 1500f, 1f, DENSITY));
+        assertFalse(BorderGlow.belowBand(band, 0f, 1000f, 1500f, 1400f, 1f, DENSITY));
+        assertFalse("no span", BorderGlow.belowBand(band, 1000f, 1000f, 1500f, 1560f, 1f,
+            DENSITY));
+        assertEquals("untouched", new RectF(1f, 2f, 3f, 4f), band);
+    }
+
     @Test
     public void itsEndsFadeOverTheCornerRadiusAndAShortEdgeStillPeaksOnce() {
         assertEquals("lit only through the clearance the side borders take",

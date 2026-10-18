@@ -49,7 +49,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Home floats (docs/GLOSSARY.md): windows of the session drawn over one Home page, pinned to it,
- * born full-size between the status bar and the dock, remembering their shape per orientation,
+ * born a window inside the room between the status bar and the dock, remembering their shape per orientation,
  * lifted over the keyboard, and the status bar on Home that comes with them.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -82,7 +82,7 @@ public class HomeFloatTest {
     // --- Birth ---
 
     @Test
-    public void aHomeFloatIsAWindowOutOfTheRowBornFullSizeAndFocused() {
+    public void aHomeFloatIsAWindowOutOfTheRowBornAWindowAndFocused() {
         TerminalSession shell = terminal();
         TerminalPaneController.Window window = mController.openHomeFloat(shell, 0);
 
@@ -96,10 +96,18 @@ public class HomeFloatTest {
 
         View container = containerOf(window);
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) container.getLayoutParams();
-        assertEquals("born full width", LAYER_WIDTH, params.width);
-        assertEquals("between the status bar and the dock", DOCK_TOP - ROOM_TOP, params.height);
-        assertEquals(ROOM_TOP, params.topMargin);
-        assertEquals(0, params.leftMargin);
+        // The regression: the first float filled the whole room, so it took the screen. It is a
+        // window: centred, narrower than the room, below its top, the wallpaper round it.
+        int roomHeight = DOCK_TOP - ROOM_TOP;
+        int width = Math.round(HomeFloatPolicy.BIRTH_WIDTH_FRAC * LAYER_WIDTH);
+        int top = Math.round(HomeFloatPolicy.BIRTH_TOP_FRAC * roomHeight);
+        assertEquals("narrower than the room", width, params.width, 1);
+        assertEquals("centred", (LAYER_WIDTH - width) / 2, params.leftMargin, 1);
+        assertEquals("below the room's top", ROOM_TOP + top, params.topMargin, 1);
+        assertEquals("ending on the room's bottom, to meet the keyboard", DOCK_TOP,
+            params.topMargin + params.height, 1);
+        assertTrue(params.width < LAYER_WIDTH && params.height < roomHeight);
+        assertFalse("not maximised", FloatTitlebarPolicy.isMaximised(window.active.floatRestoreFrac));
         assertEquals(View.VISIBLE, container.getVisibility());
         assertEquals(1, mHost.floatsChanged);
     }
@@ -139,26 +147,31 @@ public class HomeFloatTest {
         assertEquals("one titlebar band down", under.topMargin + band, over.topMargin, 1);
         assertEquals("a small step right", under.leftMargin + step, over.leftMargin, 1);
         assertEquals("ends at the room's bottom", DOCK_TOP, over.topMargin + over.height, 1);
-        assertEquals("ends at the room's right", LAYER_WIDTH, over.leftMargin + over.width, 1);
+        assertEquals("the same width, a step right", under.leftMargin + under.width + step,
+            over.leftMargin + over.width, 1);
     }
 
     @Test
-    public void aFloatOnAnotherPageOrOverAMinimisedOneIsBornFullSize() {
+    public void aFloatOnAnotherPageOrOverAMinimisedOneIsBornAsTheFirstWas() {
         TerminalPaneController.Window first = mController.openHomeFloat(terminal(), 0);
+        FrameLayout.LayoutParams born = (FrameLayout.LayoutParams) containerOf(first).getLayoutParams();
+        int bornTop = born.topMargin;
+        int bornLeft = born.leftMargin;
         TerminalPaneController.Window elsewhere = mController.openHomeFloat(terminal(), 1);
         mController.minimiseHomeFloat(first);
         TerminalPaneController.Window again = mController.openHomeFloat(terminal(), 0);
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) containerOf(again).getLayoutParams();
-        assertEquals(ROOM_TOP, params.topMargin);
-        assertEquals(0, params.leftMargin);
+        assertEquals(bornTop, params.topMargin);
+        assertEquals(bornLeft, params.leftMargin);
         assertNotNull(elsewhere);
     }
 
     @Test
     public void cascadeKeepsTheSizeAndClampsToTheRoom() {
-        assertEquals("nothing under it: full size", HomeFloatPolicy.birthFrac(),
+        assertEquals("nothing under it: born a window",
+            HomeFloatPolicy.birthFrac(600, 800, 120, 90, 35),
             HomeFloatPolicy.cascadeFrac(null, 600, 800, 16, 35, 120, 90));
-        assertEquals("a room not measured yet: full size", HomeFloatPolicy.birthFrac(),
+        assertEquals("a room not measured yet: the window's fractions", HomeFloatPolicy.birthFrac(),
             HomeFloatPolicy.cascadeFrac(new RectF(0f, 0f, .5f, .5f), 0, 0, 16, 35, 120, 90));
 
         RectF small = HomeFloatPolicy.cascadeFrac(new RectF(.1f, .1f, .5f, .5f), 600, 800,
@@ -168,9 +181,16 @@ public class HomeFloatTest {
         assertEquals("the size is kept", .4f, small.width(), 1e-4f);
         assertEquals(.4f, small.height(), 1e-4f);
 
-        RectF full = HomeFloatPolicy.cascadeFrac(HomeFloatPolicy.birthFrac(), 600, 800,
+        RectF full = HomeFloatPolicy.cascadeFrac(FloatTitlebarPolicy.fullRoom(), 600, 800,
             16, 35, 120, 90);
-        assertEquals(new RectF(16 / 600f, 35 / 800f, 1f, 1f), full);
+        assertEquals("off a maximised float", new RectF(16 / 600f, 35 / 800f, 1f, 1f), full);
+
+        RectF born = HomeFloatPolicy.birthFrac(600, 800, 120, 90, 35);
+        RectF next = HomeFloatPolicy.cascadeFrac(born, 600, 800, 16, 35, 120, 90);
+        assertEquals("off a new float: a step right", born.left + 16 / 600f, next.left, 1e-4f);
+        assertEquals("the width kept", born.width(), next.width(), 1e-4f);
+        assertEquals("a band down", born.top + 35 / 800f, next.top, 1e-4f);
+        assertEquals("still ending on the room's bottom", 1f, next.bottom, 1e-4f);
 
         RectF corner = HomeFloatPolicy.cascadeFrac(new RectF(.9f, .95f, 1f, 1f), 600, 800,
             16, 35, 120, 90);
@@ -178,6 +198,63 @@ public class HomeFloatTest {
         assertEquals(1f, corner.bottom, 1e-4f);
         assertEquals(120 / 600f, corner.width(), 1e-4f);
         assertEquals(90 / 800f, corner.height(), 1e-4f);
+    }
+
+    /**
+     * The first float on a page is born a window, never the whole room: centred, narrower and
+     * lower than the room, its bottom on the room's bottom so the keyboard shrinks it above
+     * itself, and never smaller than the least size or with its titlebar out of the room.
+     */
+    @Test
+    public void aNewFloatIsBornAWindowInsideTheRoom() {
+        // A 390 dp portrait phone at 3 px/dp: a room of 1122 by 1920 px.
+        RectF portrait = HomeFloatPolicy.birthFrac(1122, 1920, 360, 270, 105);
+        assertEquals((1f - HomeFloatPolicy.BIRTH_WIDTH_FRAC) / 2f, portrait.left, 1e-4f);
+        assertEquals(1f - portrait.left, portrait.right, 1e-4f);
+        assertEquals(HomeFloatPolicy.BIRTH_TOP_FRAC, portrait.top, 1e-4f);
+        assertEquals(1f, portrait.bottom, 1e-4f);
+        assertTrue("air on every side but the dock's, where the Margin is",
+            portrait.left > 0f && portrait.top > 0f && portrait.width() < 1f);
+        assertTrue(HomeFloatPolicy.reachesBottom(portrait));
+        assertFalse("never the whole room", FloatTitlebarPolicy.fullRoom().equals(portrait));
+        // Landscape: 2400 by 900 px.
+        RectF landscape = HomeFloatPolicy.birthFrac(2400, 900, 360, 270, 105);
+        assertEquals(portrait.left, landscape.left, 1e-4f);
+        assertEquals(HomeFloatPolicy.BIRTH_TOP_FRAC, landscape.top, 1e-4f);
+
+        RectF narrow = HomeFloatPolicy.birthFrac(300, 800, 280, 90, 35);
+        assertEquals("never narrower than the least width", 280 / 300f, narrow.width(), 1e-4f);
+        assertEquals("still centred", 10 / 300f, narrow.left, 1e-4f);
+        RectF low = HomeFloatPolicy.birthFrac(600, 200, 120, 190, 35);
+        assertEquals("its top comes up to keep the least height", 10 / 200f, low.top, 1e-4f);
+        RectF tiny = HomeFloatPolicy.birthFrac(100, 60, 120, 90, 35);
+        assertEquals("a room under the least size: all of it", new RectF(0f, 0f, 1f, 1f), tiny);
+        RectF band = HomeFloatPolicy.birthFrac(600, 300, 120, 20, 290);
+        assertEquals("the titlebar's band stays in the room", 10 / 300f, band.top, 1e-4f);
+        assertEquals("unmeasured", HomeFloatPolicy.birthFrac(),
+            HomeFloatPolicy.birthFrac(0, 0, 120, 90, 35));
+    }
+
+    @Test
+    public void aNewFloatSitsAboveTheKeyboardThatComesUpWithIt() {
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        View container = containerOf(window);
+        layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
+        int bornTop = ((FrameLayout.LayoutParams) container.getLayoutParams()).topMargin;
+
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 600);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) container.getLayoutParams();
+        assertEquals("its titlebar stays where it was born", bornTop, params.topMargin);
+        assertEquals("its bottom at the keyboard's top", 600, params.topMargin + params.height, 1);
+        assertEquals("shrunk, not lifted", 0f, container.getTranslationY(), 0f);
+
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1);
+        params = (FrameLayout.LayoutParams) container.getLayoutParams();
+        assertEquals("grown back when the keyboard closes", DOCK_TOP,
+            params.topMargin + params.height, 1);
+        // Maximise still fills the whole room.
+        mController.toggleFloatMaximised(window.active);
+        assertEquals(FloatTitlebarPolicy.fullRoom(), window.active.floatFrac);
     }
 
     // --- Pinned to its page ---
@@ -526,12 +603,16 @@ public class HomeFloatTest {
         TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
         FrameLayout.LayoutParams params =
             (FrameLayout.LayoutParams) containerOf(window).getLayoutParams();
-        assertEquals(margin, params.leftMargin);
-        assertEquals(ROOM_TOP + margin, params.topMargin);
-        assertEquals(LAYER_WIDTH - 2 * margin, params.width);
-        assertEquals(DOCK_TOP - ROOM_TOP - 2 * margin, params.height);
-        assertEquals("still full-size: the whole room", HomeFloatPolicy.birthFrac(),
-            window.active.floatFrac);
+        int roomWidth = LAYER_WIDTH - 2 * margin;
+        int roomHeight = DOCK_TOP - ROOM_TOP - 2 * margin;
+        RectF frac = window.active.floatFrac;
+        assertEquals("the birth's fractions of the smaller room",
+            HomeFloatPolicy.BIRTH_WIDTH_FRAC, frac.width(), 1e-3f);
+        assertEquals(margin + Math.round(frac.left * roomWidth), params.leftMargin, 1);
+        assertEquals(ROOM_TOP + margin + Math.round(frac.top * roomHeight), params.topMargin, 1);
+        assertEquals(Math.round(frac.width() * roomWidth), params.width, 1);
+        assertEquals("ending on the smaller room's bottom", DOCK_TOP - margin,
+            params.topMargin + params.height, 1);
     }
 
     @Test
@@ -593,14 +674,15 @@ public class HomeFloatTest {
         layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
         View container = containerOf(second);
         int cascadedTop = ((FrameLayout.LayoutParams) container.getLayoutParams()).topMargin;
-        assertTrue("born below the first", cascadedTop > ROOM_TOP);
+        int firstTop = ((FrameLayout.LayoutParams) containerOf(first).getLayoutParams()).topMargin;
+        assertTrue("born below the first", cascadedTop > firstTop);
 
         mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 400);
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) container.getLayoutParams();
         assertEquals("its titlebar stays where it was", cascadedTop, params.topMargin);
         assertEquals("its bottom at the keyboard's top", 400, params.topMargin + params.height, 1);
         assertEquals("shrunk, not lifted", 0f, container.getTranslationY(), 0f);
-        assertEquals("the first sits flat at its size", ROOM_TOP,
+        assertEquals("the first sits flat at its size", firstTop,
             ((FrameLayout.LayoutParams) containerOf(first).getLayoutParams()).topMargin);
 
         mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1);
@@ -613,6 +695,7 @@ public class HomeFloatTest {
     @Test
     public void aFullSizeFloatShrinksAboveTheKeyboardAndGrowsBack() {
         TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        mController.toggleFloatMaximised(window.active);
         View container = containerOf(window);
         layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
         RectF born = new RectF(window.active.floatFrac);
@@ -659,6 +742,7 @@ public class HomeFloatTest {
     @Test
     public void onlyTheFocusedFloatShrinksForTheKeyboard() {
         TerminalPaneController.Window first = mController.openHomeFloat(terminal(), 0);
+        mController.toggleFloatMaximised(first.active);
         TerminalPaneController.Window second = mController.openHomeFloat(terminal(), 0);
         // Born cascaded off the first; maximised, it fills the room as the first does.
         titlebarOf(containerOf(second)).buttonFor(FloatTitlebarPolicy.ACTION_MAXIMISE).performClick();
@@ -780,6 +864,7 @@ public class HomeFloatTest {
         // titlebar and all, under the status bar, where none of its buttons could be reached.
         TerminalSession shell = terminal();
         TerminalPaneController.Window window = mController.openHomeFloat(shell, 0);
+        mController.toggleFloatMaximised(window.active);
         View container = containerOf(window);
         layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
         TerminalView view = mController.getViewForSession(shell);
@@ -830,6 +915,7 @@ public class HomeFloatTest {
         // No bar on Home yet: the room starts at the layer's top.
         mController.setHomeFloatObstructions(columnTop, dockTop, -1);
         TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        mController.toggleFloatMaximised(window.active);
         View container = containerOf(window);
         idle();
         assertTitlebarAtLeast(container, columnTop);

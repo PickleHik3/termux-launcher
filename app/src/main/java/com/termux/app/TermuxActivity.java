@@ -21183,7 +21183,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     });
                 }
             });
-        mPaneWallController.attachTerminalPage(paneHost);
+        mPaneWallController.attachTerminalPage(paneHost, (x, out) ->
+            mPaneController != null && mPaneController.bottomPaneEdgeAt(x, out));
         // The Widgets page is built before the widget controller looks its grid up, so the
         // controller finds it already on the wall.
         if (isWidgetsPageWanted()) {
@@ -22263,8 +22264,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     openDisplayWindow(true);
                     return true;
                 }
-                return com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)
-                    && openTerminalEntry(false);
+                if (!com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)) return false;
+                // Into an empty Workspace from Home, the tap launches a terminal: a Home float.
+                if (launchesAsHomeFloat(com.termux.app.terminal.HomeFloatPolicy.Launch.ENTRY_TAP))
+                    return openHomeFloatHere();
+                return openTerminalEntry(false);
             }
             @Override public boolean openAlternate(@NonNull String entryId) {
                 return com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)
@@ -22296,7 +22300,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (getTermuxTerminalSessionClient() != null)
                 getTermuxTerminalSessionClient().addNewSession(false, null);
         } else if (newWindow) {
-            createNewWindow();
+            createRowWindow();
         }
         mPaneWallController.refreshPages();
         mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
@@ -22319,19 +22323,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Terminal on Home (its long-press menu, the Terminal entry's New float here, the palette's
-     * Open terminal here): a Home float on the Home page in view, born full-size between the status
-     * bar and the dock, focused, with the keyboard overlay up. It is a window of the current
+     * Terminal on Home (its long-press menu, the Terminal entry's New float here and its tap into
+     * an empty Workspace, the palette's Open terminal here, and any new terminal or window a
+     * keybind or the local API asks for while Home is in front): a Home float on the Home page in
+     * view, born a window inside the room between the status bar and the dock, focused, with the
+     * keyboard overlay up and the float ending above it. It is a window of the current
      * session but not of the row: the Workspace neither gains it nor is needed for it.
      */
     boolean openHomeFloatHere() {
-        if (mPaneController == null || mPaneWallController == null || !isSplitPanesEnabled())
-            return false;
-        attachHomeFloatLayer();
-        if (mPaneController.homeFloatLayer() == null) return false;
+        return openHomeFloatHere(null);
+    }
+
+    /** {@link #openHomeFloatHere()} with its shell named {@code sessionName} (null: unnamed). */
+    boolean openHomeFloatHere(@Nullable String sessionName) {
+        if (!canOpenHomeFloat()) return false;
         closeAppDrawerForLinuxLaunch();
         TerminalSession current = getCurrentSession();
-        TerminalSession shell = createShellForCwd(current != null ? current.getCwd() : null);
+        TerminalSession shell = createShellForCwd(current != null ? current.getCwd() : null,
+            sessionName);
         if (shell == null) return false;
         int page = mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
         if (mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.WIDGETS)
@@ -22343,6 +22352,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 .ShowReason.KEYBOARD_ACTION);
         }
         return true;
+    }
+
+    /** Whether Home can carry a Home float now: split panes on, the wall and its float layer up. */
+    private boolean canOpenHomeFloat() {
+        if (mPaneController == null || mPaneWallController == null || !isSplitPanesEnabled())
+            return false;
+        attachHomeFloatLayer();
+        return mPaneController.homeFloatLayer() != null;
+    }
+
+    /**
+     * Whether a terminal asked for by {@code launch} opens as a Home float on the page in view
+     * rather than in the Workspace's row ({@link com.termux.app.terminal.HomeFloatPolicy#launchesAsFloat}).
+     */
+    private boolean launchesAsHomeFloat(@NonNull com.termux.app.terminal.HomeFloatPolicy.Launch launch) {
+        return com.termux.app.terminal.HomeFloatPolicy.launchesAsFloat(launch,
+            currentWallPage() == com.termux.app.wall.PaneWallPage.WIDGETS, isWorkspaceOnRow(),
+            canOpenHomeFloat());
     }
 
     /** Home's long-press sheet, built on the first long press and laid over everything. */
@@ -26053,8 +26080,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return false;
     }
 
-    /** New window in the current session (Ctrl+Alt+C): a fresh shell as a new pane tree. */
+    /**
+     * New window in the current session (Ctrl+Alt+C, the palette, the local API): a fresh shell as
+     * a new pane tree, or a Home float when Home is in front.
+     */
     void createNewWindow() {
+        if (!isSplitPanesEnabled() || mPaneController == null) return;
+        if (launchesAsHomeFloat(com.termux.app.terminal.HomeFloatPolicy.Launch.NEW_TERMINAL)) {
+            openHomeFloatHere();
+            return;
+        }
+        createRowWindow();
+    }
+
+    /** A fresh shell as a new window of the row, wherever the wall is (the entry's New window). */
+    private void createRowWindow() {
         if (!isSplitPanesEnabled() || mPaneController == null) return;
         if (mCurrentWSession == null) { // no session yet -> behave like new session
             getTermuxTerminalSessionClient().addNewSession(false, null);
@@ -27339,6 +27379,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void createNewWindow() {
             TermuxActivity.this.createNewWindow();
+        }
+
+        @Override public boolean openNewTerminalOnHome(@Nullable String sessionName) {
+            if (!launchesAsHomeFloat(com.termux.app.terminal.HomeFloatPolicy.Launch.NEW_TERMINAL))
+                return false;
+            // Answered even when no shell could be made: that refusal has its notice already.
+            openHomeFloatHere(sessionName);
+            return true;
         }
 
         @Override public void closeCurrentWindow() {
