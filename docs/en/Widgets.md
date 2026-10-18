@@ -4,6 +4,10 @@ Home is the launcher half of the wall, to the left of the Workspace. It holds a 
 one or more Home pages: Android home-screen widgets and the launcher's own. This page covers adding,
 arranging and sizing them, and the keyboard on Home.
 
+App icons share the same grid: each takes one cell beside the widgets, moves and leaves the same
+way, and follows the same pages and Margin. See
+[App icons on Home](Home_Screen_And_Apps.md#app-icons-on-home).
+
 The home button always brings you to Home page 1. From the Workspace you can also tap **Home** at
 the bottom of the sessions drawer, or drag right from the first window's border.
 

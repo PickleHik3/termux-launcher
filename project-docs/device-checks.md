@@ -665,6 +665,36 @@ Not seen: everything else listed under the sections below.
   after the row's is never consumed); with the Home float focused, `Ctrl+Alt+.` does nothing.
   Neither action is offered in the Home palette.
 
+### Wall rework phase two: slice 7a, app icons on Home pages (feat/wall-rework-phase2)
+- Owed · commits "feat(home): app icons as a Home item kind in the widget store (schema v6)",
+  "feat(home): app icon cells on Home pages: launch, edit mode, gone apps" and "feat(home): Add to
+  Home in the app menu, Add an app on the Home sheet" · emulator, portrait. Install the build over
+  one that has widgets on Home (a v5 wall with a built-in and an app widget): every widget is where
+  it was and works.
+- Owed · drawer › hold two apps in turn › **Add to Home**: each lands in the first free cell of the
+  Home page in front, with its icon and its label under it (one line, ellipsised, legible on the
+  wallpaper and on glass), and a toast reads "Added to Home page N". Home sheet (hold an empty
+  spot) › **Add an app** (beside Add a widget) › pick one from the list (search narrows it): same
+  placement, same toast.
+- Owed · fill the page in front: the next Add to Home goes to the first page with room, or onto a
+  new page after the last when every page is full; the toast names that page.
+- Owed · tap an icon: the app opens (with the press ripple). A pinned app's menu has Add to Home
+  too.
+- Owed · long-press an icon: edit mode opens as for a widget (remove chip, no resize handles,
+  other items outlined) and the same press moves it; drop it on a widget and the widget slides
+  aside. Hold it against the page's edge past the last page: a new page is made and the icon lands
+  there; carry it back, and the empty page goes again. Remove chip takes it off.
+- Owed · Appearance › Layout on Home › Margin · Home at 24: icons and widgets are inset alike
+  (the same rim), and back at the old Margin both return.
+- Owed · Settings › icon pack applied live: the Home icons change with the drawer's and the dock's,
+  without a restart.
+- Owed · `adb uninstall` a test app (or `pm disable-user` one) that is on Home: its icon stays in
+  its cell, faint, under its old label; a tap opens edit mode on it and the remove chip takes it
+  off. Reinstall (or enable) before removing: the icon comes back to life on its own.
+- Owed · the page's grid-size popup (corner tab) still works with icons present: a smaller grid
+  moves icons and widgets into free space or onto a new page, none dropped; back to the old size.
+- Owed · rotate to landscape and back with icons on Home: each orientation keeps its own layout.
+
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners

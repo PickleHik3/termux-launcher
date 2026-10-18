@@ -112,6 +112,15 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
 6. **The first-boot tour**, rewritten for the wall (switched off since 651ea9d7f).
 7. **The icon grid on Home pages**: app icons, folders, drag between pages. Born on slice 2b's
    rule: its rim is Home's Margin, as the widget grid's is.
+   **7a done** (app icons): an icon is a Home item of kind APP in the widget store (schema v6
+   writes a `kind` on every record and an `app` on icons; v5 and older load with the kind
+   inferred), keyed negative from the built-ins' allocator, so it shares the widget grid's cells,
+   pages, moves and rim. 1×1, icon pack applied, label under it; tap launches, hold is the page's
+   edit mode (move, carry across pages, remove; no resize). In from the app menu's **Add to Home**
+   and the Home sheet's **Add an app** (`HomeAppPicker`): the page in front, else the first with
+   room, else a new page (`HomeItemPlacementPolicy`). A gone app's icon stays, faint, until
+   removed, and revives if the app returns. Unit tests green; emulator pass owed (device-checks,
+   slice 7a). **7b next**: folders (the reserved `FOLDER` kind).
 8. **Per-toplevel X11 windows** (needs a rootless server).
 9. **Rebuilding the row and the floats after a background kill** beyond Saved sessions.
 

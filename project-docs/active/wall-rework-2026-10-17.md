@@ -246,7 +246,8 @@ titlebar); `TerminalCommandPalette` (Home action set, Linux apps, floats); `Laun
 ## 12. Out of scope (phase two and later)
 
 - The icon grid on Home pages: app icons, folders, drag and drop between pages. Home stays a widget
-  canvas with a dock and a drawer in phase one.
+  canvas with a dock and a drawer in phase one. (Phase two slice 7a put app icons on the widget
+  grid, 2026-10-18; folders are slice 7b.)
 - The status bar's **capsule** form: a third form beside compact and expanded, a thin material
   capsule at the top centre; a continuous swipe sizes the bar by where the finger lets go, quick
   swipes step one form, the bar folds to the capsule after a short idle, and the capsule is Minimal
