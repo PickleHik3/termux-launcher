@@ -5,6 +5,11 @@ glossary "The wall and its chrome"). Phase two builds on it on this branch, one 
 slice merged only with its unit tests green and an emulator or Surface pass recorded in
 `project-docs/device-checks.md`.
 
+Merged in: PR #82 (`feat/glass-controls-unify`: one set of glass controls in Look › Custom,
+Adaptive glass always on) at 03aac5a8b, merged into this branch on 2026-10-18 (the branch tip then
+was 0843ad75e, 03aac5a8b plus one device-checks note, and that is what went in); its owed device
+checks stay owed here too. When #82 lands on `pre`, merge `pre` into this branch again.
+
 ## Slices, in order
 
 1. **The status bar's capsule form.** A third form beside compact and expanded: a thin material
