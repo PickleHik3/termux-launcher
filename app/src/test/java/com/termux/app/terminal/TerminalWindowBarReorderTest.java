@@ -147,6 +147,30 @@ public class TerminalWindowBarReorderTest {
     }
 
     @Test
+    public void aLongPressOnAChipThatCannotLiftIsSwallowedAndATapStillTaps() {
+        float start = centre(3);
+        down(start);
+        holdForLongPress();
+        // The chip answers the long press itself: nothing is left over for the view beneath.
+        assertTrue(chip(3).isLongClickable());
+        assertTrue(chip(3).performLongClick());
+        move(start + dp(2));
+        up(start + dp(2));
+        ShadowLooper.idleMainLooper();
+        assertEquals(-1, mBar.liftedChipIndex());
+        assertTrue(mMoves.isEmpty());
+        // A held chip is not a tap.
+        assertEquals(-1, mSelected.get());
+        // The chip that can lift leaves its long press to the lift.
+        assertTrue(!chip(0).performLongClick());
+
+        down(start);
+        up(start);
+        ShadowLooper.idleMainLooper();
+        assertEquals(3, mSelected.get());
+    }
+
+    @Test
     public void aBarOfOneWindowLiftsNothing() {
         mBar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem("one", "one")), 0);
         mBar.setMovableChipCount(1);
