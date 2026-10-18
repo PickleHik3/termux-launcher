@@ -1496,6 +1496,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final String PANE_STATE_CURRENT_WINDOW = "current_window";
     private static final String PANE_STATE_CURRENT_SESSION = "current_session";
     private static final String PANE_STATE_SESSION_NAME = "session_name";
+    private static final String PANE_STATE_HOME_FLOATS = "home_floats";
 
     private static final String LOG_TAG = "TermuxActivity";
     private static final int IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT = 100;
@@ -1508,13 +1509,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final long EMPTY_SESSION_RECOVERY_DEBOUNCE_MS = 1500L;
     private static volatile boolean sPendingStyleReloadRecreateActivity = true;
     /**
-     * This process has started its first shell. The Workspace may be empty after that (ADR 0008):
-     * an empty session list then means the user closed everything, and an activity coming back
-     * (recreation, a second launch) starts nothing behind Home. A fresh process is a cold start
-     * and gets its shell as always — the bootstrap, the Welcome flow and the first-boot tour ride
-     * on it.
+     * This process has started its first shell, or settled that its cold start keeps the
+     * Workspace empty or rebuilt the autosaved arrangement (slice 9). The Workspace may be empty
+     * after that (ADR 0008): an empty session list then means the user closed everything, and an
+     * activity coming back (recreation, a second launch) starts nothing behind Home. A fresh
+     * process is a cold start: it rebuilds the autosaved arrangement, keeps an autosaved empty
+     * one, or gets its shell as always — the bootstrap, the Welcome flow and the first-boot tour
+     * ride on it.
      */
     private static volatile boolean sFirstShellStarted;
+    /**
+     * The pane layout the last activity left behind, keyed by shell handles, for as long as this
+     * process (and so the terminal service) lives. An activity that comes back without instance
+     * state — the last one was finished, or swiped from Recents — rebuilds the row's windows,
+     * their trees and the Home floats from it around the shells still running, instead of one
+     * plain window per shell. Strings and numbers only: it holds no view.
+     */
+    @Nullable private static volatile Bundle sProcessPaneLayout;
+    /** How long the arrangement must stand still before the autosave writes it. */
+    private static final long ARRANGEMENT_AUTOSAVE_DEBOUNCE_MS = 1500L;
+    /** One writer for every activity instance, so autosaves land in the order they were taken. */
+    private static final java.util.concurrent.ExecutorService ARRANGEMENT_AUTOSAVE_WRITER =
+        java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "arrangement-autosave");
+            thread.setDaemon(true);
+            return thread;
+        });
+    /** Set once this activity has settled what its start does; see armArrangementAutosave. */
+    private boolean mArrangementAutosaveArmed;
+    private final android.os.Handler mArrangementAutosaveHandler =
+        new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable mArrangementAutosave = this::autosaveArrangementNow;
+    /** The autosaved arrangement a cold start rebuilds once the bootstrap answers, or null. */
+    @Nullable private com.termux.app.terminal.TerminalWorkspace mPendingArrangementRebuild;
 
     private boolean mSeamlessStatusBackgroundActive;
     private int mLastStatusBarInsetTop;
@@ -1788,6 +1815,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
             mPendingWallState = savedInstanceState;
+        } else {
+            // No instance state while the process lives on: the layout the last activity left.
+            mPendingPaneLayoutState = sProcessPaneLayout;
         }
         // Delete ReportInfo serialized object files from cache older than 14 days
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
@@ -8964,6 +8994,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mBarMemorySmoother.reset();
         if (mIsInvalidState)
             return;
+        // A stopped activity may be finished or killed next: the arrangement is kept for both.
+        rememberProcessPaneLayout();
+        autosaveArrangementNow();
         // From here until the layout we come back to has settled, the panes' sizes are kept as
         // pending: the stop's own geometry (the keyboard's, the dock's IME offset below) and the
         // burst a return brings — insets, frame, fullscreen flags, the keyboard re-measuring, the
@@ -9068,6 +9101,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
+        rememberProcessPaneLayout();
+        mArrangementAutosaveHandler.removeCallbacks(mArrangementAutosave);
         // First: what follows (the keyboard's teardown among it) must not book passes or holds
         // on the main looper for a window that is going away.
         mGeometry.dispose();
@@ -9172,8 +9207,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mInAppKeyboard != null)
             mInAppKeyboard.onSaveInstanceState(savedInstanceState);
         savedInstanceState.putBoolean(ARG_ACTIVITY_RECREATED, true);
-        Bundle paneLayout = savePaneLayoutState();
+        // Before the service connected, the layout this activity was handed is still waiting:
+        // it is passed on rather than lost to a second recreate.
+        Bundle paneLayout = mTermuxService != null ? savePaneLayoutState() : mPendingPaneLayoutState;
         if (paneLayout != null) savedInstanceState.putBundle(ARG_PANE_LAYOUT, paneLayout);
+        if (mTermuxService != null) sProcessPaneLayout = paneLayout;
         if (mPaneWallController != null) mPaneWallController.onSaveInstanceState(savedInstanceState);
     }
 
@@ -9289,12 +9327,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherTransitionController.maybeHandleGestureContract(intent, mSuggestionBarView);
         }
         setIntent(null);
-        if (mTermuxService.isTermuxSessionsEmpty()
-            && !com.termux.app.wall.WallRow.startsShellOnConnect(true, sFirstShellStarted,
-                asksForSession(intent))) {
-            // The Workspace was emptied on purpose: Home stays, and nothing starts behind it.
-            Logger.logDebug(LOG_TAG, "No sessions after the first shell: the Workspace stays empty");
-        } else if (mTermuxService.isTermuxSessionsEmpty()) {
+        // Live shells were recreated or adopted above; an empty service is decided here: the
+        // autosaved arrangement rebuilt, the empty Workspace kept, or one fresh shell.
+        com.termux.app.terminal.ArrangementRecovery.Start emptyStart =
+            mTermuxService.isTermuxSessionsEmpty() ? decideEmptyServiceStart(intent) : null;
+        if (emptyStart == com.termux.app.terminal.ArrangementRecovery.Start.EMPTY) {
+            // The Workspace was emptied on purpose, now or before the restart: Home stays, and
+            // nothing starts behind it.
+            Logger.logDebug(LOG_TAG, "No sessions wanted: the Workspace stays empty");
+            sFirstShellStarted = true;
+            armArrangementAutosave();
+        } else if (emptyStart != null) {
             if (mIsVisible) {
                 if (!recoverEmptyVisibleSessionInPlace(intent, "service-connected")) {
                     startBootstrapAndSession(intent);
@@ -9320,6 +9363,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             } else {
                 mTermuxTerminalSessionActivityClient.setCurrentSession(mTermuxTerminalSessionActivityClient.getCurrentStoredSessionOrLast());
             }
+            armArrangementAutosave();
         }
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
@@ -9368,7 +9412,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (intent != null && intent.getExtras() != null) {
                     launchFailsafe = intent.getExtras().getBoolean(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
                 }
-                mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
+                com.termux.app.terminal.TerminalWorkspace rebuild = mPendingArrangementRebuild;
+                mPendingArrangementRebuild = null;
+                if (rebuild == null || !rebuildArrangement(rebuild))
+                    mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
+                armArrangementAutosave();
                 mEmptySessionRecoveryInProgress = false;
             } catch (WindowManager.BadTokenException e) {
                 // Activity finished - ignore.
@@ -9383,6 +9431,110 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (intent == null) return false;
         return Intent.ACTION_RUN.equals(intent.getAction())
             || intent.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
+    }
+
+    /**
+     * What a service with no shell does ({@link com.termux.app.terminal.ArrangementRecovery}).
+     * The autosave is read only on a cold start that names no shell of its own; a rebuild's
+     * arrangement waits in {@link #mPendingArrangementRebuild} for the bootstrap's answer.
+     */
+    @NonNull
+    private com.termux.app.terminal.ArrangementRecovery.Start decideEmptyServiceStart(
+            @Nullable Intent intent) {
+        boolean cold = !sFirstShellStarted;
+        boolean asks = asksForSession(intent);
+        com.termux.app.terminal.TerminalWorkspaceStore.Autosave autosave = cold && !asks
+            ? new com.termux.app.terminal.TerminalWorkspaceStore().loadAutosave() : null;
+        com.termux.app.terminal.ArrangementRecovery.Start start =
+            com.termux.app.terminal.ArrangementRecovery.decide(false, false, cold, asks,
+                autosave == null ? com.termux.app.terminal.ArrangementRecovery.Saved.NONE
+                    : autosave.kind,
+                arrangementStartIn());
+        mPendingArrangementRebuild =
+            start == com.termux.app.terminal.ArrangementRecovery.Start.REBUILD && autosave != null
+                ? autosave.arrangement : null;
+        Logger.logDebug(LOG_TAG, "Empty service on connect: " + start);
+        return start;
+    }
+
+    /**
+     * Rebuilds the autosaved arrangement on a cold start, as Saved sessions' Load does: fresh
+     * shells in the saved working directories — never the saved commands, which a crashed run
+     * must not replay — the row's windows and trees, and the floats on their pages. Start in =
+     * Workspace with no window left in the row also gets one fresh shell. False when it could
+     * not be rebuilt; the caller then starts one fresh shell.
+     */
+    private boolean rebuildArrangement(@NonNull com.termux.app.terminal.TerminalWorkspace arrangement) {
+        try {
+            restoreArrangement(arrangement, false, false);
+        } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
+            Logger.logWarn(LOG_TAG, "The autosaved arrangement could not be rebuilt: " + e.getMessage());
+            return false;
+        }
+        sFirstShellStarted = true;
+        int rowWindows = mCurrentWSession == null ? 0 : mCurrentWSession.windows.size();
+        if (com.termux.app.terminal.ArrangementRecovery.rebuildWantsFreshWindow(rowWindows,
+                arrangementStartIn()))
+            mTermuxTerminalSessionActivityClient.addNewSession(false, null);
+        com.termux.app.notice.AppNotice.show(this, R.string.notice_windows_restored);
+        return true;
+    }
+
+    /** Start in as the arrangement's start reads it: the Workspace when there is no Home. */
+    @Nullable
+    private String arrangementStartIn() {
+        return com.termux.app.terminal.ArrangementRecovery.effectiveStartIn(
+            mPreferences == null ? null : mPreferences.getLauncherStartIn(),
+            com.termux.app.wall.WallRow.lastShellClosedShowsHome(isWidgetsPageWanted(),
+                isDefaultHomeApp()));
+    }
+
+    /**
+     * The arrangement is autosaved from here on: only once this activity has settled what the
+     * start does, so a cold start still waiting for its rebuild never overwrites the autosave
+     * with the empty service it found.
+     */
+    private void armArrangementAutosave() {
+        mArrangementAutosaveArmed = true;
+        scheduleArrangementAutosave();
+    }
+
+    /**
+     * Something in the arrangement changed (a window, a tree, the row, a float): the autosave
+     * follows {@link #ARRANGEMENT_AUTOSAVE_DEBOUNCE_MS} after the last change. An empty
+     * arrangement is written as soon as the change in hand is through (a Load's replace passes
+     * through empty on its way): closing everything may be the last thing this process does.
+     */
+    private void scheduleArrangementAutosave() {
+        if (!mArrangementAutosaveArmed) return;
+        mArrangementAutosaveHandler.removeCallbacks(mArrangementAutosave);
+        boolean empty = mPaneController == null || mPaneController.homeFloatCount() == 0;
+        for (WSession ws : mWSessions) empty &= ws.windows.isEmpty();
+        mArrangementAutosaveHandler.postDelayed(mArrangementAutosave,
+            empty ? 0L : ARRANGEMENT_AUTOSAVE_DEBOUNCE_MS);
+    }
+
+    /**
+     * Writes the arrangement to the autosave slot now, off the main thread, without commands.
+     * Exit is itself the arrangement: the service wrote the empty one, and the windows its dying
+     * shells take down on the way out must not overwrite it.
+     */
+    private void autosaveArrangementNow() {
+        mArrangementAutosaveHandler.removeCallbacks(mArrangementAutosave);
+        if (!mArrangementAutosaveArmed || mTermuxService == null || mTermuxService.mWantsToStop
+            || mPaneController == null) return;
+        final com.termux.app.terminal.TerminalWorkspace arrangement = snapshotArrangement(
+            com.termux.app.terminal.TerminalWorkspaceStore.AUTOSAVE_NAME, false);
+        final TermuxService service = mTermuxService;
+        ARRANGEMENT_AUTOSAVE_WRITER.execute(() -> {
+            // An Exit between the snapshot and the write wins.
+            if (service.mWantsToStop) return;
+            try {
+                new com.termux.app.terminal.TerminalWorkspaceStore().saveAutosave(arrangement);
+            } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
+                Logger.logWarn(LOG_TAG, "Could not autosave the arrangement: " + e.getMessage());
+            }
+        });
     }
 
     private boolean shouldRecoverEmptySessionInPlace() {
@@ -18323,12 +18475,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public com.termux.app.terminal.TerminalWorkspace saveWorkspace(
             @NonNull String requestedName, boolean overwrite, boolean captureCommands)
             throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
-        if (mPaneController == null
-            || (mWSessions.isEmpty() && mPaneController.homeFloatCount() == 0)) {
+        String name = com.termux.app.terminal.TerminalWorkspaceStore.validateName(requestedName);
+        com.termux.app.terminal.TerminalWorkspace workspace = snapshotArrangement(name, captureCommands);
+        if (workspace == null) {
             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                 "no_session", "There are no terminal sessions to save");
         }
-        String name = com.termux.app.terminal.TerminalWorkspaceStore.validateName(requestedName);
+        workspace.validate();
+        new com.termux.app.terminal.TerminalWorkspaceStore().save(name, workspace, overwrite);
+        return workspace;
+    }
+
+    /**
+     * The live arrangement — every session's row of windows with their trees, then the Home
+     * floats — in the Saved sessions model under {@code name}, or null when there is nothing
+     * (no window and no float). Commands are captured only when {@code captureCommands}: the
+     * autosave never keeps one.
+     */
+    @Nullable
+    private com.termux.app.terminal.TerminalWorkspace snapshotArrangement(@NonNull String name,
+                                                                         boolean captureCommands) {
+        if (mPaneController == null) return null;
+        boolean anyWindow = false;
+        for (WSession ws : mWSessions) anyWindow |= !ws.windows.isEmpty();
+        if (!anyWindow && mPaneController.homeFloatCount() == 0) return null;
         java.util.List<com.termux.app.terminal.TerminalWorkspace.Session> sessions =
             new java.util.ArrayList<>();
         com.termux.app.terminal.TerminalPaneController.WorkspacePaneCapture capture = shell -> {
@@ -18373,13 +18543,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 windows.add(mPaneController.snapshotWorkspaceWindow(window, capture));
             sessions.add(new com.termux.app.terminal.TerminalWorkspace.Session(null, 0, windows));
         }
-        int current = Math.max(0, Math.min(
-            mCurrentWSession == null ? 0 : mWSessions.indexOf(mCurrentWSession), sessions.size() - 1));
-        com.termux.app.terminal.TerminalWorkspace workspace =
-            new com.termux.app.terminal.TerminalWorkspace(name, System.currentTimeMillis(), current, sessions);
-        workspace.validate();
-        new com.termux.app.terminal.TerminalWorkspaceStore().save(name, workspace, overwrite);
-        return workspace;
+        if (sessions.isEmpty()) return null;
+        // The saved current session counts the sessions written, which skip any with no window.
+        int current = 0;
+        for (int i = 0, written = 0; i < mWSessions.size(); i++) {
+            WSession ws = mWSessions.get(i);
+            if (ws.windows.isEmpty()) continue;
+            if (ws == mCurrentWSession) current = written;
+            written++;
+        }
+        current = Math.max(0, Math.min(current, sessions.size() - 1));
+        return new com.termux.app.terminal.TerminalWorkspace(name, System.currentTimeMillis(),
+            current, sessions);
     }
 
     @NonNull
@@ -18494,6 +18669,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     public com.termux.app.terminal.TerminalWorkspace.LoadResult loadWorkspace(@NonNull String name, boolean replace, boolean runCommands)
             throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
+        requireArrangementRestorable();
+        return restoreArrangement(new com.termux.app.terminal.TerminalWorkspaceStore().load(name),
+            replace, runCommands);
+    }
+
+    private void requireArrangementRestorable()
+            throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
         if (!isSplitPanesEnabled()) {
             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                 "splits_disabled", "Split panes are disabled while compatibility mode is on");
@@ -18502,8 +18684,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                 "unavailable", "The terminal service and pane controller must be ready");
         }
-        com.termux.app.terminal.TerminalWorkspace workspace =
-            new com.termux.app.terminal.TerminalWorkspaceStore().load(name);
+    }
+
+    /**
+     * Builds {@code workspace}'s arrangement: fresh shells in the saved working directories (and
+     * the saved commands only when {@code runCommands}), the row's windows and trees, the Home
+     * floats on their pages. Saved sessions' Load and the cold start's rebuild from the autosave
+     * both come here.
+     */
+    @NonNull
+    private com.termux.app.terminal.TerminalWorkspace.LoadResult restoreArrangement(
+            @NonNull com.termux.app.terminal.TerminalWorkspace workspace, boolean replace,
+            boolean runCommands) throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
+        requireArrangementRestorable();
         int paneCount = workspace.paneCount();
         int eventualCount = replace ? paneCount : mTermuxService.getTermuxSessionsSize() + paneCount;
         if (eventualCount > com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
@@ -19055,9 +19248,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * Keeps the arrangement for an activity that comes back in this process without instance
+     * state ({@link #sProcessPaneLayout}). Only a connected activity knows it; one that never
+     * connected leaves what an earlier one kept.
+     */
+    private void rememberProcessPaneLayout() {
+        if (mTermuxService == null || mPaneController == null) return;
+        sProcessPaneLayout = savePaneLayoutState();
+    }
+
+    /**
+     * The row's windows and their trees, the current window, and the Home floats (page,
+     * minimised, shape), every pane keyed by its shell's handle, so a recreated activity puts
+     * them back around the same running shells.
+     */
     @Nullable
     private Bundle savePaneLayoutState() {
-        if (mPaneController == null || mWSessions.isEmpty()) return null;
+        if (mPaneController == null
+            || (mWSessions.isEmpty() && mPaneController.homeFloatCount() == 0)) return null;
         Bundle root = new Bundle();
         java.util.ArrayList<Bundle> sessionStates = new java.util.ArrayList<>();
         for (WSession ws : mWSessions) {
@@ -19075,6 +19284,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         root.putParcelableArrayList(PANE_STATE_SESSIONS, sessionStates);
         root.putInt(PANE_STATE_CURRENT_SESSION,
             Math.max(0, mCurrentWSession == null ? 0 : mWSessions.indexOf(mCurrentWSession)));
+        java.util.ArrayList<Bundle> floatStates = new java.util.ArrayList<>();
+        for (com.termux.app.terminal.TerminalPaneController.Window window :
+                mPaneController.homeFloats())
+            floatStates.add(mPaneController.saveHomeFloat(window));
+        if (!floatStates.isEmpty()) root.putParcelableArrayList(PANE_STATE_HOME_FLOATS, floatStates);
         mPaneController.saveScratchpadState(root);
         return root;
     }
@@ -19092,6 +19306,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         java.util.ArrayList<Bundle> sessionStates =
             root.getParcelableArrayList(PANE_STATE_SESSIONS);
+        restoreHomeFloatsState(root.getParcelableArrayList(PANE_STATE_HOME_FLOATS), sessionsByHandle);
         if (sessionStates == null) return;
         mWSessions.clear();
         for (Bundle sessionState : sessionStates) {
@@ -19117,6 +19332,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCurrentWSession = mWSessions.get(current);
             mPaneController.showWindow(mCurrentWSession.currentWindow());
         }
+    }
+
+    /**
+     * The Home floats of a saved pane layout, back on their pages around their running shells,
+     * minimised as they were, neither focused nor animated in. A float whose shell is gone stays
+     * gone; with no Home page to float over its shell is adopted as a window of the row instead
+     * ({@link #ensureWindowsForServiceSessions}).
+     */
+    private void restoreHomeFloatsState(@Nullable java.util.ArrayList<Bundle> floatStates,
+                                        @NonNull java.util.Map<String, TerminalSession> sessionsByHandle) {
+        if (floatStates == null || floatStates.isEmpty() || mPaneController == null) return;
+        attachHomeFloatLayer();
+        int homeCount = mPaneController.homeFloatLayer() == null || mWidgetPaneController == null
+            ? 0 : mWidgetPaneController.homePageCount();
+        boolean restored = false;
+        for (Bundle floatState : floatStates)
+            restored |= mPaneController.restoreHomeFloat(floatState, sessionsByHandle, homeCount) != null;
+        if (restored) onHomeFloatsChangedInActivity();
     }
 
     /** Rebuild the visible session list: one entry per session (its current window's focused shell). */
@@ -19150,6 +19383,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDrawerShape.endRecord();
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
+        // The same funnel is where the autosave hears that the windows or their trees moved.
+        scheduleArrangementAutosave();
     }
 
     /**
@@ -25403,6 +25638,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
+        scheduleArrangementAutosave();
         // A float that just flew into its chip (or a new one) needs the chip in sight: a bar
         // folded to the capsule opens to compact (spec §4.4; StatusBarFormPolicy).
         if (exist) {

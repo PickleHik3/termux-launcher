@@ -1,9 +1,11 @@
 package com.termux.app.terminal;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.TermuxConstants;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -27,6 +29,10 @@ public final class TerminalWorkspaceStore {
     public static final int MAX_FILE_BYTES = 1024 * 1024;
     private static final int MAX_NAME_CODE_POINTS = 64;
     private static final String SUFFIX = ".json";
+    /** The autosave slot's file: hidden, and outside every Saved sessions name. */
+    public static final String AUTOSAVE_FILE = ".autosave.json";
+    /** The name the autosave document carries. */
+    public static final String AUTOSAVE_NAME = "autosave";
 
     @NonNull private final File homeDir;
 
@@ -70,10 +76,86 @@ public final class TerminalWorkspaceStore {
         File target = resolveFile(directory, cleanName);
         if (target.exists() && !overwrite)
             throw error("conflict", "Workspace '" + cleanName + "' already exists");
+        writeAtomically(directory, target, "." + cleanName + ".", payload, cleanName);
+    }
 
+    /**
+     * The autosave slot (wall rework slice 9): the arrangement as it last stood, in the Saved
+     * sessions model, in {@code .autosave.json} beside the saved files. Its name starts with a
+     * dot, which no Saved sessions name can, so {@link #list}, {@link #load} and {@link #delete}
+     * never reach it. Null writes the empty arrangement: everything closed, or Exit.
+     */
+    public void saveAutosave(@Nullable TerminalWorkspace arrangement)
+        throws TerminalWorkspace.WorkspaceException {
+        byte[] payload;
+        try {
+            JSONObject json;
+            if (arrangement != null) {
+                arrangement.validate();
+                json = arrangement.toJson();
+            } else {
+                // The same document with no session: what validate() refuses for a Saved
+                // session, and what the autosave reads as "nothing was left open".
+                json = new JSONObject();
+                json.put("version", TerminalWorkspace.VERSION);
+                json.put("name", AUTOSAVE_NAME);
+                json.put("savedAtEpochMs", System.currentTimeMillis());
+                json.put("currentSession", 0);
+                json.put("sessions", new JSONArray());
+            }
+            payload = (json.toString(2) + "\n").getBytes(StandardCharsets.UTF_8);
+        } catch (JSONException e) {
+            throw error("invalid_workspace", "Could not encode the autosave: " + e.getMessage(), e);
+        }
+        if (payload.length > MAX_FILE_BYTES)
+            throw error("workspace_too_large", "Autosave exceeds " + MAX_FILE_BYTES + " bytes");
+        File directory = ensureDirectory();
+        writeAtomically(directory, new File(directory, AUTOSAVE_FILE), AUTOSAVE_FILE + ".",
+            payload, AUTOSAVE_NAME);
+    }
+
+    /** What the autosave slot holds; a missing, unreadable or invalid file is {@code NONE}. */
+    @NonNull
+    public Autosave loadAutosave() {
+        try {
+            File directory = workspaceDirectory(false);
+            if (!directory.isDirectory()) return Autosave.NONE_SAVED;
+            validateDirectory(directory);
+            File target = new File(directory, AUTOSAVE_FILE);
+            long length = target.length();
+            if (!target.isFile() || length < 1 || length > MAX_FILE_BYTES) return Autosave.NONE_SAVED;
+            byte[] bytes = Files.readAllBytes(target.toPath());
+            JSONObject json = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
+            JSONArray sessions = json.optJSONArray("sessions");
+            if (sessions != null && sessions.length() == 0) return Autosave.EMPTY_SAVED;
+            return new Autosave(ArrangementRecovery.Saved.ARRANGEMENT, TerminalWorkspace.fromJson(json));
+        } catch (IOException | JSONException | TerminalWorkspace.WorkspaceException e) {
+            return Autosave.NONE_SAVED;
+        }
+    }
+
+    /** The autosave slot's content: its kind, and the arrangement when there is one. */
+    public static final class Autosave {
+        static final Autosave NONE_SAVED = new Autosave(ArrangementRecovery.Saved.NONE, null);
+        static final Autosave EMPTY_SAVED = new Autosave(ArrangementRecovery.Saved.EMPTY, null);
+
+        @NonNull public final ArrangementRecovery.Saved kind;
+        /** Non-null exactly when {@link #kind} is {@code ARRANGEMENT}. */
+        @Nullable public final TerminalWorkspace arrangement;
+
+        private Autosave(@NonNull ArrangementRecovery.Saved kind,
+                         @Nullable TerminalWorkspace arrangement) {
+            this.kind = kind;
+            this.arrangement = arrangement;
+        }
+    }
+
+    private void writeAtomically(@NonNull File directory, @NonNull File target,
+                                 @NonNull String temporaryPrefix, @NonNull byte[] payload,
+                                 @NonNull String cleanName) throws TerminalWorkspace.WorkspaceException {
         File temporary = null;
         try {
-            temporary = File.createTempFile("." + cleanName + ".", ".tmp", directory);
+            temporary = File.createTempFile(temporaryPrefix, ".tmp", directory);
             try (FileOutputStream output = new FileOutputStream(temporary)) {
                 output.write(payload);
                 output.flush();

@@ -216,7 +216,10 @@ footer Save as workspace… It gains:
 | Home press from another app | the page that was in front when the launcher was left, Home page or window |
 | Corner tab › Home, drawer › Home, palette › Go to Workspace | as named |
 | Last row window closed | the last Home page slides in |
-| Cold start, process killed in the background | Start in: Home (default) shows page 1; Workspace opens one fresh shell window. Saved sessions restore as they do today; nothing else rebuilds the row or the floats |
+| Activity recreated, shells alive (a turn, the system recreating it, a relaunch after Recents) | the row's windows, their trees and the Home floats (page, minimised, shape) come back around the same shells; the half and window as saved; a shell the layout does not name is adopted as a window (phase two, slice 9) |
+| Cold start, process killed in the background | the autosaved arrangement is rebuilt: fresh shells in the saved folders (no saved command runs), the row's windows and trees, the floats on their pages, and a notice; Start in still picks the half shown (Home page 1, or the Workspace, with one fresh window if every saved window was a float). Phase two, slice 9 |
+| Cold start after everything was closed, or after Exit | the arrangement left was empty: Start in = Home shows Home with an empty Workspace and no shell; Start in = Workspace opens one fresh shell window |
+| First start (no autosave) | Start in: Home (default) shows page 1; Workspace opens one fresh shell window. Saved sessions restore as they always have, and replace the autosave like any change |
 
 ## 10. Settings and migration
 
