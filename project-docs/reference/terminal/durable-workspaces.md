@@ -114,6 +114,9 @@ state while the service lived (finished, swiped from Recents) rebuilds the same 
 | empty | empty Workspace, Home shows, no shell | one fresh shell window |
 | none (first start) | one fresh shell, Home shows | one fresh shell window |
 
+With no Home to show (no Home pages, and the launcher is not the phone's home app, where closing
+the last shell ends the app) the start goes by the Workspace column whatever Start in says.
+
 The rebuild is a Load without Replace into the empty service: one login shell per saved pane in
 its saved working directory, the windows, trees, floating panes and Home floats, after the
 bootstrap answers. A notice says "Windows restored from before the restart". **Saved commands are

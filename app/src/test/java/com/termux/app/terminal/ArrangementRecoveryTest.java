@@ -80,6 +80,15 @@ public class ArrangementRecoveryTest {
     }
 
     @Test
+    public void withNoHomeToShowAnEmptyAutosaveStillGetsItsShell() {
+        assertEquals(HOME, ArrangementRecovery.effectiveStartIn(HOME, true));
+        assertEquals(WORKSPACE, ArrangementRecovery.effectiveStartIn(HOME, false));
+        assertEquals(WORKSPACE, ArrangementRecovery.effectiveStartIn(null, false));
+        assertEquals(Start.FRESH, ArrangementRecovery.decide(false, false, true, false,
+            Saved.EMPTY, ArrangementRecovery.effectiveStartIn(HOME, false)));
+    }
+
+    @Test
     public void aRebuildOfFloatsOnlyOpensAWindowOnlyForStartInWorkspace() {
         assertTrue(ArrangementRecovery.rebuildWantsFreshWindow(0, WORKSPACE));
         assertFalse(ArrangementRecovery.rebuildWantsFreshWindow(0, HOME));

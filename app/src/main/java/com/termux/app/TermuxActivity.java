@@ -9401,7 +9401,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.terminal.ArrangementRecovery.decide(false, false, cold, asks,
                 autosave == null ? com.termux.app.terminal.ArrangementRecovery.Saved.NONE
                     : autosave.kind,
-                mPreferences == null ? null : mPreferences.getLauncherStartIn());
+                arrangementStartIn());
         mPendingArrangementRebuild =
             start == com.termux.app.terminal.ArrangementRecovery.Start.REBUILD && autosave != null
                 ? autosave.arrangement : null;
@@ -9426,10 +9426,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         sFirstShellStarted = true;
         int rowWindows = mCurrentWSession == null ? 0 : mCurrentWSession.windows.size();
         if (com.termux.app.terminal.ArrangementRecovery.rebuildWantsFreshWindow(rowWindows,
-                mPreferences == null ? null : mPreferences.getLauncherStartIn()))
+                arrangementStartIn()))
             mTermuxTerminalSessionActivityClient.addNewSession(false, null);
         com.termux.app.notice.AppNotice.show(this, R.string.notice_windows_restored);
         return true;
+    }
+
+    /** Start in as the arrangement's start reads it: the Workspace when there is no Home. */
+    @Nullable
+    private String arrangementStartIn() {
+        return com.termux.app.terminal.ArrangementRecovery.effectiveStartIn(
+            mPreferences == null ? null : mPreferences.getLauncherStartIn(),
+            com.termux.app.wall.WallRow.lastShellClosedShowsHome(isWidgetsPageWanted(),
+                isDefaultHomeApp()));
     }
 
     /**

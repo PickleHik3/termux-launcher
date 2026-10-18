@@ -78,6 +78,17 @@ public final class ArrangementRecovery {
     }
 
     /**
+     * The Start in a start goes by: the preference, unless there is no Home to show ({@code
+     * hasHome} false: no Home pages and not the phone's home app, where closing the last shell
+     * ends the app, {@link WallRow#lastShellClosedShowsHome}). An empty Workspace would then leave
+     * nothing on screen, so the start goes by the Workspace.
+     */
+    @Nullable
+    public static String effectiveStartIn(@Nullable String startIn, boolean hasHome) {
+        return hasHome ? startIn : WallRow.START_IN_WORKSPACE;
+    }
+
+    /**
      * Whether a rebuilt arrangement also gets one fresh shell window: Start in = Workspace and
      * the rebuild left the row with no window (its windows were all Home floats).
      */
