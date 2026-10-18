@@ -285,6 +285,32 @@ public class SessionsDrawerViewTest {
         assertEquals(SessionsDrawerView.RowState.IDLE, drawer.rowState(7));
     }
 
+    /**
+     * The list key opens the drawer on Live; a tap on the Saved segment is the only thing that
+     * shows the saved half then, and it must ask for the saved files: it never did, so the half
+     * read "No saved sessions" over a full directory (slice 4 pass, finding C).
+     */
+    @Test
+    public void theSavedSegmentAsksForTheSavedFilesEveryTimeItIsShown() {
+        RecordingListener listener = new RecordingListener();
+        SessionsDrawerView drawer = drawer(listener);
+        assertEquals(SessionsDrawerView.Tab.LIVE, drawer.tab());
+        assertEquals(0, listener.savedShown);
+
+        findText(drawer, string(R.string.sessions_drawer_saved)).performClick();
+        assertEquals(SessionsDrawerView.Tab.SAVED, drawer.tab());
+        assertEquals(1, listener.savedShown);
+
+        findText(drawer, string(R.string.sessions_drawer_saved)).performClick();
+        assertEquals("a tap on the half already shown reads nothing again", 1, listener.savedShown);
+
+        findText(drawer, string(R.string.sessions_drawer_live)).performClick();
+        assertEquals("Live does not read the saved files", 1, listener.savedShown);
+        findText(drawer, string(R.string.sessions_drawer_saved)).performClick();
+        assertEquals("shown again, read again", 2, listener.savedShown);
+        assertTrue(listener.events.isEmpty());
+    }
+
     // ------------------------------------------------------------------ helpers
 
     @NonNull
@@ -350,5 +376,8 @@ public class SessionsDrawerViewTest {
             events.add("delete:" + name);
         }
         @Override public void onTypingStarted() { events.add("typing"); }
+        /** Counted apart from {@link #events}, which the other tests compare whole. */
+        int savedShown;
+        @Override public void onSavedTabShown() { savedShown++; }
     }
 }
