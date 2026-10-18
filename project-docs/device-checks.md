@@ -558,6 +558,11 @@ Not seen: everything else listed under the sections below.
   starts before `rebuildDrawerSessions`' re-sync. Log the offsets of a 1 → 2 jump beside the
   1 → 3 one: a first step of about 73 % on both is the emulator's slow first frame on the settle
   curve, not a snap, and needs a pacing fix, not this one.
+- Re-check 2026-10-18 (c243c23c4): a bar jump still mis-pans: both a one-step and a two-step jump
+  first move the wallpaper the wrong way (about 56 px, then 120–184 px) before panning to the
+  arrival (`fixround2-devcheck/80-jump1.mp4`, `81-jump2.mp4`). A first frame computed with the
+  departure still current while the arrival page is already nudged in would do exactly this
+  (`innerPosition` with ADJACENT from the stale index); owed.
 ### Wall rework phase two: slice 4, Saved sessions keep Home floats (feat/wall-rework-phase2)
 - Owed · commits "feat(wall): saved sessions record a Home float's page and shape (v4)" and
   "feat(wall): a saved Home float loads back as a Home float on its page" · emulator, portrait,
@@ -614,6 +619,15 @@ Not seen: everything else listed under the sections below.
 - Owed · re-check of (1), commit "fix(sessions): the drawer's Saved half reads the saved files
   whenever it is shown" (the bug dates from 93c031139, 2026-09-13, before the wall rework): open
   the drawer from the list key, tap Saved: the files are listed.
+- Re-check seen 2026-10-18 (c243c23c4, emulator, device-checker): `exit` in the last window and
+  closing the last float both leave Home on screen with the launcher resumed, and the dock's
+  Terminal entry opens a fresh window (the notification's text and Exit action could not be read:
+  the emulator has the app's notifications at importance NONE; pong); a float stops at its room's
+  edges in portrait and landscape, titlebar whole, a resize past the corner changes nothing; the
+  Saved tab lists the files right after a save and from the list key after a restart; a long press
+  on a float's chip raises no selection (the Display chip not reached: the bar folds first). Also
+  seen: in landscape on Home the Clock widget squashes into a thin pill under the status pill; the
+  drawer's rows let terminal text show through.
 ### Wall rework phase two: slice 5a, window reorder by drag in the window bar (feat/wall-rework-phase2)
 - Owed · commits "feat(wall): window reorder policy and moving a window in the row", "feat(wall):
   drag a window's chip along the window bar to reorder the row" and "feat(wall): window.move verb
