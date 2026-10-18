@@ -110,4 +110,31 @@ public class GlobalGlassTest {
         assertEquals(40, preferences.getTerminalTintStrength());
         assertEquals(40, preferences.getDockTintStrength());
     }
+
+    /** A Hue picked while the shared Tint is 0 raises it to 40 in the same edit. */
+    @Test
+    public void aHuePickAtTintZeroRaisesTheTint() {
+        GlobalGlass.write(preferences, SurfaceProperty.TINT, 0);
+        int tint = GlobalGlass.writeTintHue(preferences,
+            com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                .GLASS_TINT_HUE_TERTIARY);
+        assertEquals(GlobalGlass.TINT_ON_HUE_PICK, tint);
+        assertEquals(40, GlobalGlass.TINT_ON_HUE_PICK);
+        assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals("every surface wears it, as the Tint slider writes it", 40,
+            preferences.getDockTintStrength());
+        assertEquals("tertiary", preferences.getSurfaceGlassTintHue());
+    }
+
+    /** With some Tint already on the glass, a Hue pick changes the hue alone. */
+    @Test
+    public void aHuePickAboveTintZeroLeavesTheTint() {
+        GlobalGlass.write(preferences, SurfaceProperty.TINT, 15);
+        assertEquals(15, GlobalGlass.writeTintHue(preferences, "secondary"));
+        assertEquals(15, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals("secondary", preferences.getSurfaceGlassTintHue());
+        GlobalGlass.write(preferences, SurfaceProperty.TINT, 100);
+        assertEquals(100, GlobalGlass.writeTintHue(preferences, "primary"));
+        assertEquals(100, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+    }
 }

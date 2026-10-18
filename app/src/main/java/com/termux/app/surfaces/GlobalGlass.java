@@ -58,4 +58,28 @@ final class GlobalGlass {
         }
         return clamped;
     }
+
+    /**
+     * The Tint a Hue pick raises an untinted glass to: a hue chosen at Tint 0 would show nothing,
+     * so the pick also gives the glass enough accent to see it. On the stretched scale (glass
+     * controls format 2) 40 sits just past the Tint Look's 35: on Clear the frame tint and the
+     * face move a mid-grey wallpaper's face about 8 CIE76 units (calc, M3 baseline purple), and
+     * at the Tint Look's opacity the face alone about 13 on dark glass and 7 on light.
+     */
+    static final int TINT_ON_HUE_PICK = 40;
+
+    /**
+     * The Hue pill picked {@code hueId} for the shared glass: the hue is written, and where the
+     * shared Tint stands at 0 it is raised to {@link #TINT_ON_HUE_PICK} in the same edit, as the
+     * global Tint slider writes it. A Tint above 0 is left as it is.
+     *
+     * @return the shared Tint after the pick
+     */
+    static int writeTintHue(@NonNull TermuxAppSharedPreferences prefs, @NonNull String hueId) {
+        prefs.setSurfaceGlassTintHue(hueId);
+        int tint = prefs.getSurfaceBaseValue(SurfaceProperty.TINT);
+        if (tint > 0)
+            return tint;
+        return write(prefs, SurfaceProperty.TINT, TINT_ON_HUE_PICK);
+    }
 }

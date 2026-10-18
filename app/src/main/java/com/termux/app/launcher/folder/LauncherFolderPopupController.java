@@ -2,17 +2,30 @@ package com.termux.app.launcher.folder;
 
 import android.content.Context;
 import android.view.Choreographer;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.PopupWindow;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.Spring;
 
 /** Shared dock/drawer popup owner with non-focusable flags and house-spring transitions. */
 public final class LauncherFolderPopupController implements Choreographer.FrameCallback {
+    /**
+     * Decides whether a touch outside the popup leaves it open. The popup is outside-touchable, so
+     * Android dismisses it on the first touch anywhere else, including the in-app keyboard's keys
+     * a rename is typed with: the press dismissed the popup, the dismissal cancelled the rename,
+     * and the key then went to the terminal.
+     */
+    public interface OutsideTouchGuard {
+        /** True when a touch at this screen point must not close the popup. */
+        boolean keepsOpen(float rawX, float rawY);
+    }
+
     /** Backdrop dim at full open; separates the folder from the drawer/dock behind it. */
     private static final float DIM_AMOUNT = 0.32f;
 
@@ -24,6 +37,12 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
     private boolean framePosted;
     private long lastFrame;
     private boolean hiddenForDrag;
+    @Nullable private OutsideTouchGuard outsideTouchGuard;
+
+    /** The guard every popup shown from now on consults on an outside touch; null for none. */
+    public void setOutsideTouchGuard(@Nullable OutsideTouchGuard guard) {
+        outsideTouchGuard = guard;
+    }
 
     public void show(@NonNull PopupWindow next, @NonNull String id,
                      @NonNull Runnable positionAndShow, @Nullable Runnable dismissListener) {
@@ -36,12 +55,25 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
         next.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
         next.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED);
         next.setOnDismissListener(this::finishDismiss);
+        next.setTouchInterceptor((view, event) -> keepsOpenOn(event));
         positionAndShow.run();
         closing = false;
         spring.reset(0f);
         spring.target = 1f;
         apply(0f);
         postFrame();
+    }
+
+    /**
+     * Whether {@code event} is an outside touch the guard keeps the popup open for. Consuming it
+     * only stops the dismissal: the popup is not touch-modal, so the touch itself still lands on
+     * the window below.
+     */
+    @VisibleForTesting
+    boolean keepsOpenOn(@NonNull MotionEvent event) {
+        OutsideTouchGuard guard = outsideTouchGuard;
+        return event.getActionMasked() == MotionEvent.ACTION_OUTSIDE && guard != null
+            && guard.keepsOpen(event.getRawX(), event.getRawY());
     }
 
     public boolean isShowing() { return popup != null && popup.isShowing(); }

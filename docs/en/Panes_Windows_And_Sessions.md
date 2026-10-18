@@ -168,7 +168,7 @@ so the window chips, the sessions drawer and the shortcuts all see it.
 - It stays on the Home page it was opened on and moves with that page. Open as many as you like;
   tap one to bring it to the front. The focused float wears the active rim.
 - Drag its **titlebar** to move it and its bottom-right corner to resize it. Each float remembers
-  its size and spot in each orientation until the launcher restarts.
+  its size and spot in each orientation, across a restart too (see [After a restart](#after-a-restart)).
 - The titlebar's buttons: **Minimise** tucks the float into its chip in the status bar,
   **Maximise** fills the room and becomes **Restore size**, and **Close** closes it and its shell.
   Long press the titlebar's handle for its menu: **Dock** moves the float into the Workspace as a
@@ -255,6 +255,19 @@ Saved sessions are files at `~/.termux/workspaces/<name>.json`. A name is up to 
 with a letter or digit, and may contain letters, digits, spaces, `_`, `-` and `.`. The
 `workspace.save`, `workspace.load`, `workspace.list` and `workspace.delete` actions are available
 to [custom keybindings](Custom_Keybindings.md).
+
+## After a restart
+
+The launcher keeps your windows, their panes and your Home floats without you saving anything.
+When the screen turns or Android recreates the launcher while your shells keep running, everything
+comes back attached to the same shells, scrollback and running programs included. When Android
+stops the whole app in the background, the next launch rebuilds the windows, their split panes
+and the floats on their pages, each pane a fresh shell in the folder it was in, and says "Windows
+restored from before the restart". Programs that were running are not started again, and the
+scrollback is gone. **Start in** still decides whether Home or the Workspace shows first. If you
+closed every window and float, or chose **Exit** in the notification, the launcher starts the same
+way: an empty Workspace, with Home showing and no shell (with Start in set to the Workspace, one
+fresh window). Saved sessions are separate and stay as you saved them.
 
 ## Let programs open panes
 

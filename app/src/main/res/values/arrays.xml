@@ -373,6 +373,16 @@
         <item>pixiedust</item>
         <item>comet</item>
     </string-array>
+    <string-array name="appearance_editor_tint_hue_entries">
+        <item>Primary</item>
+        <item>Secondary</item>
+        <item>Tertiary</item>
+    </string-array>
+    <string-array name="appearance_editor_tint_hue_values">
+        <item>primary</item>
+        <item>secondary</item>
+        <item>tertiary</item>
+    </string-array>
     <string-array name="settings_terminal_retro_effect_entries">
         <item>None</item>
         <item>CRT</item>

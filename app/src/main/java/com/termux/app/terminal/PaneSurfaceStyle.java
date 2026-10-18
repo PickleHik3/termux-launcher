@@ -80,6 +80,7 @@ public interface PaneSurfaceStyle {
     default boolean paneAttentionPulses() { return true; }
     /** True while {@link #paneGlassRim} would answer, so a re-dress asks for a drawable only then. */
     default boolean paneGlassRimWanted() { return false; }
+
     /** Corner radius of a pane slab, in px. */
     float paneGlassCornerRadiusPx();
     /**
@@ -127,13 +128,6 @@ public interface PaneSurfaceStyle {
      * below API 33. One look for every surface; a slab only applies it at its own corner radius.
      */
     @Nullable default com.termux.app.chrome.GlassRefraction.Look paneGlassRefraction() { return null; }
-
-    /**
-     * Adaptive glass: the slab's outline gathers the wallpaper's light in place of the hairline
-     * ({@link com.termux.app.chrome.GlassRefraction.Program#setGathered}). False, the default, is
-     * the hairline; only meaningful while {@link #paneGlassRefraction()} answers a look.
-     */
-    default boolean adaptiveGlass() { return false; }
 
     /**
      * Fancier Glass's edge clarity: a clearer frame of the same rect as

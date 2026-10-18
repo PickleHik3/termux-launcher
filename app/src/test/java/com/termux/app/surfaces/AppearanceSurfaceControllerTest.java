@@ -154,6 +154,18 @@ public class AppearanceSurfaceControllerTest {
 
         @Override public void restoreNext(@Nullable AppearanceReturnState state) { restored = state; }
 
+        /** The session the presentation holds, and the one handed over for the next one. */
+        @Nullable AppearanceSurfaceController.EditorSession session;
+        @Nullable AppearanceSurfaceController.EditorSession adopted;
+
+        @Nullable @Override public AppearanceSurfaceController.EditorSession carrySession() {
+            return presented ? session : adopted;
+        }
+
+        @Override public void adoptSessionNext(@Nullable AppearanceSurfaceController.EditorSession s) {
+            adopted = s;
+        }
+
         /** The frame has settled in the editor. */
         void settle() {
             Runnable r = settled;
@@ -1117,5 +1129,121 @@ public class AppearanceSurfaceControllerTest {
         assertEquals(PageId.LAYOUT, mSurface.shownPage());
         assertEquals(0, mEditor.count("present icons"));
         assertNull(mEditor.restored);
+    }
+
+    // ------------------------------------------------- a configuration relaunch under the surface
+
+    /** The activity Android builds after a relaunch: its own content, editor and surface. */
+    private final class Next {
+        final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        final FakeEditor editor = new FakeEditor();
+        final FakeHost host;
+        final AppearanceSurfaceController surface;
+
+        Next() {
+            activity.setTheme(R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+            host = new FakeHost(activity);
+            // Long past the remembered place's window: a relaunch is not a leave.
+            host.now = mHost.now + 2 * com.termux.app.activities.SettingsBackStackState.RETAIN_WINDOW_MS;
+            surface = new AppearanceSurfaceController(host, editor);
+        }
+
+        @Nullable View hostView() {
+            return activity.findViewById(R.id.appearance_surface_host);
+        }
+    }
+
+    @Test
+    public void aClosedSurfaceCarriesNothing() {
+        assertNull(mSurface.carry());
+    }
+
+    @Test
+    public void aRelaunchReopensLookWhereItStoodWithTheEditorsSession() {
+        toLook();
+        mEditor.describedTarget = "KEYBOARD";
+        mEditor.session = new AppearanceSurfaceController.EditorSession() { };
+        mHost.stored = null;
+
+        AppearanceSurfaceController.Relaunch carried = mSurface.carry();
+        assertNotNull(carried);
+        assertEquals(PageId.LOOK, carried.where.page);
+        assertEquals("KEYBOARD", carried.where.target);
+        assertFalse("opened through the Overview", carried.direct);
+        assertSame(mEditor.session, carried.editor);
+        assertNull("carrying writes no memory of a leave", mHost.stored);
+
+        Next next = new Next();
+        assertTrue(next.surface.reopen(carried));
+        assertSame("the next editor continues the session", carried.editor, next.editor.adopted);
+        assertNotNull(next.editor.restored);
+        assertEquals("and stands where the first one stood", "KEYBOARD", next.editor.restored.target);
+        assertEquals("presented under the cover, not hopped into", 1, next.editor.count("present look"));
+        assertNotNull("the cover is up until the page stands", next.hostView().getBackground());
+
+        next.editor.settle();
+        idle();
+        assertEquals(PageId.LOOK, next.surface.shownPage());
+        assertNull("the cover lifted", next.hostView().getBackground());
+        assertNotNull("the Overview is built beneath as Back's target", next.host.overview);
+        assertEquals("hidden, not shown", 0, next.host.overview.page.shown);
+    }
+
+    @Test
+    public void aDirectEditorComesBackDirect() {
+        mSurface.open(PageId.LAYOUT);
+        AppearanceSurfaceController.Relaunch carried = mSurface.carry();
+        assertNotNull(carried);
+        assertEquals(PageId.LAYOUT, carried.where.page);
+        assertTrue(carried.direct);
+
+        Next next = new Next();
+        assertTrue(next.surface.reopen(carried));
+        next.editor.settle();
+        idle();
+        assertEquals(PageId.LAYOUT, next.surface.shownPage());
+        assertNull("nothing is built behind a direct editor", next.host.overview);
+        assertNull(next.hostView().getBackground());
+
+        // Back closes it, as a direct editor's Back does.
+        next.surface.onBack();
+        idle();
+        assertFalse(next.surface.isOpen());
+    }
+
+    @Test
+    public void aRelaunchOnTheOverviewReopensTheOverviewOnItsCard() {
+        mSurface.open(PageId.OVERVIEW);
+        idle();
+        mHost.overview.centred = "LOCK";
+
+        AppearanceSurfaceController.Relaunch carried = mSurface.carry();
+        assertNotNull(carried);
+        assertEquals(PageId.OVERVIEW, carried.where.page);
+        assertNull("no editor session on the Overview", carried.editor);
+
+        Next next = new Next();
+        assertTrue(next.surface.reopen(carried));
+        idle();
+        assertEquals(PageId.OVERVIEW, next.surface.shownPage());
+        assertEquals("LOCK", next.host.askedCentred);
+        assertFalse(next.editor.presented);
+        assertNull(next.editor.adopted);
+    }
+
+    @Test
+    public void aDirectEditorThatCannotComeBackClosesAndDropsTheSession() {
+        mSurface.open(PageId.LOOK);
+        mEditor.session = new AppearanceSurfaceController.EditorSession() { };
+        AppearanceSurfaceController.Relaunch carried = mSurface.carry();
+        assertNotNull(carried);
+        assertTrue(carried.direct);
+
+        Next next = new Next();
+        next.editor.frameFails = true;
+        assertTrue(next.surface.reopen(carried));
+        idle();
+        assertFalse("with nothing behind it, it closes", next.surface.isOpen());
+        assertNull(next.editor.adopted);
     }
 }

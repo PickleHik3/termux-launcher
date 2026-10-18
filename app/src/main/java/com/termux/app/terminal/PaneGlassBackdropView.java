@@ -46,7 +46,7 @@ import com.termux.app.chrome.WallpaperParallax;
  * grain and the rim, in addition to the user's own terminal opacity — the order
  * {@code GlassSurfaceFactory} gives a chrome band's veil.
  */
-public final class PaneGlassBackdropView extends View {
+public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdge {
 
     private final Paint mFramePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint mTintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -110,8 +110,6 @@ public final class PaneGlassBackdropView extends View {
     @Nullable private BitmapShader mLastAimShader;
     /** Fancier Glass, or null for the plain draw. */
     @Nullable private GlassRefraction.Look mLook;
-    /** Adaptive glass's gathered light in place of the hairline; see {@link GlassRefraction.Program#setGathered}. */
-    private boolean mGathered;
     /** The program the frame draws through while {@link #mLook} is set and the phone runs one. */
     @Nullable private GlassRefraction.Program mProgram;
     @Nullable private GlassRefraction.Program mPreviousProgram;
@@ -121,6 +119,10 @@ public final class PaneGlassBackdropView extends View {
      * uniform it reads is written afresh before it draws again.
      */
     @Nullable private GlassRefraction.Program mSpareProgram;
+    /** Told when {@link #drawsEdge} changes; see {@link #setOnEdgeChanged}. */
+    @Nullable private Runnable mOnEdgeChanged;
+    /** {@link #drawsEdge} as last told. */
+    private boolean mEdgeTold;
     /** Answers this slab's veil; null for a slab nobody measures. See {@link #setVeilSource}. */
     @Nullable private PaneSurfaceStyle mVeilSource;
     /**
@@ -186,7 +188,11 @@ public final class PaneGlassBackdropView extends View {
                             @Nullable Drawable grain, int grainStrength, float radiusPx,
                             @Nullable ColorFilter frostFilter, boolean crossfade) {
         Bitmap requested = frame != null && !frame.isRecycled() ? frame : null;
-        Bitmap live = requested != null ? requested : mFrame;
+        // The frame kept while a fresh one is in flight is only kept while it can still be drawn:
+        // a recycled one goes tint-only until the next pass hands a real frame, rather than being
+        // wrapped in a shader (which throws for a recycled bitmap).
+        Bitmap held = mFrame != null && !mFrame.isRecycled() ? mFrame : null;
+        Bitmap live = requested != null ? requested : held;
         if (mDressed && live == mFrame && mTintColor == tintColor && mRadiusPx == radiusPx
             && mGrainStrength == grainStrength && (mGrain == null) == (grain == null)
             && mFrostFilter == frostFilter && mFrameRect.equals(frameRect)) {
@@ -314,18 +320,8 @@ public final class PaneGlassBackdropView extends View {
      * behind the page, which has no rim.
      */
     public void setRefraction(@Nullable GlassRefraction.Look look) {
-        setRefraction(look, false);
-    }
-
-    /**
-     * {@link #setRefraction(GlassRefraction.Look)} with Adaptive glass's edge: {@code gathered}
-     * draws the gathered light in place of the hairline. A slab's rim runs along its own bounds,
-     * with no seam to push past it.
-     */
-    public void setRefraction(@Nullable GlassRefraction.Look look, boolean gathered) {
-        if (java.util.Objects.equals(look, mLook) && gathered == mGathered) return;
+        if (java.util.Objects.equals(look, mLook)) return;
         mLook = look;
-        mGathered = gathered;
         syncRefraction();
         // Whichever way the draw goes now, its aim has to be written afresh: the program's on
         // first use, the shader's matrix after the program cleared it.
@@ -379,11 +375,49 @@ public final class PaneGlassBackdropView extends View {
     }
 
     /**
+     * True while this slab's own program draws its outline, the gathered light: it is shown, it
+     * has a frame, and that frame is drawn through the program, not plain (no look, a corner mask,
+     * a driver that refused the program, Android 12). The pane's resting border yields to it
+     * ({@link PaneRim}); every other case keeps the border.
+     */
+    @Override
+    public boolean drawsEdge() {
+        return getVisibility() == View.VISIBLE && mProgram != null && mFrame != null
+            && !mFrame.isRecycled();
+    }
+
+    @Override
+    public void setOnEdgeChanged(@Nullable Runnable onEdgeChanged) {
+        mOnEdgeChanged = onEdgeChanged;
+        mEdgeTold = drawsEdge();
+    }
+
+    /** Tells the border once {@link #drawsEdge} has moved, so it redraws with or without its line. */
+    private void tellEdge() {
+        boolean edge = drawsEdge();
+        if (edge == mEdgeTold) return;
+        mEdgeTold = edge;
+        Runnable told = mOnEdgeChanged;
+        if (told != null) told.run();
+    }
+
+    @Override
+    public void setVisibility(int visibility) {
+        super.setVisibility(visibility);
+        tellEdge();
+    }
+
+    /**
      * Points the paints at the program or at the frame's own shader, whichever the look asks for
      * and the phone can run. On every frame change and look change, never per draw: the program
      * captures its input when it is set.
      */
     private void syncRefraction() {
+        syncProgram();
+        tellEdge();
+    }
+
+    private void syncProgram() {
         mLastAimShader = null;
         GlassRefraction.Look look = mLook;
         BitmapShader shader = mFrameShader;
@@ -407,7 +441,6 @@ public final class PaneGlassBackdropView extends View {
             return;
         }
         program.setLook(look);
-        program.setGathered(mGathered);
         program.setInput(shader);
         syncClarity();
         program.applyTo(mFramePaint);
@@ -427,7 +460,6 @@ public final class PaneGlassBackdropView extends View {
         mPreviousProgram = previous;
         if (previous != null) {
             previous.setLook(look);
-            previous.setGathered(mGathered);
             previous.setInput(previousShader);
             previous.applyTo(mPreviousFramePaint);
         }

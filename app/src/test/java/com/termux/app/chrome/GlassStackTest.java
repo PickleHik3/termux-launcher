@@ -125,7 +125,9 @@ public class GlassStackTest {
 
         assertEquals(2, stack.getNumberOfLayers());
         assertSame(backdrop, stack.getDrawable(0));
-        assertEquals(FANCIER, backdrop.refractionLook());
+        // The look as stored, raised by what the tint over it covers (its opacity, no Shade).
+        assertEquals(FANCIER.withCover(spec.tintAlpha), backdrop.refractionLook());
+        assertEquals(FANCIER, backdrop.refractionLook().withCover(0f));
         assertEquals(RADIUS_PX, backdrop.refractionRadiusPx(), 0f);
         LayerDrawable tint = (LayerDrawable) stack.getDrawable(1);
         // base, light, grain, rim: the one rim the factory draws.
@@ -136,36 +138,81 @@ public class GlassStackTest {
     }
 
     @Test
-    public void withAdaptiveGlassTheProgramDrawsTheEdgeAndNoRimIsLaidOverIt() {
-        // Glass plan 2026-10-16, Round 1: the gathered light replaces the white gradient stroke
-        // wherever the program draws the glass.
-        surfaces.adaptive = true;
+    public void theRimIsDecidedPerStackByWhetherItsOwnBackdropDrawsTheEdge() {
+        // The gathered light is the edge wherever the program draws the glass; a stack whose own
+        // backdrop is plain, or that has none, keeps its rim.
+        assertFalse("its backdrop runs the program", GlassStack.wearsRim(true, true));
+        assertTrue("its backdrop is plain", GlassStack.wearsRim(true, false));
+        assertFalse("the spec asked for none", GlassStack.wearsRim(false, false));
+        assertFalse(GlassStack.wearsRim(false, true));
+    }
+
+    @Test
+    public void aStackWhoseBackdropDrawsPlainKeepsItsRimWhateverTheLook() {
+        // Below Android 13 (this runner) the frame never runs the program, so a stack keeps its
+        // rim even while Fancier Glass answers a look: the gate is the backdrop, not the look.
+        surfaces.look = FANCIER;
         Bitmap frame = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888);
         SharedFrameDrawable backdrop = new SharedFrameDrawable(frame, new Rect(0, 0, 40, 40), null,
             out -> { out[0] = 0; out[1] = 0; });
 
         Drawable stack = GlassStack.build(glass, keyboardSpec(FANCIER), 2f, backdrop);
 
-        assertEquals(0, rimsIn(stack));
-        assertTrue("the frame is told to gather its edge", backdrop.refractionGathered());
-        assertEquals("the look itself is what is stored", FANCIER, backdrop.refractionLook());
-        // The scheme-colour stack the same way.
-        assertEquals(0, rimsIn(GlassStack.build(glass,
+        assertFalse(backdrop.refracts());
+        assertEquals(1, rimsIn(stack));
+        assertEquals("the look itself is what is stored, with the tint's cover", FANCIER,
+            backdrop.refractionLook().withCover(0f));
+        // A stack with no backdrop at all, the scheme-colour one, the same way.
+        assertEquals(1, rimsIn(GlassStack.build(glass,
             keyboardSpec(null).withTintColor(0x80112233), 2f, null)));
     }
 
     @Test
-    public void withAdaptiveGlassOffTheStackIsExactlyTodays() {
+    public void aStackWhoseBackdropRefractsLaysNoRim() {
+        // The JVM runs no program, so a refracting frame is stood in through the probe: what
+        // build() does with the answer is what is pinned here.
         Bitmap frame = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888);
         SharedFrameDrawable backdrop = new SharedFrameDrawable(frame, new Rect(0, 0, 40, 40), null,
             out -> { out[0] = 0; out[1] = 0; });
+        boolean[] asked = {false};
 
-        Drawable stack = GlassStack.build(glass, keyboardSpec(FANCIER), 2f, backdrop);
+        Drawable stack = GlassStack.build(glass, keyboardSpec(FANCIER), 2f, backdrop, b -> {
+            asked[0] = true;
+            assertEquals("asked after the look is handed over", FANCIER,
+                b.refractionLook().withCover(0f));
+            return true;
+        });
 
-        assertEquals(1, rimsIn(stack));
-        assertFalse(backdrop.refractionGathered());
-        assertEquals(1, rimsIn(GlassStack.build(glass,
-            keyboardSpec(null).withTintColor(0x80112233), 2f, null)));
+        assertTrue(asked[0]);
+        assertEquals("the gathered light is the edge; no rim over it", 0, rimsIn(stack));
+        // The same spec over a frame drawn plain keeps its rim, and the tint stack is otherwise
+        // the same: only the rim layer differs.
+        Drawable plain = GlassStack.build(glass, keyboardSpec(FANCIER), 2f, backdrop, b -> false);
+        assertEquals(1, rimsIn(plain));
+        assertEquals(layerCount(plain) - 1, layerCount(stack));
+        // A scheme-colour stack the same way.
+        assertEquals(0, rimsIn(GlassStack.build(glass,
+            keyboardSpec(FANCIER).withTintColor(0x80112233), 2f, backdrop, b -> true)));
+    }
+
+    @Test
+    public void theWindowBarOverAFrostThatDrawsTheEdgeLaysNoStrokeButKeepsItsCorner() {
+        Drawable stroked = glass.statusBarSurface(0.4f, 0f, 1f, ChromeEdgeRule.ALL, null, false);
+        Drawable bare = glass.statusBarSurface(0.4f, 0f, 1f, ChromeEdgeRule.ALL, null, true);
+        assertEquals(1, rimsIn(stroked));
+        assertEquals(0, rimsIn(bare));
+        assertEquals(layerCount(stroked) - 1, layerCount(bare));
+        // The five-argument form is the stroked one, as before.
+        assertEquals(1, rimsIn(glass.statusBarSurface(0.4f, 0f, 1f, ChromeEdgeRule.ALL, null)));
+    }
+
+    /** How many leaf layers a stack holds, at any depth. */
+    private static int layerCount(Drawable drawable) {
+        if (!(drawable instanceof LayerDrawable)) return 1;
+        LayerDrawable layers = (LayerDrawable) drawable;
+        int count = 0;
+        for (int i = 0; i < layers.getNumberOfLayers(); i++) count += layerCount(layers.getDrawable(i));
+        return count;
     }
 
     /** How many {@link GradientRimDrawable} layers a stack holds, at any depth. */
@@ -297,7 +344,7 @@ public class GlassStackTest {
 
     @Test
     public void theKeyboardSpecWearsItsOwnTintStrength() {
-        assertEquals("the shipped tint", 100, keyboardSpec(null).tintStrengthPercent);
+        assertEquals("no accent ships", 0, keyboardSpec(null).tintStrengthPercent);
         preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 60);
         assertEquals(60, keyboardSpec(null).tintStrengthPercent);
 
@@ -305,6 +352,6 @@ public class GlassStackTest {
         assertEquals(25, keyboardSpec(null).tintStrengthPercent);
         assertEquals("the dock keeps following Base", 60, preferences.getDockTintStrength());
         assertNotEquals(keyboardSpec(null).withTintStrength(60), keyboardSpec(null));
-        assertEquals(100, dockSpec(null).tintStrengthPercent);
+        assertEquals("the plain spec mixes in no accent", 0, dockSpec(null).tintStrengthPercent);
     }
 }

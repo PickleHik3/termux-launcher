@@ -62,6 +62,32 @@ public class WallpaperFrostPainterOffDockTest {
     }
 
     @Test
+    public void theWindowBarIsToldWhetherItsFrostReallyDrawsTheEdge() {
+        // Nothing to frost: the bar keeps its stroke.
+        chrome.frost().updateTopPane();
+        assertEquals(Boolean.FALSE, surfaces.windowBarEdge);
+
+        // A look is set, and the frost is up, but this runner draws it plain (no program below
+        // Android 13): the rule says refract, the frost does not, and the bar keeps its stroke.
+        surfaces.look = new GlassRefraction.Look(9, 20, 10);
+        ImageView statusFrost = sheet(300, 24);
+        ImageView paneFrost = sheet(300, 40);
+        surfaces.views.put(R.id.terminal_status_bar_wallpaper_backdrop, statusFrost);
+        surfaces.views.put(R.id.terminal_window_bar_wallpaper_backdrop, paneFrost);
+        surfaces.views.put(R.id.terminal_window_bar_host, (View) paneFrost.getParent());
+        surfaces.windowBarEdge = null;
+        chrome.frost().updateTopPane();
+        assertEquals("the frost is up", View.VISIBLE, paneFrost.getVisibility());
+        assertFalse(SharedFrameDrawable.of(paneFrost.getDrawable()).refracts());
+        assertEquals(Boolean.FALSE, surfaces.windowBarEdge);
+
+        // Clearing the top pane tells it too.
+        surfaces.windowBarEdge = null;
+        chrome.frost().clearTopPane();
+        assertEquals(Boolean.FALSE, surfaces.windowBarEdge);
+    }
+
+    @Test
     public void aSheetOffTheDockShowsTheDocksOwnFrame() {
         surfaces.dockBlurRadiusDp = 14;
         surfaces.statusBlurRadiusDp = 6;

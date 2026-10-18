@@ -40,7 +40,8 @@ import java.util.Objects;
  *
  * <p>With Fancier Glass on ({@link #setRefraction}), the same aim goes to
  * {@link GlassRefraction} as uniforms and the frame is drawn through its program instead, bent
- * at the rim and lit along it, in the one pass the plain draw already took.</p>
+ * at the rim and its outline gathering the wallpaper's light, in the one pass the plain draw
+ * already took.</p>
  *
  * <p>The drawable reports no intrinsic size. Every host is a {@code fitXY} {@code ImageView} or
  * a background, both of which size the drawable to the view, and neither host pads, so drawable
@@ -77,8 +78,6 @@ public final class SharedFrameDrawable extends Drawable {
     private float mLookDensity;
     private float mRimRadiusPx;
     private int mSeams;
-    /** Adaptive glass's gathered light in place of the hairline; see {@link GlassRefraction.Program#setGathered}. */
-    private boolean mGathered;
     /** The program the frame draws through while {@link #mLook} is set and the phone runs one. */
     @Nullable private GlassRefraction.Program mProgram;
     @Nullable private GlassRefraction.Program mPreviousProgram;
@@ -110,6 +109,9 @@ public final class SharedFrameDrawable extends Drawable {
      * underneath and the new one fades in over {@link FrameCrossfade#DURATION_MS}.
      */
     public void setFrame(@NonNull Bitmap frame, @NonNull Rect frameRect, boolean crossfade) {
+        // A recycled bitmap cannot be wrapped in a shader (it throws): keep drawing what is held
+        // (draw() skips a frame that is itself recycled) until the next pass hands a live one.
+        if (frame.isRecycled()) return;
         if (frame == mFrame && mFrameRect.equals(frameRect)) return;
         if (crossfade && mFrame != null && mFrame != frame && !mFrame.isRecycled()
             && mFrameRect.equals(frameRect)) {
@@ -143,28 +145,21 @@ public final class SharedFrameDrawable extends Drawable {
      */
     public void setRefraction(@Nullable GlassRefraction.Look look, float density,
                               float cornerRadiusPx, int seams) {
-        setRefraction(look, density, cornerRadiusPx, seams, false);
-    }
-
-    /**
-     * {@link #setRefraction(GlassRefraction.Look, float, float, int)} with Adaptive glass's
-     * edge: {@code gathered} draws the gathered light in place of the hairline, and pushes the
-     * seams past its reach. Off is the hairline, exactly as before.
-     */
-    public void setRefraction(@Nullable GlassRefraction.Look look, float density,
-                              float cornerRadiusPx, int seams, boolean gathered) {
         if (Objects.equals(look, mLook) && mLookDensity == density
-            && mRimRadiusPx == cornerRadiusPx && mSeams == seams && mGathered == gathered) return;
+            && mRimRadiusPx == cornerRadiusPx && mSeams == seams) return;
         mLook = look;
         mLookDensity = density;
         mRimRadiusPx = cornerRadiusPx;
         mSeams = seams;
-        mGathered = gathered;
         syncRefraction();
         invalidateSelf();
     }
 
-    /** True while the frame is drawn through the refraction program rather than plain. */
+    /**
+     * True while the frame is drawn through the refraction program rather than plain: the
+     * program then draws this surface's outline, the gathered light, and a stack over it lays no
+     * rim of its own ({@link GlassStack#build}).
+     */
     public boolean refracts() {
         return mProgram != null;
     }
@@ -177,6 +172,8 @@ public final class SharedFrameDrawable extends Drawable {
      * counts as on screen ({@link #shows}) while it is set.
      */
     public void setClearFrame(@Nullable Bitmap clearFrame) {
+        // A recycled bitmap cannot be wrapped in a shader (it throws): keep the frost at the edge.
+        if (clearFrame != null && clearFrame.isRecycled()) clearFrame = null;
         if (clearFrame == mClearFrame) return;
         mClearFrame = clearFrame;
         mClearShader = clearFrame == null ? null
@@ -263,11 +260,6 @@ public final class SharedFrameDrawable extends Drawable {
         return mSeams;
     }
 
-    @VisibleForTesting
-    boolean refractionGathered() {
-        return mGathered;
-    }
-
     /**
      * Points the paints at the program or at the frame's own shader, whichever the look asks for
      * and the phone can run. On every frame change and look change, never per draw: the program
@@ -295,7 +287,6 @@ public final class SharedFrameDrawable extends Drawable {
             return;
         }
         program.setLook(look);
-        program.setGathered(mGathered);
         program.setInput(shader);
         syncClarity();
         syncTouch();
@@ -317,7 +308,6 @@ public final class SharedFrameDrawable extends Drawable {
         mPreviousProgram = previous;
         if (previous != null) {
             previous.setLook(look);
-            previous.setGathered(mGathered);
             previous.setInput(previousShader);
             previous.applyTo(mPreviousPaint);
         }
@@ -328,7 +318,7 @@ public final class SharedFrameDrawable extends Drawable {
         GlassRefraction.Look look = mLook;
         if (look == null) return;
         GlassRefraction.rimRect(mRim, getBounds(),
-            GlassRefraction.seamReachPx(look, mLookDensity, mRimRadiusPx, mGathered), mSeams);
+            GlassRefraction.seamReachPx(look, mLookDensity, mRimRadiusPx), mSeams);
     }
 
     @Override

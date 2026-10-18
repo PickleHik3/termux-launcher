@@ -760,8 +760,9 @@ public final class TermuxInAppKeyboard {
     }
 
     /**
-     * Key-cap opacity preview. Deliberately the cheapest editor control: it repaints only the
-     * keyboard view itself — no geometry sync, no accessory glass re-render.
+     * Key-cap opacity preview (Look › Custom's Keys). Deliberately cheap: it repaints only the
+     * keyboard view itself — no geometry sync, no accessory glass re-render — and re-chooses
+     * the legends on the caps as drawn, handing the view a palette only when one moved.
      */
     public void previewSurfaceEditorKeyOpacity(int opacityPercent) {
         if (!mEnabled || mDestroyed)
@@ -872,8 +873,18 @@ public final class TermuxInAppKeyboard {
         if (mKeyOpacity == clamped)
             return;
         mKeyOpacity = clamped;
-        if (mKeyboardView != null)
-            mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
+        if (mKeyboardView == null || mDestroyed)
+            return;
+        mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
+        // The legends are chosen on the caps as drawn at this opacity: repaint them only when
+        // that moved a colour the keyboard draws.
+        juloo.keyboard2.Theme.Palette next = createPalette();
+        if (mAppliedPalette != null && sameInks(mAppliedPalette, next))
+            return;
+        mKeyboardView.setPalette(next);
+        mAppliedPalette = next;
+        applyCustomColorScheme();
+        if (mKeyPopup != null) mKeyPopup.refresh();
     }
 
     /** Configured absolute key opacity, or the theme's current effective one when unset. */
@@ -886,19 +897,31 @@ public final class TermuxInAppKeyboard {
     }
 
     /**
-     * What a letter key's label is drawn in and the cap it stands on, for the keyboard's legibility
-     * band: {@code {label, cap}}, the cap in its key colour at its live fill alpha (the user's key
-     * opacity, or the theme's own). Null while there is no keyboard view. The labels and caps are
-     * the theme's; the band measures them and veils the host, and never moves either.
+     * What a letter key's label is drawn in and the cap it stands on, then the same for a function
+     * key (Ctrl, Alt, Fn, the arrows), for the keyboard's legibility band:
+     * {@code {label, cap, functionLabel, functionCap}}, each cap in its key colour at its live
+     * fill alpha (the user's key opacity, or the theme's own; a function chip lets through as much
+     * more glass as the palette gives it). Null while there is no keyboard view. The band measures
+     * them and veils the host where no legend tone the palette can choose reads.
      */
     @Nullable
     public int[] letterKeyLegibilityInks() {
         if (mDestroyed || mKeyboardView == null)
             return null;
         juloo.keyboard2.Theme.Palette palette = createPalette();
-        int alpha = Math.round(255f * getEffectiveKeyOpacityPercent() / 100f);
-        int cap = (Math.max(0, Math.min(255, alpha)) << 24) | (palette.keyBackground & 0x00FFFFFF);
-        return new int[] {palette.labelColor | 0xFF000000, cap};
+        int alpha = Math.max(0, Math.min(255,
+            Math.round(255f * getEffectiveKeyOpacityPercent() / 100f)));
+        int cap = (alpha << 24) | (palette.keyBackground & 0x00FFFFFF);
+        // A host-set key opacity fills every cap alike; the theme's own scales each role's alpha.
+        int keyAlpha = android.graphics.Color.alpha(palette.keyBackground);
+        int functionAlpha = mKeyOpacity >= 0 || keyAlpha == 0 ? alpha : Math.max(0, Math.min(255,
+            Math.round(alpha * android.graphics.Color.alpha(palette.functionKeyBackground)
+                / (float) keyAlpha)));
+        int functionCap = (functionAlpha << 24) | (palette.functionKeyBackground & 0x00FFFFFF);
+        // The function legends are drawn secondary (Ctrl, Alt, Fn, Shift, the arrows, 123+), the
+        // tone moved toward mid grey, so the veil is bought for that rendition.
+        return new int[] {palette.labelColor | 0xFF000000, cap,
+            InAppKeyboardPaletteFactory.secondaryOf(palette.functionLabelColor), functionCap};
     }
 
     private void applyKeyCornerRadiusDp(float radiusDp) {
@@ -1454,7 +1477,7 @@ public final class TermuxInAppKeyboard {
         configBuilder.symbolFont = bundledSymbolsLabelFont();
         mAppliedConfigSignature = configPreferenceSignature();
         mKeyboardView = new Keyboard2View(requireContainer().getContext(),
-            configBuilder.build(), createPalette());
+            configBuilder.build(), recordedPalette());
         mAppliedPaletteInputs = paletteInputsSignature();
         mAppliedPaletteSignature = InAppKeyboardPaletteFactory.signature(
             requireContainer().getContext());
@@ -1512,12 +1535,81 @@ public final class TermuxInAppKeyboard {
         }
     }
 
+    /**
+     * The glass faces the keys stand on, one per row top to bottom, as the launcher measured them
+     * ({@link #setGlassFaces}); empty until it has, and the palette checks its legends against the
+     * theme's base.
+     */
+    @NonNull private int[] mGlassFaces = new int[0];
+    /** The legend tone the launcher chose ({@link #setGlassFaces(int[], int)}); any until told. */
+    private int mGlassTone = InAppKeyboardPaletteFactory.TONE_ANY;
+
+    /**
+     * The faces under the keys moved (an opacity, Shade, Tint, hue or Glass change, a new
+     * wallpaper, the veil): the legends are re-chosen so they read on every row's face, and the
+     * live keyboard is repainted only when that changed a colour it draws. Called from the
+     * launcher's dress pass, never per frame of drawing; faces that did not move cost one
+     * comparison.
+     */
+    public void setGlassFaces(@NonNull int[] faces) {
+        setGlassFaces(faces, InAppKeyboardPaletteFactory.TONE_ANY);
+    }
+
+    /**
+     * {@link #setGlassFaces(int[])} with the legend tone the launcher chose on the bare face
+     * ({@code ChromeInk#bandTone}): the letters and function legends are held to it.
+     */
+    public void setGlassFaces(@NonNull int[] faces, int tone) {
+        if (java.util.Arrays.equals(faces, mGlassFaces) && tone == mGlassTone)
+            return;
+        mGlassFaces = faces.clone();
+        mGlassTone = tone;
+        if (mDestroyed || mKeyboardView == null)
+            return;
+        juloo.keyboard2.Theme.Palette next = createPalette();
+        if (mAppliedPalette != null && sameInks(mAppliedPalette, next))
+            return;
+        mKeyboardView.setPalette(next);
+        mAppliedPalette = next;
+        applyCustomColorScheme();
+        if (mKeyPopup != null) mKeyPopup.refresh();
+    }
+
+    /** The last palette handed to the view, for {@link #setGlassFace} to compare against. */
+    @Nullable private juloo.keyboard2.Theme.Palette mAppliedPalette;
+
+    /** Whether two palettes draw the same legends and caps, all that a face can move. */
+    static boolean sameInks(@NonNull juloo.keyboard2.Theme.Palette a,
+                            @NonNull juloo.keyboard2.Theme.Palette b) {
+        return a.labelColor == b.labelColor && a.subLabelColor == b.subLabelColor
+            && a.functionLabelColor == b.functionLabelColor
+            // A function chip whose fill was raised for its legend (see
+            // InAppKeyboardPaletteFactory#createGlass) is a move too.
+            && a.functionKeyBackground == b.functionKeyBackground
+            && a.actionLabelColor == b.actionLabelColor
+            && a.actionSubLabelColor == b.actionSubLabelColor
+            && a.activatedLabelColor == b.activatedLabelColor
+            && a.pressedLabelColor == b.pressedLabelColor
+            && a.lockedModifierColor == b.lockedModifierColor
+            && a.borderColor == b.borderColor
+            && a.keyGradientTopOverlay == b.keyGradientTopOverlay
+            && a.keyGradientBottomOverlay == b.keyGradientBottomOverlay;
+    }
+
+    /** {@link #createPalette()} for the view, remembered as the one it draws. */
+    @NonNull
+    private juloo.keyboard2.Theme.Palette recordedPalette() {
+        mAppliedPalette = createPalette();
+        return mAppliedPalette;
+    }
+
     private juloo.keyboard2.Theme.Palette createPalette() {
         Context context = requireContainer().getContext();
         String theme = mPreferences.getInAppKeyboardTheme();
         juloo.keyboard2.Theme.Palette palette =
             InAppKeyboardPaletteFactory.createGlass(context, theme,
-                com.termux.app.chrome.GlassLook.of(mPreferences));
+                com.termux.app.chrome.GlassLook.of(mPreferences), mGlassFaces, mKeyOpacity,
+                mGlassTone);
         InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
         return scheme.shouldApplyImportedPalette(theme) ? scheme.applyToPalette(palette) : palette;
@@ -1588,7 +1680,7 @@ public final class TermuxInAppKeyboard {
             return;
         }
         mAppliedPaletteInputs = paletteInputs;
-        mKeyboardView.setPalette(createPalette());
+        mKeyboardView.setPalette(recordedPalette());
         if (mKeyPopup != null) mKeyPopup.refresh();
         mAppliedPaletteSignature = InAppKeyboardPaletteFactory.signature(
             requireContainer().getContext());
@@ -1639,7 +1731,7 @@ public final class TermuxInAppKeyboard {
         mAppliedPaletteInputs = paletteInputsSignature();
         // Both of these reload the stored scheme, so dynamic slots re-resolve against the new
         // Material roles while pinned and imported swatches keep their persisted colors.
-        mKeyboardView.setPalette(createPalette());
+        mKeyboardView.setPalette(recordedPalette());
         applyCustomColorScheme();
         if (mKeyPopup != null) mKeyPopup.refresh();
         return true;

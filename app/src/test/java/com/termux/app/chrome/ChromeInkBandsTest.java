@@ -68,7 +68,8 @@ public class ChromeInkBandsTest {
             if (rect.equals(STATUS_RECT)) return status;
             if (rect.equals(PANE_TOP)) return paneTop;
             if (rect.equals(PANE_BOTTOM)) return paneBottom;
-            if (rect.equals(KEYBOARD_RECT)) return keyboard;
+            // The keyboard is measured row by row too: every row of it is the same wallpaper.
+            if (KEYBOARD_RECT.contains(rect)) return keyboard;
             return other;
         }
     }

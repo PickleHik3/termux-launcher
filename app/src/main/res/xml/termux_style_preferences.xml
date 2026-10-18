@@ -56,11 +56,6 @@
             app:title="@string/settings_wallpaper_parallax_title"
             app:summary="@string/settings_wallpaper_parallax_summary"
             android:defaultValue="true" />
-        <SwitchPreferenceCompat
-            app:key="fancier_glass_adaptive"
-            app:title="@string/settings_adaptive_glass_title"
-            app:summary="@string/settings_adaptive_glass_summary"
-            android:defaultValue="false" />
         <com.termux.app.fragments.settings.SliderPreference
             app:key="wallpaper_render_zoom"
             app:title="@string/settings_wallpaper_alignment_title"

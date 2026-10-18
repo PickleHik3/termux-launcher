@@ -356,7 +356,7 @@ public final class TourController {
         TourStep step = currentStep();
         if (step == null || signalId == null || mCompleting) return;
         if (mClock.nowMillis() - mArmedAt < ARM_DELAY_MS) return;
-        if (!signalId.equals(step.signalAt(mStage))) return;
+        if (!step.clearedBy(mStage, signalId)) return;
         mStage++;
         if (mStage < step.stageCount()) {
             // The second half of the same lesson: the card swaps without celebrating the first.

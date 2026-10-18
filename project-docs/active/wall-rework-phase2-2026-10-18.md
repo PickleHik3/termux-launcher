@@ -5,6 +5,11 @@ glossary "The wall and its chrome"). Phase two builds on it on this branch, one 
 slice merged only with its unit tests green and an emulator or Surface pass recorded in
 `project-docs/device-checks.md`.
 
+Merged in: PR #82 (`feat/glass-controls-unify`: one set of glass controls in Look › Custom,
+Adaptive glass always on) at 03aac5a8b, merged into this branch on 2026-10-18 (the branch tip then
+was 0843ad75e, 03aac5a8b plus one device-checks note, and that is what went in); its owed device
+checks stay owed here too. When #82 lands on `pre`, merge `pre` into this branch again.
+
 ## Slices, in order
 
 1. **The status bar's capsule form.** A third form beside compact and expanded: a thin material
@@ -65,6 +70,9 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    196 px first step: the departure was already passed; the nudge now starts before the re-sync.
    Likely the emulator's slow first frame on the settle curve; re-check owed with a 1 → 2 jump
    beside it.
+   Status 2026-10-18 (fix round 3): the bar jump's wrong-way start was the departure card's
+   glass ground drawn without the parallax offset (Home's stretch of the picture under any
+   window); fixed in `wallpaperGlassGround`. Re-check owed (device-checks, slice 3).
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.
    Status 2026-10-18: built on a worker branch. File version 4: a window may carry `homeFloat`
    { page, minimised, portrait?, landscape? }; absent, or malformed, it is a window of the row, so
@@ -146,6 +154,10 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    popup: the dock's (menu module, `LauncherFolderPopupController`, `FolderRenameTitleView` and
    the activity's `FolderRenameController` for rename). No drag out of the popup: Remove from
    folder places the app instead. Unit tests green; emulator pass owed (device-checks, slice 7b).
+   Status 2026-10-18 (emulator pass fixes): the Home folder popup is now a view over the Home
+   pane (`HomeFolderOverlay`), not a window, so the in-app keyboard types into its rename and is
+   not dimmed; its title, labels and rename take the capsule's ink rule. The dock's folder popup
+   is unchanged. Re-check owed (device-checks, slice 7b).
    **Slice 7 complete.**
 8. **Per-toplevel X11 windows** (needs a rootless server).
    Status 2026-10-18: not started; a developer decision. The display is the vendored termux-x11
@@ -158,6 +170,19 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    window per toplevel, map/unmap/geometry from the X connection) only after that. Options: fund the
    server work, or keep one display window per X display and drop this slice.
 9. **Rebuilding the row and the floats after a background kill** beyond Saved sessions.
+9. **Rebuilding the row and the floats after a background kill** beyond Saved sessions. Done in
+   code: `ArrangementRecovery` decides each start (recreate, adopt, rebuild, empty, fresh). An
+   activity recreate with the service alive brings the floats back with the row's trees around
+   the same shells (keyed by `TerminalSession.mHandle`; the process keeps the last layout for an
+   activity that returns without instance state). The arrangement is autosaved in the version 4
+   model to the hidden `~/.termux/workspaces/.autosave.json` (1.5 s debounce, at once when empty,
+   on stop; Exit writes the empty one), and a cold start with no live shell rebuilds it with fresh
+   shells in the saved folders, never replaying a command, then a notice. Docs:
+   `durable-workspaces.md` › Autosave and recovery, the user guide's After a restart, spec §9.
+   Unit tests green; emulator pass owed (device-checks, slice 9).
+   Status 2026-10-18 (emulator pass fix): a rebuilt window stayed on `exit`. Rebuild and Load now
+   take their current window through `activateSessionInPanes` like any shell; the cause is not
+   confirmed off the device. Re-check owed (device-checks, slice 9).
 
 ## Rules carried over
 

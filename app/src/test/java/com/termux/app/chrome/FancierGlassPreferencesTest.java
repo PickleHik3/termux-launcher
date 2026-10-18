@@ -50,21 +50,6 @@ public class FancierGlassPreferencesTest {
     }
 
     @Test
-    public void theAdaptiveGlassSwitchIsOffByDefaultAndRoundTrips() {
-        // Glass plan 2026-10-16: off until the developer has seen it on pong.
-        assertFalse(TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_ADAPTIVE);
-        assertFalse(preferences.isFancierGlassAdaptiveEnabled());
-        assertEquals("fancier_glass_adaptive", TERMUX_APP.KEY_FANCIER_GLASS_ADAPTIVE);
-        preferences.setFancierGlassAdaptiveEnabled(true);
-        assertTrue(preferences.isFancierGlassAdaptiveEnabled());
-        // Its own key: the Fancier Glass switch and the Look are untouched by it.
-        assertTrue(preferences.isFancierGlassEnabled());
-        assertEquals(GlassRefraction.Look.DEFAULT, GlassRefraction.Look.of(preferences));
-        preferences.setFancierGlassAdaptiveEnabled(false);
-        assertFalse(preferences.isFancierGlassAdaptiveEnabled());
-    }
-
-    @Test
     public void theKnobsDefaultToTheDocksOwnRefraction() {
         // GlassRefraction.Look.DEFAULT is built from these same three numbers; see its test.
         assertEquals(9, preferences.getFancierGlassBendDp());

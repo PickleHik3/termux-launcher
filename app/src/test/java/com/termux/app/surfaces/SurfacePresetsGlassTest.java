@@ -50,9 +50,10 @@ public class SurfacePresetsGlassTest {
         SurfacePresets.Preset mist = preset("frost");
         SurfacePresets.apply(preferences, mist);
 
+        // Glass 75.
         assertEquals(25, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals(60, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        assertEquals(8, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(7, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
         assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, preferences.getSurfaceGlassTint());
         assertEquals(TERMUX_APP.GLASS_RIM_GRADIENT, preferences.getSurfaceGlassRim());
         assertEquals(TERMUX_APP.GLASS_MOTION_MIST, preferences.getSurfaceGlassMotion());
@@ -80,17 +81,20 @@ public class SurfacePresetsGlassTest {
     public void clearTintAndSolidCarryTheRecipesOfTheSpec() {
         // Clear, Mist and Tint sit on the Depth curve at 90, 80 and 70, each bend one and a half
         // bands; light 10 is stored for older builds only, the hairline is fixed in the program.
-        assertRecipe(preset("minimal"), 4, 10, 4, 27, 18, 10, 40, 76);
-        assertRecipe(preset("stock"), 10, 46, 10, 21, 14, 10, 0, 0);
+        // Blur and grain are each Look's point on the Glass curve: Clear 20, Tint 40, Mist 75.
+        assertRecipe(preset("minimal"), 7, 10, 3, 27, 18, 10, 40, 76);
+        assertRecipe(preset("stock"), 12, 46, 4, 21, 14, 10, 0, 0);
         assertRecipe(preset("solid"), 0, 92, 0, 0, 1, 0, 0, 0);
-        assertRecipe(preset("frost"), 25, 60, 8, 24, 16, 10, 0, 0);
-        assertEquals(TERMUX_APP.GLASS_TINT_MATERIAL,
+        assertRecipe(preset("frost"), 25, 60, 7, 24, 16, 10, 0, 0);
+        // Tint is the scheme's ink at the Material blend (35); no Look names the old family.
+        assertEquals(TERMUX_APP.GLASS_TINT_SCHEME,
             preset("stock").values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
+        assertEquals(35, preset("stock").values.get(TERMUX_APP.KEY_SURFACE_BASE_TINT));
 
         // Leaving Mist for Tint hands rim and motion back.
         SurfacePresets.apply(preferences, preset("frost"));
         SurfacePresets.apply(preferences, preset("stock"));
-        assertEquals(TERMUX_APP.GLASS_TINT_MATERIAL, preferences.getSurfaceGlassTint());
+        assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, preferences.getSurfaceGlassTint());
         assertEquals(TERMUX_APP.GLASS_RIM_HAIRLINE, preferences.getSurfaceGlassRim());
         assertEquals(TERMUX_APP.GLASS_MOTION_CLASSIC, preferences.getSurfaceGlassMotion());
         assertEquals(14, preferences.getFancierGlassEdgeWidthDp());
@@ -132,7 +136,7 @@ public class SurfacePresetsGlassTest {
 
     @Test
     public void aLookStoredBeforeFormatFourReadsAsNoSpecularDispersionOrClarity() {
-        assertEquals(4, SurfacePresets.FORMAT_VERSION);
+        assertEquals(6, SurfacePresets.FORMAT_VERSION);
         Map<String, Object> look = SurfacePresets.deserialize(
             "{\"format_version\":2,\"surface_base_blur\":21,\"surface_material\":\"glass\"}");
         assertNotNull(look);
@@ -250,7 +254,7 @@ public class SurfacePresetsGlassTest {
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, preferences.getSurfaceGlassTint());
         assertEquals(TERMUX_APP.GLASS_MOTION_CLASSIC, preferences.getSurfaceGlassMotion());
-        assertEquals(4, SurfacePresets.FORMAT_VERSION);
+        assertEquals(6, SurfacePresets.FORMAT_VERSION);
     }
 
     @Test

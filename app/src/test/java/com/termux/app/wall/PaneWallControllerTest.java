@@ -637,6 +637,38 @@ public class PaneWallControllerTest {
         assertEquals(5f, controller.rowPosition(), ROW_EPS);
     }
 
+    /**
+     * A one-window jump from the bar, either way, in the order showWindowFromBar takes: the
+     * departure is current, the arrival is made current, then the arrival is nudged in from a
+     * width out naming the departure. The row runs from the departure to the arrival and never
+     * steps outside them, so the wallpaper never starts the wrong way (slice 3 re-check).
+     */
+    @Test public void aOneWindowJumpEitherWayStaysBetweenTheDepartureAndTheArrival() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        int[][] jumps = {{1, 2}, {2, 1}};
+        float[] leftToTravel = {1f, 0.5f, 0f};
+        for (int[] jump : jumps) {
+            int departure = jump[0];
+            int arrival = jump[1];
+            host.current = departure;
+            assertEquals(3f + departure, controller.rowPosition(), ROW_EPS);
+            host.current = arrival;
+            float sign = arrival > departure ? 1f : -1f;
+            float departureAt = 3f + departure;
+            float arrivalAt = 3f + arrival;
+            for (float left : leftToTravel) {
+                controller.nudgeTerminalPage(sign * 1080f * left, departure, 300L, null, null);
+                float at = controller.rowPosition();
+                assertEquals(departure + " to " + arrival + ", " + left + " of a width out",
+                    arrivalAt + (departureAt - arrivalAt) * left, at, ROW_EPS);
+                assertTrue("never past the departure", (at - departureAt) * sign >= -ROW_EPS);
+                assertTrue("never past the arrival", (arrivalAt - at) * sign >= -ROW_EPS);
+            }
+            idle();
+            assertEquals(arrivalAt, controller.rowPosition(), ROW_EPS);
+        }
+    }
+
     private static void letTheHoldElapse() {
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
             java.time.Duration.ofMillis(com.termux.view.HoldTiming.holdTimeoutMs() + 20L));
