@@ -26738,7 +26738,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildDrawerSessions();
     }
 
-    /** Bridges {@link com.termux.app.terminal.TerminalPaneController} back into the activity. */
     /** What the Terminal widgets' coordinator reads and does through the activity. */
     private final class TerminalWidgetHost
             implements com.termux.app.launcher.widget.builtin.TerminalWidgetCoordinator.Host {
@@ -26805,6 +26804,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /** Bridges {@link com.termux.app.terminal.TerminalPaneController} back into the activity. */
     private final class PaneHost implements com.termux.app.terminal.TerminalPaneController.Host {
         @Override @Nullable public TerminalSession createShell(@Nullable String cwd) {
             return createShellForCwd(cwd);
