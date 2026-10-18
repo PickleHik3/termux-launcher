@@ -266,6 +266,11 @@ public class TerminalPaneController {
          * page last shown as a Home float, taking it out of the row. False leaves it where it is.
          */
         default boolean onFloatWindowOntoHome(@NonNull Window window) { return false; }
+        /**
+         * The shell of the float terminal widget {@code widgetId} hosts ended on its own: the
+         * float is gone, and the widget shows the way to start a new shell.
+         */
+        default void onHostedFloatEnded(int widgetId) {}
     }
 
     /** Supplies durable metadata for a pane while its tree is being snapshotted. */
@@ -360,10 +365,29 @@ public class TerminalPaneController {
         int homePage = HomeFloatPolicy.NOT_HOME_FLOAT;
         /** A Home float tucked into its chip in the status bar. */
         boolean minimised;
+        /**
+         * The terminal widget this Home float is drawn in, while it is a <b>hosted</b> float;
+         * {@link #NOT_HOSTED} for every other window. A hosted float is in no float layer, no
+         * chip, no pill and no count of Home floats: the widget is its frame, and it lives and
+         * dies with the widget.
+         */
+        int hostedWidgetId = NOT_HOSTED;
         Window(Leaf leaf) { root = leaf; active = leaf; }
 
-        /** Whether this window is a Home float rather than a window of the Workspace's row. */
-        public boolean isHomeFloat() { return homePage >= 0; }
+        /** {@link #hostedWidgetId} of a window no widget hosts. */
+        public static final int NOT_HOSTED = Integer.MIN_VALUE;
+
+        /**
+         * Whether this window is a Home float rather than a window of the Workspace's row: a free
+         * one over a Home page, or one a terminal widget hosts.
+         */
+        public boolean isHomeFloat() { return homePage >= 0 || isHostedFloat(); }
+
+        /** Whether a terminal widget hosts this float ({@link #hostedWidgetId}). */
+        public boolean isHostedFloat() { return hostedWidgetId != NOT_HOSTED; }
+
+        /** The terminal widget hosting this float, or {@link #NOT_HOSTED}. */
+        public int hostedWidgetId() { return hostedWidgetId; }
 
         /** The Home page a Home float is pinned to, or {@link HomeFloatPolicy#NOT_HOME_FLOAT}. */
         public int homePage() { return homePage; }
@@ -410,6 +434,16 @@ public class TerminalPaneController {
     private final List<Window> mHomeFloats = new ArrayList<>();
     /** Each Home float's container in the float layer; never touched by {@link #render()}. */
     private final Map<Leaf, FloatingPaneContainer> mHomeFloatContainers = new HashMap<>();
+    /**
+     * Home floats a terminal widget hosts, in the order they were opened. Each is also in
+     * {@link #mWindows}, so a shell finds it as a window and no adoption makes a second one, but
+     * none is in {@link #mHomeFloats}: everything that lists, counts or lays out Home floats
+     * (chips, the windows pill, the status bar, minimise, the page's floats, the birth cascade,
+     * Saved sessions) reads that list and so never sees one.
+     */
+    private final List<Window> mHostedFloats = new ArrayList<>();
+    /** Each hosted float's container, kept while its widget is off screen. */
+    private final Map<Window, HostedFloatContainer> mHostedContainers = new HashMap<>();
     /** Where Home floats are drawn, over the Home pages; null until the host gives one. */
     @Nullable private HomeFloatLayer mHomeFloatLayer;
     /** The Home float holding focus, whose pane takes the keyboard; null while Home or a window has it. */
@@ -1413,6 +1447,16 @@ public class TerminalPaneController {
             }
             mHost.onHomeFloatsChanged();
         }
+        if (mHostedFloats.remove(w)) {
+            // Its widget lets go of it: no lift left on the widget, no container in its slot.
+            HostedFloatContainer container = mHostedContainers.remove(w);
+            if (container != null) container.leaveSlot();
+            if (mFocusedHomeFloat == w) {
+                mFocusedHomeFloat = null;
+                mHost.onActivePaneChanged();
+                mHost.onHomeFloatFocusReleased();
+            }
+        }
         if (mActiveWindow == w) {
             mActiveWindow = null;
             mMaximizedLeaf = null;
@@ -1515,6 +1559,21 @@ public class TerminalPaneController {
             v.post(v::updateSize);
         for (TerminalView v : shownHomeFloatPaneViews())
             v.post(v::updateSize);
+        for (TerminalView v : shownHostedFloatPaneViews())
+            v.post(v::updateSize);
+    }
+
+    /** The pane views of the hosted floats whose widget is on screen now. */
+    @NonNull
+    private List<TerminalView> shownHostedFloatPaneViews() {
+        List<TerminalView> out = new ArrayList<>();
+        for (Window w : mHostedFloats) {
+            HostedFloatContainer container = mHostedContainers.get(w);
+            TerminalView view = w.active == null ? null : mPaneViews.get(w.active.session);
+            if (container != null && container.isInSlot() && view != null && view.isShown())
+                out.add(view);
+        }
+        return out;
     }
 
     /**
@@ -1648,6 +1707,7 @@ public class TerminalPaneController {
     /** Focus the pane showing {@code session} within the active window. */
     public void focusSession(TerminalSession session) {
         Window homeFloat = homeFloatOf(session);
+        if (homeFloat == null) homeFloat = hostedFloatOf(session);
         if (homeFloat != null) {
             focusHomeFloat(homeFloat);
             return;
@@ -2083,6 +2143,13 @@ public class TerminalPaneController {
             if (owningLeaf != null) break;
         }
         if (owningLeaf == null) return FINISHED_UNKNOWN;
+        if (owner.isHostedFloat()) {
+            // The widget stays where it is; only its shell is gone, and the widget says so.
+            int widgetId = owner.hostedWidgetId;
+            removeWindow(owner);
+            mHost.onHostedFloatEnded(widgetId);
+            return FINISHED_PANE;
+        }
         if (owner.isHomeFloat()) {
             // A Home float is its one pane: it goes, and nothing in the Workspace moves.
             removeHomeFloat(owner);
@@ -2663,8 +2730,10 @@ public class TerminalPaneController {
      * later re-dock to split against.
      */
     public int toggleFloatActivePane() {
-        // On a Home float the toggle docks it into the row, as its titlebar's Dock does.
+        // On a Home float the toggle docks it into the row, as its titlebar's Dock does. A widget's
+        // terminal belongs to its widget and docks nowhere.
         if (mFocusedHomeFloat != null) {
+            if (mFocusedHomeFloat.isHostedFloat()) return FLOAT_TOGGLE_NONE;
             dockHomeFloat(mFocusedHomeFloat);
             return FLOAT_TOGGLE_DOCKED;
         }
@@ -2927,7 +2996,10 @@ public class TerminalPaneController {
                 applyHomeFloatPage();
             }
 
-            @Override public void onPressBesideFloats() {
+            @Override public void onPressBesideFloats(float rawX, float rawY) {
+                // A widget's terminal sits under the layer, in the grid: a press on the focused
+                // one is a press on it, not beside it.
+                if (pressIsOnFocusedHostedFloat(rawX, rawY)) return;
                 releaseHomeFloatFocus();
             }
         });
@@ -3024,12 +3096,17 @@ public class TerminalPaneController {
         return mFocusedHomeFloat;
     }
 
-    /** Gives {@code w} focus: raised over the other floats, its pane takes the keyboard. */
+    /**
+     * Gives {@code w} focus: raised over the other floats, its pane takes the keyboard. A hosted
+     * float takes it only while its widget is on screen, and is raised over nothing.
+     */
     public void focusHomeFloat(@NonNull Window w) {
-        if (!mHomeFloats.contains(w) || w.active == null) return;
+        boolean hosted = mHostedFloats.contains(w);
+        if ((!hosted && !mHomeFloats.contains(w)) || w.active == null) return;
+        if (hosted && !isHostedFloatInSlot(w)) return;
         boolean changed = mFocusedHomeFloat != w;
         mFocusedHomeFloat = w;
-        if (mHomeFloats.indexOf(w) != mHomeFloats.size() - 1) {
+        if (!hosted && mHomeFloats.indexOf(w) != mHomeFloats.size() - 1) {
             mHomeFloats.remove(w);
             mHomeFloats.add(w);
         }
@@ -3269,6 +3346,10 @@ public class TerminalPaneController {
                 ? -homeFloatLiftPx(w, container) : 0f;
             if (container.getTranslationY() != target) container.setTranslationY(target);
         }
+        for (Window w : mHostedFloats) {
+            HostedFloatContainer container = mHostedContainers.get(w);
+            if (container != null) container.applyLift(w == mFocusedHomeFloat);
+        }
     }
 
     private int homeFloatLiftPx(@NonNull Window w, @NonNull FloatingPaneContainer container) {
@@ -3436,6 +3517,212 @@ public class TerminalPaneController {
     private boolean isLandscapeScreen() {
         return mHostView.getResources().getConfiguration().orientation
             == Configuration.ORIENTATION_LANDSCAPE;
+    }
+
+    // ------------------------------------------------------------------ hosted Home floats
+
+    /**
+     * Opens the Home float terminal widget {@code widgetId} hosts, around {@code shell}: a window
+     * of its own whose one pane is drawn in the widget ({@link #attachHostedFloat}), never in the
+     * float layer. It has no titlebar, no chip and no page of its own, and is neither focused nor
+     * shown until its widget attaches it. The widget's existing float when it already has one.
+     */
+    @NonNull
+    public Window openHostedFloat(@NonNull TerminalSession shell, int widgetId) {
+        Window existing = hostedFloatFor(widgetId);
+        if (existing != null) return existing;
+        Leaf leaf = new Leaf(shell);
+        Window w = new Window(leaf);
+        w.root = null;
+        w.floating.add(leaf);
+        w.hostedWidgetId = widgetId;
+        mWindows.add(w);
+        mHostedFloats.add(w);
+        return w;
+    }
+
+    /** The float terminal widget {@code widgetId} hosts, or null. */
+    @Nullable
+    public Window hostedFloatFor(int widgetId) {
+        for (Window w : mHostedFloats) if (w.hostedWidgetId == widgetId) return w;
+        return null;
+    }
+
+    /** The hosted float showing {@code session}, or null. */
+    @Nullable
+    public Window hostedFloatOf(@Nullable TerminalSession session) {
+        if (session == null) return null;
+        for (Window w : mHostedFloats)
+            if (w.active != null && w.active.session == session) return w;
+        return null;
+    }
+
+    /** Every hosted float, in the order they were opened. */
+    @NonNull
+    public List<Window> hostedFloats() {
+        return new ArrayList<>(mHostedFloats);
+    }
+
+    /**
+     * Draws {@code w}'s pane in {@code slot}, filling it: the widget came on screen, or was built
+     * again at a new size. Moved there from any slot it was in before, and drawn once, since
+     * output that came while it was off screen was not.
+     */
+    public void attachHostedFloat(@NonNull Window w, @NonNull HostedFloatSlot slot) {
+        if (!mHostedFloats.contains(w) || w.active == null) return;
+        HostedFloatContainer container = mHostedContainers.get(w);
+        if (container == null) {
+            container = new HostedFloatContainer(w);
+            mHostedContainers.put(w, container);
+        }
+        container.enter(slot);
+        TerminalView view = mPaneViews.get(w.active.session);
+        if (view != null) view.onScreenUpdated();
+    }
+
+    /**
+     * {@code slot} left the screen (its page turned away, the widget built again, the widget
+     * gone): the pane leaves it, focus goes back to Home if the pane had it, and the shell keeps
+     * running. Nothing when the pane has already moved to another slot.
+     */
+    public void detachHostedFloat(@NonNull Window w, @NonNull HostedFloatSlot slot) {
+        HostedFloatContainer container = mHostedContainers.get(w);
+        if (container == null || container.slot() != slot) return;
+        if (w == mFocusedHomeFloat) releaseHomeFloatFocus();
+        container.leaveSlot();
+    }
+
+    /** Whether {@code w}'s pane is in its widget now. */
+    public boolean isHostedFloatInSlot(@NonNull Window w) {
+        HostedFloatContainer container = mHostedContainers.get(w);
+        return container != null && container.isInSlot();
+    }
+
+    /** Whether a press at this screen point lands on the focused hosted float's widget. */
+    private boolean pressIsOnFocusedHostedFloat(float rawX, float rawY) {
+        Window focused = mFocusedHomeFloat;
+        HostedFloatContainer container = focused == null ? null : mHostedContainers.get(focused);
+        HostedFloatSlot slot = container == null ? null : container.slot();
+        if (slot == null || !container.isInSlot()) return false;
+        View widget = slot.liftTarget();
+        int[] at = new int[2];
+        widget.getLocationOnScreen(at);
+        return rawX >= at[0] && rawX < at[0] + widget.getWidth()
+            && rawY >= at[1] && rawY < at[1] + widget.getHeight();
+    }
+
+    /**
+     * A hosted float's pane, as its widget holds it: the pane frame on the terminal's own ground,
+     * so the ink reads as it does in the Workspace whatever the widget's card is. While the
+     * focused float's cursor row is under the keyboard the widget is lifted over it.
+     */
+    private final class HostedFloatContainer extends FrameLayout {
+        private final Window mWindow;
+        @Nullable private HostedFloatSlot mSlot;
+        /** The view this float last lifted over the keyboard, put back before any other is. */
+        @Nullable private View mLifted;
+
+        HostedFloatContainer(@NonNull Window window) {
+            super(mHostView.getContext());
+            mWindow = window;
+            addView(paneFrameFor(window.active.session), new LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+
+        @Nullable HostedFloatSlot slot() {
+            return mSlot;
+        }
+
+        boolean isInSlot() {
+            return mSlot != null && getParent() == mSlot.paneFrame();
+        }
+
+        void enter(@NonNull HostedFloatSlot slot) {
+            if (mSlot != null && mSlot != slot) leaveSlot();
+            mSlot = slot;
+            FrameLayout target = slot.paneFrame();
+            if (getParent() != target) {
+                if (getParent() instanceof ViewGroup) ((ViewGroup) getParent()).removeView(this);
+                target.addView(this, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            }
+            dress(slot);
+        }
+
+        /** The widget's corner is the pane's: the text keeps clear of it, and no rim is drawn. */
+        private void dress(@NonNull HostedFloatSlot slot) {
+            TerminalSession session = mWindow.active == null ? null : mWindow.active.session;
+            PaneContentFrame frame = session == null ? null : mPaneFrames.get(session);
+            if (frame != null) {
+                frame.setPaneShape(slot.cornerRadiusPx(), false);
+                frame.setRimStrokePx(0f);
+                PaneRim rim = mBorderStates.remove(session);
+                if (rim != null) rim.clear(frame);
+            }
+            TerminalEmulator emulator = session == null ? null : session.getEmulator();
+            int background = emulator != null
+                ? emulator.mColors.mCurrentColors[com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND]
+                : com.termux.terminal.TerminalColors.COLOR_SCHEME
+                    .mDefaultColors[com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND];
+            setBackgroundColor(HomeFloatPolicy.hostedGround(background, slot.groundAlpha()));
+        }
+
+        void leaveSlot() {
+            putLiftBack();
+            if (getParent() instanceof ViewGroup) ((ViewGroup) getParent()).removeView(this);
+            mSlot = null;
+        }
+
+        /** Lifts the widget so the focused float's cursor row clears the keyboard, or puts it back. */
+        void applyLift(boolean focused) {
+            View target = mSlot != null && isInSlot() ? mSlot.liftTarget() : null;
+            if (mLifted != null && mLifted != target) putLiftBack();
+            if (target == null) return;
+            int lift = focused ? liftPx(target) : 0;
+            if (lift == 0) {
+                // Only a lift of this float's own is undone: the grid moves its cells too.
+                if (mLifted == target) putLiftBack();
+                return;
+            }
+            if (target.getTranslationY() != -lift) target.setTranslationY(-lift);
+            mLifted = target;
+        }
+
+        private void putLiftBack() {
+            if (mLifted == null) return;
+            mLifted.setTranslationY(0f);
+            mLifted = null;
+        }
+
+        /**
+         * How far the widget rises: what the cursor row's bottom past the keyboard's top asks, but
+         * never above the room's top nor the top of the grid that clips it. In screen pixels, read
+         * without the lift already applied.
+         */
+        private int liftPx(@NonNull View target) {
+            if (mHomeKeyboardTopOnScreenPx < 0 || mWindow.active == null || !target.isShown())
+                return 0;
+            TerminalView view = mPaneViews.get(mWindow.active.session);
+            TerminalEmulator emulator = view == null ? null : view.mEmulator;
+            if (emulator == null || emulator.mRows <= 0) return 0;
+            int row = Math.max(0, Math.min(emulator.mRows - 1, emulator.getCursorRow()));
+            float rowBottom = view.getRowTopPixels(row) + view.getTerminalCellHeightPixels();
+            float liftedBy = mLifted == target ? target.getTranslationY() : 0f;
+            int[] at = new int[2];
+            view.getLocationOnScreen(at);
+            int cursorBottom = Math.round(at[1] - liftedBy + rowBottom);
+            target.getLocationOnScreen(at);
+            int widgetTop = Math.round(at[1] - liftedBy);
+            int ceiling = mHomeRoomTopOnScreenPx == Integer.MIN_VALUE ? 0
+                : mHomeRoomTopOnScreenPx + mHomeFloatMarginPx;
+            if (target.getParent() instanceof View) {
+                View parent = (View) target.getParent();
+                parent.getLocationOnScreen(at);
+                ceiling = Math.max(ceiling, at[1] + parent.getPaddingTop());
+            }
+            return HomeFloatPolicy.hostedLiftPx(true, cursorBottom, mHomeKeyboardTopOnScreenPx,
+                widgetTop, ceiling);
+        }
     }
 
 
@@ -4717,9 +5004,16 @@ public class TerminalPaneController {
         float radiusPx = paneRadiusPx();
         boolean active = paneGlassActive();
         // NaN and -1: the first pass always shapes the panes, whatever the style turns out to be.
-        for (FrameLayout frame : mPaneFrames.values()) {
+        for (Map.Entry<TerminalSession, PaneContentFrame> entry : mPaneFrames.entrySet()) {
+            PaneContentFrame frame = entry.getValue();
             PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
             if (backdrop == null) continue;
+            // A widget's terminal stands on its widget's card, glass or not: the widget is its
+            // frame and wears the widget's own Glass switch.
+            if (hostedFloatOf(entry.getKey()) != null) {
+                if (backdrop.getVisibility() != View.GONE) backdrop.setVisibility(View.GONE);
+                continue;
+            }
             if (!PaneGlass.apply(mSurfaceStyle, frame, backdrop, radiusPx, true))
                 releasePanePlank(frame);
         }

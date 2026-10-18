@@ -93,6 +93,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         default void cancelHomeFolderRename() { }
         /** Whether a touch at this screen point types into a rename in progress (a key). */
         default boolean isFolderRenameTypingTouch(float rawX, float rawY) { return false; }
+        /**
+         * The edit chrome's remove was tapped on widget {@code appWidgetId}: run {@code remove},
+         * now or once the user agrees (a Terminal widget whose shell is still running something).
+         */
+        default void confirmWidgetRemoval(int appWidgetId, @NonNull Runnable remove) {
+            remove.run();
+        }
     }
 
     /** Where a Home folder's rename lands; the activity's rename intake commits through it. */
@@ -871,7 +878,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 if (edit == null) return;
                 int appWidgetId = edit.appWidgetId;
                 exitEditMode();
-                widgets.removeWidget(appWidgetId);
+                host.confirmWidgetRemoval(appWidgetId, () -> widgets.removeWidget(appWidgetId));
             }
             @Override public void onConfigure() {
                 if (edit == null) return;

@@ -180,6 +180,29 @@ public final class HomeFloatPolicy {
         return Math.max(0, Math.min(wantedPx, floatTopPx - roomTopPx));
     }
 
+    /**
+     * How far a focused terminal widget rises over the keyboard: its cursor row's bottom past
+     * the keyboard's top, never higher than {@code ceilingPx} (the room's top, or the top of the
+     * grid that clips the widget, whichever is lower), nothing while the keyboard is down. A
+     * widget is lifted, never resized: its size is the user's, set in edit mode. All in one
+     * coordinate space, read without any lift applied.
+     */
+    public static int hostedLiftPx(boolean keyboardShown, int cursorRowBottomPx, int keyboardTopPx,
+                                   int widgetTopPx, int ceilingPx) {
+        if (!keyboardShown || keyboardTopPx < 0) return 0;
+        return liftPx(Math.max(0, cursorRowBottomPx - keyboardTopPx), widgetTopPx, ceilingPx);
+    }
+
+    /**
+     * The ground a widget's terminal stands on: the terminal palette's background, so its ink
+     * reads as in the Workspace, at {@code alpha} (whole on a plain card, the card's own
+     * see-through over glass). A palette background left transparent is taken at its colour.
+     */
+    public static int hostedGround(int paletteBackground, int alpha) {
+        int a = Math.max(0, Math.min(255, alpha));
+        return (a << 24) | (paletteBackground & 0x00FFFFFF);
+    }
+
     /** How far above the room's bottom a float may end and still reach it: rounding, not a placement. */
     private static final float FILL_EPSILON = 1e-4f;
 

@@ -40,6 +40,12 @@ public final class BuiltinWidgetServices {
         default void onSystemImeRequested() { }
         /** That dialog is gone: the keyboard with it, and the terminal's own arrangement back. */
         default void onSystemImeReleased() { }
+        /** A Terminal widget came on screen: its shell's pane goes into {@code widget}. */
+        default void attachTerminalWidget(int widgetId, @NonNull TerminalWidgetView widget) { }
+        /** That widget left the screen; its shell keeps running. */
+        default void detachTerminalWidget(int widgetId, @NonNull TerminalWidgetView widget) { }
+        /** The widget's shell had ended and the card was tapped: a new shell for it. */
+        default void restartTerminalWidget(int widgetId) { }
     }
 
     /** A once-a-minute heartbeat, aligned to the system's minute tick. */

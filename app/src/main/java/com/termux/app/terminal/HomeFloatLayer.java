@@ -25,8 +25,8 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
     public interface Listener {
         /** Home page {@code page} is on screen: its floats show, every other page's hide. */
         void onHomePageShown(int page);
-        /** A press went down on Home beside every float. */
-        void onPressBesideFloats();
+        /** A press went down on Home beside every float, at this point on screen. */
+        void onPressBesideFloats(float rawX, float rawY);
     }
 
     @Nullable private Listener mListener;
@@ -74,7 +74,7 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN && mListener != null
             && !holdsPoint(event.getX() + getLeft() + getTranslationX(),
                 event.getY() + getTop() + getTranslationY())) {
-            mListener.onPressBesideFloats();
+            mListener.onPressBesideFloats(event.getRawX(), event.getRawY());
         }
         return super.dispatchTouchEvent(event);
     }

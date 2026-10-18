@@ -22,7 +22,8 @@ public enum BuiltinWidgetKind {
     NOTIFICATIONS("notifications", R.string.builtin_widget_notifications, 2, 2),
     TASKS("tasks", R.string.builtin_widget_tasks, 2, 2),
     NOTES("notes", R.string.builtin_widget_notes, 2, 2),
-    CALENDAR("calendar.month", R.string.builtin_widget_calendar, 2, 2);
+    CALENDAR("calendar.month", R.string.builtin_widget_calendar, 2, 2),
+    TERMINAL("terminal", R.string.builtin_widget_terminal, 4, 2);
 
     @NonNull public final String id;
     @StringRes public final int label;

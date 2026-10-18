@@ -810,6 +810,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private long mLinuxAppsSignature;
     @Nullable private com.termux.app.launcher.widget.LauncherWidgetHostController mWidgetHostController;
     @Nullable private com.termux.app.launcher.widget.WidgetPaneController mWidgetPaneController;
+    /** The Terminal widgets' shells: shown in their widgets, kept, restarted and ended with them. */
+    private final com.termux.app.launcher.widget.builtin.TerminalWidgetCoordinator mTerminalWidgets =
+        new com.termux.app.launcher.widget.builtin.TerminalWidgetCoordinator(new TerminalWidgetHost());
     private static final int REQUEST_CODE_WEATHER_LOCATION = 4711;
     private static final int REQUEST_CODE_VOICE_TYPING = 4712;
     private static final int REQUEST_CODE_WALLPAPER_READ_PERMISSION = 4713;
@@ -9226,6 +9229,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A stopped activity may be finished or killed next: the arrangement is kept for both.
         rememberProcessPaneLayout();
         autosaveArrangementNow();
+        // A Terminal widget's shell starts again where it was if the process dies in the background.
+        mTerminalWidgets.rememberDirectories();
         // From here until the layout we come back to has settled, the panes' sizes are kept as
         // pending: the stop's own geometry (the keyboard's, the dock's IME offset below) and the
         // burst a return brings — insets, frame, fullscreen flags, the keyboard re-measuring, the
@@ -9836,6 +9841,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void armArrangementAutosave() {
         mArrangementAutosaveArmed = true;
         scheduleArrangementAutosave();
+        // The start is settled: Terminal widgets already on screen may find or start their shells
+        // now, once the service connection that settled it has run its course.
+        mArrangementAutosaveHandler.post(mTerminalWidgets::onShellsReady);
     }
 
     /**
@@ -19797,6 +19805,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TerminalSession shell = ts.getTerminalSession();
             if (!com.termux.app.terminal.TerminalPaneController
                 .shouldAdoptAsWindowSession(shell == null ? null : shell.mSessionName)) continue;
+            // A Terminal widget's shell is its widget's, shown there when the widget is.
+            if (mTerminalWidgets.isWidgetShell(shell)) continue;
             if (mPaneController.windowOf(shell) == null) {
                 com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
                 WSession ws = new WSession();
@@ -23474,6 +23484,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mPaneWallController != null && mPaneWallController.widgetsPage() != null) {
                         mPaneWallController.widgetsPage().applyWidgetEditing(editing);
                     }
+                    mTerminalWidgets.onWidgetEditing(editing);
+                }
+                // A Terminal widget whose shell is busy asks before it goes, as a window does.
+                @Override public void confirmWidgetRemoval(int appWidgetId, @NonNull Runnable remove) {
+                    mTerminalWidgets.confirmRemoval(TermuxActivity.this, appWidgetId, remove);
                 }
                 // Home's swipe between Home pages pans the wallpaper over the row, per frame; a
                 // Home page added or removed lands here too as the page re-renders at rest.
@@ -23481,6 +23496,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     syncWallpaperParallax();
                 }
                 @Override public void onWidgetPageRendered() {
+                    // A Terminal widget gone from Home takes its shell with it, however it went.
+                    mTerminalWidgets.reconcile();
                     // The badge, the chips and the summary read the page: a new page or a new
                     // widget changes all three.
                     if (!isWidgetsPageShowing()) return;
@@ -23578,6 +23595,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         @Override @Nullable public android.graphics.Typeface monoTypeface() {
                             TerminalView view = getTerminalView();
                             return view == null ? null : view.getTerminalTypeface();
+                        }
+                        @Override public void attachTerminalWidget(int widgetId,
+                                @NonNull com.termux.app.launcher.widget.builtin.TerminalWidgetView widget) {
+                            mTerminalWidgets.attach(widgetId, widget);
+                        }
+                        @Override public void detachTerminalWidget(int widgetId,
+                                @NonNull com.termux.app.launcher.widget.builtin.TerminalWidgetView widget) {
+                            mTerminalWidgets.detach(widgetId, widget);
+                        }
+                        @Override public void restartTerminalWidget(int widgetId) {
+                            mTerminalWidgets.restart(widgetId);
                         }
                     };
                 }
@@ -25766,12 +25794,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (session == null || mPaneController == null) return false;
         TerminalSession previousFocused = getCurrentSession();
         com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.windowOf(session);
+        if (w != null && w.isHostedFloat()) {
+            // A Terminal widget's shell takes focus by a tap on its widget and no other way: a
+            // return to the launcher (whose fallback is the newest shell, often a widget's) never
+            // hands the keyboard to a widget, least of all one off the page in view.
+            return false;
+        }
         if (w == null) {
             // A scratchpad shell that isn't in any tree is hidden, not new: it belongs to
             // toggleScratchpad as a float, so minting a window session for it here would add a
             // bogus row to the sessions panel.
             if (!com.termux.app.terminal.TerminalPaneController
                 .shouldAdoptAsWindowSession(session.mSessionName)) return false;
+            // Nor is a Terminal widget's shell while its widget is off screen: it is no window.
+            if (mTerminalWidgets.isWidgetShell(session)) return false;
             // New shell -> its own session with one window.
             w = mPaneController.newWindow(session);
             WSession ws = new WSession();
@@ -26703,6 +26739,72 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** Bridges {@link com.termux.app.terminal.TerminalPaneController} back into the activity. */
+    /** What the Terminal widgets' coordinator reads and does through the activity. */
+    private final class TerminalWidgetHost
+            implements com.termux.app.launcher.widget.builtin.TerminalWidgetCoordinator.Host {
+
+        @Override @Nullable public com.termux.app.terminal.TerminalPaneController panes() {
+            return mPaneController;
+        }
+
+        @Override public boolean shellsReady() {
+            // Before the start is settled an empty service is still deciding what to rebuild, and
+            // a widget's shell would make it look busy.
+            return mTermuxService != null
+                && (mArrangementAutosaveArmed || !mTermuxService.isTermuxSessionsEmpty());
+        }
+
+        @Override @Nullable public TerminalSession liveShell(@NonNull String handle) {
+            return mTermuxService == null ? null : mTermuxService.getTerminalSessionForHandle(handle);
+        }
+
+        @Override @Nullable public TerminalSession createShell(@Nullable String cwd) {
+            return createShellForCwd(cwd, null);
+        }
+
+        @Override public void killShell(@NonNull TerminalSession shell) {
+            if (mTermuxService != null) mTermuxService.killTermuxSession(shell);
+        }
+
+        @Override @Nullable public Bundle widgetConfig(int widgetId) {
+            if (mWidgetHostController == null) return null;
+            com.termux.app.launcher.widget.LauncherWidgetRecord record =
+                mWidgetHostController.repository().get(widgetId);
+            return isTerminalWidget(record) ? record.sizeOptions() : null;
+        }
+
+        @Override public void writeWidgetConfig(int widgetId, @NonNull Bundle config) {
+            if (mWidgetHostController != null)
+                mWidgetHostController.updateBuiltinConfig(widgetId, config);
+        }
+
+        @Override @NonNull public java.util.Map<Integer, Bundle> terminalWidgets() {
+            java.util.Map<Integer, Bundle> out = new java.util.HashMap<>();
+            if (mWidgetHostController == null) return out;
+            for (com.termux.app.launcher.widget.LauncherWidgetRecord record
+                    : mWidgetHostController.repository().records()) {
+                if (isTerminalWidget(record)) out.put(record.appWidgetId, record.sizeOptions());
+            }
+            return out;
+        }
+
+        @Override public void ensureFloatRoom() {
+            attachHomeFloatLayer();
+        }
+
+        @Override @Nullable public Boolean isShellIdle(@NonNull TerminalSession shell) {
+            int pid = shell.getPid();
+            return pid < 1 ? null
+                : new com.termux.app.x11.LinuxTerminalAppRunner.ProcfsForegroundState().isIdle(pid);
+        }
+
+        private boolean isTerminalWidget(
+                @Nullable com.termux.app.launcher.widget.LauncherWidgetRecord record) {
+            return record != null && com.termux.app.launcher.widget.builtin.BuiltinWidgetKind
+                .TERMINAL.id.equals(record.builtinKind);
+        }
+    }
+
     private final class PaneHost implements com.termux.app.terminal.TerminalPaneController.Host {
         @Override @Nullable public TerminalSession createShell(@Nullable String cwd) {
             return createShellForCwd(cwd);
@@ -26865,6 +26967,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             out.set(onScreen[0], onScreen[1], onScreen[0] + chip.getWidth(),
                 onScreen[1] + chip.getHeight());
             return true;
+        }
+
+        @Override public void onHostedFloatEnded(int widgetId) {
+            mTerminalWidgets.onShellEnded(widgetId);
         }
 
         @Override public void onHomeFloatFocusReleased() {
