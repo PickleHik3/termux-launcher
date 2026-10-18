@@ -132,6 +132,22 @@ public final class FloatTitlebarView extends FrameLayout {
         return FloatTitlebarPolicy.ACTION_NONE;
     }
 
+    /**
+     * The button action whose reach holds {@code (x, y)}, in this view's coordinates: a button's
+     * column from the strip's top down to {@link FloatTitlebarPolicy#BUTTON_REACH_DP}, past the
+     * strip's own height. The float's container hands a press below the strip to the button.
+     */
+    public int actionInReach(float x, float y) {
+        if (!FloatTitlebarPolicy.inButtonReach(y, getHeight(),
+            dp(FloatTitlebarPolicy.BUTTON_REACH_DP))) return FloatTitlebarPolicy.ACTION_NONE;
+        for (int i = 0; i < mButtons.length; i++) {
+            ImageButton b = mButtons[i];
+            if (b.getVisibility() == VISIBLE && x >= b.getLeft() && x < b.getRight())
+                return mActions[i];
+        }
+        return FloatTitlebarPolicy.ACTION_NONE;
+    }
+
     /** Maximise reads as Restore while the float fills its host. */
     public void setMaximised(boolean maximised) {
         if (mMaximised == maximised) return;

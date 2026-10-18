@@ -207,6 +207,41 @@ public class FloatTitlebarTest {
     }
 
     @Test
+    public void metrics_aThinStripWhoseButtonsStillReachAThumb() {
+        // The strip is the glyph and a little air; the target is the reach, not the strip.
+        android.graphics.drawable.Drawable glyph = context().getDrawable(R.drawable.ic_titlebar_close);
+        float density = context().getResources().getDisplayMetrics().density;
+        assertNotNull(glyph);
+        assertTrue("the glyph fits the strip with air above and below",
+            glyph.getIntrinsicHeight() + 2 * Math.round(2 * density)
+                <= Math.round(FloatTitlebarPolicy.HEIGHT_DP * density));
+        assertTrue("a thumb-sized target", FloatTitlebarPolicy.BUTTON_REACH_DP >= 40);
+        assertTrue("the reach covers the gap under the strip", FloatTitlebarPolicy.BUTTON_REACH_DP
+            > FloatTitlebarPolicy.HEIGHT_DP + FloatTitlebarPolicy.GAP_DP);
+
+        assertTrue(FloatTitlebarPolicy.inButtonReach(0f, 24, 40));
+        assertTrue(FloatTitlebarPolicy.inButtonReach(39.5f, 24, 40));
+        assertFalse(FloatTitlebarPolicy.inButtonReach(40f, 24, 40));
+        assertFalse("never above the strip", FloatTitlebarPolicy.inButtonReach(-1f, 24, 40));
+        assertTrue("a strip taller than the reach is its own reach",
+            FloatTitlebarPolicy.inButtonReach(50f, 60, 40));
+    }
+
+    @Test
+    public void actionInReach_takesAPressJustUnderAButtonButNotUnderTheHandle() {
+        FloatTitlebarView strip = laidOut(strip(false, new ArrayList<>()), 1000);
+        ImageButton close = strip.buttonFor(FloatTitlebarPolicy.ACTION_CLOSE);
+        float density = context().getResources().getDisplayMetrics().density;
+        float reach = FloatTitlebarPolicy.BUTTON_REACH_DP * density;
+        float x = (close.getLeft() + close.getRight()) / 2f;
+        assertEquals(FloatTitlebarPolicy.ACTION_CLOSE, strip.actionInReach(x, strip.getHeight() + 1f));
+        assertEquals(FloatTitlebarPolicy.ACTION_CLOSE, strip.actionInReach(x, reach - 1f));
+        assertEquals(FloatTitlebarPolicy.ACTION_NONE, strip.actionInReach(x, reach + 1f));
+        assertEquals("the handle's span reaches nothing",
+            FloatTitlebarPolicy.ACTION_NONE, strip.actionInReach(10f, strip.getHeight() + 1f));
+    }
+
+    @Test
     public void narrowStrip_stillFitsEveryButton() {
         FloatTitlebarView strip = laidOut(strip(true, new ArrayList<>()), 90);
         ImageButton minimise = strip.buttonFor(FloatTitlebarPolicy.ACTION_MINIMISE);

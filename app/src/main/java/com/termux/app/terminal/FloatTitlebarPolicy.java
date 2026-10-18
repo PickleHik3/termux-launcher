@@ -30,14 +30,24 @@ public final class FloatTitlebarPolicy {
     public static final int ACTION_DOCK = 3;
     public static final int ACTION_CLOSE = 4;
 
-    /** The strip's height: one row of buttons, tall enough to grab with a thumb. */
-    public static final int HEIGHT_DP = 32;
+    /**
+     * The strip's height: one row of the 18dp glyphs with 3dp of air above and below. The strip
+     * carries no text, so the font scale never asks for more; a thumb's target is
+     * {@link #BUTTON_REACH_DP}, not this.
+     */
+    public static final int HEIGHT_DP = 24;
     /** The air between the strip and the pane under it, so each reads as its own slab. */
     public static final int GAP_DP = 3;
     /** The width a button takes while the float is wide enough for every button at full size. */
     public static final int BUTTON_DP = 40;
     /** The drag handle's grip bar, drawn in the strip's free span when the span can hold it. */
     public static final int GRIP_WIDTH_DP = 28;
+    /**
+     * How far down from the strip's top a button still takes a press: a thumb-sized target on a
+     * thin strip. Past the strip it reaches over the gap and the pane's top edge, under the
+     * buttons only; the rest of the pane's top stays the terminal's.
+     */
+    public static final int BUTTON_REACH_DP = 40;
 
     /**
      * The buttons a titlebar shows, leading to trailing, all at the trailing end with Close
@@ -68,6 +78,14 @@ public final class FloatTitlebarPolicy {
     public static int buttonSlotPx(int stripWidthPx, int count, int preferredPx) {
         if (count <= 0 || stripWidthPx <= 0) return 0;
         return Math.max(0, Math.min(preferredPx, stripWidthPx / count));
+    }
+
+    /**
+     * Whether a press {@code yPx} below the strip's top is within a button's reach: inside the
+     * strip, or below it as far as {@code reachPx} from its top. Never above the strip.
+     */
+    public static boolean inButtonReach(float yPx, int stripHeightPx, int reachPx) {
+        return yPx >= 0f && yPx < Math.max(stripHeightPx, reachPx);
     }
 
     /**
