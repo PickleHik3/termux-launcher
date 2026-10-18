@@ -10,10 +10,17 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
+import androidx.core.content.ContextCompat;
+
+import com.google.android.material.color.MaterialColors;
 
 import com.termux.R;
+import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.ChromeShade;
 import com.termux.app.launcher.LauncherAppLauncher;
 import com.termux.app.launcher.folder.FolderRenameModel;
 import com.termux.app.launcher.folder.FolderRenameTitleView;
@@ -24,6 +31,8 @@ import com.termux.app.launcher.popup.AnchoredMenuTheme;
 import com.termux.app.launcher.popup.MenuRow;
 import com.termux.app.launcher.popup.MenuRowFactory;
 import com.termux.app.launcher.popup.MenuSpec;
+import com.termux.app.material.M3;
+import com.termux.app.terminal.FloatTitlebarPolicy;
 
 import java.util.Collections;
 import java.util.List;
@@ -101,8 +110,9 @@ final class HomeFolderPopup {
         folderId = folder.appWidgetId;
         LinearLayout shell = rows.newShell();
 
+        int ink = resolveInk();
         FolderRenameTitleView name = new FolderRenameTitleView(context);
-        name.setTextColor(theme.textColor());
+        name.setTextColor(ink);
         name.setPadding(dp(8), 0, dp(8), 0);
         name.bind(new FolderRenameModel(folder.folderName()), false);
         final int id = folder.appWidgetId;
@@ -122,7 +132,7 @@ final class HomeFolderPopup {
                 shell.addView(row, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             }
-            row.addView(cellFor(id, apps.get(i)),
+            row.addView(cellFor(id, apps.get(i), ink),
                 new LinearLayout.LayoutParams(dp(CELL_WIDTH_DP), dp(CELL_HEIGHT_DP)));
         }
 
@@ -182,6 +192,51 @@ final class HomeFolderPopup {
         dismiss();
     }
 
+    /**
+     * The ink of the popup's title, its rename draft and its app labels: the titlebar's rule on the
+     * chrome's polarity, as the capsule status bar takes it ({@link FloatTitlebarPolicy#glyphInk},
+     * as on a focused float). On a panel the wallpaper shows through
+     * ({@link #wallpaperShowsThrough}), once the chrome's polarity is published, it is the theme's
+     * neutral on that polarity: the wallpaper through the panel is what the eye reads the ink
+     * against, and the theme's onSurface alone came out dark on dark glass over a dark wallpaper.
+     * On a panel whose own colour is most of what is seen, or before any polarity is published, it
+     * is onSurface made legible on that colour ({@code surface}, opaque).
+     */
+    @ColorInt
+    @VisibleForTesting
+    static int ink(boolean throughGlass, @Nullable ChromeInk.Polarity polarity,
+                   @ColorInt int onSurface, @ColorInt int surfaceBase, @ColorInt int surface) {
+        return FloatTitlebarPolicy.glyphInk(throughGlass, polarity, onSurface, surfaceBase,
+            surface, true);
+    }
+
+    /**
+     * Whether the wallpaper is most of what is seen through a panel at {@code opacityPercent}: the
+     * capsule's tint is faint, but this panel's opacity is the dock's own setting (43 by default)
+     * and a dark plate at 80 over a light wallpaper is a dark ground whatever the polarity says.
+     */
+    @VisibleForTesting
+    static boolean wallpaperShowsThrough(int opacityPercent) {
+        return opacityPercent < 50;
+    }
+
+    /** {@link #ink} for this popup's panel, on the polarity published now. */
+    @ColorInt
+    private int resolveInk() {
+        Context context = host.getContext();
+        boolean plate = theme.blurEnabled() && theme.blurRadiusDp() > 0;
+        boolean throughGlass = wallpaperShowsThrough(theme.opacityPercent());
+        int onSurface = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnSurface,
+            ContextCompat.getColor(context, R.color.termux_on_surface));
+        int surfaceBase = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfaceBase,
+            ContextCompat.getColor(context, R.color.termux_surface_base));
+        // The panel's own colour, opaque: the plate's tint, or the plain menu surface.
+        int surface = plate ? (0xFF000000 | TINT_BASE) : (0xFF000000 | M3.surfaceContainer(context));
+        return ink(throughGlass, ChromeShade.polarity(), onSurface, surfaceBase, surface);
+    }
+
     /** The title view of the popup on screen, for a rename that ended to draw the name again. */
     @Nullable FolderRenameTitleView title() { return title; }
 
@@ -196,15 +251,15 @@ final class HomeFolderPopup {
     }
 
     @NonNull
-    private View cellFor(int id, @NonNull LauncherWidgetRecord.FolderApp member) {
+    private View cellFor(int id, @NonNull LauncherWidgetRecord.FolderApp member,
+                         @ColorInt int ink) {
         HomeAppIconView cell = new HomeAppIconView(host.getContext());
         LauncherAppEntry entry = icons.entryFor(member);
         boolean gone = entry == null && icons.catalogueLoaded();
         String label = entry != null ? entry.label : member.label;
         cell.bind(icons.artworkFor(entry), label, gone);
-        // The label is drawn on the popup's glass, not over a wallpaper: the theme's ink, no
-        // shadow, so it reads in a light theme too.
-        tintLabel(cell, theme.textColor());
+        // The label is drawn on the popup's glass: the popup's ink, no shadow.
+        tintLabel(cell, ink);
         final LauncherAppEntry launch = entry != null ? entry
             : new LauncherAppEntry(member.app(), label, null);
         cell.setOnClickListener(v -> {
