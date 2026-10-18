@@ -523,6 +523,17 @@ Not seen: everything else listed under the sections below.
 
 ## Developer
 
+- 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners
+  and Margin; Margin as the one air on Home) · On pong, release build: Settings → Start in =
+  Workspace, then a true cold start (swipe the app away or reboot, not a force-stop): the
+  Workspace opens with its chrome, no Home flash. A 6-column widget grid at the seeded Margin
+  (your Workspace's, 12 dp by default): the cap on pong's 386 dp wall is 5, so the grid reflows
+  once on the upgrade; judge whether six should survive (Margin ≤ 7 dp keeps it, or a 53 dp
+  minimum cell). Open Appearance over a Home page and set Home apart (Floating, Margin ~24):
+  dock cards, keyboard, a Home float's room and the widget rim move together, and the Workspace
+  keeps its own; the capsule status bar with a float open wears Home's Margin. Dark theme and a
+  rotation with Home set apart; font scale 1.5 truncates the built-in Clock's date line (time
+  intact), say whether that is acceptable · pong, by hand.
 - 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" · With the switch
   on, the edge reads as light, not an outline. Also record whether floating panels still stand
   apart from a white wallpaper: that is Round 5's gate · pong, release build.
