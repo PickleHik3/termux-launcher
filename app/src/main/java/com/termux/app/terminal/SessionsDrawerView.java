@@ -100,6 +100,13 @@ public final class SessionsDrawerView extends LinearLayout
          * nothing summons a keyboard on its behalf until there is somewhere for one to type.
          */
         void onTypingStarted();
+
+        /**
+         * The Saved half came into view, by its segment or by a door that opens on it: the saved
+         * files are read now, whichever way the drawer was opened, so the half never shows an
+         * empty list it was simply never given.
+         */
+        default void onSavedTabShown() {}
     }
 
     private static final float TITLE_SP = 14f;
@@ -246,6 +253,7 @@ public final class SessionsDrawerView extends LinearLayout
         mTab = tab;
         collapseAll();
         rebuild();
+        if (tab == Tab.SAVED && mListener != null) mListener.onSavedTabShown();
     }
 
     /** Which session has unfolded its actions, and what it unfolded. */

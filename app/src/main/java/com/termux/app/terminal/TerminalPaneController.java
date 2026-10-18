@@ -3613,8 +3613,13 @@ public class TerminalPaneController {
         float hostHeight = room.height();
         RectF frac = leaf.floatFrac != null ? leaf.floatFrac : defaultFloatFrac(0);
         if (hostWidth > 0f && hostHeight > 0f) {
-            frac = clampFloatFractions(frac, hostWidth, hostHeight,
-                dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), dp(FLOAT_MIN_VISIBLE_DP));
+            // A Home float stays inside its room on every side (HomeFloatPolicy.clampInRoom); a
+            // window's floating pane may still hang off sideways by all but its handle.
+            frac = container.mHomeFloat != null
+                ? HomeFloatPolicy.clampInRoom(frac, hostWidth, hostHeight,
+                    dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), false)
+                : clampFloatFractions(frac, hostWidth, hostHeight,
+                    dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), dp(FLOAT_MIN_VISIBLE_DP));
             // Deliberately NOT written back into leaf.floatFrac. The clamp is a projection of the
             // user's shape onto the current host, not new intent from the user — writing it back is
             // what ratcheted the scratchpad smaller every time the keyboard opened and closed.
@@ -6386,8 +6391,13 @@ public class TerminalPaneController {
                         candidate.right += dx;
                         candidate.bottom += dy;
                     }
-                    mLeaf.floatFrac = clampFloatFractions(candidate, hostWidth, hostHeight,
-                        dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), dp(FLOAT_MIN_VISIBLE_DP));
+                    mLeaf.floatFrac = mHomeFloat != null
+                        ? HomeFloatPolicy.clampInRoom(candidate, hostWidth, hostHeight,
+                            dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP),
+                            mDragMode == DRAG_RESIZE)
+                        : clampFloatFractions(candidate, hostWidth, hostHeight,
+                            dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP),
+                            dp(FLOAT_MIN_VISIBLE_DP));
                     // Moved or resized off the full room by hand, the float is no longer
                     // maximised: Maximise starts over from this shape rather than jumping back.
                     if (mLeaf.floatRestoreFrac != null

@@ -553,6 +553,11 @@ Not seen: everything else listed under the sections below.
   `nudgeTerminalPage`); a one-frame 40–50 px blip at a drag's end. Not seen: the Display page,
   dark theme, keyboard up, Reduce motion. Once, three `sh` windows fell to one after a slow swipe
   and taps, not reproduced.
+- Owed · re-check of the 1 → 3 jump (commit "fix(wall): a window-bar jump starts its nudge before
+  the wallpaper re-syncs"): the departure was already reaching `nudgeTerminalPage`; the nudge now
+  starts before `rebuildDrawerSessions`' re-sync. Log the offsets of a 1 → 2 jump beside the
+  1 → 3 one: a first step of about 73 % on both is the emulator's slow first frame on the settle
+  curve, not a snap, and needs a pacing fix, not this one.
 ### Wall rework phase two: slice 4, Saved sessions keep Home floats (feat/wall-rework-phase2)
 - Owed · commits "feat(wall): saved sessions record a Home float's page and shape (v4)" and
   "feat(wall): a saved Home float loads back as a Home float on its page" · emulator, portrait,
@@ -597,6 +602,18 @@ Not seen: everything else listed under the sections below.
   (5) chips on a deleted page keep "home · 2" until the next Replace; (6) the Save card's "Also
   save what is running" sits below its buttons; (7) the built-in Clock in landscape stacks "11"
   over "38" in a wide pill.
+- Owed · re-check of (2), commit "fix(wall): the last shell closing shows Home instead of
+  finishing the activity": the service stopped itself with its last shell and the activity
+  finished on the disconnect. With an empty Workspace close the last window (bar ×, `exit`), then
+  separately the last Home float (Close, `exit`): the last Home page shows, the launcher stays, the
+  notification reads 0 sessions; the Terminal entry opens a fresh window. The notification's Exit
+  still closes the app.
+- Owed · re-check of (3), commit "fix(wall): a Home float stays inside its room when dragged": in
+  landscape and portrait a full-width float does not move sideways at all; a smaller one stops at
+  each edge of the room with its titlebar whole; a corner resize stops at the room's edge.
+- Owed · re-check of (1), commit "fix(sessions): the drawer's Saved half reads the saved files
+  whenever it is shown" (the bug dates from 93c031139, 2026-09-13, before the wall rework): open
+  the drawer from the list key, tap Saved: the files are listed.
 ### Wall rework phase two: slice 5a, window reorder by drag in the window bar (feat/wall-rework-phase2)
 - Owed · commits "feat(wall): window reorder policy and moving a window in the row", "feat(wall):
   drag a window's chip along the window bar to reorder the row" and "feat(wall): window.move verb

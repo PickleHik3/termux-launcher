@@ -183,4 +183,19 @@ public final class WallRow {
                                                boolean launchAsksForSession) {
         return sessionsEmpty && (!firstShellStarted || launchAsksForSession);
     }
+
+    /**
+     * What closing the Workspace's last shell — the last window, the last Home float, or an
+     * {@code exit} in either — leaves on screen: Home's last page ({@code true}), or nothing, the
+     * activity finishing as plain Termux does ({@code false}). Home stays whenever there is a Home
+     * to show: the wall has Home pages ({@code hasHomePages}), or the launcher is the phone's home
+     * app ({@code isHomeApp}), whose home press would only bring it straight back. Only a launcher
+     * with no Home at all ends with its last shell.
+     *
+     * <p>The terminal service stops itself when it holds no shell and the activity finishes when
+     * its service goes, so this is also whether the service keeps running with no shell.
+     */
+    public static boolean lastShellClosedShowsHome(boolean hasHomePages, boolean isHomeApp) {
+        return hasHomePages || isHomeApp;
+    }
 }

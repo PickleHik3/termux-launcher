@@ -86,6 +86,48 @@ public final class HomeFloatPolicy {
     }
 
     /**
+     * A Home float's shape {@code candidate}, fractions of its room ({@code roomWidthPx} by
+     * {@code roomHeightPx}), held inside that room: a float never hangs off any side of it, so its
+     * titlebar, its buttons and its text stay on screen in either orientation. A float as wide (or
+     * tall) as its room cannot move along that axis at all; a smaller one moves up to the room's
+     * edges and no further. Never smaller than {@code minWidthPx} by {@code minHeightPx}, nor
+     * larger than the room.
+     *
+     * <p>A move ({@code resizing} false) keeps the float's size and stops it at the edge it runs
+     * into. A resize keeps its top-left corner (inside the room, with room for the minimum size)
+     * and stops its bottom-right corner at the room's edge, so dragging the corner past the edge
+     * does not shove the float the other way.
+     *
+     * <p>Stricter than {@link TerminalPaneController#clampFloatFractions} on purpose: that clamp
+     * lets a window's floating pane hang off sideways while 48 dp of its handle stays reachable,
+     * and on a Home float, whose room is the whole screen's width, that let a full-width float be
+     * dragged until its titlebar and text were clipped off the screen.
+     */
+    @NonNull
+    public static RectF clampInRoom(@NonNull RectF candidate, float roomWidthPx, float roomHeightPx,
+                                    float minWidthPx, float minHeightPx, boolean resizing) {
+        if (roomWidthPx <= 0f || roomHeightPx <= 0f) return new RectF(candidate);
+        float minWidth = Math.max(0f, Math.min(1f, minWidthPx / roomWidthPx));
+        float minHeight = Math.max(0f, Math.min(1f, minHeightPx / roomHeightPx));
+        if (resizing) {
+            float left = clamp(candidate.left, 0f, 1f - minWidth);
+            float top = clamp(candidate.top, 0f, 1f - minHeight);
+            float right = clamp(candidate.right, left + minWidth, 1f);
+            float bottom = clamp(candidate.bottom, top + minHeight, 1f);
+            return new RectF(left, top, right, bottom);
+        }
+        float width = clamp(candidate.width(), minWidth, 1f);
+        float height = clamp(candidate.height(), minHeight, 1f);
+        float left = clamp(candidate.left, 0f, 1f - width);
+        float top = clamp(candidate.top, 0f, 1f - height);
+        return new RectF(left, top, Math.min(1f, left + width), Math.min(1f, top + height));
+    }
+
+    private static float clamp(float value, float low, float high) {
+        return Math.max(low, Math.min(high, value));
+    }
+
+    /**
      * How far the focused float rises over the keyboard: what its cursor row asks
      * ({@code wantedPx}), but never past the room's top, so the titlebar stays below the status
      * bar with its buttons in reach. {@code floatTopPx} and {@code roomTopPx} are the float's

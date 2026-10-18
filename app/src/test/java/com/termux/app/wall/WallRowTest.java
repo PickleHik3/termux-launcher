@@ -115,6 +115,19 @@ public class WallRowTest {
             WallRow.restore(WallRow.HALF_WORKSPACE, 0, 3, 0, false));
     }
 
+    /**
+     * The last window or float closing with nothing else open: Home shows, and the service (and
+     * the activity bound to it) stays, unless there is no Home at all (slice 4 pass, finding A).
+     */
+    @Test
+    public void theLastShellClosingShowsHomeWheneverThereIsAHome() {
+        assertTrue("Home pages on the wall", WallRow.lastShellClosedShowsHome(true, false));
+        assertTrue("the phone's home app", WallRow.lastShellClosedShowsHome(false, true));
+        assertTrue(WallRow.lastShellClosedShowsHome(true, true));
+        assertFalse("no Home at all: plain Termux's end",
+            WallRow.lastShellClosedShowsHome(false, false));
+    }
+
     @Test
     public void unknownSavedNamesFallBackToHomePageOne() {
         assertEquals(WallRow.homePage(0), WallRow.restore("TERMINAL", 2, 3, 3, true));

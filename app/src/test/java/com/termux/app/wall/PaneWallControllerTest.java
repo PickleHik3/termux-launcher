@@ -616,6 +616,27 @@ public class PaneWallControllerTest {
         idle();
     }
 
+    /**
+     * A two-window jump from the bar (window 1 to window 3, row 3 to row 5) pans over both steps:
+     * wherever the arriving window stands on its way in, the row stands as far along from the
+     * departure, through window 2 at half way, never at the arrival before the window is there
+     * (slice 3 pass, finding D). Each nudge is started at that point of the way in rather than
+     * stepped frame by frame: under Robolectric the nudge's animator ends on its first frame.
+     */
+    @Test public void aTwoWindowJumpPansFromTheDepartureAcrossWindowTwoToTheArrival() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        host.current = 2;
+        float[] leftToTravel = {1f, 0.75f, 0.5f, 0.25f};
+        float[] rowAt = {3f, 3.5f, 4f, 4.5f};
+        for (int i = 0; i < leftToTravel.length; i++) {
+            controller.nudgeTerminalPage(1080f * leftToTravel[i], 0, 300L, null, null);
+            assertEquals("a window " + leftToTravel[i] + " of a width out", rowAt[i],
+                controller.rowPosition(), ROW_EPS);
+        }
+        idle();
+        assertEquals(5f, controller.rowPosition(), ROW_EPS);
+    }
+
     private static void letTheHoldElapse() {
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
             java.time.Duration.ofMillis(com.termux.view.HoldTiming.holdTimeoutMs() + 20L));
