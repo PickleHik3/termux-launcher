@@ -618,6 +618,17 @@ Not seen: everything else listed under the sections below.
 - Owed · overflow: with 8 windows, so the bar scrolls, lift the first chip and hold it near the
   bar's right edge: the strip scrolls under it until the end, the chips part as it passes them,
   and the release lands it where it shows.
+- Seen 2026-10-18 (56bc8e6b4, emulator, device-checker): dragging window 1's chip past the
+  other two reorders the bar, the current window follows (third, still selected), the border drag
+  and the drawer's Live list agree, Save then Load keeps the order, the palette's Move window
+  left/right move one place, a tap still switches, a returned or vertical drag changes nothing,
+  the Display and Home float chips never lift, and with 12 windows the strip auto-scrolls at the
+  right edge and the chip drops last. Found: a long press on a float's or the Display's chip leaks
+  to the terminal under the bar (a "Text selected" toast and the selection menu; the toast lingers
+  on Home); the Saved tab empty right after a save (the list-key route, as in slice 4); the palette's
+  Move window left/right are not adjacent in the results; the folded bar's description once read a
+  blank window label. Not seen: the left-edge auto-scroll, `window.move to=` from a keybinding,
+  dark theme, large text, rotation.
 ### Wall rework phase two: slice 5b, consume and expel (feat/wall-rework-phase2)
 - Owed · commits "feat(wall): consume a neighbour window into this one, expel a pane into its own"
   and "feat(wall): pane.consume and pane.expel verbs, palette rows and Niri keys" · emulator,
