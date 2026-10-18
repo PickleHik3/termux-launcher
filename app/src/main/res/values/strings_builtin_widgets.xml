@@ -13,6 +13,13 @@
     <string name="builtin_widget_tasks">Tasks</string>
     <string name="builtin_widget_notes">Scratchpad</string>
     <string name="builtin_widget_calendar">Calendar</string>
+    <string name="builtin_widget_terminal">Terminal</string>
+
+    <!-- The Terminal widget. -->
+    <string name="terminal_widget_ended">Session ended. Tap to start a new one.</string>
+    <string name="terminal_widget_remove_title">Remove Terminal?</string>
+    <string name="terminal_widget_remove_running_message">Something is still running in this terminal.</string>
+    <string name="terminal_widget_remove">Remove</string>
 
     <string name="builtin_widget_settings_save">Save</string>
     <string name="builtin_widget_settings_title">%1$s settings</string>

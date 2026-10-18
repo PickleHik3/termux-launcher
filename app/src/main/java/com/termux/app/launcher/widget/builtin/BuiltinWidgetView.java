@@ -85,6 +85,8 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     /** The cells the widget spans on its grid; the bucket is chosen from them and the room. */
     private int cellColumns = 1, cellRows = 1;
     @NonNull private Bundle config = new Bundle();
+    /** The record this view draws, or {@link #NO_WIDGET_ID} for a picker preview. */
+    private int widgetId = NO_WIDGET_ID;
     private boolean preview;
     private boolean built;
     private boolean started;
@@ -244,14 +246,16 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         // so the old layout never shows at the new size. Measured once more for the new layout.
         if (measuredOnce && built && wantedSpan != span) {
             span = wantedSpan;
-            rebuild();
-            int wasWidth = getMeasuredWidth();
-            int wasHeight = getMeasuredHeight();
-            measureCard(lastWidthSpec, lastHeightSpec);
-            // Only a card that wraps its content can change size with its layout; the parent
-            // hears of it on the next pass.
-            if (getMeasuredWidth() != wasWidth || getMeasuredHeight() != wasHeight) {
-                post(this::requestLayout);
+            if (rebuildsForSpan()) {
+                rebuild();
+                int wasWidth = getMeasuredWidth();
+                int wasHeight = getMeasuredHeight();
+                measureCard(lastWidthSpec, lastHeightSpec);
+                // Only a card that wraps its content can change size with its layout; the parent
+                // hears of it on the next pass.
+                if (getMeasuredWidth() != wasWidth || getMeasuredHeight() != wasHeight) {
+                    post(this::requestLayout);
+                }
             }
         }
         if (slab != null) slab.layout(0, 0, right - left, bottom - top);
@@ -433,6 +437,26 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         if (slab.getVisibility() != VISIBLE) slab.setVisibility(VISIBLE);
     }
 
+    /** {@link #widgetId()} of a view no record stands behind. */
+    public static final int NO_WIDGET_ID = Integer.MIN_VALUE;
+
+    /** The record this view draws; set by the host before the first bind. */
+    public final void setWidgetId(int id) { widgetId = id; }
+
+    /** The record this view draws, or {@link #NO_WIDGET_ID}. */
+    public final int widgetId() { return widgetId; }
+
+    /**
+     * Whether a settings key is the widget's own state rather than a setting: kept in the record
+     * beside the settings, carried through the settings sheet, but never a reason to rebuild.
+     */
+    public static boolean isStateKey(@NonNull String key) {
+        return key.startsWith(STATE_KEY_PREFIX);
+    }
+
+    /** What every state key starts with ({@link #isStateKey}). */
+    public static final String STATE_KEY_PREFIX = "_";
+
     /** Render as a picker card: no live subscriptions, sample data where there is none. */
     public final void setPreview(boolean value) { preview = value; }
     public final boolean isPreview() { return preview; }
@@ -459,6 +483,12 @@ public abstract class BuiltinWidgetView extends FrameLayout {
      * would narrow the room it grows into.
      */
     protected boolean zoomsToFill(@NonNull BuiltinWidgetSpan span) { return true; }
+
+    /**
+     * Whether a new size bucket builds the layout again. A widget whose one layout fills every
+     * size says no, and keeps what it holds across a resize.
+     */
+    protected boolean rebuildsForSpan() { return true; }
 
     /** The settings this widget offers; empty means no cog in edit mode. */
     @NonNull public List<ConfigField> configFields() { return Collections.emptyList(); }
@@ -549,9 +579,12 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         setOnClickListener(v -> onTap());
     }
 
-    private static boolean sameConfig(@NonNull Bundle a, @NonNull Bundle b) {
-        if (a.size() != b.size()) return false;
-        for (String key : a.keySet()) {
+    /** Whether two settings bundles hold the same settings, the widget's own state left out. */
+    static boolean sameConfig(@NonNull Bundle a, @NonNull Bundle b) {
+        java.util.Set<String> keys = new java.util.HashSet<>(a.keySet());
+        keys.addAll(b.keySet());
+        for (String key : keys) {
+            if (isStateKey(key)) continue;
             Object left = a.get(key), right = b.get(key);
             if (left == null ? right != null : !left.equals(right)) return false;
         }
