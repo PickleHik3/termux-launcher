@@ -22313,8 +22313,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Terminal on Home (its long-press menu, the Terminal entry's New float here and its tap into
      * an empty Workspace, the palette's Open terminal here, and any new terminal or window a
-     * keybind or the local API asks for while Home is in front): a Home float on the Home page in view, born full-size between the status
-     * bar and the dock, focused, with the keyboard overlay up. It is a window of the current
+     * keybind or the local API asks for while Home is in front): a Home float on the Home page in
+     * view, born a window inside the room between the status bar and the dock, focused, with the
+     * keyboard overlay up and the float ending above it. It is a window of the current
      * session but not of the row: the Workspace neither gains it nor is needed for it.
      */
     boolean openHomeFloatHere() {
