@@ -49,7 +49,24 @@ import com.termux.view.HoldTiming;
  * wheels that change it. Everything between the corners is the widgets': a grid that reaches the
  * rim is touchable to its last pixel.
  */
-public final class WidgetPaneFrame extends PaneContentFrame {
+public final class WidgetPaneFrame extends PaneContentFrame
+    implements com.termux.app.launcher.widget.builtin.BuiltinWidgetView.GlassSource {
+
+    /** The built-in widgets on this page wearing their own glass, fed with the page's. */
+    private final java.util.Set<com.termux.app.launcher.widget.builtin.BuiltinWidgetView>
+        mGlassWidgets = new java.util.LinkedHashSet<>();
+
+    @Nullable @Override public PaneSurfaceStyle widgetGlassStyle() { return mStyle; }
+
+    @Override public void addGlassWidget(
+            @NonNull com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget) {
+        mGlassWidgets.add(widget);
+    }
+
+    @Override public void removeGlassWidget(
+            @NonNull com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget) {
+        mGlassWidgets.remove(widget);
+    }
 
     /** What the page needs from the launcher. */
     public interface Host {
@@ -626,6 +643,10 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         // border as the status bar, dock and keyboard, never the focus colour.
         if (border) mRim.apply(this, glass, radiusPx, PaneBorderStyle.lone(), style);
         else mRim.clear(this);
+        // The widgets wearing their own glass take the frame this pass hands out, in the same
+        // pass as every pane, so none of them is left drawing a frame the cache has let go.
+        for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget : mGlassWidgets)
+            widget.onGlassStyle(style);
     }
 
     /**
@@ -634,6 +655,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
      */
     public void onWallMoved() {
         if (mGlass != null) mGlass.invalidateGlassPosition();
+        for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget : mGlassWidgets)
+            widget.onGlassMoved();
         if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
     }
 

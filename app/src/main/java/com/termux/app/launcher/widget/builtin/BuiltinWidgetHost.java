@@ -98,13 +98,12 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
     /** The live view for {@code appWidgetId}, when it is on the page now. */
     @Nullable public BuiltinWidgetView viewOf(int appWidgetId) { return views.get(appWidgetId); }
 
-    /** True when the widget offers settings, so edit mode shows its cog. */
+    /**
+     * True when the widget offers settings, so edit mode shows its cog: every built-in this build
+     * knows, since each carries its Glass switch ({@link BuiltinWidgetGlass}).
+     */
     public boolean hasSettings(@NonNull LauncherWidgetRecord record) {
-        BuiltinWidgetView view = views.get(record.appWidgetId);
-        if (view != null) return !view.configFields().isEmpty();
-        BuiltinWidgetKind kind = BuiltinWidgetKind.fromId(record.builtinKind);
-        if (kind == null) return false;
-        return !BuiltinWidgetFactory.create(context, kind, services, style()).configFields().isEmpty();
+        return BuiltinWidgetKind.fromId(record.builtinKind) != null;
     }
 
     /** The settings sheet's fields for {@code record}, from its live view or a throwaway one. */
