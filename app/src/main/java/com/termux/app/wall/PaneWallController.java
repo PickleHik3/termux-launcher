@@ -173,6 +173,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
+     * The terminal's pane host as the wall's middle page, with where its panes stand along its
+     * bottom border, so that border's glow lies under the pane pressed ({@link PaneEdges}).
+     */
+    public void attachTerminalPage(@NonNull View paneHost, @Nullable PaneEdges edges) {
+        mWall.setTerminalPaneEdges(edges);
+        attachTerminalPage(paneHost);
+    }
+
+    /**
      * Re-read what decides the row: whether there is a window, and whether a display is up. A
      * page that leaves while the wall rests on it hands the wall to the page on its left, turned
      * to its last: the last window when the display goes down, the last Home page when the last

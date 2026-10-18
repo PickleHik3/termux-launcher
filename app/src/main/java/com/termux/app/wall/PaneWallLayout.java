@@ -321,6 +321,15 @@ public final class PaneWallLayout extends ViewGroup {
     private int mGlowPageWidth;
     private int mGlowPageHeight;
     /**
+     * Where the bottom border's glow lies for the press that lit it, in its page's own pixels: the
+     * pressed pane's {@code left, right, bottom} ({@link PaneEdges}), and how far down the air
+     * below the page reached ({@link BorderGlow#belowBand}).
+     */
+    private final float[] mGlowEdge = new float[3];
+    private float mGlowAirBottom;
+    /** Where the terminal page's panes stand along its bottom border; null: the page's frame. */
+    @Nullable private PaneEdges mTerminalEdges;
+    /**
      * The status bar's fold the finger drives ({@link Listener#onStatusFoldBegin}): its whole way
      * in px from the claim to the lift, 0 while no fold is engaged. The fold is carried on the
      * keyboard's reveal arithmetic ({@link KeyboardReveal}) with the direction turned over, since
@@ -439,6 +448,11 @@ public final class PaneWallLayout extends ViewGroup {
         if (view == null) mPageViews.remove(page);
         else mPageViews.put(page, view);
         applyPagePositions();
+    }
+
+    /** Where the terminal page's panes stand, for the bottom border's glow ({@link PaneEdges}). */
+    public void setTerminalPaneEdges(@Nullable PaneEdges edges) {
+        mTerminalEdges = edges;
     }
 
     @Nullable
@@ -984,6 +998,7 @@ public final class PaneWallLayout extends ViewGroup {
             mGlowPage = mPageViews.get(mCurrent);
             mGlowPageWidth = mGlowPage == null ? 0 : mGlowPage.getWidth();
             mGlowPageHeight = mGlowPage == null ? 0 : mGlowPage.getHeight();
+            loadGlowEdge(mGlowPage, event.getX());
             if (mBorderDrag.slidePages()) {
                 mGlow.light(mBorderDrag.border());
             } else {
@@ -1548,6 +1563,25 @@ public final class PaneWallLayout extends ViewGroup {
     // ---- The hold's glow ---------------------------------------------------------------------
 
     /**
+     * Where the bottom border's glow goes for a press at the wall's {@code x} on {@code page}:
+     * under the pane there ({@link PaneEdges}), or under the whole page where it has no panes of
+     * its own; and the air below the page, down to the wall's own bottom edge, which meets the
+     * dock, the keyboard or the screen's edge. Measured at the press, in the page's own pixels.
+     */
+    private void loadGlowEdge(@Nullable View page, float x) {
+        mGlowAirBottom = 0f;
+        if (page == null) return;
+        float inPage = x - page.getLeft() - page.getTranslationX();
+        if (page != mPageViews.get(PaneWallPage.TERMINAL) || mTerminalEdges == null
+            || !mTerminalEdges.bottomEdgeAt(inPage, mGlowEdge)) {
+            mGlowEdge[0] = 0f;
+            mGlowEdge[1] = page.getWidth();
+            mGlowEdge[2] = page.getHeight();
+        }
+        mGlowAirBottom = getHeight() - page.getTop();
+    }
+
+    /**
      * The glow follows the press it was lit for ({@link BorderGlow}): full once the wall claims
      * the finger, and fading out once the press is given up, handed to the keyboard's or the
      * status bar's grabber, or the drag ends — whatever made the finger anything but a pending
@@ -1582,9 +1616,12 @@ public final class PaneWallLayout extends ViewGroup {
         int save = canvas.save();
         canvas.translate(page.getLeft(), page.getTop());
         canvas.concat(page.getMatrix());
-        mGlow.draw(canvas, 0f, 0f, BorderGlow.heldExtent(mGlowPageWidth, page.getWidth()),
-            BorderGlow.heldExtent(mGlowPageHeight, page.getHeight()), 1f, visibility,
-            SystemClock.uptimeMillis());
+        // The bottom border's lies in the air below the pane pressed, which ends where it ended
+        // at the press or higher, should the keyboard have come up since.
+        mGlow.drawBelow(canvas, 0f, 0f, BorderGlow.heldExtent(mGlowPageWidth, page.getWidth()),
+            BorderGlow.heldExtent(mGlowPageHeight, page.getHeight()), mGlowEdge[0], mGlowEdge[1],
+            mGlowEdge[2], BorderGlow.heldExtent(mGlowAirBottom, getHeight() - page.getTop()), 1f,
+            visibility, SystemClock.uptimeMillis());
         canvas.restoreToCount(save);
     }
 

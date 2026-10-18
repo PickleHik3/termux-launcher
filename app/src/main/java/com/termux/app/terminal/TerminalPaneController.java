@@ -1355,6 +1355,32 @@ public class TerminalPaneController {
         return null;
     }
 
+    /**
+     * The tiled pane of the window on screen whose bottom border is at {@code x}, in the pane
+     * host's own pixels ({@link com.termux.app.wall.PaneEdges}): its frame's {@code left, right,
+     * bottom}, as laid out. Panes off the host (a maximised pane's siblings) are not candidates.
+     */
+    public boolean bottomPaneEdgeAt(float x, @NonNull float[] out) {
+        if (mActiveWindow == null) return false;
+        List<RectF> frames = new ArrayList<>();
+        for (Leaf leaf : leavesOf(mActiveWindow.root)) {
+            View frame = mPaneFrames.get(leaf.session);
+            if (frame == null || frame.getWidth() <= 0 || frame.getHeight() <= 0) continue;
+            float left = frame.getLeft();
+            float top = frame.getTop();
+            android.view.ViewParent parent = frame.getParent();
+            while (parent instanceof View && parent != mHostView) {
+                View view = (View) parent;
+                left += view.getLeft() - view.getScrollX();
+                top += view.getTop() - view.getScrollY();
+                parent = view.getParent();
+            }
+            if (parent != mHostView) continue;
+            frames.add(new RectF(left, top, left + frame.getWidth(), top + frame.getHeight()));
+        }
+        return com.termux.app.wall.PaneEdges.pick(frames, x, out);
+    }
+
     /** All shells of {@code w}: tiled leaves first, then floating panes. */
     public List<TerminalSession> shellsOf(Window w) {
         List<TerminalSession> out = new ArrayList<>();

@@ -21171,7 +21171,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     });
                 }
             });
-        mPaneWallController.attachTerminalPage(paneHost);
+        mPaneWallController.attachTerminalPage(paneHost, (x, out) ->
+            mPaneController != null && mPaneController.bottomPaneEdgeAt(x, out));
         // The Widgets page is built before the widget controller looks its grid up, so the
         // controller finds it already on the wall.
         if (isWidgetsPageWanted()) {

@@ -28,14 +28,17 @@ import androidx.annotation.Nullable;
  * full at once and gone at once.
  *
  * <p>Drawn by the wall ({@link PaneWallLayout#dispatchDraw}) in the accent the grabbers use, as a
- * band along the held edge of the page as drawn — slid and sunk with it — lit at the edge and
- * through the page's clearance before its text, and fading out inward. It lies wholly inside the
- * page's frame ({@link #band}) and is clipped to it: it never spills into the air, the status bar
- * or the dock beyond. And it stays on the edge the finger pressed: should the page grow after the
- * press (the content reaching under the dock or the keyboard), the glow keeps the frame it was
- * lit on ({@link #heldExtent}). It asks for frames only while it rises or fades; at rest
- * and at full nothing repaints. Its level is a function of the clock, so the timing is pure and
- * tested without a view.
+ * band along the held edge of the page as drawn — slid and sunk with it. On the top and side
+ * borders it is lit at the edge and through the page's clearance before its text, and fades out
+ * inward: it lies wholly inside the page's frame ({@link #band}) and is clipped to it, never
+ * spilling into the status bar beyond. The bottom border's lies just below it instead
+ * ({@link #belowBand}): under the pane the finger pressed, lit at that pane's bottom edge and
+ * fading out down into the air before the dock, the keyboard or the screen's edge, clipped to that
+ * air so it never reaches what is below; a page with no air below keeps it inside. And it stays
+ * on the edge the finger pressed: should the page grow after the press (the content reaching
+ * under the dock or the keyboard), the glow keeps the frame it was lit on ({@link #heldExtent}).
+ * It asks for frames only while it rises or fades; at rest and at full nothing repaints. Its
+ * level is a function of the clock, so the timing is pure and tested without a view.
  */
 public final class BorderGlow {
 
@@ -46,8 +49,9 @@ public final class BorderGlow {
     /** Its alpha at full, under the accent's own. */
     static final float FULL_ALPHA = 0.8f;
     /**
-     * How far inside the page's edge it reaches in all, in dp: lit through {@link #INSET_DP} and
-     * fading to nothing over the rest. Never outside the edge.
+     * How far from the page's edge it reaches in all, in dp: lit through {@link #INSET_DP} and
+     * fading to nothing over the rest. Inward, except along the bottom border, where it reaches
+     * down into the air below.
      */
     public static final float DEPTH_DP = 10f;
     /**
@@ -205,8 +209,8 @@ public final class BorderGlow {
         if (!(level > 0f) || !(visibility > 0f) || mDown == null || mAcross == null) return false;
         float density = mHost.getResources().getDisplayMetrics().density;
         if (!band(mRect, mSide, left, top, right, bottom, scale, density)) return false;
-        boolean down = mSide == BorderDrag.Border.TOP || mSide == BorderDrag.Border.BOTTOM;
-        // From the page's edge, lit, inward to the band's far side, clear.
+        // From the page's edge, lit, inward to the band's far side, clear; clipped to the frame,
+        // so not even the rounding's edge pixels fall outside it.
         float lit;
         float clear;
         switch (mSide) {
@@ -215,6 +219,49 @@ public final class BorderGlow {
             case LEFT: lit = mRect.left; clear = mRect.right; break;
             default: lit = mRect.right; clear = mRect.left; break;
         }
+        return paint(canvas, lit, clear, left, top, right, bottom, level, visibility, density,
+            nowMs);
+    }
+
+    /**
+     * Draw the bottom border's glow below the pane the finger pressed ({@link #belowBand}): across
+     * {@code paneLeft..paneRight}, from that pane's bottom edge {@code edge} down into the air
+     * that ends at {@code airBottom}, all in the page's own space at {@code scale}. Where there is
+     * no air below the edge it is the band inside the page's frame ({@code left, top, right,
+     * bottom}) as {@link #draw} draws it, so the press still answers. Any other side is
+     * {@link #draw}'s.
+     *
+     * @return whether a next frame was asked for
+     */
+    boolean drawBelow(@NonNull Canvas canvas, float left, float top, float right, float bottom,
+                      float paneLeft, float paneRight, float edge, float airBottom, float scale,
+                      float visibility, long nowMs) {
+        float density = mHost.getResources().getDisplayMetrics().density;
+        if (mSide != BorderDrag.Border.BOTTOM
+            || !belowBand(mRect, paneLeft, paneRight, edge, airBottom, scale, density)) {
+            return draw(canvas, left, top, right, bottom, scale, visibility, nowMs);
+        }
+        float level = level(nowMs);
+        if (mPhase == Phase.FADING && !needsFrame(nowMs)) {
+            mPhase = Phase.REST;
+            level = 0f;
+        }
+        if (!(level > 0f) || !(visibility > 0f) || mDown == null || mAcross == null) return false;
+        // Lit at the pane's edge, clear toward what is below; clipped to the air itself, so it
+        // never reaches the pane above or the dock, keyboard or screen edge below.
+        return paint(canvas, mRect.top, mRect.bottom, mRect.left, mRect.top, mRect.right,
+            mRect.bottom, level, visibility, density, nowMs);
+    }
+
+    /**
+     * Paints {@link #mRect} as the glow along {@link #mSide}, lit at {@code lit} and clear at
+     * {@code clear} across the edge, its ends tapered along it, at {@code level} and clipped to
+     * {@code clipLeft, clipTop, clipRight, clipBottom}; asks for the next frame while it changes.
+     */
+    private boolean paint(@NonNull Canvas canvas, float lit, float clear, float clipLeft,
+                          float clipTop, float clipRight, float clipBottom, float level,
+                          float visibility, float density, long nowMs) {
+        boolean down = mSide == BorderDrag.Border.TOP || mSide == BorderDrag.Border.BOTTOM;
         mMatrix.setScale(down ? 1f : clear - lit, down ? clear - lit : 1f);
         mMatrix.postTranslate(down ? 0f : lit, down ? lit : 0f);
         Shader shader = down ? mDown : mAcross;
@@ -231,9 +278,8 @@ public final class BorderGlow {
         mPaint.setShader(new ComposeShader(shader, along, PorterDuff.Mode.DST_IN));
         mPaint.setAlpha(Math.round(255f * alpha(level, visibility)));
         float radius = Math.min(mRect.width(), mRect.height()) / 2f;
-        // Clipped to the frame, so not even the rounding's edge pixels fall outside it.
         int save = canvas.save();
-        canvas.clipRect(left, top, right, bottom);
+        canvas.clipRect(clipLeft, clipTop, clipRight, clipBottom);
         canvas.drawRoundRect(mRect, radius, radius, mPaint);
         canvas.restoreToCount(save);
         boolean more = needsFrame(nowMs);
@@ -293,6 +339,25 @@ public final class BorderGlow {
         }
         if (!(r > l) || !(b > t)) return false;
         out.set(l, t, r, b);
+        return true;
+    }
+
+    /**
+     * The bottom border's band below the pane a finger pressed, in the page's own space at
+     * {@code scale}: across the pane's span {@code left..right}, from its bottom edge {@code edge}
+     * down {@link #DEPTH_DP}, never past {@code airBottom}, where the air below the page ends at
+     * the dock, the keyboard or the screen's edge. Derived from the pane's laid-out edge and the
+     * air measured below it, so it sits in the gap whatever the Margin, the dock's style, the
+     * keyboard or the orientation make of it. False, {@code out} untouched, where there is no air
+     * below the edge (a page flush with what is below it) or no span.
+     */
+    static boolean belowBand(@NonNull RectF out, float left, float right, float edge,
+                             float airBottom, float scale, float density) {
+        if (!(right > left) || !(airBottom > edge)) return false;
+        float s = Float.isNaN(scale) || scale <= 0f ? 1f : scale;
+        float b = Math.min(airBottom, edge + DEPTH_DP * density * s);
+        if (!(b > edge)) return false;
+        out.set(left, edge, right, b);
         return true;
     }
 
