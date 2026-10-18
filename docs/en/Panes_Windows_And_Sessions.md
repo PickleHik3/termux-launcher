@@ -71,6 +71,26 @@ when it rang, a tick or cross when a command finished while you were elsewhere, 
 when an AI agent in it is working or waiting for you ([Agent status](Agent_Status.md)). More on the
 status bar in [Status bar](Status_Bar.md).
 
+### Columns: consume and expel
+
+Borrowed from the Niri window manager, where each window of a row is a *column* that can hold
+several panes. Here the column is simply a window of the Workspace's row, and two actions move
+panes between windows:
+
+- **Consume next window into this pane** (`Ctrl+Alt+,`) pulls the window to the right of the one
+  you are on into it: its panes sit beside your focused pane, split the way **New pane** would
+  split it, and that window leaves the row. You stay on your window, and the pane that was focused
+  in the pulled window has the focus. `pane.consume from=left` pulls the window on the left
+  instead. At the end of the row there is nothing to pull, and nothing happens.
+- **Expel pane to its own window** (`Ctrl+Alt+.`) pushes your focused pane out into a new window
+  of its own, right after the one you are on. The focus goes with it: the new window becomes the
+  current one and the Workspace slides to it, as when a window is made. `pane.expel to=left` puts
+  the new window right before instead. A window with one pane has nothing to expel, and nothing
+  happens.
+
+No shell is closed by either; the bar, the drawer and Saved sessions follow the new row. Home
+floats are not in the row, so they are never consumed and cannot be expelled.
+
 ## The pane corner tab
 
 Hold a corner of a split pane to bring out its tab:

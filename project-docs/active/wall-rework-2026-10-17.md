@@ -252,7 +252,8 @@ titlebar); `TerminalCommandPalette` (Home action set, Linux apps, floats); `Laun
   swipes step one form, the bar folds to the capsule after a short idle, and the capsule is Minimal
   mode's default form. Agreed, everywhere on the wall; not phase one.
 - Drag-to-reorder of windows (done in phase two, slice 5a), and Niri's consume/expel of panes
-  into and out of columns (slice 5b).
+  into and out of columns (done in phase two, slice 5b: `pane.consume` and `pane.expel`, the
+  row's windows being the columns).
 - Per-toplevel X11 windows in the row (needs a rootless server).
 - Saved sessions recording the float flag and page (done in phase two, slice 4).
 - Rebuilding the row or the floats after a background kill beyond what Saved sessions restore.
