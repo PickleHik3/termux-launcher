@@ -2265,6 +2265,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
                 mAzTabTouch = mAzTabLayer != null
                     && mAzTabLayer.isOnTab(ev.getRawX(), ev.getRawY());
+                // The Home folder popup lives in the Home pane: a press outside the pane closes it.
+                if (mWidgetPaneController != null)
+                    mWidgetPaneController.onWindowTouchDown(ev.getRawX(), ev.getRawY());
             }
             // Seen before any view acts on it: a tap off the dictation card's text ends its edit.
             if (mVoiceCardEdit != null)

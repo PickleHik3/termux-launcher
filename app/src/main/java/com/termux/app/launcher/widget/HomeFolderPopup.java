@@ -2,8 +2,10 @@ package com.termux.app.launcher.widget;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
@@ -15,9 +17,9 @@ import com.termux.R;
 import com.termux.app.launcher.LauncherAppLauncher;
 import com.termux.app.launcher.folder.FolderRenameModel;
 import com.termux.app.launcher.folder.FolderRenameTitleView;
-import com.termux.app.launcher.folder.LauncherFolderPopupController;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.popup.AnchoredMenu;
+import com.termux.app.launcher.popup.AnchoredMenuGeometry;
 import com.termux.app.launcher.popup.AnchoredMenuTheme;
 import com.termux.app.launcher.popup.MenuRow;
 import com.termux.app.launcher.popup.MenuRowFactory;
@@ -27,12 +29,13 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The popup a folder on Home opens: the dock's folder popup, built from the same parts. The
- * window comes from the launcher's menu module ({@link AnchoredMenu#buildDetached}, the shell
- * from {@link MenuRowFactory}) and lives under {@link LauncherFolderPopupController}, so it
- * springs in and out and dims what is behind it exactly as a dock folder does. The title is the
- * dock's {@link FolderRenameTitleView}: a tap on it starts the dock's own focusless rename through
- * the activity ({@link Callbacks#onBeginRename}).
+ * The popup a folder on Home opens: the dock's folder popup, built from the same parts. The panel
+ * comes from the launcher's menu module ({@link AnchoredMenu#buildDetached}, the shell from
+ * {@link MenuRowFactory}), so it has the dock folder's glass, but it is shown in a
+ * {@link HomeFolderOverlay} over the Home pane rather than in a window of its own: the in-app
+ * keyboard a rename is typed with stays over it and pressable, and undimmed. It springs in and
+ * out as a dock folder does. The title is the dock's {@link FolderRenameTitleView}: a tap on it
+ * starts the dock's own focusless rename through the activity ({@link Callbacks#onBeginRename}).
  *
  * <p>The apps are laid out as they are on the page ({@link HomeAppIconView}: icon and label), up to
  * four across. A tap launches the app and closes the popup; a long press, or a tap on an app that
@@ -48,9 +51,9 @@ final class HomeFolderPopup {
         /** The popup went away: a rename in progress ends with it. */
         void onPopupDismissed();
         /**
-         * Whether a touch outside the popup at this screen point leaves it open: a key of the
-         * keyboard a rename is being typed with, which would otherwise close the popup and end
-         * the rename on its first stroke.
+         * Whether a touch outside the Home pane at this screen point leaves the popup open: a key
+         * of the keyboard a rename is being typed with, which would otherwise close the popup and
+         * end the rename on its first stroke.
          */
         default boolean keepsOpenOnTouch(float rawX, float rawY) { return false; }
     }
@@ -62,18 +65,18 @@ final class HomeFolderPopup {
     /** The dock folder's default tint, the base its glass is laid over. */
     private static final int TINT_BASE = 0x202020;
 
-    private final View host;
+    private final ViewGroup host;
     private final AnchoredMenuTheme theme;
     private final HomeAppIconFactory icons;
     private final Callbacks callbacks;
-    private final LauncherFolderPopupController controller = new LauncherFolderPopupController();
+    @Nullable private HomeFolderOverlay overlay;
     private final AnchoredMenu surface;
     private final AnchoredMenu appMenu;
     private final MenuRowFactory rows;
     private int folderId;
     @Nullable private FolderRenameTitleView title;
 
-    HomeFolderPopup(@NonNull View host, @NonNull AnchoredMenuTheme theme,
+    HomeFolderPopup(@NonNull ViewGroup host, @NonNull AnchoredMenuTheme theme,
                     @NonNull HomeAppIconFactory icons, @NonNull Callbacks callbacks) {
         this.host = host;
         this.theme = theme;
@@ -82,18 +85,18 @@ final class HomeFolderPopup {
         surface = new AnchoredMenu(host, theme);
         appMenu = new AnchoredMenu(host, theme);
         rows = new MenuRowFactory(host.getContext(), theme);
-        controller.setOutsideTouchGuard(callbacks::keepsOpenOnTouch);
     }
 
-    boolean isShowing() { return controller.isShowing(); }
+    boolean isShowing() { return overlay != null && overlay.isOpen(); }
 
     /** The folder on screen, while the popup is. */
-    int folderId() { return controller.isShowing() ? folderId : 0; }
+    int folderId() { return isShowing() ? folderId : 0; }
 
     /** Opens {@code folder}'s popup against {@code anchor}, replacing any one open. */
     void show(@NonNull LauncherWidgetRecord folder, @NonNull View anchor) {
         if (!folder.isFolder()) return;
         appMenu.dismiss();
+        dismissImmediate();
         Context context = host.getContext();
         folderId = folder.appWidgetId;
         LinearLayout shell = rows.newShell();
@@ -125,12 +128,58 @@ final class HomeFolderPopup {
 
         PopupWindow window = surface.buildDetached(MenuSpec.of(shell, TINT_BASE)
             .width(Math.max(dp(176), columns * dp(CELL_WIDTH_DP) + dp(6))).build());
-        controller.show(window, String.valueOf(id),
-            () -> surface.placeAtAnchor(window, anchor, false), () -> {
+        View panel = panelOf(window);
+        final HomeFolderOverlay[] shown = new HomeFolderOverlay[1];
+        shown[0] = new HomeFolderOverlay(context, panel, window.getWidth(), window.getHeight(),
+            anchor, dp(AnchoredMenuGeometry.GAP_DP), () -> {
+                if (overlay != shown[0]) return;
+                overlay = null;
                 appMenu.dismiss();
                 title = null;
                 callbacks.onPopupDismissed();
             });
+        overlay = shown[0];
+        shown[0].showIn(host);
+    }
+
+    /**
+     * The panel {@code window} was built around, taken out of it: the menu module's glass (the
+     * plate, its blur and grain over the rows) is the content itself; the plain surface is the
+     * window's background, worn here by a frame round the content. The window is never shown.
+     */
+    @NonNull
+    private View panelOf(@NonNull PopupWindow window) {
+        View content = window.getContentView();
+        Drawable background = window.getBackground();
+        float elevation = window.getElevation();
+        window.setContentView(null);
+        if (content.getParent() instanceof ViewGroup)
+            ((ViewGroup) content.getParent()).removeView(content);
+        if (background == null) {
+            content.setElevation(elevation);
+            return content;
+        }
+        FrameLayout frame = new FrameLayout(host.getContext());
+        frame.setBackground(background);
+        frame.setElevation(elevation);
+        frame.setClipToOutline(true);
+        frame.addView(content, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        return frame;
+    }
+
+    /**
+     * A press anywhere in the window, seen by the activity before any view: one outside the Home
+     * pane closes the popup, as a tap elsewhere closed it while it was a window of its own, except
+     * a key of the keyboard a rename is typed with ({@link Callbacks#keepsOpenOnTouch}). The press
+     * itself goes on to whatever it landed on. Presses on the pane are the overlay's own.
+     */
+    void onWindowTouchDown(float rawX, float rawY) {
+        HomeFolderOverlay open = overlay;
+        if (open == null || !open.isOpen()) return;
+        if (AnchoredMenu.isRawInsideView(host, rawX, rawY)) return;
+        if (callbacks.keepsOpenOnTouch(rawX, rawY)) return;
+        dismiss();
     }
 
     /** The title view of the popup on screen, for a rename that ended to draw the name again. */
@@ -138,12 +187,12 @@ final class HomeFolderPopup {
 
     void dismiss() {
         appMenu.dismiss();
-        controller.dismiss();
+        if (overlay != null) overlay.dismiss();
     }
 
     void dismissImmediate() {
         appMenu.dismiss();
-        controller.dismissImmediate();
+        if (overlay != null) overlay.dismissImmediate();
     }
 
     @NonNull
@@ -160,7 +209,7 @@ final class HomeFolderPopup {
             : new LauncherAppEntry(member.app(), label, null);
         cell.setOnClickListener(v -> {
             if (gone) { offerRemove(id, member, v); return; }
-            controller.dismiss();
+            dismiss();
             LauncherAppLauncher.launchEntry(v.getContext(), launch);
         });
         cell.setOnLongClickListener(v -> {
@@ -186,8 +235,7 @@ final class HomeFolderPopup {
         LinearLayout shell = rows.newShell();
         final String stableId = member.stableId();
         Runnable remove = () -> {
-            appMenu.dismiss();
-            controller.dismiss();
+            dismiss();
             callbacks.onRemoveFromFolder(id, stableId);
         };
         TextView row = rows.addActionRow(shell,
