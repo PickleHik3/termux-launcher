@@ -55,6 +55,12 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    (`BuiltinWidgetView.lossesAt`). For built-ins the `resyncSizes` re-tell was never the cure;
    whether app widgets need it is still unproven. Re-check owed (device-checks, slice 2).
 3. **Parallax between Home pages and windows** (the wallpaper pans with the wall).
+   Status 2026-10-18: built on a worker branch. `WallParallax` spreads the spare width over the
+   row (`p / (count - 1) * spare`); `PaneWallController.rowPosition` composes the wall's offset
+   between views, Home's grid translation (reported per frame through `WidgetPaneView`) and the
+   terminal page's nudge as a window arrives (the window bar names the window it left, so a jump
+   pans over every window between). A Home page or window added or removed snaps to the new
+   spread. Unit tests green; emulator pass owed (device-checks, slice 3).
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.
 5. **Window reorder** by drag in the window bar; consume/expel of panes into and out of columns.
 6. **The first-boot tour**, rewritten for the wall (switched off since 651ea9d7f).

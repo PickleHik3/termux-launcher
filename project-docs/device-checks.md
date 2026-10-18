@@ -521,6 +521,28 @@ Not seen: everything else listed under the sections below.
   line truncates to "Saturday, Octobe…" with the time intact (acceptable for a fixed cell). Not
   seen: dark theme, rotation, keyboard up; Start in = Workspace on a true cold start.
 
+### Wall rework phase two: slice 3, parallax across the whole row (feat/wall-rework-phase2)
+- Owed · commits "feat(wall): parallax geometry spread over the whole row" and "feat(wall): the
+  wallpaper pans with the row's live position" · emulator, portrait, a wallpaper set through the
+  launcher's picker (self-drawn backdrop, managed copy), Wallpaper parallax on, animations on,
+  Low-memory preset off. Two Home pages, two windows, a display up. Swipe Home page 1 → 2, across
+  the seam to the first window, border drag to the second window, on to the Display page: the
+  wallpaper pans continuously with each finger, settles at a distinct offset on each page (five
+  even steps from the picture's left edge to its right), and does not jump at the seam or at a
+  drag that commits; the frost (status bar, dock, keyboard, pane glass, Home's widget glass)
+  follows the wallpaper with no visible lag. Swipe back the same way: the same offsets. Window bar
+  jump from window 1 to window 2 and back: the pan runs over the arrival, with no snap first.
+  Home press from a window: the wallpaper pans back to Home page 1's offset with the slide.
+- Owed · negatives: rotate to landscape: no pan anywhere (the wallpaper is still); back to
+  portrait: the pan resumes at the page's offset. Low-memory preset on: no pan; off again: back.
+  Animations off (developer options or reduce motion): no pan.
+- Owed · count changes: on Home, add a Home page; open a window from the Workspace (+): the
+  wallpaper re-spreads over the new count without a visible jump larger than one page's step (it
+  snaps, by design, rather than animating); close a window, take the display down: the same.
+- Not hooked (snaps): Home's own jump to a Home page without a swipe (the home press while already
+  on Home, a jump to a window from the drawer by id) snaps, as the page itself does; a session
+  switch (vertical) re-spreads at once.
+
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners
