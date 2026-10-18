@@ -651,18 +651,48 @@ Not seen: everything else listed under the sections below.
 - The Terminal pin leaving the first dock slot after an upgrade or cold boot was seen twice on
   the emulator and not reproduced since (install -r and a reboot kept it, store included); watch.
 
-### Wall rework phase two: slice 1, the capsule status bar (feat/wall-rework-phase2)
-- 2026-10-18 · d3f2fa8e7 · emulator: Home with a float folds to the capsule after idle ("Status
-  bar folded: Home, 5:19 PM" at the top centre, titlebar clear below); window 1 on the Workspace
-  folds the same ("terminal in home, 5:23 PM"); a tap opens compact; a slow 90 dp drag down
-  reaches expanded (bar 136–375); a quick flick up from expanded went to the capsule, not one
-  step to compact (judge: the flick was 72 dp, past compact's stop). Capsule ink reads too dark
-  on a dark wallpaper (fix in flight).
-- Owed: the capsule under Minimal mode (MinimalMode.apply still hides the bar); a notification
-  arriving while folded (dots, and the fold cancelled); the idle fold from expanded resizing the
-  Workspace terminals, by hand on pong, to judge whether it should stop at compact instead.
-- Emulator note: the pin store emptied between two cold boots while another session used the
-  emulator for a "Look reset" check; not attributed.
+### Wall phase three: the 10-18 round (feat/wall-phase3)
+On pong as 1.1.0-pre.6+dev.d986fc9ae (2026-10-18 20:40, launch clean). Nothing below is seen yet;
+all of it is reasoned from code and unit tests. The capsule form is gone, so slice 1's owed items
+are void.
+- Status bar: Workspace bar swipes compact ↔ expanded with no idle fold; Minimal mode as before.
+- Home pills: no floats → stats pill (CPU, RAM, weather) at the top, grid's top row below it; open
+  two floats → windows pill appears left; tap a section for a float on another Home page → that
+  page, its name expands once; close floats → pill shrinks then goes; stats all off + no floats →
+  band goes, grid moves up; bar on a side → no Home bar until a float opens; bar at the bottom →
+  pills in the bottom band; tap between pills reaches the widget under; font 1.3 at 360 dp with
+  4 floats → nothing clipped; Docked/Floating, light/dark, glass → pills on glass, no strip
+  behind the system bar; settling Home → window shows no flash of pills.
+- Display chip: open an X11 app, tap its chip → the bar keeps every window chip, the chip wears
+  the app's icon; a terminal chip tapped there returns to that window.
+- Home launches: empty Workspace, tap Terminal in the dock → a Home float, wall stays on Home;
+  Ctrl+Alt+C / palette New window on Home → float; new float is a centred window (wallpaper left,
+  right, above) in portrait and landscape; keyboard up → it ends above the keyboard, titlebar
+  stays; Maximise fills the room, Restore returns; a second float cascades; restart keeps sizes.
+- Bottom-border glow sits in the gap below the pane, not inside: keyboard up/down,
+  Docked/Floating, one pane and a split, landscape; never over the dock or keyboard.
+- Float titlebar is thinner (24 dp); Close/Maximise/Minimise still take taps just below the
+  strip; dragging the strip moves the float.
+- Wallpaper: on a window page, set a wallpaper in the system app, press Home → same window;
+  with a Home float open, apply from the launcher's Wallpaper page → stay on the window; Home
+  pressed while in front still goes to Home page 1.
+- Keyboard Looks: "BG opacity" then "Key opacity" under a link button with leader lines; linked,
+  either drags the other; unlink keeps values; ✕/Back restores the link state, Done keeps it;
+  Large text and RTL keep the "Keyboard" heading clear of the button.
+- Start in reads "Terminal" and still opens the Workspace.
+- Layouts Home filter: tap Home → miniature shows the grid below the pills band and the wall goes
+  to Home; dock moved there changes Home's only; Corners/Margin read "· Home"; Landscape stays
+  selected; Undo restores both layouts; opened over the display, Home off returns to it; Row A
+  fits at 360 dp, font 1.3.
+- Widget glass: Glass on in a built-in widget's settings → blurred wallpaper, rounded corners,
+  fixed to the wallpaper while sliding; readable in light/dark/Material You; off is identical to
+  before; a wallpaper change updates it.
+- Terminal widget: add from the picker, type into it, tap beside → keyboard goes; low on the page
+  with keyboard up → prompt above keyboard and dock (portrait/landscape, Docked/Floating); resize
+  in edit mode → rows/cols change, shell kept; on page 2 focused, swipe to page 1 → focus and
+  keyboard go, output shows on return; recreate → same shell, process kill → fresh shell in the
+  last directory; `exit` → "Session ended", tap restarts; remove while `sleep 100` → asks; never
+  in the windows pill, chips, status bar or Saved sessions, never a Workspace window.
 
 ### Wall rework phase two: slice 2, Style, Corners and Margin on Home (feat/wall-rework-phase2)
 - 2026-10-18 · commit "feat(wall): the chrome wears the Style, Corners and Margin of the half on
