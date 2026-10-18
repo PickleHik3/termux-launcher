@@ -54,7 +54,25 @@ the app's label under it, and wears the same icon as the drawer and the dock, ic
 - An app you uninstall or disable leaves its icon where it was, faint, under its old label. Tap it
   to select it and take it off with the remove chip; it comes back to life if the app returns.
 
-Icons follow Home's grid and its **Margin**, exactly as widgets do. Folders on Home are coming.
+Icons follow Home's grid and its **Margin**, exactly as widgets do.
+
+### Folders on Home
+
+Folders on a Home page work like the dock's. While a page is in edit mode (hold an icon), pick up
+an icon and rest it on another icon for a moment: the icon under it swells, and letting go there
+makes a folder of the two, named after the app you dropped. Rest an icon on a folder the same way
+to add it. Let go before the swell and the icon moves as it always does. Nothing merges with a
+widget, and a folder holds up to 16 apps.
+
+- A folder takes one cell and shows up to four of its apps in a small grid, with its name under
+  it.
+- **Tap** a folder to open it. Tap an app in it to open the app. Tap the folder's name to rename
+  it, as in the dock.
+- **Hold** an app in an open folder and choose **Remove from folder**: the app goes back on the
+  Home page you are on as an icon (or on the first page with room). When one app is left, the
+  folder turns back into that app's icon.
+- **Hold** a folder to move it or carry it to another page, as you would an icon; its remove chip
+  takes the folder and the apps in it off Home (the apps stay installed).
 
 ## The Terminal entry
 
