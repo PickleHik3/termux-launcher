@@ -113,6 +113,15 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
 7. **The icon grid on Home pages**: app icons, folders, drag between pages. Born on slice 2b's
    rule: its rim is Home's Margin, as the widget grid's is.
 8. **Per-toplevel X11 windows** (needs a rootless server).
+   Status 2026-10-18: not started; a developer decision. The display is the vendored termux-x11
+   Xlorie server (`x11-server/`, prebuilt `libXlorie.so` built by `build_x11_native.yml`, source
+   outside this repo): rootful, one root framebuffer composited with GLES
+   (`project-docs/reference/launcher/pane-wall-x11-study.md:37-44`). The only toplevel data is the
+   EWMH client list read over the X socket (`X11WindowList`, with openbox as the window manager).
+   Per-toplevel windows need the server to export each toplevel as its own surface (XComposite
+   or a rootless DDX): native server work on the upstream fork, with the launcher side (one wall
+   window per toplevel, map/unmap/geometry from the X connection) only after that. Options: fund the
+   server work, or keep one display window per X display and drop this slice.
 9. **Rebuilding the row and the floats after a background kill** beyond Saved sessions.
 
 ## Rules carried over
