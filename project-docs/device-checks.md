@@ -725,6 +725,13 @@ Not seen: everything else listed under the sections below.
   Minor: an expelled window's chip reads "sh" (the cwd and title do not carry over to the new
   window); the Saved tab empty right after a save (fixed in the slice 4 round, re-check owed);
   `launcherctl window focus` from Home makes the window current without leaving Home.
+- Seen 2026-10-18 (ed6b8d160, emulator, device-checker, fresh data): every lesson clears by its
+  gesture (page swipe + border drag, keyboard down/up, status pull + quick fold, swipe up for the
+  palette, corner hold + ?); the Workspace lessons start on the window with no way-there card;
+  wandering to Home shows the way-back card and does not clear ("ignored: other half"); Skip
+  moves on; Replay tour replays; a force-stop resumes on the same lesson; one shell. Caveat: the
+  apps lesson clears on a drag down on the dock strip (drawer.opened) but not on a tap on the
+  A–Z letters; owed: a tap that opens the drawer should count.
 ### Wall rework phase two: slice 7a, app icons on Home pages (feat/wall-rework-phase2)
 - Owed · commits "feat(home): app icons as a Home item kind in the widget store (schema v6)",
   "feat(home): app icon cells on Home pages: launch, edit mode, gone apps" and "feat(home): Add to
@@ -775,6 +782,11 @@ Not seen: everything else listed under the sections below.
   the same. With Start in = Workspace either way: one fresh shell window.
 - Owed · an explicit Saved sessions Load (Replace) still works, and a force-stop 2 s after it
   brings back the loaded arrangement, not the one before. The Saved tab never lists `.autosave`.
+- Seen 2026-10-18 (ed6b8d160, emulator): after a rotation the split, the cwd and the float come
+  back on the same shells (same pids); after a force-stop with the stock home set and a launch from
+  the icon, the split, the /system/bin cwd and the float come back on fresh shells. Not seen: the
+  "Windows restored" notice (owed: check it fires after a rebuild), the empty-arrangement restart,
+  Saved sessions Load after a rebuild, the parallax card re-check.
 ### Wall rework phase two: slice 7b, folders on Home pages (feat/wall-rework-phase2)
 - Owed · commits "feat(home): folders as a Home item kind in the widget store (schema v7)" and
   "feat(home): folder cells, the folder popup and drop-to-merge on Home pages" · emulator,
@@ -808,6 +820,14 @@ Not seen: everything else listed under the sections below.
   starts, that cell is empty and the rest of Home stands (covered by unit tests; seen on device
   once).
 
+- Seen 2026-10-18 (ed6b8d160, emulator): three apps added from the picker with labels and the
+  "Added to Home page 1" toast; tap launches; move within and across pages; drop on an icon
+  makes a folder named after the dropped app with a 2×2 mosaic; drop on the folder adds; launch
+  from the popup; Remove from folder places the app; the folder dissolves at one app; a disabled
+  app draws grey and its tap opens edit mode; icons and folders survive a force-stop. Not seen:
+  the folder rename (typed "Tools", the label stayed: likely the focusless rename not taking keys
+  on Home; owed), Margin · Home with icons, the grid-size popup, the drawer's Add to Home route,
+  the empty page being dropped.
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners
