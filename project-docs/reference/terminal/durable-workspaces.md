@@ -68,9 +68,13 @@ after its row's windows, in the order they were opened. On load each floats agai
 on the last Home page when its page is gone, minimised as saved, at its shape for the screen's
 orientation (born as a new float is when it has none there). A file without the key, a
 `homeFloat` that is malformed, or one on a window of more than one pane loads the window into the
-row; so does every float when there are no Home pages, and a session whose windows were all floats
-keeps its first in the row. `currentWindow` picks among the row's windows; a float named there
-leaves the row on the window before it. Replace closes the live Home floats too.
+row; so does every float when there are no Home pages. A session whose windows were all floats
+loads as its floats alone and adds no session to the row (a session is its row's windows), so a
+file saved from an empty Workspace with Home floats loads back to an empty Workspace with those
+floats; the wall stays on Home, or the last Home page slides in from the Workspace. Saving with an
+empty Workspace and Home floats writes them as such a session. `currentWindow` picks among the
+row's windows; a float named there leaves the row on the window before it. Replace closes the live
+Home floats too.
 
 ## Agent and CLI actions
 

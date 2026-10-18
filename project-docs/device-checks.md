@@ -563,6 +563,13 @@ Not seen: everything else listed under the sections below.
   shape returns on the turn back.
 - Owed · Replace with Home floats open that are not in the file: they close (Replace closes the
   live Home floats with the rest of the session).
+- Owed · floats only: close every window of the Workspace, keep two Home floats (one minimised),
+  Save sessions… as "onlyfloats"; Replace-load "floats", then Replace-load "onlyfloats": the two
+  floats come back on their page and the Workspace is empty (Home shows, no window in the row,
+  the Terminal entry opens a fresh window); from the Workspace the last Home page slides in, from
+  Home the wall does not move. Add-to-current "onlyfloats" over a live Workspace: the floats join,
+  the current session and window stay. Note: with an empty Workspace the drawer's Live list has no
+  session to list the floats under (as before this slice).
 
 ## Developer
 

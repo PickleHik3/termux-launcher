@@ -68,9 +68,13 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    windows, in the order they were opened. Load floats them on their page
    (`HomeFloatPolicy.restoredPage`: the last Home page when theirs is gone; tiled when there are no
    Home pages), minimised as saved, at their shape for the screen's orientation with the other
-   seeded into their memory; a float with no shape is born as a new float is. A session's row is
-   never left empty (`restoredAsFloats`); the row's current window skips floats
-   (`restoredRowIndex`) and the wall stays where it was. Replace also closes the live Home floats.
+   seeded into their memory; a float with no shape is born as a new float is. Every saved float
+   floats (`restoredAsFloats`): a session saved as floats only loads as floats only and adds no
+   session (a session is its row's windows; the empty Workspace is no session, as after closing the
+   last window), so the Workspace may come back empty, with the wall on Home. The row's current
+   window skips floats (`restoredRowIndex`, -1 for an empty row) and the wall stays where it was.
+   An empty Workspace with Home floats saves them as such a session. Replace also closes the live
+   Home floats.
    Maximise's restore is not saved. Unit tests green; emulator pass owed (device-checks, slice 4).
 5. **Window reorder** by drag in the window bar; consume/expel of panes into and out of columns.
 6. **The first-boot tour**, rewritten for the wall (switched off since 651ea9d7f).

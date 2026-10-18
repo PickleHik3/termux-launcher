@@ -207,7 +207,8 @@ terminal is never empty.
 Saved sessions keep the sessions, windows, pane layout and split sizes, floating panes, focus,
 titles and each pane's folder, so you can rebuild them later. A Home float is saved with its page
 and shape, and loads back as a float on that page (minimised if it was); a page that no longer
-exists lands it on the last Home page.
+exists lands it on the last Home page. Sessions saved with only Home floats load back as those
+floats alone, with the Workspace empty.
 
 - **Save**: at the bottom of the **Live** tab tap **Save sessions…**, type a name and save.
   Tick **Also save what is running** to record the program in each busy pane. Saving over a name
