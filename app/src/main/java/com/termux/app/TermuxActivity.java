@@ -19845,9 +19845,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TerminalSession terminal = termuxSession.getTerminalSession();
             if (terminal != null) sessionsByHandle.put(terminal.mHandle, terminal);
         }
+        restoreRowWindowsState(root, sessionsByHandle);
+        // After the row's windows: a float's arrival refreshes the status bar, which re-reads the
+        // wall's row. Read with the service bound and no window back yet, the row had no
+        // Workspace, and a relaunch on a window page (a new wallpaper's colours) landed on Home.
+        restoreHomeFloatsState(root.getParcelableArrayList(PANE_STATE_HOME_FLOATS), sessionsByHandle);
+    }
+
+    /** The saved sessions' windows, back in the row around their running shells. */
+    private void restoreRowWindowsState(@NonNull Bundle root,
+                                        @NonNull java.util.Map<String, TerminalSession> sessionsByHandle) {
         java.util.ArrayList<Bundle> sessionStates =
             root.getParcelableArrayList(PANE_STATE_SESSIONS);
-        restoreHomeFloatsState(root.getParcelableArrayList(PANE_STATE_HOME_FLOATS), sessionsByHandle);
         if (sessionStates == null) return;
         mWSessions.clear();
         for (Bundle sessionState : sessionStates) {
