@@ -65,6 +65,9 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    196 px first step: the departure was already passed; the nudge now starts before the re-sync.
    Likely the emulator's slow first frame on the settle curve; re-check owed with a 1 → 2 jump
    beside it.
+   Status 2026-10-18 (fix round 3): the bar jump's wrong-way start was the departure card's
+   glass ground drawn without the parallax offset (Home's stretch of the picture under any
+   window); fixed in `wallpaperGlassGround`. Re-check owed (device-checks, slice 3).
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.
    Status 2026-10-18: built on a worker branch. File version 4: a window may carry `homeFloat`
    { page, minimised, portrait?, landscape? }; absent, or malformed, it is a window of the row, so
