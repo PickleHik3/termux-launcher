@@ -112,6 +112,80 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     /**
+     * Home's look ({@link HomePillsPolicy}): the bar draws its glass only inside the pills, shows
+     * nothing of its own content, and hands every touch to the pills, which keep only those on a
+     * pill, so the page under the rest of the band keeps its own. No fold while it holds.
+     */
+    public void setHomePills(boolean on) {
+        HomePillsView pills = homePills();
+        boolean shown = on && pills != null;
+        if (pills != null) {
+            int visibility = shown ? VISIBLE : GONE;
+            if (pills.getVisibility() != visibility) pills.setVisibility(visibility);
+        }
+        if (shown == mHomePills) return;
+        mHomePills = shown;
+        if (mGesture != null) mGesture.cancel();
+        cancelFoldDrag();
+        cancelPullHint();
+        requestStructuralReset();
+        invalidate();
+    }
+
+    public boolean isShowingHomePills() { return mHomePills; }
+
+    @Nullable
+    private HomePillsView homePills() {
+        if (mHomePillsView == null) {
+            View view = findViewById(R.id.terminal_home_pills);
+            if (view instanceof HomePillsView) mHomePillsView = (HomePillsView) view;
+        }
+        return mHomePillsView;
+    }
+
+    private boolean mHomePills;
+    @Nullable private HomePillsView mHomePillsView;
+    private final android.graphics.Path mPillsClip = new android.graphics.Path();
+
+    /** The bar's own glass: drawn whole, or only inside the pills on Home. */
+    private static boolean isGlassLayer(@NonNull View child) {
+        int id = child.getId();
+        return id == R.id.terminal_window_bar_wallpaper_backdrop
+            || id == R.id.terminal_window_bar_blur
+            || id == R.id.terminal_window_bar_background;
+    }
+
+    @Override protected boolean drawChild(@NonNull android.graphics.Canvas canvas,
+                                          @NonNull View child, long drawingTime) {
+        if (!mHomePills) return super.drawChild(canvas, child, drawingTime);
+        HomePillsView pills = mHomePillsView;
+        if (child == pills) {
+            View glass = findViewById(R.id.terminal_window_bar_background);
+            pills.setGlass(glass != null && glass.getVisibility() == VISIBLE
+                && glass.getBackground() != null);
+            return super.drawChild(canvas, child, drawingTime);
+        }
+        // The rest of the bar's content stays laid out for the Workspace and is not drawn here.
+        if (!isGlassLayer(child) || pills == null) return false;
+        pills.pillsPath(mPillsClip);
+        if (mPillsClip.isEmpty()) return false;
+        int saved = canvas.save();
+        canvas.clipPath(mPillsClip);
+        boolean more = super.drawChild(canvas, child, drawingTime);
+        canvas.restoreToCount(saved);
+        return more;
+    }
+
+    @Override public void addChildrenForAccessibility(java.util.ArrayList<View> outChildren) {
+        if (mHomePills && mHomePillsView != null) {
+            // Only the pills speak on Home; the bar's own content is not on screen there.
+            outChildren.add(mHomePillsView);
+            return;
+        }
+        super.addChildrenForAccessibility(outChildren);
+    }
+
+    /**
      * The edge the bar stands on. It decides which way a drag folds the bar; a live stream is
      * dropped rather than reinterpreted mid-gesture.
      */
@@ -256,6 +330,17 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
+        HomePillsView pills = mHomePillsView;
+        if (mHomePills && pills != null) {
+            float dx = getScrollX() - pills.getLeft();
+            float dy = getScrollY() - pills.getTop();
+            event.offsetLocation(dx, dy);
+            try {
+                return pills.dispatchTouchEvent(event);
+            } finally {
+                event.offsetLocation(-dx, -dy);
+            }
+        }
         mDispatchInProgress = true;
         try {
             int action = event.getActionMasked();

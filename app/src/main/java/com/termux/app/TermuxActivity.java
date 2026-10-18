@@ -8771,11 +8771,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
     }
 
+    /** Whether the bar is showing Home's pills rather than itself. */
+    private boolean isShowingHomePills() {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        return host instanceof com.termux.app.statusbar.StatusBarSwipeLayout
+            && ((com.termux.app.statusbar.StatusBarSwipeLayout) host).isShowingHomePills();
+    }
+
     /** The lead the strip behind the system status bar continues, or NONE while it is not shown. */
     @NonNull
     private com.termux.app.chrome.ChromeEdgeRule.TopLead statusInsetStripLead() {
         // Under a joined Docked frame the frame's glass runs up under the system bar: no strip.
         if (frameStandsDown()) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
+        // Home's pills float on their own: nothing runs on from them under the system bar.
+        if (isShowingHomePills()) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
         return com.termux.app.chrome.ChromeEdgeRule.statusInsetLead(isRoundedDockStyle(),
             !shouldEnableSeamlessStatusBackground(), mLastStatusBarInsetTop, topEdgeStackLead());
     }
@@ -24294,6 +24303,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
             new java.util.ArrayList<>();
         java.util.List<Integer> foregroundPids = new java.util.ArrayList<>();
+        // The Home pills' windows: the Home floats' sections, filled on Home only.
+        java.util.List<com.termux.app.statusbar.HomePillsPolicy.Section> homeSections =
+            new java.util.ArrayList<>();
         int selected = -1;
         // Whether the chips below stand for this session's terminal windows at all. The row is
         // shared with the other places, which fill it with something else entirely.
@@ -24306,7 +24318,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // focused one is selected. Without a float there is no bar here at all.
             selected = -1;
             if (mPaneController != null) {
-                addHomeFloatChips(items, foregroundPids);
+                addHomeFloatChips(items, foregroundPids, homeSections);
                 com.termux.app.terminal.TerminalPaneController.Window focused =
                     mPaneController.focusedHomeFloat();
                 if (focused != null) selected = chipFloats().indexOf(focused);
@@ -24353,7 +24365,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     .withIcon(displayChipIcon()));
             }
             // Home floats are windows of the session too: chips after the row's, marked as floats.
-            addHomeFloatChips(items, foregroundPids);
+            addHomeFloatChips(items, foregroundPids, null);
         }
         // Only the row's own windows can be dragged to reorder: not the display's chip or the
         // Home floats' after them, and nothing on the places that fill the row with other things.
@@ -24371,6 +24383,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setWindows(items, selected);
+        syncHomePills(homeSections, selected);
         syncBackgroundProcessStack();
         scheduleShellPhaseJudgement();
         java.util.List<Integer> pids = collectAllPanePids();
@@ -25120,6 +25133,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mStatsCardView != null && mStatusCardHost.isShowing()) {
             mStatsCardView.bind(stats);
         }
+        syncHomePillsStats();
     }
 
     private void toggleStatsCard(@NonNull View anchor) {
@@ -25292,6 +25306,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWeatherCardView != null && mStatusCardHost.isShowing()) {
             mWeatherCardView.bind(weather);
         }
+        syncHomePillsStats();
     }
 
     private void toggleWeatherCard(@NonNull View anchor) {
@@ -26322,19 +26337,107 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return at >= 0 && at < floats.size() ? floats.get(at) : null;
     }
 
-    /** One chip per Home float, each carrying its page, appended to {@code items}. */
+    /**
+     * One chip per Home float, each carrying its page, appended to {@code items}; and, given
+     * {@code sections}, the Home pills' section for each (the chip's glyph and name, without the
+     * page mark, and the chip's spoken label).
+     */
     private void addHomeFloatChips(
             @NonNull java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items,
-            @NonNull java.util.List<Integer> foregroundPids) {
+            @NonNull java.util.List<Integer> foregroundPids,
+            @Nullable java.util.List<com.termux.app.statusbar.HomePillsPolicy.Section> sections) {
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
         for (int i = 0; i < floats.size(); i++) {
             com.termux.app.terminal.TerminalPaneController.Window window = floats.get(i);
             TerminalSession session = mPaneController.windowActiveSession(window);
-            items.add(buildWindowItem(session, items.size(), foregroundPids,
-                mPaneController.windowName(window))
+            com.termux.app.terminal.TerminalWindowBar.WindowItem item = buildWindowItem(session,
+                items.size(), foregroundPids, mPaneController.windowName(window))
                 .withHomeFloat(window.homePage(),
-                    getString(R.string.window_chip_home_float, window.homePage() + 1)));
+                    getString(R.string.window_chip_home_float, window.homePage() + 1));
+            items.add(item);
+            if (sections != null) {
+                String mark = com.termux.app.terminal.HomeFloatPolicy.chipPageMark(
+                    window.homePage());
+                String label = item.label.endsWith(mark)
+                    ? item.label.substring(0, item.label.length() - mark.length()) : item.label;
+                sections.add(com.termux.app.statusbar.HomePillsPolicy.Section.of(label,
+                    item.spokenLabel));
+            }
         }
+    }
+
+    /**
+     * Home's look: on a Home page with the bar along the top or the bottom, the bar shows the
+     * Home pills (HomePillsPolicy) instead of itself, with the floats' sections, the focused one
+     * expanded, and the stats; anywhere else the bar is itself.
+     */
+    private void syncHomePills(
+            @NonNull java.util.List<com.termux.app.statusbar.HomePillsPolicy.Section> sections,
+            int focused) {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        com.termux.app.statusbar.HomePillsView pills = findViewById(R.id.terminal_home_pills);
+        if (!(host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) || pills == null) {
+            return;
+        }
+        boolean on = com.termux.app.statusbar.HomePillsPolicy.shown(isWidgetsPageShowing(),
+            mStatusBarEdge);
+        com.termux.app.statusbar.StatusBarSwipeLayout bar =
+            (com.termux.app.statusbar.StatusBarSwipeLayout) host;
+        boolean was = bar.isShowingHomePills();
+        bar.setHomePills(on);
+        // The bar's glass was dressed for the other look this pass (the strip behind the system
+        // bar runs on from the bar, never from the pills): dress it again, once, after this pass.
+        if (was != bar.isShowingHomePills()) host.post(this::refreshTerminalWindowBar);
+        if (!on) return;
+        if (pills.getTag() == null) {
+            pills.setTag("wired");
+            pills.setListener(index -> {
+                java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats =
+                    chipFloats();
+                if (index >= 0 && index < floats.size()) showHomeFloat(floats.get(index));
+            });
+        }
+        pills.setAnimationsEnabled(!isReducedMotionEnabled());
+        int inset = statusBarContentEdgeInsetPx(isRoundedDockStyle());
+        pills.setHorizontalInsets(inset, inset);
+        pills.setWindows(sections, focused);
+        syncHomePillsStats();
+    }
+
+    /**
+     * The stats pill's readings: CPU and RAM from the bar's own smoothers, the weather from the
+     * weather's cache, each only while the status bar's settings show it. The same samplers the
+     * bar reads; the pills add none.
+     */
+    private void syncHomePillsStats() {
+        com.termux.app.statusbar.HomePillsView pills = findViewById(R.id.terminal_home_pills);
+        if (pills == null || pills.getVisibility() != View.VISIBLE) return;
+        boolean cpuOn = com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
+            mPreferences != null && mPreferences.isStatusWidgetCpuEnabled(),
+            PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
+        boolean ramOn = mPreferences != null && mPreferences.isStatusWidgetRamEnabled();
+        boolean weatherOn = mPreferences != null && mPreferences.isStatusWidgetWeatherEnabled();
+        String cpu = cpuOn ? mBarCpuSmoother.text() : null;
+        String ram = ramOn ? mBarMemorySmoother.text() : null;
+        String weatherGlyph = null;
+        String weather = null;
+        if (weatherOn) {
+            com.termux.app.statusbar.WeatherController.Weather cached =
+                mWeatherController == null ? null : mWeatherController.cache();
+            if (cached != null && cached.valid) {
+                weatherGlyph = com.termux.app.statusbar.WeatherController.glyphFor(
+                    cached.currentCode);
+                weather = com.termux.app.statusbar.WeatherController.formatTemp(cached.currentC,
+                    mPreferences != null && mPreferences.isStatusWidgetWeatherFahrenheit());
+            } else {
+                weather = "--°";
+            }
+        }
+        java.util.List<String> spoken = new java.util.ArrayList<>(3);
+        if (cpu != null) spoken.add(getString(R.string.home_pills_cpu, cpu));
+        if (ram != null) spoken.add(getString(R.string.home_pills_memory, ram));
+        if (weather != null) spoken.add(getString(R.string.home_pills_weather, weather));
+        pills.setStats(cpu, ram, weatherGlyph, weather, android.text.TextUtils.join(", ", spoken));
     }
 
     /**
