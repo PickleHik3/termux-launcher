@@ -42,6 +42,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         /** Turn {@code page} to its {@code index}-th page at once (Home page n). */
         default void showInnerPage(@NonNull PaneWallPage page, int index) { }
         /**
+         * How far the page in front of {@code page}'s view stands off its rest while that view's
+         * own swipe turns it, as a fraction of a page width, positive to the right: Home's grid
+         * mid-swipe and while the next Home page slides in. The windows' arrival is the wall's own
+         * nudge and is not asked. Read on every frame the wallpaper pans; it must not allocate.
+         */
+        default float innerShiftFraction(@NonNull PaneWallPage page) { return 0f; }
+        /**
          * A border drag committed to the window {@code steps} away and the wall still stands where
          * the finger let go: picture what is leaving. {@link #onInnerStep} follows.
          */
@@ -336,11 +343,92 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             + " terminalVisibility=" + (terminal == null ? "none" : String.valueOf(terminal.getVisibility()));
     }
 
-    /** The terminal page slides in from {@code fromPx} beside its place; see PaneWallLayout#nudgePage. */
-    public void nudgeTerminalPage(float fromPx, long durationMs,
+    /**
+     * The terminal page slides in from {@code fromPx} beside its place; see PaneWallLayout#nudgePage.
+     *
+     * @param fromWindow the window the arrival left, for the wallpaper's pan over every window
+     *                   between ({@link #rowPosition}), or {@link WallParallax#ADJACENT} for the
+     *                   one next door
+     */
+    public void nudgeTerminalPage(float fromPx, int fromWindow, long durationMs,
                                   @Nullable android.view.animation.Interpolator interpolator,
                                   @Nullable Runnable onEnd) {
+        mNudgeFromWindow = fromWindow;
         mWall.nudgePage(PaneWallPage.TERMINAL, fromPx, durationMs, interpolator, onEnd);
+    }
+
+    /** The window the terminal page's current nudge left; see {@link #nudgeTerminalPage}. */
+    private int mNudgeFromWindow = WallParallax.ADJACENT;
+
+    // ---- The row's live position, for the wallpaper's pan ----------------------------------
+
+    /**
+     * How many pages the row has: the Home pages, the windows (the Workspace counts as one page
+     * while it is on the row before its windows are known), and the Display page while a display
+     * is up. See {@link WallParallax#rowCount}.
+     */
+    public int rowCount() {
+        java.util.List<PaneWallPage> pages = mWall.pages();
+        return WallParallax.rowCount(rowHomeCount(), rowWindowCount(pages),
+            pages.contains(PaneWallPage.DISPLAY));
+    }
+
+    /**
+     * Where the row is right now, in pages from Home page 1: whole at rest, fractional while
+     * anything moves it. Composed from the three things that move the row, none of which knows
+     * about the others: the wall's offset between its views (the seam, the slide to the Display
+     * page, a border drag between windows), Home's own swipe between Home pages, and the
+     * terminal page's nudge as a window arrives. Read on every frame the wallpaper pans, so
+     * nothing here allocates.
+     */
+    public float rowPosition() {
+        java.util.List<PaneWallPage> pages = mWall.pages();
+        int homes = rowHomeCount();
+        int windows = rowWindowCount(pages);
+        PaneWallPage current = mWall.currentPage();
+        int restAt = rowIndexOf(current, homes, windows);
+        int width = mWall.getWidth();
+        float at = restAt;
+        if (width > 0 && current == PaneWallPage.WIDGETS) {
+            at = WallParallax.innerPosition(restAt,
+                mHost.innerShiftFraction(PaneWallPage.WIDGETS), WallParallax.ADJACENT);
+        } else if (width > 0 && current == PaneWallPage.TERMINAL) {
+            float nudgePx = mWall.nudgePx(PaneWallPage.TERMINAL);
+            if (nudgePx != 0f) {
+                int from = mNudgeFromWindow == WallParallax.ADJACENT ? WallParallax.ADJACENT
+                    : WallParallax.rowIndex(PaneWallPage.TERMINAL, mNudgeFromWindow, homes, windows);
+                at = WallParallax.innerPosition(restAt, nudgePx / width, from);
+            }
+        }
+        float offsetPx = mWall.offsetPx();
+        if (offsetPx == 0f || width <= 0) return at;
+        // Positive: the pages sit to the right, so what is coming in is on the left.
+        int steps = offsetPx > 0f ? -1 : 1;
+        float neighbourAt;
+        if (!mWall.isCrossSlide() && hasInnerPage(current, steps)) {
+            // A border drag toward the next window inside the Workspace.
+            neighbourAt = restAt + steps;
+        } else {
+            PaneWallPage neighbour = PaneWallPolicy.neighbour(pages, current, steps);
+            // Past the row's end nothing comes in, and the picture holds.
+            neighbourAt = neighbour == current ? at : rowIndexOf(neighbour, homes, windows);
+        }
+        return WallParallax.slidePosition(at, neighbourAt, offsetPx, width);
+    }
+
+    /** Where the page {@code kind}'s view shows sits in the row. */
+    private int rowIndexOf(@NonNull PaneWallPage kind, int homes, int windows) {
+        int index = kind == PaneWallPage.DISPLAY ? 0 : mHost.innerIndex(kind);
+        return WallParallax.rowIndex(kind, index, homes, windows);
+    }
+
+    private int rowHomeCount() {
+        return Math.max(1, mHost.innerCount(PaneWallPage.WIDGETS));
+    }
+
+    private int rowWindowCount(@NonNull java.util.List<PaneWallPage> pages) {
+        if (!pages.contains(PaneWallPage.TERMINAL)) return 0;
+        return Math.max(1, mHost.innerCount(PaneWallPage.TERMINAL));
     }
 
     /** Navigate by the {@code page=} argument of {@code wall.go}: a name, or left/right. */

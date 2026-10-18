@@ -47,8 +47,12 @@ public class PaneWallControllerTest {
         int stepBegun;
         int stepped;
         float steppedFrom;
+        float homeShift;
 
         @Override public boolean reducedMotion() { return reduced; }
+        @Override public float innerShiftFraction(PaneWallPage page) {
+            return page == PaneWallPage.WIDGETS ? homeShift : 0f;
+        }
         @Override public boolean isPlankTiltEnabled() { return !reduced; }
         @Override public boolean hasWindow() { return hasWindow; }
         @Override public boolean isDisplayUp() { return display; }
@@ -508,6 +512,108 @@ public class PaneWallControllerTest {
 
     private static android.view.MotionEvent touch(int action, float x, float y, long timeMs) {
         return android.view.MotionEvent.obtain(0L, timeMs, action, x, y, 0);
+    }
+
+    // ---- The row's live position, for the wallpaper's pan (slice 3) ---------------------------
+
+    private static final float ROW_EPS = 0.01f;
+
+    @Test public void eachPageRestsAtItsPlaceInTheRow() {
+        // Three Home pages, three windows, the Display page: seven pages.
+        assertEquals(7, controller.rowCount());
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        host.homePage = 0;
+        assertEquals(0f, controller.rowPosition(), ROW_EPS);
+        host.homePage = 2;
+        assertEquals(2f, controller.rowPosition(), ROW_EPS);
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        host.current = 1;
+        assertEquals("window 2 comes after the three Home pages", 4f, controller.rowPosition(),
+            ROW_EPS);
+        controller.goTo(PaneWallPage.DISPLAY, false);
+        assertEquals("the Display page is the row's last", 6f, controller.rowPosition(), ROW_EPS);
+    }
+
+    @Test public void anEmptyWorkspaceLeavesHomeAndTheDisplayPage() {
+        host.hasWindow = false;
+        controller.refreshPages();
+        assertEquals(4, controller.rowCount());
+        controller.goTo(PaneWallPage.DISPLAY, false);
+        assertEquals(3f, controller.rowPosition(), ROW_EPS);
+        host.display = false;
+        controller.refreshPages();
+        assertEquals("Home pages only", 3, controller.rowCount());
+    }
+
+    @Test public void aWorkspaceWhoseWindowsAreNotKnownYetIsOnePage() {
+        host.windows = 0;
+        controller.refreshPages();
+        assertEquals(5, controller.rowCount());
+    }
+
+    @Test public void homesOwnSwipeMovesTheRowBetweenHomePages() {
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        host.homePage = 1;
+        // Home page 2 dragged 0.3 widths left: Home page 3 is coming in.
+        host.homeShift = -0.3f;
+        assertEquals(1.3f, controller.rowPosition(), ROW_EPS);
+        // Committed: Home page 3 in front, entering from 0.7 widths to the right.
+        host.homePage = 2;
+        host.homeShift = 0.7f;
+        assertEquals(1.3f, controller.rowPosition(), ROW_EPS);
+    }
+
+    @Test public void theSeamDragRunsFromTheLastHomePageIntoWindowOne() {
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        host.homePage = 2;
+        host.current = 2;
+        controller.homeSeam().begin();
+        controller.homeSeam().drag(-432f);
+        assertEquals("0.4 of the way from Home page 3 to window 1", 2.4f,
+            controller.rowPosition(), ROW_EPS);
+        controller.homeSeam().end(-3000f);
+        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
+        assertEquals(3f, controller.rowPosition(), ROW_EPS);
+    }
+
+    @Test public void aBorderDragBetweenWindowsMovesTheRowByOneWindow() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        host.current = 1;
+        wall.beginPlainDrag();
+        wall.dragTo(-324f);
+        assertEquals(4.3f, controller.rowPosition(), ROW_EPS);
+        wall.dragTo(324f);
+        assertEquals(3.7f, controller.rowPosition(), ROW_EPS);
+        wall.cancelDrag();
+    }
+
+    @Test public void aSlideAcrossTheRowStartsWhereTheWallLeftAndEndsWhereItLands() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        host.current = 2;
+        host.reduced = false;
+        controller.refreshPages();
+        // The home press from window 3: the wall slides one view, the row runs from row 5 to 0.
+        controller.goHome(true);
+        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        assertEquals(5f, controller.rowPosition(), 0.05f);
+        idle();
+        assertEquals(0f, controller.rowPosition(), ROW_EPS);
+    }
+
+    @Test public void aWindowArrivalPansFromTheWindowItLeft() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        host.current = 2;
+        // The bar jumped from window 1 to window 3: the arrival starts a whole width out.
+        controller.nudgeTerminalPage(1080f, 0, 300L, null, null);
+        assertEquals(3f, controller.rowPosition(), ROW_EPS);
+        idle();
+        assertEquals(5f, controller.rowPosition(), ROW_EPS);
+        // A step back to window 2, arriving from the left with no departure named, starts from
+        // window 3 next door.
+        host.current = 1;
+        controller.nudgeTerminalPage(-540f, WallParallax.ADJACENT, 300L, null, null);
+        assertEquals(4.5f, controller.rowPosition(), ROW_EPS);
+        idle();
     }
 
     private static void letTheHoldElapse() {

@@ -66,6 +66,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * keyboard, down puts them away (spec §5.1).
          */
         default void onHomePaletteSwipe(boolean up) { }
+        /**
+         * The Home page's content moved sideways under Home's own swipe, or as a page slides in
+         * or back; {@link #homePageShiftFraction} says where it stands. Per frame of the motion.
+         */
+        default void onHomePageShifted() { }
         /** The activity-side services the built-in widgets need; null keeps them inert. */
         @Nullable default BuiltinWidgetServices.Host builtinWidgetHost() { return null; }
     }
@@ -135,6 +140,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             @Override public void onFreeAreaVerticalSwipe(boolean up) {
                 host.onHomePaletteSwipe(up);
             }
+            @Override public void onContentShifted() { host.onHomePageShifted(); }
         }, new WidgetPickerAdapter.Listener() {
             @Override public void onProviderSelected(@NonNull WidgetProviderItem item) {
                 selectProvider(item);
@@ -344,6 +350,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     /** Which Home page is in front, counting from 0. */
     public int homePageIndex() {
         return currentPage;
+    }
+
+    /**
+     * How far the Home page in front stands off its rest while Home's swipe turns it, as a
+     * fraction of a page width, positive to the right; 0 at rest.
+     */
+    public float homePageShiftFraction() {
+        return pane.contentShiftFraction();
     }
 
     /** Turn Home to page {@code page} (clamped), without the swipe's slide. */

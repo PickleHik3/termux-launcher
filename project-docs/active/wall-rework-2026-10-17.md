@@ -27,6 +27,11 @@ Parallax runs across the whole row. The seam is continuous but never silent: the
 with the first window (status bar, extra keys, corner tabs, borders), so the user sees which half
 they are in.
 
+Status 2026-10-18 (phase two, slice 3): parallax across the whole row built. The spare width is
+spread linearly over the row's pages (`WallParallax.offsetPx`); the live row position composes the
+wall's offset, Home's own swipe and a window's arrival (`PaneWallController.rowPosition`). A count
+change snaps. Unit tests green; emulator pass owed (device-checks, slice 3).
+
 ## 3. Home
 
 - **Content**: today's widget grid, already multi-page (`LauncherWidgetRepository`). Long press on an
