@@ -22683,6 +22683,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mFirstBootTour != null) mFirstBootTour.onWindowSelected(String.valueOf(index));
         });
         bar.setOnWindowCloseRequestedListener(this::closeWindowFromStatusBar);
+        // A chip dragged along the row and dropped: the window moves there, and stays current if
+        // it was. Only the Workspace's windows' chips lift (setMovableChipCount below).
+        bar.setOnWindowChipMovedListener(this::moveWindow);
         bar.setOnCreateWindowListener(() -> {
             // On the Display place the chips are the display's apps, and the plus meant
             // "open another app"; the app drawer has no programmatic open yet, so the plus
@@ -23377,6 +23380,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Home floats are windows of the session too: chips after the row's, marked as floats.
             addHomeFloatChips(items, foregroundPids);
         }
+        // Only the row's own windows can be dragged to reorder: not the display's chip or the
+        // Home floats' after them, and nothing on the places that fill the row with other things.
+        bar.setMovableChipCount(terminalWindows && mCurrentWSession != null
+            ? mCurrentWSession.windows.size() : 0);
         bar.setWindows(items, selected);
         // The row is rebuilt whenever anything about a window changes, so the count is the edge
         // the tour reads: one more chip is the +, one fewer is a chip's ×. Only the terminal
