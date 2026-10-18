@@ -18180,6 +18180,70 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
+    /**
+     * Consume ({@code pane.consume}, Niri's word; {@link com.termux.app.terminal.ColumnPolicy}):
+     * the current window's neighbour in the row — on the right, or on the left when
+     * {@code fromLeft} — joins it as panes beside its focused pane and leaves the row. The current
+     * window stays current and on screen, its index following it when the neighbour stood before
+     * it; the consumed window's focused pane takes the focus. No session closes. Home floats are
+     * not in the row, so a consume never takes one. False at the row's end on that side, with one
+     * window, or when the controller refuses.
+     */
+    boolean consumeWindow(boolean fromLeft) {
+        if (mPaneController == null || mCurrentWSession == null) return false;
+        WSession ws = mCurrentWSession;
+        int current = ws.current;
+        int source = com.termux.app.terminal.ColumnPolicy.consumeSource(current, ws.windows.size(),
+            fromLeft);
+        if (source == com.termux.app.terminal.ColumnPolicy.INVALID) return false;
+        com.termux.app.terminal.TerminalPaneController.Window into = ws.windows.get(current);
+        com.termux.app.terminal.TerminalPaneController.Window taken = ws.windows.get(source);
+        // The row is settled before the controller announces the change: what hears it (the
+        // drawer's rebuild) reads this row, which must no longer hold the consumed window.
+        ws.windows.remove(source);
+        ws.current = com.termux.app.terminal.ColumnPolicy.currentAfterRemove(current, source);
+        if (!mPaneController.consumeWindow(into, taken, fromLeft)) {
+            ws.windows.add(source, taken);
+            ws.current = current;
+            return false;
+        }
+        if (mPaneController.activeWindow() != into) mPaneController.showWindow(into);
+        rebuildDrawerSessions();
+        return true;
+    }
+
+    /**
+     * Expel ({@code pane.expel}, Niri's word; {@link com.termux.app.terminal.ColumnPolicy}): the
+     * current window's focused pane leaves it for a new window of its own, right after it in the
+     * row, or right before it when {@code toLeft}. Focus goes with the pane, as in Niri: the new
+     * window becomes current and the Workspace slides to it the way a new window arrives, from the
+     * side it was placed on. No session closes. False for a window of one pane, and while a Home
+     * float has the focus: a float is not in the row.
+     */
+    boolean expelPane(boolean toLeft) {
+        if (mPaneController == null || mCurrentWSession == null) return false;
+        if (mPaneController.focusedHomeFloat() != null) return false;
+        WSession ws = mCurrentWSession;
+        com.termux.app.terminal.TerminalPaneController.Window from = ws.currentWindow();
+        int target = com.termux.app.terminal.ColumnPolicy.expelTarget(ws.current,
+            ws.windows.size(), toLeft);
+        if (from == null || target == com.termux.app.terminal.ColumnPolicy.INVALID) return false;
+        // The window as it was slides off; the new one arrives in its place.
+        captureTerminalDeparture();
+        com.termux.app.terminal.TerminalPaneController.Window expelled =
+            mPaneController.expelPane(from);
+        if (expelled == null) {
+            dropTerminalDepartureSnapshot();
+            return false;
+        }
+        ws.windows.add(target, expelled);
+        ws.current = com.termux.app.terminal.ColumnPolicy.currentAfterExpel(target);
+        mPaneController.showWindow(expelled);
+        animateTerminalWindowLifecycleArrival(toLeft ? -1 : 1);
+        rebuildDrawerSessions();
+        return true;
+    }
+
     /** Number of windows in the current tmux-style session. */
     int getCurrentWindowCount() {
         return mCurrentWSession == null ? 0 : mCurrentWSession.windows.size();
@@ -26266,6 +26330,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean moveWindow(int from, int to) {
             return TermuxActivity.this.moveWindow(from, to);
+        }
+
+        @Override public boolean consumeWindow(boolean fromLeft) {
+            return TermuxActivity.this.consumeWindow(fromLeft);
+        }
+
+        @Override public boolean expelPane(boolean toLeft) {
+            return TermuxActivity.this.expelPane(toLeft);
         }
 
         @Override public int currentWindowCount() {

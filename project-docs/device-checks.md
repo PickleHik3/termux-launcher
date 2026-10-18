@@ -618,6 +618,24 @@ Not seen: everything else listed under the sections below.
 - Owed · overflow: with 8 windows, so the bar scrolls, lift the first chip and hold it near the
   bar's right edge: the strip scrolls under it until the end, the chips part as it passes them,
   and the release lands it where it shows.
+### Wall rework phase two: slice 5b, consume and expel (feat/wall-rework-phase2)
+- Owed · commits "feat(wall): consume a neighbour window into this one, expel a pane into its own"
+  and "feat(wall): pane.consume and pane.expel verbs, palette rows and Niri keys" · emulator,
+  portrait. With windows A B C (one pane each) and B current, palette › **Consume next window into
+  this pane**: B holds B's pane and C's pane split (stacked in portrait, side by side in
+  landscape), the bar and the drawer's Live list read A B, the consumed pane (C's) has the focus,
+  and C's shell is still alive (its scrollback is there).
+- Owed · then palette › **Expel pane to its own window** (or `Ctrl+Alt+.`): the focused pane
+  leaves B into a new window right after B, the row reads A B C', C' is current (its chip
+  selected) and the Workspace slid to it from the right; B is back to its one pane. Expel on a
+  one-pane window does nothing and closes nothing.
+- Owed · Save sessions… then Load (Replace) after each step keeps the row and the panes as shown.
+- Owed · `pane.consume from=left` (`map ctrl+alt+shift+m pane.consume from=left` in
+  `~/.termux/termux-launcher-bindings.conf`, `termux-reload-settings`) on B pulls A: A's pane sits
+  before B's, the row reads B C. `Ctrl+Alt+,` on the row's last window does nothing.
+- Owed · with a Home float open, consume on the row's last window does nothing (the float's chip
+  after the row's is never consumed); with the Home float focused, `Ctrl+Alt+.` does nothing.
+  Neither action is offered in the Home palette.
 
 ## Developer
 

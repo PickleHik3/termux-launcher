@@ -305,3 +305,20 @@ row, samples the shared frame like the pane's own glass, and wears the active ri
 focused. Maximise remembers the earlier fractions and a second tap restores them. Dock on a window's
 floating pane tiles it back; on a Home float it moves the window into the row after the current
 one and slides to the Workspace.
+
+### Consume and expel (wall phase two, slice 5b)
+
+Niri's column moves, with the row's windows as the columns. `ColumnPolicy` is the arithmetic:
+`pane.consume` (`from=right|left`, default right, `Ctrl+Alt+,`) names the current window's
+neighbour (nothing at the row's end or with one window); `TerminalPaneController.consumeWindow`
+joins that window's whole tree beside the focused pane as one split, on the axis `splitAuto` would
+take (the pane's longer side under dwindle, the screen's longer side otherwise), before the pane
+when it came from the left, moves its floats over and gives its focused pane the focus; the window
+leaves the controller and `TermuxActivity.consumeWindow` takes it out of `WSession.windows`, with
+the current index following the current window. `pane.expel` (`to=right|left`, default right,
+`Ctrl+Alt+.`) runs `expelPane`: the focused pane is detached (`detachLeaf`; a focused float is
+undocked, a lone tiled pane beside floats lets the first float dock in its place) into a new window
+whose root is that leaf; the activity inserts it right after the current window (before it with
+`to=left`), makes it current, as Niri keeps focus with the expelled window, and slides to it like a
+new window. A one-pane window and a focused scratchpad refuse. Neither closes a session; Home floats
+are outside the row and take no part.

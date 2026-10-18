@@ -2400,6 +2400,121 @@ public class TerminalPaneController {
         return true;
     }
 
+    // --- Columns: consume and expel ---
+
+    /** {@link #consumeWindow(Window, Window, boolean)} with the consumed window's panes after. */
+    public boolean consumeWindow(@NonNull Window into, @NonNull Window source) {
+        return consumeWindow(into, source, false);
+    }
+
+    /**
+     * Consume, in Niri's sense ({@link ColumnPolicy}): {@code source}'s whole tree joins
+     * {@code into} as a split beside {@code into}'s focused pane, before it when
+     * {@code sourceFirst} (the window came from the left) and after it otherwise. The axis is the
+     * one {@link #splitAuto} gives a split of that pane: its longer side while the window tiles
+     * itself, the screen's longer side otherwise (side by side in landscape, stacked in portrait).
+     * {@code source}'s floating panes float on in {@code into}, and its focused pane becomes
+     * {@code into}'s. {@code source} leaves the controller; no session is closed. The caller takes
+     * it out of its row. False, changing nothing, for one window twice, a Home float on either
+     * side, or a window this controller does not hold.
+     */
+    public boolean consumeWindow(@NonNull Window into, @NonNull Window source,
+                                 boolean sourceFirst) {
+        if (into == source || into.isHomeFloat() || source.isHomeFloat()
+            || !mWindows.contains(into) || !mWindows.contains(source)
+            || into.root == null || into.active == null
+            || source.root == null || source.active == null) return false;
+        Leaf anchor = into.active;
+        if (into.floating.contains(anchor)) anchor = firstLeaf(into.root);
+        int orientation = isDwindleManaged(into) && into == mActiveWindow
+            ? dwindleOrientationFor(anchor)
+            : DwindleTilingPolicy.splitOrientationFor(mHostView.getWidth(), mHostView.getHeight());
+        Node consumed = source.root;
+        Split split = new Split();
+        split.orientation = orientation;
+        split.weightA = 1f;
+        split.weightB = 1f;
+        split.a = sourceFirst ? consumed : anchor;
+        split.b = sourceFirst ? anchor : consumed;
+        split.parent = anchor.parent;
+        if (split.parent == null) {
+            into.root = split;
+        } else if (split.parent.a == anchor) {
+            split.parent.a = split;
+        } else {
+            split.parent.b = split;
+        }
+        anchor.parent = split;
+        consumed.parent = split;
+        // The consumed window's floats keep their shape and z-order, above the floats already here.
+        into.floating.addAll(source.floating);
+        into.active = source.active;
+        source.floating.clear();
+        source.root = null;
+        source.active = null;
+        mWindows.remove(source);
+        // A maximised pane would hide what was just pulled in; one of the consumed window's
+        // was never this window's to keep.
+        if (into == mActiveWindow || source == mActiveWindow) mMaximizedLeaf = null;
+        if (mActiveWindow == source) mActiveWindow = null;
+        // A managed window re-tiles around its new panes, as it does around a split.
+        reapplyLayoutPolicy(into);
+        if (into == mActiveWindow) {
+            render();
+            mHost.onActivePaneChanged();
+        }
+        mHost.onTreesChanged();
+        return true;
+    }
+
+    /**
+     * Expel, in Niri's sense ({@link ColumnPolicy}): {@code from}'s focused pane leaves it for a new
+     * window of its own, whose tree is that one pane; the pane keeps its shell, its zoom and its
+     * view. A focused float docks as the new window's root. {@code from} focuses the pane that
+     * took the expelled one's place (or its first tiled pane), and re-tiles if it tiles itself.
+     * The new window is not shown and not in any row: the caller places and shows it. Null,
+     * changing nothing, for a Home float, a window this controller does not hold, a window of one
+     * pane and no floats, which has nothing to expel it from, or a focused scratchpad.
+     */
+    @Nullable
+    public Window expelPane(@NonNull Window from) {
+        if (from.isHomeFloat() || !mWindows.contains(from) || from.active == null
+            || from.root == null) return null;
+        if (from.root instanceof Leaf && from.floating.isEmpty()) return null;
+        Leaf leaf = from.active;
+        // The scratchpad is its window's drop-down, summoned there by name; it never leaves.
+        if (from.floating.contains(leaf) && isScratchpadLeaf(leaf)) return null;
+        if (mMaximizedLeaf == leaf) mMaximizedLeaf = null;
+        if (from.floating.contains(leaf)) {
+            from.floating.remove(leaf);
+            removeFloatContainer(leaf);
+            leaf.floatFrac = null;
+            leaf.floatRestoreFrac = null;
+            leaf.appliedFloatFrac = null;
+            from.active = firstLeaf(from.root);
+        } else if (leaf.parent == null) {
+            // The last tiled pane leaves while floats stay: the bottom-most float docks as the
+            // tree, as when that pane's shell ends (onSessionFinished).
+            from.root = null;
+            dockLeaf(from, from.floating.get(0));
+        } else {
+            Node sibling = leaf.parent.a == leaf ? leaf.parent.b : leaf.parent.a;
+            detachLeaf(from, leaf);
+            from.active = firstLeaf(sibling);
+        }
+        leaf.parent = null;
+        Window window = new Window(leaf);
+        window.layoutPolicy = mDefaultLayoutPolicy;
+        mWindows.add(window);
+        reapplyLayoutPolicy(from);
+        if (from == mActiveWindow) {
+            render();
+            mHost.onActivePaneChanged();
+        }
+        mHost.onTreesChanged();
+        return window;
+    }
+
     // --- Floating panes ---
 
     /**

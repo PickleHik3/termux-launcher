@@ -33,6 +33,7 @@ import org.robolectric.util.ReflectionHelpers;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
@@ -1697,6 +1698,179 @@ public class TerminalPaneControllerTest {
         assertEquals(24, ((TerminalPaneController.Leaf) restoredRoot.a).fontSize);
         assertEquals(0, ((TerminalPaneController.Leaf) restoredRoot.b).fontSize);
         assertEquals(40, restored.floating.get(0).fontSize);
+    }
+
+    // --- Columns: consume and expel (Niri's words; the row's windows are the columns) ---
+
+    @Test
+    public void consumePullsTheWholeNeighbourTreeBesideTheFocusedPaneAndFocusesIt() {
+        int[] removed = {0};
+        TerminalPaneController controller = newCountingController(removed);
+        TerminalSession a1 = terminal();
+        TerminalPaneController.Window a = controller.newWindow(a1, "A");
+        PaneFixture b = fourPaneFixture(controller);
+        TerminalPaneController.Node bRoot = b.window.root;
+        TerminalSession bFocused = b.sessions.get(2);
+        controller.showWindow(a);
+
+        assertTrue(controller.consumeWindow(a, b.window));
+        // The host has no size here, so the screen's longer side is undecided: stacked, as
+        // pane.split would split.
+        TerminalPaneController.Split root = (TerminalPaneController.Split) a.root;
+        assertEquals(LinearLayout.VERTICAL, root.orientation);
+        assertSame(a1, ((TerminalPaneController.Leaf) root.a).session);
+        assertSame("the consumed tree keeps its shape", bRoot, root.b);
+        assertSame(root, bRoot.parent);
+        assertEquals(5, countLeaves(a.root));
+        assertSame(bFocused, controller.getActiveSession());
+        assertSame(a, controller.activeWindow());
+        assertEquals("A", controller.windowName(a));
+        for (TerminalSession shell : b.sessions) assertSame(a, controller.windowOf(shell));
+        assertEquals("no session closed", 0, removed[0]);
+        assertEquals(5, controller.getVisiblePaneViews().size());
+    }
+
+    @Test
+    public void consumeFromTheLeftPutsTheConsumedPanesBefore() {
+        TerminalPaneController controller = newController();
+        TerminalSession left = terminal();
+        TerminalSession right = terminal();
+        TerminalPaneController.Window source = controller.newWindow(left);
+        TerminalPaneController.Window into = controller.newWindow(right);
+        controller.showWindow(into);
+
+        assertTrue(controller.consumeWindow(into, source, true));
+        TerminalPaneController.Split root = (TerminalPaneController.Split) into.root;
+        assertSame(left, ((TerminalPaneController.Leaf) root.a).session);
+        assertSame(right, ((TerminalPaneController.Leaf) root.b).session);
+        assertSame(left, controller.getActiveSession());
+        assertEquals(Arrays.asList(left, right), controller.shellsOf(into));
+    }
+
+    @Test
+    public void consumeCarriesTheNeighboursFloatsAndRefusesWhatIsNotInTheRow() {
+        TerminalPaneController controller = newController();
+        HomeFloatLayer layer = new HomeFloatLayer(RuntimeEnvironment.getApplication());
+        controller.setHomeFloatLayer(layer);
+        TerminalSession mine = terminal();
+        TerminalPaneController.Window into = controller.newWindow(mine);
+        PaneFixture neighbour = fourPaneFixture(controller);
+        assertEquals(TerminalPaneController.FLOAT_TOGGLE_FLOATED,
+            controller.toggleFloatActivePane());
+        TerminalPaneController.Leaf floated = neighbour.window.floating.get(0);
+        TerminalPaneController.Window homeFloat = controller.openHomeFloat(terminal(), 0);
+        controller.showWindow(into);
+
+        assertFalse(controller.consumeWindow(into, into));
+        assertFalse("a Home float is never consumed", controller.consumeWindow(into, homeFloat));
+        assertFalse(controller.consumeWindow(homeFloat, into));
+        assertEquals(Collections.singletonList(mine), controller.shellsOf(into));
+
+        assertTrue(controller.consumeWindow(into, neighbour.window));
+        assertEquals(Collections.singletonList(floated), into.floating);
+        assertSame("the float had the neighbour's focus and keeps it", floated, into.active);
+        assertEquals(4, countLeaves(into.root));
+        assertEquals(5, controller.shellsOf(into).size());
+        assertTrue(homeFloat.isHomeFloat());
+        assertFalse("gone from the controller", controller.consumeWindow(into, neighbour.window));
+    }
+
+    @Test
+    public void expelTakesTheFocusedPaneIntoAWindowOfItsOwn() {
+        int[] removed = {0};
+        PaneFixture fixture = fourPaneFixture(newCountingController(removed));
+        TerminalSession focused = fixture.sessions.get(2);
+
+        TerminalPaneController.Window expelled = fixture.controller.expelPane(fixture.window);
+        assertNotNull(expelled);
+        assertTrue(expelled.root instanceof TerminalPaneController.Leaf);
+        assertSame(focused, ((TerminalPaneController.Leaf) expelled.root).session);
+        assertNull(expelled.root.parent);
+        assertSame(expelled.root, expelled.active);
+        assertSame(expelled, fixture.controller.windowOf(focused));
+        // one | (two / four): the pane beside it took its place, and the focus.
+        assertEquals(3, countLeaves(fixture.window.root));
+        assertEquals(Arrays.asList(fixture.sessions.get(0), fixture.sessions.get(1),
+            fixture.sessions.get(3)), fixture.controller.shellsOf(fixture.window));
+        assertSame(fixture.sessions.get(3), fixture.controller.getActiveSession());
+        assertEquals("no session closed", 0, removed[0]);
+
+        // Not shown yet: the host places it in the row and shows it.
+        assertSame(fixture.window, fixture.controller.activeWindow());
+        fixture.controller.showWindow(expelled);
+        assertSame(focused, fixture.controller.getActiveSession());
+    }
+
+    @Test
+    public void expelLeavesAOnePaneWindowAlone() {
+        TerminalPaneController controller = newController();
+        TerminalSession only = terminal();
+        TerminalPaneController.Window window = controller.newWindow(only);
+        controller.showWindow(window);
+
+        assertNull(controller.expelPane(window));
+        assertEquals(Collections.singletonList(only), controller.shellsOf(window));
+        assertSame(window, controller.windowOf(only));
+        assertSame(only, controller.getActiveSession());
+    }
+
+    @Test
+    public void expelOfAFloatDocksItAsTheNewWindowsRoot() {
+        PaneFixture fixture = fourPaneFixture();
+        TerminalSession focused = fixture.sessions.get(2);
+        fixture.controller.toggleFloatActivePane();
+
+        TerminalPaneController.Window expelled = fixture.controller.expelPane(fixture.window);
+        assertNotNull(expelled);
+        TerminalPaneController.Leaf leaf = (TerminalPaneController.Leaf) expelled.root;
+        assertSame(focused, leaf.session);
+        assertNull(leaf.floatFrac);
+        assertTrue(expelled.floating.isEmpty());
+        assertTrue(fixture.window.floating.isEmpty());
+        assertEquals(3, countLeaves(fixture.window.root));
+        assertSame(fixture.sessions.get(0), fixture.controller.getActiveSession());
+    }
+
+    @Test
+    public void expelOfTheLastTiledPaneDocksAFloatInItsPlace() {
+        TerminalPaneController controller = newController();
+        List<TerminalSession> sessions = Arrays.asList(terminal(), terminal());
+        TerminalWorkspace.Node tree = new TerminalWorkspace.Split(
+            TerminalWorkspace.Split.HORIZONTAL, 1f, 1f,
+            new TerminalWorkspace.Pane("/one", null, null),
+            new TerminalWorkspace.Pane("/two", null, null));
+        TerminalPaneController.Window window = controller.newWorkspaceWindow(
+            new TerminalWorkspace.Window(1, tree), sessions);
+        controller.showWindow(window);
+        assertEquals(TerminalPaneController.FLOAT_TOGGLE_FLOATED,
+            controller.toggleFloatActivePane());
+        TerminalPaneController.Leaf tiled = (TerminalPaneController.Leaf) window.root;
+        TerminalSession floating = window.floating.get(0).session;
+        window.active = tiled;
+
+        TerminalPaneController.Window expelled = controller.expelPane(window);
+        assertNotNull(expelled);
+        assertSame(tiled.session, ((TerminalPaneController.Leaf) expelled.root).session);
+        assertSame(floating, ((TerminalPaneController.Leaf) window.root).session);
+        assertTrue(window.floating.isEmpty());
+        assertSame(floating, controller.getActiveSession());
+
+        // A Home float has nothing to expel it from.
+        controller.setHomeFloatLayer(new HomeFloatLayer(RuntimeEnvironment.getApplication()));
+        assertNull(controller.expelPane(controller.openHomeFloat(terminal(), 0)));
+    }
+
+    /** {@link #newController()} counting the shells it is asked to remove. */
+    private static TerminalPaneController newCountingController(int[] removed) {
+        Context context = RuntimeEnvironment.getApplication();
+        return new TerminalPaneController(new TerminalPaneController.Host() {
+            @Override public TerminalSession createShell(String cwd) { return null; }
+            @Override public void configurePaneView(TerminalView view) {}
+            @Override public void removeShell(TerminalSession session) { removed[0]++; }
+            @Override public void onActivePaneChanged() {}
+            @Override public void onTreesChanged() {}
+            @Override public String defaultCwd() { return "/"; }
+        }, new FrameLayout(context), LayoutInflater.from(context));
     }
 
     /** Four panes whose controller can also create shells, so {@code split()} actually runs. */

@@ -129,6 +129,10 @@ class FakeTerminalHost implements TerminalHost {
     int lastRenamedBrowserIndex = -1;
     @Nullable Integer lastSelectedWindow;
     @Nullable int[] lastMovedWindow;
+    @Nullable Boolean lastConsumedFromLeft;
+    @Nullable Boolean lastExpelledToLeft;
+    boolean consumeWindowResult = true;
+    boolean expelPaneResult = true;
     @Nullable Boolean lastSwitchWindowForward;
 
     // Workspaces
@@ -729,6 +733,18 @@ class FakeTerminalHost implements TerminalHost {
         record("moveWindow");
         lastMovedWindow = new int[]{from, to};
         return true;
+    }
+
+    @Override public boolean consumeWindow(boolean fromLeft) {
+        record("consumeWindow");
+        lastConsumedFromLeft = fromLeft;
+        return consumeWindowResult;
+    }
+
+    @Override public boolean expelPane(boolean toLeft) {
+        record("expelPane");
+        lastExpelledToLeft = toLeft;
+        return expelPaneResult;
     }
 
     @Override public int currentWindowCount() {

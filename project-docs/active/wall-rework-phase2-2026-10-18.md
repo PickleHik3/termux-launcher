@@ -89,6 +89,18 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    (`to=left|right|<place from 1>`) and the palette's Move window left / right (Workspace only),
    no default stroke. The status bar's vertical window column (a left or right bar) has no drag.
    Unit tests green; emulator pass owed (device-checks, slice 5a). Next: 5b, consume/expel.
+   Status 2026-10-18 (slice 5b, consume/expel): built on a worker branch. The row's windows are
+   Niri's columns (`ColumnPolicy`). `pane.consume` (`from=right|left`, default right,
+   `Ctrl+Alt+,`, palette "Consume next window into this pane") pulls the neighbour window's whole
+   tree and floats into the current window beside its focused pane, on `pane.split`'s automatic
+   axis, and focuses the consumed window's focused pane; that window leaves the row and the
+   current window stays on screen. `pane.expel` (`to=right|left`, default right, `Ctrl+Alt+.`,
+   palette "Expel pane to its own window") detaches the focused pane into a new window right after
+   the current one (before it with `to=left`); focus goes with it, as in Niri, so the new window is
+   current and the Workspace slides to it like a new window. A one-pane window, a focused
+   scratchpad and a focused Home float refuse; Home floats are never consumed; no session closes.
+   `window.move` got its title ("Move window to…"). Unit tests green; emulator pass owed
+   (device-checks, slice 5b). Slice 5 done.
 6. **The first-boot tour**, rewritten for the wall (switched off since 651ea9d7f).
 7. **The icon grid on Home pages**: app icons, folders, drag between pages. Born on slice 2b's
    rule: its rim is Home's Margin, as the widget grid's is.

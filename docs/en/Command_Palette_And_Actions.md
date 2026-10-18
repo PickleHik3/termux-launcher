@@ -86,6 +86,8 @@ Pane, window, session-browser and workspace actions need **Split-pane controls**
 | `pane.rotate` | Rotate pane layout | `direction`: `clockwise` (default), `counterclockwise` | |
 | `pane.move_to_edge` | Move pane to edge | `edge`: `left`, `right`, `up`, `down` (required) | |
 | `pane.toggle_float` | Float / dock pane | | `Ctrl+Alt+F` (on) |
+| `pane.consume` | Consume next window into this pane | `from`: `right` (default), `left` | `Ctrl+Alt+,` (on) |
+| `pane.expel` | Expel pane to its own window | `to`: `right` (default), `left` | `Ctrl+Alt+.` (on) |
 | `pane.rename` | Rename pane | `name` (required; empty restores the default) | |
 | `pane.rename_prompt` | Rename pane… | | `Ctrl+Alt+R` (off) |
 
@@ -98,7 +100,7 @@ Pane, window, session-browser and workspace actions need **Split-pane controls**
 | `window.next` | Next window | | `Ctrl+Alt+]`, `Ctrl+Alt+Right` (on) |
 | `window.previous` | Previous window | | `Ctrl+Alt+[`, `Ctrl+Alt+Left` (on) |
 | `window.select` | Switch to window | `index`: 0 to 64, counted from 0 (required) | `Ctrl+Alt+1` to `9` (on) |
-| `window.move` | (no palette row) | `to`: `left`, `right`, or a place in the row counted from 1 (required) | |
+| `window.move` | Move window to… | `to`: `left`, `right`, or a place in the row counted from 1 (required) | |
 | `window.move_left` | Move window left | | |
 | `window.move_right` | Move window right | | |
 | `window.rename` | Rename window | `name`: up to 14 characters; empty restores the automatic label (required) | |
@@ -107,6 +109,10 @@ Pane, window, session-browser and workspace actions need **Split-pane controls**
 `window.next` and `window.previous` step through the open apps on a display window.
 `window.move`, `window.move_left` and `window.move_right` move the current window along the
 Workspace's row and keep it current; dragging a window's chip in the window bar does the same.
+`pane.consume` pulls the neighbouring window of the row (on the right unless `from=left`) into the
+current window as panes beside the focused one, and `pane.expel` pushes the focused pane out into
+a new window right after the current one (before it with `to=left`), which becomes current. Neither
+closes a shell; see [Columns](Panes_Windows_And_Sessions.md#columns-consume-and-expel).
 
 ### Session and workspace
 
