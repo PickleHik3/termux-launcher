@@ -494,6 +494,23 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
+     * Whether a slide from one view to another ({@link #goTo} to a different page) is under way:
+     * then the view beside the current page is the other kind's, never a window of the current
+     * page's own, which is how the pages are placed ({@link #applyPagePositions}).
+     */
+    public boolean isCrossSlide() {
+        return mCrossSlide;
+    }
+
+    /**
+     * How far {@code page} stands off its place right now by a {@link #nudgePage}, in px,
+     * positive to the right; 0 when it is not being nudged.
+     */
+    public float nudgePx(@NonNull PaneWallPage page) {
+        return page == mNudgePage ? mNudgePx : 0f;
+    }
+
+    /**
      * Whether {@code page}'s pixels are on screen, read off the page view itself rather than off
      * the record of which page is current. The two agree whenever the wall rests where it says it
      * does; a slide that was cut short leaves them apart, and then the pixels are the truth.

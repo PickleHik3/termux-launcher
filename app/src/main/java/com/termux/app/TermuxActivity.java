@@ -3981,11 +3981,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Puts the wallpaper where the wall is: the offset is a function of the wall's live
-     * position ({@link com.termux.app.wall.WallParallax#offsetPx}), so a drag, a fling and a
-     * settle all move the picture on the wall's own curve, and every surface that samples the
-     * frame is told to draw again when it moved. Per frame of a slide, so nothing here allocates:
-     * one number written, and invalidates.
+     * Puts the wallpaper where the row is: the offset is a function of the row's live position
+     * ({@link com.termux.app.wall.PaneWallController#rowPosition}, spread over the picture by
+     * {@link com.termux.app.wall.WallParallax#offsetPx}), so Home's swipe, the seam, a border drag
+     * between windows, a window's arrival and a slide to the Display page all move the picture on
+     * their own curve, and every surface that samples the frame is told to draw again when it
+     * moved. Per frame of a slide, so nothing here allocates: one number written, and
+     * invalidates. A Home page or a window coming or going re-spreads the picture over the new
+     * count at once: the pan snaps to it rather than animating.
      */
     private void syncWallpaperParallax() {
         syncWallpaperParallax(false);
@@ -4000,9 +4003,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float offsetPx = 0f;
         int sparePx = mWallpaperParallaxSparePx;
         if (sparePx > 0 && mPaneWallController != null) {
-            offsetPx = com.termux.app.wall.WallParallax.offsetPx(mPaneWallController.pages(),
-                mPaneWallController.currentPage(), mWallOffsetPx,
-                mPaneWallController.wall().getWidth(), sparePx);
+            offsetPx = com.termux.app.wall.WallParallax.offsetPx(
+                mPaneWallController.rowPosition(), mPaneWallController.rowCount(), sparePx);
         }
         if (!mWallpaperParallax.setOffsetPx(offsetPx)) return;
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.invalidate();
@@ -18902,6 +18904,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!mDrawerSessions.isEmpty()) sFirstShellStarted = true;
         // The wall's row follows the windows: the Workspace is on it while there is one.
         if (mPaneWallController != null) mPaneWallController.refreshPages();
+        // So does the wallpaper's pan: a window opened or closed, or another session's windows,
+        // re-spread the picture over the row (a snap; an arrival that follows pans from there).
+        syncWallpaperParallax();
         // The one funnel every structural change to the sessions and their windows already takes,
         // so it is where the run reads them. Both are edge-triggered: a rebuild that moved neither
         // says nothing.
@@ -19926,6 +19931,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void showInnerPage(@NonNull com.termux.app.wall.PaneWallPage page,
                                                     int index) {
                     showWallInnerPage(page, index);
+                }
+                // Home's own swipe between Home pages, for the wallpaper's pan over the row.
+                @Override public float innerShiftFraction(
+                        @NonNull com.termux.app.wall.PaneWallPage page) {
+                    return page == com.termux.app.wall.PaneWallPage.WIDGETS
+                        && mWidgetPaneController != null
+                        ? mWidgetPaneController.homePageShiftFraction() : 0f;
                 }
                 @Override public void onInnerStepBegin(
                         @NonNull com.termux.app.wall.PaneWallPage page, int steps) {
@@ -22368,6 +22380,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mPaneWallController.widgetsPage().applyWidgetEditing(editing);
                     }
                 }
+                // Home's swipe between Home pages pans the wallpaper over the row, per frame; a
+                // Home page added or removed lands here too as the page re-renders at rest.
+                @Override public void onHomePageShifted() {
+                    syncWallpaperParallax();
+                }
                 @Override public void onWidgetPageRendered() {
                     // The badge, the chips and the summary read the page: a new page or a new
                     // widget changes all three.
@@ -24319,7 +24336,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mCurrentWSession.current = index;
         mPaneController.showWindow(mCurrentWSession.currentWindow());
         rebuildDrawerSessions();
-        animateTerminalWindowArrival(index >= previous ? 1 : -1);
+        animateTerminalWindowArrival(index >= previous ? 1 : -1, previous);
     }
 
     /**
@@ -24334,9 +24351,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Hyprland gives workspaces on one axis and groups on another, and once both switches animate
      * the axis is what tells the user which of the two just happened, without reading a label.
      */
-    private void animateTerminalWindowArrival(int direction) {
+    private void animateTerminalWindowArrival(int direction, int fromWindow) {
         animateTerminalArrival(direction, true,
-            com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
+            com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS, 0f,
+            fromWindow);
     }
 
     /** Session switch: the same arrival on the vertical axis. */
@@ -24370,6 +24388,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void animateTerminalArrival(int direction, boolean horizontal, long durationMs,
                                         float travelPx) {
+        animateTerminalArrival(direction, horizontal, durationMs, travelPx,
+            com.termux.app.wall.WallParallax.ADJACENT);
+    }
+
+    /**
+     * @param fromWindow the window a sideways arrival left, so the wallpaper pans over every
+     *                   window between on the arrival's curve; {@code WallParallax.ADJACENT} for
+     *                   the one next door, on the side the arrival comes from
+     */
+    private void animateTerminalArrival(int direction, boolean horizontal, long durationMs,
+                                        float travelPx, int fromWindow) {
         ViewGroup surfaceHost = findViewById(R.id.terminal_surface_host);
         View paneHost = findViewById(R.id.terminal_pane_host);
         if (surfaceHost == null || paneHost == null || isReducedMotionEnabled()) {
@@ -24410,7 +24439,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The pane host is the wall's terminal page and the wall owns where its pages sit, so
             // a sideways arrival is drawn by the wall; nothing else writes that position.
             if (mPaneWallController != null) {
-                mPaneWallController.nudgeTerminalPage(offset, durationMs, settle, unclip);
+                mPaneWallController.nudgeTerminalPage(offset, fromWindow, durationMs, settle,
+                    unclip);
             } else {
                 unclip.run();
             }

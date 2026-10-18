@@ -2,8 +2,6 @@ package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
 
-import java.util.List;
-
 /**
  * Where the wallpaper sits under the wall: the parallax's geometry, pure and tested.
  *
@@ -139,57 +137,5 @@ public final class WallParallax {
 
     private static int clamp(int value, int low, int high) {
         return Math.max(low, Math.min(high, value));
-    }
-
-    /**
-     * The three-place geometry this class had before the row (slice 3): kept only until the
-     * activity reads the row position; removed with that wiring.
-     *
-     * <p>Where a place sits on the picture, as a fraction of the spare width: Home at the left edge,
-     * Terminal in the centre, Display at the right edge. Fixed per place, not per slot on the
-     * wall — a wall without a Home page still shows the Terminal over the picture's centre, which
-     * is also the part the system was handed as the screen-sized wallpaper.
-     */
-    public static float placePosition(@NonNull PaneWallPage page) {
-        switch (page) {
-            case WIDGETS:
-                return 0f;
-            case DISPLAY:
-                return 1f;
-            case TERMINAL:
-            default:
-                return 0.5f;
-        }
-    }
-
-    /**
-     * The wallpaper's x-offset for the wall as it is right now: how far into the picture the
-     * screen's left edge is, in px.
-     *
-     * <p>The wall's offset is signed distance of the pages from the current page's rest, in wall
-     * widths: positive means the pages sit to the right of where they will land, so what is
-     * coming into view is the place to the current one's left. The picture interpolates between
-     * the current place's position and that neighbour's by the fraction of a width travelled. The
-     * neighbour is the wall's own — the row is a line, so past either end the picture stays at
-     * its edge — and a drag that turns into
-     * a committed slide (the wall's {@code goTo} re-bases the offset against the new current page)
-     * lands on the same value from either side, with no jump.</p>
-     *
-     * @param pages        the places this wall has, in spatial order
-     * @param current      the page the wall's record says is current
-     * @param wallOffsetPx the wall's signed offset from that page's rest
-     * @param wallWidthPx  one page's width; the offset is measured against it
-     * @param sparePx      the picture's width beyond one screen; 0 while nothing pans
-     */
-    public static float offsetPx(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
-                                 float wallOffsetPx, int wallWidthPx, int sparePx) {
-        if (sparePx <= 0) return 0f;
-        float from = placePosition(current);
-        if (wallWidthPx <= 0 || wallOffsetPx == 0f) return from * sparePx;
-        float fraction = Math.max(-1f, Math.min(1f, wallOffsetPx / wallWidthPx));
-        PaneWallPage neighbour = PaneWallPolicy.neighbour(pages, current, fraction > 0f ? -1 : 1);
-        float to = placePosition(neighbour);
-        float travelled = Math.abs(fraction);
-        return (from + (to - from) * travelled) * sparePx;
     }
 }

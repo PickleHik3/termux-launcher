@@ -46,6 +46,11 @@ public final class WidgetPaneView extends FrameLayout {
          * the picker.
          */
         default void onFreeAreaVerticalSwipe(boolean up) { }
+        /**
+         * The page's content moved sideways: the swipe drags it, or a page slides in or back.
+         * Per frame of that motion; {@link #contentShiftFraction} says where it stands.
+         */
+        default void onContentShifted() { }
     }
 
     /**
@@ -672,10 +677,25 @@ public final class WidgetPaneView extends FrameLayout {
             pinnedLayer.animate().cancel();
             pinnedLayer.setTranslationX(value);
         }
+        if (listener != null) listener.onContentShifted();
+    }
+
+    /**
+     * How far the page's content stands off its rest, as a fraction of the pane's width,
+     * positive to the right: mid-swipe, and while a page slides in or back. 0 at rest.
+     */
+    public float contentShiftFraction() {
+        int width = getWidth();
+        return width <= 0 ? 0f : grid.getTranslationX() / width;
     }
 
     private void animateContentTranslationX() {
-        grid.animate().translationX(0f).setDuration(160).start();
+        // The grid's slide reports each frame, so the wallpaper pans on the page's own curve.
+        grid.animate().translationX(0f).setDuration(160)
+            .setUpdateListener(animation -> {
+                if (listener != null) listener.onContentShifted();
+            })
+            .start();
         empty.animate().translationX(0f).setDuration(160).start();
         if (pinnedLayer != null) pinnedLayer.animate().translationX(0f).setDuration(160).start();
     }
