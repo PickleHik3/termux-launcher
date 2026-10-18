@@ -45,6 +45,33 @@ Example shape:
 }
 ```
 
+Later versions add optional keys only, so every older file still loads: version 2 a window's
+`floats` (panes floating inside it, each a pane node plus `left`/`top`/`width`/`height` fractions),
+version 3 a window's `name`, version 4 a window's `homeFloat`. Files newer than the build are
+refused with `unsupported_version`.
+
+A window saved while it was a Home float (a window of the current session floating over a Home
+page) keeps its one pane as `root` and adds:
+
+```json
+"homeFloat": {
+  "page": 1,
+  "minimised": false,
+  "portrait": {"left": 0.0, "top": 0.1, "width": 0.8, "height": 0.6},
+  "landscape": {"left": 0.4, "top": 0.0, "width": 0.5, "height": 1.0}
+}
+```
+
+`page` counts Home pages from 0; the shapes are fractions of the room floats are laid out in,
+present for each orientation the float was shaped in. The current session's Home floats are saved
+after its row's windows, in the order they were opened. On load each floats again on its page, or
+on the last Home page when its page is gone, minimised as saved, at its shape for the screen's
+orientation (born as a new float is when it has none there). A file without the key, a
+`homeFloat` that is malformed, or one on a window of more than one pane loads the window into the
+row; so does every float when there are no Home pages, and a session whose windows were all floats
+keeps its first in the row. `currentWindow` picks among the row's windows; a float named there
+leaves the row on the window before it. Replace closes the live Home floats too.
+
 ## Agent and CLI actions
 
 The registry exposes four terminal-executor tools. They are intentionally agent/CLI-only because

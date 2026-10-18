@@ -62,6 +62,16 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    pans over every window between). A Home page or window added or removed snaps to the new
    spread. Unit tests green; emulator pass owed (device-checks, slice 3).
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.
+   Status 2026-10-18: built on a worker branch. File version 4: a window may carry `homeFloat`
+   { page, minimised, portrait?, landscape? }; absent, or malformed, it is a window of the row, so
+   v1–3 files load as before. Save writes the current session's Home floats after its row's
+   windows, in the order they were opened. Load floats them on their page
+   (`HomeFloatPolicy.restoredPage`: the last Home page when theirs is gone; tiled when there are no
+   Home pages), minimised as saved, at their shape for the screen's orientation with the other
+   seeded into their memory; a float with no shape is born as a new float is. A session's row is
+   never left empty (`restoredAsFloats`); the row's current window skips floats
+   (`restoredRowIndex`) and the wall stays where it was. Replace also closes the live Home floats.
+   Maximise's restore is not saved. Unit tests green; emulator pass owed (device-checks, slice 4).
 5. **Window reorder** by drag in the window bar; consume/expel of panes into and out of columns.
 6. **The first-boot tour**, rewritten for the wall (switched off since 651ea9d7f).
 7. **The icon grid on Home pages**: app icons, folders, drag between pages. Born on slice 2b's

@@ -543,6 +543,27 @@ Not seen: everything else listed under the sections below.
   on Home, a jump to a window from the drawer by id) snaps, as the page itself does; a session
   switch (vertical) re-spreads at once.
 
+### Wall rework phase two: slice 4, Saved sessions keep Home floats (feat/wall-rework-phase2)
+- Owed · commits "feat(wall): saved sessions record a Home float's page and shape (v4)" and
+  "feat(wall): a saved Home float loads back as a Home float on its page" · emulator, portrait,
+  at least two Home pages. On Home page 2 open two Home floats; minimise one, move and resize the
+  other. In the Workspace keep a tiled window and a window split in two. Save sessions… as
+  "floats". Close everything (or force-stop with the stock home set, so it is a true restart).
+  Load "floats" (Replace): both floats are back on Home page 2, the moved one at its spot and size,
+  the minimised one as a chip only (not shown until tapped); the tiled window and the split are in
+  the Workspace's row; the drawer's Live list marks the two floats as floats; the wall stays on the
+  place it was on before the load.
+- Owed · older files: load a session saved before this build (version 3): unchanged, every window
+  in the row.
+- Owed · a page that is gone: delete Home page 2, then load "floats": both floats land on the last
+  Home page.
+- Owed · orientation: shape a float in landscape too, save, rotate to portrait, load: the portrait
+  shape is used; rotate to landscape: the landscape shape comes back. Rotate before loading a file
+  saved in portrait only: the float is born full-size (or cascaded) in landscape, and the portrait
+  shape returns on the turn back.
+- Owed · Replace with Home floats open that are not in the file: they close (Replace closes the
+  live Home floats with the rest of the session).
+
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners
