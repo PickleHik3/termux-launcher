@@ -24766,7 +24766,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.graphics.Matrix matrix = new android.graphics.Matrix();
         matrix.setScale(frameRect.width() / (float) Math.max(1, frame.getWidth()),
             frameRect.height() / (float) Math.max(1, frame.getHeight()));
-        matrix.postTranslate(frameRect.left - location[0], frameRect.top - location[1]);
+        // The live slabs sample the frame the wallpaper's parallax further along (GlassAnchor's
+        // aim); without it the card showed Home's stretch of the picture under any window, so a
+        // window switch began with the wallpaper a step per window the wrong way.
+        matrix.postTranslate(frameRect.left - location[0] - mWallpaperParallax.offsetPx(),
+            frameRect.top - location[1]);
         android.graphics.BitmapShader shader = new android.graphics.BitmapShader(
             frame, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
         shader.setLocalMatrix(matrix);
