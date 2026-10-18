@@ -45,7 +45,9 @@
        status   Glass, Opacity, Tint                      (button: Clock)
 
      Layout rows (layout editor v2, DECISIONS items 2, 3 and 10). Row A: Orientation (two 48dp
-     icon segments), Style (two 48dp icon segments), and eye-off at the end: the only drop target
+     icon segments), Style (two 48dp icon segments), the Home filter (one 48dp icon segment; a
+     second "Terminal" segment would not fit 360dp and would misname a display opened over), and
+     eye-off at the end: the only drop target
      for hiding, the toggle of the hidden tiles, and the count badge's anchor. Behind it a 64dp
      highlight, larger than its 48dp target, shows while a lifted bar may be dropped on it. Row B:
      Corner radius and Margin as two equal columns, each a label above its slider; while the hidden
@@ -61,7 +63,7 @@
          widest "Custom" ≈ 44, under stops (W - 32 - 2 × track padding) / 4 apart: ≥ 70 at 360.
        Appearance Row B: at most six columns, five 12dp gaps: (W - 32 - 60) / 6 = 44.7 / 53.2
          / 73.5, each wider than the 28dp track; fewer columns share the same width equally.
-       Layout Row A: 96 + 8 + 96 + gap + 48 = 248 + gap; gap 80 / 131 / 253. The 64dp highlight
+       Layout Row A: 96 + 8 + 96 + 8 + 48 + gap + 48 = 304 + gap; gap 24 / 75 / 197. The 64dp highlight
          is centred on eye-off: 8dp of it stand past the button's end, inside the sheet's 16dp
          padding.
        Layout Row B: two columns, one 16dp gap: 156 / 181.5 / 242.5; "Corner radius · 40 dp"
@@ -500,6 +502,34 @@
             app:iconSize="24dp" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
+    <!-- The Home filter (LayoutEditorController.showHome): one segment, checked while the canvas
+         shows a Home page and every edit lands on the Home layout with Home's own Style, Corners
+         and Margin; unchecked, the window the editor was opened over. A filter of its own beside
+         Orientation, which still applies either way. -->
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/layout_editor_home_filter"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:visibility="gone"
+        app:layout_constraintStart_toEndOf="@id/appearance_editor_style"
+        app:layout_constraintTop_toTopOf="@id/layout_editor_orientation"
+        app:selectionRequired="false"
+        app:singleSelection="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/layout_editor_home_filter_home"
+            style="@style/Widget.Termux.Button.Segment"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:contentDescription="@string/layout_editor_home_filter"
+            android:tooltipText="@string/layout_editor_home_filter"
+            app:icon="@drawable/ic_layout_home"
+            app:iconPadding="0dp"
+            app:iconSize="24dp" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
     <!-- Eye-off's drop highlight: 64dp, larger than the 48dp target it stands behind, shown
          (INVISIBLE otherwise, so it never moves anything) only while a lifted element may be
          put away. Its rect is the drop area LayoutEditorController gives the canvas. -->
@@ -710,5 +740,5 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:visibility="gone"
-        app:constraint_referenced_ids="layout_editor_orientation,appearance_editor_style,layout_editor_hidden" />
+        app:constraint_referenced_ids="layout_editor_orientation,appearance_editor_style,layout_editor_home_filter,layout_editor_hidden" />
 </androidx.constraintlayout.widget.ConstraintLayout>

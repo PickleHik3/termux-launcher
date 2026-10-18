@@ -184,6 +184,7 @@ final class AppearanceEditorPanel {
     private final TextView mEffectValue;
     private final MaterialButtonToggleGroup mOrientation;
     private final MaterialButtonToggleGroup mStyle;
+    private final MaterialButtonToggleGroup mHomeFilter;
     private final MaterialButton mHidden;
     private final View mHiddenHighlight;
     private final HorizontalScrollView mHiddenTiles;
@@ -262,6 +263,7 @@ final class AppearanceEditorPanel {
         mEffectTitle = root.findViewById(R.id.appearance_editor_effect_title);
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mStyle = root.findViewById(R.id.appearance_editor_style);
+        mHomeFilter = root.findViewById(R.id.layout_editor_home_filter);
         mHidden = root.findViewById(R.id.layout_editor_hidden);
         TooltipCompat.setTooltipText(mHidden,
             context.getString(R.string.appearance_editor_hidden_tooltip));
@@ -281,12 +283,14 @@ final class AppearanceEditorPanel {
         mAppearanceGroup.setReferencedIds(new int[] {R.id.appearance_editor_look,
             R.id.appearance_editor_look_labels});
         mLayoutGroup.setReferencedIds(new int[] {R.id.layout_editor_orientation,
-            R.id.appearance_editor_style, R.id.layout_editor_hidden});
+            R.id.appearance_editor_style, R.id.layout_editor_home_filter,
+            R.id.layout_editor_hidden});
         applyGroups(EditorMode.LOOK);
         applyRow2(false);
         paintSheet();
         paintSelectedSegments(mOrientation);
         paintSelectedSegments(mStyle);
+        paintSelectedSegments(mHomeFilter);
         buildLookLabels();
         bind();
     }
@@ -991,6 +995,11 @@ final class AppearanceEditorPanel {
 
     @NonNull MaterialButtonToggleGroup orientationToggle() {
         return mOrientation;
+    }
+
+    /** The Home filter beside the orientation toggle: one segment, checked while Home is shown. */
+    @NonNull MaterialButtonToggleGroup homeFilterToggle() {
+        return mHomeFilter;
     }
 
     /**

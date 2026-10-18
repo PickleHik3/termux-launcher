@@ -346,6 +346,8 @@ public final class LayoutCanvasView extends View {
     private final RectF mScratchRectA = new RectF();
     private final RectF mScratchRectB = new RectF();
     private final RectF mScratchRectC = new RectF();
+    /** Home's grid area or its two pills, as {@link HomeCanvasGeometry} writes them. */
+    private final float[] mHomeScratch = new float[8];
     private final Map<Block, RectF> mBlockRects = new EnumMap<>(Block.class);
     private final Map<Block, RectF> mLegendRects = new EnumMap<>(Block.class);
     /**
@@ -1620,26 +1622,38 @@ public final class LayoutCanvasView extends View {
         return Math.min(card.height() * CHIN_MAX_SHARE, px);
     }
 
-    /** Home's widget area inside the pane's opening, as {@link #drawHomeGrid} lays it; or null. */
+    /**
+     * Home's widget area inside the pane's opening, as {@link #drawHomeGrid} lays it: Home's Margin
+     * in on every side, to scale, as the live grid's rim is ({@link HomeCanvasGeometry}); or null.
+     */
     @Nullable
     private RectF gridArea() {
         RectF rect = mBlockRects.get(Block.CANVAS);
         if (rect == null || rect.isEmpty()) return null;
-        RectF pane = new RectF(rect);
-        float pad = 10f * mUnit;
-        pane.inset(pad, pad);
-        return pane.width() > 0f && pane.height() > 0f ? pane : null;
+        RectF area = new RectF();
+        return gridAreaIn(rect, area) ? area : null;
     }
 
+    /** {@link #gridArea} for one pane, written to {@code out}; false when nothing is left. */
+    private boolean gridAreaIn(@NonNull RectF pane, @NonNull RectF out) {
+        float[] area = mHomeScratch;
+        if (!HomeCanvasGeometry.gridArea(pane.left, pane.top, pane.right, pane.bottom,
+                mCanvasScale, mMarginDp, area)) return false;
+        out.set(area[0], area[1], area[2], area[3]);
+        return true;
+    }
+
+    /** The air between two of Home's cells, to scale: the live grid's own gap. */
+    private float gridGapPx() {
+        return HomeCanvasGeometry.gapPx(mCanvasScale);
+    }
 
     private float gridCellWidth(@NonNull RectF area, int columns) {
-        int n = Math.max(1, columns);
-        return (area.width() - 6f * mUnit * (n - 1)) / n;
+        return HomeCanvasGeometry.cellExtent(area.width(), columns, gridGapPx());
     }
 
     private float gridCellHeight(@NonNull RectF area, int rows) {
-        int n = Math.max(1, rows);
-        return (area.height() - 6f * mUnit * (n - 1)) / n;
+        return HomeCanvasGeometry.cellExtent(area.height(), rows, gridGapPx());
     }
 
     /**
@@ -1767,7 +1781,7 @@ public final class LayoutCanvasView extends View {
             default: {
                 RectF area = gridArea();
                 if (area == null) return;
-                float gap = 6f * mUnit;
+                float gap = gridGapPx();
                 WidgetGridCaps caps = widgetGridCaps();
                 int columns = cellsFor(area.left, area.width(), mHandleStartRect.centerX() + dx,
                     gap, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS, caps.maxColumns);
@@ -2128,12 +2142,10 @@ public final class LayoutCanvasView extends View {
     private void computeContent() {
         mGridCollapsed = false;
         if (mLayout == null || canvasKind() != CanvasKind.HOME_GRID) return;
-        RectF canvasRect = mBlockRects.get(Block.CANVAS);
-        if (canvasRect == null) return;
-        int columns = Math.max(1, mLayout.widgetColumns);
-        int rows = Math.max(1, mLayout.widgetRows);
-        float cellWidth = canvasRect.width() / columns;
-        float cellHeight = canvasRect.height() / rows;
+        RectF area = gridArea();
+        if (area == null) return;
+        float cellWidth = gridCellWidth(area, mLayout.widgetColumns);
+        float cellHeight = gridCellHeight(area, mLayout.widgetRows);
         mGridCollapsed = Math.min(cellWidth, cellHeight) < dp(4);
     }
 
@@ -2874,24 +2886,26 @@ public final class LayoutCanvasView extends View {
 
     /**
      * Home's widget grid, as the layout counts it: one faint tile per cell, and on the first two
-     * a clock face and a few lines, so the tiles read as widgets rather than as a grid.
+     * a clock face and a few lines, so the tiles read as widgets rather than as a grid. Its rim is
+     * Home's Margin and its gaps the live grid's, to scale; Home's two status pills float over
+     * its top ({@link #drawHomePills}).
      */
     private void drawHomeGrid(@NonNull Canvas canvas, @NonNull RectF pane) {
         if (mLayout == null) return;
-        float pad = 10f * mUnit;
         RectF area = mScratchRectA;
-        area.set(pane.left + pad, pane.top + pad, pane.right - pad, pane.bottom - pad);
+        if (!gridAreaIn(pane, area)) return;
         int tile = ColorUtils.setAlphaComponent(container(), TILE_ALPHA);
         if (mGridCollapsed) {
             mFillPaint.setColor(tile);
             canvas.drawRoundRect(area, tileRadiusPx(), tileRadiusPx(), mFillPaint);
+            drawHomePills(canvas, pane);
             return; // the "n×m" figure is in the legend, so nothing else is written here
         }
         int columns = Math.max(1, mLayout.widgetColumns);
         int rows = Math.max(1, mLayout.widgetRows);
-        float cellGap = 6f * mUnit;
-        float cellW = (area.width() - cellGap * (columns - 1)) / columns;
-        float cellH = (area.height() - cellGap * (rows - 1)) / rows;
+        float cellGap = gridGapPx();
+        float cellW = gridCellWidth(area, columns);
+        float cellH = gridCellHeight(area, rows);
         float radius = Math.min(tileRadiusPx(), Math.min(cellW, cellH) * 0.3f);
         boolean decorated = Math.min(cellW, cellH) >= u(22f);
         float areaLeft = area.left;
@@ -2906,6 +2920,43 @@ public final class LayoutCanvasView extends View {
                 if (!decorated) continue;
                 if (r == 0 && c == 0) drawClockFace(canvas, mScratchRectB);
                 else if (r == 0 && c == 1) drawTextLines(canvas, mScratchRectB);
+            }
+        }
+        drawHomePills(canvas, pane);
+    }
+
+    /**
+     * Home's status pills over the top of the grid: the windows pill at the start and the system
+     * readout at the end, a Margin in from the page's corners, at their real height to scale
+     * ({@link HomeCanvasGeometry#pills}). Fully rounded cards in the pack's surface, each with a
+     * dim line or two of text, so they read as status rather than as widgets. Not elements: they
+     * cannot be lifted, selected or put away.
+     */
+    private void drawHomePills(@NonNull Canvas canvas, @NonNull RectF pane) {
+        float[] pills = mHomeScratch;
+        if (!HomeCanvasGeometry.pills(pane.left, pane.top, pane.right, pane.bottom, mCanvasScale,
+                mMarginDp, pills)) return;
+        for (int i = 0; i < 2; i++) {
+            RectF pill = mScratchRectB;
+            pill.set(pills[4 * i], pills[4 * i + 1], pills[4 * i + 2], pills[4 * i + 3]);
+            float radius = pill.height() / 2f;
+            mFillPaint.setColor(container());
+            canvas.drawRoundRect(pill, radius, radius, mFillPaint);
+            // A dim bar of text inside each, the end pill's in two parts (its readouts).
+            float lineH = Math.max(1f, pill.height() * 0.22f);
+            float inset = radius;
+            float y = pill.centerY() - lineH / 2f;
+            mFillPaint.setColor(dim());
+            if (i == 0) {
+                canvas.drawRoundRect(pill.left + inset, y, pill.right - inset, y + lineH,
+                    lineH / 2f, lineH / 2f, mFillPaint);
+            } else {
+                float mid = pill.centerX();
+                float half = lineH;
+                canvas.drawRoundRect(pill.left + inset, y, mid - half, y + lineH,
+                    lineH / 2f, lineH / 2f, mFillPaint);
+                canvas.drawRoundRect(mid + half, y, pill.right - inset, y + lineH,
+                    lineH / 2f, lineH / 2f, mFillPaint);
             }
         }
     }
