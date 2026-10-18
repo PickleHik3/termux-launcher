@@ -18161,6 +18161,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
+    /**
+     * Moves the Workspace's window at {@code from} to {@code to} in the current session's row: a
+     * chip dropped in the window bar, {@code window.move}, the palette's Move window left / right.
+     * The current window stays current and its index follows it. Everything that reads the row —
+     * the window bar, the drawer, the wall's inner index, the Ctrl+Alt window keys, Saved
+     * sessions — reads {@link WSession#windows}, so one rebuild brings them all along. False when
+     * either index is outside the row.
+     */
+    boolean moveWindow(int from, int to) {
+        if (mCurrentWSession == null) return false;
+        int count = mCurrentWSession.windows.size();
+        if (from < 0 || from >= count || to < 0 || to >= count) return false;
+        if (from == to) return true;
+        mCurrentWSession.current = com.termux.app.terminal.WindowReorderPolicy.move(
+            mCurrentWSession.windows, from, to, mCurrentWSession.current);
+        rebuildDrawerSessions();
+        return true;
+    }
+
     /** Number of windows in the current tmux-style session. */
     int getCurrentWindowCount() {
         return mCurrentWSession == null ? 0 : mCurrentWSession.windows.size();
