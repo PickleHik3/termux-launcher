@@ -177,7 +177,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     public AddResult removeWidget(int appWidgetId) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null) return AddResult.IGNORED;
-        if (record.isBuiltin()) {
+        if (!record.hasPlatformId()) {
             // No platform ID to give back: the record is the whole of it.
             if (!repository.removeRecord(appWidgetId)) {
                 notifyChanged(AddResult.REMOVE_FAILED);
@@ -314,7 +314,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return false;
         // A built-in widget's settings are the launcher's own sheet; the pane opens it itself.
-        if (record.isBuiltin()) return false;
+        if (!record.hasPlatformId()) return false;
         try {
             AppWidgetProviderInfo info = platform.getInfo(appWidgetId);
             if (info == null || !providerMatches(record, info)) return false;
@@ -499,6 +499,23 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         return AddResult.READY;
     }
 
+    /**
+     * Puts an app icon on Home: the page in front when it has room, else the first that has, else
+     * a new page after the last. One durable write; the record as placed, or null when the write
+     * failed and nothing changed.
+     */
+    @Nullable
+    public LauncherWidgetRecord addApp(@NonNull com.termux.app.launcher.model.AppRef app,
+                                       @NonNull String label, int preferredPage) {
+        Bundle options = new Bundle();
+        options.putString(LauncherWidgetRecord.APP_LABEL, label);
+        LauncherWidgetRecord placed = repository.addApp(app, preferredPage, options);
+        // IGNORED, not READY: the pane redraws, and a widget add waiting on another app's
+        // activity does not read this as its own result.
+        if (placed != null) notifyChanged(AddResult.IGNORED);
+        return placed;
+    }
+
     /** Replaces a built-in widget's own settings; a no-op for anything else. */
     public boolean updateBuiltinConfig(int appWidgetId, @NonNull Bundle config) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
@@ -511,7 +528,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return null;
         // A built-in widget is the grid's own view, never a host view.
-        if (record.isBuiltin()) return null;
+        if (!record.hasPlatformId()) return null;
         // Every host view is asked for through here, so this is the one place a stale one can be
         // caught whatever brought the render about.
         discardHostViewsBuiltInAnotherMode();
@@ -544,7 +561,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return false;
         // A built-in widget reads its own size; its options bundle is its settings, not a
         // size report, and there is no provider process to wake.
-        if (record.isBuiltin()) return false;
+        if (!record.hasPlatformId()) return false;
         WidgetSizeOptionsPolicy.Result result = WidgetSizeOptionsPolicy.calculate(record.sizeOptions(),
             widthPx, heightPx, activity.getResources().getDisplayMetrics().density,
             orientation, Build.VERSION.SDK_INT);
@@ -581,11 +598,11 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
 
     public void reconcileProviders() { reconcileProviders(-1); }
 
-    /** The records that are bound to another app's provider: every one but the built-ins. */
+    /** The records that are bound to another app's provider: every one but the launcher's own. */
     @NonNull private List<LauncherWidgetRecord> appWidgetRecords() {
         List<LauncherWidgetRecord> out = new ArrayList<>();
         for (LauncherWidgetRecord record : repository.records()) {
-            if (!record.isBuiltin()) out.add(record);
+            if (record.hasPlatformId()) out.add(record);
         }
         return out;
     }
@@ -604,8 +621,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
             return;
         }
         for (LauncherWidgetRecord record : repository.records()) {
-            // Built-in widgets have no provider to lose and no host ID to reconcile.
-            if (record.isBuiltin()) continue;
+            // Built-ins and app icons have no provider to lose and no host ID to reconcile.
+            if (!record.hasPlatformId()) continue;
             AppWidgetProviderInfo info;
             try {
                 info = platform.getInfo(record.appWidgetId);
