@@ -47,6 +47,12 @@ final class HomeFolderPopup {
                            @NonNull FolderRenameTitleView title);
         /** The popup went away: a rename in progress ends with it. */
         void onPopupDismissed();
+        /**
+         * Whether a touch outside the popup at this screen point leaves it open: a key of the
+         * keyboard a rename is being typed with, which would otherwise close the popup and end
+         * the rename on its first stroke.
+         */
+        default boolean keepsOpenOnTouch(float rawX, float rawY) { return false; }
     }
 
     /** How many apps sit side by side in the popup. */
@@ -76,6 +82,7 @@ final class HomeFolderPopup {
         surface = new AnchoredMenu(host, theme);
         appMenu = new AnchoredMenu(host, theme);
         rows = new MenuRowFactory(host.getContext(), theme);
+        controller.setOutsideTouchGuard(callbacks::keepsOpenOnTouch);
     }
 
     boolean isShowing() { return controller.isShowing(); }

@@ -9729,6 +9729,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void cancelFolderRename() {
                 TermuxActivity.this.cancelFolderRename();
             }
+
+            @Override public boolean isFolderRenameTypingTouch(float rawX, float rawY) {
+                return TermuxActivity.this.isFolderRenameTypingTouch(rawX, rawY);
+            }
         });
         mSuggestionBarView.setNotificationPopupInteractionListener(
             new SuggestionBarView.NotificationPopupInteractionListener() {
@@ -16017,8 +16021,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         if (mInAppKeyboard != null)
             mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
-        onSystemImeRequested();
-        KeyboardUtils.showSoftKeyboard(this, mTerminalView);
+        raiseFolderRenameKeyboard();
     }
 
     /**
@@ -16041,15 +16044,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public void onRenameEnded(boolean committed) {
                 titleView.bind(new FolderRenameModel(target.currentName()), false);
-                if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(
-                    isAppDrawerOpen() && mAppDrawerController != null
-                        ? mAppDrawerController.getSearchController() : null);
+                // Whoever owns the slot now: on Home that can be the palette or a sheet too.
+                restoreInAppKeyboardTypingClaim();
             }
         });
         if (mInAppKeyboard != null)
             mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
+        raiseFolderRenameKeyboard();
+    }
+
+    /**
+     * The keyboard a folder rename is typed with. The in-app keyboard when it is on, shown if it
+     * is down: the rename takes its keys through the interceptor slot, and on Home it may well
+     * be down (Home rests without it unless Keyboard on Home is on), where asking the system IME
+     * for itself raised nothing, since the in-app keyboard holds the system IME suppressed.
+     * Otherwise the system IME, through a terminal view that holds the focus: the rename has no
+     * text field, and the IME's text and keys reach the rename only by the terminal's overlay
+     * channel. On Home the focus may sit elsewhere, and the IME then typed into nothing.
+     */
+    private void raiseFolderRenameKeyboard() {
+        if (ensureInAppTypingKeyboard()) return;
+        if (!(getCurrentFocus() instanceof TerminalView)) handKeysToActivePane();
+        View target = getCurrentFocus() instanceof TerminalView ? getCurrentFocus() : mTerminalView;
         onSystemImeRequested();
-        KeyboardUtils.showSoftKeyboard(this, mTerminalView);
+        KeyboardUtils.showSoftKeyboard(this, target);
+    }
+
+    /**
+     * Whether a touch at this screen point is a key of the keyboard a folder rename is typed with:
+     * the in-app keyboard's keys or the extra-keys row beside them. The folder popup stays open
+     * for those, where any other touch outside it closes it.
+     */
+    private boolean isFolderRenameTypingTouch(float rawX, float rawY) {
+        return isFolderRenameActive()
+            && (isPointOnInAppKeyboard(rawX, rawY)
+                || viewContainsScreenPoint(findViewById(R.id.inapp_keyboard_container), rawX, rawY)
+                || viewContainsScreenPoint(findViewById(R.id.terminal_toolbar_host), rawX, rawY));
     }
 
     public void cancelFolderRename() { mFolderRenameController.cancel(); }
@@ -22952,6 +22982,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxActivity.this.beginHomeFolderRename(name, title, target);
                 }
                 @Override public void cancelHomeFolderRename() { cancelFolderRename(); }
+                @Override public boolean isFolderRenameTypingTouch(float rawX, float rawY) {
+                    return TermuxActivity.this.isFolderRenameTypingTouch(rawX, rawY);
+                }
                 // The palette gesture starts on the page's free area: Home has no bottom border.
                 @Override public void onHomePaletteSwipe(boolean up) {
                     if (isWidgetsPageShowing()) applyBorderKeyboardSwipe(up);

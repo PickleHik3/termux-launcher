@@ -689,6 +689,8 @@ public final class SuggestionBarView extends GridLayout
         void beginFolderRename(long revision, @NonNull String folderId, @NonNull String title,
                                @NonNull FolderRenameTitleView titleView);
         void cancelFolderRename();
+        /** Whether a touch at this screen point types into a rename in progress (a key). */
+        default boolean isFolderRenameTypingTouch(float rawX, float rawY) { return false; }
     }
 
     public interface NotificationPopupInteractionListener {
@@ -1423,6 +1425,8 @@ public final class SuggestionBarView extends GridLayout
 
     public void setFolderRenameHost(@Nullable FolderRenameHost host) {
         this.folderRenameHost = host;
+        // A key of the keyboard the rename is typed with must not close the popup under it.
+        sharedFolderPopup.setOutsideTouchGuard(host == null ? null : host::isFolderRenameTypingTouch);
     }
 
     /** No-op when nothing hosts the rename flow (the popup is then just a folder grid). */
