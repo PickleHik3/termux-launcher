@@ -665,6 +665,15 @@ Not seen: everything else listed under the sections below.
   after the row's is never consumed); with the Home float focused, `Ctrl+Alt+.` does nothing.
   Neither action is offered in the Home palette.
 
+- Seen 2026-10-18 (78405f42a, emulator, device-checker): Consume stacks the right neighbour's pane
+  under the current one with focus on it (`pwd` prints its cwd), the row and the drawer count agree;
+  Expel gives the focused pane its own window right after, current and on screen; Expel on a
+  one-pane window or with a float focused does nothing; `pane.consume from=left` (via a keybinding)
+  pulls the left neighbour above; Save then Load keeps the two-pane window; a float's chip is never
+  consumed; "Move window to…" asks for a 1-based target; landscape consume splits side by side.
+  Minor: an expelled window's chip reads "sh" (the cwd and title do not carry over to the new
+  window); the Saved tab empty right after a save (fixed in the slice 4 round, re-check owed);
+  `launcherctl window focus` from Home makes the window current without leaving Home.
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners
