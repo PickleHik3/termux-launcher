@@ -63,6 +63,8 @@ final class AppearanceSnapshot {
     private final int mClarity;
     private final int mKeyboardBlurRaw;
     private final int mKeyOpacity;
+    /** Whether the keyboard's key and background opacity move together. */
+    private final boolean mOpacityLinked;
     /** The stored radius, or NaN when the key is absent and the style's default applies. */
     private final float mKeyRadiusRaw;
     /** The stored key spacing, or NaN when the key is absent and the Style's default applies. */
@@ -121,6 +123,7 @@ final class AppearanceSnapshot {
         mClarity = prefs.getFancierGlassClarityPercent();
         mKeyboardBlurRaw = prefs.getInAppKeyboardBlurRadiusRaw();
         mKeyOpacity = prefs.getInAppKeyboardKeyOpacity();
+        mOpacityLinked = prefs.isInAppKeyboardOpacityLinked();
         mKeyRadiusRaw = rawKeyRadius(prefs);
         mKeySpacingRaw = rawFloat(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
         mDockButtonCount = prefs.getAppLauncherButtonCount();
@@ -177,6 +180,7 @@ final class AppearanceSnapshot {
         prefs.setFancierGlassClarityPercent(mClarity);
         prefs.setInAppKeyboardBlurRadiusRaw(mKeyboardBlurRaw);
         prefs.setInAppKeyboardKeyOpacity(mKeyOpacity);
+        prefs.setInAppKeyboardOpacityLinked(mOpacityLinked);
         restoreKeyRadius(prefs, mKeyRadiusRaw);
         restoreFloat(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE, mKeySpacingRaw);
         prefs.setAppLauncherButtonCount(mDockButtonCount);
@@ -210,6 +214,7 @@ final class AppearanceSnapshot {
             .append('|').append(mSpecular).append('|').append(mDispersion)
             .append('|').append(mClarity)
             .append('|').append(mKeyboardBlurRaw).append('|').append(mKeyOpacity)
+            .append('|').append(mOpacityLinked)
             .append('|').append(mKeyRadiusRaw).append('|').append(mKeySpacingRaw)
             .append('|').append(mDockButtonCount).append('|').append(mDim).append('|').append(mSoft)
             .append('|').append(mContrast).append('|').append(mTrailStyle).append('|').append(mTrailEnabled)

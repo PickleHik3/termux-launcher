@@ -39,7 +39,9 @@
      every selection; Row B is GONE at a Look stop. Sets, left to right:
        nothing  Glass, Opacity, Tint, Vibrancy; Edge after Tint and Depth last while the glass edge
                 is drawn (Android 13, a wallpaper set from the launcher, Lazy mode off)  (pill: Hue)
-       keyboard Glass, Opacity, Tint, Keys, Key radius, Key spacing (button: Keyboard theme)
+       keyboard Glass, BG opacity, Key opacity, Tint, Key radius, Key spacing (button: Keyboard
+                theme; the opacity link over BG opacity and Key opacity, in the heading row's
+                height between their tracks, at 360 about 74 to 122 of the content width)
        dock     Glass, Opacity, Tint, Icon size, App icons
        terminal Glass, Opacity, Tint, Contrast            (pills: Cursor trail, Terminal effect)
        status   Glass, Opacity, Tint                      (button: Clock)
@@ -153,6 +155,15 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/appearance_editor_look_labels"
         app:layout_constraintVertical_bias="0">
+
+    <!-- Row B's body: the heading row over the sliders, and over both the keyboard's opacity
+         link, a button centred between the BG opacity and Key opacity tracks in the heading row's
+         height with a leader line to each. SliderLinkFrame places both from the laid-out sliders
+         and draws the lines; the button shows only for that pair. -->
+    <com.termux.app.surfaces.SliderLinkFrame
+        android:id="@+id/appearance_editor_row2_body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
 
     <LinearLayout
         android:id="@+id/appearance_editor_row2_content"
@@ -416,6 +427,31 @@
                 android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
+
+        <!-- The opacity link: a 48dp target round a 40dp circle, filled while linked. Placed by
+             translation from the top-left corner (absolute, so the arithmetic holds in RTL). -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_editor_opacity_link"
+            style="@style/Widget.Material3.Button.IconButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="top|left"
+            android:checkable="true"
+            android:contentDescription="@string/appearance_editor_opacity_link"
+            android:insetLeft="4dp"
+            android:insetTop="4dp"
+            android:insetRight="4dp"
+            android:insetBottom="4dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="0dp"
+            android:visibility="gone"
+            app:cornerRadius="20dp"
+            app:icon="@drawable/ic_symbol_link"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="24dp" />
+    </com.termux.app.surfaces.SliderLinkFrame>
     </ScrollView>
 
     <androidx.constraintlayout.widget.Group

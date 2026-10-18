@@ -638,11 +638,14 @@ public abstract class AppearanceEditorPanelFitBase {
     }
 
     /** The widest legend each control can show, so the row is fitted at its worst. */
-    private String widest(AppearanceLooks.Control control) {
+    private String widest(AppearanceLooks.Target target, AppearanceLooks.Control control) {
         android.content.Context context = mPanel.view().getContext();
         switch (control) {
             case GLASS: return context.getString(R.string.appearance_editor_glass, 100);
-            case OPACITY: return context.getString(R.string.appearance_editor_opacity, 100);
+            case OPACITY:
+                return context.getString(target == AppearanceLooks.Target.KEYBOARD
+                    ? R.string.appearance_editor_bg_opacity : R.string.appearance_editor_opacity,
+                    100);
             case TINT: return context.getString(R.string.appearance_editor_tint, 100);
             case EDGE: return context.getString(R.string.appearance_editor_edge, 100);
             case VIBRANCY: return context.getString(R.string.appearance_editor_vibrancy, "1.50");
@@ -670,7 +673,7 @@ public abstract class AppearanceEditorPanelFitBase {
         mPanel.showRow2(nameOfTarget(target));
         java.util.List<AppearanceEditorPanel.SliderState> states = new java.util.ArrayList<>();
         for (AppearanceLooks.Control control : AppearanceLooks.controls(target, glassEdge)) {
-            final String legend = widest(control);
+            final String legend = widest(target, control);
             states.add(new AppearanceEditorPanel.SliderState(control, control.max,
                 control != AppearanceLooks.Control.CONTRAST, value -> legend));
         }

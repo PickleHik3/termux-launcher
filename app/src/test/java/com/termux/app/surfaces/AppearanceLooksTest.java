@@ -85,8 +85,9 @@ public class AppearanceLooksTest {
     public void eachSelectionHasItsSliderSet() {
         assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
             Control.VIBRANCY), AppearanceLooks.controls(null));
-        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-            Control.KEY_OPACITY, Control.KEY_RADIUS, Control.KEY_SPACING),
+        // The keyboard's two opacities stand side by side, under their link.
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.KEY_OPACITY,
+            Control.TINT, Control.KEY_RADIUS, Control.KEY_SPACING),
             AppearanceLooks.controls(Target.KEYBOARD));
         assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
             Control.ICON_SIZE, Control.APP_ICONS), AppearanceLooks.controls(Target.DOCK));

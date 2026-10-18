@@ -99,6 +99,8 @@ final class AppearanceEditorPanel {
         void onRetroEffect(@NonNull String id);
         /** The global set's Tint colour menu: the hue id the user chose. */
         default void onTintHue(@NonNull String id) {}
+        /** The keyboard's opacity link was turned on or off by the user. */
+        default void onOpacityLink(boolean linked) {}
     }
 
     /**
@@ -177,6 +179,10 @@ final class AppearanceEditorPanel {
     private final boolean[] mSliderEnabled = new boolean[AppearanceLooks.MAX_CONTROLS];
     private final MaterialButton mKeyboardTheme;
     private final MaterialButton mClock;
+    /** Row B's body, which places the opacity link and draws its leader lines. */
+    private final SliderLinkFrame mLinkFrame;
+    /** The keyboard's opacity link over BG opacity and Key opacity; checked while linked. */
+    private final MaterialButton mOpacityLink;
     /** The terminal's Cursor trail and Terminal effect pills: a heading over the chosen option. */
     private final View mTrail;
     private final View mEffect;
@@ -254,6 +260,11 @@ final class AppearanceEditorPanel {
             mSliders[i] = root.findViewById(sliderIds[i]);
         mKeyboardTheme = root.findViewById(R.id.appearance_editor_door_keyboard_theme);
         mClock = root.findViewById(R.id.appearance_editor_door_clock);
+        mLinkFrame = root.findViewById(R.id.appearance_editor_row2_body);
+        mOpacityLink = root.findViewById(R.id.appearance_editor_opacity_link);
+        mLinkFrame.bind(mOpacityLink, mRow2Head, mRow2Name);
+        TooltipCompat.setTooltipText(mOpacityLink,
+            context.getString(R.string.appearance_editor_opacity_link));
         mTrail = root.findViewById(R.id.appearance_editor_trail);
         mEffect = root.findViewById(R.id.appearance_editor_effect);
         mTrailValue = root.findViewById(R.id.appearance_editor_trail_value);
@@ -287,6 +298,7 @@ final class AppearanceEditorPanel {
         paintSheet();
         paintSelectedSegments(mOrientation);
         paintSelectedSegments(mStyle);
+        paintSelected(mOpacityLink);
         buildLookLabels();
         bind();
     }
@@ -515,6 +527,18 @@ final class AppearanceEditorPanel {
      * item 12): theme roles only, resolved against the active scheme.
      */
     private void paintSelectedSegments(@NonNull MaterialButtonToggleGroup group) {
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child instanceof MaterialButton)
+                paintSelected((MaterialButton) child);
+        }
+    }
+
+    /**
+     * One checkable button in those colours: a segment, or the keyboard's opacity link, whose
+     * checked state is "linked".
+     */
+    private void paintSelected(@NonNull MaterialButton button) {
         int container = MaterialColors.getColor(mRoot,
             com.google.android.material.R.attr.colorPrimaryContainer,
             ContextCompat.getColor(mContext, R.color.termux_primary));
@@ -525,17 +549,10 @@ final class AppearanceEditorPanel {
             com.google.android.material.R.attr.colorOnSurfaceVariant,
             ContextCompat.getColor(mContext, R.color.termux_on_surface));
         int[][] states = {{android.R.attr.state_checked}, {}};
-        ColorStateList fill = new ColorStateList(states, new int[] {container, 0});
         ColorStateList ink = new ColorStateList(states, new int[] {onContainer, quiet});
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            if (!(child instanceof MaterialButton))
-                continue;
-            MaterialButton button = (MaterialButton) child;
-            button.setBackgroundTintList(fill);
-            button.setIconTint(ink);
-            button.setTextColor(ink);
-        }
+        button.setBackgroundTintList(new ColorStateList(states, new int[] {container, 0}));
+        button.setIconTint(ink);
+        button.setTextColor(ink);
     }
 
     // ------------------------------------------------------------------------- the Look slider
@@ -731,6 +748,10 @@ final class AppearanceEditorPanel {
         }
         mKeyboardTheme.setOnClickListener(view -> {
             if (mListener != null) mListener.onDoor(Door.KEYBOARD_THEME, view);
+        });
+        mOpacityLink.addOnCheckedChangeListener((button, linked) -> {
+            mLinkFrame.setLinked(linked);
+            if (!mRestating && mListener != null) mListener.onOpacityLink(linked);
         });
         mClock.setOnClickListener(view -> {
             if (mListener != null) mListener.onDoor(Door.CLOCK, view);
@@ -1125,7 +1146,7 @@ final class AppearanceEditorPanel {
             : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         for (int i = 0; i < mSliders.length; i++)
             mSliders[i].setEnabled(shown && mSliderEnabled[i]);
-        for (View button : new View[] {mKeyboardTheme, mClock, mTrail, mEffect})
+        for (View button : new View[] {mKeyboardTheme, mClock, mTrail, mEffect, mOpacityLink})
             button.setEnabled(shown);
         mRow2.setVisibility(shown && mMode == EditorMode.LOOK ? View.VISIBLE : View.GONE);
         // Where Row B scrolls inside the sheet, it comes up at its heading.
@@ -1173,6 +1194,52 @@ final class AppearanceEditorPanel {
             slider.setVisibility(View.VISIBLE);
             first = false;
         }
+    }
+
+    /**
+     * The keyboard's opacity link over its BG opacity and Key opacity columns: shown while
+     * {@code offered} and the two stand side by side, checked while {@code linked}. Call after
+     * {@link #setSliders}.
+     */
+    void setOpacityLink(boolean offered, boolean linked) {
+        int opacity = columnOf(Control.OPACITY);
+        int keys = columnOf(Control.KEY_OPACITY);
+        boolean shown = offered && opacity >= 0 && keys >= 0 && Math.abs(opacity - keys) == 1;
+        if (!shown) {
+            mLinkFrame.setPair(null, null);
+            return;
+        }
+        mLinkFrame.setPair(mSliders[Math.min(opacity, keys)], mSliders[Math.max(opacity, keys)]);
+        if (mOpacityLink.isChecked() != linked) {
+            mRestating = true;
+            mOpacityLink.setChecked(linked);
+            mRestating = false;
+        }
+        mLinkFrame.setLinked(linked);
+    }
+
+    /** Whether the opacity link shows now, and whether it is on, for a test to read. */
+    boolean isOpacityLinkShown() {
+        return mOpacityLink.getVisibility() == View.VISIBLE;
+    }
+
+    boolean isOpacityLinked() {
+        return mOpacityLink.isChecked();
+    }
+
+    /** The link button, for a test to tap. */
+    @NonNull
+    MaterialButton opacityLinkButton() {
+        return mOpacityLink;
+    }
+
+    /** The visible column showing {@code control}, or -1. */
+    private int columnOf(@NonNull Control control) {
+        for (int i = 0; i < mSliders.length; i++) {
+            if (mSliderControls[i] == control && mSliders[i].getVisibility() == View.VISIBLE)
+                return i;
+        }
+        return -1;
     }
 
     /** The control each visible column holds now, in order, for a test to read. */

@@ -36,7 +36,11 @@
     <string name="appearance_editor_legibility_low">Contrast · Softer</string>
     <string name="appearance_editor_legibility_unavailable">Contrast · off</string>
     <!-- The keyboard's key caps: how solid they are, from clear to opaque. -->
-    <string name="appearance_editor_key_opacity">Keys · %1$d%%</string>
+    <string name="appearance_editor_key_opacity">Key opacity · %1$d%%</string>
+    <!-- The keyboard's own Opacity: its background behind the keys, beside Key opacity. -->
+    <string name="appearance_editor_bg_opacity">BG opacity · %1$d%%</string>
+    <!-- The button over Key opacity and BG opacity; checked, the two move together. -->
+    <string name="appearance_editor_opacity_link">Move key and background opacity together</string>
     <string name="appearance_editor_key_corners">Radius · %1$d dp</string>
     <string name="appearance_editor_legibility_normal">Contrast · Default</string>
     <string name="appearance_editor_legibility_high">Contrast · Harder</string>
