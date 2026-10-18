@@ -113,7 +113,16 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
 7. **The icon grid on Home pages**: app icons, folders, drag between pages. Born on slice 2b's
    rule: its rim is Home's Margin, as the widget grid's is.
 8. **Per-toplevel X11 windows** (needs a rootless server).
-9. **Rebuilding the row and the floats after a background kill** beyond Saved sessions.
+9. **Rebuilding the row and the floats after a background kill** beyond Saved sessions. Done in
+   code: `ArrangementRecovery` decides each start (recreate, adopt, rebuild, empty, fresh). An
+   activity recreate with the service alive brings the floats back with the row's trees around
+   the same shells (keyed by `TerminalSession.mHandle`; the process keeps the last layout for an
+   activity that returns without instance state). The arrangement is autosaved in the version 4
+   model to the hidden `~/.termux/workspaces/.autosave.json` (1.5 s debounce, at once when empty,
+   on stop; Exit writes the empty one), and a cold start with no live shell rebuilds it with fresh
+   shells in the saved folders, never replaying a command, then a notice. Docs:
+   `durable-workspaces.md` › Autosave and recovery, the user guide's After a restart, spec §9.
+   Unit tests green; emulator pass owed (device-checks, slice 9).
 
 ## Rules carried over
 

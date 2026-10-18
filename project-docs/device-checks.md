@@ -674,6 +674,26 @@ Not seen: everything else listed under the sections below.
   Minor: an expelled window's chip reads "sh" (the cwd and title do not carry over to the new
   window); the Saved tab empty right after a save (fixed in the slice 4 round, re-check owed);
   `launcherctl window focus` from Home makes the window current without leaving Home.
+
+### Wall rework phase two: slice 9, the row and the floats after a background kill (feat/wall-rework-phase2)
+- Owed · commit "feat(wall): an activity recreate brings the Home floats back around their shells"
+  · emulator. Two windows (the second split), a Home float on page 2 minimised and one shown on
+  page 1; type `echo before` in a pane of each. Rotate (`settings put system user_rotation 1`,
+  activity recreate): both windows, the split, and both floats (page 2's still a chip, page 1's
+  shown) are back, attached to the same shells: `echo after` in each, the scrollback above still
+  shows `before`. No extra plain window appears for a float's shell. Rotate back: the same.
+- Owed · commit "feat(wall): autosave the arrangement and rebuild it on a cold start" · emulator.
+  `am kill com.termux` is not enough (the home app is revived): set the stock home first, `cd` to a
+  different folder in each pane, wait 2 s, `am force-stop com.termux`, launch from the icon. The
+  row (fresh shells; `pwd` prints each saved folder), the split and the floats on their pages (the
+  page 2 one minimised) are back, the notice "Windows restored from before the restart" shows,
+  and no program that was running starts again. Start in = Home shows Home page 1; with Start in =
+  Workspace the Workspace shows.
+- Owed · close every window and float, force-stop, launch: an empty Workspace, Home shows, no
+  shell (`launcherctl` session list empty). Again with the notification's **Exit** then launch:
+  the same. With Start in = Workspace either way: one fresh shell window.
+- Owed · an explicit Saved sessions Load (Replace) still works, and a force-stop 2 s after it
+  brings back the loaded arrangement, not the one before. The Saved tab never lists `.autosave`.
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners
