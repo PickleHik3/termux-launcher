@@ -571,6 +571,28 @@ Not seen: everything else listed under the sections below.
   the current session and window stay. Note: with an empty Workspace the drawer's Live list has no
   session to list the floats under (as before this slice).
 
+### Wall rework phase two: slice 5a, window reorder by drag in the window bar (feat/wall-rework-phase2)
+- Owed · commits "feat(wall): window reorder policy and moving a window in the row", "feat(wall):
+  drag a window's chip along the window bar to reorder the row" and "feat(wall): window.move verb
+  and Move window left / right palette actions" · emulator, portrait, status bar on the top edge.
+  With three windows (1 2 3) and window 1 current, long-press window 1's chip: it lifts (grows a
+  little, a haptic tick). Drag it past windows 2 and 3 and release: the bar reads 2 3 1, the
+  current window is still window 1 (now third, its chip selected), and the border drag left goes
+  to window 3. The drawer's Live list reads 2 3 1. Save sessions… then Load (Replace) gives 2 3 1.
+- Owed · `window.move to=1`: bind `map ctrl+alt+shift+m window.move to=1` in
+  `~/.termux/termux-launcher-bindings.conf`, `termux-reload-settings`, press it on window 1 (third):
+  the bar reads 1 2 3 again and window 1 stays current. The palette's Move window right / left
+  move it one place each way; at the end of the row they do nothing; neither is offered on Home.
+- Owed · what does not move: with a Home float open, its chip (after the row's, marked as a float)
+  does not lift on a long press, and neither does the display's chip; on Home and on the Display
+  place no chip lifts. A tap on a chip still switches; a second tap on the current chip still
+  offers its ×. A long press released without moving changes nothing; dragging away and back to
+  the start changes nothing; a drag that turns mostly vertical puts the chip back and does not fold
+  the status bar.
+- Owed · overflow: with 8 windows, so the bar scrolls, lift the first chip and hold it near the
+  bar's right edge: the strip scrolls under it until the end, the chips part as it passes them,
+  and the release lands it where it shows.
+
 ## Developer
 
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners

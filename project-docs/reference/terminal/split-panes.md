@@ -38,7 +38,10 @@ in-app keyboard is NOT yet routed to the multiplexer — needs a hook in Termina
 The middle tmux level. User's binds for it (currently pass through to the shell, NOT intercepted):
 - `Alt+1..9` → select-window
 - `Alt+Left / Alt+Right` → prev/next window
-- `Alt+Shift+Left / Right` → swap-window
+- `Alt+Shift+Left / Right` → swap-window (never bound. Reordering arrived in wall phase two,
+  slice 5a, as a drag of the window's chip along the window bar, plus the `window.move` action and
+  its palette pair `window.move_left` / `window.move_right`, which have no default stroke: Alt+Arrow
+  went to pane focus, and Alt+Shift+Arrow is word selection in many editors.)
 Needs a Window model (each window owns its own pane layout, many windows per session) + a switch UI (window bar or just the keybinds).
 
 ## Historical Phase 2a result (verified on-device, 2026-07-22)
