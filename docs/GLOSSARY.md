@@ -86,11 +86,13 @@ Home opens. Chips, the drawer and the shortcuts see it like any window.
 _Avoid_: floating terminal (in prose), scratchpad (that is the toggled one), popup
 
 **Home pills**:
-The status bar's look on a **Home page**, there while a **Home float** exists: two pills on the
-bar's glass instead of the bar. The windows pill, at the start, has one section per Home float
-showing its glyph, the focused one its name too; a tap brings that float in front, paging Home to
-it. The stats pill, at the end, has CPU, RAM and the weather as the status bar's settings show
-them, and no clock, battery or notification dots. A bar down a side keeps its column of chips.
+The status bar's look on a **Home page**: two pills on the bar's glass instead of the bar, in a
+band the widget grid gives its room to. The stats pill, at the end, is always there while it has
+something to show: CPU, RAM and the weather as the status bar's settings show them, and no clock,
+battery or notification dots. The windows pill, at the start, comes while a **Home float**
+exists, with one section per float showing its glyph, the focused one its name too; a tap brings
+that float in front, paging Home to it. A bar down a side keeps its column of chips, and comes to
+Home only for the floats.
 _Avoid_: capsule (the removed form), Home bar
 
 **Keyboard swipe**:

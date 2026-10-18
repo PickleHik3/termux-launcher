@@ -59,6 +59,16 @@ public final class HomePillsPolicy {
         return onHome && !StatusBarGesturePolicy.isVertical(edge);
     }
 
+    /**
+     * The band the pills stand in on Home, in dp: the compact bar's row on the style Home wears
+     * ({@code floating} for Floating). The live bar claims exactly this band on its edge, which
+     * the widget grid gives its room to, and the Layout editor's Home miniature draws the same
+     * band above its grid; the pills inside it are {@link #PILL_MAX_HEIGHT_DP} at most.
+     */
+    public static float bandDp(boolean floating) {
+        return StatusBarEdgeGeometry.thicknessDp(Edge.TOP, floating, true);
+    }
+
     // ---------------------------------------------------------------- sections
 
     /** One window's section: the glyph its chip wears, its name and what is spoken for it. */

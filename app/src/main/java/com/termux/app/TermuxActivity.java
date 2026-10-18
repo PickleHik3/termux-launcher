@@ -13633,8 +13633,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCachedPlaceLayoutRevision = store.revision();
             mCachedFloatBarLayout = null;
         }
-        // Home has no status bar until a Home float exists; then it carries the floats' chips.
-        if (variant == com.termux.app.place.LayoutVariant.HOME && mHomeFloatBarInLayout) {
+        // Home wears the bar as the pills' band, or down a side for the floats' chips
+        // (HomeChromePolicy.homeStatusBarShown); otherwise it has none.
+        if (variant == com.termux.app.place.LayoutVariant.HOME && mHomeBarInLayout) {
             if (mCachedFloatBarLayout == null) {
                 mCachedFloatBarLayout = com.termux.app.place.HomeChromePolicy.withFloatStatusBar(
                     mCachedPlaceLayout, store.statusBarEdge(orientation), true);
@@ -13646,8 +13647,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The Home layout with the status bar brought in for the floats, built once per resolve. */
     @Nullable private PlaceLayout mCachedFloatBarLayout;
-    /** Whether the status bar stands on Home for the floats: from the first float to the last. */
-    private boolean mHomeFloatBarInLayout;
+    /** Whether the status bar stands on Home (homeStatusBarWanted), kept through its slide out. */
+    private boolean mHomeBarInLayout;
+    /** Home's bar is sliding out; it leaves the layout when the slide ends. */
+    private boolean mHomeBarLeaving;
 
     /** Horizontal display-cutout insets from the last insets pass; the rail never draws narrower. */
     private int mLastDisplayCutoutInsetLeft;
@@ -14470,8 +14473,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean applyEdgeStacksAndInvalidate(@NonNull PlaceLayout layout) {
         boolean moved = applyEdgeStacks(layout);
         EdgeStackPolicy.Metrics metrics = buildEdgeStackMetrics();
-        boolean statusOverlays =
-            com.termux.app.place.HomeChromePolicy.statusOverlays(mLastWallPage);
+        // A bar along the top on Home is the pills' band, which the grid gives its room to.
+        boolean statusOverlays = com.termux.app.place.HomeChromePolicy.statusOverlays(
+            mLastWallPage, com.termux.app.statusbar.HomePillsPolicy.shown(true,
+                layout.slot(Element.STATUS).edge));
         moved |= applyTopStackOverlap(EdgeStackPolicy.topOverlapPx(layout, metrics,
             statusOverlays));
         // The side stacks ride up with the canvas; they start back at the bar's edge.
@@ -14546,10 +14551,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : lettersOffDock
                 ? AzBarHostGeometry.rowHeightPx(azBarHostMarginPx(), azBarThicknessPx())
                 : dockLayout.azRowHeightPx;
+        // On Home the row is the pills' band, one rule with the Layout editor's miniature.
+        int statusRowPx = com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage)
+            ? Math.round(com.termux.app.statusbar.HomePillsPolicy.bandDp(capsule) * density)
+            : com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(
+                PlaceLayout.Edge.TOP, capsule, compact, density);
         return EdgeStackPolicy.Metrics.builder()
             .cutout(mLastDisplayCutoutInsetLeft, mLastDisplayCutoutInsetRight)
-            .status(com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(
-                        PlaceLayout.Edge.TOP, capsule, compact, density),
+            .status(statusRowPx,
                 com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(
                         PlaceLayout.Edge.LEFT, capsule, compact, density)
                     + statusBarColumnOuterMarginPx())
@@ -14574,6 +14583,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // of the screen — or a grip dragged in the Layout editor — has to re-read them. The look
         // itself is every place's, so nothing else here depends on where the wall stands.
         boolean sizesMoved = applyPlaceSizes();
+        adoptHomeStatusBar();
         PlaceLayout layout = currentPlaceLayout();
         PlaceLayout previous = mAppliedPlaceLayout;
         boolean arrangementChanged = !layout.equals(previous);
@@ -20167,7 +20177,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean keyboardUp = place == mLastWallPage ? committedKeyboardVisible()
             : wantsKeyboardOnEnter(place);
         // A Home page has no status bar: the window's fades on the way there (HomeChromePolicy).
-        if (!com.termux.app.place.HomeChromePolicy.statusShownAtRest(place, mHomeFloatBarInLayout))
+        if (!com.termux.app.place.HomeChromePolicy.statusShownAtRest(place, mHomeBarInLayout))
             return keyboardUp ? REST_HOME_KEYBOARD_UP : REST_HOME_KEYBOARD_DOWN;
         return keyboardUp ? REST_KEYBOARD_UP : REST_KEYBOARD_DOWN;
     }
@@ -22483,8 +22493,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             roomTop += insets.getInsets(
                 androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
         }
-        // The room starts under the top edge's whole stack, the bar the floats bring included,
-        // which overlays the grid rather than pushing it down (HomeChromePolicy.statusOverlays).
+        // The room starts under the top edge's whole stack, Home's bar included, whether it takes
+        // its band from the grid or overlays it (HomeChromePolicy.statusOverlays).
         // Read off the layout, not the bar's live position: a float born as the bar arrives sits
         // where the bar settles, not where its slide has got to.
         View column = findViewById(R.id.terminal_content_column);
@@ -25092,6 +25102,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ensureAiIndicatorController();
         // The tiers just moved, and a tier is which hue this widget's ink is toned from.
         syncStatusBarInk();
+        // The stats pill may have gained its first reading or lost its last: Home's bar follows.
+        syncHomeStatusBar();
     }
 
     /**
@@ -26274,31 +26286,79 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Home floats came, went, were minimised or restored: what shows them follows. The first float
+     * Home floats came, went, were minimised or restored: what shows them follows. Where Home
+     * wears no bar of its own (a side bar, or a stats pill with nothing to show), the first float
      * brings the status bar down onto Home, compact, and the last one closing takes it back up.
      */
     private void onHomeFloatsChangedInActivity() {
-        boolean exist = mPaneController != null && mPaneController.homeFloatCount() > 0;
-        if (exist && !mHomeFloatBarInLayout) {
-            mHomeFloatBarInLayout = true;
+        syncHomeStatusBar();
+        refreshTerminalWindowBar();
+        refreshSessionsDrawer();
+        scheduleArrangementAutosave();
+    }
+
+    /**
+     * Whether Home wears the status bar now (HomeChromePolicy.homeStatusBarShown): the pills'
+     * band along the top or the bottom while the stats pill has a reading or a float exists, a
+     * side bar only for the floats.
+     */
+    private boolean homeStatusBarWanted() {
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null) return false;
+        boolean stats = com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
+                mPreferences != null && mPreferences.isStatusWidgetCpuEnabled(),
+                PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi())
+            || (mPreferences != null && (mPreferences.isStatusWidgetRamEnabled()
+                || mPreferences.isStatusWidgetWeatherEnabled()));
+        return com.termux.app.place.HomeChromePolicy.homeStatusBarShown(
+            store.statusBarEdge(currentPlaceOrientation()),
+            mPaneController != null && mPaneController.homeFloatCount() > 0, stats);
+    }
+
+    /**
+     * Home's bar follows {@link #homeStatusBarWanted} with a slide: brought down onto Home, or
+     * taken back up and out of the layout at the end of the way out. Called when the floats, the
+     * stats settings or the CPU's access change.
+     */
+    private void syncHomeStatusBar() {
+        // Before the first layout pass there is nothing on screen to slide: that pass adopts it.
+        if (mAppliedPlaceLayout == null) return;
+        boolean want = homeStatusBarWanted();
+        if (want && (!mHomeBarInLayout || mHomeBarLeaving)) {
+            boolean slide = !mHomeBarInLayout;
+            mHomeBarInLayout = true;
+            mHomeBarLeaving = false;
             mCachedFloatBarLayout = null;
             syncPlaceLayout();
             refreshTerminalWindowBar();
-            slideHomeStatusBar(true, null);
+            if (slide) slideHomeStatusBar(true, null);
             syncHomeFloatObstructions();
-        } else if (!exist && mHomeFloatBarInLayout) {
+        } else if (!want && mHomeBarInLayout && !mHomeBarLeaving) {
+            mHomeBarLeaving = true;
             slideHomeStatusBar(false, () -> {
-                if (mPaneController != null && mPaneController.homeFloatCount() > 0) return;
-                mHomeFloatBarInLayout = false;
+                if (!mHomeBarLeaving) return;
+                mHomeBarLeaving = false;
+                if (homeStatusBarWanted()) return;
+                mHomeBarInLayout = false;
                 mCachedFloatBarLayout = null;
                 syncPlaceLayout();
                 refreshTerminalWindowBar();
                 syncHomeFloatObstructions();
             });
         }
-        refreshTerminalWindowBar();
-        refreshSessionsDrawer();
-        scheduleArrangementAutosave();
+    }
+
+    /**
+     * The layout pass's own read of Home's bar: a change that came without a slide (the bar's edge
+     * moved in the Layout editor, the first pass after a start) is taken at once. A bar on its way
+     * out keeps its place until its slide ends.
+     */
+    private void adoptHomeStatusBar() {
+        if (mHomeBarLeaving) return;
+        boolean want = homeStatusBarWanted();
+        if (want == mHomeBarInLayout) return;
+        mHomeBarInLayout = want;
+        mCachedFloatBarLayout = null;
     }
 
     /**

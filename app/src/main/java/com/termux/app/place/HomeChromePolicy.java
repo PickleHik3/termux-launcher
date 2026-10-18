@@ -89,19 +89,34 @@ public final class HomeChromePolicy {
     }
 
     /**
-     * Whether the status bar floats over the page's content rather than taking room from it. On a
-     * Home page it does, as the dock does: the bar the first float brings down slides over the
-     * widget grid, which keeps its size whether the bar is there or not, and the floats' room
-     * starts at the bar's edge ({@link EdgeStackPolicy#topOverlapPx}). On a window the bar takes
-     * its band as always.
+     * Whether Home wears the status bar. Along the top or the bottom it is the Home pills' band,
+     * there whenever the stats pill has a reading to show or a Home float exists (the windows
+     * pill); down a side it carries the floats' chips, so only while a Home float exists. With
+     * nothing to show, a Home page has no bar at all.
+     *
+     * @param statsShown whether the stats pill has a reading: one of the status bar's CPU, RAM
+     *     and weather settings is on (CPU only with the access it needs)
      */
-    public static boolean statusOverlays(@NonNull PaneWallPage page) {
-        return isHome(page);
+    public static boolean homeStatusBarShown(@NonNull PlaceLayout.Edge edge,
+                                             boolean homeFloatsExist, boolean statsShown) {
+        if (edge.isOnSide()) return homeFloatsExist;
+        return homeFloatsExist || statsShown;
     }
 
     /**
-     * Whether the status bar's content shows while the wall rests on the page. On a Home page the
-     * Home layout has no status bar, so a slide toward Home fades the window's bar out on the way
+     * Whether the status bar floats over the page's content rather than taking room from it. On a
+     * window it never does. On a Home page a bar along the top or the bottom is the Home pills'
+     * band ({@code pillsBand}), which the widget grid gives its room to, so nothing on the grid
+     * lies under a pill; any other bar overlays the page as the dock does, and the floats' room
+     * starts at its edge ({@link EdgeStackPolicy#topOverlapPx}).
+     */
+    public static boolean statusOverlays(@NonNull PaneWallPage page, boolean pillsBand) {
+        return isHome(page) && !pillsBand;
+    }
+
+    /**
+     * Whether the status bar's content shows while the wall rests on the page, Home's own bar
+     * left out: on a Home page none, so a slide toward Home fades the window's bar out on the way
      * and a slide toward a window brings it with the window.
      */
     public static boolean statusShownAtRest(@NonNull PaneWallPage page) {
@@ -109,18 +124,18 @@ public final class HomeChromePolicy {
     }
 
     /**
-     * The same, once Home floats are counted: on a Home page the status bar is there exactly while
-     * a Home float is open or minimised, in its compact form, and on a window always. The first
-     * float brings it down from the top and the last one closing takes it away.
+     * The same, once Home's own bar is counted ({@link #homeStatusBarShown}): on a Home page the
+     * status bar is there exactly while Home wears it, in its compact form, and on a window
+     * always.
      */
-    public static boolean statusShownAtRest(@NonNull PaneWallPage page, boolean homeFloatsExist) {
-        return !isHome(page) || homeFloatsExist;
+    public static boolean statusShownAtRest(@NonNull PaneWallPage page, boolean homeBarShown) {
+        return !isHome(page) || homeBarShown;
     }
 
     /**
      * Whether the status bar's window chips show on the page. On a window they are the row's
      * windows; on a Home page they are the Home floats, of every page, so they show exactly while
-     * a Home float exists, open or minimised: the bar comes onto Home only to carry them.
+     * a Home float exists, open or minimised.
      */
     public static boolean windowChipsShown(@NonNull PaneWallPage page, boolean homeFloatsExist) {
         return !isHome(page) || homeFloatsExist;
@@ -135,15 +150,15 @@ public final class HomeChromePolicy {
     }
 
     /**
-     * The Home layout with the status bar brought in while Home floats exist: on the edge it
-     * stands on in the Workspace, so it reads as the same bar. Unchanged while there is no float,
-     * or while the layout already shows one.
+     * The Home layout with the status bar brought in while Home wears it
+     * ({@link #homeStatusBarShown}): on the edge it stands on in the Workspace, so it reads as the
+     * same bar. Unchanged while Home wears none, or while the layout already shows one.
      */
     @NonNull
     public static PlaceLayout withFloatStatusBar(@NonNull PlaceLayout home,
                                                  @NonNull PlaceLayout.Edge edge,
-                                                 boolean homeFloatsExist) {
-        if (!homeFloatsExist || !home.slot(Element.STATUS).hidden) return home;
+                                                 boolean homeBarShown) {
+        if (!homeBarShown || !home.slot(Element.STATUS).hidden) return home;
         return home.withSlot(Element.STATUS, Slot.on(edge, Element.STATUS));
     }
 
