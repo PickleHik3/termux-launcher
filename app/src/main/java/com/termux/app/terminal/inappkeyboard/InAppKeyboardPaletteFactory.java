@@ -19,6 +19,13 @@ public final class InAppKeyboardPaletteFactory {
 
     private static final double MIN_TEXT_CONTRAST = 4.5d;
 
+    /**
+     * The palette's {@code secondaryDimming}: the keyboard draws every key flagged secondary (Ctrl,
+     * Alt, Fn, Shift, the arrows, Esc, Tab, Backspace, Enter, 123+) in its legend colour moved this
+     * far toward mid grey ({@link #secondaryOf}), not in the colour itself.
+     */
+    private static final float SECONDARY_DIMMING = 0.25f;
+
     // How far each part of a keyboard on Obsidian glass sits from the capsule, toward its ink.
     private static final float KEY_LIFT = 0.16f;
     private static final float FUNCTION_LIFT = 0.08f;
@@ -234,6 +241,77 @@ public final class InAppKeyboardPaletteFactory {
     @NonNull
     public static Theme.Palette createGlass(@NonNull Context context, String variant,
                                             @NonNull GlassLook look) {
+        return createGlass(context, variant, look, Color.TRANSPARENT);
+    }
+
+    /**
+     * {@link #createGlass(Context, String, GlassLook)} with every legend checked against its chip
+     * over {@code face}, the glass the keys really stand on as measured (the wallpaper, the dim,
+     * the Shade and the tint at its opacity; {@code ChromeInk#bandFace}), rather than over the
+     * theme's glass base. A theme legend that already reads there is kept; one that does not moves
+     * toward whichever of white or black reads. {@link Color#TRANSPARENT} for not measured yet:
+     * the glass base stands in, as before.
+     */
+    @NonNull
+    public static Theme.Palette createGlass(@NonNull Context context, String variant,
+                                            @NonNull GlassLook look, @ColorInt int face) {
+        return createGlass(context, variant, look,
+            Color.alpha(face) == 0 ? new int[0] : new int[] {face});
+    }
+
+    /**
+     * {@link #createGlass(Context, String, GlassLook, int)} on several faces at once: the glass
+     * under each row of the keyboard, top to bottom, as measured ({@code ChromeInk#bandFaces}).
+     * Every legend is checked on its chip over every one of them, so a label the top row's bright
+     * wallpaper passes is not drawn dark on the near-black wallpaper under the bottom row. Where no
+     * tone clears all of them, the side that reads best on the worst face wins and the band's veil
+     * (measured on the same rows) is what buys the rest. Empty for not measured yet: the glass
+     * base stands in, as before.
+     */
+    @NonNull
+    public static Theme.Palette createGlass(@NonNull Context context, String variant,
+                                            @NonNull GlassLook look, @NonNull int[] faces) {
+        return createGlass(context, variant, look, faces,
+            com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                .DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY);
+    }
+
+    /**
+     * {@link #createGlass(Context, String, GlassLook, int[])} at the user's key opacity
+     * ({@code keyOpacityPercent}, 0 to 100; negative for the theme's own). The keyboard draws
+     * every cap but a pressed one at that alpha in place of the palette's
+     * ({@code juloo.keyboard2.Theme.Computed.Key}), so the legends are chosen on the caps as
+     * drawn at it: letters, the space bar, Enter and the function keys alike, each over every
+     * row's face. At 0 the caps are clear and the legends are chosen on the glass face itself.
+     * The function chip's raise does not apply there, since the view would draw over it.
+     */
+    @NonNull
+    public static Theme.Palette createGlass(@NonNull Context context, String variant,
+                                            @NonNull GlassLook look, @NonNull int[] faces,
+                                            int keyOpacityPercent) {
+        return createGlass(context, variant, look, faces, keyOpacityPercent, TONE_ANY);
+    }
+
+    /** {@link #createGlass(Context, String, GlassLook, int[], int, int)}: the tone is the faces'. */
+    public static final int TONE_ANY = 0;
+    /** The launcher chose dark legends on the bare face ({@code ChromeInk#bandTone}). */
+    public static final int TONE_DARK = 1;
+    /** The launcher chose pale legends on the bare face ({@code ChromeInk#bandTone}). */
+    public static final int TONE_PALE = 2;
+
+    /**
+     * {@link #createGlass(Context, String, GlassLook, int[], int)} with the letters and the
+     * function legends held to {@code tone}, the side the launcher chose on the bare face
+     * ({@code ChromeInk#onFixedInkEitherTone}, which bought the veil, if any, for that side): each
+     * the theme's legend where it is on that side and reads, else moved toward that side's
+     * endpoint as far as it and its secondary rendition need, else the endpoint. So the legends
+     * follow the one decision, hysteresis and all, instead of flipping on the faces near the
+     * line. {@link #TONE_ANY} chooses on the faces, as before.
+     */
+    @NonNull
+    public static Theme.Palette createGlass(@NonNull Context context, String variant,
+                                            @NonNull GlassLook look, @NonNull int[] faces,
+                                            int keyOpacityPercent, int tone) {
         String normalizedVariant = variant == null || "dock".equals(variant)
             ? "system" : variant;
         Theme.Palette base = create(context, normalizedVariant);
@@ -264,26 +342,62 @@ public final class InAppKeyboardPaletteFactory {
         int space = ColorUtils.setAlphaComponent(baseSpace, night ? 150 : 180);
         int activated = ColorUtils.setAlphaComponent(base.activatedKeyBackground, 216);
 
-        int keyOnBase = ColorUtils.compositeColors(key, glassBase);
-        int actionOnBase = ColorUtils.compositeColors(action, glassBase);
-        int functionOnBase = ColorUtils.compositeColors(function, glassBase);
-        int activatedOnBase = ColorUtils.compositeColors(activated, glassBase);
-
-        int label = ensureContrast(baseLabel, keyOnBase);
-        int subLabel = ensureContrast(baseSubLabel, keyOnBase);
-        int actionLabel = ensureContrast(base.actionLabelColor, actionOnBase);
-        int actionSubLabel = ensureContrast(base.actionSubLabelColor, actionOnBase);
-        int functionLabel = ensureContrast(baseFunctionLabel, functionOnBase);
-        int activatedLabel = ensureContrast(base.activatedLabelColor, activatedOnBase);
-        // Re-sunk against the composited chip; see the non-glass path for why RGB, not alpha.
-        int pressedLabel = ColorUtils.blendARGB(activatedOnBase, activatedLabel, 130f / 255f);
-        int lockedLabel = ensureContrast(base.lockedModifierColor, activatedOnBase);
+        // What the chips are laid on: the measured faces where there are some, else the base.
+        int[] under = measuredOrBase(faces, glassBase);
+        int[] keyOn = chipsOn(key, under);
+        int[] actionOn = chipsOn(action, under);
+        int[] activatedOn = chipsOn(activated, under);
+        // The cap shading and the pressed blend follow the face the chips mostly stand on.
+        int keyOnBase = ColorUtils.compositeColors(key, meanOf(under));
+        int activatedOnBase = ColorUtils.compositeColors(activated, meanOf(under));
 
         // Rim and cap shading follow the chip's effective brightness, not the phone's UI
         // mode, so a light theme under a dark phone still reads as light physical caps.
         boolean lightChips = ColorUtils.calculateLuminance(keyOnBase) > 0.5d;
         int gradientTop = ColorUtils.setAlphaComponent(Color.WHITE, lightChips ? 46 : 26);
         int gradientBottom = ColorUtils.setAlphaComponent(Color.BLACK, lightChips ? 26 : 56);
+
+        boolean userKeys = keyOpacityPercent >= 0;
+        if (userKeys) {
+            // The caps as the view draws them at the user's opacity (activated ones keep theirs).
+            int alpha = Math.round(255f * Math.min(100, keyOpacityPercent) / 100f);
+            keyOn = drawnChipsOn(ColorUtils.setAlphaComponent(key, alpha), gradientTop,
+                gradientBottom, under);
+            actionOn = drawnChipsOn(ColorUtils.setAlphaComponent(action, alpha), gradientTop,
+                gradientBottom, under);
+            function = ColorUtils.setAlphaComponent(function, alpha);
+        }
+        int label = legibleOnTone(baseLabel, keyOn, tone);
+        int subLabel = ensureContrastOnAll(baseSubLabel, keyOn);
+        // Enter stands on its own accent button, which the launcher's tone was not judged on:
+        // its legend is chosen on that button over the faces, which no longer carry a veil
+        // bought for the legends drawn before.
+        int actionLabel = legibleWithSecondary(base.actionLabelColor, actionOn);
+        int actionSubLabel = ensureContrastOnAll(base.actionSubLabelColor, actionOn);
+        // The function legends (Ctrl, Alt, Fn, the gear, Shift, Backspace, the right-hand
+        // cluster) are chosen on their chip as the keyboard really draws it over every row's
+        // face, and where no tone reads on that, the chip's fill is raised until one does (not
+        // at a user key opacity, which the view draws in place of any fill).
+        // Nearly every function legend is drawn secondary, so the tone is chosen for that too.
+        int[] functionOn = drawnChipsOn(function, gradientTop, gradientBottom, under);
+        int functionLabel = legibleOnTone(baseFunctionLabel, functionOn, tone);
+        if (!userKeys && drawnContrast(functionLabel, functionOn) < MIN_TEXT_CONTRAST) {
+            for (int alpha = Color.alpha(function) + 1; alpha <= 255; alpha++) {
+                int raised = ColorUtils.setAlphaComponent(baseFunction, alpha);
+                int[] on = drawnChipsOn(raised, gradientTop, gradientBottom, under);
+                int ink = legibleOnTone(baseFunctionLabel, on, tone);
+                if (alpha == 255 || drawnContrast(ink, on) >= MIN_TEXT_CONTRAST) {
+                    function = raised;
+                    functionLabel = ink;
+                    break;
+                }
+            }
+        }
+        int activatedLabel = ensureContrastOnAll(base.activatedLabelColor, activatedOn);
+        // Re-sunk against the composited chip; see the non-glass path for why RGB, not alpha.
+        int pressedLabel = ColorUtils.blendARGB(activatedOnBase, activatedLabel, 130f / 255f);
+        int lockedLabel = ensureContrastOnAll(base.lockedModifierColor, activatedOn);
+
         int border = lightChips
             ? ColorUtils.setAlphaComponent(Color.BLACK, 48)
             : ColorUtils.setAlphaComponent(Color.WHITE, 64);
@@ -383,6 +497,221 @@ public final class InAppKeyboardPaletteFactory {
                 low = amount;
             } else {
                 high = amount;
+            }
+        }
+        return opaque(best);
+    }
+
+    /** The opaque faces, or the glass base alone where none was measured. */
+    @NonNull
+    private static int[] measuredOrBase(@NonNull int[] faces, @ColorInt int glassBase) {
+        int count = 0;
+        for (int face : faces) if (Color.alpha(face) != 0) count++;
+        if (count == 0) return new int[] {opaque(glassBase)};
+        int[] out = new int[count];
+        int at = 0;
+        for (int face : faces) if (Color.alpha(face) != 0) out[at++] = opaque(face);
+        return out;
+    }
+
+    /** {@code chip} composited over each of {@code faces}, opaque. */
+    @NonNull
+    private static int[] chipsOn(@ColorInt int chip, @NonNull int[] faces) {
+        int[] out = new int[faces.length];
+        for (int i = 0; i < faces.length; i++)
+            out[i] = opaque(ColorUtils.compositeColors(chip, faces[i]));
+        return out;
+    }
+
+    /**
+     * A key cap as the keyboard draws it ({@code juloo.keyboard2.Theme.Computed.Key}): the fill
+     * becomes a vertical gradient from {@code gradientTop} over it to {@code gradientBottom} over
+     * it, and that gradient is painted with the fill's own colour on the paint, whose alpha the
+     * canvas multiplies into the shader. So a glass chip reaches the screen at roughly its alpha
+     * squared: a light theme's function chip of 124/255 shows about 70/255 of its colour, which
+     * is why its legends, chosen on the fill alone, were drawn dark on a near-black chip over dark
+     * wallpaper. Returns the two ends of that gradient (the darkest and palest the cap gets), or
+     * the fill alone where the palette draws no gradient.
+     */
+    @NonNull
+    public static int[] drawnCapStops(@ColorInt int fill, @ColorInt int gradientTop,
+                                      @ColorInt int gradientBottom) {
+        if ((gradientTop == 0 && gradientBottom == 0) || Color.alpha(fill) == 0)
+            return new int[] {fill};
+        return new int[] {
+            drawnStop(compositeOver(gradientTop, fill), Color.alpha(fill)),
+            drawnStop(compositeOver(gradientBottom, fill), Color.alpha(fill))
+        };
+    }
+
+    /** One gradient stop with the paint's alpha multiplied into it. */
+    @ColorInt
+    private static int drawnStop(@ColorInt int stop, int paintAlpha) {
+        return ColorUtils.setAlphaComponent(stop,
+            Math.round(Color.alpha(stop) * paintAlpha / 255f));
+    }
+
+    /** {@code Theme.Computed.Key#compositeOver}: source-over keeping {@code base}'s translucency. */
+    @ColorInt
+    private static int compositeOver(@ColorInt int overlay, @ColorInt int base) {
+        if (overlay == 0) return base;
+        float oa = Color.alpha(overlay) / 255f;
+        float ba = Color.alpha(base) / 255f;
+        float outA = oa + ba * (1f - oa);
+        if (outA <= 0f) return Color.TRANSPARENT;
+        int r = Math.round((Color.red(overlay) * oa + Color.red(base) * ba * (1f - oa)) / outA);
+        int g = Math.round((Color.green(overlay) * oa + Color.green(base) * ba * (1f - oa)) / outA);
+        int b = Math.round((Color.blue(overlay) * oa + Color.blue(base) * ba * (1f - oa)) / outA);
+        return Color.argb(Math.round(outA * 255f), r, g, b);
+    }
+
+    /** Each end of the drawn cap ({@link #drawnCapStops}) composited over each of {@code faces}. */
+    @NonNull
+    private static int[] drawnChipsOn(@ColorInt int fill, @ColorInt int gradientTop,
+                                      @ColorInt int gradientBottom, @NonNull int[] faces) {
+        int[] stops = drawnCapStops(fill, gradientTop, gradientBottom);
+        int[] out = new int[stops.length * faces.length];
+        int at = 0;
+        for (int stop : stops)
+            for (int face : faces)
+                out[at++] = opaque(ColorUtils.compositeColors(stop, face));
+        return out;
+    }
+
+    /** The plain sRGB mean of {@code colors}, opaque. */
+    @ColorInt
+    private static int meanOf(@NonNull int[] colors) {
+        long red = 0, green = 0, blue = 0;
+        for (int color : colors) {
+            red += Color.red(color);
+            green += Color.green(color);
+            blue += Color.blue(color);
+        }
+        int n = Math.max(1, colors.length);
+        return Color.rgb((int) (red / n), (int) (green / n), (int) (blue / n));
+    }
+
+    /**
+     * {@code legend} as the keyboard draws it on a key flagged secondary
+     * ({@code juloo.keyboard2.Theme.adjustLight} at {@link #SECONDARY_DIMMING}): its value moved
+     * toward mid grey, {@code v' = d + (1 - 2d) v}, so black becomes a dark grey and white a light
+     * one. Never black or white, which is why a legend that only just reads leaves its Ctrl, Alt
+     * and arrows unreadable on a mid face.
+     */
+    @ColorInt
+    public static int secondaryOf(@ColorInt int legend) {
+        float[] hsv = new float[3];
+        Color.colorToHSV(legend, hsv);
+        hsv[2] = SECONDARY_DIMMING - (2f * SECONDARY_DIMMING - 1f) * hsv[2];
+        return Color.HSVToColor(0xFF, hsv);
+    }
+
+    /** The lower of a legend's own contrast and its secondary rendition's, on every background. */
+    private static double drawnContrast(@ColorInt int legend, @NonNull int[] backgrounds) {
+        return Math.min(minContrast(legend, backgrounds),
+            minContrast(secondaryOf(legend), backgrounds));
+    }
+
+    /**
+     * {@link #ensureContrastOnAll} for a legend the keyboard also draws secondary
+     * ({@link #secondaryOf}): that tone where its secondary rendition reads as well; else white or
+     * black, whichever leaves the secondary rendition reading best on the worst background,
+     * without the legend itself falling under what that tone gave it (or the floor). The veil
+     * ({@code ChromeInk#onFixedInk}) is asked for the secondary rendition, so where neither reads it
+     * rises.
+     */
+    @ColorInt
+    static int legibleWithSecondary(@ColorInt int foreground, @NonNull int[] backgrounds) {
+        int ink = ensureContrastOnAll(foreground, backgrounds);
+        if (backgrounds.length == 0
+                || minContrast(secondaryOf(ink), backgrounds) >= MIN_TEXT_CONTRAST)
+            return ink;
+        double floor = Math.min(MIN_TEXT_CONTRAST, minContrast(ink, backgrounds));
+        int best = ink;
+        double bestSecondary = minContrast(secondaryOf(ink), backgrounds);
+        for (int endpoint : new int[] {Color.WHITE, Color.BLACK}) {
+            if (minContrast(endpoint, backgrounds) < floor) continue;
+            double secondary = minContrast(secondaryOf(endpoint), backgrounds);
+            if (secondary > bestSecondary) {
+                best = endpoint;
+                bestSecondary = secondary;
+            }
+        }
+        return opaque(best);
+    }
+
+    /**
+     * {@link #legibleWithSecondary} held to {@code tone}'s side ({@link #TONE_ANY}: either). On
+     * the side: {@code foreground} where it is on that side and it and its secondary rendition
+     * read; else moved toward the side's endpoint only as far as both need; else the endpoint.
+     * Off the side, the endpoint.
+     */
+    @ColorInt
+    static int legibleOnTone(@ColorInt int foreground, @NonNull int[] backgrounds, int tone) {
+        if (tone != TONE_DARK && tone != TONE_PALE)
+            return legibleWithSecondary(foreground, backgrounds);
+        int endpoint = tone == TONE_PALE ? Color.WHITE : Color.BLACK;
+        foreground = opaque(foreground);
+        boolean onSide = (ColorUtils.calculateLuminance(foreground) > 0.5d) == (tone == TONE_PALE);
+        if (!onSide) return endpoint;
+        if (backgrounds.length == 0
+                || drawnContrast(foreground, backgrounds) >= MIN_TEXT_CONTRAST)
+            return foreground;
+        if (drawnContrast(endpoint, backgrounds) < MIN_TEXT_CONTRAST) return endpoint;
+        int best = endpoint;
+        float low = 0f;
+        float high = 1f;
+        for (int i = 0; i < 20; i++) {
+            float amount = (low + high) / 2f;
+            int candidate = ColorUtils.blendARGB(foreground, endpoint, amount);
+            if (drawnContrast(candidate, backgrounds) >= MIN_TEXT_CONTRAST) {
+                best = candidate;
+                high = amount;
+            } else {
+                low = amount;
+            }
+        }
+        return opaque(best);
+    }
+
+    /** The lowest contrast {@code foreground} has on any of {@code backgrounds}. */
+    private static double minContrast(@ColorInt int foreground, @NonNull int[] backgrounds) {
+        double worst = Double.MAX_VALUE;
+        for (int background : backgrounds)
+            worst = Math.min(worst, ColorUtils.calculateContrast(opaque(foreground), background));
+        return worst;
+    }
+
+    /**
+     * {@link #ensureContrast} held on every one of {@code backgrounds} at once (opaque): the
+     * label itself where it already reads on all of them; else moved toward white or black only
+     * as far as all of them need, on the side that reads best on the worst of them; and where
+     * neither endpoint clears them all, that endpoint itself, the most legible tone there is. One
+     * background is exactly {@link #ensureContrast}.
+     */
+    @ColorInt
+    public static int ensureContrastOnAll(@ColorInt int foreground, @NonNull int[] backgrounds) {
+        foreground = opaque(foreground);
+        if (backgrounds.length == 0) return foreground;
+        if (backgrounds.length == 1) return ensureContrast(foreground, backgrounds[0]);
+        if (minContrast(foreground, backgrounds) >= MIN_TEXT_CONTRAST) return foreground;
+        double white = minContrast(Color.WHITE, backgrounds);
+        double black = minContrast(Color.BLACK, backgrounds);
+        // The endpoint that reads best on the worst background: the only one that can clear all
+        // of them if either can, and the most legible tone where neither can.
+        int endpoint = white >= black ? Color.WHITE : Color.BLACK;
+        if (minContrast(endpoint, backgrounds) < MIN_TEXT_CONTRAST) return endpoint;
+        int best = endpoint;
+        float low = 0f;
+        float high = 1f;
+        for (int i = 0; i < 20; i++) {
+            float amount = (low + high) / 2f;
+            int candidate = ColorUtils.blendARGB(foreground, endpoint, amount);
+            if (minContrast(candidate, backgrounds) >= MIN_TEXT_CONTRAST) {
+                best = candidate;
+                high = amount;
+            } else {
+                low = amount;
             }
         }
         return opaque(best);

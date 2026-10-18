@@ -35,7 +35,6 @@ public final class PaneStyleKey {
     private final int mWallBehindColor;
     @Nullable private final com.termux.app.chrome.GlassRefraction.Look mRefraction;
     @Nullable private final Bitmap mClearFrame;
-    private final boolean mAdaptive;
 
     private PaneStyleKey(@NonNull PaneSurfaceStyle style) {
         mGlass = style.isPaneGlassActive();
@@ -54,7 +53,6 @@ public final class PaneStyleKey {
         mWallBehindColor = style.wallBehindColor();
         mRefraction = style.paneGlassRefraction();
         mClearFrame = style.paneGlassClearFrame();
-        mAdaptive = style.adaptiveGlass();
     }
 
     @NonNull
@@ -82,8 +80,7 @@ public final class PaneStyleKey {
             && mWallBehind == that.mWallBehind
             && mWallBehindColor == that.mWallBehindColor
             && Objects.equals(mRefraction, that.mRefraction)
-            && mClearFrame == that.mClearFrame
-            && mAdaptive == that.mAdaptive;
+            && mClearFrame == that.mClearFrame;
     }
 
     @Override
@@ -91,6 +88,6 @@ public final class PaneStyleKey {
         return Objects.hash(mGlass, mBorder, System.identityHashCode(mFrame), mFrameRect,
             System.identityHashCode(mFrostFilter), mTint, mRim, mOpeningLine, mGrainStrength, mCornerRadiusPx,
             mCornerRadiusDp, mGapDp, System.identityHashCode(mWallBehind), mWallBehindColor,
-            mRefraction, System.identityHashCode(mClearFrame), mAdaptive);
+            mRefraction, System.identityHashCode(mClearFrame));
     }
 }

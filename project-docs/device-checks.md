@@ -82,20 +82,35 @@ under twenty items; past that, the oldest are re-judged first.
   and `fancier_glass_edge_width` 18; one Depth step down writes 26/17 and the dock's bend ring
   narrows by a step, not to a third. Fails if the page says Custom with Depth 34: something wrote
   a preference before the first-run check, and the install was taken for an upgrade · emulator.
-- 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" (glass plan Round
-  1) · Adaptive glass off: Clear, Mist and Tint look exactly as on `pre` (crop a pane corner and
-  the dock's top edge on both builds). On: the edge is the wallpaper's colour brightened,
-  brightest top-left and faint all round; no white line and no second stroke; over a pale
-  wallpaper the glint shrinks; no bright line on a seam (keyboard over the under-pill strip, status
-  over the window bar); the dock shows one edge, not two; in a joined frame, no glow runs along the
-  screen's own edges. Look for a leftover white line on a Floating pane with the border on (its
-  border still comes from the gradient rim) and on a wall page's corner tab (still the hairline).
-  The row is hidden on Android 12 and greyed with the hint until a wallpaper is set from the
-  picker · emulator, `glass-city` and `glass-flowers` wallpapers, Docked and Floating, keyboard up
-  and down.
-- 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" ·
-  `GlassRefractionAgslInstrumentationTest` passes, its two gathered-edge cases included (a lit
-  top-left corner with `uGathered` 1; switched back off draws the hairline exactly) · emulator.
+- 2026-10-16 · commit "feat(glass): the gathered light is the only glass edge" (glass plan Round
+  1, always on) · Android 13+, wallpaper set from the picker, Clear, Mist and Tint: every glass
+  surface shows one edge, the wallpaper's colour brightened, brightest top-left and faint all
+  round, and no white line or gradient stroke beside it. Crop each: the dock (Docked and capsule,
+  where the capsule must still clip to its rounded outline), the under-pill strip, the keyboard,
+  the window bar capsule, a Floating pane with the border on (one edge, no rim), a split's focused
+  pane (its active colour still shows), a wall page's corner tab (now lit), the frame gutter in a
+  joined Docked frame (no glow along the screen's edges). No bright line on a seam (keyboard over
+  the strip, status over the window bar). Over a pale sky the edge stays blue, not white or cyan.
+  With no Look (Fancier Glass off, a wallpaper not set from the picker) the dock and the strip
+  still show the gathered edge and no rim under it, and the other surfaces keep their rims ·
+  emulator, `glass-city` and `glass-flowers` and a pale-sky wallpaper, Docked and Floating,
+  keyboard up and down.
+- 2026-10-16 · commit "feat(glass): the gathered light is the only glass edge" · Android 12 (or a
+  forced plain draw) looks exactly as on `pre`: every rim, the dock's rim under its glass, the
+  panes' gradient rim · an API 31/32 emulator.
+- 2026-10-17 · commit "fix(glass): every edge follows the glass on screen, not the rule" · The
+  window bar capsule: one edge on a cold start (no rim beside the gathered light on the first
+  frame after the frost lands), and its stroke back the moment the frost goes (Fancier Glass off,
+  status blur radius 0, the bar moved onto the dock's plank and back). The dock: its rim under the
+  glass shows while a blur is in flight on a fresh wallpaper and goes once the glass is up. A
+  Floating pane: its rim shows while its slab is plain (a fresh blur in flight, a corner-masked
+  page) and goes when the slab refracts · emulator, logcat clean.
+- 2026-10-16 · commit "feat(glass): the gathered light is the only glass edge" · Settings › Theme
+  & fonts has no Adaptive glass row and nothing else on the page moved (crop the page before and
+  after) · emulator.
+- 2026-10-16 · commit "feat(glass): the gathered light is the only glass edge" ·
+  `GlassRefractionAgslInstrumentationTest` passes, `aPaleSkysOutlineKeepsItsBlue` and the lit
+  top-left corner included (only a device proves the AGSL compiles) · emulator.
 - 2026-10-16 · commit "feat(keyboard): a touch engine that learns where your taps land" ·
   A swipe that starts in a moved border strip keeps its own key's swipe legend: with Adaptive
   touch accuracy past its warm-up and a border moved (the low strip of `b` typing a space), swipe
@@ -108,6 +123,177 @@ under twenty items; past that, the oldest are re-judged first.
 - 2026-10-16 · commit "feat(keyboard): a touch engine that learns where your taps land" · The status row reads whole at font scale 1.3 in all three states (Learning, Active,
   Paused), its summary wrapping rather than clipping, and dims with the switch off · emulator,
   `font_scale 1.3`, force-stop after the change.
+
+- 2026-10-17 · branch feat/glass-controls-unify, "feat(glass): one set of glass controls in Look › Custom" · Look ›
+  Custom from Clear, then Mist, then Tint: Tint 0→100 adds visible accent each time (Mist light
+  theme too); Hue Secondary/Tertiary changes the tint; Glass 0→100 goes clear→frosted with
+  no sandy grain; Vibrancy 0.7x/1.5x changes the glass colour but not the bare wallpaper beside
+  it; the global heading row shows "All surfaces" with Hue beside it, whole at 360dp and at Large
+  text; Contrast moves with wallpaper colours off; Glass released at 5 reads 5 on reopening; no
+  Shade column anywhere; Undo puts all of it back · emulator tl16, dark and light theme,
+  screenshots before/after per control.
+- 2026-10-17 · same branch · Migration: an install on Clear, Mist, Tint and Solid from the pre build
+  keeps its stop and its colour after the update (Clear and Tint change blur and grain by design);
+  a Custom with Tint 40 on Mist comes up at Tint 0 and the same colour; a saved Custom applies as it
+  looked · emulator, a pre-build store per Look.
+- 2026-10-17 · same branch · Edge outline: the gathered edge on dark Mist (60%, gain 2.25), light
+  Mist (35%), the dock, sheets and Solid reads about as strong as on Clear, never white-clipped,
+  on a pale and a dark wallpaper ·
+  emulator tl16 (Android 13+), screenshots of each surface.
+- 2026-10-17 · same branch, "fix(glass): the terminal's ink follows the face its panes are drawn
+  with" · Light theme, wallpaper on, Terminal colours dynamic: Solid shows dark terminal text on its
+  near-white panes, after switching to it from Clear and after a fresh start; a Clear-derived Custom
+  dragged Opacity 0→100 in the editor flips the text to dark within a moment of release (and back to
+  pale at 0), with the keyboard shown and hidden first; dark theme unchanged · emulator tl16,
+  screenshots before/after.
+- 2026-10-17 · same branch, "feat(glass): Edge is a slider" · Look › Custom, glass edge drawn
+  (Android 13+): the global set reads Glass, Opacity, Tint, Edge, Vibrancy, Depth, whole at 360dp
+  and Large text; Clear opens at Edge 40 and looks exactly as before (compare a `pre` crop), Mist
+  and Tint at 0. Edge 0, 40, 70, 100 on Clear and on Mist, both themes: each step a plainly
+  stronger split; seams (keyboard over strip, status over window bar) show no line · emulator
+  tl16, top-edge and corner crops per value. On pong the first bold edge read as a red band on a
+  dark wallpaper, and its successor as a separate yellow-green border just inside every
+  surface under a gold Look; "fix(glass): Edge past 40 splits the rim's light" replaces both.
+  Recheck Clear, Mist and a gold-tinted Look at Edge 100 over Celestial Field (dark) and a pale
+  wallpaper: every edge of the dock, panes, status band and keyboard wears a cyan-blue px on the
+  outline itself and an orange one right against it (about 1.5 dp in all), no gap and no line
+  further in, both visible on the dark and the pale wallpaper, the cool side cyan-blue (not
+  green) under the gold tint, the edge as a whole not redder or bluer than at 40, nothing
+  white-clipped; Edge 40 identical to before (same crop boxes as `codex-emu4/sheets`).
+- 2026-10-17 · same branch, "feat(glass): retire Shade" · An install whose store or saved Custom
+  had Shade 60 comes up with the face as at Shade 0 and no Shade column; the chrome, terminal, A-Z
+  and key legends readable on Clear and Mist over a pale and a dark wallpaper, both themes ·
+  emulator tl16, a store with `surface_glass_shade` set (`run-as`, before the force-stop).
+- 2026-10-17 · same branch, "feat(keyboard): a Keys slider" · Keyboard selected in Look › Custom:
+  Glass, Opacity, Tint, Keys, Radius, Spacing whole at 360dp and Large text; Keys stands at the
+  theme's cap opacity on a fresh store; Keys 0, 50, 100 over the dark grass and a pale wallpaper,
+  both themes: every legend (letters, Ctrl, Alt, Fn, gear, Shift, Backspace, Enter, arrows)
+  legible on its cap, at 0 on the glass itself; a Look stop and Undo put the theme's value back ·
+  emulator tl16, keyboard crops per value. **Failed on the emulator 2026-10-17:** light theme,
+  keyboard Glass 20, Opacity 35, Keys 0 over the dark grass: dark legends, Ctrl, Alt, 123+, arrows
+  and Enter nearly invisible, the number row faint (Glass 75 read). Two causes: the keyboard's rows
+  were measured off the dock's frame (its 25 dp blur mixed the lit grass into the bottom rows),
+  and the function legends are drawn secondary (toward mid grey, black as #404040) but were judged
+  as the full tone. "fix(keyboard): legends at Keys 0 judged on the keyboard's own frame, as drawn"
+  reads the rows at the keyboard's radius and chooses (and veils for) the secondary rendition.
+  Recheck that route at Glass 20 and 75, Keys 0, then Keys 50: every legend legible on every row
+  (a light veil rising where needed, not milky past that); dark theme the same route; the theme's
+  own key opacity over dark grass and a pale wallpaper unchanged in look.
+- 2026-10-17 · same branch, "fix(keyboard): legends re-judged when the keyboard's own frame
+  lands" · Light theme, keyboard card, Keys 0, Opacity 10, Tint 0 over the dark grass: tap and
+  drag Glass 20→0, release, capture at once and again 1 s later: the second capture shows every
+  legend (letters, Ctrl, Alt, Fn, 123+, Shift, arrows, Backspace, Enter, the number row) legible,
+  with no further edit: pale legends with no milky veil ("fix(keyboard): legend tone chosen on the
+  bare face"), the same tone a fresh start on those settings shows; Ctrl, Alt and the arrows are
+  #BFBFBF at best and may read a little under 4.5:1 there (unit model 3.96). A pale wallpaper
+  takes dark legends, no veil; a mid grey takes the better tone with the least veil; a face near
+  the line does not flicker between tones while Glass or Opacity is dragged.
+  The same in the editor's live preview; no flicker or repeated repaint after the release
+  (gfxinfo flat once settled) · emulator tl16, two crops per step.
+- 2026-10-17 · same branch, "feat(looks): Mist is 35% on light glass" · Light theme: picking Mist
+  shows Opacity 35 and the stop reads Mist; switching the theme dark→light→dark with Mist on moves
+  it 60→35→60 and the stop stays Mist; a Custom at 50 keeps 50 across the switch · emulator tl16,
+  editor screenshots per theme.
+- 2026-10-17 · same branch, "feat(editor): a Hue picked at Tint 0" · From Clear, Custom: pick
+  Secondary in the Hue pill and the Tint column jumps to 40 with the colour showing; at Tint 15 a
+  Hue pick leaves 15; Undo returns to the open state · emulator tl16, editor screenshots.
+- 2026-10-17 · same branch, "fix(glass): keyboard-area labels" and "fix(glass): keyboard legends
+  are chosen on every row's face" · **Failed on the emulator 2026-10-17 before the row fix:** light
+  theme, Celestial Field, Custom from Solid at Opacity 10 and 0: the keyboard's Ctrl, Alt, Fn, gear
+  and right-hand cluster stayed dark on their see-through chips over the near-black grass under the
+  bottom row (Mist light about 2.5:1); Opacity 100 light and Opacity 10 dark passed. Recheck that
+  route at Opacity 0, 10, Mist and 100: every keyboard legend legible on every row, a light veil on
+  the keyboard where no legend tone reads otherwise. The A-Z letters stay pale there: the row under
+  them averages 0.01-0.03 luminance on that screenshot, so pale is the measured answer; judge by
+  eye. Then the first round: dark wallpaper, Opacity 100 dark labels, 10 pale; dark theme on a pale
+  wallpaper the mirror; the A-Z bar on the plank and its own capsule · emulator tl16, row crops.
+  **After the row fix, 2026-10-17:** Opacity 36 and dark theme passed, no veil loop; Opacity 0 and
+  9 light still failed (Ctrl, Alt, Fn, gear, Shift, Backspace, right cluster dark grey on dark
+  grass; 16 readable). Cause: the keyboard draws a cap's gradient with the fill's alpha on the
+  paint too, so a 124/255 function chip shows about 0.23 of its colour (measured off those
+  screenshots), not the 0.49 the legend was chosen on. "fix(glass): function legends on the chip
+  as drawn" chooses them on the drawn chip and raises the function fill where no tone reads.
+  Recheck light theme over the dark grass at Opacity 0, 9, 16 and 36: function legends legible
+  (pale at 0, or on a fuller chip), letter keys as before, no milky keyboard; dark theme at 0 and 9.
+- 2026-10-17 · same branch, "feat(glass): Tint colours the glass across its range, Clear
+  included" · Clear, Custom: Tint 0, 40, 100, dark and light theme, a grey-ish and a colourful
+  wallpaper: each step is plainly more accent-coloured behind every glass surface (dock, status,
+  keyboard, panes with blur), the bare wallpaper beside the panes unchanged, no white lift; Mist and
+  Solid at Tint 100 a strong accent face, readable text; the Tint Look stop renders as before
+  (compare against a `pre` screenshot) and still reads Tint; terminal, A–Z, extra keys and key
+  legends readable at Tint 100 on Clear, Mist, Tint and Solid, both themes; Hue pick at Tint 0
+  shows 40 with visible colour on Clear. Migration: a format-1 store on the Tint Look comes up on
+  the Tint stop at 35, same colour; a Custom with Tint 100 comes up at 35 · emulator tl16
+  (Android 13+), screenshots per value.
+- 2026-10-17 · same branch, "fix(editor): choosing a Look resets every surface to it" · Look ›
+  Custom, keyboard tapped: move Glass, Opacity, Tint and Keys well off; tap Clear: the keyboard's
+  glass and caps are Clear's at once (compare a fresh Clear crop); back at Custom the keyboard
+  card shows the moved values again (this visit's Custom comes back); Undo puts back the look the
+  editor opened on. Same with the dock's Glass · emulator tl16, keyboard crops before/after.
+- 2026-10-17 · same branch, "fix(editor): Custom comes back whole after a Look is saved" · Look ›
+  Custom: keyboard Glass 0, Opacity 90, Tint 100, Keys 0, terminal Glass 0, Opacity 90, Tint 100;
+  Done. Reopen, tap Clear, Done; force-stop the app, reopen the editor: it opens on Clear; tap
+  Custom: every card shows those values again and the keyboard and terminal look as they did
+  (compare crops); tap Clear: all of Clear at once. Undo after a Custom edit puts back the look
+  and the Custom the editor opened with · emulator tl16, crops before/after.
+- 2026-10-17 · same branch, "fix(glass): never recycle a wallpaper frame a surface was handed" ·
+  With an X11 pane showing on the wall, set a wallpaper from the in-app picker, then another with
+  `launcherctl wallpaper set <file>`; repeat both with the Look editor open, and once with a
+  widget pane showing: no crash (`adb logcat -b crash` empty, no `Cannot create BitmapShader for
+  recycled bitmap`), and the panes' glass shows the new picture after it lands · emulator tl16,
+  release build, screenshots before/after each set.
+- 2026-10-17 · same branch, "fix(wallpaper): a new wallpaper re-styles in place, no recreate" ·
+  With wallpaper mode on and the Look editor open, `launcherctl wallpaper set <file>`: the editor
+  stays open on the same page with its state, its preview shows the new picture, and logcat has no
+  `Recreating activity`; turning wallpaper mode off and on (Settings) still restyles the theme ·
+  emulator tl16. Then on pong: Firefox running in an X11 display pane, set a wallpaper from the
+  in-app picker, then with `launcherctl wallpaper set`: the display keeps running, Firefox still
+  drawn and answering touch, no `Recreating activity` · pong with the go-ahead.
+- 2026-10-17 · same branch, "fix(wallpaper): launcherctl wallpaper set runs the picker's in-place
+  apply" · **Failed before it on the emulator:** with the mode on and the Look editor open,
+  `launcherctl wallpaper set` left the pid but changed the window (4→5→6) and closed the editor.
+  Now: run `adb logcat -b events -c`, then the same set twice with two pictures of different
+  colours: the editor stays open, the window id holds, and `adb logcat -b events | grep -E
+  'am_relaunch|wm_relaunch|am_destroy'` shows nothing for TermuxActivity. If a relaunch still
+  shows there, repeat it with the in-app picker from the Overview: a relaunch on both is Android
+  restyling for the new wallpaper colours, not our code · emulator tl16.
+- 2026-10-17 · same branch, "fix(appearance): the surface and its editor session survive a
+  configuration relaunch" · Open Look through the Overview, tap the keyboard in the frame, move a
+  slider (Undo shows), then `launcherctl wallpaper set` with a picture of different colours. When
+  `am_relaunch`/`wm_relaunch` shows for TermuxActivity, the editor comes back on Look under a
+  short colorSurface cover (no hop from the Overview), keyboard still selected, Undo still shown;
+  Undo puts back the look at the first open; Back goes to the Overview. Repeat from a corner
+  tab's Layout door (Back then closes) and once with dark mode toggled (`cmd uimode night yes`)
+  · emulator tl16.
+- 2026-10-17 · same branch, "fix(x11): a relaunch's destroy never reads as the display stopping"
+  · Firefox in the Display place: `launcherctl wallpaper set` (and dark mode toggled) relaunches
+  the activity; the Display place comes back drawing Firefox and answering touch, the place bar's
+  display dot stays on, a new terminal session still has `DISPLAY` set. If the display still
+  stops, note whether `pgrep -f termux-x11` still lists the server and whether Firefox's process
+  is alive: the launcher side lets go of nothing but its own view · pong with the go-ahead.
+  Seen on pong (release 2f5596e2b): Firefox survived, but `printenv DISPLAY` in a pane opened with
+  `launcherctl pane open` after the relaunch was empty. Re-check on the build with "fix(x11): new
+  sessions' DISPLAY follows the server, not the activity": after the wallpaper change and after the
+  dark-mode toggle, a new pane prints `:0` (the opt-in on); then Stop the display and a new pane
+  prints nothing; and with the display stopped first, a relaunch neither starts it nor gives a new
+  pane `DISPLAY` · pong with the go-ahead, emulator first.
+- 2026-10-18 · same branch, "fix(x11): the Linux app runner outlives a configuration relaunch"
+  · Firefox on the X11 display (from the drawer), then set a wallpaper of different colours from
+  the in-app picker, again with `launcherctl wallpaper set <file>`, and once with a theme switch
+  (dark mode toggled): after each, Firefox's pid is the same (`pgrep -f firefox` before/after),
+  its window is drawn and answers touch on the Display place, and logcat has no
+  `X11LinuxAppRunner: firefox exited with`. If it still dies, that line's code is the lead: 143
+  or 137 is a signal (look for a sender), 0 is Firefox closing itself (look for a close or quit
+  reaching it). Also: an Xfce desktop running, relaunch, tap Xfce again (only shows it), tap
+  another desktop (asks first) · pong with the go-ahead, release build.
+- 2026-10-18 · same branch, "fix(x11): a relaunched activity's Display page hears its display
+  runs" · (The in-app picker case passed on pong 2026-10-18 at 2f5596e2b.) Firefox on the X11
+  display, resting on the Display place: `launcherctl wallpaper set <file>` with a picture of
+  different colours, then once with dark mode toggled. After each the Display place
+  is still on the wall and draws Firefox (no "Start display" empty state), answers touch, the
+  place bar's display dot is on, and the window chips list Firefox. Also once relaunched from the
+  terminal place, then swipe to Display: same. Then stop the display, relaunch: the page shows
+  its empty state, nothing restarts · pong with the go-ahead, release build.
 
 ### Wall rework: orchestrator check of e64d95a92 (emulator, 2026-10-18 10:55)
 Seen: after the Display chip in the Home palette started the X server (one process) and Stop with
@@ -913,9 +1099,32 @@ Not seen: everything else listed under the sections below.
 - 2026-10-17 · commit "feat(motd): a rounded welcome card in the wallpaper's colours" · On a fresh
   session the card reads well over a light wallpaper as well as a dark one, and tapping "Tap to
   read the docs" opens the guide · pong, release build.
-- 2026-10-16 · commit "feat(glass): Adaptive glass, an edge of gathered light" · With the switch
-  on, the edge reads as light, not an outline. Also record whether floating panels still stand
-  apart from a white wallpaper: that is Round 5's gate · pong, release build.
+- 2026-10-17 · same branch · Taste: light-theme Mist at 35% no longer milky; the edge gain cap at
+  2.25 (dark Mist now gets its full ratio) · pong.
+- 2026-10-17 · same branch, "feat(glass): Tint colours the glass across its range" · Taste on
+  pong: Clear at Tint 100 reads as tinted glass, not neon and not milky; the frame-tint caps
+  (`GlassFrameTint.MAX_STRENGTH` 0.42, `MAX_CHROMA` 0.6, fade-out at Opacity 45) are the knobs. A
+  Tint or Opacity drag stays smooth, the glass behind catches up once after release (one re-blur) ·
+  pong.
+- 2026-10-17 · same branch, "feat(glass): Edge is a slider" (replaces the Prism rows: on pong
+  Glint and Prism looked alike) · Taste at arm's length, dark and light, Celestial Field: Edge 100
+  on Clear, on Mist and on a warm/gold Look reads as light splitting at the glass rim, a crisp
+  spectral edge on the outline itself (cyan-blue on the outer px, orange right inside), never a
+  separate coloured border, on a dark and a pale wallpaper, and the edge does not read red
+  overall; compare against the 10-17 shot of the old one, Edge 100 on a gold Look over the cat
+  wallpaper, where a yellow-green line ran inside every edge:
+  `/tmp/claude-1000/-home-amalvajdan-Projects-termux-launcher-app-termux-launcher/ff00a939-66f3-41a9-acb3-82df73313d71/scratchpad/pong-edge100.png`
+  (dock crop `pong-edge100-dock.png` beside it; /tmp, so copy it out before a reboot). 40 is
+  Clear's glint as before; the slider feels even from 40 to 100; Edge drags stay smooth. Knobs:
+  `Look.BOLD_MIX` 0.4 (how far a fringe's peak mixes toward its colour per unit of the cover
+  gain, the strength), `BOLD_LOBE_DP` 0.3 and `BOLD_CENTRE` 2 (width and where the two meet),
+  `BOLD_WARM`/`BOLD_COOL` (the two colours) · pong.
+
+- 2026-10-16 · commit "feat(glass): the gathered light is the only glass edge" · The edge reads
+  as light, not an outline, on every surface; on Mist and Solid (and the sheet and chip, floored
+  near opaque) note how faint the outline gets under their tint, for phase B's opacity scaling.
+  Also record whether floating panels still stand apart from a white wallpaper: that is Round 5's
+  gate · pong, release build.
 - 2026-10-16 · commit "feat(keyboard): a touch engine that learns where your taps land" ·
   The touch engine's pass bar, under the round 2 take-back rule: take-backs into space drop by
   30% or more from the warm-up's rate to the corrected rate, no other key's rate rises, and aiming
@@ -942,7 +1151,8 @@ Not seen: everything else listed under the sections below.
 - 2026-09-27 · voice panel · Keyboard → Voice input → Mic sensitivity (Normal, High): soft speech at
   arm's length is picked up on both; High lets in more of a nearby voice or video, Normal fewer;
   keyboard clicks, a fan or air conditioning alone never open a phrase on either · pong, by hand.
-- 2026-10-12 · fix(appearance): Custom starts from the Look on screen · On pong, apply Clear,
+- 2026-10-12 · fix(appearance): Custom starts from the Look on screen (with no Custom saved;
+  a saved one now comes back instead) · On pong, apply Clear,
   Done, reopen the editor, tap Custom: the sliders show Clear's numbers and the look does not
   change. Tweak Blur, tap Mist, tap Custom: the tweak is back. Undo: Clear again · pong, by hand.
 - 2026-10-12 · PR #63 · The resting look at Clear and Mist on pong: the outer ~2 dp of every rim

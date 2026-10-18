@@ -235,8 +235,23 @@ public final class GlassInk {
         int seed = ink.polarity() == ChromeInk.Polarity.DARK_INK ? darkInk : paleInk;
         // Through the ink, not the raw cache: it maps the rect into root space as onGlass did, so
         // the two share the band's one sample, and it holds the ink to the user's legibility level.
-        int backdrop = ink.backdropUnder(band, screenRect, dim, Color.TRANSPARENT);
+        // The face is the glass the band stands on where one was told (the A-Z strip on the
+        // dock's), else the wallpaper under the dim.
+        int backdrop = ink.faceUnder(band, screenRect);
         return OnGlass.resolveBare(backdrop, seed, ink.target(target));
+    }
+
+    /**
+     * The ink for labels whose colour is the theme's, on the face they really stand on
+     * ({@link ChromeInk#faceUnder}): {@code themeInk} itself wherever it already clears
+     * {@code target}; otherwise the nearest tone of it that does, on whichever side of the face
+     * reads (dark on a pale face, pale on a dark one), and black or white at worst. The extra keys.
+     *
+     * @param target the tier the labels are held to, at the user's legibility level already
+     */
+    @ColorInt
+    public static int faceInk(@ColorInt int face, @ColorInt int themeInk, double target) {
+        return OnGlass.resolveBare(OnGlass.opaque(face), OnGlass.opaque(themeInk), target, null).ink;
     }
 
     // ---------------------------------------------------------------- the halo

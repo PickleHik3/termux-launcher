@@ -50,6 +50,32 @@ public final class ChromeRenderer {
 
         @Nullable TermuxAppSharedPreferences preferences();
 
+        /** The frames' Vibrancy: the stored glass Vibrancy, today's frame without preferences. */
+        @Override
+        default int glassVibrancyPercent() {
+            TermuxAppSharedPreferences preferences = preferences();
+            return preferences != null ? preferences.getSurfaceGlassVibrancy()
+                : com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.DEFAULT_SURFACE_GLASS_VIBRANCY;
+        }
+
+        /**
+         * The frames' tint: the shared glass's Tint amount, hue and Opacity
+         * ({@link GlassFrameTint}), none without preferences. The accent is resolved only when
+         * the amount and the opacity leave the frame something to carry.
+         */
+        @Override
+        default int glassFrameTint() {
+            TermuxAppSharedPreferences preferences = preferences();
+            if (preferences == null) return GlassFrameTint.NONE;
+            int amount = preferences.getSurfaceBaseValue(
+                TermuxAppSharedPreferences.SurfaceProperty.TINT);
+            int opacity = preferences.getSurfaceBaseValue(
+                TermuxAppSharedPreferences.SurfaceProperty.OPACITY);
+            if (GlassFrameTint.strength(amount, opacity) <= 0f) return GlassFrameTint.NONE;
+            return new GlassSurfaceFactory(this).look(amount).frameTint(opacity);
+        }
+
         /**
          * The user's one legibility control, which multiplies every band's contrast target. Read
          * from the preferences' "Terminal contrast" choice; default while there are none.
@@ -92,6 +118,15 @@ public final class ChromeRenderer {
         default boolean statusBarOnDockPlank() {
             return false;
         }
+
+        /**
+         * Told after every top-pane frost pass whether the window bar's frost is now on screen
+         * drawn through the program, whose gathered light is then the bar's edge; the bar's own
+         * stroke follows it ({@link GlassSurfaceFactory#statusBarSurface(float, float, float, int,
+         * GlassBackdropCache.Band, boolean)}). The frost is painted after the bar is dressed, so
+         * the bar learns of it here rather than asking while it dresses.
+         */
+        default void onWindowBarFrostEdge(boolean drawsEdge) {}
 
         /**
          * What leads the top edge's stack, which the strip behind the system status bar continues
@@ -156,15 +191,6 @@ public final class ChromeRenderer {
         }
 
         /**
-         * Adaptive glass: the program draws every glass outline as gathered light, so no surface
-         * lays the white gradient rim over it. True only while {@link #fancierGlassLook()} answers
-         * a look and the switch is on; false, the default, is the hairline and the rim as before.
-         */
-        default boolean adaptiveGlass() {
-            return false;
-        }
-
-        /**
          * The corner a full-pane plane's glass — the palette, the sheet, the drawer — is clipped
          * to, in px, so a plane's rim can follow its outline. 0 where the planes are square.
          */
@@ -188,6 +214,14 @@ public final class ChromeRenderer {
 
         /** The terminal pane's own glass frost, which rides the same triggers as the top pane's. */
         void updateTerminalGlassFrost();
+
+        /**
+         * {@code bands}' rows were read off a stand-in frame and their own has landed
+         * ({@link ChromeInk#onBlurFrameReady}): what was chosen from them (the keyboard's legends,
+         * from {@link ChromeInk#bandFaces}) is measured again and pushed, repainting only where an
+         * ink moved. Nothing by default.
+         */
+        default void rejudgeBandInks(@NonNull java.util.Set<GlassBackdropCache.Band> bands) {}
 
         /** Whether the blurred surfaces actually have a backdrop installed for this spec. */
         boolean isBlurHealthy(@NonNull ChromeSpec spec);
@@ -380,6 +414,11 @@ public final class ChromeRenderer {
         mLedger.markAllBackdropsDirty();
         mLedger.markFrostDirty();
         mSurfaces.updateTerminalGlassFrost();
+        // A band whose rows were read off a stand-in for want of this frame (the keyboard after a
+        // Glass edit) is re-judged now, on the frame it really shows, rather than left to whatever
+        // the render pass below happens to re-ask.
+        java.util.Set<GlassBackdropCache.Band> stale = mInk.onBlurFrameReady();
+        if (!stale.isEmpty()) mSurfaces.rejudgeBandInks(stale);
         requestSync(SCOPE_BACKDROPS | SCOPE_KEYBOARD_BACKDROP | SCOPE_TOP_PANE_FROST
             | SCOPE_ACCESSORY_RENDER);
     }
@@ -621,6 +660,17 @@ public final class ChromeRenderer {
         return mCommitPending;
     }
 
+    /**
+     * Runs a pending {@link #SCOPE_APPLY_THIS_FRAME} commit now instead of at its gate. For a
+     * caller already in the frame's animation phase (the editor's slider pass): a commit asked for
+     * there is otherwise left to the pre-draw gate, after layout, where any view the apply moves
+     * cancels the draw and the tick costs a frame. Run here, the frame's own layout picks it up.
+     * Nothing pending, nothing runs.
+     */
+    public void commitNow() {
+        commit();
+    }
+
     // ------------------------------------------------------------------ commit
 
     /**
@@ -769,7 +819,11 @@ public final class ChromeRenderer {
     public void onDestroy() {
         mDestroyed = true;
         releaseFirstFrameGate();
-        if (mBlurWorker instanceof ExecutorService) ((ExecutorService) mBlurWorker).shutdownNow();
+        if (mBlurWorker instanceof ExecutorService) {
+            ((ExecutorService) mBlurWorker).shutdownNow();
+            // A job it never ran never posts back: the loans its capture took are given back here.
+            mBlurCache.abandonQueuedJobs();
+        }
         unscheduleCommit();
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
         mHandler.removeCallbacks(mBlurRecoveryRunnable);

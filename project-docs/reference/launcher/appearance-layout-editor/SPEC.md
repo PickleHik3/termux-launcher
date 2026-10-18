@@ -118,11 +118,14 @@ Rules:
   put it back. With wallpaper colours off the terminal wears a scheme file no contrast level
   moves, so the segments are disabled and the label says it needs wallpaper colours (as the
   Settings row does).
-- Moving to Custom, by the slider or by a control touched at a Look stop, seeds Custom from the
-  Look on screen and writes nothing; the saved Custom is not applied. Sliding from Custom back to
-  a Look applies the Look; the Custom values of the session (saved or not) are kept, so sliding
-  back to Custom within one editor visit restores them. Undo and Discard clear them and restore
-  the state at open.
+- Moving to Custom by the slider brings back the user's last Custom (amended 2026-10-17): this
+  visit's Custom values when there are any, else the saved Custom, applied whole (every
+  per-surface cell and link, Glass positions, Keys, Hue, Vibrancy, Edge, Tint amounts). With
+  none saved it seeds Custom from the Look on screen and writes nothing, as a control touched at
+  a Look stop always does. Sliding from a Custom the user changed back to a Look keeps those
+  values for the visit and stores them as the saved Custom (so does Done or Save at Custom);
+  applying a Look resets every surface to it and never touches the saved Custom. Undo and
+  Discard clear the visit's values and restore the state at open, the saved Custom included.
 - Rim style, tint colour, motion, chip radius, key spacing and glass depth live inside the Look.
   They have no control anywhere. Corners and margins are Layout's (§3.5).
 - **Tint** (amended 2026-10-06) is a Custom control: how much of the Material colour tint a
