@@ -2316,6 +2316,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             clampInAppKeyboardKeyOpacity(value), false);
     }
 
+    public boolean isInAppKeyboardOpacityLinked() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_OPACITY_LINKED,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_OPACITY_LINKED);
+    }
+
+    public void setInAppKeyboardOpacityLinked(boolean linked) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_OPACITY_LINKED, linked, false);
+    }
+
     /** Negative values collapse to the -1 "theme-defined" sentinel. */
     public static int clampInAppKeyboardKeyOpacity(int value) {
         if (value < 0) return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY;

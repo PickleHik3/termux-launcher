@@ -30,7 +30,7 @@ Workspace only. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
 **Settings → Start in** says where the launcher opens after a restart: **Home** (the default) or
-**Workspace**, which opens with one fresh shell window.
+**Terminal**, which opens the Workspace with one fresh shell window.
 
 (Older versions had a usage mode and three places, Widgets, Terminal and Display, on a pane wall.
 Home and the Workspace replace them.)

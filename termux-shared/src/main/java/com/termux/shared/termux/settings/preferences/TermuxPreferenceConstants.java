@@ -1151,6 +1151,16 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_IN_APP_KEYBOARD_KEY_OPACITY = 100;
 
         /**
+         * Defines whether the Appearance editor moves the keyboard's key opacity and its
+         * background opacity together: a move of either slider moves the other by the same
+         * amount. Unlinking leaves both values where they are.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_OPACITY_LINKED =
+            "in_app_keyboard_opacity_linked";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_OPACITY_LINKED = false;
+
+        /**
          * Defines the opacity in percent of the keyboard's own background surface — the glass
          * tint, or the color-scheme background override when one is set. Independent of the key
          * caps ({@link #KEY_IN_APP_KEYBOARD_KEY_OPACITY}); 100 keeps the surface as the theme

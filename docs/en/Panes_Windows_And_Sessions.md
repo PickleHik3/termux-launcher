@@ -266,7 +266,7 @@ and the floats on their pages, each pane a fresh shell in the folder it was in, 
 restored from before the restart". Programs that were running are not started again, and the
 scrollback is gone. **Start in** still decides whether Home or the Workspace shows first. If you
 closed every window and float, or chose **Exit** in the notification, the launcher starts the same
-way: an empty Workspace, with Home showing and no shell (with Start in set to the Workspace, one
+way: an empty Workspace, with Home showing and no shell (with Start in set to Terminal, one
 fresh window). Saved sessions are separate and stay as you saved them.
 
 ## Let programs open panes

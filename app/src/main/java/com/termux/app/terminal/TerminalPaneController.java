@@ -22,6 +22,7 @@ import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewPropertyAnimator;
 import android.view.ViewConfiguration;
@@ -29,6 +30,7 @@ import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -6457,6 +6459,9 @@ public class TerminalPaneController {
                 } else if (mActiveWindow == null || mActiveWindow.active != mLeaf
                     || mActiveWindow.floating.indexOf(mLeaf) != mActiveWindow.floating.size() - 1)
                     post(() -> focusSession(mLeaf.session));
+                // A press just under a titlebar button is still the button's (its reach).
+                mButtonReach = buttonReachAt(event.getX(), event.getY());
+                if (mButtonReach != null) return true;
                 // A press on a titlebar button is the button's; the rest of the strip moves.
                 mDragMode = dragModeAt(event.getX(), event.getY());
                 if (mDragMode != DRAG_NONE) {
@@ -6467,8 +6472,36 @@ public class TerminalPaneController {
             return false;
         }
 
+        /** The titlebar button a press below the strip went to, for the rest of that press. */
+        @Nullable private TouchDelegate mButtonReach;
+
+        /**
+         * The button whose reach ({@link FloatTitlebarPolicy#BUTTON_REACH_DP}) holds a press below
+         * the strip, as a delegate that hands the press on; null over the strip itself, whose
+         * buttons take their own presses, and outside every button's column.
+         */
+        @Nullable private TouchDelegate buttonReachAt(float x, float y) {
+            float stripY = y - mTitlebar.getTop();
+            if (stripY < mTitlebar.getHeight()) return null;
+            ImageButton button = mTitlebar.buttonFor(
+                mTitlebar.actionInReach(x - mTitlebar.getLeft(), stripY));
+            if (button == null) return null;
+            int left = mTitlebar.getLeft();
+            int top = mTitlebar.getTop();
+            return new TouchDelegate(new Rect(left + button.getLeft(), top,
+                left + button.getRight(), top + dp(FloatTitlebarPolicy.BUTTON_REACH_DP)), button);
+        }
+
         @Override
         public boolean onTouchEvent(MotionEvent event) {
+            TouchDelegate reach = mButtonReach;
+            if (reach != null) {
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
+                    mButtonReach = null;
+                reach.onTouchEvent(event);
+                return true;
+            }
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     // Down lands here directly on the gap between strip and pane (no child).

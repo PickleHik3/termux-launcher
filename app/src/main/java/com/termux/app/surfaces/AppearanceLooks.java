@@ -126,8 +126,8 @@ public final class AppearanceLooks {
      * A vertical slider of the Custom row, with the integer range its stored value maps onto.
      * Icon size is the pinned icon in dp, and its slider runs over the range the dock gives under
      * the Style ({@link #iconSizeRangeDp}); the bounds here are only the ones no dock passes, the
-     * icon's floor and the deepest row. Key spacing is the key margin scale in tenths; Keys the
-     * caps' opacity in percent (stored -1 leaves it to the theme); the others are their own units (dp, percent, a count, a stop). Glass is 0 to 100 over blur and grain
+     * icon's floor and the deepest row. Key spacing is the key margin scale in tenths; Key opacity
+     * the caps' opacity in percent (stored -1 leaves it to the theme); the others are their own units (dp, percent, a count, a stop). Glass is 0 to 100 over blur and grain
      * ({@link GlassControls}); Vibrancy the frame's saturation in percent, 70 to 150. Edge and
      * Depth are the glass edge's: Edge the stored dispersion itself, 0 (no fringe) to 100 (a bold
      * coloured edge), Glint at 40; Depth 0 to 100 over the bend and the edge width
@@ -194,7 +194,9 @@ public final class AppearanceLooks {
     /**
      * The sliders of the Custom row for a selection, in legend order (left to right): the global
      * set for nothing tapped (null), or the element's own. Glass, Opacity and Tint come first, so
-     * the same three columns stay under the user's thumb as the selection changes. The global set
+     * the same three columns stay under the user's thumb as the selection changes, except that
+     * the keyboard puts Key opacity between Opacity and Tint, so its two opacities stand side by
+     * side under their link ({@link OpacityLink}). The global set
      * adds Vibrancy and, while the glass edge is drawn ({@code glassEdge}), Edge after Tint and
      * Depth at the end: the edge is not drawn otherwise, so neither is offered. An element never
      * has those.
@@ -209,8 +211,9 @@ public final class AppearanceLooks {
                     Control.VIBRANCY);
         switch (target) {
             case KEYBOARD:
-                return Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-                    Control.KEY_OPACITY, Control.KEY_RADIUS, Control.KEY_SPACING);
+                // Key opacity stands beside Opacity (its BG opacity), under their link.
+                return Arrays.asList(Control.GLASS, Control.OPACITY, Control.KEY_OPACITY,
+                    Control.TINT, Control.KEY_RADIUS, Control.KEY_SPACING);
             case DOCK:
                 return Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
                     Control.ICON_SIZE, Control.APP_ICONS);

@@ -1982,6 +1982,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 enabled, legendFor(control, enabled)));
         }
         panel.setSliders(states);
+        panel.setOpacityLink(mTarget == Target.KEYBOARD, prefs.isInAppKeyboardOpacityLinked());
         List<Door> doors = new ArrayList<>(AppearanceLooks.doors(mTarget));
         if (!PaneRetroEffect.available())
             doors.remove(Door.EFFECT);
@@ -2052,7 +2053,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private String legendText(@NonNull Control control, int value, boolean enabled) {
         switch (control) {
             case GLASS: return getString(R.string.appearance_editor_glass, value);
-            case OPACITY: return getString(R.string.appearance_editor_opacity, value);
+            case OPACITY:
+                // The keyboard's sits beside Key opacity: its background's, named so.
+                return getString(mTarget == Target.KEYBOARD ? R.string.appearance_editor_bg_opacity
+                    : R.string.appearance_editor_opacity, value);
             case TINT: return getString(R.string.appearance_editor_tint, value);
             case VIBRANCY:
                 return getString(R.string.appearance_editor_vibrancy,
@@ -2200,7 +2204,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public void onSlider(@NonNull Control control, int value, boolean dragging) {
             beginDrag(dragging);
-            writeControl(control, value);
+            if (!writeLinkedOpacity(control, value, dragging))
+                writeControl(control, value);
+        }
+
+        @Override public void onOpacityLink(boolean linked) {
+            TermuxAppSharedPreferences prefs = prefs();
+            if (prefs == null || mTarget != Target.KEYBOARD)
+                return;
+            // Unlinking leaves both values where they stand.
+            prefs.setInAppKeyboardOpacityLinked(linked);
+            mLinkAnchor = null;
+            syncDirty();
         }
 
         @Override public void onDoor(@NonNull Door door, @NonNull View anchor) {
@@ -2223,8 +2238,44 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public void onSliderReleased() {
+            mLinkAnchor = null;
             endDrag();
         }
+    }
+
+    /**
+     * Where the keyboard's two opacities stood when a linked move began ({@link OpacityLink}):
+     * {@code {moved start, partner start}} for {@link #mLinkMoved}, held for the drag.
+     */
+    @Nullable private int[] mLinkAnchor;
+    @Nullable private Control mLinkMoved;
+
+    /**
+     * A move of BG opacity or Key opacity while the keyboard's link is on: the moved slider's
+     * own write, then its partner moved by the same amount from where it stood when the move
+     * began, written the same way and restated on its slider. False when the link does not
+     * apply, and the caller writes the one control.
+     */
+    private boolean writeLinkedOpacity(@NonNull Control control, int value, boolean dragging) {
+        TermuxAppSharedPreferences prefs = prefs();
+        Control partner = OpacityLink.partner(control);
+        if (prefs == null || partner == null || mTarget != Target.KEYBOARD
+            || !prefs.isInAppKeyboardOpacityLinked())
+            return false;
+        if (mLinkAnchor == null || mLinkMoved != control) {
+            mLinkAnchor = new int[] {valueOf(control, prefs), valueOf(partner, prefs)};
+            mLinkMoved = control;
+        }
+        int follow = OpacityLink.follow(mLinkAnchor[0], value, mLinkAnchor[1], partner);
+        writeControl(control, value);
+        if (follow != valueOf(partner, prefs))
+            writeControl(partner, follow);
+        if (mPanel != null)
+            mPanel.setSliderValue(partner, follow);
+        // A tap or an accessibility step is a move of its own; a drag keeps its start.
+        if (!dragging)
+            mLinkAnchor = null;
+        return true;
     }
 
     /**

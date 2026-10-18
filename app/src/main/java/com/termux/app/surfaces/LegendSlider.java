@@ -306,6 +306,12 @@ public final class LegendSlider extends View {
         return Math.max(mHandleOverhangPx, (getWidth() - group) / 2f + mHandleOverhangPx);
     }
 
+    /** The track's centre across this view, as it is drawn: what a leader line points at. */
+    float trackCentreX() {
+        float trackWidth = trackWidthPx();
+        return trackLeftPx(trackWidth) + trackWidth / 2f;
+    }
+
     private float fraction() {
         float span = mValueTo - mValueFrom;
         if (span == 0f)
