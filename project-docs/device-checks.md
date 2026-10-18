@@ -581,6 +581,22 @@ Not seen: everything else listed under the sections below.
   the current session and window stay. Note: with an empty Workspace the drawer's Live list has no
   session to list the floats under (as before this slice).
 
+- Seen 2026-10-18 (f10e312f1, emulator, device-checker): Save writes `homeFloat` with the page,
+  `minimised` and a portrait shape (file version 4); Replace after a true restart brings both floats
+  back on Home page 2 (one a chip, one at its spot and size) with the tiled window and the split, the
+  Live list reads "Float · page 2"; a deleted page 2 lands them on page 1; Replace closes a stray
+  float; a hand-made version 3 file loads as tiled windows. Landscape load: floats born full-size
+  (the portrait reload of a landscape save not done). Not seen: a floats-only session; Add's
+  behaviour (the file's windows arrived as a new session 2 and the view switched to it: confirm
+  against the old Add). Found, outside the slice: (1) the drawer's Saved tab shows "No saved
+  sessions" when opened from the list key even with files on disk, and fills only via the palette's
+  Load entry or the Home picker chip (check the previous build); (2) closing the last window or
+  float with an empty Workspace finishes the activity and drops to the stock launcher; (3) in
+  landscape a full-width float drags left until its titlebar is clipped off-screen; (4) once, after
+  a landscape session, the live session collapsed to one window with new ids, not reproduced;
+  (5) chips on a deleted page keep "home · 2" until the next Replace; (6) the Save card's "Also
+  save what is running" sits below its buttons; (7) the built-in Clock in landscape stacks "11"
+  over "38" in a wide pill.
 ### Wall rework phase two: slice 5a, window reorder by drag in the window bar (feat/wall-rework-phase2)
 - Owed · commits "feat(wall): window reorder policy and moving a window in the row", "feat(wall):
   drag a window's chip along the window bar to reorder the row" and "feat(wall): window.move verb
