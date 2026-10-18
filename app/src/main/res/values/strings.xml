@@ -317,7 +317,7 @@
     <string name="settings_use_as_custom">Custom</string>
     <string name="settings_start_in_title">Start in</string>
     <string name="settings_start_in_home">Home</string>
-    <string name="settings_start_in_workspace">Workspace</string>
+    <string name="settings_start_in_workspace">Terminal</string>
     <string-array name="settings_start_in_entries" translatable="false">
         <item>@string/settings_start_in_home</item>
         <item>@string/settings_start_in_workspace</item>

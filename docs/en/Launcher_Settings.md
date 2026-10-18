@@ -10,8 +10,8 @@ setting inside every page, so `fonts`, `ligatures` or `Shizuku` lead straight to
 
 ## Start in
 
-The first row: **Home** (the default) or **Workspace**. Where the launcher opens after a restart;
-**Workspace** opens with one fresh shell window. See
+The first row: **Home** (the default) or **Terminal**. Where the launcher opens after a restart;
+**Terminal** opens the Workspace with one fresh shell window. See
 [Home screen and apps](Home_Screen_And_Apps.md#home-and-the-workspace). (It replaces the
 **Launcher mode** row of older versions.)
 
