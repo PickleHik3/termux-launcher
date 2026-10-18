@@ -2666,9 +2666,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     resetHomeForTour();
                 }
 
+                // No Workspace window beside Home: no seam to cross, no border to drag back.
                 @Override public boolean hasOnePlace() {
-                    // Home is always on the wall (ADR 0008): there is no terminal-only install.
-                    return false;
+                    return !hasHome() || !mPaneWallController.pages()
+                        .contains(com.termux.app.wall.PaneWallPage.TERMINAL);
+                }
+
+                @Override public boolean hasHome() {
+                    return mPaneWallController != null && mPaneWallController.hasWidgetsPage();
                 }
             });
             mFirstBootTour.setSetupHost(welcomeSheet());
@@ -2689,10 +2694,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The home screen as every lesson of the run starts it: help, the palette, the drawer, the
-     * corner menu and the status shade closed, the wall on the terminal and the keyboard up. Each
-     * through the call the launcher already makes for it, so nothing here replays a gesture. A
-     * keyboard the user switched off stays off; the keyboard lesson can be skipped.
+     * The wall as every lesson of the run starts it, which is where the home press leaves it:
+     * help, the palette, the drawer, the corner tabs and the status bar's unfolded form closed,
+     * the wall on Home page 1 and the keyboard down there (unless always on keeps it). The
+     * Workspace remembers its keyboard up, so the window the next lesson lands on has one to put
+     * away. Each through the call the launcher already makes for it, so nothing here replays a
+     * gesture. A keyboard the user switched off stays off; the keyboard lesson can be skipped.
      */
     private void resetHomeForTour() {
         if (isFinishing() || isDestroyed()) return;
@@ -2701,12 +2708,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mAppDrawerController != null && isAppDrawerEngaged()) mAppDrawerController.close(true);
         if (mPaneController != null) mPaneController.dismissControlsForHelp();
         if (!isStatusBarCompact()) setTopStatusBarCollapsed(true, true);
-        if (mPaneWallController != null) mPaneWallController.returnToTerminal(true);
-        if (mInAppKeyboard != null && mInAppKeyboard.isEnabled() && !mInAppKeyboard.isTurnedOff()
-                && !mInAppKeyboard.isVisible()) {
-            mInAppKeyboard.show(
-                com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store != null && mInAppKeyboard != null && mInAppKeyboard.isEnabled()
+                && !mInAppKeyboard.isTurnedOff()) {
+            store.setKeyboardOpen(com.termux.app.wall.PaneWallPage.TERMINAL, true);
         }
+        if (mPaneWallController == null) return;
+        if (mPaneWallController.widgetsPage() != null)
+            mPaneWallController.widgetsPage().dismissControls();
+        if (!mPaneWallController.hasWidgetsPage()) {
+            mPaneWallController.returnToTerminal(true);
+            return;
+        }
+        // Already resting on Home, no slide lands the keyboard: one left up goes down here.
+        boolean restingOnHome = isWidgetsPageShowing() && !mPaneWallController.wall().isMoving();
+        mPaneWallController.goHome(true);
+        if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
+        if (restingOnHome && !isHomeKeyboardAlwaysOn()) lowerHomePaletteKeyboard();
     }
 
     /** The setup sheet the run is offered on, built the first time the run asks for it. */
@@ -15674,7 +15692,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // both of its close paths make, so it is where the run hears that the palette moved — and
         // where the card asking the user to close it again is cleared.
         if (mFirstBootTour != null) {
-            if (!active) mFirstBootTour.onPaletteClosed();
+            // Every open, the Home palette gesture and the corner tab's included.
+            if (active) mFirstBootTour.onPaletteOpened();
+            else mFirstBootTour.onPaletteClosed();
             mFirstBootTour.onChromeChanged();
         }
         if (mInAppKeyboard == null)
@@ -20212,6 +20232,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // rather than in the release frame (ADR 0003). The dock and the keyboard have
                     // already travelled there with the slide; this is where what they showed
                     // becomes the layout.
+                    // The tour hears the page first: the keyboard the settle lands is then heard
+                    // on the half the wall arrived on, not taken for a swipe on the one it left.
+                    if (mFirstBootTour != null) mFirstBootTour.onPlaceSettled(page.name());
                     settlePlaceChrome(page);
                     noteTerminalPlaceMayBeVisible();
                     if (mWidgetPaneController != null) {
@@ -20234,7 +20257,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         });
                     }
                     dismissHelpOverlay();
-                    if (mFirstBootTour != null) mFirstBootTour.onPlaceSettled(page.name());
                     // The "Go to …" read-out lands with the page (showTerminalActionHint).
                     if (mWallReadoutShowing) {
                         mWallReadoutShowing = false;
@@ -26475,12 +26497,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void showCommandPalette() {
+            // The run hears the open from the palette's own funnel
+            // (setCommandPaletteInterceptorActive), whichever way it was asked for.
             com.termux.app.terminal.TerminalCommandPalette.show(TermuxActivity.this);
-            // This entry point toggles, and the space bar's swipe up is one of the four ways into
-            // it; nothing downstream carries which one, so the run is told whenever the palette
-            // actually came up.
-            if (mFirstBootTour != null && getCommandPaletteController().isOpen())
-                mFirstBootTour.onPaletteOpened();
         }
 
         @Override public boolean toggleMouseMode() {

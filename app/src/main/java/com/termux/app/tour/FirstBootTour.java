@@ -36,12 +36,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     TourSignals.Listener, TourViewTargets.ViewFinder {
 
     /**
-     * Switched off for the wall rework (ADR 0008): the run still teaches the three places and
-     * the border drag on Home, which no longer exist. The activity builds no tour while this is
-     * false (every caller handles the null), and Settings' "Start the tour" does nothing. Turn it
-     * back on with the rewrite; see project-docs/active/wall-rework-2026-10-17.md §12.
+     * The gate on the whole run: while false the activity builds no tour (every caller handles
+     * the null) and Settings' "Replay tour" does nothing. On since the run was rewritten for the
+     * wall (ADR 0008; phase two, slice 6).
      */
-    public static final boolean ENABLED = false;
+    public static final boolean ENABLED = true;
 
     /** How long a cleared lesson's card says "Got it" before the run moves on. */
     static final long GOT_IT_MS = 1100L;
