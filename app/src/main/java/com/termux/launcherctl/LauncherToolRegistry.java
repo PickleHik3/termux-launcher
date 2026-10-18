@@ -289,7 +289,8 @@ public final class LauncherToolRegistry {
             new HashSet<>(Arrays.asList(
                 TOOL_MOUSE_TOGGLE,
                 TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
-                TOOL_WINDOW_RENAME, TOOL_WINDOW_RENAME_PROMPT, TOOL_WINDOW_SELECT));
+                TOOL_WINDOW_RENAME, TOOL_WINDOW_RENAME_PROMPT, TOOL_WINDOW_SELECT,
+                TOOL_WINDOW_MOVE, TOOL_WINDOW_MOVE_LEFT, TOOL_WINDOW_MOVE_RIGHT));
 
         /**
          * Whether the action only means something with a terminal pane in front of the user, so
@@ -471,6 +472,10 @@ public final class LauncherToolRegistry {
     public static final String TOOL_CLIPBOARD_PASTE = "clipboard.paste";
     public static final String TOOL_WINDOW_SELECT = "window.select";
     public static final String TOOL_WINDOW_RENAME = "window.rename";
+    /** Moves the current window to another place in the row; the window stays current. */
+    public static final String TOOL_WINDOW_MOVE = "window.move";
+    public static final String TOOL_WINDOW_MOVE_LEFT = "window.move_left";
+    public static final String TOOL_WINDOW_MOVE_RIGHT = "window.move_right";
     public static final String TOOL_SESSION_RENAME = "session.rename";
     public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
     public static final String TOOL_PANE_RENAME = "pane.rename";
@@ -1008,6 +1013,28 @@ public final class LauncherToolRegistry {
                 Binding.of("ctrl+alt+7", BindingCondition.SPLITS_ON),
                 Binding.of("ctrl+alt+8", BindingCondition.SPLITS_ON),
                 Binding.of("ctrl+alt+9", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+        // Reordering the row: the keyboard's and the agent's form of dragging a chip along the
+        // window bar. window.move carries its place, so it has no palette row of its own; the
+        // two one-step forms are what the palette offers. No default stroke: every free one
+        // near the window keys is one a shell or an editor also wants.
+        addUi(map, TOOL_WINDOW_MOVE,
+            "Move the current window to another place in the current session's row: 'left' or"
+                + " 'right' one place, or a place counted from 1. The window stays current.",
+            schemaObject()
+                .withString("to", "left, right, or the place in the row counted from 1", true)
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, 0, 0, null, REQUIRES_SPLITS);
+        addUi(map, TOOL_WINDOW_MOVE_LEFT,
+            "Move the current window one place left in the current session's row.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_move_left, 0, null, REQUIRES_SPLITS);
+        addUi(map, TOOL_WINDOW_MOVE_RIGHT,
+            "Move the current window one place right in the current session's row.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_move_right, 0, null, REQUIRES_SPLITS);
         // The three rename tools name the three things the UI names, and nothing else:
         // session.rename a drawer row, window.rename a window-bar tab, pane.rename one shell. The
         // ids used to be rotated one step — window.rename renamed the session and session.rename

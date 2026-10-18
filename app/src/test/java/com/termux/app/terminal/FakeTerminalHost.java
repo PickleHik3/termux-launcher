@@ -128,6 +128,7 @@ class FakeTerminalHost implements TerminalHost {
     @Nullable String lastRenamedBrowserName;
     int lastRenamedBrowserIndex = -1;
     @Nullable Integer lastSelectedWindow;
+    @Nullable int[] lastMovedWindow;
     @Nullable Boolean lastSwitchWindowForward;
 
     // Workspaces
@@ -722,6 +723,12 @@ class FakeTerminalHost implements TerminalHost {
         record("selectWindow");
         lastSelectedWindow = index;
         return selectWindowResult;
+    }
+
+    @Override public boolean moveWindow(int from, int to) {
+        record("moveWindow");
+        lastMovedWindow = new int[]{from, to};
+        return true;
     }
 
     @Override public int currentWindowCount() {

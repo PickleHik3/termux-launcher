@@ -69,7 +69,8 @@ public class TerminalActionDispatcherTest {
             "keyboard.cycle_layout", "keyboard.select_layout",
             "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide",
             "keyboard.clipboard", "keyboard.toggle_enabled", "voice.dictate",
-            "pane.open", "pane.list", "pane.focus", "pane.close", "pane.write", "pane.read", "pane.split"};
+            "pane.open", "pane.list", "pane.focus", "pane.close", "pane.write", "pane.read", "pane.split",
+            "window.move", "window.move_left", "window.move_right"};
         for (String name : handled) {
             assertTrue(name, TerminalActionDispatcher.handles(name));
         }
@@ -824,6 +825,37 @@ public class TerminalActionDispatcherTest {
         assertEquals(1, dispatcher.execute("window.select", new JSONObject().put("index", 1))
             .getInt("index"));
         assertEquals(Integer.valueOf(1), host.lastSelectedWindow);
+    }
+
+    @Test
+    public void windowMoveTakesLeftRightOrAPlaceCountedFromOne() throws Exception {
+        FakeTerminalHost host = attach();
+        host.windowCount = 3;
+        host.windowIndex = 0;
+
+        assertEquals(400, dispatcher.execute("window.move", new JSONObject()).getInt("_statusCode"));
+        assertEquals(400, dispatcher.execute("window.move", new JSONObject().put("to", "0"))
+            .getInt("_statusCode"));
+        assertEquals(400, dispatcher.execute("window.move", new JSONObject().put("to", "up"))
+            .getInt("_statusCode"));
+        assertEquals(null, host.lastMovedWindow);
+
+        JSONObject last = dispatcher.execute("window.move", new JSONObject().put("to", 3));
+        assertEquals(3, last.getInt("to"));
+        assertEquals(0, host.lastMovedWindow[0]);
+        assertEquals(2, host.lastMovedWindow[1]);
+
+        host.windowIndex = 2;
+        dispatcher.execute("window.move_left", new JSONObject());
+        assertEquals(2, host.lastMovedWindow[0]);
+        assertEquals(1, host.lastMovedWindow[1]);
+        dispatcher.execute("window.move", new JSONObject().put("to", "right"));
+        assertEquals(2, host.lastMovedWindow[1]);
+
+        host.windowCount = 0;
+        host.windowIndex = -1;
+        assertEquals(409, dispatcher.execute("window.move_right", new JSONObject())
+            .getInt("_statusCode"));
     }
 
     @Test
