@@ -4416,6 +4416,35 @@ public final class SuggestionBarView extends GridLayout
         pinEditorListener = listener;
     }
 
+    /** Puts an app on a Home page: the app menu's Add to Home. */
+    public interface AddToHomeListener {
+        /** Whether there are Home pages to take an icon right now; no row while there are not. */
+        boolean canAddToHome();
+        void onAddToHome(@NonNull LauncherAppEntry entry);
+    }
+
+    @Nullable private AddToHomeListener addToHomeListener;
+
+    /** Who puts an app on Home; null takes the Add to Home row out of the app menu. */
+    public void setAddToHomeListener(@Nullable AddToHomeListener listener) {
+        addToHomeListener = listener;
+    }
+
+    /** The app menu's Add to Home row, beside Pin/Unpin; nothing while no Home takes icons. */
+    private void addAddToHomeRow(@NonNull LinearLayout shell, @NonNull LauncherAppEntry entry,
+                                 int tintBase) {
+        if (addToHomeListener == null || !addToHomeListener.canAddToHome()) return;
+        Runnable add = () -> {
+            dismissAppContextPopup();
+            AddToHomeListener listener = addToHomeListener;
+            if (listener != null) listener.onAddToHome(entry);
+        };
+        TextView row = menuRows.addActionRow(shell,
+            getResources().getString(R.string.home_add_to_home), R.drawable.ic_symbol_add, false,
+            tintBase, add);
+        pendingMenuRows.add(new MenuRow(row, add, false));
+    }
+
     /**
      * Opens the modern, reusable pin editor (also used from Settings → Default apps). On save it
      * re-reads pinned items from the repository and re-renders the dock.
@@ -5637,6 +5666,7 @@ public final class SuggestionBarView extends GridLayout
                     removePinnedAt(targetPinnedIndex);
                 }, false));
             }
+            addAddToHomeRow(shell, context.entry, tintBase);
         } else {
             if (!suppressPinRow) {
                 TextView pinRow = menuRows.addActionRow(shell, "Pin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
@@ -5648,6 +5678,7 @@ public final class SuggestionBarView extends GridLayout
                     pinEntryToTopLevel(context.entry);
                 }, false));
             }
+            addAddToHomeRow(shell, context.entry, tintBase);
 
             TextView changeIconRow = menuRows.addActionRow(shell, "Change app icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
                 dismissAppContextPopup();

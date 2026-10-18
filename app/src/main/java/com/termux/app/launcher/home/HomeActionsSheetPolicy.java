@@ -25,6 +25,8 @@ public final class HomeActionsSheetPolicy {
         /** A new Home float on this page: the first and primary row. */
         TERMINAL(Group.PAGE),
         ADD_WIDGET(Group.PAGE),
+        /** An app icon on this page, from a list of the drawer's apps. */
+        ADD_APP(Group.PAGE),
         ADD_PAGE(Group.PAGE),
         /** The Home page editor: the corner tab's pencil. */
         EDIT_PAGES(Group.PAGE),
@@ -67,6 +69,7 @@ public final class HomeActionsSheetPolicy {
         items.add(Item.TERMINAL);
         if (hasPages) {
             items.add(Item.ADD_WIDGET);
+            items.add(Item.ADD_APP);
             items.add(Item.ADD_PAGE);
             items.add(Item.EDIT_PAGES);
             items.add(Item.LAYOUT);

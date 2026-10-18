@@ -45,6 +45,14 @@ public final class LauncherWidgetRepository {
      * downgrade keeps the wall rather than half of it.
      */
     private static final int BUILTIN_VERSION = 5;
+    /**
+     * Written while a Home page holds an app icon: every record names its {@code kind}, and an
+     * app icon carries its {@code app}. A v5 build would read an app icon as an app widget with a
+     * negative ID and refuse the wall, so the newer number makes it go read-only instead. v5 and
+     * older carry no kind and load unchanged: a {@code builtin} field makes a built-in, anything
+     * else an app widget.
+     */
+    private static final int APP_ITEM_VERSION = 6;
     /** v3 is read as v4 with no orientation named and no shelf: identical bytes, nothing moves. */
     private static final int LEGACY_PAGED_VERSION = 3;
     private static final String PREFS = "launcher_widget_repository";
@@ -109,6 +117,41 @@ public final class LauncherWidgetRepository {
             for (int id : layout.cells.keySet()) lowest = Math.min(lowest, id);
         }
         return lowest - 1;
+    }
+
+    /**
+     * Puts an app icon on Home: on {@code preferredPage} (the page in front) when it has room, else
+     * the first page that has, else on a new page after the last ({@link HomeItemPlacementPolicy}).
+     * One commit, the page and the icon together. Returns the icon as stored, or null when the
+     * write failed or the store is read-only, with nothing changed.
+     */
+    @Nullable
+    public synchronized LauncherWidgetRecord addApp(@NonNull com.termux.app.launcher.model.AppRef app,
+                                                    int preferredPage, @Nullable Bundle options) {
+        HomeItemPlacementPolicy.Choice choice = HomeItemPlacementPolicy.place(grid, pageCount,
+            preferredPage, this::occupancyOnPage, 1, 1);
+        if (choice == null) return null;
+        LauncherWidgetRecord record = LauncherWidgetRecord.app(allocateBuiltinId(), app,
+            choice.cell, choice.page, options);
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
+        next.put(record.appWidgetId, record);
+        int nextPages = choice.appendsPage ? pageCount + 1 : pageCount;
+        return commitValidated(next, pending, grid, nextPages, revision + 1) ? record : null;
+    }
+
+    /**
+     * What stands on a page for a placement to avoid: its records and, on its page, the cell an
+     * add in flight has reserved, which no record holds yet.
+     */
+    @NonNull private List<LauncherWidgetRecord> occupancyOnPage(int page) {
+        ArrayList<LauncherWidgetRecord> out = new ArrayList<>(recordsOnPage(page));
+        WidgetAddTransaction held = pending;
+        if (held != null && held.page == page && held.appWidgetId > 0
+            && !records.containsKey(held.appWidgetId)) {
+            out.add(new LauncherWidgetRecord(held.appWidgetId, held.provider, held.profileSerial,
+                LauncherWidgetRecord.State.DELETING, held.cell, held.page, null, null));
+        }
+        return out;
     }
     @Nullable public synchronized WidgetAddTransaction pending() { return pending; }
     @NonNull public synchronized WidgetGridDefinition gridDefinition() { return grid; }
@@ -797,7 +840,7 @@ public final class LauncherWidgetRepository {
             // shelves no layout, so it is adopted as it stands and rewritten as v4 on the next
             // commit. Nothing moves for a user who never turns the screen.
             if (version != SCHEMA_VERSION && version != LEGACY_PAGED_VERSION
-                && version != BUILTIN_VERSION) {
+                && version != BUILTIN_VERSION && version != APP_ITEM_VERSION) {
                 readOnlyUnknownVersion = true;
                 return;
             }
@@ -862,6 +905,7 @@ public final class LauncherWidgetRepository {
         for (int i = 0; i < count; i++) {
             LauncherWidgetRecord legacy = decodeRecord(array.getJSONObject(i), false,
                 i % migratedGrid.columns, i / migratedGrid.columns);
+            if (legacy == null) throw new JSONException("unknown kind in v1");
             if (migrated.put(legacy.appWidgetId, legacy) != null) throw new JSONException("duplicate widget ID");
         }
         WidgetAddTransaction migratedPending = hasPending
@@ -898,6 +942,8 @@ public final class LauncherWidgetRepository {
         if (array == null) return loaded;
         for (int i = 0; i < array.length(); i++) {
             LauncherWidgetRecord record = decodeRecord(array.getJSONObject(i), hasCell, 0, 0);
+            // A kind this build cannot hold (a folder, before folders) leaves its cell empty.
+            if (record == null) continue;
             if (loaded.put(record.appWidgetId, record) != null) throw new JSONException("duplicate widget ID");
         }
         return loaded;
@@ -912,7 +958,9 @@ public final class LauncherWidgetRepository {
                                  @Nullable RowSnapshot snapshot, long revision) {
         try {
             JSONObject root = new JSONObject();
-            root.put("version", holdsBuiltin(values.values()) ? BUILTIN_VERSION : SCHEMA_VERSION);
+            boolean writeKind = holdsApp(values.values());
+            root.put("version", writeKind ? APP_ITEM_VERSION
+                : holdsBuiltin(values.values()) ? BUILTIN_VERSION : SCHEMA_VERSION);
             root.put("revision", revision);
             root.put("grid", encodeGrid(definition));
             root.put("pages", Math.max(1, pages));
@@ -941,7 +989,9 @@ public final class LauncherWidgetRepository {
                 root.put("rowSnapshot", held);
             }
             JSONArray array = new JSONArray();
-            for (LauncherWidgetRecord record : values.values()) array.put(encodeRecord(record));
+            for (LauncherWidgetRecord record : values.values()) {
+                array.put(encodeRecord(record, writeKind));
+            }
             root.put("records", array);
             if (transaction != null) root.put("pending", encodeTransaction(transaction));
             return root.toString();
@@ -1037,11 +1087,26 @@ public final class LauncherWidgetRepository {
         return false;
     }
 
-    private static JSONObject encodeRecord(LauncherWidgetRecord record) throws JSONException {
+    private static boolean holdsApp(@NonNull Collection<LauncherWidgetRecord> values) {
+        for (LauncherWidgetRecord record : values) if (record.isApp()) return true;
+        return false;
+    }
+
+    /** {@code writeKind}: a v6 payload, where every record names its kind. */
+    private static JSONObject encodeRecord(LauncherWidgetRecord record, boolean writeKind)
+        throws JSONException {
         JSONObject value = new JSONObject();
         value.put("id", record.appWidgetId);
+        if (writeKind) value.put("kind", record.kind.name());
         value.put("provider", record.provider.flattenToString());
         if (record.builtinKind != null) value.put("builtin", record.builtinKind);
+        com.termux.app.launcher.model.AppRef app = record.appRef();
+        if (app != null) {
+            value.put("app", new JSONObject().put("package", app.packageName)
+                .put("activity", app.activityName).put("user", app.userId)
+                .put("serial", app.userSerialNumber).put("cloned", app.clonedProfile)
+                .put("profileLabel", app.profileLabel));
+        }
         value.put("profile", record.profileSerial);
         value.put("state", record.state.name());
         value.put("cell", encodeCell(record.cell));
@@ -1051,6 +1116,12 @@ public final class LauncherWidgetRepository {
         return value;
     }
 
+    /**
+     * One stored record, or null for a kind this build cannot hold (folders, before folders),
+     * which the caller leaves out. A record with no {@code kind} (v5 and older) is a built-in when
+     * it names one and an app widget otherwise, exactly as those versions read it.
+     */
+    @Nullable
     private static LauncherWidgetRecord decodeRecord(JSONObject value, boolean hasCell,
                                                      int legacyColumn, int legacyRow)
         throws JSONException {
@@ -1058,6 +1129,29 @@ public final class LauncherWidgetRepository {
         if (provider == null) throw new JSONException("invalid provider");
         WidgetCellRect cell = hasCell ? decodeCell(value.getJSONObject("cell"))
             : new WidgetCellRect(legacyColumn, legacyRow, legacyColumn + 1, legacyRow + 1);
+        String kindName = value.optString("kind", null);
+        if (kindName != null && !kindName.isEmpty()) {
+            LauncherWidgetRecord.Kind kind;
+            try {
+                kind = LauncherWidgetRecord.Kind.valueOf(kindName);
+            } catch (IllegalArgumentException unknown) {
+                kind = null;
+            }
+            if (kind == null || kind == LauncherWidgetRecord.Kind.FOLDER) {
+                android.util.Log.w("LauncherWidgets", "dropping Home item of kind " + kindName);
+                return null;
+            }
+            if (kind == LauncherWidgetRecord.Kind.APP) {
+                JSONObject app = value.getJSONObject("app");
+                com.termux.app.launcher.model.AppRef ref = new com.termux.app.launcher.model.AppRef(
+                    app.getString("package"), app.getString("activity"), app.optInt("user", -1),
+                    app.optLong("serial", -1L), app.optBoolean("cloned", false),
+                    app.optString("profileLabel", ""));
+                return LauncherWidgetRecord.app(value.getInt("id"), ref, cell,
+                    Math.max(0, value.optInt("page", 0)),
+                    decodeBundle(value.optJSONObject("options")));
+            }
+        }
         String builtin = value.optString("builtin", null);
         if (builtin != null && !builtin.isEmpty()) {
             return LauncherWidgetRecord.builtin(value.getInt("id"), builtin, cell,
