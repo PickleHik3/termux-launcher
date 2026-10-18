@@ -179,6 +179,67 @@ public final class HomeFloatPolicy {
         return widthPx > heightPx;
     }
 
+    // --- Saved sessions ---
+
+    /**
+     * The Home page a saved Home float loads back onto when Home has {@code homeCount} pages: the
+     * page it was saved on, or the last page when that one no longer exists.
+     * {@link #NOT_HOME_FLOAT} when there are no Home pages at all: it loads as a tiled window.
+     */
+    public static int restoredPage(int savedPage, int homeCount) {
+        if (homeCount <= 0) return NOT_HOME_FLOAT;
+        return Math.max(0, Math.min(savedPage, homeCount - 1));
+    }
+
+    /**
+     * Which of a saved session's windows load back as Home floats: the ones saved as floats
+     * ({@code savedAsFloat}), while there are Home pages to float over ({@code homePages}). A
+     * session's row is never left empty: when every one of its windows was a float, the first
+     * loads into the row as a tiled window and the rest float.
+     */
+    @NonNull
+    public static boolean[] restoredAsFloats(@NonNull boolean[] savedAsFloat, boolean homePages) {
+        boolean[] asFloat = new boolean[savedAsFloat.length];
+        if (!homePages) return asFloat;
+        boolean rowKept = false;
+        for (int i = 0; i < savedAsFloat.length; i++) {
+            asFloat[i] = savedAsFloat[i];
+            if (!savedAsFloat[i]) rowKept = true;
+        }
+        if (!rowKept && asFloat.length > 0) asFloat[0] = false;
+        return asFloat;
+    }
+
+    /**
+     * The index in the row of a saved session's current window {@code savedCurrent}, once the
+     * windows marked in {@code asFloat} have gone to Home: the same window when it stays in the
+     * row, else the row's window before it (its first when none is before it). The wall is not
+     * slid to Home for a current window that floats.
+     */
+    public static int restoredRowIndex(@NonNull boolean[] asFloat, int savedCurrent) {
+        if (asFloat.length == 0) return 0;
+        int current = Math.max(0, Math.min(savedCurrent, asFloat.length - 1));
+        int before = 0;
+        for (int i = 0; i < current; i++) if (!asFloat[i]) before++;
+        return asFloat[current] ? Math.max(0, before - 1) : before;
+    }
+
+    /**
+     * A float's shape in each orientation, for Saved sessions: {@code frac}, its live shape, under
+     * the orientation it was last laid out in ({@code memory}'s, else {@code landscapeNow}), and
+     * the shape {@code memory} keeps for the other one, if it has been shaped there. Index 0 is
+     * portrait, 1 landscape; null where no shape is known.
+     */
+    @NonNull
+    public static RectF[] savedShapes(@Nullable ShapeMemory memory, @Nullable RectF frac,
+                                      boolean landscapeNow) {
+        Boolean laidOut = memory == null ? null : memory.orientation();
+        boolean landscape = laidOut != null ? laidOut : landscapeNow;
+        RectF other = memory == null ? null : memory.remembered(!landscape);
+        RectF live = frac == null ? null : new RectF(frac);
+        return landscape ? new RectF[]{other, live} : new RectF[]{live, other};
+    }
+
     /**
      * The words a float's chip carries after its label: the float's page, as the page dots count
      * it ("· 2"), so floats from every page can share one row of chips.
@@ -222,6 +283,44 @@ public final class HomeFloatPolicy {
             if (landscape ? !mLandscapeKnown : !mPortraitKnown) return null;
             return landscape ? new Shape(copy(mLandscapeFrac), copy(mLandscapeRestore))
                 : new Shape(copy(mPortraitFrac), copy(mPortraitRestore));
+        }
+
+        /**
+         * The orientation the float's live shape belongs to: the one it was last laid out in
+         * (true for landscape), or null before its first layout.
+         */
+        @Nullable
+        public Boolean orientation() {
+            return mLandscape;
+        }
+
+        /**
+         * The shape kept for an orientation the float has left ({@code landscape} or portrait),
+         * or null when it has not been shaped there. The orientation it is laid out in now keeps
+         * its shape on the float itself, not here.
+         */
+        @Nullable
+        public RectF remembered(boolean landscape) {
+            if (mLandscape != null && mLandscape == landscape) return null;
+            return landscape ? (mLandscapeKnown ? copy(mLandscapeFrac) : null)
+                : (mPortraitKnown ? copy(mPortraitFrac) : null);
+        }
+
+        /**
+         * Remembers {@code frac} for {@code landscape} or portrait as if the float had been shaped
+         * there and left it: a float loaded from Saved sessions takes that shape on its first turn
+         * into that orientation. Not maximised there: Maximise's restore is not saved.
+         */
+        public void seed(boolean landscape, @NonNull RectF frac) {
+            if (landscape) {
+                mLandscapeFrac = new RectF(frac);
+                mLandscapeRestore = null;
+                mLandscapeKnown = true;
+            } else {
+                mPortraitFrac = new RectF(frac);
+                mPortraitRestore = null;
+                mPortraitKnown = true;
+            }
         }
 
         @Nullable
