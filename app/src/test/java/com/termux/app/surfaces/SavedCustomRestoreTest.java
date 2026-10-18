@@ -2,6 +2,7 @@ package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -55,7 +56,7 @@ public class SavedCustomRestoreTest {
     }
 
     @Test
-    public void customComesBackWholeAfterALookWasSavedInBetween() {
+    public void customComesBackWholeAcrossVisitsWhileNoLookIsSaved() {
         // Visit 1: from Mist to Custom, the keyboard and the terminal tuned, Done.
         TermuxAppSharedPreferences first = freshPreferences();
         SurfacePresets.applyLook(first, mist);
@@ -64,34 +65,50 @@ public class SavedCustomRestoreTest {
         tuneTheKeyboardAndTheTerminal(first);
         doneAtCustom(visit1, first);
         String custom = AppearanceSnapshot.signatureOf(first);
-        String saved = first.getSurfaceCustomPreset();
 
-        // Visit 2: opens at Custom, Clear picked, Done at Clear.
+        // Visit 2: opens at Custom; Clear tried, back to Custom in the same visit, Done at Custom.
         TermuxAppSharedPreferences second = freshPreferences();
         SurfaceEditorController.SessionCustom visit2 = new SurfaceEditorController.SessionCustom();
         visit2.leave(second);
         SurfacePresets.applyLook(second, clear);
         assertOnClear(second);
-        assertEquals("a Look picked and saved leaves the saved Custom alone",
-            saved, second.getSurfaceCustomPreset());
+        visit2.enter(second);
+        assertEquals(custom, AppearanceSnapshot.signatureOf(second));
+        doneAtCustom(visit2, second);
 
-        // Visit 3: opens on Clear; Custom brings the whole setup back.
+        // Visit 3: opens at Custom with the whole setup.
         TermuxAppSharedPreferences third = freshPreferences();
-        assertTrue(SurfacePresets.matches(third, clear));
         SurfaceEditorController.SessionCustom visit3 = new SurfaceEditorController.SessionCustom();
         visit3.enter(third);
         assertEquals(custom, AppearanceSnapshot.signatureOf(third));
         assertTuned(third);
+    }
 
-        // Clear again, untouched: everything back on Clear, the saved Custom unchanged.
-        visit3.leave(third);
-        SurfacePresets.applyLook(third, clear);
-        assertOnClear(third);
-        assertEquals(saved, third.getSurfaceCustomPreset());
+    @Test
+    public void aLookSavedIsCustomsNextStartingPoint() {
+        // Visit 1: a Custom setup saved.
+        TermuxAppSharedPreferences first = freshPreferences();
+        SurfacePresets.applyLook(first, mist);
+        SurfaceEditorController.SessionCustom visit1 = new SurfaceEditorController.SessionCustom();
+        visit1.enter(first);
+        tuneTheKeyboardAndTheTerminal(first);
+        doneAtCustom(visit1, first);
 
-        // And once more to Custom in the same visit: still the whole setup.
+        // Visit 2: Clear picked and saved: the saved Custom goes.
+        TermuxAppSharedPreferences second = freshPreferences();
+        SurfaceEditorController.SessionCustom visit2 = new SurfaceEditorController.SessionCustom();
+        visit2.leave(second);
+        SurfacePresets.applyLook(second, clear);
+        doneAtLook(second);
+        assertOnClear(second);
+        assertNull(SurfacePresets.custom(second));
+
+        // Visit 3: opens on Clear; Custom starts from Clear's values, not the old setup.
+        TermuxAppSharedPreferences third = freshPreferences();
+        SurfaceEditorController.SessionCustom visit3 = new SurfaceEditorController.SessionCustom();
         visit3.enter(third);
-        assertEquals(custom, AppearanceSnapshot.signatureOf(third));
+        assertOnClear(third);
+        assertFalse("seeded from Clear, untouched", visit3.isTouched(third));
     }
 
     @Test
@@ -193,6 +210,11 @@ public class SavedCustomRestoreTest {
 
     private TermuxAppSharedPreferences freshPreferences() {
         return new TermuxAppSharedPreferences(context, store, null);
+    }
+
+    /** The editor's Done at a Look's stop (SurfaceEditorController.commitLook). */
+    private static void doneAtLook(TermuxAppSharedPreferences prefs) {
+        prefs.setSurfaceCustomPreset(null);
     }
 
     /** The editor's Done at the Custom stop. */

@@ -9509,6 +9509,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         else open.run();
     }
 
+    /**
+     * Restores the window's view states, but skips them rather than crash when one does not fit
+     * the view now holding its id (#83: a Bundle handed to a plain view after a relaunch).
+     *
+     * <p>Activity's own implementation restores only the view hierarchy; this activity's saved
+     * values are read in onCreate and are unaffected. A skip loses the views' saved state from the
+     * failing view on, which is far cheaper than the crash it replaces.
+     */
+    @Override
+    protected void onRestoreInstanceState(@NonNull Bundle savedInstanceState) {
+        try {
+            super.onRestoreInstanceState(savedInstanceState);
+        } catch (IllegalArgumentException | ClassCastException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG,
+                "Skipped restoring the view hierarchy state: a saved state did not fit its view", e);
+        }
+    }
+
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
         Logger.logVerbose(LOG_TAG, "onConfigurationChanged");

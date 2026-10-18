@@ -3644,14 +3644,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * Saves the look: at a Custom the user changed it is also stored as the saved Custom. A Custom
-     * left as seeded (a tap at Clear, then Done) is a Look, and must not replace the saved one.
+     * Saves the look. At a Custom the user changed it is also stored as the saved Custom; a Custom
+     * left as seeded (a tap at Clear, then Done) is the Look on screen and changes nothing. A Look
+     * saved at its stop is the user's new starting point, so the saved Custom goes: the next visit's
+     * Custom starts from that Look's values (the developer's rule, 2026-10-18).
      */
     private void commitLook() {
         TermuxAppSharedPreferences prefs = prefs();
-        if (prefs != null && AppearanceLooks.isCustomStop(mStop)
-            && mSessionCustom.isTouched(prefs))
+        if (prefs == null) return;
+        if (!AppearanceLooks.isCustomStop(mStop)) {
+            prefs.setSurfaceCustomPreset(null);
+        } else if (mSessionCustom.isTouched(prefs)) {
             SurfacePresets.saveCustom(prefs);
+        }
     }
 
     /** Done: the look is saved, and the surface takes the editor off screen. */

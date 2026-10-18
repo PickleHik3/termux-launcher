@@ -294,6 +294,13 @@ under twenty items; past that, the oldest are re-judged first.
   place bar's display dot is on, and the window chips list Firefox. Also once relaunched from the
   terminal place, then swipe to Display: same. Then stop the display, relaunch: the page shows
   its empty state, nothing restarts · pong with the go-ahead, release build.
+- 2026-10-18 · commit "fix(widgets): a relaunch no longer hands a widget's saved Bundle to
+  another view (#83)" · With two or more app widgets on Home (widget ids that are small numbers,
+  as on a fresh install), several panes open, the Appearance editor open and the Display page
+  showing, relaunch the activity with `adb shell cmd uimode night yes` then `no`, and with
+  `launcherctl wallpaper set <file>` twice: no crash and no "Wrong state class" in logcat; the
+  editor reopens where it was and the widgets come back. Repeat on Android 12 (API 31) if an image
+  is at hand · emulator.
 
 ### Wall rework: orchestrator check of e64d95a92 (emulator, 2026-10-18 10:55)
 Seen: after the Display chip in the Home palette started the X server (one process) and Stop with
