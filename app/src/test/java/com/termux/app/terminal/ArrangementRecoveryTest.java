@@ -94,4 +94,18 @@ public class ArrangementRecoveryTest {
         assertFalse(ArrangementRecovery.rebuildWantsFreshWindow(0, HOME));
         assertFalse(ArrangementRecovery.rebuildWantsFreshWindow(2, WORKSPACE));
     }
+
+    /**
+     * The rebuild runs from the service connection, before the window is in front: the notice it
+     * owes waits for a started activity whose window holds the focus, and is not shown once paid.
+     */
+    @Test
+    public void theRestoredNoticeWaitsForTheWindowToBeInFront() {
+        assertFalse("rebuilt behind the starting window",
+            ArrangementRecovery.restoredNoticeDue(true, true, false));
+        assertFalse("not started", ArrangementRecovery.restoredNoticeDue(true, false, true));
+        assertFalse(ArrangementRecovery.restoredNoticeDue(true, false, false));
+        assertTrue("on screen and focused", ArrangementRecovery.restoredNoticeDue(true, true, true));
+        assertFalse("nothing owed", ArrangementRecovery.restoredNoticeDue(false, true, true));
+    }
 }

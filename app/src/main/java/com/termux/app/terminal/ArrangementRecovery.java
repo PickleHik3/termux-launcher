@@ -95,4 +95,20 @@ public final class ArrangementRecovery {
     public static boolean rebuildWantsFreshWindow(int rowWindows, @Nullable String startIn) {
         return rowWindows <= 0 && WallRow.START_IN_WORKSPACE.equals(startIn);
     }
+
+    /**
+     * Whether the "Windows restored" notice a rebuild owes may go up now. The rebuild runs on a
+     * cold start from the bootstrap's answer, which comes from the service connection, before
+     * the activity has drawn its first frame and while the system's starting window still covers
+     * it. A notice raised there spent its whole hold behind that window, the shells being spawned
+     * and the wall settling on its first page. So it waits until the activity is on screen with
+     * its window focused, which Android only grants once the starting window has gone.
+     *
+     * @param owed a rebuild put the arrangement back and the notice has not been shown yet
+     * @param visible the activity is started
+     * @param windowFocused the activity's window holds the focus
+     */
+    public static boolean restoredNoticeDue(boolean owed, boolean visible, boolean windowFocused) {
+        return owed && visible && windowFocused;
+    }
 }

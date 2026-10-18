@@ -1542,6 +1542,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final Runnable mArrangementAutosave = this::autosaveArrangementNow;
     /** The autosaved arrangement a cold start rebuilds once the bootstrap answers, or null. */
     @Nullable private com.termux.app.terminal.TerminalWorkspace mPendingArrangementRebuild;
+    /** A rebuild put the arrangement back and its notice waits for the window to be in front. */
+    private boolean mWindowsRestoredNoticeOwed;
 
     private boolean mSeamlessStatusBackgroundActive;
     private int mLastStatusBarInsetTop;
@@ -9476,8 +9478,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (com.termux.app.terminal.ArrangementRecovery.rebuildWantsFreshWindow(rowWindows,
                 arrangementStartIn()))
             mTermuxTerminalSessionActivityClient.addNewSession(false, null);
-        com.termux.app.notice.AppNotice.show(this, R.string.notice_windows_restored);
+        mWindowsRestoredNoticeOwed = true;
+        showWindowsRestoredNoticeIfDue();
         return true;
+    }
+
+    /**
+     * Shows the "Windows restored" notice a rebuild owes, once the activity is in front
+     * ({@link com.termux.app.terminal.ArrangementRecovery#restoredNoticeDue}); called again when
+     * the window gains the focus. Posted, so it goes up after the frame the wall's start page and
+     * the rebuilt row are laid out in, on whichever half is in front, for its ordinary hold.
+     */
+    private void showWindowsRestoredNoticeIfDue() {
+        if (!com.termux.app.terminal.ArrangementRecovery.restoredNoticeDue(
+                mWindowsRestoredNoticeOwed, mIsVisible, hasWindowFocus())) return;
+        mWindowsRestoredNoticeOwed = false;
+        View content = findViewById(android.R.id.content);
+        Runnable show = () -> com.termux.app.notice.AppNotice.show(this,
+            R.string.notice_windows_restored);
+        if (content != null) content.post(show);
+        else show.run();
     }
 
     /** Start in as the arrangement's start reads it: the Workspace when there is no Home. */
@@ -27064,6 +27084,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!hasFocus || mIsInvalidState || !mIsVisible) {
             return;
         }
+        showWindowsRestoredNoticeIfDue();
         // The Appearance surface's own dialogs and sheets take and return focus: the backdrops are
         // not re-rendered for them (a re-render under the scaled editor frame showed as a flash).
         if (!mAppearance.isOpen())
