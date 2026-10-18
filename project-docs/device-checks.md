@@ -1085,6 +1085,11 @@ Not seen: everything else listed under the sections below.
   are tiny while the Add an app list's are full size.
 ## Developer
 
+- 2026-10-18 · feat/wall-rework-phase2 after the PR #82 merge (85ddb719a) · The seam between #82's
+  relaunch survival and the wall: with the Appearance editor open over a Home page, relaunch the
+  activity (`launcherctl wallpaper set <image>`): the editor comes back over Home with Home's
+  labels ("· Home"), not the Workspace's; same with Firefox running on the display: the display
+  window is still there afterwards and typing reaches it · pong, by hand.
 - 2026-10-18 · feat/wall-rework-phase2 at e66a1710f, slices 2 and 2b (Home's own Style, Corners
   and Margin; Margin as the one air on Home) · On pong, release build: Settings → Start in =
   Workspace, then a true cold start (swipe the app away or reboot, not a force-stop): the
