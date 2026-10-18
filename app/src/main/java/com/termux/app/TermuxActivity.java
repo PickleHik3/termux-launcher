@@ -1496,6 +1496,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final String PANE_STATE_CURRENT_WINDOW = "current_window";
     private static final String PANE_STATE_CURRENT_SESSION = "current_session";
     private static final String PANE_STATE_SESSION_NAME = "session_name";
+    private static final String PANE_STATE_HOME_FLOATS = "home_floats";
 
     private static final String LOG_TAG = "TermuxActivity";
     private static final int IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT = 100;
@@ -1515,6 +1516,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * on it.
      */
     private static volatile boolean sFirstShellStarted;
+    /**
+     * The pane layout the last activity left behind, keyed by shell handles, for as long as this
+     * process (and so the terminal service) lives. An activity that comes back without instance
+     * state — the last one was finished, or swiped from Recents — rebuilds the row's windows,
+     * their trees and the Home floats from it around the shells still running, instead of one
+     * plain window per shell. Strings and numbers only: it holds no view.
+     */
+    @Nullable private static volatile Bundle sProcessPaneLayout;
 
     private boolean mSeamlessStatusBackgroundActive;
     private int mLastStatusBarInsetTop;
@@ -1788,6 +1797,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
             mPendingWallState = savedInstanceState;
+        } else {
+            // No instance state while the process lives on: the layout the last activity left.
+            mPendingPaneLayoutState = sProcessPaneLayout;
         }
         // Delete ReportInfo serialized object files from cache older than 14 days
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
@@ -8916,6 +8928,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mBarMemorySmoother.reset();
         if (mIsInvalidState)
             return;
+        // A stopped activity may be finished or killed next: the arrangement is kept for both.
+        rememberProcessPaneLayout();
         // From here until the layout we come back to has settled, the panes' sizes are kept as
         // pending: the stop's own geometry (the keyboard's, the dock's IME offset below) and the
         // burst a return brings — insets, frame, fullscreen flags, the keyboard re-measuring, the
@@ -9020,6 +9034,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
+        rememberProcessPaneLayout();
         // First: what follows (the keyboard's teardown among it) must not book passes or holds
         // on the main looper for a window that is going away.
         mGeometry.dispose();
@@ -9124,8 +9139,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mInAppKeyboard != null)
             mInAppKeyboard.onSaveInstanceState(savedInstanceState);
         savedInstanceState.putBoolean(ARG_ACTIVITY_RECREATED, true);
-        Bundle paneLayout = savePaneLayoutState();
+        // Before the service connected, the layout this activity was handed is still waiting:
+        // it is passed on rather than lost to a second recreate.
+        Bundle paneLayout = mTermuxService != null ? savePaneLayoutState() : mPendingPaneLayoutState;
         if (paneLayout != null) savedInstanceState.putBundle(ARG_PANE_LAYOUT, paneLayout);
+        if (mTermuxService != null) sProcessPaneLayout = paneLayout;
         if (mPaneWallController != null) mPaneWallController.onSaveInstanceState(savedInstanceState);
     }
 
@@ -18997,9 +19015,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * Keeps the arrangement for an activity that comes back in this process without instance
+     * state ({@link #sProcessPaneLayout}). Only a connected activity knows it; one that never
+     * connected leaves what an earlier one kept.
+     */
+    private void rememberProcessPaneLayout() {
+        if (mTermuxService == null || mPaneController == null) return;
+        sProcessPaneLayout = savePaneLayoutState();
+    }
+
+    /**
+     * The row's windows and their trees, the current window, and the Home floats (page,
+     * minimised, shape), every pane keyed by its shell's handle, so a recreated activity puts
+     * them back around the same running shells.
+     */
     @Nullable
     private Bundle savePaneLayoutState() {
-        if (mPaneController == null || mWSessions.isEmpty()) return null;
+        if (mPaneController == null
+            || (mWSessions.isEmpty() && mPaneController.homeFloatCount() == 0)) return null;
         Bundle root = new Bundle();
         java.util.ArrayList<Bundle> sessionStates = new java.util.ArrayList<>();
         for (WSession ws : mWSessions) {
@@ -19017,6 +19051,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         root.putParcelableArrayList(PANE_STATE_SESSIONS, sessionStates);
         root.putInt(PANE_STATE_CURRENT_SESSION,
             Math.max(0, mCurrentWSession == null ? 0 : mWSessions.indexOf(mCurrentWSession)));
+        java.util.ArrayList<Bundle> floatStates = new java.util.ArrayList<>();
+        for (com.termux.app.terminal.TerminalPaneController.Window window :
+                mPaneController.homeFloats())
+            floatStates.add(mPaneController.saveHomeFloat(window));
+        if (!floatStates.isEmpty()) root.putParcelableArrayList(PANE_STATE_HOME_FLOATS, floatStates);
         mPaneController.saveScratchpadState(root);
         return root;
     }
@@ -19034,6 +19073,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         java.util.ArrayList<Bundle> sessionStates =
             root.getParcelableArrayList(PANE_STATE_SESSIONS);
+        restoreHomeFloatsState(root.getParcelableArrayList(PANE_STATE_HOME_FLOATS), sessionsByHandle);
         if (sessionStates == null) return;
         mWSessions.clear();
         for (Bundle sessionState : sessionStates) {
@@ -19059,6 +19099,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCurrentWSession = mWSessions.get(current);
             mPaneController.showWindow(mCurrentWSession.currentWindow());
         }
+    }
+
+    /**
+     * The Home floats of a saved pane layout, back on their pages around their running shells,
+     * minimised as they were, neither focused nor animated in. A float whose shell is gone stays
+     * gone; with no Home page to float over its shell is adopted as a window of the row instead
+     * ({@link #ensureWindowsForServiceSessions}).
+     */
+    private void restoreHomeFloatsState(@Nullable java.util.ArrayList<Bundle> floatStates,
+                                        @NonNull java.util.Map<String, TerminalSession> sessionsByHandle) {
+        if (floatStates == null || floatStates.isEmpty() || mPaneController == null) return;
+        attachHomeFloatLayer();
+        int homeCount = mPaneController.homeFloatLayer() == null || mWidgetPaneController == null
+            ? 0 : mWidgetPaneController.homePageCount();
+        boolean restored = false;
+        for (Bundle floatState : floatStates)
+            restored |= mPaneController.restoreHomeFloat(floatState, sessionsByHandle, homeCount) != null;
+        if (restored) onHomeFloatsChangedInActivity();
     }
 
     /** Rebuild the visible session list: one entry per session (its current window's focused shell). */
