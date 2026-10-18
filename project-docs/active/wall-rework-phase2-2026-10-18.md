@@ -61,6 +61,10 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    terminal page's nudge as a window arrives (the window bar names the window it left, so a jump
    pans over every window between). A Home page or window added or removed snaps to the new
    spread. Unit tests green; emulator pass owed (device-checks, slice 3).
+   Status 2026-10-18 (emulator pass): steps even, seam and drags clean. The 1 → 3 bar jump's
+   196 px first step: the departure was already passed; the nudge now starts before the re-sync.
+   Likely the emulator's slow first frame on the settle curve; re-check owed with a 1 → 2 jump
+   beside it.
 4. **Saved sessions record the float flag and page**; a saved float loads as a float.
    Status 2026-10-18: built on a worker branch. File version 4: a window may carry `homeFloat`
    { page, minimised, portrait?, landscape? }; absent, or malformed, it is a window of the row, so
@@ -76,6 +80,10 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    An empty Workspace with Home floats saves them as such a session. Replace also closes the live
    Home floats.
    Maximise's restore is not saved. Unit tests green; emulator pass owed (device-checks, slice 4).
+   Status 2026-10-18 (emulator pass): save and load pass. Fixed from it: the last window or float
+   closing finished the activity (the service stopped itself; it now stays while there is a Home,
+   `WallRow.lastShellClosedShowsHome`); a Home float dragged off-screen (`HomeFloatPolicy
+   .clampInRoom`); the drawer's Saved half empty from the list key (older bug). Re-checks owed.
 5. **Window reorder** by drag in the window bar; consume/expel of panes into and out of columns.
    Status 2026-10-18 (slice 5a, window reorder): built on a worker branch. A long press on a
    window's chip in the window bar lifts it (scale, elevation, haptic); the finger carries it, the

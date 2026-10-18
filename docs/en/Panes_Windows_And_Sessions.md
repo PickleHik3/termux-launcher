@@ -227,8 +227,9 @@ switch to it and once to rename it, so you can rename a session you are not in. 
 up to 8 characters.
 
 Cloning starts a fresh shell in the current pane's folder. It does not copy the running program,
-the shell's state, the scrollback or the layout. Ending the last session starts a fresh one, so the
-terminal is never empty.
+the shell's state, the scrollback or the layout. Ending the last session, or closing the last
+window or Home float, leaves the Workspace empty: the launcher stays on Home (from the Workspace,
+Home's last page slides in), and the Terminal entry opens a fresh window.
 
 ## Saved sessions
 
