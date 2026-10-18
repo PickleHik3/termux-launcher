@@ -98,10 +98,15 @@ Pane, window, session-browser and workspace actions need **Split-pane controls**
 | `window.next` | Next window | | `Ctrl+Alt+]`, `Ctrl+Alt+Right` (on) |
 | `window.previous` | Previous window | | `Ctrl+Alt+[`, `Ctrl+Alt+Left` (on) |
 | `window.select` | Switch to window | `index`: 0 to 64, counted from 0 (required) | `Ctrl+Alt+1` to `9` (on) |
+| `window.move` | (no palette row) | `to`: `left`, `right`, or a place in the row counted from 1 (required) | |
+| `window.move_left` | Move window left | | |
+| `window.move_right` | Move window right | | |
 | `window.rename` | Rename window | `name`: up to 14 characters; empty restores the automatic label (required) | |
 | `window.rename_prompt` | Rename window… | | `Ctrl+Alt+R` (on) |
 
 `window.next` and `window.previous` step through the open apps on a display window.
+`window.move`, `window.move_left` and `window.move_right` move the current window along the
+Workspace's row and keep it current; dragging a window's chip in the window bar does the same.
 
 ### Session and workspace
 

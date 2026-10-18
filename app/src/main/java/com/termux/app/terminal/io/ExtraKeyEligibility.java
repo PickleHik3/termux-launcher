@@ -174,6 +174,9 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WINDOW_NEW, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_CLOSE, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_SELECT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_RENAME, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_RENAME_PROMPT, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_SESSION_NEW, Band.MULTIPLEX);

@@ -77,6 +77,18 @@ slice merged only with its unit tests green and an emulator or Surface pass reco
    Home floats.
    Maximise's restore is not saved. Unit tests green; emulator pass owed (device-checks, slice 4).
 5. **Window reorder** by drag in the window bar; consume/expel of panes into and out of columns.
+   Status 2026-10-18 (slice 5a, window reorder): built on a worker branch. A long press on a
+   window's chip in the window bar lifts it (scale, elevation, haptic); the finger carries it, the
+   other chips part, and the release drops it (`WindowReorderPolicy`: the lifted centre passes a
+   neighbour's resting centre by 6dp, with hysteresis; the landing place is read from the finger,
+   so a chip as wide as the last one can still pass it; auto-scroll near the edges of an
+   overflowing bar). Only the row's windows' chips lift: not the display's, not the Home floats'
+   after them, nothing on Home or Display. The row is `WSession.windows` in `TermuxActivity`
+   (`moveWindow`; the current window stays current), so the bar, the drawer, the wall's inner
+   index, the Ctrl+Alt window keys and Saved sessions follow from one rebuild. `window.move`
+   (`to=left|right|<place from 1>`) and the palette's Move window left / right (Workspace only),
+   no default stroke. The status bar's vertical window column (a left or right bar) has no drag.
+   Unit tests green; emulator pass owed (device-checks, slice 5a). Next: 5b, consume/expel.
 6. **The first-boot tour**, rewritten for the wall (switched off since 651ea9d7f).
 7. **The icon grid on Home pages**: app icons, folders, drag between pages. Born on slice 2b's
    rule: its rim is Home's Margin, as the widget grid's is.

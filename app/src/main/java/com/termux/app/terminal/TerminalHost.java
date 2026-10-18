@@ -474,6 +474,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     boolean selectWindow(int index);
 
+    /**
+     * Moves the window at {@code from} to {@code to} in the current session's row, both counted
+     * from 0; the current window stays current. False when either is outside the row.
+     */
+    boolean moveWindow(int from, int to);
+
     int currentWindowCount();
 
     int currentWindowIndex();

@@ -174,6 +174,9 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_TERMINAL_SHARE_TRANSCRIPT = "terminal.share_transcript";
     public static final String TOOL_CLIPBOARD_PASTE = "clipboard.paste";
     public static final String TOOL_WINDOW_SELECT = "window.select";
+    public static final String TOOL_WINDOW_MOVE = LauncherToolRegistry.TOOL_WINDOW_MOVE;
+    public static final String TOOL_WINDOW_MOVE_LEFT = LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT;
+    public static final String TOOL_WINDOW_MOVE_RIGHT = LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT;
     public static final String TOOL_WINDOW_RENAME = "window.rename";
     public static final String TOOL_SESSION_RENAME = "session.rename";
     public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
@@ -381,6 +384,9 @@ public final class TerminalActionDispatcher {
             case TOOL_TERMINAL_SHARE_TRANSCRIPT:
             case TOOL_CLIPBOARD_PASTE:
             case TOOL_WINDOW_SELECT:
+            case TOOL_WINDOW_MOVE:
+            case TOOL_WINDOW_MOVE_LEFT:
+            case TOOL_WINDOW_MOVE_RIGHT:
             case TOOL_WINDOW_RENAME:
             case TOOL_SESSION_RENAME:
             case TOOL_PANE_RENAME:
@@ -1369,6 +1375,31 @@ public final class TerminalActionDispatcher {
                             + "; the current session has " + host.currentWindowCount());
                     }
                     return ok().put("index", index);
+                }
+
+                case TOOL_WINDOW_MOVE:
+                case TOOL_WINDOW_MOVE_LEFT:
+                case TOOL_WINDOW_MOVE_RIGHT: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    String to = TOOL_WINDOW_MOVE_LEFT.equals(toolName) ? "left"
+                        : TOOL_WINDOW_MOVE_RIGHT.equals(toolName) ? "right"
+                        : arguments.has("to") ? arguments.optString("to", "") : null;
+                    if (to == null) return error(400, "bad_request", "Missing 'to'");
+                    int count = host.currentWindowCount();
+                    int from = host.currentWindowIndex();
+                    if (count <= 0 || from < 0 || from >= count) {
+                        return error(409, "no_window", "There is no window to move");
+                    }
+                    int target = WindowReorderPolicy.targetIndex(to, from, count);
+                    if (target == WindowReorderPolicy.INVALID) {
+                        return error(400, "bad_request", "Invalid 'to'; expected left, right, or a"
+                            + " place from 1 to " + count);
+                    }
+                    if (!host.moveWindow(from, target)) {
+                        return error(409, "no_window", "There is no window to move");
+                    }
+                    // Places counted from 1, as 'to' takes them.
+                    return ok().put("from", from + 1).put("to", target + 1);
                 }
 
                 case TOOL_WINDOW_RENAME: {

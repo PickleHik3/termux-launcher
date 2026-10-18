@@ -52,6 +52,14 @@ window slides Home back in.
 - Drag sideways from a window's border to move to the next or previous window. Dragging right from
   the first window goes back to the last Home page.
 - Tap a window chip in the status bar to switch to it; tap `+` to make a new one.
+- Hold a window chip until it lifts, then drag it along the bar to move that window to another
+  place in the row. The other chips make room, and letting go drops it there. The window you are
+  on stays the one you are on, and the border drag, the drawer, the `Ctrl+Alt` window keys and
+  Saved sessions all follow the new order. The display's chip and a Home float's chip stay where
+  they are. The palette's **Move window left** and **Move window right** do the same one place at
+  a time, and the `window.move` action takes `to=left`, `to=right` or a place counted from 1 (for
+  a key in [Custom keybindings](Custom_Keybindings.md), such as
+  `map ctrl+alt+shift+m window.move to=1`).
 - `Ctrl+Alt+C` makes a window, `Ctrl+Alt+[` / `Ctrl+Alt+]` or `Ctrl+Alt+Left` / `Ctrl+Alt+Right`
   step through them, `Ctrl+Alt+1` to `9` jump to one, and `Ctrl+Alt+X` closes the current window
   after asking.

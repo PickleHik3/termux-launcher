@@ -68,8 +68,30 @@ public class LauncherToolRegistryTest {
         // value rather than as a prompt, and by app.open_help, the command palette's door to help,
         // and by keyboard.clipboard, the keyboard's clipboard panel on a key or a chord, and by
         // keyboard.toggle_enabled, which turns the keyboard off so a tap no longer raises it, and by
-        // voice.dictate, the Dictate key that starts a dictation on any place.
-        assertEquals(84, registry.getUiTools().size());
+        // voice.dictate, the Dictate key that starts a dictation on any place, and by window.move
+        // with its palette pair window.move_left and window.move_right, which reorder the row.
+        assertEquals(87, registry.getUiTools().size());
+    }
+
+    @Test
+    public void windowMove_isRemoteAndItsOneStepPairIsThePalettes() {
+        LauncherToolRegistry.ToolMetadata move = registry.getTool("window.move");
+        assertNotNull(move);
+        assertEquals("to", move.schema.optJSONArray("required").optString(0));
+        // No palette row: it carries its place.
+        assertEquals(0, move.titleRes);
+        for (String name : new String[]{"window.move", "window.move_left", "window.move_right"}) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
+            assertNotNull(name, tool);
+            assertEquals(name, LauncherToolRegistry.ToolExecutor.TERMINAL, tool.executor);
+            // Workspace only: Home has no row of windows to reorder.
+            assertTrue(name, tool.terminalOnly);
+        }
+        for (String name : new String[]{"window.move_left", "window.move_right"}) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
+            assertTrue(name + " needs a titleRes", tool.titleRes != 0);
+            assertEquals(name, null, tool.schema.optJSONArray("required"));
+        }
     }
 
     @Test

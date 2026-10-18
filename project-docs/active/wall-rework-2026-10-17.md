@@ -158,7 +158,9 @@ keyboard layouts) shown with a Home action set:
   window. Ctrl+Alt+V and Ctrl+Alt+H split inside a window; Ctrl+Alt+C opens a window; Ctrl+Alt+Shift+C
   opens a session. Nothing about panes changes.
 - **Insertion**: a new window (Ctrl+Alt+C, a Terminal=true Linux app, Dock on a Home float) lands
-  right after the current window. No drag-to-reorder in phase one.
+  right after the current window. No drag-to-reorder in phase one; phase two's slice 5a adds it (a
+  long press lifts a window's chip in the window bar, a drag moves the window along the row, and
+  `window.move` does it from keys and scripts).
 - **Switching**: the border drag, the window chips in the status bar (display windows are chips
   too; Home floats are chips marked as floats), the Ctrl+Alt shortcuts and the drawer. The screen
   glyph jumps to the first display window, or starts the display if none is up.
@@ -249,7 +251,8 @@ titlebar); `TerminalCommandPalette` (Home action set, Linux apps, floats); `Laun
   capsule at the top centre; a continuous swipe sizes the bar by where the finger lets go, quick
   swipes step one form, the bar folds to the capsule after a short idle, and the capsule is Minimal
   mode's default form. Agreed, everywhere on the wall; not phase one.
-- Drag-to-reorder of windows, and Niri's consume/expel of panes into and out of columns.
+- Drag-to-reorder of windows (done in phase two, slice 5a), and Niri's consume/expel of panes
+  into and out of columns (slice 5b).
 - Per-toplevel X11 windows in the row (needs a rootless server).
 - Saved sessions recording the float flag and page (done in phase two, slice 4).
 - Rebuilding the row or the floats after a background kill beyond what Saved sessions restore.
