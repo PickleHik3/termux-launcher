@@ -899,6 +899,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         return service.getTerminalSessionForHandle(sessionHandle);
     }
 
+    /**
+     * Whether the service keeps running once it holds no shell: Home stays on screen after the
+     * Workspace's last shell, so the activity must outlive it, and the activity finishes when its
+     * service stops. See {@link TerminalHost#staysWhenWorkspaceEmpty()}.
+     */
+    public boolean keepsServiceWhenEmpty() {
+        return mHost.staysWhenWorkspaceEmpty();
+    }
+
     public void removeFinishedSession(TerminalSession finishedSession) {
         // Return pressed with finished session - remove it.
         TermuxService service = mHost.service();

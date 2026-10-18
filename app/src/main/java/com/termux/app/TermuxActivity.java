@@ -25839,6 +25839,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.finishActivityIfNotFinishing();
         }
 
+        @Override public boolean staysWhenWorkspaceEmpty() {
+            return com.termux.app.wall.WallRow.lastShellClosedShowsHome(isWidgetsPageWanted(),
+                isDefaultHomeApp());
+        }
+
         @Override public void runOnUiThread(@NonNull Runnable runnable) {
             TermuxActivity.this.runOnUiThread(runnable);
         }
