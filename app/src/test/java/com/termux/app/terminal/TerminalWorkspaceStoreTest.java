@@ -248,6 +248,50 @@ public class TerminalWorkspaceStoreTest {
             () -> TerminalWorkspace.fromJson(sample("dev").toJson().put("version", 5)));
     }
 
+    @Test
+    public void theAutosaveSlotKeepsAnArrangementAndIsNoSavedSession() throws Exception {
+        TerminalWorkspaceStore store = new TerminalWorkspaceStore(temporary.newFolder("home"));
+        assertEquals("nothing autosaved yet", ArrangementRecovery.Saved.NONE,
+            store.loadAutosave().kind);
+
+        store.saveAutosave(withHomeFloat(new TerminalWorkspace.HomeFloat(1, true, null, null)));
+        TerminalWorkspaceStore.Autosave autosave = store.loadAutosave();
+
+        assertEquals(ArrangementRecovery.Saved.ARRANGEMENT, autosave.kind);
+        assertNotNull(autosave.arrangement);
+        TerminalWorkspace.Window floated = autosave.arrangement.sessions.get(0).windows.get(1);
+        assertNotNull("the float keeps its page", floated.homeFloat);
+        assertEquals(1, floated.homeFloat.page);
+        assertTrue(floated.homeFloat.minimised);
+        assertTrue("never listed among Saved sessions", store.list().isEmpty());
+        expectCode("invalid_name", () -> store.load(".autosave"));
+    }
+
+    @Test
+    public void anEmptyAutosaveSaysNothingWasLeftOpenAndAnArrangementReplacesIt() throws Exception {
+        TerminalWorkspaceStore store = new TerminalWorkspaceStore(temporary.newFolder("home"));
+        store.saveAutosave(null);
+        assertEquals(ArrangementRecovery.Saved.EMPTY, store.loadAutosave().kind);
+        assertNull(store.loadAutosave().arrangement);
+
+        store.saveAutosave(sample(TerminalWorkspaceStore.AUTOSAVE_NAME));
+        assertEquals(ArrangementRecovery.Saved.ARRANGEMENT, store.loadAutosave().kind);
+        store.saveAutosave(null);
+        assertEquals(ArrangementRecovery.Saved.EMPTY, store.loadAutosave().kind);
+    }
+
+    @Test
+    public void aCorruptAutosaveReadsAsNone() throws Exception {
+        File home = temporary.newFolder("home");
+        TerminalWorkspaceStore store = new TerminalWorkspaceStore(home);
+        store.saveAutosave(null);
+        File file = new File(new File(new File(home, ".termux"), "workspaces"),
+            TerminalWorkspaceStore.AUTOSAVE_FILE);
+        assertTrue(file.isFile());
+        Files.write(file.toPath(), "{not json".getBytes(StandardCharsets.UTF_8));
+        assertEquals(ArrangementRecovery.Saved.NONE, store.loadAutosave().kind);
+    }
+
     private static TerminalWorkspace withHomeFloat(TerminalWorkspace.HomeFloat homeFloat) {
         TerminalWorkspace base = sample("dev");
         TerminalWorkspace.Window tiled = base.sessions.get(0).windows.get(0);
