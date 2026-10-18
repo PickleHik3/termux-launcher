@@ -563,6 +563,14 @@ Not seen: everything else listed under the sections below.
   arrival (`fixround2-devcheck/80-jump1.mp4`, `81-jump2.mp4`). A first frame computed with the
   departure still current while the arrival page is already nudged in would do exactly this
   (`innerPosition` with ADJACENT from the stale index); owed.
+- Owed · re-check of commit "fix(wall): the departure card's glass ground follows the wallpaper's
+  parallax": the wrong-way first frame was the departure card, not the row position (already
+  monotonic, current set before the nudge): `TermuxActivity.wallpaperGlassGround` drew the card's
+  slabs over the frame without the parallax offset, so it showed Home's stretch of the picture
+  (in the videos the card's stripes sit at 940 px over a departure at 760 and at 400); it now
+  subtracts `mWallpaperParallax.offsetPx()` like `GlassAnchor`. Check: a one-step and a two-step
+  bar jump, both ways, pan the wallpaper monotonically from the departure to the arrival with no
+  first-frame step on the outgoing card; compare with a border drag's step (same card).
 ### Wall rework phase two: slice 4, Saved sessions keep Home floats (feat/wall-rework-phase2)
 - Owed · commits "feat(wall): saved sessions record a Home float's page and shape (v4)" and
   "feat(wall): a saved Home float loads back as a Home float on its page" · emulator, portrait,
