@@ -221,6 +221,41 @@ public final class HomeFloatPolicy {
         return widthPx > heightPx;
     }
 
+    // --- Launching ---
+
+    /** What asked for a new terminal, for {@link #launchesAsFloat}. */
+    public enum Launch {
+        /**
+         * A tap on the Terminal entry (the dock, the drawer): it goes to the Workspace while there
+         * is one, so it launches a terminal only when the Workspace is empty.
+         */
+        ENTRY_TAP,
+        /** A new terminal or window: a keybind, the palette, the local API, Home's own Terminal items. */
+        NEW_TERMINAL,
+        /** The Terminal entry's New window: a window of the row, by name. */
+        NEW_WINDOW
+    }
+
+    /**
+     * Whether a new terminal asked for by {@code launch} opens as a Home float on the page in view
+     * instead of as a window of the Workspace's row. Every terminal launched while Home is in front
+     * ({@code homeInFront}) is a Home float, the first one included and with no window anywhere,
+     * so a launch from Home never takes the screen. A tap on the Terminal entry launches only into
+     * an empty Workspace ({@code workspaceOnRow} false); with a Workspace it goes there. New window
+     * names a window and stays one. Where Home cannot carry a float ({@code canFloat} false:
+     * compatibility mode, no Home pages) the row takes it as before.
+     */
+    public static boolean launchesAsFloat(@NonNull Launch launch, boolean homeInFront,
+                                          boolean workspaceOnRow, boolean canFloat) {
+        if (!canFloat || !homeInFront) return false;
+        switch (launch) {
+            case ENTRY_TAP: return !workspaceOnRow;
+            case NEW_TERMINAL: return true;
+            case NEW_WINDOW:
+            default: return false;
+        }
+    }
+
     // --- Saved sessions ---
 
     /**

@@ -478,6 +478,13 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void createNewWindow();
 
+    /**
+     * A new terminal asked for while Home is in front opens as a Home float on the page in view,
+     * the first one too, never as a window that takes the screen. True when it was handled so
+     * (shell named {@code sessionName}, null for unnamed); false leaves the launch to the caller.
+     */
+    default boolean openNewTerminalOnHome(@Nullable String sessionName) { return false; }
+
     void closeCurrentWindow();
 
     void switchWindow(boolean forward);

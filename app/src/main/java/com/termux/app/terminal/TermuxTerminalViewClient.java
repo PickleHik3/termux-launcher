@@ -984,7 +984,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     if (codePointLowerCase == shortcut.codePoint) {
                         switch(shortcut.shortcutAction) {
                             case TermuxPropertyConstants.ACTION_SHORTCUT_CREATE_SESSION:
-                                mTermuxTerminalSessionActivityClient.addNewSession(false, null);
+                                if (!mHost.openNewTerminalOnHome(null))
+                                    mTermuxTerminalSessionActivityClient.addNewSession(false, null);
                                 return true;
                             case TermuxPropertyConstants.ACTION_SHORTCUT_NEXT_SESSION:
                                 mTermuxTerminalSessionActivityClient.switchToSession(true);

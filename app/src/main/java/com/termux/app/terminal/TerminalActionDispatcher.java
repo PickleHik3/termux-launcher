@@ -1154,7 +1154,11 @@ public final class TerminalActionDispatcher {
                     TermuxTerminalSessionActivityClient client = host.sessionClient();
                     if (client == null) return error(503, "unavailable", "Session client is not ready");
                     String name = arguments.optString("name", "").trim();
-                    client.addNewSession(arguments.optBoolean("failsafe", false), name.isEmpty() ? null : name);
+                    boolean failsafe = arguments.optBoolean("failsafe", false);
+                    // From Home, a Home float; a failsafe shell always gets its own session.
+                    if (!failsafe && host.openNewTerminalOnHome(name.isEmpty() ? null : name))
+                        return ok();
+                    client.addNewSession(failsafe, name.isEmpty() ? null : name);
                     return ok();
                 }
                 case TOOL_SESSION_BROWSER:
