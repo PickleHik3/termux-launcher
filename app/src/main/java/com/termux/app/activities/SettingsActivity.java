@@ -6,12 +6,14 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.view.ViewGroupCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.fragment.app.Fragment;
@@ -685,6 +687,11 @@ public class SettingsActivity extends AppCompatActivity implements
                     SettingsTransitions.nameContainer(fragment, view);
                     if (!(fragment instanceof PreferenceFragmentCompat)) return;
                     PreferenceFragmentCompat preferenceFragment = (PreferenceFragmentCompat) fragment;
+                    // The page moves as one: the transition targets its root rather than the
+                    // rows it finds. An arriving list has no rows yet when the move captures its
+                    // views (they come with its first layout), so they escaped the fade-through
+                    // and drew at full strength over the leaving page's last rows.
+                    if (view instanceof ViewGroup) ViewGroupCompat.setTransitionGroup((ViewGroup) view, true);
                     // Root rows rely on the category header hairline, sub-screens on theirs; a
                     // list divider creates the unwanted double line between sections.
                     preferenceFragment.setDivider(null);

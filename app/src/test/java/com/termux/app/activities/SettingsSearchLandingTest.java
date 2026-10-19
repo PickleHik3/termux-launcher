@@ -111,6 +111,24 @@ public class SettingsSearchLandingTest {
         assertEquals(null, back.findPreference("settings_search_results"));
     }
 
+    /**
+     * A page fades through as one: its rows are laid out after the move captures its views, so a
+     * page the transition met row by row let the arriving rows draw over the leaving ones.
+     */
+    @Test
+    public void aPageIsOneTargetForItsTransition() {
+        SettingsActivity activity = open(new Intent(RuntimeEnvironment.getApplication(), SettingsActivity.class));
+        assertTrue(androidx.core.view.ViewGroupCompat.isTransitionGroup(
+            (android.view.ViewGroup) shown(activity).getView()));
+        SettingsSearchPreference search = ((SettingsActivity.RootPreferencesFragment) shown(activity))
+            .findPreference("settings_search");
+        search.getOnQueryChangedListener().onQueryChanged("12-hour");
+        search.getOnQuerySubmitListener().onQuerySubmit("12-hour");
+        idle(activity);
+        assertTrue(androidx.core.view.ViewGroupCompat.isTransitionGroup(
+            (android.view.ViewGroup) shown(activity).getView()));
+    }
+
     @Test
     public void everyOtherScreenSearchesFromTheToolbarScopedToItsSection() {
         Intent home = SettingsActivity.createFragmentIntent(RuntimeEnvironment.getApplication(),
