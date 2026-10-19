@@ -423,6 +423,8 @@
     <string name="launcher_entry_display">Display</string>
     <string name="launcher_entry_new_float">New float here</string>
     <string name="window_chip_home_float">Home float, page %1$d</string>
+    <!-- What a screen reader says for the display window's chip: the app in front, then Display. -->
+    <string name="display_window_spoken_label">%1$s, %2$s</string>
     <!-- A minimised Home float's chip above the dock, spoken: its window's label and its page. -->
     <string name="home_float_chip_description">%1$s, minimised on page %2$d</string>
     <string name="launcher_entry_new_window">New window</string>

@@ -1220,6 +1220,10 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   display keeps its picture while it slides out (no black or frozen frame), and typing reaches the
   terminal at once; then a dark/light mode switch (activity recreate) with the display window
   second in the row and in front: it comes back second and in front · pong.
+- 2026-10-19 · "feat(display): the display window's chip names the app in front" · Open Firefox
+  from the drawer: the display's chip reads Firefox (the drawer's name for it) with Firefox's icon,
+  not Display; open xeyes too and focus each in turn: the chip follows the focused app; close both:
+  it reads Display with the screen glyph again; TalkBack on the chip says "Firefox, Display" · pong.
 - 2026-10-19 · review fixes · Palette window jumps with the display window first in the row: each
   jump lands on the window it names; `launcherctl pane.list` reports `rowIndex` one more than
   `index` for windows after the display · pong.

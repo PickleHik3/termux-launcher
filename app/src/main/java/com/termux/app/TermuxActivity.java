@@ -23422,8 +23422,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!com.termux.BuildConfig.X11_SERVER) return null;
         if (mDisplayWindowIcons == null) {
             mDisplayWindowIcons = new com.termux.app.x11.X11WindowIconResolver(getResources(),
-                (wmClass, icon) -> {
-                    if (icon == null || !isDisplayUp() || !isSplitPanesEnabled()) return;
+                (wmClass, icon, name) -> {
+                    if ((icon == null && name == null) || !isDisplayUp()
+                        || !isSplitPanesEnabled()) return;
                     com.termux.app.terminal.TerminalWindowBar bar =
                         findViewById(R.id.terminal_window_bar);
                     if (bar != null) syncWindowBarItems(bar);
@@ -23433,24 +23434,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The display window's chip: named as the drawer's Display entry, wearing its front app's
-     * icon once one resolves, the way a window's chip wears its program's glyph; until then the
-     * chip's generic glyph.
+     * The display window's chip: named after the app in front, the way a terminal window's chip
+     * names what runs in it, and wearing that app's icon once one resolves; Display, with the
+     * chip's generic glyph, while no app is open (DisplayWindowName).
      */
     @NonNull
     private com.termux.app.terminal.TerminalWindowBar.WindowItem displayWindowItem() {
         String display = getString(R.string.launcher_entry_display);
-        return new com.termux.app.terminal.TerminalWindowBar.WindowItem(display, display)
-            .withIcon(displayChipIcon());
-    }
-
-    /** The display's front app's icon, or null while none is known. */
-    @Nullable
-    private android.graphics.Bitmap displayChipIcon() {
-        if (mDisplayActiveWindow < 0 || mDisplayActiveWindow >= mDisplayWindows.size()) return null;
-        com.termux.app.x11.X11WindowIconResolver icons = displayWindowIcons();
-        return icons == null ? null
-            : icons.iconFor(mDisplayWindows.get(mDisplayActiveWindow).wmClass);
+        int front = com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayWindows.size(),
+            mDisplayActiveWindow);
+        if (front < 0) {
+            return new com.termux.app.terminal.TerminalWindowBar.WindowItem(display, display);
+        }
+        com.termux.app.x11.X11WindowList.Window window = mDisplayWindows.get(front);
+        com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+        String name = com.termux.app.x11.DisplayWindowName.of(
+            apps == null ? null : apps.nameFor(window.wmClass), window.label, display);
+        String spoken = name.equals(display) ? display
+            : getString(R.string.display_window_spoken_label, name, display);
+        return new com.termux.app.terminal.TerminalWindowBar.WindowItem(name, spoken)
+            .withIcon(apps == null ? null : apps.iconFor(window.wmClass));
     }
 
     private void onDisplayWindowsChanged(
@@ -23459,7 +23462,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDisplayActiveWindow = active;
         // A stop in progress is waiting for exactly this: the last app closing itself.
         if (mDisplayStop != null) mDisplayStop.onWindowsChanged(windows.size());
-        // The display's chip wears its front app's icon, so a new front app re-dresses it.
+        // The display's chip wears its front app's name and icon, so a new front app re-dresses it.
         if (!isDisplayUp() || !isSplitPanesEnabled()) return;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) syncWindowBarItems(bar);
