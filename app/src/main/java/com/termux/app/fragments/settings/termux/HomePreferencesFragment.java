@@ -55,7 +55,10 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
     private void showEditPagesRow(boolean locked) {
         Preference pages = findPreference("home_edit_pages");
         if (pages == null) return;
+        // Off and not an action: dimmed, no chevron (the row layouts' disabled colours), and out
+        // of the focus order, since it opens nothing.
         pages.setEnabled(!locked);
+        pages.setSelectable(!locked);
         pages.setSummary(locked ? R.string.settings_home_edit_pages_locked
             : R.string.settings_home_edit_pages_summary);
     }
