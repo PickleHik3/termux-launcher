@@ -1234,6 +1234,15 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · commit "feat(home): page transition picker with a live preview" · Settings › Home ›
+  Page transition grows out of its row; the miniature plays once on open and once per pick, a tap
+  plays it back, then nothing moves; Apply returns to Home's page with the effect named under the
+  row. On a Home with three pages, each effect (Slide, Depth, Fade, Carousel, Stack) on a slow drag,
+  a release short of the commit (settles back), a fling, and a pull against page 1 and the last page
+  (only a slide); the seam from the last page into the Terminal still slides, and the wallpaper
+  pans with every effect. With a Home float and a glass widget on the page, both move with the
+  page and their glass shows no seam or jump. Animation speed Slower / Off and Remove animations:
+  the settle stretches, or lands at once · emulator, light and dark, keyboard up and down.
 - 2026-10-19 · feat(settings) motion · The four motions feel right and never stutter on a long
   page (Keyboard, Linux apps); the row ring reads as "here it is", not as an alarm · pong, by hand.
 Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
@@ -1271,6 +1280,12 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
 ## Developer
 
 ### Settings restructure (10-19)
+- 2026-10-19 · feat(home) page transition · Frame time of each effect on pong with glass on (Home
+  float and a glass widget on the page): `scripts/perf-frametime.sh` with a Home-page swipe
+  scenario, against Slide on the same build. Depth, Fade and Stack set the page's alpha, which
+  draws the page through a temporary layer for the frames of the motion; drop any effect whose
+  p90 is worse than Slide's by more than the noise, and report it red per
+  docs/agents/performance.md · pong, by hand (ask first).
 - 2026-10-19 · feat(settings) two panes · The Surface in landscape and portrait: the list and the
   section read well side by side (row widths, the root's icon tiles, the hairline), light and
   dark · the Surface, by hand.

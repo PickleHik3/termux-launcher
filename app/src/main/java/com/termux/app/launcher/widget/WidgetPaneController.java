@@ -415,6 +415,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         setCurrentPage(page);
     }
 
+    /**
+     * How a Home page moves while a swipe turns it, and Animation speed's multiplier on its
+     * settle; the activity pushes both in as it comes to the front.
+     */
+    public void setPageMotion(@NonNull com.termux.app.launcher.home.HomePageTransition effect,
+                              float speedMultiplier) {
+        pane.setPageMotion(effect, speedMultiplier);
+    }
+
     /** The wall's seam out of the last Home page; see {@link WidgetPaneView.Seam}. */
     public void setSeam(@Nullable WidgetPaneView.Seam seam) {
         pane.setSeam(seam);

@@ -38,6 +38,12 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:key="home_pages" app:title="@string/settings_home_pages_header">
+        <!-- Opens the preview, growing out of this row; the summary names the effect in use. -->
+        <Preference
+            app:key="app_launcher_home_page_transition"
+            app:persistent="false"
+            app:fragment="com.termux.app.fragments.settings.termux.HomePageTransitionFragment"
+            app:title="@string/settings_home_page_transition_title" />
         <SwitchPreferenceCompat
             app:key="wallpaper_parallax"
             app:title="@string/settings_wallpaper_parallax_title"

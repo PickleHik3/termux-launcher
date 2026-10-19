@@ -1,11 +1,13 @@
 package com.termux.app.fragments.settings.termux;
 
+import android.content.Context;
 import android.os.Bundle;
 
 import androidx.annotation.Keep;
 import androidx.preference.Preference;
 
 import com.termux.R;
+import com.termux.app.launcher.home.HomeSettings;
 import com.termux.app.wall.PaneWallPage;
 
 /**
@@ -34,5 +36,15 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
             SettingsEditorDoors.openLayoutEditor(this, row, PaneWallPage.WIDGETS);
             return true;
         });
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        Context context = getContext();
+        if (context == null) return;
+        Preference transition = findPreference(HomeSettings.KEY_PAGE_TRANSITION);
+        if (transition != null) transition.setSummary(
+            HomePageTransitionFragment.titleOf(HomeSettings.pageTransition(context)));
     }
 }

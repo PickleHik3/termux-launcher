@@ -2241,6 +2241,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshWallpaperPictureOnArrival();
 
         if (mWidgetHostController != null) mWidgetHostController.onStart();
+        applyHomeSettings();
         if (mWidgetPaneController != null) mWidgetPaneController.onStart();
 
         mTerminalFrameMetricsMonitor.start(getWindow());
@@ -23000,6 +23001,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             android.widget.Toast.LENGTH_SHORT).show();
     }
 
+    /**
+     * Settings › Home's rows that shape the Home pages ({@link
+     * com.termux.app.launcher.home.HomeSettings}), pushed into the pane as the launcher comes to
+     * the front: Settings is another activity, so a change there is always followed by this.
+     */
+    private void applyHomeSettings() {
+        if (mWidgetPaneController == null) return;
+        mWidgetPaneController.setPageMotion(
+            com.termux.app.launcher.home.HomeSettings.pageTransition(this),
+            com.termux.app.AnimationSpeed.multiplier(this));
+    }
+
     /** Each row runs what the corner tab, the palette and Settings already run for it. */
     private void runHomeAction(@NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) {
         switch (item) {
@@ -24239,6 +24252,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The grid preference was applied in onCreate, before this controller existed, straight
         // to the host; now the pane can hold it to what the wall fits, and re-cap on layout.
         applyWidgetGridPreference();
+        applyHomeSettings();
     }
 
     /** A window chip was tapped, in the row's pills or the column's stack. */

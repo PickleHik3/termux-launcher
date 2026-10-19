@@ -1,5 +1,8 @@
 package com.termux.app.launcher.widget;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.os.SystemClock;
@@ -21,6 +24,7 @@ import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
 
 import com.termux.R;
+import com.termux.app.launcher.home.HomePageTransition;
 
 import java.util.List;
 
@@ -108,6 +112,10 @@ public final class WidgetPaneView extends FrameLayout {
     private static final float PAGE_COMMIT_FRACTION = 1f / 3f;
     private static final float PAGE_COMMIT_VELOCITY_DP_PER_SEC = 900f;
     private static final float PAGE_EDGE_RESISTANCE = 0.35f;
+    /** How long a page takes to slide in or back once the finger has let go, at Normal speed. */
+    static final long PAGE_SETTLE_MS = 160L;
+    /** The camera's distance for Carousel's turn, in dp: far enough that a page never looms. */
+    private static final float CAMERA_DISTANCE_DP = 8000f;
 
     private final WidgetGridView grid;
     private final LinearLayout empty;
@@ -119,6 +127,19 @@ public final class WidgetPaneView extends FrameLayout {
     private final int touchSlop;
     private Listener listener;
     private boolean reducedMotion;
+    /** How the page moves while a swipe turns it (Settings › Home › Page transition). */
+    @NonNull private HomePageTransition transition = HomePageTransition.DEFAULT;
+    /** General › Animation speed's multiplier on the settle; 0 is Off, the instant cut. */
+    private float motionScale = 1f;
+    /**
+     * Where the page's content stands off its rest, in px, positive to the right: the finger's
+     * drag and the settle move this, and the effect draws it ({@link #applyContentShift}). Kept
+     * apart from the views' own translation, which an effect may not move at all.
+     */
+    private float contentShiftPx;
+    @Nullable private ValueAnimator contentSettle;
+    @NonNull private final HomePageTransition.Transform contentTransform =
+        new HomePageTransition.Transform();
 
     private int pageCount = 1;
     private int currentPage;
@@ -152,6 +173,8 @@ public final class WidgetPaneView extends FrameLayout {
         setFocusable(false);
 
         grid = new WidgetGridView(context); grid.setId(R.id.widget_grid);
+        float cameraDistance = CAMERA_DISTANCE_DP * getResources().getDisplayMetrics().density;
+        grid.setCameraDistance(cameraDistance);
         // The page dots sit in a band below the grid, never over its last row. The band is kept
         // whether or not the dots show, so adding a page does not shrink every cell.
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
@@ -159,6 +182,7 @@ public final class WidgetPaneView extends FrameLayout {
         addView(grid, gridParams);
 
         empty = new LinearLayout(context); empty.setOrientation(LinearLayout.VERTICAL);
+        empty.setCameraDistance(cameraDistance);
         empty.setGravity(Gravity.CENTER);
         emptyMessage = new TextView(context); emptyMessage.setId(R.id.widget_empty_message);
         emptyMessage.setText(R.string.widget_empty_hint); emptyMessage.setGravity(Gravity.CENTER);
@@ -208,7 +232,8 @@ public final class WidgetPaneView extends FrameLayout {
         if (layer.getParent() instanceof ViewGroup) ((ViewGroup) layer.getParent()).removeView(layer);
         addView(layer, indexOfChild(empty) + 1,
             new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-        layer.setTranslationX(grid.getTranslationX());
+        layer.setCameraDistance(CAMERA_DISTANCE_DP * getResources().getDisplayMetrics().density);
+        applyTransform(layer);
         layer.onHomePageShown(currentPage);
     }
 
@@ -232,6 +257,18 @@ public final class WidgetPaneView extends FrameLayout {
         listener = value; providerListener = providers;
     }
     public void setReducedMotion(boolean value) { reducedMotion = value; }
+
+    /**
+     * How the page moves while a swipe turns it, and General › Animation speed's multiplier on
+     * the settle (0 for Off). Read when the launcher comes to the front; a motion under way keeps
+     * what it started with.
+     */
+    public void setPageMotion(@NonNull HomePageTransition effect, float speedMultiplier) {
+        motionScale = Math.max(0f, speedMultiplier);
+        if (transition == effect) return;
+        transition = effect;
+        applyContentShift();
+    }
     @NonNull public WidgetGridView grid() { return grid; }
 
     /**
@@ -673,45 +710,84 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     private void enterFromSide(int direction, float dragX) {
-        if (reducedMotion) { setContentTranslationX(0f); return; }
+        if (instantMotion()) { setContentTranslationX(0f); return; }
         float start = direction > 0 ? getWidth() + dragX : dragX - getWidth();
         setContentTranslationX(start);
         animateContentTranslationX();
     }
 
     private void settleContentBack() {
-        if (reducedMotion || grid.getTranslationX() == 0f) { setContentTranslationX(0f); return; }
+        if (instantMotion() || contentShiftPx == 0f) { setContentTranslationX(0f); return; }
         animateContentTranslationX();
     }
 
+    /** Reduce motion, or Animation speed at Off: the page lands at once. */
+    private boolean instantMotion() {
+        return reducedMotion || motionScale <= 0f;
+    }
+
     private void setContentTranslationX(float value) {
-        grid.setTranslationX(value);
-        empty.setTranslationX(value);
+        if (contentSettle != null) contentSettle.cancel();
+        moveContent(value);
+    }
+
+    private void moveContent(float value) {
+        contentShiftPx = value;
+        applyContentShift();
+        if (listener != null) listener.onContentShifted();
+    }
+
+    /** Draws {@link #contentShiftPx} through the chosen effect onto everything the page shows. */
+    private void applyContentShift() {
+        int width = getWidth();
+        float position = width <= 0 ? 0f : contentShiftPx / width;
+        // A turn is a page with another page that way; a pull against either end only slides.
+        boolean turning = position < 0f ? currentPage < pageCount - 1
+            : position > 0f && currentPage > 0;
+        transition.transform(position, width, turning, contentTransform);
+        applyTransform(grid);
+        applyTransform(empty);
         if (pinnedLayer != null) {
             pinnedLayer.animate().cancel();
-            pinnedLayer.setTranslationX(value);
+            applyTransform(pinnedLayer);
         }
-        if (listener != null) listener.onContentShifted();
+    }
+
+    private void applyTransform(@NonNull View view) {
+        HomePageTransition.Transform t = contentTransform;
+        view.setTranslationX(t.translationX);
+        view.setScaleX(t.scale);
+        view.setScaleY(t.scale);
+        view.setAlpha(t.alpha);
+        view.setRotationY(t.rotationY);
+        int width = view.getWidth() > 0 ? view.getWidth() : getWidth();
+        view.setPivotX(t.pivotXFraction * width);
+        view.setPivotY(view.getHeight() / 2f);
     }
 
     /**
      * How far the page's content stands off its rest, as a fraction of the pane's width,
-     * positive to the right: mid-swipe, and while a page slides in or back. 0 at rest.
+     * positive to the right: mid-swipe, and while a page slides in or back. 0 at rest. The
+     * wallpaper pans by this whatever effect draws the page.
      */
     public float contentShiftFraction() {
         int width = getWidth();
-        return width <= 0 ? 0f : grid.getTranslationX() / width;
+        return width <= 0 ? 0f : contentShiftPx / width;
     }
 
     private void animateContentTranslationX() {
-        // The grid's slide reports each frame, so the wallpaper pans on the page's own curve.
-        grid.animate().translationX(0f).setDuration(160)
-            .setUpdateListener(animation -> {
-                if (listener != null) listener.onContentShifted();
-            })
-            .start();
-        empty.animate().translationX(0f).setDuration(160).start();
-        if (pinnedLayer != null) pinnedLayer.animate().translationX(0f).setDuration(160).start();
+        if (contentSettle != null) contentSettle.cancel();
+        ValueAnimator settle = ValueAnimator.ofFloat(contentShiftPx, 0f);
+        settle.setDuration(Math.round(PAGE_SETTLE_MS * (double) motionScale));
+        // The page reports each frame, so the wallpaper pans on the page's own curve.
+        settle.addUpdateListener(animation -> moveContent((float) animation.getAnimatedValue()));
+        settle.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (contentSettle == animation) contentSettle = null;
+            }
+        });
+        contentSettle = settle;
+        settle.start();
     }
 
     private static boolean insideNestedScrollingChild(@NonNull ViewGroup parent,
@@ -735,6 +811,7 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
+        if (contentSettle != null) { contentSettle.end(); contentSettle = null; }
         if (pagingVelocity != null) { pagingVelocity.recycle(); pagingVelocity = null; }
         if (seamVelocity != null) { seamVelocity.recycle(); seamVelocity = null; }
         super.onDetachedFromWindow();

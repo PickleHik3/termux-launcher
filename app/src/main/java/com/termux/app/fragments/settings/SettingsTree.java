@@ -110,6 +110,8 @@ public final class SettingsTree {
         // Your launcher
         section(Section.HOME, PAGES + "HomePreferencesFragment", R.string.settings_section_home,
             R.xml.home_preferences);
+        editor(PAGES + "HomePreferencesFragment", PAGES + "HomePageTransitionFragment",
+            R.string.settings_home_page_transition_title);
 
         String dock = PAGES + "LauncherPreferencesFragment";
         section(Section.DOCK_DRAWER, dock, R.string.settings_section_dock_drawer, R.xml.launcher_preferences);
