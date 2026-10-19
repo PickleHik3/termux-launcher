@@ -1234,6 +1234,17 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · review fixes on wave 2 Home · Locked layout: tap a gone app's faded icon (nothing
+  opens), open a folder (its name is not a rename, holding an app offers nothing), and Settings ›
+  Home › Edit pages is greyed with "Unlock the Home layout to edit pages" (unlock with the switch
+  on the same page: the row comes back at once). Edit pages from Settings returns to Settings ›
+  Home on Done. Reorder pages in portrait, turn the phone: landscape shows the same order;
+  remove a page in landscape, turn back: portrait lost the same page. A Home float on a page
+  that empties (its last widget removed) follows to the page in its place, and the default page
+  follows a trim. A folder grown to 18 apps survives a force-stop. With the accessibility service
+  turned on, its description in Android's accessibility settings reads "Lets the launcher lock the
+  screen and open notifications or quick settings from your gestures." Notifications by Shizuku
+  with Shizuku stopped mid-way shows "Shizuku couldn't open that…" · emulator.
 - 2026-10-19 · wave 2, Home (F5–F11) · Screenshots of Settings › Home top to bottom against the
   wave-1 build: the new groups (Icons and labels, Folders, the five gesture rows, Page transition,
   Page indicator, Edit pages, Lock Home layout) wear the same row look (height, chevron-less
@@ -1333,6 +1344,12 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
 ## Developer
 
 ### Settings restructure (10-19)
+- 2026-10-19 · review fixes on wave 2 Home · With Depth and Carousel, a glass widget (built-in,
+  glass style) and a Home float on the page: during the drag and the settle the page is drawn
+  through a hardware layer and scaled or turned, while the glass is aimed at the untransformed
+  page. Judge whether the frosted wallpaper inside the widget and the float visibly slides or
+  misaligns against the wallpaper behind during the motion, and whether it snaps at rest; take
+  this together with the frame-time check above · pong, by hand (ask first).
 - 2026-10-19 · feat(home) page transition · Frame time of each effect on pong with glass on (Home
   float and a glass widget on the page): `scripts/perf-frametime.sh` with a Home-page swipe
   scenario, against Slide on the same build. Depth, Fade and Stack set the page's alpha, which
