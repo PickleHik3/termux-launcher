@@ -32,5 +32,10 @@
             app:summary="@string/settings_pane_agent_api_summary"
             app:dependency="split_pane_controls"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="terminal_body_swipe"
+            app:title="@string/settings_terminal_body_swipe_title"
+            app:summary="@string/settings_terminal_body_swipe_summary"
+            android:defaultValue="true" />
     </PreferenceCategory>
 </PreferenceScreen>

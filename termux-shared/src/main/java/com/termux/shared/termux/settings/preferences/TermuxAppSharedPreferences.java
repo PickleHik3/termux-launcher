@@ -872,6 +872,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_AGENT_PANES_ENABLED, value, false);
     }
 
+    public boolean isTerminalBodySwipeEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_BODY_SWIPE, TERMUX_APP.DEFAULT_TERMINAL_BODY_SWIPE);
+    }
+
+    public void setTerminalBodySwipeEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BODY_SWIPE, value, false);
+    }
+
     public boolean isStatusWidgetCpuEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_CPU, TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);
