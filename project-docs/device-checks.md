@@ -1234,6 +1234,9 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · commit "feat(home): page indicator, dots or off" · With two or more Home pages the
+  dots show at the default; Page indicator Off hides them and no widget or icon moves or resizes
+  (screenshot before and after); back to Dots brings them back · emulator, light and dark.
 - 2026-10-19 · commit "feat(home): icon size, label size, two-line labels and label shadow" ·
   Before/after screenshots of a Home page with app icons and a folder at the defaults: identical.
   Then Icon size 80% and 120%, Label size Small and Large, Two-line labels on (a long app name

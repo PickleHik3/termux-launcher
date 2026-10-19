@@ -432,6 +432,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.setPageMotion(effect, speedMultiplier);
     }
 
+    /** The dots under the grid, or none (Settings › Home › Page indicator). */
+    public void setPageIndicator(@NonNull com.termux.app.launcher.home.HomePageIndicator indicator) {
+        pane.setPageIndicator(indicator);
+    }
+
     /** How Home's app icons and folders are drawn (Settings › Home › Icons and labels). */
     public void setIconStyle(@NonNull HomeIconStyle style) {
         appIcons.setStyle(style);

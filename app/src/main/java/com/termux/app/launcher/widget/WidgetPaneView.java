@@ -25,6 +25,7 @@ import androidx.core.view.ViewCompat;
 
 import com.termux.R;
 import com.termux.app.launcher.home.HomeGestures;
+import com.termux.app.launcher.home.HomePageIndicator;
 import com.termux.app.launcher.home.HomePageTransition;
 
 import java.util.List;
@@ -139,6 +140,7 @@ public final class WidgetPaneView extends FrameLayout {
     private final int doubleTapSlop;
     private Listener listener;
     private boolean reducedMotion;
+    @NonNull private HomePageIndicator indicator = HomePageIndicator.DEFAULT;
     /** How the page moves while a swipe turns it (Settings › Home › Page transition). */
     @NonNull private HomePageTransition transition = HomePageTransition.DEFAULT;
     /** General › Animation speed's multiplier on the settle; 0 is Off, the instant cut. */
@@ -287,6 +289,16 @@ public final class WidgetPaneView extends FrameLayout {
         listener = value; providerListener = providers;
     }
     public void setReducedMotion(boolean value) { reducedMotion = value; }
+
+    /**
+     * Settings › Home › Page indicator: the dots, or none. The band they stand in stays either
+     * way, so the grid keeps its height.
+     */
+    public void setPageIndicator(@NonNull HomePageIndicator value) {
+        if (indicator == value) return;
+        indicator = value;
+        setPageState(pageCount, currentPage);
+    }
 
     /** Whether a double tap and a two-finger swipe on the free area are watched for. */
     public void setExtraGestures(boolean doubleTap, boolean twoFinger) {
@@ -482,7 +494,8 @@ public final class WidgetPaneView extends FrameLayout {
         int previousPage = currentPage;
         pageCount = Math.max(1, count);
         currentPage = Math.max(0, Math.min(pageCount - 1, current));
-        dots.setVisibility(pageCount > 1 ? VISIBLE : GONE);
+        int dotsVisibility = indicator.dotsShown(pageCount) ? VISIBLE : GONE;
+        if (dots.getVisibility() != dotsVisibility) dots.setVisibility(dotsVisibility);
         dots.invalidate();
         if (pinnedLayer instanceof PagePinnedLayer)
             ((PagePinnedLayer) pinnedLayer).onHomePageShown(currentPage);

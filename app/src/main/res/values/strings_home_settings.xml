@@ -69,4 +69,17 @@
     <string name="settings_home_label_two_lines_summary">Long app names wrap instead of being cut short</string>
     <string name="settings_home_label_shadow_title">Label shadow</string>
     <string name="settings_home_label_shadow_summary">Keeps labels readable on light wallpapers</string>
+
+    <!-- Page indicator (F8) -->
+    <string name="settings_home_page_indicator_title">Page indicator</string>
+    <string name="settings_home_page_indicator_dots">Dots</string>
+    <string name="settings_home_page_indicator_off">Off</string>
+    <string-array name="settings_home_page_indicator_entries" translatable="false">
+        <item>@string/settings_home_page_indicator_dots</item>
+        <item>@string/settings_home_page_indicator_off</item>
+    </string-array>
+    <string-array name="settings_home_page_indicator_values" translatable="false">
+        <item>dots</item>
+        <item>off</item>
+    </string-array>
 </resources>

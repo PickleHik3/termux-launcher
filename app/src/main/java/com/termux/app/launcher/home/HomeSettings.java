@@ -33,15 +33,24 @@ public final class HomeSettings {
     /** The label's soft shadow. On: as Home always drew it. */
     public static final String KEY_LABEL_SHADOW = "app_launcher_home_label_shadow";
 
+    /** Settings › Home › Page indicator: a {@link HomePageIndicator} value. */
+    public static final String KEY_PAGE_INDICATOR = "app_launcher_home_page_indicator";
+
     /** Whether {@code key} is one of these rows. */
     public static boolean owns(@Nullable String key) {
         if (key == null) return false;
+        if (KEY_PAGE_INDICATOR.equals(key)) return true;
         if (KEY_PAGE_TRANSITION.equals(key) || KEY_ICON_SCALE.equals(key) || KEY_LABEL_SIZE.equals(key)
             || KEY_LABEL_TWO_LINES.equals(key) || KEY_LABEL_SHADOW.equals(key)) return true;
         for (HomeGestures.Gesture gesture : HomeGestures.Gesture.values()) {
             if (gesture.key.equals(key) || gesture.appKey().equals(key)) return true;
         }
         return false;
+    }
+
+    @NonNull
+    public static HomePageIndicator pageIndicator(@NonNull Context context) {
+        return HomePageIndicator.fromValue(getString(context, KEY_PAGE_INDICATOR, null));
     }
 
     /** How Home's app icons and folders are drawn (Settings › Home › Icons and labels). */
