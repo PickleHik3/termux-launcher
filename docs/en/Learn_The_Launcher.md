@@ -36,8 +36,10 @@ edge or hidden; see [Layout and full screen](Layout_And_Full_Screen.md).
   terminal, the widgets or the display, and the space outside it). The edge lights as soon as you
   touch it, and the page follows your finger. A short drag goes back; a longer drag or a flick lands
   on the next place. On the left and right borders, hold until the page ticks and sinks under your
-  finger, then drag; holding works on the top and bottom too. A swipe that starts on the page
-  itself belongs to the page, so a scroll or selection never changes place by accident.
+  finger, then drag; holding works on the top and bottom too. A clear sideways swipe across a
+  terminal window's text changes place the same way. A scroll, a selection, or a program that uses
+  the mouse keeps its own drag, and **Settings → Terminal → Windows & panes → Swipe on the terminal
+  to switch windows** turns the text swipe off.
 - **Tap a place icon.** The other two places peek in from the edges of the status bar. Tap one to
   go there.
 - **Keyboard.** Swipe up from the bottom border to open the keyboard, and down to put it away. It

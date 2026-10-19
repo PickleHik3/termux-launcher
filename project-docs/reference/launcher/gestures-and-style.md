@@ -38,6 +38,26 @@ like planks toward the finger, as if it pressed its weight into them, and lie fl
 too, on a still copy of its picture that stands in for the motion. The release's settle carries on at the finger's speed. The status bar does
 not page; its own drag is the fold across it.
 
+## Body swipe
+
+One sideways swipe, one muscle memory, across the whole wall (developer decision 2026-10-19): a
+swipe that starts on a terminal window's text pages the row exactly as the border drag does —
+between windows, the display window among them, and from the first window back to the last Home
+page — with the same claim, sink, plank, parallax, seam and settle, since it is the border drag's
+own path from the claim on. Nothing moves until the finger has passed the touch slop clearly
+sideways: at least 1.5 times as far across as up or down (`TerminalBodySwipe.SIDEWAYS_RATIO`).
+A steeper start stays the terminal's scroll, a still finger stays its long press (the hold never
+pages from the text), and a second finger its pinch. At the claim the terminal is sent a cancel and
+keeps nothing of the gesture. The terminal keeps a sideways drag while it is selecting text, while a
+program tracks the mouse or asked for touch reports, and in mouse mode; the tab's buttons and the
+gap between two panes keep their own presses. Any pane of a split pages the row, never between
+panes. The boxes by the grabber pills keep their vertical swipes and page sideways. The display
+window's picture takes every touch, so only its border pages. The claim is made by the wall
+(`PaneWallLayout`, `BorderDrag`), which asks the pane under the finger as it lands; the terminal
+view is never changed. On by default; Settings › Terminal › Windows & panes › Swipe on the terminal
+to switch windows turns it off for the Workspace, leaving the border drag. A Home float's terminal
+follows the same rule on Home (below).
+
 ## Home pages and the seam
 
 A Home page has no border, no slab and no rim, so there is no border drag on it. It pages by a
@@ -52,11 +72,13 @@ animating. Gated as before (portrait, the launcher drawing a managed wallpaper i
 animations on). A forward swipe on the last Home page crosses the seam to the first
 window. When the Workspace has none it crosses all the same: the empty Workspace comes in under the
 finger and, once the release commits to it, a fresh shell opens as window 1 (a swipe that springs
-back starts nothing). A swipe back never leaves Home. From the first window the border drag back returns to the last Home page. A sideways swipe
+back starts nothing). A swipe back never leaves Home. From the first window the border drag back,
+or a body swipe on its text, returns to the last Home page. A sideways swipe
 that starts on a Home float's terminal pages Home and crosses the seam exactly as one beside the
 float does; taps and vertical swipes there stay the terminal's, and the float moves only by its
-titlebar. The terminal keeps a sideways drag while it is selecting text or a program is tracking
-the mouse. The seam is
+titlebar. The terminal keeps a sideways drag by the body swipe's rule (`TerminalBodySwipe`):
+while it is selecting text, a program is tracking the mouse or asked for touch reports, or mouse
+mode is on. The seam is
 continuous but never silent: the Workspace's chrome (status bar, extra keys, corner tabs, borders)
 arrives with the first window, and the window's status bar fades on the way back to Home.
 
