@@ -132,6 +132,57 @@ public class WidgetPanePagingTest {
         assertTrue(fixture.paletteSwipes.isEmpty());
     }
 
+    @Test public void aForwardSwipeOnTheLastHomePageCrossesTheSeamWithTheFinger() {
+        Fixture fixture = new Fixture();
+        fixture.controller.menuAddPage();
+        fixture.controller.setCurrentPage(1);
+        fixture.layout();
+        RecordingSeam seam = new RecordingSeam(true);
+        fixture.controller.setSeam(seam);
+        int w = fixture.pane.getWidth();
+        int y = fixture.pane.getHeight() / 2;
+        fixture.swipe(w * 7 / 8, y, w / 16, y + 10);
+        assertEquals("the wall takes the swipe", 1, seam.begins);
+        assertTrue("and follows the finger", seam.drags.size() > 1);
+        for (int i = 1; i < seam.drags.size(); i++)
+            assertTrue(seam.drags.get(i) < seam.drags.get(i - 1));
+        assertEquals(1, seam.ends);
+        assertEquals("Home did not page", 1, fixture.controller.currentPage());
+
+        // Backward on the last page is Home's own page change, never the seam's.
+        RecordingSeam back = new RecordingSeam(true);
+        fixture.controller.setSeam(back);
+        fixture.swipe(w / 16, y, w * 7 / 8, y + 10);
+        assertEquals(0, back.begins);
+        assertEquals(0, fixture.controller.currentPage());
+    }
+
+    @Test public void aForwardSwipeOnTheLastHomePageStopsWhenTheRowEndsThere() {
+        Fixture fixture = new Fixture();
+        RecordingSeam seam = new RecordingSeam(false);
+        fixture.controller.setSeam(seam);
+        int w = fixture.pane.getWidth();
+        int y = fixture.pane.getHeight() / 2;
+        fixture.swipe(w * 7 / 8, y, w / 16, y + 10);
+        assertEquals(0, seam.begins);
+        assertEquals(0, fixture.controller.currentPage());
+    }
+
+    private static final class RecordingSeam implements WidgetPaneView.Seam {
+        final boolean open;
+        int begins;
+        int ends;
+        final List<Float> drags = new ArrayList<>();
+
+        RecordingSeam(boolean open) { this.open = open; }
+
+        @Override public boolean canLeaveForward() { return open; }
+        @Override public void begin() { begins++; }
+        @Override public void drag(float dxPx) { drags.add(dxPx); }
+        @Override public void end(float velocityPxPerSec) { ends++; }
+        @Override public void cancel() { }
+    }
+
     @Test public void aVerticalSwipeOnAWidgetIsTheWidgets() {
         Fixture fixture = new Fixture();
         assertTrue(fixture.repository.putRecord(record(3, new WidgetCellRect(0, 0, 2, 2), 0)));
