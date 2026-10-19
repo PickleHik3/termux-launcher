@@ -171,6 +171,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * Cleared when the swipe springs back to Home or the shell's window arrives.
      */
     private boolean mSeamIntoEmpty;
+    /** That crossing's shell has been asked for: a page change back and forth starts no second. */
+    private boolean mSeamShellStarted;
 
     public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host) {
         mWall = wall;
@@ -209,7 +211,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mWall.setReducedMotion(mHost.reducedMotion());
         PaneWallPage before = mWall.currentPage();
         boolean hasWindow = mHost.hasWindow();
-        if (hasWindow) mSeamIntoEmpty = false;
+        if (hasWindow) { mSeamIntoEmpty = false; mSeamShellStarted = false; }
         mWall.setPages(PaneWallPolicy.rowPages(hasWindow || mSeamIntoEmpty, mHost.isDisplayUp()));
         PaneWallPage after = mWall.currentPage();
         if (after != before && !mWall.pages().contains(before)) {
@@ -242,6 +244,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
                 if (!mHost.hasWindow() && mHost.canStartWorkspace()) {
                     // Only the page joins the row: nothing is started until the release commits.
                     mSeamIntoEmpty = true;
+                    mSeamShellStarted = false;
                     refreshPages();
                 }
                 mWall.beginPlainDrag();
@@ -589,7 +592,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallPageChanged(@NonNull PaneWallPage page) {
         mHost.onWallPageChanged(page);
-        if (!WallRow.seamStartsShell(mSeamIntoEmpty, page)) return;
+        if (mSeamShellStarted || !WallRow.seamStartsShell(mSeamIntoEmpty, page)) return;
+        mSeamShellStarted = true;
         // The release committed to the empty Workspace: its first shell starts now, while the
         // wall slides there. Its window takes the page the swipe brought in.
         if (!mHost.startWorkspaceShell()) {
@@ -605,6 +609,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // The swipe sprang back to Home: the empty Workspace's page leaves the row again.
         if (mSeamIntoEmpty && page == PaneWallPage.WIDGETS) {
             mSeamIntoEmpty = false;
+            mSeamShellStarted = false;
             refreshPages();
         }
         mHost.onWallPageSettled(page);

@@ -239,6 +239,23 @@ public class PaneWallControllerTest {
         assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
     }
 
+    @Test public void aCrossingThatWavers_beforeItsWindowArrives_startsOneShell() {
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        host.hasWindow = false;
+        host.display = false;
+        host.canStart = true;
+        controller.refreshPages();
+
+        controller.homeSeam().begin();
+        controller.homeSeam().drag(-900f);
+        controller.homeSeam().end(-3000f);
+        assertEquals(1, host.shellsStarted);
+        // The page flips back and forth before the shell's window has come.
+        controller.onWallPageChanged(PaneWallPage.WIDGETS);
+        controller.onWallPageChanged(PaneWallPage.TERMINAL);
+        assertEquals("one crossing, one shell", 1, host.shellsStarted);
+    }
+
     @Test public void aSwipeIntoAnEmptyWorkspaceThatSpringsBackLeavesNothing() {
         controller.goTo(PaneWallPage.WIDGETS, false);
         host.hasWindow = false;
