@@ -1180,8 +1180,42 @@ are void.
   leaves a grey highlight panel around a folder cell until the palette closes; on a light
   wallpaper the icon labels (white with a shadow) read weakly; the pinned-apps editor's app icons
   are tiny while the Add an app list's are full size.
+### Display as a window (10-19)
+Supersedes the screen-glyph and "lands on the last terminal window" parts of #77 display above.
+- 2026-10-19 · commits "feat(wall): the display window is a window of the row" · Two terminal
+  windows, then Display under Linux Apps from Home: the wall slides to the Workspace with the
+  display window in front, its chip last in the row and selected; no Display page, and no screen
+  mark at the status bar's right edge, with or without a display up · pong.
+- 2026-10-19 · same · From the display window, a border drag left: the last terminal window comes
+  in beside the display, the display slides out (not a blank gap), the keyboard and the extra keys
+  become the terminal's; drag right again: the display comes back, typing and the touchpad reach X
+  · pong.
+- 2026-10-19 · same · Tap the display's chip from a terminal window and a terminal chip from the
+  display: the window switch travels like any window's; the terminal never resizes (no prompt
+  redraw, no SIGWINCH line in a running `htop`) · pong.
+- 2026-10-19 · same · Hold the display's chip and drag it to the front of the row: it stays there
+  after a window opens or closes elsewhere; `launcherctl window.move to=1` on the display window
+  does the same; `+` on the display window opens a terminal window right after it · pong.
+- 2026-10-19 · same · × on the display's chip with xeyes open: asked first, xeyes closes, the
+  server stops (`pgrep -f termux-x11` empty), the window on its left comes in front; with no app
+  open it stops at once; on an unstarted display (no xkeyboard-config) it just goes · pong.
+- 2026-10-19 · same · Close the last terminal window while the display window is in the row: the
+  display window takes the Workspace instead of Home sliding in · pong.
+- 2026-10-19 · same · `launcherctl wall.go page=display` and the `wall.display` key: open the
+  display when none is up, bring the window in front when one is; from another session's row it
+  moves into this session's row at its end · pong.
+- 2026-10-19 · same · Keyboard form on the display window: in landscape the keyboard floats over
+  the display, in portrait it makes room, as before; mouse mode's key swaps pad and keyboard; the
+  space bar's corner swipes still step through the display's apps · pong.
+- 2026-10-19 · same · Settings → Display → Linux apps has no Display badge row and otherwise looks
+  exactly as before · pong, screenshot against the previous build.
+
 ## Developer
 
+- 2026-10-19 · feat(wall) display as a window · The display window's arrival and departure feel
+  like a window switch (no flash of an empty frame, no frame of black where the surface was), and
+  the plank tilt on a border drag off the display still tips once its still copy is up · pong, by
+  hand.
 - 2026-10-18 · feat/wall-rework-phase2 after the PR #82 merge (85ddb719a) · The seam between #82's
   relaunch survival and the wall: with the Appearance editor open over a Home page, relaunch the
   activity (`launcherctl wallpaper set <image>`): the editor comes back over Home with Home's
