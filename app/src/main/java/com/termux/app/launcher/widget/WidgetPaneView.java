@@ -152,6 +152,8 @@ public final class WidgetPaneView extends FrameLayout {
      */
     private float contentShiftPx;
     @Nullable private ValueAnimator contentSettle;
+    /** The content is drawn through a hardware layer for an effect's motion; see {@link #setContentLayered}. */
+    private boolean contentLayered;
     @NonNull private final HomePageTransition.Transform contentTransform =
         new HomePageTransition.Transform();
 
@@ -258,13 +260,17 @@ public final class WidgetPaneView extends FrameLayout {
      */
     public <T extends View & PagePinnedLayer> void setPagePinnedLayer(@Nullable T layer) {
         if (pinnedLayer == layer) return;
-        if (pinnedLayer != null) removeView(pinnedLayer);
+        if (pinnedLayer != null) {
+            if (contentLayered) pinnedLayer.setLayerType(LAYER_TYPE_NONE, null);
+            removeView(pinnedLayer);
+        }
         pinnedLayer = layer;
         if (layer == null) return;
         if (layer.getParent() instanceof ViewGroup) ((ViewGroup) layer.getParent()).removeView(layer);
         addView(layer, indexOfChild(empty) + 1,
             new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         layer.setCameraDistance(CAMERA_DISTANCE_DP * getResources().getDisplayMetrics().density);
+        if (contentLayered) layer.setLayerType(LAYER_TYPE_HARDWARE, null);
         applyTransform(layer);
         layer.onHomePageShown(currentPage);
     }
@@ -901,12 +907,25 @@ public final class WidgetPaneView extends FrameLayout {
         // is aimed at the grid, which must not be scaled or turned under it.
         HomePageTransition effect = widgetEditActive() ? HomePageTransition.SLIDE : transition;
         effect.transform(position, width, turning, contentTransform);
+        // An effect that scales, fades or turns the page draws it from one layer for the frames
+        // of the motion, so its widgets and floats are not drawn again under each new transform.
+        setContentLayered(effect != HomePageTransition.SLIDE && contentShiftPx != 0f);
         applyTransform(grid);
         applyTransform(empty);
         if (pinnedLayer != null) {
             pinnedLayer.animate().cancel();
             applyTransform(pinnedLayer);
         }
+    }
+
+    /** Whether the page's content draws through a hardware layer: only while an effect moves it. */
+    private void setContentLayered(boolean layered) {
+        if (contentLayered == layered) return;
+        contentLayered = layered;
+        int type = layered ? LAYER_TYPE_HARDWARE : LAYER_TYPE_NONE;
+        grid.setLayerType(type, null);
+        empty.setLayerType(type, null);
+        if (pinnedLayer != null) pinnedLayer.setLayerType(type, null);
     }
 
     private void applyTransform(@NonNull View view) {
