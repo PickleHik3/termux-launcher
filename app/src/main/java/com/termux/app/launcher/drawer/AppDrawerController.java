@@ -1341,6 +1341,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerContentView content = mContent;
         if (content == null) return;
         content.setOpenOnlyMatch(DrawerSettings.openOnlyMatch(mHost.context()));
+        content.setRememberPosition(DrawerSettings.rememberPosition(mHost.context()));
     }
 
     /** Raises the overlay and picks its backdrop material for this open. */

@@ -169,6 +169,9 @@ public final class AppDrawerContentView extends FrameLayout
     @Nullable private Runnable mRevealListener;
     /** Settings › App search › Open the only match; read once per open. */
     private boolean mOpenOnlyMatch;
+    private boolean mRememberPosition;
+    private int mSavedPosition;
+    private int mSavedOffsetPx;
     private final Runnable mAutoOpenOnlyMatch = this::autoOpenOnlyMatch;
     @Nullable private Runnable mKeyboardRequestListener;
     @Nullable private Runnable mFrameRequestListener;
@@ -957,8 +960,50 @@ public final class AppDrawerContentView extends FrameLayout
         if (categoryTilesShown()) mCategoryView.submitBuckets(mCategoryBuckets);
     }
 
+    /** Settings › Remember position; read once per open. */
+    public void setRememberPosition(boolean enabled) {
+        mRememberPosition = enabled;
+    }
+
+    /**
+     * The first visible position (list) or page (pager) of the full list, with the list's pixel
+     * offset; zeros for a search, a category view or a drawer never scrolled.
+     */
+    private void captureReopenPosition() {
+        mSavedPosition = 0;
+        mSavedOffsetPx = 0;
+        if (!mRememberPosition || hasQuery()) return;
+        if (mViewType == AppDrawerViewType.VERTICAL) {
+            int first = mLayoutManager.findFirstVisibleItemPosition();
+            View view = first < 0 ? null : mLayoutManager.findViewByPosition(first);
+            mSavedPosition = Math.max(0, first);
+            mSavedOffsetPx = view == null ? 0 : view.getTop() - mGrid.getPaddingTop();
+        } else if (mViewType == AppDrawerViewType.HORIZONTAL) {
+            mSavedPosition = mHorizontalPager.getSelectedPage();
+        }
+    }
+
+    private void restoreReopenPosition() {
+        if (!mRememberPosition) return;
+        if (mViewType == AppDrawerViewType.VERTICAL) {
+            int position = AppDrawerReopenPolicy.startPosition(true, mSavedPosition,
+                mAdapter.getItemCount());
+            if (position > 0) mLayoutManager.scrollToPositionWithOffset(position, mSavedOffsetPx);
+        } else if (mViewType == AppDrawerViewType.HORIZONTAL) {
+            int page = AppDrawerReopenPolicy.startPosition(true, mSavedPosition,
+                mHorizontalAdapter.getItemCount());
+            if (page > 0) mHorizontalPager.setSelectedPage(page, false);
+        }
+    }
+
     /** Empties the query and puts the grid back to the top. For a drawer that has closed. */
     public void resetSearch() {
+        captureReopenPosition();
+        resetSearchToTop();
+        restoreReopenPosition();
+    }
+
+    private void resetSearchToTop() {
         AppDrawerSearchController search = mSearch;
         mSearchRevealRequested = false;
         removeCallbacks(mAutoOpenOnlyMatch);
