@@ -116,6 +116,18 @@ motion starts, never per frame:
 A spring never divides by zero: Off runs it at 1/20 of its time. The phone's reduce motion still
 wins over every choice.
 
+## Two panes (F4)
+
+At 600 dp and wider (`layout-w600dp/activity_settings.xml`) the root list stands on the left (two
+fifths) and the open section on the right, with a hairline between. The detail opens on Home; a list
+row switches the section (fade through); deeper pages stack in the detail on the shared axis; Back
+from a section's own page leaves Settings. The list's search box searches for the detail, so the
+toolbar has no search action there. A width change across 600 dp (rotation, fold, window resize)
+rebuilds the stack for the new shape from the same bookkeeping: the phone gets the root back under
+the stack, the wide shape opens Home when the reader was at the root. Phones are unchanged; the
+phone layout carries a gone `settings_list` only so a restored fragment always has a container.
+The list does not mark the open section yet.
+
 ## Features and the wave that builds each
 
 | | Feature | Wave |

@@ -1259,6 +1259,10 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
   row and fades away on Back; a search result fades through; Home › Layout opens the editor
   growing from the row; with Remove animations on, every one of these is an instant cut ·
   emulator, screen recording.
+- 2026-10-19 · commit "feat(settings): two panes on wide screens" · On a 600 dp+ window: the list
+  beside Home; tap Terminal: the right side fades to Terminal; Text & display slides in on the
+  right; Back, then Back again leaves Settings; rotate a phone-sized window across 600 dp with
+  Text & display open: the page stays, Back walks up · emulator with `wm size`, then the Surface.
 - 2026-10-19 · same · Doors from outside Settings land where they did: the display window's cog
   (Linux apps), the Apps bar opener (Dock & drawer), Look and feel (Look), the drawer's settings
   (Drawer layout), the keyboard theme from the Appearance editor, Edit extra keys · emulator.
@@ -1266,6 +1270,9 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
 ## Developer
 
 ### Settings restructure (10-19)
+- 2026-10-19 · feat(settings) two panes · The Surface in landscape and portrait: the list and the
+  section read well side by side (row widths, the root's icon tiles, the hairline), light and
+  dark · the Surface, by hand.
 - 2026-10-19 · feat(settings) animation speed · General › Animation speed at Slower, Faster and
   Off: a Home page swipe, the palette opening and a terminal window floating out each take
   visibly longer, shorter, or land at once; Normal feels exactly as before · pong, by hand.

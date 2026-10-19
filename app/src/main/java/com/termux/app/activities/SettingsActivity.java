@@ -78,6 +78,16 @@ public class SettingsActivity extends AppCompatActivity implements
      */
     private final List<SettingsBackStackState.Entry> mPushedScreens = new ArrayList<>();
 
+    /** {@code Bundle} key for whether the saved state was laid out with two panes. */
+    private static final String STATE_KEY_TWO_PANE = "settings_two_pane_v1";
+
+    /**
+     * Two panes (F4, 600 dp and wider): the root list stands in {@code settings_list} and the
+     * open section in {@code settings}, whose back stack {@link #mPushedScreens} mirrors as on a
+     * phone. On a phone the root is the base of {@code settings} itself.
+     */
+    private boolean mTwoPane;
+
     /** Set in {@link #onStop}; read by {@link #onNewIntent} to judge whether the stack is stale. */
     private long mLastStoppedAtEpochMs = 0;
 
@@ -137,6 +147,8 @@ public class SettingsActivity extends AppCompatActivity implements
         registerSettingsStyleCallbacks();
         setContentView(R.layout.activity_settings);
         applySettingsSystemBars();
+        View list = findViewById(R.id.settings_list);
+        mTwoPane = list != null && list.getVisibility() == View.VISIBLE;
         if (savedInstanceState == null) {
             // QA deep-link entry path:
             // adb shell am start -n com.termux/.app.activities.SettingsActivity --ez open_tai_settings true
@@ -151,12 +163,18 @@ public class SettingsActivity extends AppCompatActivity implements
             // user was somewhere other than the root; put them back where they were instead of
             // starting over. restoreSavedStackIfFresh returns false, doing nothing, whenever
             // there is nothing to restore, it has expired, or it fails validation.
+            if (mTwoPane) {
+                getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.settings_list, new RootPreferencesFragment()).commit();
+            }
             if (!(isPlainEntryIntent(intent) && restoreSavedStackIfFresh())) {
-                Fragment initialFragment = buildInitialFragment();
-                getSupportFragmentManager().beginTransaction().replace(R.id.settings, initialFragment).commit();
+                showInitialFragment(buildInitialFragment());
             }
         } else {
             restorePushedScreensBookkeeping(savedInstanceState);
+            // The width crossed 600 dp (a rotation, a fold, a window resize): the restored
+            // fragments sit in the other shape's containers, so the stack is rebuilt for this one.
+            if (savedInstanceState.getBoolean(STATE_KEY_TWO_PANE, false) != mTwoPane) rebuildForPaneChange();
         }
         AppCompatActivityUtils.setToolbar(this, com.termux.shared.R.id.toolbar);
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
@@ -179,6 +197,76 @@ public class SettingsActivity extends AppCompatActivity implements
         // with the Activity coming straight back, not a stale re-entry) so it is left at 0.
         outState.putString(STATE_KEY_PUSHED_SCREENS,
             new SettingsBackStackState(new ArrayList<>(mPushedScreens), 0).serialize());
+        outState.putBoolean(STATE_KEY_TWO_PANE, mTwoPane);
+    }
+
+    /**
+     * The first screen, without motion. With two panes the root is the list already, so where a
+     * phone would show the root the detail opens on the first section, Home.
+     */
+    private void showInitialFragment(@NonNull Fragment initial) {
+        if (mTwoPane && initial instanceof RootPreferencesFragment) {
+            openSectionPage(SettingsTree.Section.HOME, SettingsMotionPolicy.Move.RESTORE, null);
+            return;
+        }
+        getSupportFragmentManager().beginTransaction().replace(R.id.settings, initial).commit();
+    }
+
+    /** Pushes a section's own page as the detail's first screen. */
+    private void openSectionPage(@NonNull SettingsTree.Section section, @NonNull SettingsMotionPolicy.Move move,
+                                 @Nullable Fragment out) {
+        SettingsTree.Screen page = SettingsTree.sectionPage(section);
+        pushScreen(loadScreenClass(page.className), page.titleRes, null, null, move, null, out);
+    }
+
+    /**
+     * Moves a restored stack into this shape's containers: the root into or out of the list, the
+     * deep-linked base (if any) kept, every pushed screen replayed on top without motion.
+     */
+    private void rebuildForPaneChange() {
+        FragmentManager fm = getSupportFragmentManager();
+        List<SettingsBackStackState.Entry> entries = new ArrayList<>(mPushedScreens);
+        mPushedScreens.clear();
+        fm.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        Fragment base = fm.findFragmentById(R.id.settings);
+        Fragment listed = fm.findFragmentById(R.id.settings_list);
+        androidx.fragment.app.FragmentTransaction transaction = fm.beginTransaction();
+        Fragment out;
+        if (mTwoPane) {
+            if (listed == null) transaction.replace(R.id.settings_list, new RootPreferencesFragment());
+            if (base instanceof RootPreferencesFragment) {
+                transaction.remove(base);
+                out = null;
+            } else {
+                out = base;
+            }
+        } else {
+            if (listed != null) transaction.remove(listed);
+            if (base == null) {
+                base = new RootPreferencesFragment();
+                transaction.replace(R.id.settings, base);
+            }
+            out = base;
+        }
+        transaction.commitNow();
+        for (SettingsBackStackState.Entry entry : entries) {
+            Class<? extends Fragment> screen;
+            try {
+                screen = loadScreenClass(entry.className);
+            } catch (IllegalStateException e) {
+                break;
+            }
+            Bundle args = null;
+            if (entry.place != null || entry.scrollToKey != null) {
+                args = new Bundle();
+                if (entry.place != null) args.putString(EXTRA_INITIAL_PLACE, entry.place);
+                if (entry.scrollToKey != null) args.putString(EXTRA_SCROLL_TO_KEY, entry.scrollToKey);
+                SettingsRowRing.markRung(args);
+            }
+            out = pushScreen(screen, entry.titleResId, entry.titleText, args,
+                SettingsMotionPolicy.Move.RESTORE, null, out);
+        }
+        if (mTwoPane && out == null) openSectionPage(SettingsTree.Section.HOME, SettingsMotionPolicy.Move.RESTORE, null);
     }
 
     @Override
@@ -199,12 +287,16 @@ public class SettingsActivity extends AppCompatActivity implements
         // A deep link into an open Settings crosses the tree: whatever is on show fades through
         // to the page it names, in one batch, so nothing in between is drawn.
         FragmentManager fm = getSupportFragmentManager();
+        Fragment base = buildInitialFragment();
+        if (mTwoPane && base instanceof RootPreferencesFragment) {
+            jumpTo(SettingsTree.path(SettingsTree.sectionPage(SettingsTree.Section.HOME).className), null);
+            return;
+        }
         boolean instant = SettingsMotion.isInstant(this);
         Fragment visible = fm.findFragmentById(R.id.settings);
         if (visible != null) SettingsTransitions.leaveByJump(this, visible, instant);
         mPushedScreens.clear();
         fm.popBackStack(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
-        Fragment base = buildInitialFragment();
         SettingsTransitions.arriveByJump(this, base, instant);
         fm.beginTransaction()
             .setReorderingAllowed(true)
@@ -270,10 +362,13 @@ public class SettingsActivity extends AppCompatActivity implements
         SettingsBackStackState saved = SettingsBackStackState.parse(raw);
         if (saved == null || !saved.isFresh(System.currentTimeMillis())) return false;
 
-        Fragment out = new RootPreferencesFragment();
-        getSupportFragmentManager().beginTransaction()
-            .replace(R.id.settings, out)
-            .commit();
+        Fragment out = null;
+        if (!mTwoPane) {
+            out = new RootPreferencesFragment();
+            getSupportFragmentManager().beginTransaction()
+                .replace(R.id.settings, out)
+                .commit();
+        }
 
         // A stack saved before the restructure names pages that moved: replay it in today's tree.
         for (SettingsBackStackState.Entry entry : saved.entriesForCurrentTree()) {
@@ -297,6 +392,8 @@ public class SettingsActivity extends AppCompatActivity implements
             out = pushScreen(screenClass, entry.titleResId, entry.titleText, args,
                 SettingsMotionPolicy.Move.RESTORE, null, out);
         }
+        // Left at the root: with two panes the root is the list, and the detail opens on Home.
+        if (mTwoPane && out == null) openSectionPage(SettingsTree.Section.HOME, SettingsMotionPolicy.Move.RESTORE, null);
         return true;
     }
 
@@ -319,7 +416,7 @@ public class SettingsActivity extends AppCompatActivity implements
 
     /** True when the list and the page stand side by side (600 dp and wider). */
     public boolean isTwoPane() {
-        return false;
+        return mTwoPane;
     }
 
     // ---- Search from every screen (F1) ----
@@ -637,11 +734,25 @@ public class SettingsActivity extends AppCompatActivity implements
      */
     @Override
     public void onBackPressed() {
+        // With two panes a section's page is the detail's first screen, the list beside it: Back
+        // there leaves Settings rather than emptying the detail.
+        if (mTwoPane && isSectionPageAlone()) {
+            finish();
+            return;
+        }
         if (getOnBackPressedDispatcher().hasEnabledCallbacks()) {
             super.onBackPressed();
             return;
         }
         finish();
+    }
+
+    private boolean isSectionPageAlone() {
+        FragmentManager fm = getSupportFragmentManager();
+        if (fm.getBackStackEntryCount() != 1) return false;
+        Fragment top = fm.findFragmentById(R.id.settings);
+        SettingsTree.Screen screen = top == null ? null : SettingsTree.find(top.getClass().getName());
+        return screen != null && screen.isSectionPage();
     }
 
     @Override
@@ -664,6 +775,16 @@ public class SettingsActivity extends AppCompatActivity implements
             }
             @SuppressWarnings("unchecked")
             Class<? extends Fragment> screenClass = (Class<? extends Fragment>) fragmentClass;
+            if (mTwoPane && caller instanceof RootPreferencesFragment) {
+                // The list picks the section the detail shows: a jump across the tree, unless
+                // that section is already open on its own page.
+                Fragment shown = getSupportFragmentManager().findFragmentById(R.id.settings);
+                List<SettingsTree.Screen> path = SettingsTree.path(fragmentClassName);
+                boolean alreadyOpen = shown != null && isSectionPageAlone()
+                    && SettingsTree.canonical(shown.getClass().getName()).equals(SettingsTree.canonical(fragmentClassName));
+                if (!path.isEmpty() && !alreadyOpen) jumpTo(path, null);
+                return true;
+            }
             CharSequence title = preference.getTitle();
             Bundle extras = preference.getExtras();
             pushScreen(screenClass, 0, title == null ? null : title.toString(),
