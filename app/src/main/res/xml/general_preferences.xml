@@ -85,6 +85,11 @@
             app:persistent="false"
             app:title="@string/settings_set_default_launcher_title"
             app:summary="@string/settings_set_default_launcher_summary" />
+        <Preference
+            app:key="app_launcher_restart"
+            app:persistent="false"
+            app:title="@string/settings_restart_launcher_title"
+            app:summary="@string/settings_restart_launcher_summary" />
         <SwitchPreferenceCompat
             app:key="show_in_recents_when_not_default"
             app:title="@string/settings_show_recents_title"

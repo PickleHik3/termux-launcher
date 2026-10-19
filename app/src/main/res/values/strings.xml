@@ -519,6 +519,10 @@
     <string name="settings_send_feedback_title">Send feedback</string>
     <string name="settings_source_code_title">Source code</string>
     <string name="settings_source_code_summary">GitHub</string>
+    <string name="settings_restart_launcher_title">Restart launcher</string>
+    <string name="settings_restart_launcher_summary">Reload the launcher\'s screens. Terminal sessions keep running.</string>
+    <string name="settings_restart_launcher_confirm">Reload the launcher? It comes back in a moment, and your terminal sessions keep running.</string>
+    <string name="settings_restart_launcher_action">Restart</string>
     <string name="settings_whats_new_title">What\'s new</string>
     <string name="settings_whats_new_summary">The changes in this version.</string>
     <string name="whats_new_full_notes">Full release notes online</string>
