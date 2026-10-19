@@ -47,6 +47,8 @@ public final class HomeSettings {
     /** Whether {@code key} is one of these rows. */
     public static boolean owns(@Nullable String key) {
         if (key == null) return false;
+        if (com.termux.app.launcher.drawer.DrawerSettings.owns(key)) return true;
+        if (com.termux.app.launcher.notifications.NotificationBadgeStyle.KEY.equals(key)) return true;
         if (KEY_PAGE_INDICATOR.equals(key) || KEY_LAYOUT_LOCKED.equals(key)
             || KEY_FOLDER_DENSITY.equals(key) || KEY_FOLDER_CAPACITY.equals(key)) return true;
         if (KEY_PAGE_TRANSITION.equals(key) || KEY_ICON_SCALE.equals(key) || KEY_LABEL_SIZE.equals(key)
@@ -79,6 +81,14 @@ public final class HomeSettings {
     public static com.termux.app.launcher.widget.HomeFolderDensity folderDensity(@NonNull Context context) {
         return com.termux.app.launcher.widget.HomeFolderDensity.fromValue(
             getString(context, KEY_FOLDER_DENSITY, null));
+    }
+
+    @NonNull
+    public static com.termux.app.launcher.notifications.NotificationBadgeStyle badgeStyle(
+        @NonNull Context context) {
+        return com.termux.app.launcher.notifications.NotificationBadgeStyle.fromValue(
+            getString(context, com.termux.app.launcher.notifications.NotificationBadgeStyle.KEY,
+                null));
     }
 
     public static int folderCapacity(@NonNull Context context) {

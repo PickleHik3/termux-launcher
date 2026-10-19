@@ -1336,6 +1336,20 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return dp(configured);
     }
 
+    /** The Dock &amp; drawer rows, read once per open and handed to the grid. */
+    private void applyDrawerSettings() {
+        AppDrawerContentView content = mContent;
+        if (content == null) return;
+        content.setOpenOnlyMatch(DrawerSettings.openOnlyMatch(mHost.context()));
+        content.setAzSide(DrawerSettings.azSide(mHost.context()));
+        content.setRememberPosition(DrawerSettings.rememberPosition(mHost.context()));
+        // A drawer that opens onto the keyboard has no lower half to offer: the search is up.
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        boolean keyboardOnOpen = preferences != null
+            && preferences.isAppLauncherDrawerSearchOnOpenEnabled();
+        content.setLowerStart(DrawerSettings.lowerStart(mHost.context()) && !keyboardOnOpen);
+    }
+
     /** Raises the overlay and picks its backdrop material for this open. */
     private void prepareOverlay() {
         FrameLayout host = mHostLayout;
@@ -1357,6 +1371,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             opacity, grain);
         glass.setVisibility(View.VISIBLE);
         host.setVisibility(View.VISIBLE);
+        applyDrawerSettings();
         applyBackdropMaterial();
         prepareContent(plane);
         addHostLayoutListener();

@@ -1234,6 +1234,22 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · waves 3 and 4 (F12-F17, F19) · Drawer, emulator, light and dark, font scale 1.3.
+  Settings › Dock & drawer › App search › Open the only match on: type a name that matches one app,
+  it opens after a short pause, typing on cancels it; off: only Enter opens it. Drawer layout page:
+  Remember position on, scroll the vertical list, close and reopen (also the paged layout: the page);
+  closing on a search starts at the top. Start in the lower half on, portrait: the list and its
+  letter strip start at the middle, typing a query lifts them to the top, landscape and
+  keyboard-on-open leave them alone. A-Z strip Left: strip on the left, the list shifted right, the
+  rope leans and tilts the right way, scrubbing works and a close-drag still starts from the pill;
+  Off: no strip, the list takes the width; Right is as before. Settings › Notifications › Badge
+  style Count with dots on: a dock icon with three notifications shows 3, a folder with notifications
+  in two apps shows their sum, 100 or more reads 99+, text readable on light and dark fills; Dot as
+  before. Settings › General › About › What's new opens this build's notes (a pre-release build the
+  channel list, a stable build its release) with a working link to the full notes; the Version and
+  build row still opens the build report. Settings › General › Restart launcher: Cancel does
+  nothing; Restart returns to a freshly built launcher, a terminal session started before still
+  shows its output, never a black screen; tap it twice quickly, one restart.
 - 2026-10-19 · review fixes on wave 2 Home · Locked layout: tap a gone app's faded icon (nothing
   opens), open a folder (its name is not a rename, holding an app offers nothing), and Settings ›
   Home › Edit pages is greyed with "Unlock the Home layout to edit pages" (unlock with the switch
@@ -1344,6 +1360,10 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
 ## Developer
 
 ### Settings restructure (10-19)
+- 2026-10-19 · waves 3 and 4 · Taste check on pong: the new rows' wording (Open the only match,
+  Remember position, Start in the lower half, A-Z strip, Badge style, What's new, Restart launcher),
+  how far down Start in the lower half starts the list, and whether the count badge reads well on
+  the dock's icons at your icon size · pong, by hand (ask first).
 - 2026-10-19 · review fixes on wave 2 Home · With Depth and Carousel, a glass widget (built-in,
   glass style) and a Home float on the page: during the drag and the settle the page is drawn
   through a hardware layer and scaled or turned, while the glass is aimed at the untransformed

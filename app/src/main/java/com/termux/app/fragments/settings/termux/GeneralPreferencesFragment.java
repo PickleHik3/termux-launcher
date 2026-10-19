@@ -2,6 +2,7 @@ package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
 import android.os.Bundle;
+import android.os.SystemClock;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -11,6 +12,8 @@ import androidx.preference.PreferenceDataStore;
 import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.app.TermuxActivity;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.settings.LauncherRestartPolicy;
 import com.termux.app.settings.LowMemoryPreset;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -42,6 +45,11 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
             com.termux.app.HomeAppChooser.open(context);
             return true;
         });
+        Preference restart = findPreference("app_launcher_restart");
+        if (restart != null) restart.setOnPreferenceClickListener(row -> {
+            confirmRestart(context);
+            return true;
+        });
         Preference help = findPreference("app_launcher_help");
         // An ordinary screen on top of this one: Back comes back to Settings.
         if (help != null) help.setOnPreferenceClickListener(row -> {
@@ -63,6 +71,28 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
             });
         }
     }
+
+    /**
+     * Asks first, then owes the launcher a recreate on its next resume and steps out of Settings so
+     * that resume is now. The process, and the shells in it, are not touched
+     * ({@link LauncherRestartPolicy}).
+     */
+    private void confirmRestart(@NonNull Context context) {
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.settings_restart_launcher_title)
+            .setMessage(R.string.settings_restart_launcher_confirm)
+            .setPositiveButton(R.string.settings_restart_launcher_action, (dialog, which) -> {
+                long now = SystemClock.elapsedRealtime();
+                if (!LauncherRestartPolicy.accept(now, sLastRestartAtMs)) return;
+                sLastRestartAtMs = now;
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(context.getApplicationContext(), true);
+                if (getActivity() != null) getActivity().finish();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private static long sLastRestartAtMs = -1L;
 
     @Override
     public void onResume() {

@@ -144,13 +144,13 @@ The list does not mark the open section yet.
 | F9 | Lock Home layout, unlock from the Home sheet | 2 (built) |
 | F10 | Edit pages: add, remove, reorder, default page | 2 (built) |
 | F11 | Folder density and max size | 2 (built) |
-| F12 | Open the only match | 2 |
-| F13 | Remember drawer position | 2 |
-| F14 | Start the drawer in the lower half | 2 |
-| F15 | A–Z bar: left, right or off | 2 |
-| F16 | Badges: dot or count | 2 |
-| F17 | What's new from the version row | 2 |
-| F19 | Restart launcher, shells kept | 2 |
+| F12 | Open the only match | 3 (built) |
+| F13 | Remember drawer position | 3 (built) |
+| F14 | Start the drawer in the lower half | 3 (built) |
+| F15 | A–Z bar: left, right or off | 3 (built) |
+| F16 | Badges: dot or count | 4 (built) |
+| F17 | What's new from the version row | 4 (built) |
+| F19 | Restart launcher, shells kept | 4 (built) |
 
 F18 (app language) waits for translated strings. Wave 2 builds one feature per commit, each with
 its own pure policy and test, in the order above; its rows take the places the plan's mocks show
@@ -175,6 +175,24 @@ pages, Wallpaper scrolls with pages, Lock Home layout, Start in).
 | F9 | Locked: holds on widgets, icons and folders, the pencil, the +, the picker and page removal are refused with a notice; taps launch; the sheet offers Unlock under Terminal and drops its Add and Edit rows. | `HomeLayoutLock`, `HomeActionsSheetPolicy` |
 | F10 | Edit pages is a list dialog over Home, from the sheet and a Settings row (the sheet's pencil row is now Edit widgets). Moves and removals are mappings applied to the records, the shelved other orientation (its cells on a removed page dropped and laid out afresh when it returns), the floats (a float on a removed page moves to the page in its place, shell kept) and the default page, which the Home press and a cold start on Home land on. The automatic empty-page trim hands on its renumbering the same way. A removal stops at a store failure, and refuses a page a widget is still being added to. There is no page cap. Not handled: a named saved session keeps the float pages it was saved with (they are clamped on restore). | `HomePageEdits`, `HomePagesEditor`, `LauncherWidgetRepository.movePage` |
 | F11 | Density: Compact five across in 64 × 76 dp, Default four across in 76 × 84 (as before), Comfortable three across in 92 × 104, never wider than the pane. Max size 9, 12, 16 (default) or 20; a folder past a lowered cap keeps its apps. A wall with a folder past 16 apps is written as version 8, so an older build goes read-only on it instead of cutting the folder to 16. Dock folders unchanged. | `HomeFolderDensity`, `HomeFolderPolicy` |
+
+## Dock & drawer and the rest, waves 3 and 4 (F12–F17, F19)
+
+Drawer rows read through `DrawerSettings` (`app/.../launcher/drawer/`), the badge style through
+`NotificationBadgeStyle`, both in the app's default preferences by the same page-store route Home's
+rows use; every default is today's behaviour, so nothing is pinned. The drawer reads them once per
+open (`AppDrawerController.applyDrawerSettings`), the dock's badge look when the launcher comes to
+the front (`applyHomeSettings`).
+
+| | Decision | Where |
+|---|---|---|
+| F12 | Enter already opened the first result on every channel (the drawer's three, the terminal's app search), so that is unchanged. New: App search › Open the only match; with one result and a non-empty query, the drawer opens it 800 ms after the last edit, any further edit restarts the pause. The terminal's inline app search is not changed. | `AppDrawerOnlyMatchPolicy` |
+| F13 | Drawer layout › Remember position. The list's first visible position and offset (the page, in the paged layout) is taken as the drawer closes and put back after the reset to the empty query; a close on a search, or the categories layout, starts at the top. Held in memory for the process, not stored. | `AppDrawerReopenPolicy` |
+| F14 | Drawer layout › Start in the lower half. The vertical list and its letter strip take a top margin that puts them at the content's midline; it steps aside in landscape, while a query is typed or the keyboard asked for, and when the drawer opens onto the keyboard. The pill stays at the top. Other layouts unchanged. | `AppDrawerLowerStartPolicy` |
+| F15 | Drawer layout › A–Z strip: Right (today's, default), Left, Off. Left moves the strip and the list's inset to the left and mirrors the rope's lean and tilt; Off hides the strip and gives the list its width. | `AppDrawerAzSide`, `AppDrawerRopeColumnView.setMirrored` |
+| F16 | Notifications › Badge style: Dot (default) or Count. Count is the number of active badgeable notifications for the app (the sum over a folder's apps), `99+` past 99, as a pill on the dot's corner. The dock is the only surface that draws badges today (Home and the drawer draw none), so that is the only place it applies; the dock's swipe preview keeps its dot. | `NotificationBadgeStyle`, `NotificationBadgeFrame` |
+| F17 | General › About › What's new (a new row beside Version and build, which keeps opening the build report bug reports rely on). Opens the Markdown report screen with this build's notes: a pre-release build reads the channel's rolling list, a stable build or nightly its `## vX.Y.Z` section, plus a link to the release page (`v`, `nix-v` or `vaj-v` tag). `bundleReleaseNotes` in `app/build.gradle` bundles the newest four releases and the channel list as two text files, about 15 KB before compression. A build ahead of its notes shows the link alone. | `WhatsNewNotes` |
+| F19 | General › Home app › Restart launcher, behind a confirm. It owes the launcher a recreate on its next resume (`requestTermuxActivityStylingOnNextResume(…, true)`, the path a new wallpaper's colours take) and leaves Settings so that resume is now. The terminal service shares the launcher's process, so the process is never ended; no live activity means the next launch is fresh. A second tap within four seconds is the same restart. | `LauncherRestartPolicy` |
 
 ## Rules that keep the settings look
 

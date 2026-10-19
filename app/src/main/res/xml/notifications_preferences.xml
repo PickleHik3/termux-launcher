@@ -14,6 +14,13 @@
             app:title="@string/settings_notification_dots_title"
             app:summary="@string/termux_app_launcher_notification_dots_summary"
             app:defaultValue="false" />
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="app_launcher_notification_badge_style"
+            app:title="@string/settings_notification_badge_style_title"
+            app:summary="@string/settings_notification_badge_style_summary"
+            app:defaultValue="dot"
+            app:entries="@array/notification_badge_style_entries"
+            app:entryValues="@array/notification_badge_style_values" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_notifications_pinned_header">
