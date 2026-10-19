@@ -2833,9 +2833,9 @@
     <string name="help_topic_divider_reveal">Split a pane to get a divider.</string>
     <string name="help_topic_shortcuts_purpose">Ctrl and Alt turn the other keys into launcher shortcuts.</string>
     <string name="help_topic_shortcuts_action">Then press the key for the shortcut you want.</string>
-    <string name="help_topic_display_apps_purpose">These chips are the apps running on the display.</string>
+    <string name="help_topic_display_apps_purpose">The display window has a chip among your windows, with the front app\'s icon.</string>
     <string name="help_topic_display_apps_action">Tap one to bring it forward, then tap × to close it.</string>
-    <string name="help_topic_display_apps_reveal">Start the display and open an app to see its chip.</string>
+    <string name="help_topic_display_apps_reveal">Open a Linux app or Display to see the display window\'s chip.</string>
     <string name="help_topic_scale_purpose">The scale rail sets how large the display is.</string>
     <string name="help_topic_scale_action">Drag it to resize the display.</string>
     <string name="help_topic_scale_reveal">Start the display to see the rail.</string>
@@ -2870,7 +2870,7 @@
 
     <!-- Help centre: Find your way. -->
     <string name="help_topic_places_title">Places</string>
-    <string name="help_topic_places_summary">The launcher has up to three places: Home, Terminal and Display, as your Mode allows.</string>
+    <string name="help_topic_places_summary">The launcher has two halves: Home, and your windows, the display window among them.</string>
     <string name="help_topic_places_action">Hold the top or bottom border, then swipe left or right to switch places.</string>
     <string name="help_topic_places_step1">Home holds your widgets, Terminal your shells, and Display runs Linux apps.</string>
     <string name="help_topic_places_back">Swipe back the other way to return to where you were.</string>
@@ -3091,8 +3091,8 @@
     <string name="help_topic_ai_step2">The Model centre lists what is downloaded and what is loaded.</string>
     <string name="help_topic_ai_aliases">ai, on-device ai, model, llm, tai, local, endpoint, gemma</string>
     <string name="help_topic_gui_apps_title">GUI apps</string>
-    <string name="help_topic_gui_apps_summary">Graphical apps from the termux-x11 repository open as windows on the Display.</string>
-    <string name="help_topic_gui_apps_action">Install one in a terminal, then start it: it appears on the Display.</string>
+    <string name="help_topic_gui_apps_summary">Graphical apps from the termux-x11 repository open in the display window.</string>
+    <string name="help_topic_gui_apps_action">Install one in a terminal, then start it: it appears in the display window.</string>
     <string name="help_topic_gui_apps_step1">Add the repository once with pkg install x11-repo.</string>
     <string name="help_topic_gui_apps_step2">Install an app from it with pkg install, and start the Display.</string>
     <string name="help_topic_gui_apps_step3">Setup GUI Apps, in Settings under Display, installs a few to start with.</string>
@@ -3121,7 +3121,7 @@
     <string name="help_fix_stats_aliases">cpu missing, memory missing, weather missing, status widget</string>
     <string name="help_fix_display_title">The display will not start</string>
     <string name="help_fix_display_summary">The display needs its packages installed and its server running.</string>
-    <string name="help_fix_display_action">Tap Set up on the Display page, or open Settings, under Display, and follow what it lists.</string>
+    <string name="help_fix_display_action">Tap Set up in the display window, or open Settings, under Display, and follow what it lists.</string>
     <string name="help_fix_display_aliases">display will not start, x11 fails, black screen, no display</string>
     <string name="help_fix_support_title">Still stuck?</string>
     <string name="help_fix_support_summary">The full documentation and the support page go further than help does.</string>
@@ -3130,7 +3130,7 @@
 
     <!-- Help centre: glossary. -->
     <string name="help_term_place_title">Place</string>
-    <string name="help_term_place_definition">One of the launcher\'s pages: Home, Terminal or Display, as your Mode allows.</string>
+    <string name="help_term_place_definition">One of the launcher\'s two halves: Home, or your windows.</string>
     <string name="help_term_session_title">Session</string>
     <string name="help_term_session_definition">A group of terminal windows.</string>
     <string name="help_term_window_title">Window</string>
@@ -3150,7 +3150,7 @@
     <string name="help_term_form_title">Keyboard form</string>
     <string name="help_term_form_definition">The keyboard sits docked at the bottom, floats above everything or splits in two.</string>
     <string name="help_term_mouse_title">Mouse mode</string>
-    <string name="help_term_mouse_definition">Sends your touches to the program as mouse input. On Display it opens the touchpad.</string>
+    <string name="help_term_mouse_definition">Sends your touches to the program as mouse input. In the display window it opens the touchpad.</string>
     <string name="help_term_editors_title">Layout and Appearance editors</string>
     <string name="help_term_editors_definition">Open Appearance, then Look to change how the launcher looks or Layout to arrange its parts.</string>
     <string name="help_term_border_drag_title">Border drag</string>
