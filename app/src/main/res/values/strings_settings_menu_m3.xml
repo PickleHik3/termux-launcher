@@ -34,7 +34,7 @@
     <string name="settings_drawer_header">Drawer</string>
 
     <string name="settings_terminal_sub_windows_title">Windows &amp; panes</string>
-    <string name="settings_terminal_sub_windows_summary">Tiling, focus, hints and agents</string>
+    <string name="settings_terminal_sub_windows_summary">Tiling, focus, hints and program control</string>
     <string name="settings_terminal_sub_status_summary">Clock, CPU, memory, media and weather</string>
     <string name="settings_terminal_sub_text_title">Text &amp; display</string>
     <string name="settings_terminal_sub_text_summary">Font, full screen, cursor and effects</string>
@@ -63,11 +63,6 @@
     <string name="settings_general_home_app_header">Home app</string>
 
     <!-- Root groups and the new destination -->
-    <string name="settings_root_personalization_header">Personalization</string>
-    <string name="settings_root_workspace_header">Workspace</string>
-    <string name="settings_root_app_header">App</string>
-    <string name="settings_destination_app_behavior">App behavior</string>
-    <string name="settings_destination_app_behavior_summary">Battery use and vibration</string>
 
     <!-- App behavior -->
     <string name="settings_behavior_battery_header">Battery</string>
@@ -106,15 +101,10 @@
     <string name="settings_keyboard_tap_correction_reset_confirm_action">Reset</string>
 
     <!-- Apps overview and subpages -->
-    <string name="settings_apps_home_header">Home app</string>
-    <string name="settings_apps_customize_header">Customize</string>
-    <string name="settings_apps_sub_dock_title">Dock</string>
-    <string name="settings_apps_sub_dock_summary">Pinned apps and usage-ranked page</string>
     <string name="settings_apps_sub_search_title">App search</string>
     <string name="settings_apps_sub_search_summary">Terminal search prefix and ranking</string>
     <string name="settings_apps_sub_lock_title">Double-tap to lock</string>
     <string name="settings_apps_sub_lock_summary">Shizuku, or optional accessibility access</string>
-    <string name="settings_apps_behavior_link_summary">Recents, power saving and vibration</string>
     <string name="settings_lock_method_header">Lock method</string>
     <string name="settings_lock_method_summary">Double-tap the A–Z row. Shizuku keeps the normal screen-off animation. Accessibility is optional and may flicker.</string>
 
@@ -132,8 +122,6 @@
     <string name="settings_x11_sub_input_summary">Touch mode, keyboard and clipboard</string>
     <string name="settings_x11_sub_resolution_title">Resolution and scaling</string>
     <string name="settings_x11_sub_resolution_summary">Size in percent, filtering and density in dpi</string>
-    <string name="settings_x11_sub_linux_apps_title">Linux apps</string>
-    <string name="settings_x11_sub_linux_apps_summary">Setup and drawer integration</string>
     <string name="settings_x11_sub_startup_title">Startup</string>
     <string name="settings_x11_sub_startup_summary">Auto-start and shell connection</string>
     <string name="settings_x11_sub_troubleshooting_title">Troubleshooting</string>
@@ -144,7 +132,6 @@
     <string name="settings_status_clock_header">Clock</string>
     <string name="settings_status_indicators_header">Indicators</string>
     <string name="settings_status_weather_header">Weather</string>
-    <string name="settings_status_more_header">More</string>
     <string name="settings_diagnostics_logging_header">Logging</string>
     <string name="settings_diagnostics_alerts_header">Alerts</string>
     <string name="settings_diagnostics_checks_header">Checks</string>

@@ -93,27 +93,12 @@
     <string name="settings_layout_miniature_hidden_format">%1$s, hidden</string>
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
     <!-- The one Settings row and corner button for wallpaper, Look, Layout and the icon pack. -->
-    <string name="settings_destination_wallpaper_style">Appearance</string>
-    <string name="settings_destination_wallpaper_style_summary">Wallpaper, theme, fonts and icons</string>
     <string name="settings_appearance_surface_title">Wallpaper, look and layout</string>
     <string name="settings_appearance_surface_summary">Edit them live on your home screen</string>
-    <string name="settings_destination_appearance">Theme &amp; fonts</string>
-    <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons and keyboard look</string>
     <string name="settings_destination_terminal">Terminal</string>
-    <string name="settings_destination_terminal_summary">Panes, clipboard and effects</string>
     <string name="settings_destination_status_bar">Status bar</string>
-    <string name="settings_destination_status_bar_summary">Clock, indicators and weather</string>
     <string name="settings_destination_notifications">Notifications</string>
-    <string name="settings_destination_notifications_summary">Dots, pinned alerts and history</string>
-    <string name="settings_notifications_link_summary">Dots, pinned alerts and history</string>
-    <string name="settings_status_bar_notifications_link_summary">Media and pinned alerts</string>
     <string name="settings_destination_keyboard_input">Keyboard</string>
-    <string name="settings_destination_keyboard_input_summary">Layouts, typing and voice input</string>
-    <string name="settings_destination_display">Display</string>
-    <string name="settings_destination_display_summary">Desktop apps and touch controls</string>
-    <string name="settings_destination_launcher_apps">Apps</string>
-    <string name="settings_destination_launcher_apps_summary">Dock, drawer and search</string>
-    <string name="settings_destination_on_device_ai_summary">Models, voice and local API</string>
     <string name="settings_destination_services_permissions">Permissions &amp; services</string>
     <string name="settings_destination_services_permissions_summary">Access and connected services</string>
     <string name="settings_destination_advanced_diagnostics">Diagnostics</string>
@@ -560,7 +545,6 @@
     <string name="settings_clear_logs_action">Clear</string>
     <string name="settings_logs_cleared">Logs cleared</string>
     <string name="settings_clear_logs_failed">Could not clear logs</string>
-    <string name="settings_pinned_apps_header">Dock rows</string>
     <string name="settings_show_pinned_apps_title">Pinned apps</string>
     <string name="settings_dock_rail_side_left">Left</string>
     <string name="settings_dock_rail_side_right">Right</string>
@@ -864,7 +848,6 @@
     <string name="title_activity_termux_settings">Settings</string>
 
     <!-- Termux App Preferences -->
-    <string name="settings_root_launcher_header">Launcher</string>
 
     <!-- Notifications page -->
     <string name="settings_notifications_access_header">Access</string>
@@ -904,7 +887,6 @@
     <string name="essential_rules_section_add">Add a rule</string>
     <string name="essential_rules_remove">Remove</string>
     <string name="essential_rules_clears_pill">Clears</string>
-    <string name="settings_root_system_info_header">System &amp; Info</string>
 
 
 
@@ -916,7 +898,6 @@
 
 
 
-    <string name="termux_launcher_preferences_title">Apps &amp; Access</string>
     <string name="termux_app_launcher_empty_pinned_hint">Long-press here to pin your apps</string>
 
         <!-- Debugging Preferences -->
@@ -1211,7 +1192,6 @@
 
 
         <!-- Termux Style Preferences -->
-        <string name="termux_style_preferences_title">Theme &amp; fonts</string>
 
 
         <string name="termux_theme_mode_system">System</string>
@@ -3095,7 +3075,7 @@
     <string name="help_topic_gui_apps_action">Install one in a terminal, then start it: it appears in the display window.</string>
     <string name="help_topic_gui_apps_step1">Add the repository once with pkg install x11-repo.</string>
     <string name="help_topic_gui_apps_step2">Install an app from it with pkg install, and start the Display.</string>
-    <string name="help_topic_gui_apps_step3">Set up Linux apps, in Settings under Terminal, Linux apps, installs a few to start with.</string>
+    <string name="help_topic_gui_apps_step3">Set up Linux apps, in Settings › Terminal › Linux apps, installs a few to start with.</string>
     <string name="help_topic_gui_apps_aliases">gui, x11, x11-repo, termux-x11, desktop app, linux app, install app, graphical</string>
 
     <!-- Help centre: Something missing? Each one names a symptom in the user's words. -->
