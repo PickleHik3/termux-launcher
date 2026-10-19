@@ -79,3 +79,30 @@ the CPU and RAM readings, drawn and inked as the status bar draws them (weather 
 minimised floats wait in float chips, a glass row centred just above the dock that moves with it
 when a keyboard is up. The Workspace keeps its bar and its chips for the Home floats. The phase two
 spec's Home pills slice records what was built and removed.
+
+## Amended 2026-10-19: the display window is an ordinary window of the row
+
+The developer's decision: the display stops being a section of its own. Until now the display
+window was built as a page of the wall at the row's end, after every window, with a screen mark
+peeking in at the status bar's right edge whenever the build carried a display. It is now a
+window of the Workspace's row like the terminal windows: it joins the end of the current
+session's row when it opens, stands among the windows at the place it is dragged to (its chip,
+`window.move`), is stepped onto and off by the border drag and the window chips, and closes from
+its chip's ×. There is no Display page and no peeking mark; one display window at most, as there
+is one X display.
+
+The wall still has two pages, Home and the Workspace. The display window is kept beside the
+session's terminal windows rather than in their list (`DisplaySlot`, by the window it stands
+after), because it has no panes and everything that walks a session's windows walks panes; while
+it is the window in front, its frame stands as the Workspace's page and the pane host waits off
+screen at its own size, so the terminal never resizes for it. The display keeps what is its own
+as a place in front rather than a page: its keyboard form (an overlaying keyboard), its keys, its
+help, its remembered keyboard, its touchpad and mouse mode; the bar over it wears the Workspace's
+badge, chips and accent.
+
+Closing the display window stops the display: the apps on it are asked to close first, as Stop
+does, and the user is asked before that when an app is open, since closing them may lose work.
+A display still starting, or waiting for its keyboard layouts, simply goes. The server therefore
+runs only while its window is in a row. Saved sessions do not store the display window: a display
+still running when the launcher comes back announces itself and its window rejoins the row at
+the end. The display badge setting, which chose the peeking mark's glyph, is removed.

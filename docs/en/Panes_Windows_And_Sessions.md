@@ -44,10 +44,12 @@ goes to the shell when there is no pane that way. The full list is in
 
 ## Windows
 
-The Workspace is one row: the current session's windows in order, then any
-[display window](X11_Display.md). A new window opens right after the one you are on. Switching
-session swaps the terminal windows and leaves the display windows where they are. Closing the last
-window slides Home back in.
+The Workspace is one row: the current session's windows in order, the
+[display window](X11_Display.md) among them while a display is up. The display window joins the end
+of the row when it opens and is a window like the others from then on. A new window opens right
+after the one you are on, the display window included. Switching session swaps the row; opening a
+Linux app or Display brings the display window into the session you are in. Closing the last window
+slides Home back in.
 
 - Drag sideways from a window's border to move to the next or previous window. Dragging right from
   the first window goes back to the last Home page.
@@ -55,9 +57,10 @@ window slides Home back in.
 - Hold a window chip until it lifts, then drag it along the bar to move that window to another
   place in the row. The other chips make room, and letting go drops it there. The window you are
   on stays the one you are on, and the border drag, the drawer, the `Ctrl+Alt` window keys and
-  Saved sessions all follow the new order. The display's chip and a Home float's chip stay where
-  they are. The palette's **Move window left** and **Move window right** do the same one place at
-  a time, and the `window.move` action takes `to=left`, `to=right` or a place counted from 1 (for
+  Saved sessions all follow the new order. The display window's chip moves like any window's; a
+  Home float's chip stays where it is. The palette's **Move window left** and **Move window right**
+  do the same one place at a time, and the `window.move` action takes `to=left`, `to=right` or a
+  place counted from 1, the display window counted where it stands (for
   a key in [Custom keybindings](Custom_Keybindings.md), such as
   `map ctrl+alt+shift+m window.move to=1`).
 - `Ctrl+Alt+C` makes a window, `Ctrl+Alt+[` / `Ctrl+Alt+]` or `Ctrl+Alt+Left` / `Ctrl+Alt+Right`

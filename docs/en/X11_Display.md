@@ -1,15 +1,16 @@
 # The Linux display
 
 The launcher can show a Linux desktop or any X11 app in a **display window**: a window of the
-Workspace, after your terminal windows, that shows one X display whole. The display's own window
+Workspace, in the row with your terminal windows, that shows one X display whole. The display's own window
 manager arranges the apps inside it. The display server runs in your shell like any other command,
 so everything you know from Termux:X11 (its flags, its preferences, `pkill termux-x11`) works the
 same way. This page is the short route from installing the pieces to running a desktop in a proot.
 
 There is nothing to switch on. The display starts when something asks for it: a Linux app tapped in
 the app drawer, the **Display** entry under **Linux Apps**, or `termux-x11` run from a shell. Its
-window leaves the Workspace when the display stops. (Older versions had a Display place on the
-wall and a Display switch in Settings; the display window replaces both.)
+window joins the end of your row, like a new window, and leaves when the display stops. There is
+one display window at most. (Older versions had a Display place on the wall, a Display switch in
+Settings, and a screen mark at the status bar's edge; the display window replaces all three.)
 
 ## Set it up
 
@@ -43,8 +44,10 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 ## Every day
 
 - **Get to it** like any window: drag along the Workspace from a window's border, or tap its chip
-  in the status bar. The screen glyph at the status bar's right edge goes to the first display
-  window, or starts the display if none is up. In the sessions drawer, **Displays** lists each
+  in the status bar. Hold its chip and drag it to move the display window to another place in the
+  row, as you would any window. Opening a Linux app or **Display** again brings it in front, and
+  moves it into the session you are in if another session's row holds it. In the sessions drawer,
+  **Displays** lists each
   display with the apps open on it; tap an app to bring it to the front. **Go to Display** is an
   action like any other: put it on the extra-keys row from its editor, on the in-app keyboard as a
   `tool:wall.display` key, or bind it in your keybinds file
@@ -108,8 +111,10 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   or in front of mouse mode's touchpad. With no such keyboard up it goes back inside the app on
   the display instead, the way the button does everywhere else on the phone. A keyboard you opened
   yourself stays where it is.
-- **Stop** from the long-press menu on the display. Every app on it is asked to close itself first,
-  the way it would when you close its window, and the display and its window go once they have. `pkill
+- **Stop** from the long-press menu on the display, or close the display window from its chip's
+  ×. Every app on it is asked to close itself first, the way it would when you close its window,
+  and the display and its window go once they have; with an app open you are asked before that.
+  A display that has not started yet simply closes. `pkill
   termux-x11` stops it outright instead, without giving apps that chance. The display never starts
   on its own unless you turn on **Start with the launcher**.
 - **The display survives switching away.** Your X apps keep running while you are in a

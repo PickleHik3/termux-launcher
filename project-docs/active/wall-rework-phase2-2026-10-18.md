@@ -126,7 +126,8 @@ checks stay owed here too. When #82 lands on `pre`, merge `pre` into this branch
    neighbour's resting centre by 6dp, with hysteresis; the landing place is read from the finger,
    so a chip as wide as the last one can still pass it; auto-scroll near the edges of an
    overflowing bar). Only the row's windows' chips lift: not the display's, not the Home floats'
-   after them, nothing on Home or Display. The row is `WSession.windows` in `TermuxActivity`
+   after them, nothing on Home or Display. (Amended 2026-10-19: the display window is a window
+   of the row, so its chip lifts and moves like the others; `DisplaySlot` keeps its place.) The row is `WSession.windows` in `TermuxActivity`
    (`moveWindow`; the current window stays current), so the bar, the drawer, the wall's inner
    index, the Ctrl+Alt window keys and Saved sessions follow from one rebuild. `window.move`
    (`to=left|right|<place from 1>`) and the palette's Move window left / right (Workspace only),
