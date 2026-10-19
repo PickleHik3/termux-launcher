@@ -173,10 +173,18 @@ public final class TerminalCommandPaletteController
     private long mLastFrameTimeNanos;
     /** True while {@link #doFrame} runs: a kick from inside it continues the loop and keeps its clock. */
     private boolean mInFrame;
+    /** Where the open glass ends in the Workspace; on Home, the lowest it may end. */
     private float mAnchorY;
     /**
-     * The tallest the glass may grow above {@link #mAnchorY}: unbounded in the Workspace, and on
-     * Home the room above the dock ({@link CommandPaletteHomeOverlay#availableHeightPx}).
+     * On Home, the middle the glass grows about and the highest its top may rise, both in host
+     * coordinates ({@link CommandPaletteHomeOverlay#glassBottomPx}); NaN in the Workspace, whose
+     * glass ends at {@link #mAnchorY} and grows upward.
+     */
+    private float mHomeCenterY = Float.NaN;
+    private float mHomeHighestTop = Float.NaN;
+    /**
+     * The tallest the glass may grow: unbounded in the Workspace, and on Home the room above the
+     * dock ({@link CommandPaletteHomeOverlay#availableHeightPx}).
      */
     private float mMaxHeightPx = Float.MAX_VALUE;
     private float mCurrentRadius;
@@ -660,12 +668,17 @@ public final class TerminalCommandPaletteController
         float hostWidth = mHost.getWidth();
         float openLeft = dp(SIDE_INSET);
         float openRight = hostWidth - dp(SIDE_INSET);
-        float openTop = mAnchorY - mHeight.value;
+        // On Home the glass is centred and grows about its middle; in the Workspace it ends at the
+        // anchor and grows upward. Arithmetic on the animated height only: nothing is laid out.
+        float openBottom = Float.isNaN(mHomeCenterY) ? mAnchorY
+            : CommandPaletteHomeOverlay.glassBottomPx(mHeight.value, mHomeCenterY,
+                mHomeHighestTop, mAnchorY);
+        float openTop = openBottom - mHeight.value;
         mFrame.set(
             lerp(mSeed.left, openLeft, p),
             lerp(mSeed.top, openTop, p),
             lerp(mSeed.right, openRight, p),
-            lerp(mSeed.bottom, mAnchorY, p));
+            lerp(mSeed.bottom, openBottom, p));
         // Open radius matches the dock capsule, so the palette reads as the same glass kit.
         float openRadius = mActivity.resolveDockCapsuleCornerRadiusPx(
             Math.max(1, Math.round(mHeight.value)));
@@ -712,7 +725,8 @@ public final class TerminalCommandPaletteController
 
     /**
      * Bottom edge lands mid-terminal and is clamped so the keycap strip below it never covers
-     * the last prompt rows. On Home it lands above the dock and the keyboard instead.
+     * the last prompt rows. On Home it stands in the screen's middle, clear of the dock and the
+     * keyboard, instead.
      */
     private void resolveAnchor() {
         float top = terminalTop();
@@ -722,6 +736,8 @@ public final class TerminalCommandPaletteController
             return;
         }
         mMaxHeightPx = Float.MAX_VALUE;
+        mHomeCenterY = Float.NaN;
+        mHomeHighestTop = Float.NaN;
         float anchor = top + (bottom - top) * ANCHOR_FRACTION;
         float lowest = bottom - dp(STRIP_RESERVE);
         float highest = top + dp(MIN_HEIGHT);
@@ -733,9 +749,11 @@ public final class TerminalCommandPaletteController
     }
 
     /**
-     * On Home the page runs on under the dock and the keyboard, which overlay it (spec §5), so the
-     * glass and its keycap strip end above the bottom stack and the glass grows upward into the
-     * room left above. Taps on the dock and the keyboard go through to them.
+     * On Home the glass stands in the screen's middle and grows about it as results arrive. The
+     * page runs on under the dock and the keyboard, which overlay it (spec §5), so the glass and
+     * its keycap strip never end lower than the top of the bottom stack: with the keyboard up the
+     * room above it bounds the glass, which stands on that edge where the middle is too low.
+     * Taps on the dock and the keyboard go through to them.
      */
     private void resolveHomeAnchor(float top, float bottom) {
         float stackHeight = CommandPaletteHomeOverlay.stackHeightPx(top, bottom, bottomStackTop());
@@ -743,6 +761,8 @@ public final class TerminalCommandPaletteController
         float inset = CommandPaletteHomeOverlay.bottomInsetPx(room, stackHeight,
             dp(STRIP_RESERVE));
         mAnchorY = bottom - inset;
+        mHomeCenterY = mHost.getHeight() / 2f;
+        mHomeHighestTop = top + dp(SIDE_INSET);
         mMaxHeightPx = CommandPaletteHomeOverlay.availableHeightPx(room, inset, dp(SIDE_INSET),
             dp(MAX_HEIGHT));
         mModalBounds.set(0f, top, mHost.getWidth(), bottom - stackHeight);

@@ -146,4 +146,44 @@ public class CommandPaletteHomeOverlayTest {
         assertEquals(500f, CommandPaletteHomeOverlay.bottomInsetPx(500f, 480f, 120.75f), 0f);
         assertEquals(0f, CommandPaletteHomeOverlay.availableHeightPx(500f, 500f, 36.75f, 777f), 0f);
     }
+
+    @Test
+    public void homeGlass_standsInTheScreensMiddle_andGrowsAboutIt() {
+        // 2400 tall, keyboard down: the glass may end no lower than 1429.25 (above the dock).
+        float shortBottom = CommandPaletteHomeOverlay.glassBottomPx(200f, 1200f, 150f, 1429.25f);
+        assertEquals(1300f, shortBottom, 0.01f);
+        float tallBottom = CommandPaletteHomeOverlay.glassBottomPx(600f, 1200f, 150f, 1429.25f);
+        // Taller than the middle allows: it stands on the edge above the dock and grows upward.
+        assertEquals(1429.25f, tallBottom, 0.01f);
+        // Results arriving: the top rises by part of what the glass gained, never all of it.
+        float shortTop = shortBottom - 200f;
+        float tallTop = tallBottom - 600f;
+        assertTrue(tallTop < shortTop);
+        assertTrue(shortTop - tallTop < 400f);
+    }
+
+    @Test
+    public void homeGlass_centredWhileItFits_movesUpByHalfOfWhatItGains() {
+        float before = CommandPaletteHomeOverlay.glassBottomPx(200f, 1200f, 150f, 2000f);
+        float after = CommandPaletteHomeOverlay.glassBottomPx(400f, 1200f, 150f, 2000f);
+        assertEquals(100f, (before - 200f) - (after - 400f), 0.01f);
+        assertEquals(1200f, (after - 400f + after) / 2f, 0.01f);
+    }
+
+    @Test
+    public void homeGlass_withTheKeyboardUp_standsOnTheStacksTopInsteadOfUnderIt() {
+        // Keyboard and dock from 1300 down, strip reserve 120.75: the lowest bottom is 1179.25,
+        // above the screen's middle plus half the glass, so the glass rises to clear them.
+        float bottom = CommandPaletteHomeOverlay.glassBottomPx(400f, 1200f, 150f, 1179.25f);
+        assertEquals(1179.25f, bottom, 0.01f);
+        assertTrue(bottom - 400f >= 150f);
+    }
+
+    @Test
+    public void homeGlass_neverRisesPastTheRoomsTop() {
+        // A middle high up (a short window): the top holds at the room's top and the glass grows
+        // down from there, still above the stack.
+        float bottom = CommandPaletteHomeOverlay.glassBottomPx(500f, 300f, 150f, 1429.25f);
+        assertEquals(650f, bottom, 0.01f);
+    }
 }
