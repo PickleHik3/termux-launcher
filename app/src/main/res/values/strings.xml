@@ -2781,7 +2781,7 @@
     <string name="help_az_title">A–Z index</string>
     <string name="help_space_title">Space bar</string>
     <string name="help_launcher_settings_title">Termux Launcher settings</string>
-    <string name="help_display_apps_title">Display apps</string>
+    <string name="help_display_apps_title">Display window</string>
     <string name="help_scale_title">Scale</string>
     <string name="help_pad_title">Touchpad</string>
     <string name="help_pad_one">One finger moves and taps.</string>
@@ -2834,7 +2834,7 @@
     <string name="help_topic_shortcuts_purpose">Ctrl and Alt turn the other keys into launcher shortcuts.</string>
     <string name="help_topic_shortcuts_action">Then press the key for the shortcut you want.</string>
     <string name="help_topic_display_apps_purpose">The display window has a chip among your windows, with the front app\'s icon.</string>
-    <string name="help_topic_display_apps_action">Tap one to bring it forward, then tap × to close it.</string>
+    <string name="help_topic_display_apps_action">Tap its chip to bring it forward, hold and drag it to move it, or tap × to stop the display.</string>
     <string name="help_topic_display_apps_reveal">Open a Linux app or Display to see the display window\'s chip.</string>
     <string name="help_topic_scale_purpose">The scale rail sets how large the display is.</string>
     <string name="help_topic_scale_action">Drag it to resize the display.</string>
@@ -2871,8 +2871,8 @@
     <!-- Help centre: Find your way. -->
     <string name="help_topic_places_title">Places</string>
     <string name="help_topic_places_summary">The launcher has two halves: Home, and your windows, the display window among them.</string>
-    <string name="help_topic_places_action">Hold the top or bottom border, then swipe left or right to switch places.</string>
-    <string name="help_topic_places_step1">Home holds your widgets, Terminal your shells, and Display runs Linux apps.</string>
+    <string name="help_topic_places_action">Hold the top or bottom border, then swipe left or right to move between windows and Home.</string>
+    <string name="help_topic_places_step1">Home holds your widgets; your windows hold your shells, and the display window your Linux apps.</string>
     <string name="help_topic_places_back">Swipe back the other way to return to where you were.</string>
     <string name="help_topic_places_aliases">places, switch place, home, terminal, widgets, display, border, top border, bottom border, swipe, drag, mode</string>
     <string name="help_topic_corners_back">Tap away from the controls to put them away.</string>
