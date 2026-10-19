@@ -18,7 +18,6 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.place.Element;
 import com.termux.app.place.HomeChromePolicy;
-import com.termux.app.place.KeyboardOverlayPolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.Slot;
 import com.termux.app.wall.PaneWallPage;
@@ -50,7 +49,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * Home floats (docs/GLOSSARY.md): windows of the session drawn over one Home page, pinned to it,
  * born a window inside the room between the status bar and the dock, remembering their shape per orientation,
- * lifted over the keyboard, and the status bar on Home that comes with them.
+ * shaped above the keyboard, and the status bar on Home that comes with them.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -215,7 +214,6 @@ public class HomeFloatTest {
         assertEquals(1f, portrait.bottom, 1e-4f);
         assertTrue("air on every side but the dock's, where the Margin is",
             portrait.left > 0f && portrait.top > 0f && portrait.width() < 1f);
-        assertTrue(HomeFloatPolicy.reachesBottom(portrait));
         assertFalse("never the whole room", FloatTitlebarPolicy.fullRoom().equals(portrait));
         // Landscape: 2400 by 900 px.
         RectF landscape = HomeFloatPolicy.birthFrac(2400, 900, 360, 270, 105);
@@ -638,31 +636,50 @@ public class HomeFloatTest {
     }
 
     @Test
-    public void theFocusedFloatRisesSoItsCursorRowClearsTheKeyboard() {
-        assertEquals(0, KeyboardOverlayPolicy.floatLiftPx(false, 900, 600));
-        assertEquals(0, KeyboardOverlayPolicy.floatLiftPx(true, 500, 600));
-        assertEquals(300, KeyboardOverlayPolicy.floatLiftPx(true, 900, 600));
-    }
-
-    @Test
-    public void theKeyboardLiftsASmallerFloatAndNeverResizesIt() {
+    public void aSmallerFloatUnderTheKeyboardRisesToStandOnItAndComesBack() {
         TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
-        placeSmaller(window, new RectF(.1f, .5f, .8f, .9f));
+        RectF small = new RectF(.1f, .5f, .8f, .9f);
+        placeSmaller(window, small);
         View container = containerOf(window);
         layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) container.getLayoutParams();
         int height = params.height;
         int top = params.topMargin;
+        // Its top is below the keyboard's: shrinking cannot help, so it rises at the least height.
         mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 400);
-        assertEquals("never resized", height, container.getLayoutParams().height);
-        assertEquals("never moved: lifted", top,
-            ((FrameLayout.LayoutParams) container.getLayoutParams()).topMargin);
-        assertTrue("lifted no lower than where it was", container.getTranslationY() <= 0f);
-        assertTrue("never past the room's top",
-            top + container.getTranslationY() >= ROOM_TOP);
+        params = (FrameLayout.LayoutParams) container.getLayoutParams();
+        assertEquals("it stands on the keyboard", 400, params.topMargin + params.height, 1);
+        assertEquals("at the least height it keeps over the keyboard", 160, params.height, 1);
+        assertTrue("never past the room's top", params.topMargin >= ROOM_TOP);
+        assertEquals("moved, not lifted", 0f, container.getTranslationY(), 0f);
+        assertNear("its shape is its own and stays", small, window.active.floatFrac);
 
         mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1);
-        assertEquals("put back when the keyboard closes", 0f, container.getTranslationY(), 0f);
+        params = (FrameLayout.LayoutParams) container.getLayoutParams();
+        assertEquals("back where it was when the keyboard closes", top, params.topMargin);
+        assertEquals(height, params.height);
+    }
+
+    @Test
+    public void aMovedFloatThatTheKeyboardOverlapsShrinksAboveItKeepingItsTop() {
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        RectF moved = new RectF(.1f, .2f, .8f, .9f);
+        placeSmaller(window, moved);
+        View container = containerOf(window);
+        layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
+        int top = ((FrameLayout.LayoutParams) container.getLayoutParams()).topMargin;
+        int height = container.getLayoutParams().height;
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 600);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) container.getLayoutParams();
+        assertEquals("its titlebar stays where it was", top, params.topMargin, 1);
+        assertEquals("its bottom at the keyboard's top", 600, params.topMargin + params.height, 1);
+        assertNear("its shape is its own and stays", moved, window.active.floatFrac);
+
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1);
+        assertEquals(height, container.getLayoutParams().height);
+        // A keyboard below the float leaves it alone.
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, top + height + 10);
+        assertEquals(height, container.getLayoutParams().height);
     }
 
     @Test
@@ -729,54 +746,58 @@ public class HomeFloatTest {
         assertTrue("still maximised", FloatTitlebarPolicy.isMaximised(window.active.floatRestoreFrac));
         assertNear("the restore shape is kept", small, window.active.floatRestoreFrac);
 
-        // Restore with the keyboard up: the float is the shape it was, lifted rather than shrunk.
+        // Restore with the keyboard up: the float is the shape it was, standing on the keyboard
+        // (its top lies below the keyboard's) at the least height it keeps there.
         mController.toggleFloatMaximised(window.active);
         assertNear("restored", small, window.active.floatFrac);
-        assertEquals(Math.round(small.height() * (DOCK_TOP - ROOM_TOP)),
-            container.getLayoutParams().height);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) container.getLayoutParams();
+        assertEquals(400, params.topMargin + params.height, 1);
         mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1);
         assertEquals(Math.round(small.height() * (DOCK_TOP - ROOM_TOP)),
             container.getLayoutParams().height);
     }
 
     @Test
-    public void onlyTheFocusedFloatShrinksForTheKeyboard() {
+    public void everyFloatOnThePageMeetsTheKeyboardAndAnotherPagesWaits() {
         TerminalPaneController.Window first = mController.openHomeFloat(terminal(), 0);
         mController.toggleFloatMaximised(first.active);
         TerminalPaneController.Window second = mController.openHomeFloat(terminal(), 0);
         // Born cascaded off the first; maximised, it fills the room as the first does.
         titlebarOf(containerOf(second)).buttonFor(FloatTitlebarPolicy.ACTION_MAXIMISE).performClick();
+        TerminalPaneController.Window elsewhere = mController.openHomeFloat(terminal(), 1);
+        mController.toggleFloatMaximised(elsewhere.active);
         layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
         mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 400);
         assertEquals(400 - ROOM_TOP, containerOf(second).getLayoutParams().height);
-        assertEquals("an unfocused float sits at its size", DOCK_TOP - ROOM_TOP,
+        assertEquals("an unfocused float on the page meets it too", 400 - ROOM_TOP,
             containerOf(first).getLayoutParams().height);
+        assertEquals("a float on another page keeps its shape", DOCK_TOP - ROOM_TOP,
+            containerOf(elsewhere).getLayoutParams().height);
 
         mController.focusHomeFloat(first);
         assertEquals(400 - ROOM_TOP, containerOf(first).getLayoutParams().height);
+        assertEquals(400 - ROOM_TOP, containerOf(second).getLayoutParams().height);
+
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1);
+        assertEquals(DOCK_TOP - ROOM_TOP, containerOf(first).getLayoutParams().height);
         assertEquals(DOCK_TOP - ROOM_TOP, containerOf(second).getLayoutParams().height);
     }
 
     @Test
-    public void aFloatReachesTheRoomsBottomOnlyWhileItEndsThere() {
-        assertTrue(HomeFloatPolicy.reachesBottom(FloatTitlebarPolicy.fullRoom()));
-        assertTrue(HomeFloatPolicy.reachesBottom(HomeFloatPolicy.birthFrac()));
-        assertTrue("rounding is not a placement",
-            HomeFloatPolicy.reachesBottom(new RectF(0f, 0f, 1.00001f, 0.99999f)));
-        assertTrue("a cascaded float", HomeFloatPolicy.reachesBottom(new RectF(.03f, .05f, 1f, 1f)));
-        assertTrue(HomeFloatPolicy.reachesBottom(new RectF(.05f, 0f, 1.05f, 1f)));
-        assertFalse(HomeFloatPolicy.reachesBottom(new RectF(0f, 0f, 1f, .9f)));
-        assertFalse(HomeFloatPolicy.reachesBottom(null));
-    }
-
-    @Test
-    public void theKeyboardRoomShrinksOnlyAFloatThatReachesTheRoomsBottom() {
+    public void theKeyboardRoomShapesEveryFloatThatReachesBelowTheKeyboard() {
         Rect room = new Rect(0, 80, 600, 880);
         RectF full = FloatTitlebarPolicy.fullRoom();
         assertEquals(new Rect(0, 80, 600, 400),
             HomeFloatPolicy.keyboardRoom(room, full, true, 400, 90));
-        assertEquals("a smaller float keeps the room and is lifted", room,
-            HomeFloatPolicy.keyboardRoom(room, new RectF(.1f, .5f, .8f, .9f), true, 400, 90));
+        // A smaller float whose top is below the keyboard's: it rises to stand on the keyboard.
+        RectF low = new RectF(.1f, .5f, .8f, .9f);
+        Rect laidOut = HomeFloatPolicy.keyboardRoom(room, low, true, 400, 90);
+        int top = laidOut.top + Math.round(low.top * laidOut.height());
+        int bottom = top + Math.round(low.height() * laidOut.height());
+        assertEquals("it stands on the keyboard", 400, bottom, 1);
+        assertEquals("at the least height", 90, bottom - top, 1);
+        assertEquals("a float clear of the keyboard keeps the room", room,
+            HomeFloatPolicy.keyboardRoom(room, new RectF(.1f, .1f, .8f, .3f), true, 400, 90));
         assertEquals("keyboard down", room, HomeFloatPolicy.keyboardRoom(room, full, false, 400, 90));
         assertEquals("a keyboard below the room changes nothing", room,
             HomeFloatPolicy.keyboardRoom(room, full, true, 900, 90));
@@ -803,28 +824,31 @@ public class HomeFloatTest {
     }
 
     @Test
-    public void aFloatShrunkForTheKeyboardKeepsItsOwnTop() {
+    public void aFloatShapedForTheKeyboardKeepsItsOwnTopOrStandsOnIt() {
         // The emulator's numbers: a room from 220 to 2100, the keyboard's top at 1400, a float
         // cascaded 92px down off a full-size one, so its titlebar sits at 312.
         Rect room = new Rect(0, 220, 1080, 2100);
         assertEquals("the titlebar stays put, the bottom meets the keyboard",
             new Rect(42, 312, 1080, 1400),
-            HomeFloatPolicy.keyboardShrunk(new Rect(42, 312, 1080, 2100), room, 1400, 300));
+            HomeFloatPolicy.keyboardShape(new Rect(42, 312, 1080, 2100), room, 1400, 300));
         assertEquals("a float at the room's top ends at the keyboard, as today",
             new Rect(0, 220, 1080, 1400),
-            HomeFloatPolicy.keyboardShrunk(new Rect(room), room, 1400, 300));
-        assertEquals("the minimum height holds",
-            new Rect(42, 1200, 1080, 1500),
-            HomeFloatPolicy.keyboardShrunk(new Rect(42, 1200, 1080, 2100), room, 1400, 300));
+            HomeFloatPolicy.keyboardShape(new Rect(room), room, 1400, 300));
+        assertEquals("too little left above the keyboard: it rises at the least height",
+            new Rect(42, 1100, 1080, 1400),
+            HomeFloatPolicy.keyboardShape(new Rect(42, 1200, 1080, 2100), room, 1400, 300));
         assertEquals("never grown past the height it had",
-            new Rect(42, 1300, 1080, 1500),
-            HomeFloatPolicy.keyboardShrunk(new Rect(42, 1300, 1080, 1500), room, 1400, 300));
+            new Rect(42, 1200, 1080, 1400),
+            HomeFloatPolicy.keyboardShape(new Rect(42, 1300, 1080, 1500), room, 1400, 300));
+        assertEquals("never risen past the room's top: all the room above the keyboard",
+            new Rect(42, 220, 1080, 400),
+            HomeFloatPolicy.keyboardShape(new Rect(42, 300, 1080, 2100), room, 400, 300));
         assertEquals("keyboard down", new Rect(42, 312, 1080, 2100),
-            HomeFloatPolicy.keyboardShrunk(new Rect(42, 312, 1080, 2100), room, -1, 300));
+            HomeFloatPolicy.keyboardShape(new Rect(42, 312, 1080, 2100), room, -1, 300));
         assertEquals("a keyboard below the float changes nothing", new Rect(42, 312, 1080, 1000),
-            HomeFloatPolicy.keyboardShrunk(new Rect(42, 312, 1080, 1000), room, 1400, 300));
+            HomeFloatPolicy.keyboardShape(new Rect(42, 312, 1080, 1000), room, 1400, 300));
         assertEquals("never inverted", new Rect(0, 220, 1080, 221),
-            HomeFloatPolicy.keyboardShrunk(new Rect(room), room, 20, 0));
+            HomeFloatPolicy.keyboardShape(new Rect(room), room, 20, 0));
     }
 
     @Test

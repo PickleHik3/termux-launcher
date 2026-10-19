@@ -9,8 +9,9 @@ import androidx.annotation.Nullable;
  * already up when the palette opened (a Home float's, always on) is not the palette's to close.
  *
  * <p>Pure state, no views: the controller records the opening and asks at the close, and measures
- * the room and the bottom stack and asks where the glass may stand: above the dock and the
- * keyboard, growing upward ({@link #bottomInsetPx}, {@link #availableHeightPx}).
+ * the room and the bottom stack and asks where the glass may stand: in the screen's middle,
+ * growing about its centre, and never over the dock or the keyboard ({@link #bottomInsetPx},
+ * {@link #availableHeightPx}, {@link #glassBottomPx}).
  */
 final class CommandPaletteHomeOverlay {
 
@@ -72,14 +73,30 @@ final class CommandPaletteHomeOverlay {
     }
 
     /**
-     * The tallest the Home palette's glass may grow upward from its bottom edge: the room above
-     * that edge less a gap at the top, and never past {@code maxHeightPx}. A short room (landscape)
-     * shrinks the list rather than pushing the glass under the dock.
+     * The tallest the Home palette's glass may grow: the room above its lowest bottom edge less a
+     * gap at the top, and never past {@code maxHeightPx}. A short room (landscape, or the keyboard
+     * up) shrinks the list rather than pushing the glass under the dock.
      */
     static float availableHeightPx(float roomHeightPx, float bottomInsetPx, float topGapPx,
                                    float maxHeightPx) {
         float above = Math.max(0f, roomHeightPx) - Math.max(0f, bottomInsetPx)
             - Math.max(0f, topGapPx);
         return Math.max(0f, Math.min(maxHeightPx, above));
+    }
+
+    /**
+     * Where the Home palette's glass ends for a glass {@code heightPx} tall: centred on
+     * {@code centerYPx} (the screen's middle), so as results arrive it grows about its centre and
+     * its top rises by half of what it gained, but kept inside the room. Its top never rises past
+     * {@code highestTopPx}, and its bottom never falls past {@code lowestBottomPx}, the edge above
+     * the dock, the keyboard and the keycap strip; where the middle would put it under them the
+     * glass stands on that edge instead and grows upward from it. A glass taller than the room
+     * ({@link #availableHeightPx} keeps it from being one) keeps its bottom clear of the stack.
+     */
+    static float glassBottomPx(float heightPx, float centerYPx, float highestTopPx,
+                               float lowestBottomPx) {
+        float height = Math.max(0f, heightPx);
+        float bottom = Math.max(centerYPx + height / 2f, highestTopPx + height);
+        return Math.min(bottom, lowestBottomPx);
     }
 }

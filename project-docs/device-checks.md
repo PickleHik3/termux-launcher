@@ -693,6 +693,30 @@ are void.
   keyboard go, output shows on return; recreate → same shell, process kill → fresh shell in the
   last directory; `exit` → "Session ended", tap restarts; remove while `sleep 100` → asks; never
   in the windows pill, chips, status bar or Saved sessions, never a Workspace window.
+- 10-19 Home fixes (Developer, pong; reasoned from code and unit tests, nothing seen yet):
+  - Keyboard on Home is glass (blurred wallpaper, the Keyboard surface's opacity and tint), not the
+    opaque panel: docked and split, Docked and Floating Style, light/dark/black/Material You;
+    the wallpaper under the keys lines up with the dock's (no offset after paging Home); sliding
+    Home ↔ window with the keyboard up shows no flash; the display in overlay mode is still the
+    solid panel; the floating keyboard is still its solid card on Home.
+  - Home pills on glass on every setup: bar on top and on the bottom, Docked (with side bars too)
+    and Floating, terminal glass on/off, light/dark/black/Material You; status-bar Opacity, Blur,
+    Grain and Tint (inherited and detached) change the pills; a wallpaper change updates them; the
+    pills' outline shows no square corner or second rim; no strip behind the system bar.
+  - Command palette on Home opens in the screen's middle; typing so results arrive grows it about
+    its middle (top rises a little), never over the dock; with the keyboard up it stands above the
+    keyboard's strip; landscape keeps it inside the room; the Workspace palette is unchanged.
+  - Home floats and the keyboard: a birth-shape float, a moved/resized one, a maximised one and an
+    unfocused one on the same page all end at the keyboard's top (titlebar where it was); a small
+    float low on the page rises to stand on the keyboard; closing the keyboard puts every float back
+    exactly; restart keeps the shapes from before the keyboard; paging Home with the keyboard up
+    shapes the new page's floats.
+  - The seam (no code change; the pager's hand-off is unit-tested): with at least one Workspace
+    window and no Home float on the last Home page, a plain swipe left on the free area of the last
+    Home page carries the wall into window 1 under the finger, a short swipe springs back, and a
+    border drag right off window 1 returns to the last Home page. If it does not cross, note
+    whether the Workspace had a window (the spec stops there without one) and whether the swipe
+    started on a Home float (the float keeps its own touches).
 
 ### Wall rework phase two: slice 2, Style, Corners and Margin on Home (feat/wall-rework-phase2)
 - 2026-10-18 · commit "feat(wall): the chrome wears the Style, Corners and Margin of the half on

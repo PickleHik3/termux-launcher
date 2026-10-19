@@ -112,8 +112,8 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     /**
-     * Home's look ({@link HomePillsPolicy}): the bar draws its glass only inside the pills, shows
-     * nothing of its own content, and hands every touch to the pills, which keep only those on a
+     * Home's look ({@link HomePillsPolicy}): the bar draws nothing of its own, glass or content (the
+     * pills stand on glass of their own), and hands every touch to the pills, which keep only those on a
      * pill, so the page under the rest of the band keeps its own. No fold while it holds.
      */
     public void setHomePills(boolean on) {
@@ -145,35 +145,15 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     private boolean mHomePills;
     @Nullable private HomePillsView mHomePillsView;
-    private final android.graphics.Path mPillsClip = new android.graphics.Path();
-
-    /** The bar's own glass: drawn whole, or only inside the pills on Home. */
-    private static boolean isGlassLayer(@NonNull View child) {
-        int id = child.getId();
-        return id == R.id.terminal_window_bar_wallpaper_backdrop
-            || id == R.id.terminal_window_bar_blur
-            || id == R.id.terminal_window_bar_background;
-    }
 
     @Override protected boolean drawChild(@NonNull android.graphics.Canvas canvas,
                                           @NonNull View child, long drawingTime) {
         if (!mHomePills) return super.drawChild(canvas, child, drawingTime);
-        HomePillsView pills = mHomePillsView;
-        if (child == pills) {
-            View glass = findViewById(R.id.terminal_window_bar_background);
-            pills.setGlass(glass != null && glass.getVisibility() == VISIBLE
-                && glass.getBackground() != null);
-            return super.drawChild(canvas, child, drawingTime);
-        }
-        // The rest of the bar's content stays laid out for the Workspace and is not drawn here.
-        if (!isGlassLayer(child) || pills == null) return false;
-        pills.pillsPath(mPillsClip);
-        if (mPillsClip.isEmpty()) return false;
-        int saved = canvas.save();
-        canvas.clipPath(mPillsClip);
-        boolean more = super.drawChild(canvas, child, drawingTime);
-        canvas.restoreToCount(saved);
-        return more;
+        // The bar's glass and content stay laid out for the Workspace and are not drawn here: the
+        // pills carry their own glass, so they do not depend on what the bar's layers are doing
+        // (resting on the dock's plank, standing down for a frame, a frost not yet aimed).
+        if (child != mHomePillsView) return false;
+        return super.drawChild(canvas, child, drawingTime);
     }
 
     @Override public void addChildrenForAccessibility(java.util.ArrayList<View> outChildren) {

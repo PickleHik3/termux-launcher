@@ -53,7 +53,6 @@ import com.termux.app.launcher.popup.AnchoredMenuTheme;
 import com.termux.app.launcher.popup.MenuRowFactory;
 import com.termux.app.launcher.popup.MenuSpec;
 import com.termux.app.material.M3;
-import com.termux.app.place.KeyboardOverlayPolicy;
 import com.termux.app.wall.PaneControlsView;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalEmulator;
@@ -159,6 +158,11 @@ public class TerminalPaneController {
 
     private static final int FLOAT_MIN_WIDTH_DP = 120;
     private static final int FLOAT_MIN_HEIGHT_DP = 90;
+    /**
+     * The least a Home float keeps above the keyboard before it rises instead of shrinking: its
+     * titlebar and a few rows of text.
+     */
+    private static final int FLOAT_KEYBOARD_MIN_HEIGHT_DP = 160;
     /** How much of the drag handle must remain reachable after any move or host resize. */
     private static final int FLOAT_MIN_VISIBLE_DP = 48;
     /** The bottom-trailing corner a float is resized from. */
@@ -3246,8 +3250,8 @@ public class TerminalPaneController {
      * What covers the float layer, in screen pixels: the bottom of the status bar (or of the
      * system bar) above it, the top of the dock below it with the keyboard down, and the top of the
      * keyboard, with the dock riding on it, while it is up (-1 while it is down). Floats are laid
-     * out between the first two. While the keyboard is up the focused one meets it: shrunk above
-     * it when it reaches the room's bottom, lifted otherwise ({@link #applyHomeFloatLift}).
+     * out between the first two. While the keyboard is up every float on the page that reaches
+     * below its top takes its shape above it ({@link HomeFloatPolicy#keyboardRoom}).
      */
     public void setHomeFloatObstructions(int roomTopOnScreenPx, int dockTopOnScreenPx,
                                          int keyboardTopOnScreenPx) {
@@ -3305,6 +3309,8 @@ public class TerminalPaneController {
             if (container.getVisibility() != visibility) container.setVisibility(visibility);
             if (!shown && w == mFocusedHomeFloat) focusedHidden = true;
         }
+        // The page's floats meet a keyboard already up; the last page's give their shape back.
+        applyHomeFloatLift();
         // The page turned away from the focused float: Home has the focus again.
         if (focusedHidden) releaseHomeFloatFocus();
     }
@@ -3331,9 +3337,10 @@ public class TerminalPaneController {
     }
 
     /**
-     * Meets the keyboard with the focused Home float: one that reaches its room's bottom keeps its
-     * top and shrinks to the keyboard, growing back after, as a tiled pane does; one that stops
-     * short of the bottom is lifted so its cursor row clears the keyboard. Every other float sits flat at its full size.
+     * Meets the keyboard with every Home float on the page: one reaching below the keyboard's top
+     * keeps its top and ends at the keyboard, or rises to stand on it when too little would be
+     * left, and takes its own shape back when the keyboard closes
+     * ({@link FloatingPaneContainer#layoutRoom}). Terminal widgets are lifted by their cursor row.
      */
     private void applyHomeFloatLift() {
         for (Window w : mHomeFloats) {
@@ -3342,34 +3349,11 @@ public class TerminalPaneController {
             // Re-laid only when the room it should have changed: this runs on cursor moves too.
             Rect laidOut = container.mLaidOutRoom != null ? container.mLaidOutRoom : container.room();
             if (!laidOut.equals(container.layoutRoom())) applyFloatBounds(w.active, container);
-            float target = w == mFocusedHomeFloat && container.mLaidOutRoom == null
-                ? -homeFloatLiftPx(w, container) : 0f;
-            if (container.getTranslationY() != target) container.setTranslationY(target);
         }
         for (Window w : mHostedFloats) {
             HostedFloatContainer container = mHostedContainers.get(w);
             if (container != null) container.applyLift(w == mFocusedHomeFloat);
         }
-    }
-
-    private int homeFloatLiftPx(@NonNull Window w, @NonNull FloatingPaneContainer container) {
-        HomeFloatLayer layer = mHomeFloatLayer;
-        if (layer == null || w.active == null || mHomeKeyboardTopOnScreenPx < 0
-            || container.getVisibility() != View.VISIBLE) return 0;
-        TerminalView view = mPaneViews.get(w.active.session);
-        TerminalEmulator emulator = view == null ? null : view.mEmulator;
-        if (emulator == null || emulator.mRows <= 0) return 0;
-        int row = Math.max(0, Math.min(emulator.mRows - 1, emulator.getCursorRow()));
-        float rowBottom = view.getRowTopPixels(row) + view.getTerminalCellHeightPixels();
-        int viewTop = container.getTop() + topWithin(view, container);
-        int wanted = KeyboardOverlayPolicy.floatLiftPx(true, Math.round(viewTop + rowBottom),
-            homeKeyboardTopInLayerPx());
-        // Never past the room's top: lifted by its cursor row alone, a full-size float with its
-        // prompt on the last row took its titlebar under the status bar, out of reach. The top
-        // is where the float is placed, not where the last pass left it.
-        int floatTop = container.getLayoutParams() instanceof FrameLayout.LayoutParams
-            ? ((FrameLayout.LayoutParams) container.getLayoutParams()).topMargin : container.getTop();
-        return HomeFloatPolicy.liftPx(wanted, floatTop, homeFloatRoom().top);
     }
 
     /** The keyboard's top in the float layer's pixels, or -1 while the keyboard is down. */
@@ -3379,17 +3363,6 @@ public class TerminalPaneController {
         int[] onScreen = new int[2];
         layer.getLocationOnScreen(onScreen);
         return Math.max(0, mHomeKeyboardTopOnScreenPx - onScreen[1]);
-    }
-
-    /** {@code view}'s laid-out top inside {@code ancestor}, translations left out. */
-    private static int topWithin(@NonNull View view, @NonNull View ancestor) {
-        int top = 0;
-        View current = view;
-        while (current != null && current != ancestor) {
-            top += current.getTop();
-            current = current.getParent() instanceof View ? (View) current.getParent() : null;
-        }
-        return top;
     }
 
     /**
@@ -6739,18 +6712,17 @@ public class TerminalPaneController {
         }
 
         /**
-         * The room this float is laid out in now: {@link #room()}, except that the focused Home
-         * float reaching its room's bottom keeps its top and ends at the keyboard's top while the
-         * keyboard is up ({@link HomeFloatPolicy#keyboardRoom}). Its fractions stay those of the
-         * whole room, so the keyboard is no resize.
+         * The room this float is laid out in now: {@link #room()}, except that a Home float on the
+         * page reaching below the keyboard's top takes its shape above the keyboard while it is up
+         * ({@link HomeFloatPolicy#keyboardRoom}). Its fractions stay those of the whole room, so
+         * the keyboard is no resize and nothing of it is saved.
          */
         @NonNull Rect layoutRoom() {
             Rect room = room();
-            if (mHomeFloat == null || mHomeFloat != mFocusedHomeFloat || mFlying
-                || getVisibility() != View.VISIBLE) return room;
+            if (mHomeFloat == null || mFlying || getVisibility() != View.VISIBLE) return room;
             int keyboardTop = homeKeyboardTopInLayerPx();
             return HomeFloatPolicy.keyboardRoom(room, mLeaf.floatFrac, keyboardTop >= 0,
-                keyboardTop, dp(FLOAT_MIN_HEIGHT_DP));
+                keyboardTop, dp(FLOAT_KEYBOARD_MIN_HEIGHT_DP));
         }
 
         /** The room {@link #applyFloatBounds} last laid this float out in, when it was not {@link #room()}. */
