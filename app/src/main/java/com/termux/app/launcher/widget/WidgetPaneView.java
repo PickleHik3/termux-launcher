@@ -897,7 +897,10 @@ public final class WidgetPaneView extends FrameLayout {
         // A turn is a page with another page that way; a pull against either end only slides.
         boolean turning = position < 0f ? currentPage < pageCount - 1
             : position > 0f && currentPage > 0;
-        transition.transform(position, width, turning, contentTransform);
+        // A widget carried across pages in edit mode turns them with the plain slide: its drop
+        // is aimed at the grid, which must not be scaled or turned under it.
+        HomePageTransition effect = widgetEditActive() ? HomePageTransition.SLIDE : transition;
+        effect.transform(position, width, turning, contentTransform);
         applyTransform(grid);
         applyTransform(empty);
         if (pinnedLayer != null) {
