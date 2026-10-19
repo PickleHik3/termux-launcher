@@ -1411,9 +1411,31 @@ element), not a defect; nothing about the dock's presence changed.
   Floating Style, light and dark, and the strip behind the system bar moves with the bar in Docked.
   Under a joined Docked frame, look for the bar's glass staying behind while its content moves ·
   emulator.
-- 2026-10-19 · f2f54cc4b · What still changes at settle, to judge rather than pass: a Home Style,
-  Corners or Margin set apart from the Workspace's re-dresses the dock at settle · emulator, then
-  pong.
+- 2026-10-19 · SeamDress (45d0f76b8) · pong's setup (Terminal layout without a dock, Home with
+  apps and A–Z) with Home set apart: Home Floating and the Workspace Docked, then the reverse;
+  Home's Corners and Margin different from the Workspace's; Home's dock height different in the
+  Layout editor. Slide terminal → Home slowly and by a fling: Home's dock rises already at its own
+  size, radius, margin and Style and does not change in the last frames or at settle. Home →
+  terminal: it sinks unchanged. Frames at 0, 25, 50, 75, 92 and 100 % each way, plus one just after
+  settle · emulator, then pong.
+- 2026-10-19 · SeamDress (45d0f76b8) · Same Home set apart, with the shipped Terminal layout
+  (a dock on both halves): the whole dock goes down over the first half and comes up in the other
+  half's dress over the second; at 50 % nothing of it is on screen; no row changes size or radius
+  while visible. Keyboard up on the terminal, and Home with always on: the keyboard goes down with
+  the dock and comes back in the other half's height and shape (it no longer stays up across the
+  seam while the halves are dressed apart). Drag to 40 %, 60 %, back to 40 % and let go: the dock
+  comes back in the terminal's dress, nothing pops on the spring-back · emulator.
+- 2026-10-19 · SeamDress (45d0f76b8) · Status bar along the top with Home set apart (Floating vs
+  Docked both ways): from Home toward the terminal the bar arrives already in the Workspace's
+  shape (capsule or full-bleed, its strip behind the system bar) and does not change at settle;
+  toward Home it leaves unchanged. The terminal page's own frame and panes still switch at settle
+  from Home (known, to judge rather than pass) · emulator.
+- 2026-10-19 · SeamDress (45d0f76b8) · Unchanged with Home not set apart (the default install):
+  the 10-19 seam items above still pass, and the terminal's dock padding (the glass taller by up
+  to a text row on the terminal) is never worn by Home's rows on the way to Home. Also: a Docked
+  Workspace with a side status bar (joined frame) against a Floating Home: Home's rows keep glass
+  of their own during the slide; the slide under reduced motion and Animation speed Slower; a
+  split terminal; landscape · emulator.
 - 2026-10-19 · f2f54cc4b · Unchanged elsewhere: a side rail or A–Z on a side edge in either
   layout, the status bar on a side or the bottom, reduced motion (everything snaps at settle),
   Animation speed Slower, a split terminal, landscape, the display window's slide to the terminal
@@ -1450,6 +1472,12 @@ element), not a defect; nothing about the dock's presence changed.
   start (from a Workspace without a dock, or bringing the bar from Home) or at its midpoint
   (a dip): perfetto `Wall.seamLayout` is that frame; report it red if it is worse than the
   pre-roll frames · pong, by hand (ask first).
+- 2026-10-19 · SeamDress (45d0f76b8) · With Home set apart from the Workspace, the frame that
+  changes the stack's halves (first frame toward Home, or the midpoint of a dip) now also
+  re-dresses the stack (perfetto `Wall.seamDress` inside `Wall.seamLayout`). Report it red if that
+  frame is worse than the pre-roll frames; and judge whether the whole-dock dip between two docks
+  (and the keyboard dipping with it) reads well, or wants another motion · pong, by hand (ask
+  first).
 - 2026-10-19 · PageTopInsets · The first frame of a slide from the terminal toward Home now also
   lays the canvas and Home's page out once (perfetto `Wall.canvasReach`), and the settle back on
   the terminal once more; Home's widgets are re-laid there instead of at settle. Report it red if
