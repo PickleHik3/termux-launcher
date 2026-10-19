@@ -27,6 +27,14 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
         void onHomePageShown(int page);
         /** A press went down on Home beside every float, at this point on screen. */
         void onPressBesideFloats(float rawX, float rawY);
+        /**
+         * Whether a press on {@code child}, the float under the finger, at ({@code x}, {@code y})
+         * in its own coordinates gives a sideways swipe to the page
+         * ({@link HomeFloatPolicy#bodySwipePagesHome}).
+         */
+        default boolean floatYieldsSideways(@NonNull View child, float x, float y) {
+            return false;
+        }
     }
 
     @Nullable private Listener mListener;
@@ -65,6 +73,25 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
             float top = child.getTop() + child.getTranslationY();
             if (localX >= left && localX < left + child.getWidth()
                 && localY >= top && localY < top + child.getHeight()) return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean yieldsSidewaysSwipe(float x, float y) {
+        if (mListener == null) return false;
+        float localX = x - getLeft() - getTranslationX();
+        float localY = y - getTop() - getTranslationY();
+        for (int i = getChildCount() - 1; i >= 0; i--) {
+            View child = getChildAt(i);
+            if (child.getVisibility() != VISIBLE) continue;
+            float left = child.getLeft() + child.getTranslationX();
+            float top = child.getTop() + child.getTranslationY();
+            if (localX >= left && localX < left + child.getWidth()
+                && localY >= top && localY < top + child.getHeight()) {
+                // The topmost float under the finger answers; the ones beneath never see it.
+                return mListener.floatYieldsSideways(child, localX - left, localY - top);
+            }
         }
         return false;
     }

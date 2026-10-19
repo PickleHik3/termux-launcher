@@ -55,3 +55,13 @@ The Home keyboard is transient by default: a gesture opens the command palette a
 one overlay, and the Home layout's keyboard element is the **always on** toggle, which shrinks the
 grid with today's reflow behind a snapshot. The capsule form of the status bar was tried in
 phase two and removed; Home wears its own pills instead. The spec's §4, §5 and §12 carry the detail.
+
+## Amended 2026-10-19: the seam never stops at an empty Workspace
+
+A forward swipe past the last Home page crosses even when the Workspace has no window. The swipe
+brings the empty Workspace in under the finger, under its own chrome, and a fresh shell opens as
+window 1 only when the release commits to it, through the same start the Terminal entry makes into
+an empty row; a swipe that springs back starts nothing. Since the 10-18 round sends Home's
+launches into Home floats, an empty Workspace is common, and a seam that stopped there read as a
+broken gesture. A sideways swipe that starts on a Home float's terminal pages as a swipe on the page
+does; the float moves only by its titlebar (spec §2, §4).

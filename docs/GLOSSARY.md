@@ -80,7 +80,8 @@ _Avoid_: place, widgets page, desktop
 
 **Home float**:
 A **window** of the current session drawn floating over one Home page instead of in the Workspace's
-row: born full-size, moved by its **titlebar**, resized at its bottom-right corner, minimised into
+row: born full-size, moved only by its **titlebar** (a sideways swipe on its terminal pages Home as
+a swipe beside it does), resized at its bottom-right corner, minimised into
 its chip in the status bar and docked into the row by the titlebar's Dock. It is what Terminal from
 Home opens. Chips, the drawer and the shortcuts see it like any window.
 _Avoid_: floating terminal (in prose), scratchpad (that is the toggled one), popup
@@ -227,8 +228,8 @@ _Avoid_: pill (the retired control; the dictation pill is another thing), header
 
 **Wall**:
 The one horizontal row the launcher pages along: the **Home pages**, then the **Workspace**. Swiping
-past the last Home page reaches the first window; dragging back before the first window returns to
-the last Home page. In code it is still `PaneWallController` and `PaneWallLayout`, and a page is a
+past the last Home page reaches the first window, opening a fresh one when the Workspace has none;
+dragging back before the first window returns to the last Home page. In code it is still `PaneWallController` and `PaneWallLayout`, and a page is a
 `PaneWallPage`. See ADR 0008.
 _Avoid_: pane wall (the retired name), pager, strip, carousel, home screen
 

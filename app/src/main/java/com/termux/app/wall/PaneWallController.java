@@ -28,6 +28,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         default boolean hasWindow() { return true; }
         /**
+         * Whether an empty Workspace can be started by Home's swipe past its last page: a shell
+         * can be made now. Asked only while the Workspace has no window.
+         */
+        default boolean canStartWorkspace() { return false; }
+        /**
+         * Home's swipe has carried the wall into an empty Workspace: start its first shell, as the
+         * Terminal entry does into an empty row. The wall already rests on (or slides to) the
+         * Workspace. False when no shell could be made; the wall then goes back to Home.
+         */
+        default boolean startWorkspaceShell() { return false; }
+        /**
          * A display is up, so its window is on the row: running, or asked for and starting.
          * Nothing switches it on (ADR 0008).
          */
@@ -153,6 +164,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * window: the wall goes there as soon as one arrives, unless something else moved it first.
      */
     private boolean mWorkspacePending;
+    /**
+     * Home's seam is carrying a swipe into a Workspace with no window: the row holds the
+     * Workspace's page (its pane host, empty, under the Workspace's chrome) for the swipe to bring
+     * in, and the shell is started only when the wall commits there ({@link WallRow#seamStartsShell}).
+     * Cleared when the swipe springs back to Home or the shell's window arrives.
+     */
+    private boolean mSeamIntoEmpty;
 
     public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host) {
         mWall = wall;
@@ -190,7 +208,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public void refreshPages() {
         mWall.setReducedMotion(mHost.reducedMotion());
         PaneWallPage before = mWall.currentPage();
-        mWall.setPages(PaneWallPolicy.rowPages(mHost.hasWindow(), mHost.isDisplayUp()));
+        boolean hasWindow = mHost.hasWindow();
+        if (hasWindow) mSeamIntoEmpty = false;
+        mWall.setPages(PaneWallPolicy.rowPages(hasWindow || mSeamIntoEmpty, mHost.isDisplayUp()));
         PaneWallPage after = mWall.currentPage();
         if (after != before && !mWall.pages().contains(before)) {
             mHost.showInnerPage(after, Math.max(0, mHost.innerCount(after) - 1));
@@ -203,7 +223,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /**
      * The seam out of Home for the widget grid: whether a forward swipe on the last Home page has
-     * somewhere to go on the row, and the wall's plain drag to carry it there.
+     * somewhere to go on the row, and the wall's plain drag to carry it there. With the Workspace
+     * empty the swipe still crosses: the Workspace's page joins the row for it, empty, and its
+     * first shell starts only if the release commits there.
      */
     @NonNull
     public com.termux.app.launcher.widget.WidgetPaneView.Seam homeSeam() {
@@ -211,10 +233,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             @Override public boolean canLeaveForward() {
                 return mWall.currentPage() == PaneWallPage.WIDGETS && !mWall.isMoving()
                     && mWall.areGesturesEnabled()
-                    && PaneWallPolicy.hasNeighbour(mWall.pages(), PaneWallPage.WIDGETS, 1);
+                    && WallRow.seamContinues(
+                        PaneWallPolicy.hasNeighbour(mWall.pages(), PaneWallPage.WIDGETS, 1),
+                        !mHost.hasWindow() && mHost.canStartWorkspace());
             }
             @Override public void begin() {
                 mWorkspacePending = false;
+                if (!mHost.hasWindow() && mHost.canStartWorkspace()) {
+                    // Only the page joins the row: nothing is started until the release commits.
+                    mSeamIntoEmpty = true;
+                    refreshPages();
+                }
                 mWall.beginPlainDrag();
             }
             @Override public void drag(float dxPx) { mWall.dragTo(dxPx); }
@@ -560,10 +589,24 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallPageChanged(@NonNull PaneWallPage page) {
         mHost.onWallPageChanged(page);
+        if (!WallRow.seamStartsShell(mSeamIntoEmpty, page)) return;
+        // The release committed to the empty Workspace: its first shell starts now, while the
+        // wall slides there. Its window takes the page the swipe brought in.
+        if (!mHost.startWorkspaceShell()) {
+            mSeamIntoEmpty = false;
+            refreshPages();
+            return;
+        }
+        refreshPages();
     }
 
     @Override
     public void onWallPageSettled(@NonNull PaneWallPage page) {
+        // The swipe sprang back to Home: the empty Workspace's page leaves the row again.
+        if (mSeamIntoEmpty && page == PaneWallPage.WIDGETS) {
+            mSeamIntoEmpty = false;
+            refreshPages();
+        }
         mHost.onWallPageSettled(page);
     }
 

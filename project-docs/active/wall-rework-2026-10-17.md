@@ -18,8 +18,8 @@ One horizontal row: Home page 1 … Home page n, then the Workspace's windows.
 
 | From | Gesture | Goes to |
 |---|---|---|
-| A Home page | plain swipe anywhere, left or right | the next or previous Home page |
-| The last Home page | swipe left | the first window, if the Workspace has one; otherwise it stops |
+| A Home page | plain swipe anywhere, left or right, a Home float's terminal included (amended 2026-10-19; not while it selects or a program tracks the mouse; the titlebar and resize corner stay the float's) | the next or previous Home page |
+| The last Home page | swipe left | the first window; with the Workspace empty, a fresh shell as window 1, started when the release commits (amended 2026-10-19) |
 | A window | border drag (unchanged: side borders hold-then-drag, top and bottom air plain swipe) | the next or previous window |
 | The first window | border drag right | the last Home page |
 

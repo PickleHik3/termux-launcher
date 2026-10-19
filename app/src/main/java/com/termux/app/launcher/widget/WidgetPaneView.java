@@ -96,6 +96,12 @@ public final class WidgetPaneView extends FrameLayout {
         void onHomePageShown(int page);
         /** Whether a press at ({@code x}, {@code y}), in the pane's coordinates, lands on the layer. */
         boolean holdsPoint(float x, float y);
+        /**
+         * Whether a press there on the layer gives a sideways swipe to the page: it pages Home (or
+         * crosses the seam) as a swipe on the free area does, while taps and vertical swipes stay
+         * with what is under the finger.
+         */
+        default boolean yieldsSidewaysSwipe(float x, float y) { return false; }
     }
 
     /** Fraction of the pane width a released drag must cross to commit a page switch. */
@@ -209,6 +215,11 @@ public final class WidgetPaneView extends FrameLayout {
     private boolean pinnedLayerHolds(@NonNull MotionEvent event) {
         return pinnedLayer instanceof PagePinnedLayer && pinnedLayer.getVisibility() == VISIBLE
             && ((PagePinnedLayer) pinnedLayer).holdsPoint(event.getX(), event.getY());
+    }
+
+    private boolean pinnedLayerYieldsSideways(@NonNull MotionEvent event) {
+        return pinnedLayer instanceof PagePinnedLayer && pinnedLayer.getVisibility() == VISIBLE
+            && ((PagePinnedLayer) pinnedLayer).yieldsSidewaysSwipe(event.getX(), event.getY());
     }
 
     /** The wall's seam: a forward swipe on the last Home page carries on into the row. */
@@ -432,14 +443,17 @@ public final class WidgetPaneView extends FrameLayout {
                 pagingDragging = false;
                 seamDragging = false;
                 verticalDragging = false;
+                // A swipe on a Home float is the float's, except a sideways one on its terminal
+                // when the terminal has no use for it: that one pages as it would beside it.
+                boolean onFloat = pinnedLayerHolds(event);
                 boolean free = !picker.isOpen() && !widgetEditActive()
                     && !insideNestedScrollingChild(this, event)
-                    // A swipe on a Home float is the float's (its terminal or its titlebar).
-                    && !pinnedLayerHolds(event);
+                    && (!onFloat || pinnedLayerYieldsSideways(event));
                 // One page still tracks when the seam is open: its forward swipe is the wall's.
                 pagingTracking = (pageCount > 1 || seamOpen()) && free;
-                // A swipe on a widget is the widget's, whichever way it goes.
-                verticalCandidate = free && !onWidget(event);
+                // A swipe on a widget is the widget's, whichever way it goes, and a vertical one
+                // on a float is its terminal's scroll.
+                verticalCandidate = free && !onFloat && !onWidget(event);
                 pagingDownX = event.getX(); pagingDownY = event.getY();
                 pagingDownRawX = event.getRawX();
                 if (pagingTracking || verticalCandidate) {

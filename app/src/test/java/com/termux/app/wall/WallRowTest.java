@@ -16,10 +16,25 @@ public class WallRowTest {
     public void aSwipeLeavesHomeOnlyFromTheLastPageAndOnlyWhenTheRowGoesOn() {
         assertTrue(WallRow.swipeLeavesHome(2, 3, 1, true));
         assertFalse("an earlier Home page pages Home", WallRow.swipeLeavesHome(1, 3, 1, true));
-        assertFalse("no window: the swipe stops", WallRow.swipeLeavesHome(2, 3, 1, false));
+        assertFalse("nowhere to go: the swipe stops", WallRow.swipeLeavesHome(2, 3, 1, false));
         assertFalse("backward never leaves Home", WallRow.swipeLeavesHome(0, 3, -1, true));
         assertTrue("one Home page is its own last page", WallRow.swipeLeavesHome(0, 1, 1, true));
         assertTrue("an empty count reads as one page", WallRow.swipeLeavesHome(0, 0, 1, true));
+    }
+
+    @Test
+    public void anEmptyWorkspaceStillTakesTheSwipeWhenItCanStart() {
+        assertTrue(WallRow.seamContinues(true, false));
+        assertTrue("an empty Workspace that can start", WallRow.seamContinues(false, true));
+        assertFalse("nothing after Home and nothing to start", WallRow.seamContinues(false, false));
+    }
+
+    @Test
+    public void onlyACommittedCrossingIntoAnEmptyWorkspaceStartsAShell() {
+        assertTrue(WallRow.seamStartsShell(true, PaneWallPage.TERMINAL));
+        assertFalse("sprang back to Home", WallRow.seamStartsShell(true, PaneWallPage.WIDGETS));
+        assertFalse("a Workspace with a window starts nothing",
+            WallRow.seamStartsShell(false, PaneWallPage.TERMINAL));
     }
 
     @Test

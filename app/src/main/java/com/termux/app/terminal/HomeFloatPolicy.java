@@ -170,6 +170,20 @@ public final class HomeFloatPolicy {
     }
 
     /**
+     * Whether a press on a Home float gives a sideways swipe to the page, which pages Home or
+     * crosses the seam as a swipe beside the float does: on the float's terminal, and only while
+     * the terminal has no use for a sideways drag. The titlebar ({@code onTitlebar}) moves the
+     * float and the resize corner ({@code onResizeGrip}) sizes it; a selection under way
+     * ({@code selecting}) is extended by the drag; and a program tracking the mouse
+     * ({@code mouseTracking}) is sent the drag, as it would be in the Workspace. Taps and vertical
+     * swipes on the terminal stay its own whatever this answers.
+     */
+    public static boolean bodySwipePagesHome(boolean onTitlebar, boolean onResizeGrip,
+                                             boolean selecting, boolean mouseTracking) {
+        return !onTitlebar && !onResizeGrip && !selecting && !mouseTracking;
+    }
+
+    /**
      * How far a terminal widget may rise: what its cursor row asks ({@code wantedPx}), but never
      * past {@code roomTopPx}, so it stays below the status bar. {@code floatTopPx} is its laid-out
      * top. Home floats are not lifted: they take their shape above the keyboard

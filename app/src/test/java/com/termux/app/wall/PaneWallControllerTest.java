@@ -48,8 +48,19 @@ public class PaneWallControllerTest {
         int stepped;
         float steppedFrom;
         float homeShift;
+        boolean canStart;
+        int shellsStarted;
 
         @Override public boolean reducedMotion() { return reduced; }
+        @Override public boolean canStartWorkspace() { return canStart; }
+        @Override public boolean startWorkspaceShell() {
+            shellsStarted++;
+            // The shell's window arrives with it, as the session client adds it.
+            hasWindow = true;
+            windows = 1;
+            current = 0;
+            return true;
+        }
         @Override public float innerShiftFraction(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? homeShift : 0f;
         }
@@ -200,8 +211,55 @@ public class PaneWallControllerTest {
 
         host.display = false;
         controller.refreshPages();
-        assertFalse("no window and no display: the swipe stops on the last Home page",
+        assertFalse("no window, no display and no shell to start: the swipe stops",
             controller.homeSeam().canLeaveForward());
+        host.canStart = true;
+        assertTrue("an empty Workspace that can start still takes the swipe",
+            controller.homeSeam().canLeaveForward());
+    }
+
+    @Test public void theSeamIntoAnEmptyWorkspaceStartsItsShellOnlyWhenItCommits() {
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        host.hasWindow = false;
+        host.display = false;
+        host.canStart = true;
+        controller.refreshPages();
+        assertEquals(Collections.singletonList(PaneWallPage.WIDGETS), controller.pages());
+
+        controller.homeSeam().begin();
+        assertEquals("the empty Workspace's page joins the row for the swipe",
+            Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.pages());
+        assertEquals("nothing is started at touch-down", 0, host.shellsStarted);
+        controller.homeSeam().drag(-900f);
+        assertEquals("nor while the finger drives it", 0, host.shellsStarted);
+        controller.homeSeam().end(-3000f);
+        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
+        assertEquals("the release committed: one shell", 1, host.shellsStarted);
+        controller.refreshPages();
+        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
+    }
+
+    @Test public void aSwipeIntoAnEmptyWorkspaceThatSpringsBackLeavesNothing() {
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        host.hasWindow = false;
+        host.display = false;
+        host.canStart = true;
+        controller.refreshPages();
+
+        controller.homeSeam().begin();
+        controller.homeSeam().drag(-40f);
+        controller.homeSeam().end(0f);
+        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        assertEquals(0, host.shellsStarted);
+        assertEquals("the empty page leaves the row again",
+            Collections.singletonList(PaneWallPage.WIDGETS), controller.pages());
+
+        controller.homeSeam().begin();
+        controller.homeSeam().drag(-300f);
+        controller.homeSeam().cancel();
+        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        assertEquals(0, host.shellsStarted);
+        assertEquals(Collections.singletonList(PaneWallPage.WIDGETS), controller.pages());
     }
 
     @Test public void theSeamFromHomeReachesTheFirstWindow() {

@@ -711,12 +711,19 @@ are void.
     float low on the page rises to stand on the keyboard; closing the keyboard puts every float back
     exactly; restart keeps the shapes from before the keyboard; paging Home with the keyboard up
     shapes the new page's floats.
-  - The seam (no code change; the pager's hand-off is unit-tested): with at least one Workspace
-    window and no Home float on the last Home page, a plain swipe left on the free area of the last
-    Home page carries the wall into window 1 under the finger, a short swipe springs back, and a
-    border drag right off window 1 returns to the last Home page. If it does not cross, note
-    whether the Workspace had a window (the spec stops there without one) and whether the swipe
-    started on a Home float (the float keeps its own touches).
+  - The seam: with Workspace windows, a plain swipe left on the last Home page carries the wall
+    into window 1 under the finger, a short swipe springs back, and a border drag right off
+    window 1 returns to the last Home page. With the Workspace empty (only Home floats): the same
+    swipe brings an empty Workspace in under the finger with its chrome, and letting go past the
+    commit opens a fresh shell as window 1 (one, not two); a short swipe or a swipe dragged back
+    springs to Home and no shell appears (check the drawer's sessions); no flash or jump at the
+    release.
+  - Swipes on a Home float's terminal: sideways pages Home (and crosses the seam from the last
+    page) as a swipe beside the float does; vertical scrolls the terminal; a tap focuses it and
+    types; the titlebar still moves it and the corner still sizes it; with a selection under way a
+    sideways drag extends it; in tmux/vim with mouse on, a sideways drag goes to the program; with
+    a full-size float on the last page and an empty Workspace, a sideways swipe on it opens
+    window 1. Terminal widgets on a Home page behave as before.
 
 ### Wall rework phase two: slice 2, Style, Corners and Margin on Home (feat/wall-rework-phase2)
 - 2026-10-18 · commit "feat(wall): the chrome wears the Style, Corners and Margin of the half on
