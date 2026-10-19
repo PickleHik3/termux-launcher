@@ -853,7 +853,7 @@ public class TerminalPaneController {
         }
         GridHold hold = new GridHold();
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(PANE_MOVE_MS);
+        animator.setDuration(paneMoveMs(mMotionOverlay.getContext()));
         animator.setInterpolator(PaneMotionOverlayView.standardInterpolator());
         animator.addUpdateListener(animation -> {
             float t = (float) animation.getAnimatedValue();
@@ -4448,6 +4448,14 @@ public class TerminalPaneController {
     /** How long a pane takes to slide from where it was to where the layout put it. */
     private static final long PANE_MOVE_MS = 340L;
 
+    /**
+     * {@link #PANE_MOVE_MS} at General › Animation speed, so a float's move and its depth ramp
+     * ({@link Motion#floatDepthMs}) stay in step; Off makes both instant.
+     */
+    private static long paneMoveMs(@NonNull android.content.Context context) {
+        return com.termux.app.AnimationSpeed.scale(context, PANE_MOVE_MS);
+    }
+
     /** Screen bounds of every live pane frame, captured just before a re-render replaces them. */
     private final Map<TerminalSession, Rect> mMoveOrigins = new HashMap<>();
 
@@ -4504,7 +4512,7 @@ public class TerminalPaneController {
                 ViewPropertyAnimator move = frame.animate()
                     .translationX(0f)
                     .translationY(0f)
-                    .setDuration(PANE_MOVE_MS)
+                    .setDuration(paneMoveMs(frame.getContext()))
                     .setInterpolator(PaneMotionOverlayView.standardInterpolator());
                 PaneGlassMotion.follow(frame, move);
                 move.start();
