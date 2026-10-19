@@ -24,14 +24,35 @@ public final class HomeSettings {
     /** Settings › Home › Page transition: a {@link HomePageTransition} value. */
     public static final String KEY_PAGE_TRANSITION = "app_launcher_home_page_transition";
 
+    /** Settings › Home › Icons and labels: the icon's size, a percentage of the dock's 48 dp. */
+    public static final String KEY_ICON_SCALE = "app_launcher_home_icon_scale";
+    /** The label's size: {@code small}, {@code default} or {@code large}. */
+    public static final String KEY_LABEL_SIZE = "app_launcher_home_label_size";
+    /** A long name may take a second line. Off: one line, as Home always drew it. */
+    public static final String KEY_LABEL_TWO_LINES = "app_launcher_home_label_two_lines";
+    /** The label's soft shadow. On: as Home always drew it. */
+    public static final String KEY_LABEL_SHADOW = "app_launcher_home_label_shadow";
+
     /** Whether {@code key} is one of these rows. */
     public static boolean owns(@Nullable String key) {
         if (key == null) return false;
-        if (KEY_PAGE_TRANSITION.equals(key)) return true;
+        if (KEY_PAGE_TRANSITION.equals(key) || KEY_ICON_SCALE.equals(key) || KEY_LABEL_SIZE.equals(key)
+            || KEY_LABEL_TWO_LINES.equals(key) || KEY_LABEL_SHADOW.equals(key)) return true;
         for (HomeGestures.Gesture gesture : HomeGestures.Gesture.values()) {
             if (gesture.key.equals(key) || gesture.appKey().equals(key)) return true;
         }
         return false;
+    }
+
+    /** How Home's app icons and folders are drawn (Settings › Home › Icons and labels). */
+    @NonNull
+    public static com.termux.app.launcher.widget.HomeIconStyle iconStyle(@NonNull Context context) {
+        return new com.termux.app.launcher.widget.HomeIconStyle(
+            com.termux.app.launcher.widget.HomeIconStyle.parseScale(getString(context, KEY_ICON_SCALE, null)),
+            com.termux.app.launcher.widget.HomeIconStyle.LabelSize.fromValue(
+                getString(context, KEY_LABEL_SIZE, null)),
+            getBoolean(context, KEY_LABEL_TWO_LINES, false),
+            getBoolean(context, KEY_LABEL_SHADOW, true));
     }
 
     /** What {@code gesture} on a Home page's free area does (Settings › Home › Gestures). */

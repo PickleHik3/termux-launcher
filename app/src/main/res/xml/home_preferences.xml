@@ -10,6 +10,36 @@
         app:title="@string/settings_layout_editor_title"
         app:summary="@string/settings_layout_editor_home_summary" />
 
+    <!-- How the app icons and folders on Home pages are drawn; the dock draws its own. -->
+    <PreferenceCategory app:key="home_icons" app:title="@string/settings_home_icons_header">
+        <ListPreference
+            app:key="app_launcher_home_icon_scale"
+            app:title="@string/settings_home_icon_scale_title"
+            app:dialogTitle="@string/settings_home_icon_scale_title"
+            app:entries="@array/settings_home_icon_scale_entries"
+            app:entryValues="@array/settings_home_icon_scale_values"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="100" />
+        <ListPreference
+            app:key="app_launcher_home_label_size"
+            app:title="@string/settings_home_label_size_title"
+            app:dialogTitle="@string/settings_home_label_size_title"
+            app:entries="@array/settings_home_label_size_entries"
+            app:entryValues="@array/settings_home_label_size_values"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="default" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_home_label_two_lines"
+            app:title="@string/settings_home_label_two_lines_title"
+            app:summary="@string/settings_home_label_two_lines_summary"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_home_label_shadow"
+            app:title="@string/settings_home_label_shadow_title"
+            app:summary="@string/settings_home_label_shadow_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
     <!-- Gestures on a Home page's free area. Each row's choices are filled in code
          (HomeGesturesRows): the actions that need the accessibility service or Shizuku are listed
          only while one is there. Swipe up keeps the old palette gesture's key and values. -->

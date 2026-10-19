@@ -33,4 +33,40 @@
     <string name="settings_home_gestures_helper_summary">Turn on the launcher\'s accessibility service, or connect Shizuku, to lock the screen or open notifications and quick settings with a gesture.</string>
     <string name="home_gesture_needs_helper">Turn on the launcher\'s accessibility service or connect Shizuku for this gesture</string>
     <string name="home_gesture_no_app">Choose an app for this gesture in Settings › Home</string>
+
+    <!-- Icons and labels (F7) -->
+    <string name="settings_home_icons_header">Icons and labels</string>
+    <string name="settings_home_icon_scale_title">Icon size</string>
+    <string-array name="settings_home_icon_scale_entries" translatable="false">
+        <item>80%</item>
+        <item>90%</item>
+        <item>100%</item>
+        <item>110%</item>
+        <item>120%</item>
+    </string-array>
+    <string-array name="settings_home_icon_scale_values" translatable="false">
+        <item>80</item>
+        <item>90</item>
+        <item>100</item>
+        <item>110</item>
+        <item>120</item>
+    </string-array>
+    <string name="settings_home_label_size_title">Label size</string>
+    <string name="settings_home_label_size_small">Small</string>
+    <string name="settings_home_label_size_default">Default</string>
+    <string name="settings_home_label_size_large">Large</string>
+    <string-array name="settings_home_label_size_entries" translatable="false">
+        <item>@string/settings_home_label_size_small</item>
+        <item>@string/settings_home_label_size_default</item>
+        <item>@string/settings_home_label_size_large</item>
+    </string-array>
+    <string-array name="settings_home_label_size_values" translatable="false">
+        <item>small</item>
+        <item>default</item>
+        <item>large</item>
+    </string-array>
+    <string name="settings_home_label_two_lines_title">Two-line labels</string>
+    <string name="settings_home_label_two_lines_summary">Long app names wrap instead of being cut short</string>
+    <string name="settings_home_label_shadow_title">Label shadow</string>
+    <string name="settings_home_label_shadow_summary">Keeps labels readable on light wallpapers</string>
 </resources>

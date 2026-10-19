@@ -432,6 +432,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.setPageMotion(effect, speedMultiplier);
     }
 
+    /** How Home's app icons and folders are drawn (Settings › Home › Icons and labels). */
+    public void setIconStyle(@NonNull HomeIconStyle style) {
+        appIcons.setStyle(style);
+    }
+
     /** Whether the page watches for a double tap and a two-finger swipe (each set to something). */
     public void setExtraGestures(boolean doubleTap, boolean twoFinger) {
         pane.setExtraGestures(doubleTap, twoFinger);

@@ -23092,6 +23092,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWidgetPaneController.setPageMotion(
             com.termux.app.launcher.home.HomeSettings.pageTransition(this),
             com.termux.app.AnimationSpeed.multiplier(this));
+        mWidgetPaneController.setIconStyle(com.termux.app.launcher.home.HomeSettings.iconStyle(this));
         mWidgetPaneController.setExtraGestures(
             com.termux.app.launcher.home.HomeGestures.watched(
                 com.termux.app.launcher.home.HomeSettings.gestureAction(this,

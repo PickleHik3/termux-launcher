@@ -1234,6 +1234,13 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · commit "feat(home): icon size, label size, two-line labels and label shadow" ·
+  Before/after screenshots of a Home page with app icons and a folder at the defaults: identical.
+  Then Icon size 80% and 120%, Label size Small and Large, Two-line labels on (a long app name
+  wraps to two lines, a short one keeps one, a small cell falls back to one), Label shadow off on a
+  light wallpaper. The dock's icons do not change. At font scale 1.3 (force-stop after the change)
+  and on a 5-row grid no label is cut at its bottom or sides · emulator, light and dark, the
+  Material You scheme.
 - 2026-10-19 · commit "feat(home): a gestures table for Home's free area" · With nothing set,
   Home behaves exactly as before: swipe up opens the palette with the keyboard, swipe down closes
   it (and puts a raised keyboard away), double tap and two fingers do nothing, a single tap on a
