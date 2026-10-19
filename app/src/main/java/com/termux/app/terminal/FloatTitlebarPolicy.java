@@ -113,6 +113,16 @@ public final class FloatTitlebarPolicy {
     }
 
     /**
+     * Whether the readings stand in a strip {@code stripHeightPx} tall at their own height
+     * {@code readingHeightPx}, their text at the user's font scale. Taller, they are dropped,
+     * never clipped or shrunk, so whatever shows reads exactly as the status bar's. In the 24dp
+     * strip the readings fit at font scale 1.3 (about 20dp) and give way near 1.5.
+     */
+    public static boolean readingsFitHeight(int stripHeightPx, int readingHeightPx) {
+        return readingHeightPx > 0 && readingHeightPx <= stripHeightPx;
+    }
+
+    /**
      * The drag handle's grip, centred in the span between the readings' end
      * ({@code readingsEndPx}, 0 with none) and the buttons, measured from the leading edge: the
      * grip's centre, or -1 when the span cannot hold {@code gripPx} with {@code airPx} either side.

@@ -442,8 +442,8 @@ public class TerminalPaneController {
      * Home floats a terminal widget hosts, in the order they were opened. Each is also in
      * {@link #mWindows}, so a shell finds it as a window and no adoption makes a second one, but
      * none is in {@link #mHomeFloats}: everything that lists, counts or lays out Home floats
-     * (chips, the windows pill, the status bar, minimise, the page's floats, the birth cascade,
-     * Saved sessions) reads that list and so never sees one.
+     * (the window chips, the float chips above the dock, minimise, the page's floats, the birth
+     * cascade, Saved sessions) reads that list and so never sees one.
      */
     private final List<Window> mHostedFloats = new ArrayList<>();
     /** Each hosted float's container, kept while its widget is off screen. */

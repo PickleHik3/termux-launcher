@@ -15,6 +15,7 @@ import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
@@ -42,7 +43,7 @@ import java.util.List;
  * <p>Dumb: the activity hands it the chips and places it; the policy lays them out; this draws and
  * reports taps. Nothing here repaints at rest.
  */
-public final class HomeFloatChipsView extends View {
+public final class HomeFloatChipsView extends View implements HomeFloatLayer.PartlyHeld {
 
     /** A chip was tapped. */
     public interface Listener {
@@ -83,10 +84,14 @@ public final class HomeFloatChipsView extends View {
     @Nullable private ChromeInk.Polarity mPolarity;
     private boolean mInkResolved;
     private int mDownChip = -1;
+    private float mDownX;
+    private float mDownY;
+    private final int mTouchSlop;
 
     public HomeFloatChipsView(@NonNull Context context) {
         super(context);
         mDensity = getResources().getDisplayMetrics().density;
+        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         mGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
         mNamePaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         mStrokePaint.setStyle(Paint.Style.STROKE);
@@ -115,6 +120,28 @@ public final class HomeFloatChipsView extends View {
         requestLayout();
         invalidate();
         mAccessibility.invalidateRoot();
+    }
+
+    /** Only a chip is held: a press between chips, or a swipe there, is the page's. */
+    @Override public boolean holdsLocalPoint(float x, float y) {
+        return y >= 0f && y < getHeight() && HomeFloatChipsPolicy.chipAt(mLayout, x) >= 0;
+    }
+
+    /**
+     * The theme's neutrals and panel read again, for a scheme or Material You change made without
+     * recreating the activity; repaints only when one moved.
+     */
+    public void refreshTheme() {
+        int onSurface = mOnSurface;
+        int surfaceBase = mSurfaceBase;
+        int panel = mPanel;
+        boolean resolved = mInkResolved;
+        readThemeColors();
+        if (onSurface != mOnSurface || surfaceBase != mSurfaceBase || panel != mPanel) {
+            invalidate();
+        } else {
+            mInkResolved = resolved;
+        }
     }
 
     /** The chips shown now, for tests. */
@@ -311,7 +338,14 @@ public final class HomeFloatChipsView extends View {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 mDownChip = HomeFloatChipsPolicy.chipAt(mLayout, event.getX());
+                mDownX = event.getX();
+                mDownY = event.getY();
                 return mDownChip >= 0;
+            case MotionEvent.ACTION_MOVE:
+                // Past the slop it is a swipe, not a tap: the chip lets it go.
+                if (mDownChip >= 0 && Math.hypot(event.getX() - mDownX, event.getY() - mDownY)
+                    > mTouchSlop) mDownChip = -1;
+                return true;
             case MotionEvent.ACTION_UP: {
                 int chip = HomeFloatChipsPolicy.chipAt(mLayout, event.getX());
                 int down = mDownChip;
