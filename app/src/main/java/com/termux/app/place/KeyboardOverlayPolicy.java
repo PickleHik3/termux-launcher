@@ -103,17 +103,6 @@ public final class KeyboardOverlayPolicy {
             contentOverlapPx(keyboardOverlays, keyboardShown, keyboardPx));
     }
 
-    /**
-     * How far the focused Home float rises while the keyboard overlays it, so the row its cursor
-     * is on stays above the keyboard: the cursor row's bottom past the keyboard's top, and nothing
-     * while the keyboard is down or the row is clear. The float is lifted, never resized, and is
-     * put back when the keyboard closes. Both edges in the same coordinates.
-     */
-    public static int floatLiftPx(boolean keyboardShown, int cursorRowBottomPx, int keyboardTopPx) {
-        if (!keyboardShown) return 0;
-        return Math.max(0, cursorRowBottomPx - keyboardTopPx);
-    }
-
     /** The content root's height for one arrangement: what the window leaves, less the reservation. */
     public static int contentHeightPx(int availableHeightPx, int contentReservationPx) {
         return Math.max(0, availableHeightPx - Math.max(0, contentReservationPx));
