@@ -126,8 +126,8 @@ public final class WidgetPaneView extends FrameLayout {
     private static final float PAGE_EDGE_RESISTANCE = 0.35f;
     /** How long a page takes to slide in or back once the finger has let go, at Normal speed. */
     static final long PAGE_SETTLE_MS = 160L;
-    /** The camera's distance for Carousel's turn, in dp: far enough that a page never looms. */
-    private static final float CAMERA_DISTANCE_DP = 8000f;
+    /** The camera's distance for Carousel's turn, in dp: the one every turned page shares. */
+    private static final float CAMERA_DISTANCE_DP = HomePageTransition.CAMERA_DISTANCE_DP;
 
     private final WidgetGridView grid;
     private final LinearLayout empty;

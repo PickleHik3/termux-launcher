@@ -4,19 +4,19 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * How a Home page moves while a swipe turns it (Settings › Home › Page transition). Home shows
- * one page at a time: the swipe carries the page on screen away, and once the turn commits the
- * next page comes in from the side the finger was heading for. Every effect is a pure function
- * of where that page stands, so the drag, the settle, the page coming in and the Settings
- * preview all draw the same curve.
+ * How a page moves while a swipe turns it (Settings › General › Page transition): Home's pages,
+ * and the wall's — the seam between Home and the Workspace and the Workspace's windows
+ * ({@code WallPageTransition}). Home shows one page at a time: the swipe carries the page on
+ * screen away, and once the turn commits the next page comes in from the side the finger was
+ * heading for. Every effect is a pure function of where that page stands, so the drag, the
+ * settle, the page coming in and the Settings preview all draw the same curve.
  *
  * <p>Only view properties change — translation, scale, alpha, the turn about the vertical axis
  * — so a frame of the motion is a property change on the page's render nodes: no layout, no
  * bitmap, and glass on the page is not sampled again, since it is aimed through the wall page's
  * transform only ({@code GlassAnchor#place}), never through the page content's.
  *
- * <p>The seam into the Terminal is not a Home turn and keeps its slide; so does the rubber band
- * at either end of the pages, where there is no page to turn to.
+ * <p>The rubber band at either end of the pages, where there is no page to turn to, only slides.
  */
 public enum HomePageTransition {
     /** The page slides with the finger: the motion Home always had. */
@@ -47,6 +47,8 @@ public enum HomePageTransition {
     static final float STACK_SCALE_DROP = 0.08f;
     /** How far Carousel turns a page that is a whole width away, in degrees. */
     static final float CAROUSEL_DEGREES = 60f;
+    /** The camera every turned page is seen through, in dp: far enough that a turn reads as depth. */
+    public static final float CAMERA_DISTANCE_DP = 8000f;
 
     /**
      * The curve a page settles on once the finger lets go (and the Settings preview plays): the

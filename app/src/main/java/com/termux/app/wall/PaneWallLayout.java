@@ -27,6 +27,7 @@ import android.animation.ValueAnimator;
 
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.haptics.Haptics;
+import com.termux.app.launcher.home.HomePageTransition;
 import com.termux.app.place.PageTopInsets;
 import com.termux.view.HoldTiming;
 
@@ -35,6 +36,7 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * The pane wall: fixed, full-size places side by side — Home and the Workspace — of which
@@ -427,6 +429,27 @@ public final class PaneWallLayout extends ViewGroup {
      */
     private final java.util.EnumSet<PaneWallPage> mStillPlaces =
         java.util.EnumSet.noneOf(PaneWallPage.class);
+    /** Settings' Page transition, which poses the pages as they slide ({@link WallPageTransition}). */
+    @NonNull private HomePageTransition mTransition = HomePageTransition.DEFAULT;
+    /** Scratch for one page's pose; main thread only. */
+    private final HomePageTransition.Transform mPose = new HomePageTransition.Transform();
+    /**
+     * Each page view's {@code {slide, scale}}: where the slide puts it, in px from its rest — the
+     * position an effect poses it from, and what every reader of "where is this page" reads, since
+     * its translation is the effect's — and the scale its pose gives it, which the sink multiplies.
+     * Weak, so a view that leaves the wall is not kept for it.
+     */
+    private final Map<View, float[]> mSlides = new WeakHashMap<>();
+    /** The pages an effect poses now (scaled, faded or turned), each on a hardware layer. */
+    private final List<View> mPosedPages = new ArrayList<>(3);
+    /** Whether a page or window waits on the side the wall is moving toward, this frame. */
+    private boolean mTurning;
+    /**
+     * Two children whose drawing is swapped while they share the screen, so the page the effect
+     * puts on top is drawn over the other ({@link WallPageTransition#topSide}); -1 while none are.
+     */
+    private int mSwapLow = -1;
+    private int mSwapHigh = -1;
 
     public PaneWallLayout(@NonNull Context context) {
         this(context, null);
@@ -443,6 +466,49 @@ public final class PaneWallLayout extends ViewGroup {
 
     public void setListener(@Nullable Listener listener) {
         mListener = listener;
+    }
+
+    /**
+     * Settings' Page transition: how the pages turn as the wall slides between Home and the
+     * Workspace and between windows. Read as the launcher comes to the front.
+     */
+    public void setPageTransition(@NonNull HomePageTransition effect) {
+        if (effect == mTransition) return;
+        mTransition = effect;
+        applyPagePositions();
+    }
+
+    @NonNull
+    public HomePageTransition pageTransition() {
+        return mTransition;
+    }
+
+    /**
+     * Where {@code view}'s slide puts it, in px from its rest: its translation under the slide,
+     * and the position an effect poses it from under any other. What "where is this page" means.
+     */
+    public float slidePx(@NonNull View view) {
+        float[] slide = mSlides.get(view);
+        return slide == null ? view.getTranslationX() : slide[0];
+    }
+
+    /**
+     * A window is about to be pictured as it leaves ({@code DepartureCard}): the Workspace's page
+     * drops its pose for the capture and stands flat at
+     * {@link WallPageTransition#departureCaptureSlidePx}, so the card can be posed from there and
+     * begin where the page stood. Nothing changes under the slide. The next placement poses the
+     * page again; nothing is drawn in between.
+     */
+    public void flattenForDeparture() {
+        View page = mPageViews.get(PaneWallPage.TERMINAL);
+        if (page == null || !mPosedPages.contains(page)) return;
+        page.setTranslationX(WallPageTransition.departureCaptureSlidePx(mTransition,
+            slidePx(page), getWidth()));
+        float sink = page == mSinkPage ? PageSink.scale(mSink) : 1f;
+        page.setScaleX(sink);
+        page.setScaleY(sink);
+        page.setRotationY(0f);
+        page.setAlpha(1f);
     }
 
     public void setReducedMotion(boolean reduced) {
@@ -549,6 +615,8 @@ public final class PaneWallLayout extends ViewGroup {
             mGlow.reset();
             mGlowPage = null;
         }
+        // The view leaving this place is put flat; wherever it goes next places it again.
+        if (previous != null && previous != view) unpose(previous);
         // A surface page leaving the wall lets go of its stand-in and the copy it kept.
         if (previous instanceof SurfacePage && previous != view) {
             mStillPlaces.remove(page);
@@ -648,7 +716,7 @@ public final class PaneWallLayout extends ViewGroup {
         if (view == null || !mPages.contains(page)) return false;
         int width = getWidth();
         if (width <= 0) return page == mCurrent;
-        return view.getVisibility() == VISIBLE && Math.abs(view.getTranslationX()) < width;
+        return view.getVisibility() == VISIBLE && Math.abs(slidePx(view)) < width;
     }
 
     /**
@@ -661,7 +729,7 @@ public final class PaneWallLayout extends ViewGroup {
         if (view == null || !mPages.contains(PaneWallPage.TERMINAL)) return false;
         int width = getWidth();
         if (width <= 0) return mCurrent == PaneWallPage.TERMINAL && !mDisplayInFront;
-        return view.getAlpha() > 0f && Math.abs(view.getTranslationX()) < width;
+        return view.getAlpha() > 0f && Math.abs(slidePx(view)) < width;
     }
 
     /** True while the wall is at rest but not where its record says: a slide was cut short. */
@@ -1754,7 +1822,7 @@ public final class PaneWallLayout extends ViewGroup {
         if (page.getVisibility() != VISIBLE || page.getWidth() <= 0 || page.getHeight() <= 0) {
             return;
         }
-        float visibility = PaneWallPolicy.pageOutlineAlpha(page.getTranslationX(), getWidth());
+        float visibility = PaneWallPolicy.pageOutlineAlpha(slidePx(page), getWidth());
         // Drawn in the page's own space, through the page's whole transform: its slide, its sink
         // and the plank's tilt (rotationY under a camera), so the glow stays on the edge the
         // page actually shows rather than where that edge would be flat.
@@ -1807,7 +1875,7 @@ public final class PaneWallLayout extends ViewGroup {
         for (PaneWallPage place : mPages) {
             View page = mPageViews.get(place);
             if (page == null || page.getVisibility() != VISIBLE || page.getWidth() <= 0) continue;
-            float visibility = PaneWallPolicy.pageOutlineAlpha(page.getTranslationX(), width);
+            float visibility = PaneWallPolicy.pageOutlineAlpha(slidePx(page), width);
             if (!(visibility > 0f)) continue;
             float centreX = grabberCentreX(page, page.getTranslationX());
             float pivotY = page.getTop() + page.getTranslationY() + page.getPivotY();
@@ -1864,7 +1932,10 @@ public final class PaneWallLayout extends ViewGroup {
      * re-rendered under a perspective matrix.
      */
     private void engagePlank(float fingerX) {
-        if (mReducedMotion || getWidth() <= 0 || mListener == null) return;
+        // The plank is the slide's own dressing: another effect is the page's motion, and a turn
+        // of its own would fight the plank's.
+        if (mReducedMotion || getWidth() <= 0 || mListener == null
+            || mTransition != HomePageTransition.SLIDE) return;
         View held = mPageViews.get(mCurrent);
         if (held == null || held.getWidth() <= 0 || held.getHeight() <= 0) return;
         // Planks still lying down from the last drag are laid flat first.
@@ -1937,12 +2008,13 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
-     * A hardware layer while the page tips or is dimmed, carrying the dim as its paint; none
-     * otherwise. Only ever called for a page the plank or the sink has touched.
+     * A hardware layer while the page tips, is dimmed or is posed by the page transition, carrying
+     * the dim as its paint; none otherwise. Only ever called for a page the plank, the sink or the
+     * transition has touched.
      */
     private void syncPageLayer(@NonNull View page) {
         boolean dimmed = page == mSinkPage && mSinkLayered;
-        if (mTiltPages.contains(page) || dimmed) {
+        if (mTiltPages.contains(page) || dimmed || mPosedPages.contains(page)) {
             page.setLayerType(View.LAYER_TYPE_HARDWARE, dimmed ? mSinkPaint : null);
         } else {
             page.setLayerType(View.LAYER_TYPE_NONE, null);
@@ -2033,8 +2105,10 @@ public final class PaneWallLayout extends ViewGroup {
         if (page == null) return;
         mSink = sink;
         float scale = PageSink.scale(sink);
-        page.setScaleX(scale);
-        page.setScaleY(scale);
+        // On top of the scale the page transition gives the page, where it poses it.
+        float posed = scale * poseScale(page);
+        page.setScaleX(posed);
+        page.setScaleY(posed);
         if (mSinkLayered) applySinkDim(page, sink);
         if (mTiltPages.contains(page)) applyPlanks();
         invalidateGrabberIfMoved();
@@ -2081,8 +2155,8 @@ public final class PaneWallLayout extends ViewGroup {
         mSinkSide = 0;
         mSinkDimLevel = -1;
         mSinkPaint.setColorFilter(null);
-        page.setScaleX(1f);
-        page.setScaleY(1f);
+        page.setScaleX(poseScale(page));
+        page.setScaleY(poseScale(page));
         boolean tipping = mTiltPages.contains(page);
         // The press lies down with the sink; the travel's own tip stays where the wall is.
         if (tipping) applyPlanks();
@@ -2147,7 +2221,7 @@ public final class PaneWallLayout extends ViewGroup {
             View page = entry.getValue();
             if (!(page instanceof SurfacePage)) continue;
             boolean onScreen = page.getVisibility() == VISIBLE
-                && Math.abs(page.getTranslationX()) < width;
+                && Math.abs(slidePx(page)) < width;
             if (entry.getKey() == mCurrent || onScreen) holdStill(entry.getKey());
         }
     }
@@ -2319,12 +2393,18 @@ public final class PaneWallLayout extends ViewGroup {
     private void applyPagePositions() {
         if (mDeferPositions) return;
         int width = getWidth();
+        // A turn has a page to turn to: a window arriving, or a place or window on the side the
+        // wall is moving toward. A pull into either end of the row only slides. The slide asks
+        // nothing, so its frames cost what they always did.
+        mTurning = mTransition != HomePageTransition.SLIDE && (mNudgePage != null
+            || (mOffsetPx != 0f && canStep(mOffsetPx > 0f ? -1 : 1)));
         for (Map.Entry<PaneWallPage, View> entry : mPageViews.entrySet()) {
             View view = entry.getValue();
             if (!mPages.contains(entry.getKey())) {
                 if (view == mTerminalHost) {
                     parkTerminalPage(view, width);
                 } else {
+                    unpose(view);
                     view.setVisibility(GONE);
                 }
                 continue;
@@ -2343,6 +2423,7 @@ public final class PaneWallLayout extends ViewGroup {
             placePage(view, x, width);
         }
         placeWorkspaceViewOffFront(width);
+        syncDrawingOrder(width);
         // The planks' angles are a function of where the pages stand, so the drag, the spring
         // back and the carry-out all read the same number and they are flat wherever they rest —
         // plus the held side's press, while the page is sunk. After every page has moved, since
@@ -2354,11 +2435,11 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** One page's view at {@code x}: drawn while on screen, parked as its kind parks otherwise. */
     private void placePage(@NonNull View view, float x, int width) {
-        view.setTranslationX(x);
+        poseOnWall(view, x, width);
         boolean onScreen = width <= 0 || Math.abs(x) < width;
         if (view == mTerminalHost) {
             view.setVisibility(VISIBLE);
-            view.setAlpha(onScreen ? 1f : 0f);
+            view.setAlpha(onScreen ? mPose.alpha : 0f);
             boolean offScreen = !onScreen;
             if (mListener != null
                     && (mTerminalOffScreen == null || mTerminalOffScreen != offScreen)) {
@@ -2387,11 +2468,11 @@ public final class PaneWallLayout extends ViewGroup {
         View front = mPageViews.get(PaneWallPage.TERMINAL);
         if (offFront == mNudgeLeaving && mNudgePage == PaneWallPage.TERMINAL && front != null
                 && mPages.contains(PaneWallPage.TERMINAL) && width > 0) {
-            placePage(offFront, front.getTranslationX() - Math.signum(mNudgePx) * width, width);
+            placePage(offFront, slidePx(front) - Math.signum(mNudgePx) * width, width);
         } else if (offFront == mTerminalHost) {
             parkTerminalPage(offFront, width);
         } else {
-            offFront.setTranslationX(2f * Math.max(1, width));
+            parkFlat(offFront, 2f * Math.max(1, width));
             offFront.setVisibility(INVISIBLE);
         }
     }
@@ -2402,13 +2483,148 @@ public final class PaneWallLayout extends ViewGroup {
      * its display lists for the window that brings the Workspace back.
      */
     private void parkTerminalPage(@NonNull View view, int width) {
-        view.setTranslationX(2f * Math.max(1, width));
+        parkFlat(view, 2f * Math.max(1, width));
         view.setVisibility(VISIBLE);
         view.setAlpha(0f);
         if (mListener != null && (mTerminalOffScreen == null || !mTerminalOffScreen)) {
             mTerminalOffScreen = true;
             mListener.onTerminalOffScreenChanged(true);
         }
+    }
+
+    // ---- The page transition -----------------------------------------------------------------
+
+    /**
+     * {@code view} where its slide puts it, posed by the page transition
+     * ({@link WallPageTransition}). Under the slide — and for a page alone on screen, parked, or a
+     * live surface — that is its translation alone, written exactly as the wall always wrote it.
+     * Under another effect, while the page shares the screen, it is scaled, faded or turned too,
+     * on a hardware layer for those frames only. The Terminal page's alpha is its caller's, which
+     * also parks it by alpha ({@link #placePage}); {@link #mPose} holds the alpha to give it.
+     */
+    private void poseOnWall(@NonNull View view, float slidePx, int width) {
+        float[] slide = slideOf(view);
+        slide[0] = slidePx;
+        HomePageTransition effect = WallPageTransition.effectFor(mTransition,
+            view instanceof SurfacePage);
+        WallPageTransition.pose(effect, slidePx, width, mTurning, mPose);
+        boolean posed = !WallPageTransition.isFlat(mPose);
+        boolean wasPosed = mPosedPages.contains(view);
+        view.setTranslationX(mPose.translationX);
+        if (!posed && !wasPosed) return;
+        slide[1] = mPose.scale;
+        float scale = mPose.scale * (view == mSinkPage ? PageSink.scale(mSink) : 1f);
+        view.setScaleX(scale);
+        view.setScaleY(scale);
+        view.setRotationY(mPose.rotationY);
+        view.setPivotX(mPose.pivotXFraction * (view.getWidth() > 0 ? view.getWidth() : width));
+        view.setPivotY(view.getHeight() / 2f);
+        if (view != mTerminalHost) view.setAlpha(mPose.alpha);
+        if (posed == wasPosed) return;
+        if (posed) {
+            mPosedPages.add(view);
+            view.setCameraDistance(HomePageTransition.CAMERA_DISTANCE_DP
+                * getResources().getDisplayMetrics().density);
+        } else {
+            mPosedPages.remove(view);
+        }
+        syncPageLayer(view);
+    }
+
+    /** {@code view} parked flat at {@code slidePx}, as a page off screen always is. */
+    private void parkFlat(@NonNull View view, float slidePx) {
+        unpose(view);
+        slideOf(view)[0] = slidePx;
+        view.setTranslationX(slidePx);
+    }
+
+    /**
+     * {@code view} loses any pose the transition gave it: full size bar a sink, unfaded, flat,
+     * and off its layer unless the plank or the sink still wants one. Its translation is left.
+     */
+    private void unpose(@NonNull View view) {
+        if (!mPosedPages.remove(view)) return;
+        slideOf(view)[1] = 1f;
+        float scale = view == mSinkPage ? PageSink.scale(mSink) : 1f;
+        view.setScaleX(scale);
+        view.setScaleY(scale);
+        view.setRotationY(0f);
+        view.setPivotX(view.getWidth() / 2f);
+        view.setPivotY(view.getHeight() / 2f);
+        if (view != mTerminalHost) view.setAlpha(1f);
+        syncPageLayer(view);
+    }
+
+    @NonNull
+    private float[] slideOf(@NonNull View view) {
+        float[] slide = mSlides.get(view);
+        if (slide == null) {
+            slide = new float[] {view.getTranslationX(), 1f};
+            mSlides.put(view, slide);
+        }
+        return slide;
+    }
+
+    /** The scale the transition's pose gives {@code view}: 1 unless it is posed. */
+    private float poseScale(@NonNull View view) {
+        float[] slide = mSlides.get(view);
+        return slide == null || !mPosedPages.contains(view) ? 1f : slide[1];
+    }
+
+    /**
+     * Two pages sharing the screen under an effect that lays one over the other are drawn in that
+     * order ({@link WallPageTransition#topSide}); every other frame keeps the children's order.
+     */
+    private void syncDrawingOrder(int width) {
+        int low = -1;
+        int high = -1;
+        int side = WallPageTransition.topSide(mTransition);
+        if (side != 0 && width > 0) {
+            int first = -1;
+            int second = -1;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                float[] slide = mSlides.get(child);
+                if (slide == null || child.getVisibility() != VISIBLE
+                    || !(Math.abs(slide[0]) < width)) continue;
+                if (first < 0) {
+                    first = i;
+                } else if (second < 0) {
+                    second = i;
+                } else {
+                    first = -1;
+                    break;
+                }
+            }
+            if (first >= 0 && second >= 0) {
+                float firstX = mSlides.get(getChildAt(first))[0];
+                float secondX = mSlides.get(getChildAt(second))[0];
+                // The child drawn first is to go on top: the two swap places in the drawing.
+                if (side > 0 ? firstX > secondX : firstX < secondX) {
+                    low = first;
+                    high = second;
+                }
+            }
+        }
+        if (low == mSwapLow && high == mSwapHigh) return;
+        mSwapLow = low;
+        mSwapHigh = high;
+        setChildrenDrawingOrderEnabled(low >= 0);
+        invalidate();
+    }
+
+    @Override
+    protected int getChildDrawingOrder(int childCount, int drawingPosition) {
+        if (mSwapLow < 0 || mSwapHigh >= childCount) return drawingPosition;
+        if (drawingPosition == mSwapLow) return mSwapHigh;
+        if (drawingPosition == mSwapHigh) return mSwapLow;
+        return drawingPosition;
+    }
+
+    /** The pages the transition poses now, for tests. */
+    @NonNull
+    List<View> posedPages() {
+        return Collections.unmodifiableList(new ArrayList<>(mPosedPages));
     }
 
     // ---- Layout ----------------------------------------------------------------------------

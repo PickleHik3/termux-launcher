@@ -22131,8 +22131,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View borderView = hotView(R.id.terminal_border_overlay);
         View paneHost = hotView(R.id.terminal_pane_host);
         if (borderView == null || paneHost == null) return;
+        // Where the page's slide puts it: an effect may pose it elsewhere, but the line fades on
+        // the page's way out, as the rims do.
         float alpha = com.termux.app.wall.PaneWallPolicy.pageOutlineAlpha(
-            paneHost.getTranslationX(), mPaneWallController.wall().getWidth());
+            mPaneWallController.wall().slidePx(paneHost), mPaneWallController.wall().getWidth());
         if (alpha == mTerminalFrameLineAlpha) return;
         mTerminalFrameLineAlpha = alpha;
         borderView.setAlpha(alpha);
@@ -23766,6 +23768,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSuggestionBarView != null) {
             mSuggestionBarView.setNotificationBadgeStyle(
                 com.termux.app.launcher.home.HomeSettings.badgeStyle(this));
+        }
+        // Page transition turns the wall's pages too: the seam, and the Workspace's windows.
+        if (mPaneWallController != null && mPaneWallController.wall() != null) {
+            mPaneWallController.wall().setPageTransition(
+                com.termux.app.launcher.home.HomeSettings.pageTransition(this));
         }
         if (mWidgetPaneController == null) return;
         mWidgetPaneController.setPageMotion(
@@ -27195,6 +27202,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mTerminalDepartureTranslucent;
 
     /**
+     * Where the leaving window's slide had it when it was pictured, and where it stood in the
+     * picture, in px: a page transition other than the slide poses the card from the one, and the
+     * picture already carries the other ({@code PaneWallLayout#flattenForDeparture}).
+     */
+    private float mTerminalDepartureSlidePx;
+    private float mTerminalDepartureShiftPx;
+
+    /**
      * Captures the terminal surface immediately before a window/session switch tears its pane
      * tree down. The pane glass is translucent, so the raw pixels would double-expose over the
      * incoming session mid-pan; compositing them onto the theme's opaque surface turns the
@@ -27205,6 +27220,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isReducedMotionEnabled()) return;
         View terminal = findViewById(R.id.terminal_surface_host);
         if (terminal == null || terminal.getWidth() <= 0 || terminal.getHeight() <= 0) return;
+        // Pictured flat where the page transition says, so its card can be posed on from there.
+        com.termux.app.wall.PaneWallLayout wall =
+            mPaneWallController == null ? null : mPaneWallController.wall();
+        View paneHost = findViewById(R.id.terminal_pane_host);
+        if (wall != null) wall.flattenForDeparture();
+        mTerminalDepartureSlidePx = wall == null || paneHost == null ? 0f : wall.slidePx(paneHost);
+        mTerminalDepartureShiftPx = paneHost == null ? 0f : paneHost.getTranslationX();
         try {
             // Half resolution: the software draw of the whole hierarchy (glass shaders included)
             // is the expensive part of a switch's silent gap, and it scales with pixels. The card
@@ -27309,6 +27331,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // opaque-ground cards.
         android.widget.ImageView ghost = com.termux.app.terminal.DepartureCard.view(this, departure,
             translucent, resolveTerminalSurfaceBaseColor(), dpToPx(12));
+        com.termux.app.wall.PaneWallLayout wall =
+            mPaneWallController == null ? null : mPaneWallController.wall();
+        com.termux.app.launcher.home.HomePageTransition effect = wall == null
+            ? com.termux.app.launcher.home.HomePageTransition.SLIDE : wall.pageTransition();
+        if (horizontal && wall != null
+                && effect != com.termux.app.launcher.home.HomePageTransition.SLIDE) {
+            turnTerminalDeparture(surfaceHost, wall, ghost, departure, effect, offset, settle,
+                durationMs);
+            return;
+        }
         surfaceHost.addView(ghost, new android.widget.FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         ghost.animate()
@@ -27322,6 +27354,73 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 departure.recycle();
             })
             .start();
+    }
+
+    /**
+     * The leaving window's card under a page transition other than the slide: posed each frame by
+     * where its slide puts it ({@link com.termux.app.wall.WallPageTransition}), one width from the
+     * window arriving and on its clock and curve, exactly as the wall poses its pages — so the
+     * card sinks, fades, turns or lifts as a page leaving Home does. Under the wall where the
+     * effect puts the leaving page beneath the arriving one. On a layer for the travel: the card
+     * is one still picture, so a frame is a re-composite.
+     *
+     * @param offset where the arriving window starts, in px from its rest
+     */
+    private void turnTerminalDeparture(@NonNull ViewGroup surfaceHost,
+                                       @NonNull com.termux.app.wall.PaneWallLayout wall,
+                                       @NonNull android.widget.ImageView ghost,
+                                       @NonNull android.graphics.Bitmap departure,
+                                       @NonNull com.termux.app.launcher.home.HomePageTransition effect,
+                                       float offset,
+                                       @NonNull android.view.animation.Interpolator settle,
+                                       long durationMs) {
+        View page = findViewById(R.id.terminal_pane_host);
+        int direction = offset < 0f ? -1 : 1;
+        int width = wall.getWidth();
+        int index = com.termux.app.wall.WallPageTransition.departureBeneath(effect, direction)
+            ? surfaceHost.indexOfChild(wall) : -1;
+        surfaceHost.addView(ghost, index, new android.widget.FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        ghost.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        ghost.setCameraDistance(com.termux.app.launcher.home.HomePageTransition.CAMERA_DISTANCE_DP
+            * getResources().getDisplayMetrics().density);
+        // The card is the surface host's picture; the page sits in it where the wall lays it out,
+        // and stood mTerminalDepartureShiftPx along in the picture.
+        float shift = mTerminalDepartureShiftPx;
+        float pageLeft = wall.getLeft() + (page == null ? 0f : page.getLeft()) + shift;
+        float pageWidth = page == null || page.getWidth() <= 0 ? width : page.getWidth();
+        float pivotY = wall.getTop() + (page == null ? surfaceHost.getHeight() / 2f
+            : page.getTop() + page.getHeight() / 2f);
+        // The card leaves by as much as the arriving window comes: from where it was pictured.
+        float from = mTerminalDepartureSlidePx;
+        com.termux.app.launcher.home.HomePageTransition.Transform pose =
+            new com.termux.app.launcher.home.HomePageTransition.Transform();
+        android.animation.ValueAnimator travel = android.animation.ValueAnimator.ofFloat(offset, 0f);
+        travel.setDuration(durationMs);
+        travel.setInterpolator(settle);
+        android.animation.ValueAnimator.AnimatorUpdateListener poseCard = animation -> {
+            float arriving = (Float) animation.getAnimatedValue();
+            com.termux.app.wall.WallPageTransition.pose(effect, from + arriving - offset, width,
+                true, pose);
+            ghost.setTranslationX(pose.translationX - shift);
+            ghost.setScaleX(pose.scale);
+            ghost.setScaleY(pose.scale);
+            ghost.setAlpha(pose.alpha);
+            ghost.setRotationY(pose.rotationY);
+            ghost.setPivotX(pageLeft + pose.pivotXFraction * pageWidth);
+            ghost.setPivotY(pivotY);
+        };
+        travel.addUpdateListener(poseCard);
+        travel.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                surfaceHost.removeView(ghost);
+                ghost.setImageDrawable(null);
+                departure.recycle();
+            }
+        });
+        // Posed for the frame it is added in, not one frame later.
+        travel.setCurrentFraction(0f);
+        travel.start();
     }
 
     // Creation used to settle in place (fade + a whisper of scale); it now rides the same wall
