@@ -572,6 +572,10 @@
     <string name="settings_drawer_remember_position_summary">Reopen the drawer where you left it.</string>
     <string name="settings_drawer_lower_start_title">Start in the lower half</string>
     <string name="settings_drawer_lower_start_summary">Apps begin lower on the screen, closer to your thumb.</string>
+    <string name="settings_drawer_az_side_title">A–Z strip</string>
+    <string name="settings_drawer_az_side_left">Left</string>
+    <string name="settings_drawer_az_side_right">Right</string>
+    <string name="settings_drawer_az_side_off">Off</string>
     <string name="settings_app_drawer_search_on_open_title">Open keyboard automatically</string>
     <string name="settings_app_drawer_search_on_open_summary">When the app drawer opens.</string>
     <string name="settings_app_drawer_search_android_keyboard_title">Search keyboard</string>

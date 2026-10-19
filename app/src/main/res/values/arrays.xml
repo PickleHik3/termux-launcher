@@ -143,6 +143,16 @@
         <item>horizontal</item>
         <item>categories</item>
     </string-array>
+    <string-array name="app_launcher_drawer_az_side_entries">
+        <item>@string/settings_drawer_az_side_left</item>
+        <item>@string/settings_drawer_az_side_right</item>
+        <item>@string/settings_drawer_az_side_off</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_az_side_values">
+        <item>left</item>
+        <item>right</item>
+        <item>off</item>
+    </string-array>
     <string-array name="termux_top_pane_clock_style_entries">
         <item>@string/termux_top_pane_clock_style_flip</item>
         <item>@string/termux_top_pane_clock_style_lcd</item>

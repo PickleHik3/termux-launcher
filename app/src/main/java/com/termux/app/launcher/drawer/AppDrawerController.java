@@ -1341,6 +1341,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerContentView content = mContent;
         if (content == null) return;
         content.setOpenOnlyMatch(DrawerSettings.openOnlyMatch(mHost.context()));
+        content.setAzSide(DrawerSettings.azSide(mHost.context()));
         content.setRememberPosition(DrawerSettings.rememberPosition(mHost.context()));
         // A drawer that opens onto the keyboard has no lower half to offer: the search is up.
         TermuxAppSharedPreferences preferences = mHost.preferences();

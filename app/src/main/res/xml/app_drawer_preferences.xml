@@ -10,6 +10,13 @@
         app:entries="@array/app_launcher_drawer_view_type_entries"
         app:entryValues="@array/app_launcher_drawer_view_type_values" />
 
+    <com.termux.app.fragments.settings.SegmentedPillPreference
+        app:key="app_launcher_drawer_az_side"
+        app:title="@string/settings_drawer_az_side_title"
+        android:defaultValue="right"
+        app:entries="@array/app_launcher_drawer_az_side_entries"
+        app:entryValues="@array/app_launcher_drawer_az_side_values" />
+
     <SwitchPreferenceCompat
         app:key="app_launcher_drawer_search_on_open"
         app:title="@string/settings_app_drawer_search_on_open_title"

@@ -171,6 +171,7 @@ public final class AppDrawerContentView extends FrameLayout
     private boolean mOpenOnlyMatch;
     private boolean mRememberPosition;
     private boolean mLowerStart;
+    @NonNull private AppDrawerAzSide mAzSide = AppDrawerAzSide.RIGHT;
     private int mLowerStartPx;
     private int mSavedPosition;
     private int mSavedOffsetPx;
@@ -804,6 +805,30 @@ public final class AppDrawerContentView extends FrameLayout
         applyLowerStart();
     }
 
+    /** Settings › A–Z strip; read once per open. */
+    public void setAzSide(@NonNull AppDrawerAzSide side) {
+        if (mAzSide == side) return;
+        mAzSide = side;
+        applyViewType();
+        applyColumnLetters();
+    }
+
+    /** Puts the strip on its edge, mirrored on the left, or takes it away. */
+    private void applyAzColumn() {
+        if (!mAzSide.shown()) {
+            hideColumn();
+            return;
+        }
+        mColumn.setMirrored(mAzSide.mirrored());
+        LayoutParams columnParams = (LayoutParams) mColumn.getLayoutParams();
+        int gravity = mAzSide.mirrored() ? Gravity.START : Gravity.END;
+        if (columnParams.gravity != gravity) {
+            columnParams.gravity = gravity;
+            mColumn.setLayoutParams(columnParams);
+        }
+        mColumn.setVisibility(VISIBLE);
+    }
+
     /** Settings › Start in the lower half; read once per open. */
     public void setLowerStart(boolean enabled) {
         if (mLowerStart == enabled) return;
@@ -846,12 +871,13 @@ public final class AppDrawerContentView extends FrameLayout
         switch (mViewType) {
             case VERTICAL:
                 applyCategorySearchPresentation(false);
-                gridParams.rightMargin = Math.round(mColumnWidthPx);
+                gridParams.leftMargin = mAzSide.leftInsetPx(Math.round(mColumnWidthPx));
+                gridParams.rightMargin = mAzSide.rightInsetPx(Math.round(mColumnWidthPx));
                 mGrid.setLayoutParams(gridParams);
                 mGrid.setVisibility(VISIBLE);
                 mHorizontalPager.setVisibility(GONE);
                 mCategoryView.setVisibility(GONE);
-                mColumn.setVisibility(VISIBLE);
+                applyAzColumn();
                 applyColumnLetters();
                 mPageIndicator.setVisibility(GONE);
                 break;
@@ -864,6 +890,7 @@ public final class AppDrawerContentView extends FrameLayout
                 updatePageIndicator();
                 break;
             case CATEGORIES:
+                gridParams.leftMargin = 0;
                 gridParams.rightMargin = 0;
                 mGrid.setLayoutParams(gridParams);
                 boolean search = hasQuery();
@@ -1368,7 +1395,7 @@ public final class AppDrawerContentView extends FrameLayout
             letters[i] = mSectionIndex.letterAt(i);
         }
         mColumn.setLetters(letters);
-        mColumn.setActive(mViewType == AppDrawerViewType.VERTICAL
+        mColumn.setActive(mViewType == AppDrawerViewType.VERTICAL && mAzSide.shown()
             && !hasQuery() && letterCount >= 2);
     }
 
