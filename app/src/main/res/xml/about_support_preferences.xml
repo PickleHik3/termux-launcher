@@ -8,6 +8,7 @@
     </PreferenceCategory>
     <PreferenceCategory app:title="@string/settings_about_app_header">
         <Preference app:key="about" app:title="@string/settings_version_build_title" app:summary="@string/about_preference_summary" />
+        <Preference app:key="whats_new" app:title="@string/settings_whats_new_title" app:summary="@string/settings_whats_new_summary" />
         <Preference app:key="open_source_licenses" app:title="@string/open_source_licenses_preference_title" app:summary="@string/open_source_licenses_preference_summary" />
     </PreferenceCategory>
     <PreferenceCategory app:title="@string/settings_about_project_header">
