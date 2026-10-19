@@ -431,11 +431,11 @@ Not seen: everything else listed under the sections below.
 - same · Focus: tap inside a float (it takes the keyboard); tap on Home beside every float (Home
   takes focus and the keyboard closes); close and minimise the focused float (the keyboard closes
   too) · emulator.
-- 2026-10-17 · commit "feat(wall): the status bar on Home carries the floats' chips" · The first
+- Superseded 2026-10-19 (Home wears no status bar; see "10-19 Home fixes"): 2026-10-17 · commit "feat(wall): the status bar on Home carries the floats' chips" · The first
   float brings the status bar down from the top in its compact form; it stays while a float is
   open or minimised and slides up when the last one closes. Note whether the widget grid moves
   when the bar arrives (the bar takes its room today) · emulator screenshots before/after.
-- same · Chips on Home are floats only, from every page, each with its page (" · 2"); Minimise
+- Superseded 2026-10-19 (Home wears no status bar; see "10-19 Home fixes"): same · Chips on Home are floats only, from every page, each with its page (" · 2"); Minimise
   flies the float into its chip; from another Home page, tap the chip: Home pages to the float's
   page and the float comes back focused. In the Workspace the floats' chips follow the windows'
   · emulator.
@@ -451,11 +451,11 @@ Not seen: everything else listed under the sections below.
   Minimise all floats, Restore floats, Add widget, Layout editor, and a float's row restores it.
   The sessions drawer lists floats under the session ("Float · page 2"; a tap pages Home and
   restores it) and its Home row goes to Home page 1 · emulator.
-- 2026-10-18 · commit "feat(wall): the status bar overlays Home" · The widget grid does not move
+- Superseded 2026-10-19 (Home wears no status bar; see "10-19 Home fixes"): 2026-10-18 · commit "feat(wall): the status bar overlays Home" · The widget grid does not move
   when the bar slides in with the first float, nor when it slides out after the last one closes:
   screenshot a widget's top edge before, with the bar, and after; the bar draws over the grid and
   takes the taps on its chips · emulator screenshots, then pong.
-- same · A float born with the bar already there (the second float) and the first float, born as
+- Superseded 2026-10-19 (Home wears no status bar; see "10-19 Home fixes"): same · A float born with the bar already there (the second float) and the first float, born as
   the bar arrives, both sit with their titlebar just below the bar's bottom edge, not under it;
   with the keyboard up and the cursor on a lower row, a smaller float lifts no higher than that
   edge · emulator.
@@ -656,13 +656,7 @@ On pong as 1.1.0-pre.6+dev.d986fc9ae (2026-10-18 20:40, launch clean). Nothing b
 all of it is reasoned from code and unit tests. The capsule form is gone, so slice 1's owed items
 are void.
 - Status bar: Workspace bar swipes compact ↔ expanded with no idle fold; Minimal mode as before.
-- Home pills: no floats → stats pill (CPU, RAM, weather) at the top, grid's top row below it; open
-  two floats → windows pill appears left; tap a section for a float on another Home page → that
-  page, its name expands once; close floats → pill shrinks then goes; stats all off + no floats →
-  band goes, grid moves up; bar on a side → no Home bar until a float opens; bar at the bottom →
-  pills in the bottom band; tap between pills reaches the widget under; font 1.3 at 360 dp with
-  4 floats → nothing clipped; Docked/Floating, light/dark, glass → pills on glass, no strip
-  behind the system bar; settling Home → window shows no flash of pills.
+- Home pills: superseded 2026-10-19, the pills are removed (see "10-19 Home fixes").
 - Display chip: open an X11 app, tap its chip → the bar keeps every window chip, the chip wears
   the app's icon; a terminal chip tapped there returns to that window.
 - Home launches: empty Workspace, tap Terminal in the dock → a Home float, wall stays on Home;
@@ -680,7 +674,7 @@ are void.
   either drags the other; unlink keeps values; ✕/Back restores the link state, Done keeps it;
   Large text and RTL keep the "Keyboard" heading clear of the button.
 - Start in reads "Terminal" and still opens the Workspace.
-- Layouts Home filter: tap Home → miniature shows the grid below the pills band and the wall goes
+- Layouts Home filter: tap Home → miniature shows the grid from the page's top (no band) and the wall goes
   to Home; dock moved there changes Home's only; Corners/Margin read "· Home"; Landscape stays
   selected; Undo restores both layouts; opened over the display, Home off returns to it; Row A
   fits at 360 dp, font 1.3.
@@ -692,17 +686,14 @@ are void.
   in edit mode → rows/cols change, shell kept; on page 2 focused, swipe to page 1 → focus and
   keyboard go, output shows on return; recreate → same shell, process kill → fresh shell in the
   last directory; `exit` → "Session ended", tap restarts; remove while `sleep 100` → asks; never
-  in the windows pill, chips, status bar or Saved sessions, never a Workspace window.
+  in the float chips, window chips, status bar or Saved sessions, never a Workspace window.
 - 10-19 Home fixes (Developer, pong; reasoned from code and unit tests, nothing seen yet):
   - Keyboard on Home is glass (blurred wallpaper, the Keyboard surface's opacity and tint), not the
     opaque panel: docked and split, Docked and Floating Style, light/dark/black/Material You;
     the wallpaper under the keys lines up with the dock's (no offset after paging Home); sliding
     Home ↔ window with the keyboard up shows no flash; the display in overlay mode is still the
     solid panel; the floating keyboard is still its solid card on Home.
-  - Home pills on glass on every setup: bar on top and on the bottom, Docked (with side bars too)
-    and Floating, terminal glass on/off, light/dark/black/Material You; status-bar Opacity, Blur,
-    Grain and Tint (inherited and detached) change the pills; a wallpaper change updates them; the
-    pills' outline shows no square corner or second rim; no strip behind the system bar.
+  - Home pills on glass: superseded, the pills are removed (below).
   - Command palette on Home opens in the screen's middle; typing so results arrive grows it about
     its middle (top rises a little), never over the dock; with the keyboard up it stands above the
     keyboard's strip; landscape keeps it inside the room; the Workspace palette is unchanged.
@@ -735,6 +726,33 @@ are void.
     dock's top as they do with the in-app keyboard; the Workspace with the phone's keyboard still
     shrinks the terminal above it; a side rail on Home ends above the dock; fullscreen mode
     (bars hidden). Light/dark, Docked and Floating, portrait and landscape.
+  - No status bar on Home (feat/wall-phase3, 2026-10-19 worker branch): with no float, one float,
+    one minimised and with the bar set to top, bottom and a side in the Workspace, Home shows no
+    launcher status bar and no pills, ever; the widget grid's top row starts just below the system
+    status bar (as before the pills), and does not move when floats open, minimise or close; the
+    Layout editor's Home miniature draws the grid from the page's top; slide Home ↔ window: the
+    Workspace's bar fades out toward Home and back in with the window, no flash on settle.
+  - Titlebar readings: focus a Home float → its titlebar shows CPU and RAM at the left, then the
+    grip, then Minimise, Maximise, Close; the glyphs, colours and type match the Workspace bar's CPU
+    and RAM side by side (switch pages to compare), in light, dark, black and Material You, glass on
+    and off; unfocused floats show no readings; tap beside the floats → readings go; the values
+    tick at the bar's pace and a steady value does not flicker; turn CPU or RAM off in Status bar
+    settings → that reading goes; no weather. Narrow a float, and at font scale 1.3 on a 360 dp
+    phone: RAM drops first, then CPU, never over the grip or a button; dragging the strip over the
+    readings still moves the float. With no focused float on Home the CPU sampler is idle
+    (`dumpsys` or the stats card's cadence): only a focused float's readings wake it.
+  - Float chips: minimise a float → it flies into a small glass chip centred just above the dock
+    (glyph and short name), the chip lands where the flight ends; minimise a second on another Home
+    page → two chips, both on every page; tap a chip → Home pages to its float, which comes back
+    focused and its chip goes; the last chip going lets the other floats grow back to the dock.
+    While chips show, no float covers them (maximise one: it ends above the row). Keyboard up (in-app
+    and the phone's): the row stands just above the dock riding the keyboard, not under it; minimise
+    the focused float with the keyboard up: the flight lands on the chip's final place (the keyboard
+    closes unless always on). Chips wear the dock's glass (Opacity, Blur, Grain and Tint, inherited
+    and detached; a wallpaper change updates them), readable in light/dark/black/Material You;
+    Docked and Floating; many floats (8+) at font 1.3: names drop, then chips narrow, none overlap;
+    a tap between chips reaches the widget under; on the Workspace there are no chips (the bar's
+    chips still list the floats); palette Minimise all / Restore floats update the row.
 
 ### Wall rework phase two: slice 2, Style, Corners and Margin on Home (feat/wall-rework-phase2)
 - 2026-10-18 · commit "feat(wall): the chrome wears the Style, Corners and Margin of the half on

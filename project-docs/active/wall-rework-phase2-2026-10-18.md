@@ -33,6 +33,18 @@ checks stay owed here too. When #82 lands on `pre`, merge `pre` into this branch
    pills, as there was no bar. The windows pill wins the room: the name gives way first, then the
    stats pill steps aside. A bar down a side keeps its column of float chips on Home. Unit tests
    green; emulator pass owed.
+   Status 2026-10-19: **removed** (developer's decision). Home wears no status bar of any kind:
+   the pills go, and so does the bar the first Home float brought down (`HomeChromePolicy` keeps
+   Home's status slot put away; the grid starts below the system bar's inset alone, as before the
+   pills). The focused Home float's titlebar carries CPU and RAM at its leading end, the status
+   bar's own reading widgets inked by the bar's rule on the strip (`ChromeInk.inkOnGround`),
+   readings, handle, buttons from leading to trailing; on a narrow float or at a large font scale
+   RAM drops first, then CPU, whole, never over the handle or a button
+   (`FloatTitlebarPolicy.readingsThatFit`); weather is dropped; the sampler runs on Home only while
+   a focused float shows them. Minimised floats come back from float chips, a glass row like the
+   dock's centred just above the dock that moves with it under a keyboard; the floats' room gives
+   up the row's band while it shows (`HomeFloatChipsPolicy`, `HomeFloatChipsView`). ADR 0008's
+   2026-10-19 amendment records the decision.
 2. **Style, Corners and Margin on Home** as Home's own settings (today global).
    Status 2026-10-18: built on a worker branch (keys `home_layout_style`,
    `home_surface_corner_radius`, `home_surface_side_gap`, seeded from the Workspace's while unset;

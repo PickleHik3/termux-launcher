@@ -164,12 +164,15 @@ one with **Terminal** in a Home page's long-press menu, **New float here** on th
 or **Open terminal here** in the command palette on Home. It is a window of the current session,
 so the window chips, the sessions drawer and the shortcuts all see it.
 
-- It opens full size, between the status bar and the dock, takes focus and brings the keyboard up.
+- It opens as a window above the dock, takes focus and brings the keyboard up.
 - It stays on the Home page it was opened on and moves with that page. Open as many as you like;
   tap one to bring it to the front. The focused float wears the active rim.
 - Drag its **titlebar** to move it and its bottom-right corner to resize it. Each float remembers
   its size and spot in each orientation, across a restart too (see [After a restart](#after-a-restart)).
-- The titlebar's buttons: **Minimise** tucks the float into its chip in the status bar,
+- The focused float's titlebar shows your CPU and memory use at its left, as the Workspace's
+  status bar does (whichever of the two Status bar settings has on). On a narrow float memory gives
+  way first, then CPU.
+- The titlebar's buttons: **Minimise** tucks the float into a chip just above the dock,
   **Maximise** fills the room and becomes **Restore size**, and **Close** closes it and its shell.
   Long press the titlebar's handle for its menu: **Dock** moves the float into the Workspace as a
   window right after the current one and takes you there.
@@ -178,9 +181,9 @@ so the window chips, the sessions drawer and the shortcuts all see it.
   and lifts so the cursor's line stays above the keyboard, never past the top of the room, and
   settles back when it closes. A tap on the page outside any float puts the keyboard away, as does
   minimising or closing the focused float.
-- While a float is open or minimised, the status bar slides down onto Home. Its chips are your
-  floats, from every page, each marked with its page's dot; tap one to go to its page and bring it
-  back. The bar slides away again when the last float closes.
+- Home has no status bar of its own. Minimised floats wait as small chips in a row just above
+  the dock, from every page; tap one to go to its page and bring the float back. The row moves up
+  with the dock when the keyboard is open, and floats keep clear of it.
 
 A float does not keep the Workspace open, and the Workspace's windows are not chips on Home: the
 Terminal entry takes you to them.

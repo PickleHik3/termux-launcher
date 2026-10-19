@@ -50,11 +50,13 @@ the current session, drawn floating over the Home page it was opened on, born fu
 a glass titlebar and resized at a corner, minimised into a chip, and docked into the Workspace's
 row by the titlebar's Dock. The alternative was to make it the scratchpad generalised, outside any
 session; it was rejected so that chips, the drawer, the shortcuts and Saved sessions see one kind
-of window. The launcher's status bar therefore does come to Home, but only while a float exists.
+of window. The launcher's status bar therefore did come to Home while a float existed, until
+the 2026-10-19 amendment below.
 The Home keyboard is transient by default: a gesture opens the command palette and the keyboard as
 one overlay, and the Home layout's keyboard element is the **always on** toggle, which shrinks the
 grid with today's reflow behind a snapshot. The capsule form of the status bar was tried in
-phase two and removed; Home wears its own pills instead. The spec's §4, §5 and §12 carry the detail.
+phase two and removed; Home wore its own pills for a day, and since the 2026-10-19 amendment below
+wears no status bar at all. The spec's §4, §5 and §12 carry the detail.
 
 ## Amended 2026-10-19: the seam never stops at an empty Workspace
 
@@ -65,3 +67,15 @@ an empty row; a swipe that springs back starts nothing. Since the 10-18 round se
 launches into Home floats, an empty Workspace is common, and a seam that stopped there read as a
 broken gesture. A sideways swipe that starts on a Home float's terminal pages as a swipe on the page
 does; the float moves only by its titlebar (spec §2, §4).
+
+## Amended 2026-10-19: Home wears no status bar
+
+The developer's decision: Home shows no launcher status bar of any kind. The Home pills (a windows
+pill and a stats pill standing in for the bar on Home) are removed, and so is the bar the first
+Home float used to bring down: the Home layout keeps the status slot put away whatever the floats
+do, and the widget grid starts below the system status bar's inset alone, as it did before the
+pills. What the bar carried on Home moves to the floats: the focused Home float's titlebar carries
+the CPU and RAM readings, drawn and inked as the status bar draws them (weather is dropped), and
+minimised floats wait in float chips, a glass row centred just above the dock that moves with it
+when a keyboard is up. The Workspace keeps its bar and its chips for the Home floats. The phase two
+spec's Home pills slice records what was built and removed.

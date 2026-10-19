@@ -36,7 +36,7 @@ Three rules keep this directory from rotting:
 | [`active/glass-plan-2026-10-16.md`](active/glass-plan-2026-10-16.md) | The next glass round: gathered-light edge, a per-spot film under Clear, small glass that picks its own ink. Rounds 0 and 1 built, Round 1 always on (the switch is gone); the rest is spec. |
 | [`active/display-fullscreen/PARKED.md`](active/display-fullscreen/PARKED.md) | Full-screen Display with edge slide-outs. Parked. |
 | [`active/wall-rework-2026-10-17.md`](active/wall-rework-2026-10-17.md) | The wall rework: Home pages as a conventional launcher, then the Workspace with terminal and display windows in one row; usage mode and the Display place retire (ADR 0008). Spec; not started. |
-- `active/wall-rework-phase2-2026-10-18.md`: phase two of the wall rework, slices in order (the capsule status bar, built and removed; Home pills).
+- `active/wall-rework-phase2-2026-10-18.md`: phase two of the wall rework, slices in order (the capsule status bar, built and removed; Home pills, built and removed for no status bar on Home).
 | [`active/tai-memory-manager.md`](active/tai-memory-manager.md) | The "can this model load right now" owner. Built; device checks pending. |
 | [`active/tai-feature-load-plan-2026-10-08.md`](active/tai-feature-load-plan-2026-10-08.md) | The feature load plan: how each on-device AI feature picks its model, accelerator and context for a phone. |
 | [`active/keyboard-touch-engine-2026-10-16.md`](active/keyboard-touch-engine-2026-10-16.md) | The in-app keyboard learns where your thumbs land, space bar first: corrected taps on release, take-backs, warm-up and a drift pause. Spec; not started. |

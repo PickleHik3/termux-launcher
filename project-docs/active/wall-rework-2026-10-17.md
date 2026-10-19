@@ -255,7 +255,8 @@ titlebar); `TerminalCommandPalette` (Home action set, Linux apps, floats); `Laun
   capsule at the top centre; a continuous swipe sizes the bar by where the finger lets go, quick
   swipes step one form, the bar folds to the capsule after a short idle, and the capsule is Minimal
   mode's default form. Built in phase two and removed again (2026-10-18): the bar keeps its two
-  forms, and Home wears the Home pills instead.
+  forms. Home wore the Home pills instead until 2026-10-19, and now wears no status bar at all
+  (ADR 0008's amendment).
 - Drag-to-reorder of windows (done in phase two, slice 5a), and Niri's consume/expel of panes
   into and out of columns (done in phase two, slice 5b: `pane.consume` and `pane.expel`, the
   row's windows being the columns).
