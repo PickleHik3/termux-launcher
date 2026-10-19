@@ -1411,15 +1411,34 @@ element), not a defect; nothing about the dock's presence changed.
   Floating Style, light and dark, and the strip behind the system bar moves with the bar in Docked.
   Under a joined Docked frame, look for the bar's glass staying behind while its content moves ·
   emulator.
-- 2026-10-19 · f2f54cc4b · What still changes at settle, to judge rather than pass: the terminal
-  page moves down by the bar's band as it lands from Home (and Home's page up as it lands there),
-  and a Home Style, Corners or Margin set apart from the Workspace's re-dresses the dock at settle ·
-  emulator, then pong.
+- 2026-10-19 · f2f54cc4b · What still changes at settle, to judge rather than pass: a Home Style,
+  Corners or Margin set apart from the Workspace's re-dresses the dock at settle · emulator, then
+  pong.
 - 2026-10-19 · f2f54cc4b · Unchanged elsewhere: a side rail or A–Z on a side edge in either
   layout, the status bar on a side or the bottom, reduced motion (everything snaps at settle),
   Animation speed Slower, a split terminal, landscape, the display window's slide to the terminal
   (no seam: the bar stays put), and a Home float minimised to a chip (the chip keeps its place
   during the slide, settles once) · emulator.
+- 2026-10-19 · PageTopInsets · Bar along the top, keyboard down: slide terminal → Home and Home →
+  terminal, by the border drag (stop and hold at 10 %, then let it spring back) and by a fling. The
+  terminal's text and the top of Home's grid never move vertically: not on the first frame, not
+  during, not at settle, and not on a spring-back. Take a frame just before and just after settle
+  each way and diff the terminal's first row and Home's first cell rows; also check the terminal
+  does not reflow (`stty size` before and after the round trip is the same, and a full-screen
+  program such as `htop` gets no redraw at settle) · emulator.
+- 2026-10-19 · PageTopInsets · The same round trip on every surface it could break: Docked and
+  Floating, compact and expanded bar (fold the bar on the terminal, then slide), keyboard up on the
+  terminal, a split terminal (2 tiles) and a floating pane, the display window in front of the
+  Workspace, the plain terminal border on (its frame line must frame the page on the first frame of
+  the slide, not sit a bar's height above it), opaque mode (wallpaper off: no terminal colour under
+  the status bar during the slide), compatibility mode (no bar: nothing moves either), the bar on
+  the bottom edge, landscape with an extra-keys column on a side (its keys keep their size during
+  the slide) · emulator.
+- 2026-10-19 · PageTopInsets · At rest on the terminal after a round trip, everything that reads
+  the terminal's frame still lands on it: the keybind hint panel and a mode legend (copy/find),
+  the background-process stack, the help overlay's border strips and the tour's top-border
+  pointer, the Appearance editor's terminal outline, the Layout editor's miniature, and the top
+  border's swipe that folds the bar (it starts below the bar, not under it) · emulator.
 
 ## Developer
 
@@ -1431,6 +1450,11 @@ element), not a defect; nothing about the dock's presence changed.
   start (from a Workspace without a dock, or bringing the bar from Home) or at its midpoint
   (a dip): perfetto `Wall.seamLayout` is that frame; report it red if it is worse than the
   pre-roll frames · pong, by hand (ask first).
+- 2026-10-19 · PageTopInsets · The first frame of a slide from the terminal toward Home now also
+  lays the canvas and Home's page out once (perfetto `Wall.canvasReach`), and the settle back on
+  the terminal once more; Home's widgets are re-laid there instead of at settle. Report it red if
+  that first frame is worse than the pre-roll frames above, or if a widget visibly reflows as
+  Home slides in · pong, by hand (ask first).
 
 ### Terminal body swipe (10-19)
 - 2026-10-19 · feat(wall) body swipe · Feel on pong: whether 1.5x across-over-down is the right

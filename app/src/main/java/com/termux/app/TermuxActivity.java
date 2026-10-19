@@ -3510,12 +3510,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ViewGroup.LayoutParams borderParams = borderView.getLayoutParams();
         if (borderParams instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) borderParams;
+            // It frames the terminal page from outside the wall, so it starts where that page
+            // does: the Workspace's top inset below the frame's own (applyWorkspaceTopInset).
+            mTerminalBorderFrameTopPx = borderVerticalInsetPx;
+            int borderTopPx = borderVerticalInsetPx + mWorkspaceTopInsetPx;
             if (marginParams.leftMargin != borderHorizontalInsetPx || marginParams.rightMargin != borderHorizontalInsetPx
-                || marginParams.topMargin != borderVerticalInsetPx
+                || marginParams.topMargin != borderTopPx
                 || marginParams.bottomMargin != borderVerticalInsetPx) {
                 marginParams.leftMargin = borderHorizontalInsetPx;
                 marginParams.rightMargin = borderHorizontalInsetPx;
-                marginParams.topMargin = borderVerticalInsetPx;
+                marginParams.topMargin = borderTopPx;
                 marginParams.bottomMargin = borderVerticalInsetPx;
                 borderView.setLayoutParams(marginParams);
             }
@@ -3808,9 +3812,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ViewGroup.LayoutParams params = bodySurface.getLayoutParams();
         if (params instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) params;
-            if (marginParams.leftMargin != 0 || marginParams.topMargin != 0
+            // Below the bar the canvas reaches up behind, where the canvas used to start
+            // (PageTopInsets.bodySurfaceTopPx).
+            int top = mBodySurfaceTopPx;
+            if (marginParams.leftMargin != 0 || marginParams.topMargin != top
                 || marginParams.rightMargin != 0 || marginParams.bottomMargin != 0) {
-                marginParams.setMargins(0, 0, 0, 0);
+                marginParams.setMargins(0, top, 0, 0);
                 bodySurface.setLayoutParams(marginParams);
             }
         }
@@ -14242,8 +14249,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View band = findViewById(R.id.terminal_canvas_band);
         View container = band != null && band.getHeight() > 0
             ? band : findViewById(R.id.terminal_root_container);
+        // A band reaching up under the status bar (PageTopInsets) is the bar's height taller than
+        // the column, which its stack starts back at the bar's edge.
+        int barInsetPx = container == band
+            ? mSideStackBarInsetPx[mExtraKeysHostEdge == PlaceLayout.Edge.RIGHT ? 1 : 0] : 0;
         int availablePx = container == null ? 0
-            : container.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
+            : container.getHeight() - host.getPaddingTop() - host.getPaddingBottom() - barInsetPx;
         int keyCount = keys.getRowCount();
         int keyHeightPx = ExtraKeysColumnGeometry.keyHeightPx(availablePx, keyCount,
             Math.round(dpToPx(ExtraKeysColumnGeometry.KEY_HEIGHT_DP)));
@@ -14629,20 +14640,115 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean applyEdgeStacksAndInvalidate(@NonNull PlaceLayout layout) {
         boolean moved = applyEdgeStacks(layout);
         EdgeStackPolicy.Metrics metrics = buildEdgeStackMetrics();
-        boolean statusOverlays =
-            com.termux.app.place.HomeChromePolicy.statusOverlays(mLastWallPage);
-        moved |= applyTopStackOverlap(EdgeStackPolicy.topOverlapPx(layout, metrics,
-            statusOverlays));
+        // While a Home page can be on screen the canvas reaches up under the status bar and each
+        // page keeps its own top (PageTopInsets): Home's at the canvas's top, the Workspace's a bar
+        // band below it, so a slide across the seam settles without moving either.
+        boolean reachedBefore = mCanvasReachesUnderBar;
+        boolean reaches = canvasReachesUnderBarNow();
+        mCanvasReachesUnderBar = reaches;
+        boolean barShown = isSplitPanesEnabled();
+        int reachPx = com.termux.app.place.PageTopInsets.canvasReachPx(reaches, barShown, layout,
+            metrics);
+        boolean reached = applyTopStackOverlap(reachPx);
         // The side stacks ride up with the canvas; they start back at the bar's edge.
-        moved |= applySideStackTopInset(0, R.id.place_edge_stack_left,
+        boolean overlays = reachPx > 0;
+        reached |= applySideStackTopInset(0, R.id.place_edge_stack_left,
             EdgeStackPolicy.sideStackTopInsetPx(layout, PlaceLayout.Edge.LEFT, metrics,
-                statusOverlays));
-        moved |= applySideStackTopInset(1, R.id.place_edge_stack_right,
+                overlays));
+        reached |= applySideStackTopInset(1, R.id.place_edge_stack_right,
             EdgeStackPolicy.sideStackTopInsetPx(layout, PlaceLayout.Edge.RIGHT, metrics,
-                statusOverlays));
+                overlays));
+        PlaceLayout workspace = workspacePlaceLayout();
+        applyWorkspaceTopInset(com.termux.app.place.PageTopInsets.workspaceTopInsetPx(reaches,
+                barShown, layout, workspace == null ? layout : workspace, metrics),
+            com.termux.app.place.PageTopInsets.bodySurfaceTopPx(mLastWallPage, reachPx));
+        // The canvas reaching up or coming back down moves nothing on screen (every page keeps
+        // its rect), so only a reach that changed for any other reason re-cuts the glass.
+        if (reached && reaches == reachedBefore) moved = true;
         if (moved) mChrome.onArrangementChanged();
         return moved;
     }
+
+    /**
+     * Whether the canvas reaches up under the status bar right now (PageTopInsets): committed to
+     * Home, or the wall off its rest.
+     */
+    private boolean canvasReachesUnderBarNow() {
+        com.termux.app.wall.PaneWallLayout wall =
+            mPaneWallController == null ? null : mPaneWallController.wall();
+        boolean atRest = wall == null || (!wall.isMoving() && wall.offsetPx() == 0f);
+        return com.termux.app.place.PageTopInsets.canvasReachesUnderBar(mLastWallPage, atRest);
+    }
+
+    /**
+     * The canvas reaches up under the bar as the wall leaves its rest on the Workspace, and comes
+     * back down as it rests there again: one arrangement pass on the change, in the frame that
+     * makes it, and nothing on the frames between. No page moves on screen either way.
+     */
+    private void syncCanvasTopReach() {
+        if (canvasReachesUnderBarNow() == mCanvasReachesUnderBar) return;
+        Trace.beginSection("Wall.canvasReach");
+        try {
+            applyEdgeStacksAndInvalidate(currentPlaceLayout());
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /** The Workspace's layout in this orientation, whatever page the chrome is committed to. */
+    @Nullable
+    private PlaceLayout workspacePlaceLayout() {
+        if (!com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage))
+            return committedPlaceLayout(currentPlaceOrientation());
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null) return null;
+        return store.resolve(currentPlaceOrientation(),
+            store.variantFor(com.termux.app.wall.PaneWallPage.TERMINAL));
+    }
+
+    /**
+     * Gives the wall's Workspace pages their top inset (PageTopInsets.workspaceTopInsetPx), the
+     * terminal's frame line the same, since it frames the terminal page from outside the wall,
+     * and the flat body surface its old top (PageTopInsets.bodySurfaceTopPx).
+     */
+    private void applyWorkspaceTopInset(int insetPx, int bodyTopPx) {
+        if (mPaneWallController != null) mPaneWallController.wall().setWorkspaceTopInsetPx(insetPx);
+        if (insetPx != mWorkspaceTopInsetPx) {
+            mWorkspaceTopInsetPx = insetPx;
+            View borderView = findViewById(R.id.terminal_border_overlay);
+            if (borderView != null
+                && borderView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams params =
+                    (ViewGroup.MarginLayoutParams) borderView.getLayoutParams();
+                int top = mTerminalBorderFrameTopPx + insetPx;
+                if (params.topMargin != top) {
+                    params.topMargin = top;
+                    borderView.setLayoutParams(params);
+                }
+            }
+        }
+        if (bodyTopPx != mBodySurfaceTopPx) {
+            mBodySurfaceTopPx = bodyTopPx;
+            View body = findViewById(R.id.terminal_background);
+            if (body != null && body.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams params =
+                    (ViewGroup.MarginLayoutParams) body.getLayoutParams();
+                if (params.topMargin != bodyTopPx) {
+                    params.topMargin = bodyTopPx;
+                    body.setLayoutParams(params);
+                }
+            }
+        }
+    }
+
+    /** Whether the canvas reaches up under the status bar (PageTopInsets.canvasReachesUnderBar). */
+    private boolean mCanvasReachesUnderBar;
+    /** The top inset the wall's Workspace pages were last given (applyWorkspaceTopInset). */
+    private int mWorkspaceTopInsetPx;
+    /** The terminal frame line's own top margin, before the Workspace's top inset. */
+    private int mTerminalBorderFrameTopPx;
+    /** Where the flat body surface starts below the canvas's top (applyWorkspaceTopInset). */
+    private int mBodySurfaceTopPx;
 
     /**
      * Lets the canvas reach up under the top edge's stack by {@code overlapPx} (EdgeStackPolicy
@@ -20888,6 +20994,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mX11Display.onUserKeyboardIntent(true);
             }
             syncPlaceState(page, leavingKeyboardUp);
+            // Resting on the Workspace, the canvas comes back down below the bar, its pages out of
+            // the band with it, so nothing on screen moves (PageTopInsets).
+            syncCanvasTopReach();
             // A pass that finds the arrangement already applied changes nothing.
             if (seamLaidOut) syncPlaceLayout();
             if (barTravelled) syncPlaceBar();
@@ -21614,6 +21723,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                         Trace.setCounter("Wall.offsetPx", Math.round(offsetPx));
                     syncPlaceBarOffset(offsetPx);
+                    // Off its rest on the Workspace, the canvas reaches up under the bar so Home's
+                    // page stands at its own top from this frame on (PageTopInsets).
+                    syncCanvasTopReach();
                     // The terminal's own frame line stays put while its page leaves: it fades.
                     syncTerminalFrameLineTravel();
                     // The dock, the keyboard and the status bar's content travel with the wall
