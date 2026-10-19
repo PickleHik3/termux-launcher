@@ -168,6 +168,70 @@ public class WidgetPanePagingTest {
         assertEquals(0, fixture.controller.currentPage());
     }
 
+    @Test public void aSidewaysSwipeOnAFloatsTerminalPagesHomeAndAVerticalOneStaysItsOwn() {
+        Fixture fixture = new Fixture();
+        fixture.controller.menuAddPage();
+        fixture.controller.setCurrentPage(0);
+        FloatStandIn layer = new FloatStandIn(fixture.activity, true);
+        fixture.pane.setPagePinnedLayer(layer);
+        fixture.layout();
+        int w = fixture.pane.getWidth();
+        int h = fixture.pane.getHeight();
+        fixture.swipe(w * 7 / 8, h / 2, w / 16, h / 2 + 10);
+        assertEquals("the swipe on the float paged Home", 1, fixture.controller.currentPage());
+        assertTrue("the terminal let the swipe go", layer.terminal.cancelled);
+
+        layer.terminal.cancelled = false;
+        fixture.swipe(w / 2, h * 3 / 4, w / 2, h / 4);
+        assertTrue("a vertical swipe on the float is never the palette gesture",
+            fixture.paletteSwipes.isEmpty());
+        assertFalse("and stays the terminal's", layer.terminal.cancelled);
+    }
+
+    @Test public void aFloatThatKeepsItsSwipeIsNeverPaged() {
+        Fixture fixture = new Fixture();
+        fixture.controller.menuAddPage();
+        fixture.controller.setCurrentPage(0);
+        FloatStandIn layer = new FloatStandIn(fixture.activity, false);
+        fixture.pane.setPagePinnedLayer(layer);
+        fixture.layout();
+        int w = fixture.pane.getWidth();
+        int y = fixture.pane.getHeight() / 2;
+        fixture.swipe(w * 7 / 8, y, w / 16, y + 10);
+        assertEquals(0, fixture.controller.currentPage());
+        assertFalse(layer.terminal.cancelled);
+    }
+
+    /** A float filling the page, its terminal taking every press, and the policy's answer. */
+    private static final class FloatStandIn extends android.widget.FrameLayout
+            implements WidgetPaneView.PagePinnedLayer {
+        final Terminal terminal;
+        final boolean yields;
+
+        FloatStandIn(Activity activity, boolean yields) {
+            super(activity);
+            this.yields = yields;
+            terminal = new Terminal(activity);
+            addView(terminal, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        }
+
+        @Override public void onHomePageShown(int page) { }
+        @Override public boolean holdsPoint(float x, float y) { return true; }
+        @Override public boolean yieldsSidewaysSwipe(float x, float y) { return yields; }
+    }
+
+    private static final class Terminal extends View {
+        boolean cancelled;
+
+        Terminal(Activity activity) { super(activity); }
+
+        @Override public boolean onTouchEvent(MotionEvent event) {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) cancelled = false;
+            if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) cancelled = true;
+            return true;
+        }
+    }
+
     private static final class RecordingSeam implements WidgetPaneView.Seam {
         final boolean open;
         int begins;

@@ -51,7 +51,11 @@ animating. Gated as before (portrait, the launcher drawing a managed wallpaper i
 animations on). A forward swipe on the last Home page crosses the seam to the first
 window. When the Workspace has none it crosses all the same: the empty Workspace comes in under the
 finger and, once the release commits to it, a fresh shell opens as window 1 (a swipe that springs
-back starts nothing). A swipe back never leaves Home. From the first window the border drag back returns to the last Home page. The seam is
+back starts nothing). A swipe back never leaves Home. From the first window the border drag back returns to the last Home page. A sideways swipe
+that starts on a Home float's terminal pages Home and crosses the seam exactly as one beside the
+float does; taps and vertical swipes there stay the terminal's, and the float moves only by its
+titlebar. The terminal keeps a sideways drag while it is selecting text or a program is tracking
+the mouse. The seam is
 continuous but never silent: the Workspace's chrome (status bar, extra keys, corner tabs, borders)
 arrives with the first window, and the window's status bar fades on the way back to Home.
 

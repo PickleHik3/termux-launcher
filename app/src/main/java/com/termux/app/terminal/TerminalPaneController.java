@@ -3006,6 +3006,19 @@ public class TerminalPaneController {
                 if (pressIsOnFocusedHostedFloat(rawX, rawY)) return;
                 releaseHomeFloatFocus();
             }
+
+            @Override public boolean floatYieldsSideways(@NonNull View child, float x, float y) {
+                if (!(child instanceof FloatingPaneContainer)) return false;
+                FloatingPaneContainer container = (FloatingPaneContainer) child;
+                TerminalView view = mPaneViews.get(container.mLeaf.session);
+                TerminalEmulator emulator = view == null ? null : view.mEmulator;
+                // A press just under a titlebar button is the button's too (its reach).
+                return HomeFloatPolicy.bodySwipePagesHome(
+                    y < titlebarBandPx() || container.buttonReachAt(x, y) != null,
+                    container.dragModeAt(x, y) == FloatingPaneContainer.DRAG_RESIZE,
+                    view != null && view.isSelectingText(),
+                    emulator != null && emulator.isMouseTrackingActive());
+            }
         });
         // Fractions only become pixels against the live room: a turn or a resize re-lays them.
         layer.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
