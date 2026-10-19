@@ -36,6 +36,7 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
             SettingsEditorDoors.openLayoutEditor(this, row, PaneWallPage.WIDGETS);
             return true;
         });
+        HomeGesturesRows.bind(this);
     }
 
     @Override
@@ -43,6 +44,8 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
         super.onResume();
         Context context = getContext();
         if (context == null) return;
+        // The accessibility service or Shizuku may have come or gone while the page was away.
+        HomeGesturesRows.bind(this);
         Preference transition = findPreference(HomeSettings.KEY_PAGE_TRANSITION);
         if (transition != null) transition.setSummary(
             HomePageTransitionFragment.titleOf(HomeSettings.pageTransition(context)));

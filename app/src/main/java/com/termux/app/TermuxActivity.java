@@ -20839,10 +20839,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return isHomeKeyboardAlwaysOn();
         }
         if (palette.isOpen() || !isHomePaletteGestureEnabled()) return true;
+        openHomePalette(keyboardWasUp);
+        return true;
+    }
+
+    /**
+     * The Home palette with the keyboard, as one overlay: the swipe up's, and any other Home
+     * gesture set to the palette (Settings › Home › Gestures).
+     */
+    private void openHomePalette(boolean keyboardWasUp) {
+        com.termux.app.terminal.TerminalCommandPaletteController palette =
+            getCommandPaletteController();
+        if (palette.isOpen()) return;
         if (keyboardWasUp || !terminalHost().showInAppKeyboard(false)) {
             // Nothing raised (already up, or no in-app keyboard to raise): the palette alone.
             palette.showHomeOverlay(true);
-            return true;
+            return;
         }
         // A keyboard raised just now is laid out by the next frame; the palette sprouts from its
         // space bar, so it opens once the keyboard stands where it will be.
@@ -20855,7 +20867,74 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 lowerHomePaletteKeyboard();
             }
         });
-        return true;
+    }
+
+    /**
+     * A vertical swipe on a Home page's free area, by Settings › Home › Gestures. Swipe up set to
+     * the palette, or to nothing, and a swipe down that has a palette or a keyboard to put away,
+     * take the keyboard swipe's path exactly as before; anything else runs its action.
+     */
+    private void runHomeSwipe(boolean up) {
+        com.termux.app.launcher.home.HomeGestures.Gesture gesture = up
+            ? com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP
+            : com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_DOWN;
+        com.termux.app.launcher.home.HomeGestures.Action action =
+            com.termux.app.launcher.home.HomeSettings.gestureAction(this, gesture);
+        boolean keyboardSwipe = up
+            ? action == com.termux.app.launcher.home.HomeGestures.Action.PALETTE
+                || action == com.termux.app.launcher.home.HomeGestures.Action.NONE
+            : action == com.termux.app.launcher.home.HomeGestures.Action.NONE
+                || isCommandPaletteOpen()
+                || (committedKeyboardVisible() && !isHomeKeyboardAlwaysOn());
+        if (keyboardSwipe) {
+            applyBorderKeyboardSwipe(up);
+            return;
+        }
+        runHomeGesture(gesture);
+    }
+
+    /** Runs what {@code gesture} on a Home page is set to. */
+    private void runHomeGesture(@NonNull com.termux.app.launcher.home.HomeGestures.Gesture gesture) {
+        com.termux.app.launcher.home.HomeGestureActions.run(this,
+            com.termux.app.launcher.home.HomeSettings.gestureAction(this, gesture),
+            com.termux.app.launcher.home.HomeSettings.gestureApp(this, gesture),
+            new com.termux.app.launcher.home.HomeGestureActions.Host() {
+                @Override public void openPalette() { openHomePalette(committedKeyboardVisible()); }
+                @Override public void openDrawer() { openAppDrawerFromHome(); }
+                @Override public void goToTerminal() {
+                    if (mPaneWallController != null) mPaneWallController.returnToTerminal(true);
+                }
+                @Override public void lockScreen() { lockScreenFromHomeGesture(); }
+                @Override public void explainHelperNeeded() {
+                    AppNotice.show(TermuxActivity.this, R.string.home_gesture_needs_helper, false);
+                }
+                @Override public void explainNoApp() {
+                    AppNotice.show(TermuxActivity.this, R.string.home_gesture_no_app, false);
+                }
+            });
+    }
+
+    /** The app drawer, grown out of the pinned apps row wherever it lies, as the palette opens it. */
+    private void openAppDrawerFromHome() {
+        if (mPreferences == null || !mPreferences.isAppLauncherDrawerEnabled()) return;
+        PlaceLayout.Edge edge = PlaceChromePolicy.appsEdge(currentPlaceLayout());
+        getAppDrawerController().open(AppDrawerPullGeometry.pullFor(edge),
+            AppDrawerPullGeometry.seedFor(edge));
+    }
+
+    /**
+     * A Home gesture's lock: the accessibility service when it is on, else Shizuku, else the
+     * prompt that says how to turn the service on.
+     */
+    private void lockScreenFromHomeGesture() {
+        if (LauncherLockAccessibilityAccess.isEnabled(this) && LockAccessibilityService.lockScreen()) {
+            return;
+        }
+        if (PrivilegedBackendManager.getInstance().isPrivilegedAvailable()) {
+            lockScreenWithShizuku();
+            return;
+        }
+        showEnableAccessibilityLockDialog();
     }
 
     /** Whether the Home layout keeps the keyboard up on Home (always on). */
@@ -20864,9 +20943,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return store != null && store.isHomeKeyboardAlwaysOn();
     }
 
-    /** Whether the keyboard swipe up on a Home page opens the palette (Settings). */
+    /** Whether the swipe up on a Home page opens the palette (Settings › Home › Gestures). */
     private boolean isHomePaletteGestureEnabled() {
-        return mPreferences == null || mPreferences.isHomePaletteGestureEnabled();
+        return com.termux.app.launcher.home.HomeSettings.gestureAction(this,
+                com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP)
+            == com.termux.app.launcher.home.HomeGestures.Action.PALETTE;
     }
 
     /** The keyboard the Home palette raised goes down with it. */
@@ -23011,6 +23092,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWidgetPaneController.setPageMotion(
             com.termux.app.launcher.home.HomeSettings.pageTransition(this),
             com.termux.app.AnimationSpeed.multiplier(this));
+        mWidgetPaneController.setExtraGestures(
+            com.termux.app.launcher.home.HomeGestures.watched(
+                com.termux.app.launcher.home.HomeSettings.gestureAction(this,
+                    com.termux.app.launcher.home.HomeGestures.Gesture.DOUBLE_TAP)),
+            com.termux.app.launcher.home.HomeGestures.watched(
+                com.termux.app.launcher.home.HomeSettings.gestureAction(this,
+                    com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_UP))
+                || com.termux.app.launcher.home.HomeGestures.watched(
+                com.termux.app.launcher.home.HomeSettings.gestureAction(this,
+                    com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_DOWN)));
     }
 
     /** Each row runs what the corner tab, the palette and Settings already run for it. */
@@ -24188,7 +24279,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 // The palette gesture starts on the page's free area: Home has no bottom border.
                 @Override public void onHomePaletteSwipe(boolean up) {
-                    if (isWidgetsPageShowing()) applyBorderKeyboardSwipe(up);
+                    if (isWidgetsPageShowing()) runHomeSwipe(up);
+                }
+                @Override public void onHomeDoubleTap() {
+                    if (isWidgetsPageShowing()) runHomeGesture(
+                        com.termux.app.launcher.home.HomeGestures.Gesture.DOUBLE_TAP);
+                }
+                @Override public void onHomeTwoFingerSwipe(boolean up) {
+                    if (isWidgetsPageShowing()) runHomeGesture(up
+                        ? com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_UP
+                        : com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_DOWN);
                 }
                 @Override @NonNull
                 public com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host builtinWidgetHost() {

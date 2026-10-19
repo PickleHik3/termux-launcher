@@ -10,15 +10,36 @@
         app:title="@string/settings_layout_editor_title"
         app:summary="@string/settings_layout_editor_home_summary" />
 
+    <!-- Gestures on a Home page's free area. Each row's choices are filled in code
+         (HomeGesturesRows): the actions that need the accessibility service or Shizuku are listed
+         only while one is there. Swipe up keeps the old palette gesture's key and values. -->
     <PreferenceCategory app:key="home_gestures" app:title="@string/settings_home_gestures_header">
         <ListPreference
             app:key="app_launcher_home_palette_gesture"
-            app:title="@string/settings_home_palette_gesture_title"
-            app:dialogTitle="@string/settings_home_palette_gesture_title"
-            app:entries="@array/settings_home_palette_gesture_entries"
-            app:entryValues="@array/settings_home_palette_gesture_values"
-            app:useSimpleSummaryProvider="true"
-            android:defaultValue="swipe_up" />
+            app:title="@string/settings_home_gesture_swipe_up"
+            app:dialogTitle="@string/settings_home_gesture_swipe_up" />
+        <ListPreference
+            app:key="app_launcher_home_gesture_swipe_down"
+            app:title="@string/settings_home_gesture_swipe_down"
+            app:dialogTitle="@string/settings_home_gesture_swipe_down" />
+        <ListPreference
+            app:key="app_launcher_home_gesture_double_tap"
+            app:title="@string/settings_home_gesture_double_tap"
+            app:dialogTitle="@string/settings_home_gesture_double_tap" />
+        <ListPreference
+            app:key="app_launcher_home_gesture_two_finger_up"
+            app:title="@string/settings_home_gesture_two_finger_up"
+            app:dialogTitle="@string/settings_home_gesture_two_finger_up" />
+        <ListPreference
+            app:key="app_launcher_home_gesture_two_finger_down"
+            app:title="@string/settings_home_gesture_two_finger_down"
+            app:dialogTitle="@string/settings_home_gesture_two_finger_down" />
+        <Preference
+            app:key="home_gestures_helper"
+            app:persistent="false"
+            app:isPreferenceVisible="false"
+            app:title="@string/settings_home_gestures_helper_title"
+            app:summary="@string/settings_home_gestures_helper_summary" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="home_widgets" app:title="@string/settings_home_widgets_header">

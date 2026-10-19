@@ -24,6 +24,7 @@ import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
 
 import com.termux.R;
+import com.termux.app.launcher.home.HomeGestures;
 import com.termux.app.launcher.home.HomePageTransition;
 
 import java.util.List;
@@ -50,6 +51,16 @@ public final class WidgetPaneView extends FrameLayout {
          * the picker.
          */
         default void onFreeAreaVerticalSwipe(boolean up) { }
+        /**
+         * Two taps in quick succession on the page's free area; sent only while
+         * {@link #setExtraGestures} watches for it.
+         */
+        default void onFreeAreaDoubleTap() { }
+        /**
+         * Two fingers that set off on the free area swiped up ({@code up}) or down and lifted;
+         * sent only while {@link #setExtraGestures} watches for it.
+         */
+        default void onFreeAreaTwoFingerSwipe(boolean up) { }
         /**
          * The page's content moved sideways: the swipe drags it, or a page slides in or back.
          * Per frame of that motion; {@link #contentShiftFraction} says where it stands.
@@ -125,6 +136,7 @@ public final class WidgetPaneView extends FrameLayout {
     private final PageDotsView dots;
     private final Runnable hideNotice;
     private final int touchSlop;
+    private final int doubleTapSlop;
     private Listener listener;
     private boolean reducedMotion;
     /** How the page moves while a swipe turns it (Settings › Home › Page transition). */
@@ -162,12 +174,30 @@ public final class WidgetPaneView extends FrameLayout {
      */
     private boolean verticalCandidate;
     private boolean verticalDragging;
+    /**
+     * Settings › Home › Gestures: whether a double tap and a two-finger swipe on the free area are
+     * watched for. Off (nothing set for them), the page reads taps and second fingers as before.
+     */
+    private boolean watchDoubleTap;
+    private boolean watchTwoFinger;
+    /** Whether the press now down landed on the free area and has not travelled. */
+    private boolean freePress;
+    /** The last tap's lift on the free area, for a double tap; -1 for none. */
+    private long lastTapUpMs = -1;
+    private float lastTapX, lastTapY;
+    /** The press now down is the second of a double tap, fired on its lift. */
+    private boolean secondTap;
+    /** Two fingers set off on the free area, watched for a vertical swipe; then claimed. */
+    private boolean twoFingerTracking;
+    private boolean twoFingerDragging;
+    private float twoFingerDownX, twoFingerDownY;
 
     public WidgetPaneView(@NonNull Context context, AttributeSet attrs) { this(context); }
 
     public WidgetPaneView(@NonNull Context context) {
         super(context); setId(R.id.widget_pane); setClipChildren(true); setClipToPadding(true);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        doubleTapSlop = ViewConfiguration.get(context).getScaledDoubleTapSlop();
         // Provider text inputs may take focus; the pane and its hosts never keep it themselves.
         setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
         setFocusable(false);
@@ -257,6 +287,13 @@ public final class WidgetPaneView extends FrameLayout {
         listener = value; providerListener = providers;
     }
     public void setReducedMotion(boolean value) { reducedMotion = value; }
+
+    /** Whether a double tap and a two-finger swipe on the free area are watched for. */
+    public void setExtraGestures(boolean doubleTap, boolean twoFinger) {
+        watchDoubleTap = doubleTap;
+        watchTwoFinger = twoFinger;
+        if (!doubleTap) lastTapUpMs = -1;
+    }
 
     /**
      * How the page moves while a swipe turns it, and General › Animation speed's multiplier on
@@ -491,6 +528,12 @@ public final class WidgetPaneView extends FrameLayout {
                 // A swipe on a widget is the widget's, whichever way it goes, and a vertical one
                 // on a float is its terminal's scroll.
                 verticalCandidate = free && !onFloat && !onWidget(event);
+                freePress = verticalCandidate;
+                twoFingerTracking = false;
+                twoFingerDragging = false;
+                secondTap = watchDoubleTap && freePress && HomeGestures.isSecondTap(lastTapUpMs,
+                    lastTapX, lastTapY, event.getEventTime(), event.getX(), event.getY(),
+                    ViewConfiguration.getDoubleTapTimeout(), doubleTapSlop);
                 pagingDownX = event.getX(); pagingDownY = event.getY();
                 pagingDownRawX = event.getRawX();
                 if (pagingTracking || verticalCandidate) {
@@ -500,6 +543,25 @@ public final class WidgetPaneView extends FrameLayout {
                 }
                 break;
             case MotionEvent.ACTION_MOVE:
+                if (twoFingerTracking) {
+                    float tdx = meanX(event) - twoFingerDownX;
+                    float tdy = meanY(event) - twoFingerDownY;
+                    if (Math.abs(tdy) > touchSlop && Math.abs(tdy) > Math.abs(tdx)) {
+                        // Two fingers going up or down on the free area: the gesture's, and
+                        // whatever was under the first finger is cancelled by the claim.
+                        twoFingerTracking = false;
+                        twoFingerDragging = true;
+                        return true;
+                    }
+                    if (Math.abs(tdx) > touchSlop) twoFingerTracking = false;
+                    break;
+                }
+                if (Math.abs(event.getX() - pagingDownX) > touchSlop
+                    || Math.abs(event.getY() - pagingDownY) > touchSlop) {
+                    // Travel is not a tap: neither the first nor the second of a double tap.
+                    freePress = false;
+                    secondTap = false;
+                }
                 if ((!pagingTracking && !verticalCandidate) || pagingDragging || verticalDragging)
                     break;
                 if (widgetEditActive()) {
@@ -543,19 +605,95 @@ public final class WidgetPaneView extends FrameLayout {
             case MotionEvent.ACTION_POINTER_DOWN:
                 pagingTracking = false;
                 verticalCandidate = false;
+                secondTap = false;
+                // The second finger of a two-finger swipe, when one is set and the first finger
+                // is still on the free area; a third finger is nobody's.
+                twoFingerTracking = watchTwoFinger && freePress && event.getPointerCount() == 2
+                    && !pagingDragging && !verticalDragging && !widgetEditActive();
+                freePress = false;
+                if (twoFingerTracking) {
+                    twoFingerDownX = meanX(event);
+                    twoFingerDownY = meanY(event);
+                }
                 break;
             case MotionEvent.ACTION_UP:
+                noteTapLift(event);
+                pagingTracking = false;
+                verticalCandidate = false;
+                twoFingerTracking = false;
+                break;
             case MotionEvent.ACTION_CANCEL:
                 pagingTracking = false;
                 verticalCandidate = false;
+                twoFingerTracking = false;
+                freePress = false;
+                secondTap = false;
                 break;
             default:
                 break;
         }
-        return pagingDragging || verticalDragging;
+        return pagingDragging || verticalDragging || twoFingerDragging;
+    }
+
+    /**
+     * A lift with no travel on the free area, short of a long press: the first tap of a double
+     * tap, or its second, which fires the gesture.
+     */
+    private void noteTapLift(@NonNull MotionEvent event) {
+        boolean tap = freePress && !pagingDragging && !verticalDragging
+            && event.getEventTime() - event.getDownTime() < ViewConfiguration.getLongPressTimeout();
+        boolean second = secondTap;
+        freePress = false;
+        secondTap = false;
+        if (!watchDoubleTap || !tap) {
+            lastTapUpMs = -1;
+            return;
+        }
+        if (second) {
+            lastTapUpMs = -1;
+            if (listener != null) listener.onFreeAreaDoubleTap();
+            return;
+        }
+        lastTapUpMs = event.getEventTime();
+        lastTapX = event.getX();
+        lastTapY = event.getY();
+    }
+
+    /** The two-finger swipe's stream after its claim: the lift of either finger decides. */
+    private boolean onTwoFingerTouch(@NonNull MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_POINTER_UP:
+            case MotionEvent.ACTION_UP: {
+                if (!twoFingerDragging) return true;
+                twoFingerDragging = false;
+                float commit = com.termux.app.wall.BorderDrag.KEYBOARD_COMMIT_DP
+                    * getResources().getDisplayMetrics().density;
+                int way = HomeGestures.twoFingerDirection(meanX(event) - twoFingerDownX,
+                    meanY(event) - twoFingerDownY, commit);
+                if (way != 0 && listener != null) listener.onFreeAreaTwoFingerSwipe(way < 0);
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                twoFingerDragging = false;
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /** The mean of the first two fingers' positions; the one finger's own when only one is down. */
+    private static float meanX(@NonNull MotionEvent event) {
+        return event.getPointerCount() < 2 ? event.getX()
+            : (event.getX(0) + event.getX(1)) / 2f;
+    }
+
+    private static float meanY(@NonNull MotionEvent event) {
+        return event.getPointerCount() < 2 ? event.getY()
+            : (event.getY(0) + event.getY(1)) / 2f;
     }
 
     @Override public boolean onTouchEvent(@NonNull MotionEvent event) {
+        if (twoFingerDragging) return onTwoFingerTouch(event);
         if (verticalDragging) return onVerticalTouch(event);
         if (!pagingDragging) return false;
         if (seamDragging) return onSeamTouch(event);

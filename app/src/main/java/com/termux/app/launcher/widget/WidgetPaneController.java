@@ -67,6 +67,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * keyboard, down puts them away (spec §5.1).
          */
         default void onHomePaletteSwipe(boolean up) { }
+        /** A double tap on the page's free area (Settings › Home › Gestures). */
+        default void onHomeDoubleTap() { }
+        /** A two-finger swipe up ({@code up}) or down on the page's free area. */
+        default void onHomeTwoFingerSwipe(boolean up) { }
         /**
          * The Home page's content moved sideways under Home's own swipe, or as a page slides in
          * or back; {@link #homePageShiftFraction} says where it stands. Per frame of the motion.
@@ -187,6 +191,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             @Override public void onWidgetAddPage() { menuAddPage(); }
             @Override public void onFreeAreaVerticalSwipe(boolean up) {
                 host.onHomePaletteSwipe(up);
+            }
+            @Override public void onFreeAreaDoubleTap() { host.onHomeDoubleTap(); }
+            @Override public void onFreeAreaTwoFingerSwipe(boolean up) {
+                host.onHomeTwoFingerSwipe(up);
             }
             @Override public void onContentShifted() { host.onHomePageShifted(); }
         }, new WidgetPickerAdapter.Listener() {
@@ -422,6 +430,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     public void setPageMotion(@NonNull com.termux.app.launcher.home.HomePageTransition effect,
                               float speedMultiplier) {
         pane.setPageMotion(effect, speedMultiplier);
+    }
+
+    /** Whether the page watches for a double tap and a two-finger swipe (each set to something). */
+    public void setExtraGestures(boolean doubleTap, boolean twoFinger) {
+        pane.setExtraGestures(doubleTap, twoFinger);
     }
 
     /** The wall's seam out of the last Home page; see {@link WidgetPaneView.Seam}. */

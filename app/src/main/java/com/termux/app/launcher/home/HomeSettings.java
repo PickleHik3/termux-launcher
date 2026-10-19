@@ -26,7 +26,30 @@ public final class HomeSettings {
 
     /** Whether {@code key} is one of these rows. */
     public static boolean owns(@Nullable String key) {
-        return KEY_PAGE_TRANSITION.equals(key);
+        if (key == null) return false;
+        if (KEY_PAGE_TRANSITION.equals(key)) return true;
+        for (HomeGestures.Gesture gesture : HomeGestures.Gesture.values()) {
+            if (gesture.key.equals(key) || gesture.appKey().equals(key)) return true;
+        }
+        return false;
+    }
+
+    /** What {@code gesture} on a Home page's free area does (Settings › Home › Gestures). */
+    @NonNull
+    public static HomeGestures.Action gestureAction(@NonNull Context context,
+                                                    @NonNull HomeGestures.Gesture gesture) {
+        return HomeGestures.parse(gesture, getString(context, gesture.key, null));
+    }
+
+    public static void setGestureAction(@NonNull Context context, @NonNull HomeGestures.Gesture gesture,
+                                        @NonNull HomeGestures.Action action) {
+        putString(context, gesture.key, HomeGestures.storedValue(gesture, action));
+    }
+
+    /** The app {@code gesture} opens, as a flattened component name; null when none is picked. */
+    @Nullable
+    public static String gestureApp(@NonNull Context context, @NonNull HomeGestures.Gesture gesture) {
+        return getString(context, gesture.appKey(), null);
     }
 
     @NonNull

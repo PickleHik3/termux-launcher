@@ -383,6 +383,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             TerminalIOPreferencesDataStore.getInstance(mContext).putBoolean(key, value);
             return;
         }
+        if (com.termux.app.launcher.home.HomeSettings.owns(key)) {
+            com.termux.app.launcher.home.HomeSettings.putBoolean(mContext, key, value);
+            return;
+        }
         switch(key) {
             case "use_system_wallpaper":
                 TermuxActivity.setWallpaperModeEnabled(mContext, value);
@@ -459,6 +463,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             return defValue;
         if (isTerminalIoToggle(key))
             return TerminalIOPreferencesDataStore.getInstance(mContext).getBoolean(key, defValue);
+        if (com.termux.app.launcher.home.HomeSettings.owns(key))
+            return com.termux.app.launcher.home.HomeSettings.getBoolean(mContext, key, defValue);
         switch(key) {
             case "use_system_wallpaper":
                 return mPreferences.isUseSystemWallpaperEnabled();
@@ -549,6 +555,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             return;
         if (key == null)
             return;
+        // Settings › Home's newer rows keep their own store; the launcher reads them on return.
+        if (com.termux.app.launcher.home.HomeSettings.owns(key)) {
+            com.termux.app.launcher.home.HomeSettings.putString(mContext, key, value);
+            return;
+        }
         switch (key) {
             case "terminal_contrast_level":
                 mPreferences.setTerminalContrastLevel(value);
@@ -614,6 +625,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             return defValue;
         if (key == null)
             return defValue;
+        if (com.termux.app.launcher.home.HomeSettings.owns(key))
+            return com.termux.app.launcher.home.HomeSettings.getString(mContext, key, defValue);
         switch (key) {
             case "terminal_contrast_level":
                 return mPreferences.getTerminalContrastLevel().value;

@@ -12,4 +12,25 @@
     <string name="settings_home_page_transition_fade">Fade</string>
     <string name="settings_home_page_transition_carousel">Carousel</string>
     <string name="settings_home_page_transition_stack">Stack</string>
+
+    <!-- Gestures (F6) -->
+    <string name="settings_home_gesture_swipe_up">Swipe up</string>
+    <string name="settings_home_gesture_swipe_down">Swipe down</string>
+    <string name="settings_home_gesture_double_tap">Double tap</string>
+    <string name="settings_home_gesture_two_finger_up">Two-finger swipe up</string>
+    <string name="settings_home_gesture_two_finger_down">Two-finger swipe down</string>
+    <string name="settings_home_gesture_action_none">Do nothing</string>
+    <string name="settings_home_gesture_action_palette">Command palette</string>
+    <string name="settings_home_gesture_action_drawer">App drawer</string>
+    <string name="settings_home_gesture_action_notifications">Notifications</string>
+    <string name="settings_home_gesture_action_quick_settings">Quick settings</string>
+    <string name="settings_home_gesture_action_lock">Lock screen</string>
+    <string name="settings_home_gesture_action_terminal">Terminal</string>
+    <string name="settings_home_gesture_action_app">Open an app…</string>
+    <string name="settings_home_gesture_opens_app">Opens %1$s</string>
+    <string name="settings_home_gesture_pick_app">Choose an app</string>
+    <string name="settings_home_gestures_helper_title">More gestures</string>
+    <string name="settings_home_gestures_helper_summary">Turn on the launcher\'s accessibility service, or connect Shizuku, to lock the screen or open notifications and quick settings with a gesture.</string>
+    <string name="home_gesture_needs_helper">Turn on the launcher\'s accessibility service or connect Shizuku for this gesture</string>
+    <string name="home_gesture_no_app">Choose an app for this gesture in Settings › Home</string>
 </resources>

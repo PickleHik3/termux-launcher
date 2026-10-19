@@ -1234,6 +1234,18 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · commit "feat(home): a gestures table for Home's free area" · With nothing set,
+  Home behaves exactly as before: swipe up opens the palette with the keyboard, swipe down closes
+  it (and puts a raised keyboard away), double tap and two fingers do nothing, a single tap on a
+  widget or icon launches at once. Set each gesture in turn and try it on the free area: Command
+  palette, App drawer, Terminal (the wall slides over), Open an app… (the chooser lists apps; the
+  row then reads "Opens <app>"). With the accessibility service off and Shizuku disconnected the
+  rows offer no Lock screen, Notifications or Quick settings and the "More gestures" row explains
+  why; turn the service on and come back: they appear, and each works. Swipe down set to something
+  still closes an open palette first. A double tap or two-finger swipe started on a widget, a Home
+  float, the A–Z rail or the dock does nothing new; sideways swipes still page Home and cross the
+  seam; a long press still opens the Home sheet; the bottom-border keyboard swipe and top-border
+  status swipe are unchanged · emulator, keyboard up and down, light and dark.
 - 2026-10-19 · commit "feat(home): page transition picker with a live preview" · Settings › Home ›
   Page transition grows out of its row; the miniature plays once on open and once per pick, a tap
   plays it back, then nothing moves; Apply returns to Home's page with the effect named under the
