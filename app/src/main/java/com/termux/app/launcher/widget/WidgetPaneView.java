@@ -547,6 +547,8 @@ public final class WidgetPaneView extends FrameLayout {
                 secondTap = watchDoubleTap && freePress && HomeGestures.isSecondTap(lastTapUpMs,
                     lastTapX, lastTapY, event.getEventTime(), event.getX(), event.getY(),
                     ViewConfiguration.getDoubleTapTimeout(), doubleTapSlop);
+                // Any press that is not a second tap ends whatever first tap came before it.
+                if (!secondTap) lastTapUpMs = -1;
                 pagingDownX = event.getX(); pagingDownY = event.getY();
                 pagingDownRawX = event.getRawX();
                 if (pagingTracking || verticalCandidate) {
