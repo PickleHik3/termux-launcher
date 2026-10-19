@@ -27,6 +27,7 @@ import android.animation.ValueAnimator;
 
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.haptics.Haptics;
+import com.termux.app.place.PageTopInsets;
 import com.termux.view.HoldTiming;
 
 import java.util.ArrayList;
@@ -1168,8 +1169,10 @@ public final class PaneWallLayout extends ViewGroup {
         float slide = withSlide ? page.getTranslationX() : 0f;
         mBorderZone.page(page.getLeft() + slide, page.getTop(), page.getRight() + slide,
                 page.getBottom())
-            .gaps(page.getLeft(), page.getTop(), getWidth() - page.getRight(),
-                getHeight() - page.getBottom())
+            // The air above stops at the status bar's edge, not under the bar the canvas
+            // reaches up behind (PageTopInsets).
+            .gaps(page.getLeft(), page.getTop() - pageTopInsetPx(page),
+                getWidth() - page.getRight(), getHeight() - page.getBottom())
             .minBand(BorderDrag.MIN_BAND_DP * density)
             .sideReach(BorderDrag.SIDE_REACH_DP * density)
             .corner(CornerZones.paneSizePx(density))
@@ -2446,9 +2449,39 @@ public final class PaneWallLayout extends ViewGroup {
      * none, since it has no frame and its grid's rim is Home's Margin.
      */
     private int frameMarginPx(@NonNull View child, int marginPx) {
-        PaneWallPage page = child == mTerminalHost ? PaneWallPage.TERMINAL
+        return PaneWallPolicy.pageInsetPx(pageKindOf(child), marginPx, mTerminalFrameAirPx);
+    }
+
+    /**
+     * What {@code child} stands as for its frame and its top: the pane host the terminal page
+     * wherever it is parked, the display window's frame a page the wall does not know (null), and
+     * anything else the page it is registered as.
+     */
+    @Nullable
+    private PaneWallPage pageKindOf(@NonNull View child) {
+        return child == mTerminalHost ? PaneWallPage.TERMINAL
             : child == mDisplayView ? null : pageOf(child);
-        return PaneWallPolicy.pageInsetPx(page, marginPx, mTerminalFrameAirPx);
+    }
+
+    /**
+     * How far a Workspace page starts below the wall's top (PageTopInsets.workspaceTopInsetPx):
+     * the status bar's band while the canvas reaches up under the bar, so the terminal and the
+     * display window keep their place on screen whichever way the canvas stands, while a Home
+     * page starts at the top. 0 while the canvas stands below the bar.
+     */
+    private int mWorkspaceTopInsetPx;
+
+    /** See {@link #mWorkspaceTopInsetPx}. */
+    public void setWorkspaceTopInsetPx(int px) {
+        int inset = Math.max(0, px);
+        if (inset == mWorkspaceTopInsetPx) return;
+        mWorkspaceTopInsetPx = inset;
+        requestLayout();
+    }
+
+    /** Where {@code child} starts below the wall's top, beyond its frame (PageTopInsets). */
+    private int pageTopInsetPx(@NonNull View child) {
+        return PageTopInsets.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx);
     }
 
     /** The page {@code child} is registered as, or null for a view that is no page. */
@@ -2474,7 +2507,8 @@ public final class PaneWallLayout extends ViewGroup {
                 - getPaddingRight() - frameMarginPx(child, margins.leftMargin)
                 - frameMarginPx(child, margins.rightMargin)), MeasureSpec.EXACTLY);
             int childHeight = MeasureSpec.makeMeasureSpec(Math.max(0, height - getPaddingTop()
-                - getPaddingBottom() - frameMarginPx(child, margins.topMargin)
+                - getPaddingBottom() - pageTopInsetPx(child)
+                - frameMarginPx(child, margins.topMargin)
                 - frameMarginPx(child, margins.bottomMargin)), MeasureSpec.EXACTLY);
             child.measure(childWidth, childHeight);
         }
@@ -2493,7 +2527,8 @@ public final class PaneWallLayout extends ViewGroup {
             View child = getChildAt(i);
             if (child.getVisibility() != VISIBLE) continue;
             int left = getPaddingLeft() + frameMarginPx(child, margins.leftMargin);
-            int top = getPaddingTop() + frameMarginPx(child, margins.topMargin);
+            int top = getPaddingTop() + pageTopInsetPx(child)
+                + frameMarginPx(child, margins.topMargin);
             int right = Math.max(left, r - l - getPaddingRight()
                 - frameMarginPx(child, margins.rightMargin));
             int bottom = Math.max(top, b - t - getPaddingBottom()
