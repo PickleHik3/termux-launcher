@@ -24,13 +24,13 @@
     <string name="builtin_widget_settings_save">Save</string>
     <string name="builtin_widget_settings_title">%1$s settings</string>
     <string name="builtin_widget_glass">Glass</string>
-    <string name="builtin_widget_glass_summary">Let the wallpaper show through this widget.</string>
+    <string name="builtin_widget_glass_summary">Wear your Look\'s glass, so the wallpaper shows through.</string>
 
     <!-- Settings: the look shared by every built-in widget. -->
     <string name="settings_builtin_widget_style_title">Built-in widget style</string>
     <string name="settings_builtin_widget_style_summary">How the launcher\'s own widgets are drawn.</string>
-    <string name="settings_builtin_widget_style_tonal">Tonal — soft cards with rounded corners</string>
-    <string name="settings_builtin_widget_style_pane">Pane — squared cards with a hairline rim, like a terminal pane</string>
+    <string name="settings_builtin_widget_style_tonal">Tonal — soft Material cards</string>
+    <string name="settings_builtin_widget_style_pane">Pane — a hairline rim and mono captions, like a terminal pane</string>
     <string-array name="settings_builtin_widget_style_entries">
         <item>@string/settings_builtin_widget_style_tonal</item>
         <item>@string/settings_builtin_widget_style_pane</item>

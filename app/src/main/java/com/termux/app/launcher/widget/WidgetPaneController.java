@@ -52,12 +52,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * from one place rather than from each way in and out.
          */
         default void onWidgetEditSessionChanged(boolean editing) { }
-        /** How the launcher's own widgets are drawn, and on what. */
+        /** How the launcher's own widgets are drawn. */
         @NonNull default BuiltinWidgetStyle.Direction builtinWidgetDirection() {
             return BuiltinWidgetStyle.Direction.TONAL;
         }
-        /** True while the widgets page is glass, so built-in cards go translucent with a rim. */
-        default boolean isWidgetSurfaceGlass() { return false; }
         /**
          * A long press on the page's free area: the host puts up Home's long-press sheet, whose
          * rows act on the page on screen. The raw point is where the finger rested.
@@ -153,12 +151,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         builtins = new BuiltinWidgetHost(pane.getContext(),
             new BuiltinWidgetServices(pane.getContext(),
                 builtinHost != null ? builtinHost : new InertBuiltinHost()),
-            new BuiltinWidgetHost.StyleSource() {
-                @Override @NonNull public BuiltinWidgetStyle.Direction direction() {
-                    return host.builtinWidgetDirection();
-                }
-                @Override public boolean glass() { return host.isWidgetSurfaceGlass(); }
-            });
+            host::builtinWidgetDirection);
         pane.grid().setBuiltinFactory(builtins);
         appIcons = new HomeAppIconFactory(pane.getContext(), new HomeAppIconFactory.Listener() {
             @Override public void onUnavailableAppTapped(int id) {

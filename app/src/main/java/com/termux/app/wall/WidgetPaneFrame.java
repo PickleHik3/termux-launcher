@@ -52,20 +52,41 @@ import com.termux.view.HoldTiming;
 public final class WidgetPaneFrame extends PaneContentFrame
     implements com.termux.app.launcher.widget.builtin.BuiltinWidgetView.GlassSource {
 
-    /** The built-in widgets on this page wearing their own glass, fed with the page's. */
+    /**
+     * The built-in widgets live on this page, fed the Look's glass and Corners
+     * ({@link PaneSurfaceStyle#lookGlass}: Base's values, not the terminal's).
+     */
     private final java.util.Set<com.termux.app.launcher.widget.builtin.BuiltinWidgetView>
         mGlassWidgets = new java.util.LinkedHashSet<>();
 
-    @Nullable @Override public PaneSurfaceStyle widgetGlassStyle() { return mStyle; }
+    @Nullable @Override public PaneSurfaceStyle widgetGlassStyle() {
+        return mStyle == null ? null : mStyle.lookGlass();
+    }
 
     @Override public void addGlassWidget(
             @NonNull com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget) {
         mGlassWidgets.add(widget);
+        syncLookWorn();
     }
 
     @Override public void removeGlassWidget(
             @NonNull com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget) {
         mGlassWidgets.remove(widget);
+        syncLookWorn();
+    }
+
+    /** The Look holds a blur frame for these widgets only while one of them wears its glass. */
+    private void syncLookWorn() {
+        com.termux.app.chrome.LookGlassStyle look = mStyle == null ? null : mStyle.lookGlass();
+        if (look == null) return;
+        boolean worn = false;
+        for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget : mGlassWidgets) {
+            if (widget.isGlassOn()) {
+                worn = true;
+                break;
+            }
+        }
+        look.setWorn(worn);
     }
 
     /** What the page needs from the launcher. */
@@ -643,10 +664,14 @@ public final class WidgetPaneFrame extends PaneContentFrame
         // border as the status bar, dock and keyboard, never the focus colour.
         if (border) mRim.apply(this, glass, radiusPx, PaneBorderStyle.lone(), style);
         else mRim.clear(this);
-        // The widgets wearing their own glass take the frame this pass hands out, in the same
-        // pass as every pane, so none of them is left drawing a frame the cache has let go.
-        for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget : mGlassWidgets)
-            widget.onGlassStyle(style);
+        // The widgets take the Look this pass hands out, in the same pass as every pane, so none
+        // of them is left drawing a frame the cache has let go. A copy: a widget whose Corners
+        // moved restyles them all, which may re-register them.
+        syncLookWorn();
+        PaneSurfaceStyle look = widgetGlassStyle();
+        for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget
+                : new java.util.ArrayList<>(mGlassWidgets))
+            widget.onGlassStyle(look);
     }
 
     /**

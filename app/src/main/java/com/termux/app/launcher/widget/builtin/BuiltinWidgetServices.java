@@ -105,6 +105,16 @@ public final class BuiltinWidgetServices {
     @NonNull public Context context() { return context; }
     @NonNull public Host host() { return host; }
     @NonNull public Handler main() { return main; }
+
+    /** How a widget asks for every widget's style to be resolved again; set by the page's host. */
+    @Nullable private Runnable restyleRequest;
+
+    public void setRestyleRequest(@Nullable Runnable request) { restyleRequest = request; }
+
+    /** The Look's Corners moved under the widgets: resolve the style again and restyle them all. */
+    public void requestRestyle() {
+        if (restyleRequest != null) restyleRequest.run();
+    }
     /** One background thread for file reads and calendar queries. */
     @NonNull public ExecutorService io() { return io; }
 

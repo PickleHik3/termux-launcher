@@ -124,8 +124,16 @@ public final class TerminalWidgetView extends BuiltinWidgetView implements Hoste
 
     @Override public float cornerRadiusPx() { return style().cornerRadiusPx; }
 
-    @Override public int groundAlpha() {
-        BuiltinWidgetStyle style = style();
-        return style.glass ? Color.alpha(style.card) : 255;
+    /** The card's ground: whole on the solid card, the Look's tint on its glass. */
+    @Override public int groundAlpha() { return cardAlpha(); }
+
+    /**
+     * The card's ground changed (Glass worn or put down, the Look's opacity moved): the pane in
+     * it is dressed again, in place, as it is when it comes on screen.
+     */
+    @Override protected void onCardChanged() {
+        if (isStarted() && widgetId() != NO_WIDGET_ID) {
+            services.host().attachTerminalWidget(widgetId(), this);
+        }
     }
 }

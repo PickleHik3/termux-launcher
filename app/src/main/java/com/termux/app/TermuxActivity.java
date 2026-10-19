@@ -1814,6 +1814,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return frame != null
                 && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
                     || frame == mFrameGutterBackdropBitmap || frame == mHomeFloatChipsBackdropBitmap
+                    || (mLookGlass != null && mLookGlass.holds(frame))
                     || isSharedWallpaperBlurFrameInUse(frame));
         }
 
@@ -1821,6 +1822,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneGlassFrame = null;
             mPaneGlassClearFrame = null;
             mWallBehindFrame = null;
+            if (mLookGlass != null) mLookGlass.onCacheCleared();
         }
 
         @Override public boolean isActivityVisible() {
@@ -4014,7 +4016,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         .getDisplayMetrics().density),
                         Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_CAP_DP)));
             }
+
+            @Override @NonNull public com.termux.app.chrome.LookGlassStyle lookGlass() {
+                return lookGlassStyle();
+            }
         };
+    }
+
+    /** The Look's glass Home's widgets wear; see {@link #lookGlassStyle}. */
+    @Nullable private com.termux.app.chrome.LookGlassStyle mLookGlass;
+
+    /**
+     * The Look's own glass (Base's values) as a pane style, which Home's widgets wear whatever a
+     * detached surface does. It samples the same blur cache, wallpaper frame and Fancier Glass
+     * look as the panes, in the chrome's glass base colour.
+     */
+    @NonNull
+    private com.termux.app.chrome.LookGlassStyle lookGlassStyle() {
+        if (mLookGlass == null) {
+            mLookGlass = new com.termux.app.chrome.LookGlassStyle(this, mChrome,
+                new com.termux.app.chrome.LookGlassStyle.Host() {
+                    @Override public TermuxAppSharedPreferences preferences() { return mPreferences; }
+                    @Override public View wallpaperFrame() {
+                        return findViewById(R.id.activity_termux_root_view);
+                    }
+                    @Override public boolean wallpaperBlurs() { return wallpaperPicture().blurs(); }
+                    @Override public int glassBaseColor() { return resolveAccessoryGlassBaseColor(); }
+                    @Override public com.termux.app.chrome.GlassRefraction.Look refraction() {
+                        return mFancierGlassLook;
+                    }
+                    @Override public com.termux.app.chrome.WallpaperParallax parallax() {
+                        return mWallpaperParallax;
+                    }
+                });
+        }
+        return mLookGlass;
     }
 
     /**
@@ -24732,8 +24768,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle.Direction.fromKey(
                         mPreferences == null ? null : mPreferences.getAppLauncherBuiltinWidgetStyle());
                 }
-                // The widgets page is a pane: glass when the terminal panes are glass.
-                @Override public boolean isWidgetSurfaceGlass() { return isTerminalPaneGlassActive(); }
                 @Override public void onHomeLongPressed(float rawX, float rawY) {
                     showHomeActionsSheet(rawX, rawY);
                 }

@@ -11,6 +11,7 @@ import android.app.Application;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
@@ -22,6 +23,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.terminal.PaneGlassBackdropView;
 import com.termux.app.terminal.PaneSurfaceStyle;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -39,8 +41,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The Glass switch of a built-in widget: off is exactly today's card, on is the see-through card
- * over the launcher's own wallpaper blur, fed by the page, and back off returns to today's card.
+ * The Glass switch of a built-in widget: off is the solid card, on is the Look's glass — the slab
+ * a terminal pane wears, fed by the page from the Look (Base's values) — and back off returns to
+ * the solid card. Every widget's corner is the Look's.
  */
 @RunWith(RobolectricTestRunner.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -64,23 +67,30 @@ public class BuiltinWidgetGlassTest {
                                          @NonNull BuiltinWidgetUi ui) {
             frame.addView(new TextView(getContext()));
         }
+
+        int groundAlpha() { return cardAlpha(); }
     }
 
-    /** A page that hands out a glass with a frame and keeps who wears it. */
+    /** A page that hands out the Look and keeps who is live on it. */
     private static final class Page extends FrameLayout implements BuiltinWidgetView.GlassSource {
-        final Set<BuiltinWidgetView> wearing = new LinkedHashSet<>();
+        final Set<BuiltinWidgetView> live = new LinkedHashSet<>();
         @Nullable PaneSurfaceStyle glass;
 
         Page(@NonNull Context context) { super(context); }
 
         @Nullable @Override public PaneSurfaceStyle widgetGlassStyle() { return glass; }
-        @Override public void addGlassWidget(@NonNull BuiltinWidgetView widget) { wearing.add(widget); }
+        @Override public void addGlassWidget(@NonNull BuiltinWidgetView widget) { live.add(widget); }
         @Override public void removeGlassWidget(@NonNull BuiltinWidgetView widget) {
-            wearing.remove(widget);
+            live.remove(widget);
         }
     }
 
+    /** The Look's glass, at the shipped Base Corners unless told otherwise. */
     private static PaneSurfaceStyle glass(boolean active, @Nullable Bitmap frame) {
+        return glass(active, frame, TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS);
+    }
+
+    private static PaneSurfaceStyle glass(boolean active, @Nullable Bitmap frame, int cornersDp) {
         return new PaneSurfaceStyle() {
             @Override public boolean isPaneGlassActive() { return active; }
             @Override public Bitmap paneGlassBlurFrame() { return frame; }
@@ -90,6 +100,7 @@ public class BuiltinWidgetGlassTest {
             @Override public android.graphics.drawable.Drawable paneGlassGrainLayer() { return null; }
             @Override public int paneGlassGrainStrength() { return 0; }
             @Override public float paneGlassCornerRadiusPx() { return 0f; }
+            @Override public int paneCornerRadiusDp() { return cornersDp; }
             @Override public int paneGapDp() { return 0; }
         };
     }
@@ -118,6 +129,10 @@ public class BuiltinWidgetGlassTest {
         return null;
     }
 
+    @NonNull private static View cardOf(@NonNull BuiltinWidgetView view) {
+        return view.findViewById(android.R.id.background);
+    }
+
     @Test
     public void theSwitchIsOffUnlessStoredOn() {
         assertFalse(BuiltinWidgetGlass.isOn(null));
@@ -133,22 +148,37 @@ public class BuiltinWidgetGlassTest {
     }
 
     @Test
-    public void theBlurShowsOnlyOnALiveWidgetWithTheLaunchersGlassUp() {
+    public void theLooksSlabShowsOnlyOnALiveWidgetWithItsSwitchOnAndTheLookWorn() {
         assertTrue(BuiltinWidgetGlass.slabShown(true, false, true));
         assertFalse(BuiltinWidgetGlass.slabShown(false, false, true));
         assertFalse("a picker card samples nothing", BuiltinWidgetGlass.slabShown(true, true, true));
-        assertFalse("no glass to give: the card alone", BuiltinWidgetGlass.slabShown(true, false,
-            false));
-        assertTrue(BuiltinWidgetGlass.cardGlass(true, false));
-        assertTrue(BuiltinWidgetGlass.cardGlass(false, true));
-        assertFalse(BuiltinWidgetGlass.cardGlass(false, false));
+        assertFalse("off the wallpaper: the see-through card alone",
+            BuiltinWidgetGlass.slabShown(true, false, false));
     }
 
     @Test
-    public void offIsExactlyTodaysCardAndOnIsTheGlassCard() {
+    public void onlyCornersThatReallyMovedRestyle() {
+        assertFalse(BuiltinWidgetGlass.cornersMoved(48f, 48f));
+        assertFalse("float noise from the same dp", BuiltinWidgetGlass.cornersMoved(48f, 48.1f));
+        assertTrue(BuiltinWidgetGlass.cornersMoved(48f, 40f));
+        assertTrue(BuiltinWidgetGlass.cornersMoved(0f, 1f));
+    }
+
+    @Test
+    public void everyStyleIsCutAtTheLooksCornersWhateverTheStyleSetting() {
+        float density = context.getResources().getDisplayMetrics().density;
+        float look = TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS * density;
+        assertEquals(look, style.cornerRadiusPx, 0.01f);
+        assertEquals("Pane is no longer its own 12dp", look, BuiltinWidgetStyle.resolve(context,
+            BuiltinWidgetStyle.Direction.PANE, false, null).cornerRadiusPx, 0.01f);
+    }
+
+    @Test
+    public void offIsTheSolidCardAndOnIsTheSeeThroughOne() {
         Plain view = new Plain(context, services, style);
         view.bind(null);
-        assertSame("off: the page's own look", style, view.style());
+        assertSame("off: the host's own look", style, view.style());
+        assertEquals("the solid card's ground is whole", 255, view.groundAlpha());
         view.bind(glassOn());
         assertTrue(view.isGlassOn());
         assertTrue(view.style().glass);
@@ -156,11 +186,11 @@ public class BuiltinWidgetGlassTest {
         assertEquals(style.onSurface, view.style().onSurface);
         view.bind(new Bundle());
         assertFalse(view.isGlassOn());
-        assertSame("back off: today's look again", style, view.style());
+        assertSame("back off: the solid card again", style, view.style());
     }
 
     @Test
-    public void aGlassWidgetWearsThePagesBlurUnderItsCardAndGivesItBackWhenOff() {
+    public void aGlassWidgetWearsTheLooksSlabAsItsCardAndPutsItDownWhenOff() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         Page page = new Page(activity);
         Bitmap frame = Bitmap.createBitmap(10, 20, Bitmap.Config.ARGB_8888);
@@ -170,29 +200,33 @@ public class BuiltinWidgetGlassTest {
         page.addView(view, new FrameLayout.LayoutParams(200, 100));
         activity.setContentView(page);
 
-        assertTrue("registered with its page", page.wearing.contains(view));
+        assertTrue("registered with its page", page.live.contains(view));
         PaneGlassBackdropView slab = slabOf(view);
         assertTrue(slab != null && slab.getVisibility() == View.VISIBLE);
         assertSame("under the card", slab, view.getChildAt(0));
         assertSame(frame, slab.heldFrame());
+        assertNull("the slab's tint is the card: no fill over it", cardOf(view).getBackground());
+        assertEquals("the ground is the Look's tint", 0x80, view.groundAlpha());
 
-        // The launcher's glass goes (no blur configured): the see-through card stays, no blur.
+        // Off the wallpaper there is no glass to wear: the see-through card comes back.
         view.onGlassStyle(glass(false, null));
         assertEquals(View.GONE, slab.getVisibility());
+        assertTrue(cardOf(view).getBackground() instanceof GradientDrawable);
         view.onGlassStyle(page.glass);
         assertEquals(View.VISIBLE, slab.getVisibility());
 
         view.bind(new Bundle());
-        assertFalse("off: no longer fed", page.wearing.contains(view));
+        assertTrue("still fed the Look's corners", page.live.contains(view));
         assertEquals(View.GONE, slab.getVisibility());
+        assertTrue(cardOf(view).getBackground() instanceof GradientDrawable);
 
         view.bind(glassOn());
         page.removeView(view);
-        assertFalse("detached: no longer fed", page.wearing.contains(view));
+        assertFalse("detached: no longer fed", page.live.contains(view));
     }
 
     @Test
-    public void aWidgetWithGlassOffNeverMakesASlab() {
+    public void aWidgetWithGlassOffIsFedTheLookButNeverMakesASlab() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         Page page = new Page(activity);
         page.glass = glass(true, Bitmap.createBitmap(10, 20, Bitmap.Config.ARGB_8888));
@@ -200,7 +234,22 @@ public class BuiltinWidgetGlassTest {
         view.bind(null);
         page.addView(view, new FrameLayout.LayoutParams(200, 100));
         activity.setContentView(page);
-        assertTrue(page.wearing.isEmpty());
+        assertTrue(page.live.contains(view));
+        view.onGlassStyle(page.glass);
         assertNull(slabOf(view));
+    }
+
+    @Test
+    public void cornersThatMovedUnderTheWidgetAskForOneRestyle() {
+        int[] restyles = {0};
+        services.setRestyleRequest(() -> restyles[0]++);
+        Plain view = new Plain(context, services, style);
+        view.bind(null);
+        view.onGlassStyle(glass(true, null));
+        assertEquals("the Look's corners are the style's", 0, restyles[0]);
+        view.onGlassStyle(glass(true, null, 8));
+        assertEquals(1, restyles[0]);
+        view.onGlassStyle(null);
+        assertEquals("no Look to read: nothing asked", 1, restyles[0]);
     }
 }
