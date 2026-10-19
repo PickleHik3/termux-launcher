@@ -744,8 +744,8 @@
     <string name="settings_fancier_glass_header">Fancier Glass</string>
     <string name="settings_fancier_glass_title">Fancier Glass</string>
     <string name="settings_fancier_glass_summary">Bends the wallpaper at glass edges. Set the wallpaper with the in-app wallpaper picker.</string>
-    <string name="settings_motion_light_title">Motion light</string>
-    <string name="settings_motion_light_summary">Glass catches the light as panes move and when you press them.</string>
+    <string name="settings_motion_light_title">Living glass</string>
+    <string name="settings_motion_light_summary">Glass flexes as panes move and gives a little under your finger.</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
     <!-- Brief confirmation of the binding that just ran: stroke, then the action's name. -->
     <string name="terminal_key_binding_ran">%1$s · %2$s</string>
