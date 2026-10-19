@@ -153,6 +153,14 @@
         <item>right</item>
         <item>off</item>
     </string-array>
+    <string-array name="notification_badge_style_entries">
+        <item>@string/settings_notification_badge_style_dot</item>
+        <item>@string/settings_notification_badge_style_count</item>
+    </string-array>
+    <string-array name="notification_badge_style_values">
+        <item>dot</item>
+        <item>count</item>
+    </string-array>
     <string-array name="termux_top_pane_clock_style_entries">
         <item>@string/termux_top_pane_clock_style_flip</item>
         <item>@string/termux_top_pane_clock_style_lcd</item>

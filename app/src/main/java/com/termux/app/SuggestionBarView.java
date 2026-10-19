@@ -117,6 +117,7 @@ import com.termux.app.launcher.data.LauncherIconResolver;
 import com.termux.app.launcher.data.PinnedArtworkMemo;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.launcher.notifications.NotificationBadgeFrame;
+import com.termux.app.launcher.notifications.NotificationBadgeStyle;
 import com.termux.app.launcher.notifications.NotificationCardSurface;
 import com.termux.app.launcher.notifications.NotificationSwipePolicy;
 import com.termux.app.launcher.data.LauncherRankingEngine;
@@ -311,6 +312,7 @@ public final class SuggestionBarView extends GridLayout
     private int blurRadiusDp = 10;
     private int inheritedTintColor = 0;
     private boolean notificationBadgesEnabled = false;
+    @NonNull private NotificationBadgeStyle notificationBadgeLook = NotificationBadgeStyle.DOT;
     private boolean rowHapticsEnabled = true;
     @NonNull private Set<String> notificationBadgePackages = Collections.emptySet();
     @Nullable private LauncherNotificationBadgeStore.Listener notificationBadgeListener;
@@ -395,6 +397,12 @@ public final class SuggestionBarView extends GridLayout
             @Override public int badgeStrokeColor() { return resolveNotificationBadgeStrokeColor(); }
             @Override public int iconSizePx() { return SuggestionBarView.this.iconSizePx(); }
             @Override public float density() { return screenDensity(); }
+            @NonNull @Override public NotificationBadgeStyle badgeStyle() {
+                return notificationBadgeLook;
+            }
+            @Override public int badgeCount(@NonNull Set<String> packages) {
+                return LauncherNotificationBadgeStore.countFor(packages);
+            }
         };
     /**
      * Card building, swipe-to-dismiss and the inline reply composer for the mirrored notification
@@ -1160,6 +1168,13 @@ public final class SuggestionBarView extends GridLayout
     public void setBlurConfig(boolean blurEnabled, int blurRadiusDp) {
         this.blurEnabled = blurEnabled;
         this.blurRadiusDp = Math.max(0, blurRadiusDp);
+    }
+
+    /** Settings › Notifications › Badge style: a dot, or the number of notifications. */
+    public void setNotificationBadgeStyle(@NonNull NotificationBadgeStyle style) {
+        if (notificationBadgeLook == style) return;
+        notificationBadgeLook = style;
+        invalidateNotificationBadgeViews();
     }
 
     public void setNotificationBadgesEnabled(boolean enabled) {

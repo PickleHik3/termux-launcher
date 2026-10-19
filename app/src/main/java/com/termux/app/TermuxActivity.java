@@ -23123,6 +23123,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the front: Settings is another activity, so a change there is always followed by this.
      */
     private void applyHomeSettings() {
+        // The dock's badge look is Settings › Notifications', pushed here for the same reason.
+        if (mSuggestionBarView != null) {
+            mSuggestionBarView.setNotificationBadgeStyle(
+                com.termux.app.launcher.home.HomeSettings.badgeStyle(this));
+        }
         if (mWidgetPaneController == null) return;
         mWidgetPaneController.setPageMotion(
             com.termux.app.launcher.home.HomeSettings.pageTransition(this),
