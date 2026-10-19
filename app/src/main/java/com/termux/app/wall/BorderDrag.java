@@ -2,6 +2,8 @@ package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.terminal.TerminalBodySwipe;
+
 /**
  * A press on a pane's border that pages the wall: slid sideways off any of its four borders, or
  * held on any border and then dragged. The one gesture every place has for moving to the places
@@ -33,10 +35,16 @@ import androidx.annotation.NonNull;
  *       once, the same drag a hold would have begun, measured from where the claim was made.
  *       Nothing there is the content's. The phone's back swipe still takes the side edges outside
  *       the stretch the wall asks it to leave (its gesture exclusion), before this sees them.</li>
+ *   <li>On the page's text, where the terminal there gives a sideways swipe away (the owner
+ *       asks {@link TerminalBodySwipe#yieldsSideways} as the finger lands): only a start that is
+ *       clearly sideways ({@link TerminalBodySwipe#isSideways}) claims the wall, the same drag
+ *       again; a vertical or diagonal one stays the terminal's scroll, and the hold never pages
+ *       from the text, so a still finger is the terminal's long press.</li>
  *   <li>Anywhere else — the minimum band where it reaches past the clearance into the page (a
  *       page almost flush with the wall), the boxes by the pills, and the phone's own strip at the
- *       top of the screen: the gesture is given up, so a scroll, a selection or a TUI's drag
- *       inside the page stays the content's. Only the hold pages from there.</li>
+ *       top of the screen, wherever the text does not give the swipe away: the gesture is given
+ *       up, so a scroll, a selection or a TUI's drag inside the page stays the content's. Only the
+ *       hold pages from the band.</li>
  * </ul>
  *
  * <p>The bottom border carries one more gesture, the keyboard's: a clear vertical swipe that
@@ -343,6 +351,14 @@ public final class BorderDrag {
             return true;
         }
 
+        /**
+         * Whether {@code (x, y)} lies on the page itself: from its left and top edges to just
+         * short of its right and bottom ones.
+         */
+        boolean holds(float x, float y) {
+            return x >= mLeft && x < mRight && y >= mTop && y < mBottom;
+        }
+
         /** Whether {@code (x, y)} lies in the box by the pill on {@code side}. */
         boolean inPill(@NonNull Border side, float x, float y) {
             float[] box = mPillBox;
@@ -374,6 +390,12 @@ public final class BorderDrag {
     private boolean mKeyboardEligible;
     /** Whether this press may become the status bar's swipe: it landed in the top zone. */
     private boolean mStatusEligible;
+    /**
+     * Whether a sideways start pages from inside the page, on its text: the terminal there gives
+     * the swipe away ({@link TerminalBodySwipe}), and the finger has to set off clearly sideways
+     * ({@link TerminalBodySwipe#isSideways}).
+     */
+    private boolean mBodySlides;
 
     /**
      * Which border the point {@code (x, y)} presses in {@code zone}: the page edge it lies beyond,
@@ -490,6 +512,22 @@ public final class BorderDrag {
      */
     public boolean down(float x, float y, @NonNull Zone zone, float slopPx, boolean canPage,
                         boolean keyboardSwipe, boolean statusSwipe, float statusTopLimit) {
+        return down(x, y, zone, slopPx, canPage, keyboardSwipe, statusSwipe, statusTopLimit,
+            false);
+    }
+
+    /**
+     * {@link #down}, for a press that may also land on the page's text with a terminal there that
+     * gives a sideways swipe away ({@code bodySwipe}). Inside the page, below the phone's strip,
+     * on a wall with another place to go, a finger that sets off clearly sideways
+     * ({@link TerminalBodySwipe#isSideways}) before the hold pages at once, as from a border
+     * outside the text. Its hold never pages — a still finger is the terminal's long press — and
+     * a start that is not clearly sideways stays the terminal's scroll, or is the keyboard's or the
+     * status bar's swipe where it landed in a pill's box.
+     */
+    public boolean down(float x, float y, @NonNull Zone zone, float slopPx, boolean canPage,
+                        boolean keyboardSwipe, boolean statusSwipe, float statusTopLimit,
+                        boolean bodySwipe) {
         mDownX = x;
         mDownY = y;
         mDragOriginX = x;
@@ -501,7 +539,9 @@ public final class BorderDrag {
         Border swipeSide = mBorder != Border.NONE ? mBorder : pillAt(x, y, zone);
         mKeyboardEligible = keyboardSwipe && swipeSide == Border.BOTTOM;
         mStatusEligible = statusSwipe && swipeSide == Border.TOP && !(y < statusTopLimit);
-        boolean armed = mHoldPages || mKeyboardEligible || mStatusEligible;
+        mBodySlides = bodySwipe && canPage && !mSlidePages && zone.holds(x, y)
+            && !(y < statusTopLimit);
+        boolean armed = mHoldPages || mKeyboardEligible || mStatusEligible || mBodySlides;
         mBorder = !armed ? Border.NONE : mHoldPages ? mBorder : swipeSide;
         mClaim = armed ? Claim.PENDING : Claim.NONE;
         return armed;
@@ -524,7 +564,7 @@ public final class BorderDrag {
         if (vertical) {
             mClaim = mKeyboardEligible ? Claim.KEYBOARD
                 : mStatusEligible ? Claim.STATUS : Claim.ABANDONED;
-        } else if (mSlidePages) {
+        } else if (mSlidePages || (mBodySlides && TerminalBodySwipe.isSideways(dx, dy))) {
             mClaim = Claim.PAGING;
             mDragOriginX = x;
         } else {
@@ -585,6 +625,7 @@ public final class BorderDrag {
         mSlidePages = false;
         mKeyboardEligible = false;
         mStatusEligible = false;
+        mBodySlides = false;
     }
 
     @NonNull
@@ -618,6 +659,14 @@ public final class BorderDrag {
      */
     public boolean slidePages() {
         return mSlidePages;
+    }
+
+    /**
+     * True from a DOWN on the page's text whose clearly sideways start pages ({@link #down} with
+     * {@code bodySwipe}) until the lift, whichever way the claim went.
+     */
+    public boolean bodySlides() {
+        return mBodySlides;
     }
 
     /** True while the wall owns the finger. */

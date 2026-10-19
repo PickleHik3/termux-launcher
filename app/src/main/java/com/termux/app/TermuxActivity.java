@@ -21264,6 +21264,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return !isWidgetsPageShowing() || isHomePaletteGestureEnabled()
                         || committedKeyboardVisible();
                 }
+                // The pane under the finger, and whether its terminal gives the swipe away.
+                @Override public boolean bodySwipePagesWall(float rawX, float rawY) {
+                    return mPaneController != null
+                        && mPaneController.bodySwipePagesWall(rawX, rawY);
+                }
                 // The keyboard swipe tied to the finger: the reveal the wall's slide already
                 // draws the keyboard through, driven by the finger instead of the wall.
                 @Override public int onKeyboardRevealBegin(boolean opening) {

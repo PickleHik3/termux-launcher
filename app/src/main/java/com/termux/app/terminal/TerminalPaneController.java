@@ -3660,6 +3660,24 @@ public class TerminalPaneController {
     }
 
     /**
+     * Whether a sideways swipe that starts at this screen point pages the wall's row
+     * ({@link TerminalBodySwipe}): the point is on a pane of the window in front, on its text
+     * rather than on anything the panes' overlay takes for itself (a tab's button, the gap between
+     * two panes), and that pane's terminal can give the drag away. Any pane of a split answers
+     * alike: a swipe pages the row, never between panes. Asked once as a finger lands.
+     */
+    public boolean bodySwipePagesWall(float rawX, float rawY) {
+        if (mActiveWindow == null || !mInteractionOverlay.isShown()) return false;
+        mInteractionOverlay.getLocationOnScreen(mBodySwipeLocation);
+        float x = rawX - mBodySwipeLocation[0];
+        float y = rawY - mBodySwipeLocation[1];
+        if (mInteractionOverlay.takesPressAt(x, y)) return false;
+        Leaf leaf = mInteractionOverlay.leafAt(x, y);
+        return leaf != null && terminalYieldsSideways(mPaneViews.get(leaf.session), false);
+    }
+    private final int[] mBodySwipeLocation = new int[2];
+
+    /**
      * Whether {@code view}'s terminal gives a sideways swipe away ({@link
      * TerminalBodySwipe#yieldsSideways}): no selection, no program tracking the mouse or asking
      * for touch reports, not in mouse mode. A press on the pane's own chrome ({@code onChrome})
@@ -6392,6 +6410,26 @@ public class TerminalPaneController {
             if (hit == null) return CornerZones.NONE;
             mCornerTapLeaf = leaves.get(hit.index);
             return hit.corner;
+        }
+
+        /**
+         * Whether a press at {@code (x, y)} is the overlay's own from the DOWN: a button of the
+         * tab that is up, or the gap between two panes. A corner square is not: until its hold
+         * fires every event goes to the terminal under it.
+         */
+        boolean takesPressAt(float x, float y) {
+            return controlActionAt(x, y) != ACTION_NONE || !dividerGapsAt(x, y).isEmpty();
+        }
+
+        /** The pane of the window in front whose frame holds {@code (x, y)}, or null. */
+        @Nullable
+        Leaf leafAt(float x, float y) {
+            if (mActiveWindow == null) return null;
+            for (Leaf leaf : leavesOf(mActiveWindow.root)) {
+                RectF rect = paneRect(leaf, mHitPaneRect);
+                if (rect != null && rect.contains(x, y)) return leaf;
+            }
+            return null;
         }
 
         @Nullable
