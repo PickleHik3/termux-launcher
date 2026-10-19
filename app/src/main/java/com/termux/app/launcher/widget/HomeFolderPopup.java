@@ -80,6 +80,8 @@ final class HomeFolderPopup {
     private final AnchoredMenu appMenu;
     private final MenuRowFactory rows;
     private int folderId;
+    /** Home's layout was locked when the popup opened: nothing in it edits the folder. */
+    private boolean locked;
     @Nullable private FolderRenameTitleView title;
 
     HomeFolderPopup(@NonNull ViewGroup host, @NonNull AnchoredMenuTheme theme,
@@ -100,13 +102,18 @@ final class HomeFolderPopup {
 
     /** Opens {@code folder}'s popup against {@code anchor}, replacing any one open. */
     void show(@NonNull LauncherWidgetRecord folder, @NonNull View anchor) {
-        show(folder, anchor, HomeFolderDensity.DEFAULT);
+        show(folder, anchor, HomeFolderDensity.DEFAULT, false);
     }
 
-    /** The same, laid out at {@code density} (Settings › Home › Folders). */
+    /**
+     * The same, laid out at {@code density} (Settings › Home › Folders). With Home's layout
+     * {@code locked} the folder is only opened and its apps launched: the title is not a rename
+     * and no app offers Remove from folder.
+     */
     void show(@NonNull LauncherWidgetRecord folder, @NonNull View anchor,
-              @NonNull HomeFolderDensity density) {
+              @NonNull HomeFolderDensity density, boolean locked) {
         if (!folder.isFolder()) return;
+        this.locked = locked;
         appMenu.dismiss();
         dismissImmediate();
         Context context = host.getContext();
@@ -120,7 +127,7 @@ final class HomeFolderPopup {
         name.bind(new FolderRenameModel(folder.folderName()), false);
         final int id = folder.appWidgetId;
         final String current = folder.folderName();
-        name.setOnClickListener(v -> callbacks.onBeginRename(id, current, name));
+        if (!locked) name.setOnClickListener(v -> callbacks.onBeginRename(id, current, name));
         title = name;
         shell.addView(name, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -270,11 +277,14 @@ final class HomeFolderPopup {
         final LauncherAppEntry launch = entry != null ? entry
             : new LauncherAppEntry(member.app(), label, null);
         cell.setOnClickListener(v -> {
-            if (gone) { offerRemove(id, member, v); return; }
+            if (gone) {
+                if (!locked) offerRemove(id, member, v);
+                return;
+            }
             dismiss();
             LauncherAppLauncher.launchEntry(v.getContext(), launch);
         });
-        cell.setOnLongClickListener(v -> {
+        if (!locked) cell.setOnLongClickListener(v -> {
             offerRemove(id, member, v);
             return true;
         });

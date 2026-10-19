@@ -221,7 +221,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         widgets.setListener(this);
         // Pages saved before this rule, or left behind by a removed widget while the page was off
         // screen, are brought level with it once here; changes keep it from then on.
-        widgets.repository().trimEmptyPages();
+        trimPages();
         clampCurrentPage();
         render();
     }
@@ -584,6 +584,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      */
     private void onUnavailableAppTapped(int id) {
         if (pane.widgetEditActive()) return;
+        // The tap on a gone app opens edit mode to remove it: an edit like any hold.
+        if (refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
         beginEditSession(id);
     }
 
@@ -594,7 +596,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (pane.widgetEditActive()) return;
         LauncherWidgetRecord folder = widgets.repository().get(id);
         if (folder == null || !folder.isFolder()) return;
-        folderPopup().show(folder, anchor, folderDensity);
+        folderPopup().show(folder, anchor, folderDensity, layoutLocked);
     }
 
     @NonNull private HomeFolderPopup folderPopup() {
@@ -604,10 +606,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (theme == null) theme = PLAIN_MENU_THEME;
         popup = new HomeFolderPopup(pane, theme, appIcons, new HomeFolderPopup.Callbacks() {
             @Override public void onRemoveFromFolder(int folderId, @NonNull String stableId) {
+                if (refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
                 removeFromFolder(folderId, stableId);
             }
             @Override public void onBeginRename(int folderId, @NonNull String name,
                                                 @NonNull com.termux.app.launcher.folder.FolderRenameTitleView title) {
+                if (refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
                 // The name as stored now: the popup may have outlived a rename already.
                 LauncherWidgetRecord held = widgets.repository().get(folderId);
                 if (held == null || !held.isFolder()) return;
@@ -677,13 +681,24 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     void menuRemovePage() {
-        // The sheet offers it only for an empty page; the same path as Edit pages' remove.
+        // The sheet offers it only for an empty page, and asks nothing: a page that has gained
+        // something since is not taken away from here (Edit pages asks first).
+        if (itemsOnPage(currentPage) > 0) return;
         removePage(currentPage);
     }
 
     /** How many things page {@code page} holds: widgets, icons and folders. */
     public int itemsOnPage(int page) {
         return widgets.repository().recordsOnPage(page).size();
+    }
+
+    /** How many apps the folders on page {@code page} hold between them. */
+    public int folderAppsOnPage(int page) {
+        int apps = 0;
+        for (LauncherWidgetRecord record : widgets.repository().recordsOnPage(page)) {
+            if (record.isFolder()) apps += record.folderApps().size();
+        }
+        return apps;
     }
 
     /**
@@ -715,23 +730,50 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         int count = repository.pageCount();
         if (!com.termux.app.launcher.home.HomePageEdits.canRemove(count) || page < 0 || page >= count)
             return false;
+        WidgetAddTransaction waiting = repository.pending();
+        if (waiting != null && waiting.page == page) {
+            // A widget is on its way to this page (its app's setup is open): it stays.
+            pane.showNotice(pane.getContext().getString(R.string.home_pages_editor_remove_pending));
+            return false;
+        }
         if (pane.widgetEditActive()) exitEditMode();
         dismissFolderPopup();
         for (LauncherWidgetRecord record : repository.recordsOnPage(page)) {
-            widgets.removeWidget(record.appWidgetId);
-        }
-        // A page emptied by those removals has gone with its last widget unless it was added by
-        // hand; one that is still there goes now.
-        if (repository.pageCount() == count && !repository.removePage(page)) {
-            render();
-            return false;
+            if (widgets.removeWidget(record.appWidgetId)
+                    == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
+                // Stop where the store refused. What did go has been renumbered for by the trims
+                // its removals ran; the page stays with what is left on it.
+                pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
+                render();
+                return false;
+            }
         }
         int[] mapping = com.termux.app.launcher.home.HomePageEdits.removeMapping(count, page);
+        // A page emptied by those removals went with its last widget, and the trim that took it
+        // told the host already; a page added by hand is still there and goes now.
+        if (repository.pageCount() == count) {
+            if (!repository.removePage(page)) {
+                pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
+                render();
+                return false;
+            }
+            host.onHomePagesRenumbered(mapping);
+        }
+        // Edit pages acts on both orientations: the shelved one loses the same page.
+        repository.renumberShelvedPages(mapping);
         currentPage = com.termux.app.launcher.home.HomePageEdits.remap(currentPage, mapping);
         clampCurrentPage();
         render();
-        host.onHomePagesRenumbered(mapping);
         return true;
+    }
+
+    /**
+     * Takes away every empty page ({@link LauncherWidgetRepository#trimEmptyPages}) and hands the
+     * renumbering on, so the floats and the default page follow their pages.
+     */
+    private void trimPages() {
+        int[] renumbered = widgets.repository().trimEmptyPagesRenumbering();
+        if (renumbered != null) host.onHomePagesRenumbered(renumbered);
     }
 
     /** Edit pages' Add page: an empty page after the last, kept until something lands on it. */
@@ -872,7 +914,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     @Override public void onWidgetRepositoryChanged(@NonNull LauncherWidgetHostController.AddResult result) {
         // A widget arrived or left: a page with nothing on it goes with it. A carry that has made
         // a page for the widget in the air keeps it until the carry ends, which trims it then.
-        if (carry == null || carry.turn.createdPage < 0) widgets.repository().trimEmptyPages();
+        if (carry == null || carry.turn.createdPage < 0) trimPages();
         clampCurrentPage();
         render();
         if (result == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
@@ -1203,7 +1245,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         repository.setPages(snapshot.pageCount, snapshot.freshPages);
         // A widget binned during the session does not come back, so the page it was the last thing
         // on does not either: the restored count is trimmed to what the layout now holds.
-        repository.trimEmptyPages();
+        trimPages();
         clampCurrentPage();
         render();
     }
@@ -1524,7 +1566,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.turn.createdPage = -1;
         // The drag is over: a page it made and did not land on goes again, and so does a page the
         // widget it carried away was the last thing on.
-        if (committed || created) widgets.repository().trimEmptyPages();
+        if (committed || created) trimPages();
         if (committed || crossed) {
             // The trim can have renumbered the pages under all this; the widget's own page is
             // where the pane belongs, whether it landed there or was sent home.
@@ -1623,7 +1665,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetCellView cell = pane.grid().cellForId(target.appWidgetId);
         if (cell != null) { cell.animate().cancel(); cell.setScaleX(1f); cell.setScaleY(1f); }
         // A page the drag made, or one the icon was the last thing on, goes again.
-        widgets.repository().trimEmptyPages();
+        trimPages();
         LauncherWidgetRecord settled = widgets.repository().get(folder.appWidgetId);
         if (settled != null) currentPage = settled.page;
         clampCurrentPage();
@@ -1828,7 +1870,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (state.turn.createdPage < 0) return;
         state.turn.createdPage = -1;
         int before = currentPage;
-        widgets.repository().trimEmptyPages();
+        trimPages();
         clampCurrentPage();
         if (!redraw) return;
         render();

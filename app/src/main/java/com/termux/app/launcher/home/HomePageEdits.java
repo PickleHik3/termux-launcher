@@ -70,6 +70,32 @@ public final class HomePageEdits {
         return Math.max(0, Math.min(page, remaining - 1));
     }
 
+    /**
+     * A page's new number in a layout that may have more pages than {@code mapping} covers (the
+     * other orientation's): its mapped number, {@link #REMOVED} for the page taken away, and a
+     * page past the mapping moved down by as many pages as were taken away.
+     */
+    public static int renumber(int page, @NonNull int[] mapping) {
+        if (page < 0) return page;
+        if (page < mapping.length) return mapping[page];
+        return page - removedCount(mapping);
+    }
+
+    /** How many pages a layout of {@code pageCount} keeps after {@code mapping}; at least one. */
+    public static int pageCountAfter(int pageCount, @NonNull int[] mapping) {
+        int removed = 0;
+        for (int page = 0; page < Math.min(pageCount, mapping.length); page++) {
+            if (mapping[page] == REMOVED) removed++;
+        }
+        return Math.max(1, pageCount - removed);
+    }
+
+    private static int removedCount(@NonNull int[] mapping) {
+        int removed = 0;
+        for (int value : mapping) if (value == REMOVED) removed++;
+        return removed;
+    }
+
     @NonNull
     private static int[] identity(int count) {
         int[] mapping = new int[Math.max(0, count)];

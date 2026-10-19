@@ -1,11 +1,14 @@
 package com.termux.app.launcher.widget;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.os.Build;
 
+import com.termux.app.launcher.home.HomePageEdits;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.widget.LauncherWidgetRecord.FolderApp;
 
@@ -27,9 +30,17 @@ import java.util.List;
 @Config(sdk = Build.VERSION_CODES.S, application = android.app.Application.class)
 public class LauncherWidgetRepositoryEditPagesTest {
 
+    private static final WidgetGridDefinition PORTRAIT = new WidgetGridDefinition(5, 4);
+    private static final WidgetGridDefinition LANDSCAPE = new WidgetGridDefinition(3, 6);
+
     private static LauncherWidgetRecord widget(int id, int page) {
+        return widgetAt(id, page, 0, 0);
+    }
+
+    private static LauncherWidgetRecord widgetAt(int id, int page, int left, int top) {
         return new LauncherWidgetRecord(id, WidgetTestFixtures.PROVIDER, 0,
-            LauncherWidgetRecord.State.ACTIVE, new WidgetCellRect(0, 0, 1, 1), page, null, null);
+            LauncherWidgetRecord.State.ACTIVE, new WidgetCellRect(left, top, left + 1, top + 1),
+            page, null, null);
     }
 
     private static LauncherWidgetRecord folderOf(int apps) {
@@ -70,4 +81,67 @@ public class LauncherWidgetRepositoryEditPagesTest {
         assertEquals(9, version(memory));
     }
 
+    @Test
+    public void theTrimSaysHowItRenumbered() {
+        LauncherWidgetRepository repository = new LauncherWidgetRepository(new WidgetTestFixtures.Memory());
+        assertEquals(1, repository.addPage());
+        assertEquals(2, repository.addPage());
+        assertTrue(repository.putRecord(widget(10, 0)));
+        assertTrue(repository.putRecord(widget(12, 2)));
+        assertArrayEquals(new int[] {0, HomePageEdits.REMOVED, 1},
+            repository.trimEmptyPagesRenumbering());
+        assertEquals(1, repository.get(12).page);
+        assertNull("nothing left to trim", repository.trimEmptyPagesRenumbering());
+        assertTrue(repository.trimEmptyPages());
+    }
+
+    @Test
+    public void aLayoutWithMorePagesThanTheMappingRenumbersPastIt() {
+        int[] removal = HomePageEdits.removeMapping(3, 1);
+        assertEquals(0, HomePageEdits.renumber(0, removal));
+        assertEquals(HomePageEdits.REMOVED, HomePageEdits.renumber(1, removal));
+        assertEquals("a page past the mapping moves down with the rest", 3,
+            HomePageEdits.renumber(4, removal));
+        assertEquals(4, HomePageEdits.pageCountAfter(5, removal));
+        assertEquals(1, HomePageEdits.pageCountAfter(1, HomePageEdits.removeMapping(2, 0)));
+        int[] move = HomePageEdits.moveMapping(3, 0, 2);
+        assertEquals(5, HomePageEdits.renumber(5, move));
+        assertEquals(6, HomePageEdits.pageCountAfter(6, move));
+    }
+
+    @Test
+    public void aMoveRenumbersTheShelvedOrientationToo() {
+        LauncherWidgetRepository repository = new LauncherWidgetRepository(new WidgetTestFixtures.Memory());
+        assertEquals(1, repository.addPage());
+        assertTrue(repository.putRecord(widget(10, 0)));
+        assertTrue(repository.putRecord(widget(11, 1)));
+        assertFalse(repository.applyOrientation("portrait", PORTRAIT));
+        assertTrue(repository.applyOrientation("landscape", LANDSCAPE));
+
+        assertTrue(repository.movePage(0, 1));
+        assertEquals(1, repository.get(10).page);
+
+        assertTrue(repository.applyOrientation("portrait", PORTRAIT));
+        assertEquals("portrait's page 1 moved too", 1, repository.get(10).page);
+        assertEquals(0, repository.get(11).page);
+    }
+
+    @Test
+    public void aRemovalDropsTheShelvedOrientationsPageAndRenumbersTheRest() {
+        LauncherWidgetRepository repository = new LauncherWidgetRepository(new WidgetTestFixtures.Memory());
+        assertEquals(1, repository.addPage());
+        assertEquals(2, repository.addPage());
+        assertTrue(repository.putRecord(widget(11, 1)));
+        assertTrue(repository.putRecord(widget(12, 2)));
+        // Its own cell, so laying it out afresh in portrait moves nothing else.
+        assertTrue(repository.putRecord(widgetAt(10, 0, 2, 2)));
+        assertFalse(repository.applyOrientation("portrait", PORTRAIT));
+        assertTrue(repository.applyOrientation("landscape", LANDSCAPE));
+
+        assertTrue(repository.renumberShelvedPages(HomePageEdits.removeMapping(3, 0)));
+
+        assertTrue(repository.applyOrientation("portrait", PORTRAIT));
+        assertEquals(0, repository.get(11).page);
+        assertEquals(1, repository.get(12).page);
+    }
 }

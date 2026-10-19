@@ -117,6 +117,7 @@
     </plurals>
     <string name="home_pages_editor_remove_confirm_floats">Terminals on it stay open on another page.</string>
     <string name="home_pages_editor_remove_confirm">Remove</string>
+    <string name="home_pages_editor_remove_pending">A widget is still being added to this page</string>
 
     <!-- Folders (F11) -->
     <string name="settings_home_folders_header">Folders</string>

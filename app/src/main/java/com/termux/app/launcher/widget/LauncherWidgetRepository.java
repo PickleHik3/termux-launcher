@@ -618,6 +618,22 @@ public final class LauncherWidgetRepository {
      * not held a widget yet. The page a reservation is waiting on counts as held.
      */
     public synchronized boolean trimEmptyPages() {
+        trimEmptyPagesRenumbering();
+        return !trimFailed;
+    }
+
+    /** Whether the last trim had pages to take away and could not write it. */
+    private boolean trimFailed;
+
+    /**
+     * {@link #trimEmptyPages()}, answering how it renumbered the pages: each old page's new number,
+     * {@link com.termux.app.launcher.home.HomePageEdits#REMOVED} for a page it took away, for what
+     * else names a page (the floats, the default page). Null when nothing changed, or when the
+     * write failed.
+     */
+    @Nullable
+    public synchronized int[] trimEmptyPagesRenumbering() {
+        trimFailed = false;
         boolean[] keep = new boolean[pageCount];
         for (LauncherWidgetRecord record : records.values()) {
             if (record.page >= 0 && record.page < pageCount) keep[record.page] = true;
@@ -631,7 +647,7 @@ public final class LauncherWidgetRepository {
         for (int page = 0; page < pageCount; page++) {
             renumbered[page] = keep[page] ? kept++ : -1;
         }
-        if (kept == pageCount) return true;
+        if (kept == pageCount) return null;
         // Nothing to keep means nothing to renumber either: one empty page is what is left.
         int target = Math.max(1, kept);
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>();
@@ -646,7 +662,11 @@ public final class LauncherWidgetRepository {
                 nextFresh.add(renumbered[page]);
             }
         }
-        return commitValidated(next, nextPending, grid, target, nextFresh, revision + 1);
+        if (!commitValidated(next, nextPending, grid, target, nextFresh, revision + 1)) {
+            trimFailed = true;
+            return null;
+        }
+        return renumbered;
     }
 
     /**
@@ -709,7 +729,49 @@ public final class LauncherWidgetRepository {
         for (Integer fresh : freshPages) {
             if (fresh >= 0 && fresh < pageCount) nextFresh.add(mapping[fresh]);
         }
-        return commitValidated(next, nextPending, grid, pageCount, nextFresh, revision + 1);
+        // Edit pages acts on both orientations: the shelved one's pages move the same way.
+        return commitValidated(next, nextPending, grid, pageCount, nextFresh, orientation,
+            shelfRenumbered(mapping), revision + 1);
+    }
+
+    /**
+     * Edit pages took a page away from the orientation on screen (its widgets went first, through
+     * their own removals): the shelved orientations' pages are renumbered by the same
+     * {@code mapping}, their cells on the removed page dropped (a widget placed there is laid out
+     * afresh when that orientation comes back). One commit; the live wall is unchanged.
+     */
+    public synchronized boolean renumberShelvedPages(@NonNull int[] mapping) {
+        if (layouts.isEmpty()) return true;
+        return commitValidated(records, pending, grid, pageCount, freshPages, orientation,
+            shelfRenumbered(mapping), revision + 1);
+    }
+
+    /** Every shelved orientation with its pages renumbered by an Edit pages mapping. */
+    @NonNull
+    private LinkedHashMap<String, OrientationLayout> shelfRenumbered(@NonNull int[] mapping) {
+        LinkedHashMap<String, OrientationLayout> next = new LinkedHashMap<>();
+        for (Map.Entry<String, OrientationLayout> entry : layouts.entrySet()) {
+            OrientationLayout layout = entry.getValue();
+            int pages = com.termux.app.launcher.home.HomePageEdits.pageCountAfter(
+                layout.pageCount, mapping);
+            LinkedHashMap<Integer, Placement> cells = new LinkedHashMap<>();
+            for (Map.Entry<Integer, Placement> cell : layout.cells.entrySet()) {
+                int page = com.termux.app.launcher.home.HomePageEdits.renumber(
+                    cell.getValue().page, mapping);
+                if (page < 0) continue;
+                cells.put(cell.getKey(), new Placement(cell.getValue().cell, page));
+                pages = Math.max(pages, page + 1);
+            }
+            LinkedHashSet<Integer> fresh = new LinkedHashSet<>();
+            for (Integer page : layout.freshPages) {
+                int renumbered = com.termux.app.launcher.home.HomePageEdits.renumber(page, mapping);
+                if (renumbered < 0) continue;
+                fresh.add(renumbered);
+                pages = Math.max(pages, renumbered + 1);
+            }
+            next.put(entry.getKey(), new OrientationLayout(layout.grid, pages, fresh, cells));
+        }
+        return next;
     }
 
     public synchronized boolean putRecord(@NonNull LauncherWidgetRecord record) {

@@ -62,7 +62,8 @@ Folders on a Home page work like the dock's. While a page is in edit mode (hold 
 an icon and rest it on another icon for a moment: the icon under it swells, and letting go there
 makes a folder of the two, named after the app you dropped. Rest an icon on a folder the same way
 to add it. Let go before the swell and the icon moves as it always does. Nothing merges with a
-widget, and a folder holds up to 16 apps.
+widget, and a folder holds up to 16 apps (Settings › Home › Folders › Max folder size changes
+that, and Folder density how tightly an open folder lays its apps out).
 
 - A folder takes one cell and shows up to four of its apps in a small grid, with its name under
   it.
@@ -73,6 +74,27 @@ widget, and a folder holds up to 16 apps.
   folder turns back into that app's icon.
 - **Hold** a folder to move it or carry it to another page, as you would an icon; its remove chip
   takes the folder and the apps in it off Home (the apps stay installed).
+
+### Lock Home layout
+
+Turn on **Lock layout** from Home's long-press menu (or Settings › Home › Lock Home layout) and
+nothing on your Home pages can be moved by accident. While it is on:
+
+- Holding an icon, a folder or a widget does not pick it up; a short note says the layout is
+  locked. Taps still open apps and folders.
+- The menu's rows that add or change things (Add a widget, Add an app, Add a page, Edit widgets,
+  Edit pages, Remove page) step aside for **Unlock layout**, right under Terminal.
+- An open folder cannot be renamed and offers no Remove from folder.
+- **Add to Home** from the app drawer's app menu still works: it is a deliberate act, so the lock
+  lets it through and the new icon goes on the page with room.
+
+### Edit pages
+
+**Edit pages** (Home's long-press menu, or Settings › Home) lists your Home pages: move each up
+or down, choose the one Home opens on (the house), add a page at the end, or remove one. Removing
+a page that holds something asks first; its widgets, icons and folders go with it, and a floating
+terminal on it moves to another page with its shell still running. The last page cannot be
+removed.
 
 ## The Terminal entry
 
