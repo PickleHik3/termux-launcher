@@ -3474,7 +3474,9 @@ public final class TerminalView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         if (mEmulator == null) {
-            canvas.drawColor(0XFF000000);
+            // Nothing to draw yet, and nothing painted: the launcher's panes sit on glass and the
+            // wallpaper, and a black fill here was a black frame each time a pane was rebuilt
+            // before its session came back (a launcher restart).
         } else {
             long drawStartNanos = SystemClock.elapsedRealtimeNanos();
             // render the terminal view and highlight any selected text
