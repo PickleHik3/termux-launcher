@@ -100,6 +100,22 @@ animation:
 Reduce motion (the system's animator scale at 0) or General › Animation speed at Off: an instant
 cut. Durations scale with General › Animation speed.
 
+## Animation speed (F3)
+
+General › Motion › Animation speed: Slower (×1.5), Normal, Faster (×0.67), Off (instant). Stored as
+`animation_speed` in the app's default preferences and read only through `AnimationSpeed`, when a
+motion starts, never per frame:
+
+| Reader | Where | How |
+|---|---|---|
+| Settings' transitions and row ring | `SettingsMotion` | durations × speed; Off is the instant cut |
+| The wall's page and window slide | `PaneWallLayout.startSlide` | the settle spring's frequency ÷ speed |
+| The command palette | `TerminalCommandPaletteController.kick` | the springs' clock ÷ speed |
+| Floating windows' depth ramp | `Motion.floatDepthMs` | 320 ms × speed |
+
+A spring never divides by zero: Off runs it at 1/20 of its time. The phone's reduce motion still
+wins over every choice.
+
 ## Features and the wave that builds each
 
 | | Feature | Wave |

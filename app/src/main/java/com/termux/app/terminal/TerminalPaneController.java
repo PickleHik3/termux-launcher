@@ -2788,7 +2788,7 @@ public class TerminalPaneController {
         container.animate()
             .translationZ(0f)
             .scaleX(1f).scaleY(1f)
-            .setDuration(Motion.FLOAT_DEPTH_MS)
+            .setDuration(Motion.floatDepthMs(container.getContext()))
             .setInterpolator(PaneMotionOverlayView.standardInterpolator())
             .start();
     }
@@ -2801,7 +2801,7 @@ public class TerminalPaneController {
         frame.setTranslationZ(dp(FLOAT_ELEVATION_DP));
         frame.animate()
             .translationZ(0f)
-            .setDuration(Motion.FLOAT_DEPTH_MS)
+            .setDuration(Motion.floatDepthMs(frame.getContext()))
             .setInterpolator(PaneMotionOverlayView.standardInterpolator())
             .start();
     }

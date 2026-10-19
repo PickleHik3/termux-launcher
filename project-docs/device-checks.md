@@ -1266,6 +1266,9 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
 ## Developer
 
 ### Settings restructure (10-19)
+- 2026-10-19 · feat(settings) animation speed · General › Animation speed at Slower, Faster and
+  Off: a Home page swipe, the palette opening and a terminal window floating out each take
+  visibly longer, shorter, or land at once; Normal feels exactly as before · pong, by hand.
 - 2026-10-19 · settings restructure · Taste check of the new root and the Home and Terminal
   sections against the approved plan page: names, order, summaries · pong, by hand.
 

@@ -46,6 +46,19 @@
     <string name="settings_keyboard_look_title">Look</string>
 
     <string name="settings_general_motion_header">Motion</string>
+    <string name="settings_animation_speed_title">Animation speed</string>
+    <string-array name="settings_animation_speed_entries">
+        <item>Slower</item>
+        <item>Normal</item>
+        <item>Faster</item>
+        <item>Off</item>
+    </string-array>
+    <string-array name="settings_animation_speed_values" translatable="false">
+        <item>slower</item>
+        <item>normal</item>
+        <item>faster</item>
+        <item>off</item>
+    </string-array>
     <string name="settings_general_more_header">Backup, access and about</string>
     <string name="settings_general_home_app_header">Home app</string>
 
@@ -57,7 +70,7 @@
     <string name="settings_destination_app_behavior_summary">Battery use and vibration</string>
 
     <!-- App behavior -->
-    <string name="settings_behavior_battery_header">Battery and motion</string>
+    <string name="settings_behavior_battery_header">Battery</string>
     <string name="settings_behavior_idle_title">Reduce idle activity</string>
     <string name="settings_behavior_idle_summary">Lazy mode. Pause idle animations and update status less often.</string>
     <string name="settings_behavior_low_memory_title">Low-memory preset</string>

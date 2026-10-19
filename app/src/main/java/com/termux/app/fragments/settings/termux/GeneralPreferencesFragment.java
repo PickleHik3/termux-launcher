@@ -94,6 +94,19 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
         }
 
         @Override
+        public void putString(@Nullable String key, @Nullable String value) {
+            if (com.termux.app.AnimationSpeed.KEY.equals(key)) com.termux.app.AnimationSpeed.set(context, value);
+            else style.putString(key, value);
+        }
+
+        @Nullable
+        @Override
+        public String getString(@Nullable String key, @Nullable String defValue) {
+            return com.termux.app.AnimationSpeed.KEY.equals(key) ? com.termux.app.AnimationSpeed.get(context)
+                : style.getString(key, defValue);
+        }
+
+        @Override
         public boolean getBoolean(@Nullable String key, boolean defValue) {
             if (KEY_LOW_MEMORY_PRESET.equals(key)) {
                 TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
