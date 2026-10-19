@@ -1498,7 +1498,47 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   the card, the glass and the content clip all round at the same, capped corner; no content is
   cut in the corners of Notes, Media or Calendar at Corners 0, 24 and 40 · emulator.
 
+### Page transition across the wall (10-19)
+- 2026-10-19 · feat(wall) page transition across the wall · Settings › General › Motion now holds
+  Page transition (gone from Home's Pages); a search for "page transition" finds it there, its
+  summary names the effect, the preview opens from its row; an old link to Home's row lands on
+  General · emulator.
+- 2026-10-19 · feat(wall) page transition across the wall · Slide: the seam (last Home page ↔
+  Workspace), a border drag and a body swipe between two terminal windows, a chip tap, a keyboard
+  chord and `launcherctl` window switch look exactly as on the build before (screenrecord both,
+  frames at the quarters) · emulator.
+- 2026-10-19 · feat(wall) page transition across the wall · Each of Depth, Fade, Carousel and
+  Stack, one pane and then two panes, keyboard down then up, Docked then Floating dock: (a) the
+  seam both ways by drag and by fling, Home with a Home float on its page; (b) window to window by
+  border drag, by body swipe released half way, by chip tap and by chord; (c) a terminal window to
+  the display window and back. Each crossing poses both pages as a Home turn does (Depth: the page
+  leaving forward sinks and fades in place, the next slides over it; Stack: the leaving page
+  slides off the top, the next rises from beneath; Fade; Carousel turns about the shared edge),
+  the dock rows, status bar and keyboard travel exactly as under Slide, the page lands flat with
+  nothing left scaled, faded or turned, and a drag released half way continues from where it was
+  with no jump of the leaving window. A pull into either end of the row only slides · emulator.
+- 2026-10-19 · feat(wall) page transition across the wall · The display window always slides
+  (its picture is a live surface); the window beside it still takes the effect, and neither
+  flashes black or leaves a hole as the display comes or goes · emulator, a display up.
+- 2026-10-19 · feat(wall) page transition across the wall · Reduce motion on, and Animation speed
+  Off: every crossing lands at once with no effect frame; Slower and Faster stretch the seam and
+  border-drag settles. Window switches by chip and chord keep their own fixed time under every
+  speed, as they did before · emulator.
+
 ## Developer
+
+### Page transition across the wall (10-19), by hand
+- 2026-10-19 · feat(wall) page transition across the wall · Glass on (pane glass, a glass widget
+  and a Home float): under Depth, Stack and Carousel the frosted wallpaper inside every slab stays
+  fixed to the wallpaper behind while the page scales or turns, and the leaving window's card
+  (a picture) only carries its frost along; judge whether that reads as misaligned and whether
+  anything snaps at rest · pong, by hand (ask first).
+- 2026-10-19 · feat(wall) page transition across the wall · Frame time of each effect against
+  Slide on the same build, glass on, two panes: the seam by fling and a chip-tap window switch
+  (`scripts/perf-frametime.sh`). Pages are on a hardware layer only while posed, and glass re-aims
+  every frame as it does under Slide, so a posed page re-renders its layer per frame; report any
+  effect whose p90 is worse than Slide's by more than the noise, per docs/agents/performance.md ·
+  pong, by hand (ask first).
 
 ### Widgets wear the Look's glass (10-19)
 - 2026-10-19 · feat(widgets) Look's glass · Legibility on pong with your Look: widgets' text on
