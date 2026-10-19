@@ -61,7 +61,7 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   The keyboard's copy, cut, paste, select all, undo and redo keys do on the display what they do
   on a desktop, the paste key on the extra-keys row pastes into the display rather than behind
   it, and **Fn** with the paste key types the text out instead, for an app that has its own idea
-  of what Ctrl+V means. The two sides share by default; **Settings → Display → Input → Share the
+  of what Ctrl+V means. The two sides share by default; **Settings → Terminal → Linux apps → Input → Share the
   clipboard** keeps them apart.
 - **Switching.** The display window is one of your windows, so **Next window** and **Previous
   window** (the space bar's top corners, the extra-keys row, a key chord, `launcherctl`) step from
@@ -80,7 +80,7 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   terminal pane: power starts or stops the display, and the cog opens its settings. A
   tap in the corner goes to the display, so a maximised window keeps its own controls there. Tap
   anywhere else to put them away.
-- **Touch.** **Settings → Display → Input → Touch** says what a finger on the display does.
+- **Touch.** **Settings → Terminal → Linux apps → Input → Touch** says what a finger on the display does.
   **Touchscreen** is the tablet: fingers are touches, so a page scrolls, pinches, drags and
   long-presses where you put them, and an app written for a touchscreen behaves as it would on
   one. Apps that only understand a mouse still get taps and drags as clicks. The keyboard follows
@@ -118,13 +118,13 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   on its own unless you turn on **Start with the launcher**.
 - **The display survives switching away.** Your X apps keep running while you are in a
   terminal window or on Home; only the picture is put away.
-- **Options.** **Settings → Display** holds five pages. A running
-  display picks a change up at once.
+- **Options.** **Settings → Terminal → Linux apps** holds them: its own rows, then four pages. A
+  running display picks a change up at once.
+  - On the page itself: **Show Linux apps in drawer**, **Set up Linux apps**, **Hidden Linux
+    apps** and **Window manager**.
   - **Input**: **Touch**, **Use Android keyboard**, **OSK auto-show** and **Share the clipboard**.
   - **Resolution and scaling**: **Resolution**, **Scale**, **Fixed size** or **Custom size**,
     **Scaling** (filtering) and **Display density**.
-  - **Linux apps**: **Show Linux apps in drawer**, **Set up Linux apps**, **Hidden Linux apps**,
-    **Window manager** and **Display badge**.
   - **Startup**: **Start with the launcher**, **Start command**, and **Connect new shells**
     (`DISPLAY` set in every new shell while a display runs).
   - **Troubleshooting**: **Compatibility drawing** and **Swap colour channels**.
@@ -141,7 +141,7 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 ## The keyboard follows text fields
 
 Tap a text field on the display and the keyboard comes up; tap anywhere else and it goes away
-again. It is on by default (**Settings → Display → Input → OSK auto-show**) and it only applies
+again. It is on by default (**Settings → Terminal → Linux apps → Input → OSK auto-show**) and it only applies
 in **Touchscreen** touch mode, where a tap lands where you put it. Trackpad and
 Direct touch are unchanged.
 
@@ -220,7 +220,7 @@ the proot's login shell). The launcher never sets these for you.
 
 The launcher can pick for you: `launcherctl x11 gpu` says which row fits this phone and what is
 installed, and `launcherctl x11 gpu --env` prints the exports to paste or `eval` (see
-[launcherctl](LauncherCtl.md#x11-gpu)). The same answer is under **Settings → Display → Linux apps
+[launcherctl](LauncherCtl.md#x11-gpu)). The same answer is under **Settings → Terminal → Linux apps
 → Set up Linux apps → Graphics**: **Graphics acceleration** shows what the phone can do, and **Copy
 the graphics command** puts the install line and the exports for this phone on the clipboard.
 
@@ -257,13 +257,13 @@ Two things make this work:
 
 - **The window manager.** The launcher starts `openbox` with the display (install it with
   `pkg install openbox`) for single apps, with a launcher-owned rule that maximises every window,
-  so windows open full size and dialogs stay on screen. **Settings → Display → Linux apps →
+  so windows open full size and dialogs stay on screen. **Settings → Terminal → Linux apps →
   Window manager** is where another command goes, or an empty box for none. A whole desktop session brings its own
   window manager instead: openbox steps aside while the desktop runs and comes back once it closes.
   Windows fill the display to its rounded corners, as on any rounded desktop, so a terminal that
   wants its first and last cells clear of the arcs pads its own window (`window_padding_width` in
   kitty, `window.padding` in alacritty).
-- **Show Linux apps in drawer**, in **Settings → Display → Linux apps**, can be switched off if
+- **Show Linux apps in drawer**, in **Settings → Terminal → Linux apps**, can be switched off if
   you would rather start apps from a shell.
 
 When an app is started from the drawer, the launcher exports the GPU settings from the table

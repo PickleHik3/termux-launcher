@@ -12373,10 +12373,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (intent == null || !intent.getBooleanExtra(EXTRA_SURFACE_EDITOR, false))
             return;
         String initialSection = intent.getStringExtra(EXTRA_SURFACE_EDITOR_SECTION);
+        boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
+        intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
         openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LOOK,
             initialSection, null, null);
+        // Keyboard's Appearance row in Settings: closing the editor goes back to Settings.
+        if (fromSettings) mAppearanceFromSettings = true;
     }
 
     /** Settings' "Appearance" row: the launcher comes forward with the Appearance surface open. */
@@ -12418,9 +12422,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         com.termux.app.wall.PaneWallPage place =
             parseLayoutEditorPlace(intent.getStringExtra(EXTRA_LAYOUT_EDITOR_PLACE));
+        boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
         intent.removeExtra(EXTRA_LAYOUT_EDITOR);
         intent.removeExtra(EXTRA_LAYOUT_EDITOR_PLACE);
+        intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
         openLayoutEditor(place);
+        // Settings' Layout rows (Home, Terminal): closing the editor goes back to Settings, as
+        // the Look page's Appearance row does.
+        if (fromSettings) mAppearanceFromSettings = true;
     }
 
     /**
@@ -15851,14 +15860,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ActivityUtils.startActivity(this,
             SettingsActivity.createFragmentIntent(this,
                 com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment.class,
-                R.string.termux_style_preferences_title));
+                R.string.settings_section_look));
     }
 
     private void openAppsBarSettings() {
         ActivityUtils.startActivity(this,
             SettingsActivity.createFragmentIntent(this,
                 com.termux.app.fragments.settings.termux.LauncherPreferencesFragment.class,
-                R.string.termux_launcher_preferences_title));
+                R.string.settings_section_dock_drawer));
     }
 
     private void openSettingsHome() {
@@ -22220,7 +22229,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ActivityUtils.startActivity(TermuxActivity.this,
                     com.termux.app.activities.SettingsActivity.createFragmentIntent(TermuxActivity.this,
                         com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment.class,
-                        R.string.settings_destination_display));
+                        R.string.settings_terminal_sub_linux_apps_title));
             }
             @Override public boolean consumeLauncherKey(@NonNull KeyEvent event) {
                 // The display's keyboard is a PC keyboard: every key, chords included, is X's.

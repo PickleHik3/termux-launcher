@@ -2,15 +2,70 @@
 <!-- Copy for the task-based Settings menus: root groups, the focused Keyboard, Apps and Display
      pages, and App behavior. Short titles; a sentence only where the consequence is not obvious. -->
 <resources>
+    <!-- The settings tree by the wall's halves (project-docs/active/settings-restructure-2026-10-19.md) -->
+    <string name="settings_root_your_launcher_header">Your launcher</string>
+    <string name="settings_root_shared_header">Shared</string>
+    <string name="settings_root_system_header">System</string>
+    <string name="settings_section_home">Home</string>
+    <string name="settings_section_home_summary">Pages, widgets, gestures and where you start</string>
+    <string name="settings_section_dock_drawer">Dock &amp; drawer</string>
+    <string name="settings_section_dock_drawer_summary">Pinned apps, drawer, A–Z and app search</string>
+    <string name="settings_section_terminal_summary">Windows, panes, status bar and Linux apps</string>
+    <string name="settings_section_look">Look</string>
+    <string name="settings_section_look_summary">Glass, theme, wallpaper and icons</string>
+    <string name="settings_section_keyboard_summary">Layouts, size, typing, voice and look</string>
+    <string name="settings_section_notifications_summary">Access, dots, pinned alerts and history</string>
+    <string name="settings_section_ai_summary">Models, voice and assistant</string>
+    <string name="settings_section_general">General</string>
+    <string name="settings_section_general_summary">Motion, vibration, battery, backup and about</string>
+
+    <string name="settings_search_in">Search %1$s</string>
+    <string name="settings_search_results_header">Results</string>
+    <string name="settings_search_no_results">No settings match</string>
+
+    <string name="settings_layout_editor_title">Layout</string>
+    <string name="settings_layout_editor_home_summary">Arrange Home in the Layout editor</string>
+    <string name="settings_layout_editor_terminal_summary">Arrange the Terminal in the Layout editor</string>
+
+    <string name="settings_home_gestures_header">Gestures</string>
+    <string name="settings_home_pages_header">Pages</string>
+
+    <string name="settings_dock_header">Dock</string>
+    <string name="settings_drawer_header">Drawer</string>
+
+    <string name="settings_terminal_sub_windows_title">Windows &amp; panes</string>
+    <string name="settings_terminal_sub_windows_summary">Tiling, focus, hints and program control</string>
+    <string name="settings_terminal_sub_status_summary">Clock, CPU, memory, media and weather</string>
+    <string name="settings_terminal_sub_text_title">Text &amp; display</string>
+    <string name="settings_terminal_sub_text_summary">Font, full screen, cursor and effects</string>
+    <string name="settings_terminal_sub_clipboard_title">Clipboard &amp; compatibility</string>
+    <string name="settings_terminal_sub_clipboard_summary">Clipboard access and the system keyboard</string>
+    <string name="settings_terminal_sub_linux_apps_title">Linux apps</string>
+    <string name="settings_terminal_sub_linux_apps_summary">Desktop apps in a window of the Terminal</string>
+
+    <string name="settings_keyboard_look_title">Look</string>
+
+    <string name="settings_general_motion_header">Motion</string>
+    <string name="settings_animation_speed_title">Animation speed</string>
+    <string-array name="settings_animation_speed_entries">
+        <item>Slower</item>
+        <item>Normal</item>
+        <item>Faster</item>
+        <item>Off</item>
+    </string-array>
+    <string-array name="settings_animation_speed_values" translatable="false">
+        <item>slower</item>
+        <item>normal</item>
+        <item>faster</item>
+        <item>off</item>
+    </string-array>
+    <string name="settings_general_more_header">Backup, access and about</string>
+    <string name="settings_general_home_app_header">Home app</string>
+
     <!-- Root groups and the new destination -->
-    <string name="settings_root_personalization_header">Personalization</string>
-    <string name="settings_root_workspace_header">Workspace</string>
-    <string name="settings_root_app_header">App</string>
-    <string name="settings_destination_app_behavior">App behavior</string>
-    <string name="settings_destination_app_behavior_summary">Battery use and vibration</string>
 
     <!-- App behavior -->
-    <string name="settings_behavior_battery_header">Battery and motion</string>
+    <string name="settings_behavior_battery_header">Battery</string>
     <string name="settings_behavior_idle_title">Reduce idle activity</string>
     <string name="settings_behavior_idle_summary">Lazy mode. Pause idle animations and update status less often.</string>
     <string name="settings_behavior_low_memory_title">Low-memory preset</string>
@@ -46,15 +101,10 @@
     <string name="settings_keyboard_tap_correction_reset_confirm_action">Reset</string>
 
     <!-- Apps overview and subpages -->
-    <string name="settings_apps_home_header">Home app</string>
-    <string name="settings_apps_customize_header">Customize</string>
-    <string name="settings_apps_sub_dock_title">Dock</string>
-    <string name="settings_apps_sub_dock_summary">Pinned apps and usage-ranked page</string>
     <string name="settings_apps_sub_search_title">App search</string>
     <string name="settings_apps_sub_search_summary">Terminal search prefix and ranking</string>
     <string name="settings_apps_sub_lock_title">Double-tap to lock</string>
     <string name="settings_apps_sub_lock_summary">Shizuku, or optional accessibility access</string>
-    <string name="settings_apps_behavior_link_summary">Recents, power saving and vibration</string>
     <string name="settings_lock_method_header">Lock method</string>
     <string name="settings_lock_method_summary">Double-tap the A–Z row. Shizuku keeps the normal screen-off animation. Accessibility is optional and may flicker.</string>
 
@@ -72,8 +122,6 @@
     <string name="settings_x11_sub_input_summary">Touch mode, keyboard and clipboard</string>
     <string name="settings_x11_sub_resolution_title">Resolution and scaling</string>
     <string name="settings_x11_sub_resolution_summary">Size in percent, filtering and density in dpi</string>
-    <string name="settings_x11_sub_linux_apps_title">Linux apps</string>
-    <string name="settings_x11_sub_linux_apps_summary">Setup and drawer integration</string>
     <string name="settings_x11_sub_startup_title">Startup</string>
     <string name="settings_x11_sub_startup_summary">Auto-start and shell connection</string>
     <string name="settings_x11_sub_troubleshooting_title">Troubleshooting</string>
@@ -84,7 +132,6 @@
     <string name="settings_status_clock_header">Clock</string>
     <string name="settings_status_indicators_header">Indicators</string>
     <string name="settings_status_weather_header">Weather</string>
-    <string name="settings_status_more_header">More</string>
     <string name="settings_diagnostics_logging_header">Logging</string>
     <string name="settings_diagnostics_alerts_header">Alerts</string>
     <string name="settings_diagnostics_checks_header">Checks</string>

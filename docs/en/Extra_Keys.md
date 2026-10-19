@@ -54,7 +54,7 @@ later.
 
 Launcher actions not on the shipped row can be added this way too. For example, **App drawer**
 ("Open the app drawer.", with an apps-grid icon) is in the launcher group of the action search. It
-opens the app drawer from the apps row's current edge, and does nothing while **Settings → Apps →
+opens the app drawer from the apps row's current edge, and does nothing while **Settings → Dock & drawer →
 Swipe down for app drawer** is off. Do not confuse it with `app.open_drawer` (**Open sessions**),
 which opens the sessions drawer.
 
@@ -123,7 +123,7 @@ extra-keys = [[ \
 
 Names and values are trimmed and separated by commas; there is no quoting inside a `tool:` string,
 so prefer a package name for `app.launch`. Pane and window actions do nothing while
-**Settings → Terminal → Sessions and panes → Split-pane controls** is off. Every action id and its
+**Settings → Terminal → Windows & panes → Split-pane controls** is off. Every action id and its
 arguments are listed in [Command palette and actions](Command_Palette_And_Actions.md).
 
 ### Macros for shell programs

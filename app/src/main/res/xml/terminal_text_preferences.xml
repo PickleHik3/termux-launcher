@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Terminal › Text & display: the terminal font (from Appearance) and the old Terminal page's
+     display group, keys unchanged. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <PreferenceCategory app:title="@string/settings_fonts_header">
+        <Preference
+            app:key="terminal_fonts"
+            app:persistent="false"
+            app:title="@string/termux_fonts_preferences_title"
+            app:summary="@string/termux_fonts_preferences_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment" />
+    </PreferenceCategory>
+    <PreferenceCategory app:title="@string/settings_terminal_display_header">
+        <SwitchPreferenceCompat
+            app:key="fullscreen"
+            app:title="@string/settings_full_screen_title"
+            app:summary="@string/termux_fullscreen_summary"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="terminal_padding_fill"
+            app:title="@string/settings_terminal_padding_fill_title"
+            app:summary="@string/settings_terminal_padding_fill_summary"
+            android:defaultValue="true" />
+        <ListPreference
+            app:key="terminal_cursor_trail_style"
+            app:title="@string/settings_terminal_cursor_trail_style_title"
+            app:entries="@array/settings_terminal_cursor_trail_style_entries"
+            app:entryValues="@array/settings_terminal_cursor_trail_style_values"
+            app:defaultValue="default"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="terminal_retro_effect"
+            app:title="@string/settings_terminal_retro_effect_title"
+            app:entries="@array/settings_terminal_retro_effect_entries"
+            app:entryValues="@array/settings_terminal_retro_effect_values"
+            app:defaultValue="none"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+</PreferenceScreen>

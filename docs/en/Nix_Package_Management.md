@@ -473,8 +473,8 @@ at all.
 
 A few notes:
 
-- **Enable the display first.** **Settings → Display → Linux display**
-  turns it on. The Display place is where the apps open.
+- **Start the display first.** The display window is where the apps open; see
+  [The Linux display](X11_Display.md).
 - **Every switch is picked up on its own.** The store path changes each
   time; return to the launcher and the drawer is already right.
 - **Terminal programs with a menu entry** — `vim`, for instance, ships

@@ -153,6 +153,8 @@ public final class TerminalCommandPaletteController
      * resizing twice.
      */
     private final Spring mProgress = new Spring(0f, 900f, 50f);
+    /** The springs' share of their own time at the chosen animation speed; see {@link #kick}. */
+    private float mSpringTime = 1f;
     private final Spring mHeight = new Spring(0f, 820f, 55f);
 
     private final Rect mScratchRect = new Rect();
@@ -587,7 +589,11 @@ public final class TerminalCommandPaletteController
         if (mFrameScheduled) return;
         mFrameScheduled = true;
         // A re-post from inside doFrame keeps the frame clock (see DockPlankController.kick).
-        if (!mInFrame) mLastFrameTimeNanos = 0L;
+        if (!mInFrame) {
+            mLastFrameTimeNanos = 0L;
+            // General › Animation speed, read once per run of the springs.
+            mSpringTime = com.termux.app.AnimationSpeed.springTime(mActivity);
+        }
         Choreographer.getInstance().postFrameCallback(this);
     }
 
@@ -607,7 +613,8 @@ public final class TerminalCommandPaletteController
             ? Spring.MIN_DT
             : (frameTimeNanos - mLastFrameTimeNanos) / 1_000_000_000f;
         mLastFrameTimeNanos = frameTimeNanos;
-        dt = Spring.clampDelta(dt);
+        // The springs run on a clock stretched or squeezed by the animation speed.
+        dt = Spring.clampDelta(dt) / mSpringTime;
         boolean reduced = isReducedMotion();
         boolean moving = mProgress.tick(reduced, dt);
         moving |= mHeight.tick(reduced, dt);

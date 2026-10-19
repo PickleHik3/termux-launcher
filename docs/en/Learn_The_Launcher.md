@@ -141,14 +141,14 @@ A closing card follows, with tips: hold an empty spot on Home and tap **Terminal
 float, and **Layout** in the same menu arranges the dock. If the wall has no window beside Home,
 the first lesson is left out.
 
-Replay it from **Settings → About & help → Replay tour**.
+Replay it from **Settings → General → About & help → Replay tour**.
 
 ## Get help
 
 Hold any corner for its tab, then tap **?** to see what the controls on that place do. **Help** is
-also in the command palette and in **Settings → Apps → Help**, and it opens for the place you are
+also in the command palette and in **Settings → General → Help**, and it opens for the place you are
 on. On the terminal it opens by topic, grouped from **Find your way** to **Something missing?**:
 pick what you are stuck on. **Try it** on a topic closes help and walks you through that action.
 
-These guides are also linked from **Settings → About & help → Documentation**. To report a bug,
+These guides are also linked from **Settings → General → About & help → Documentation**. To report a bug,
 use **Send feedback** there, and see [Troubleshooting](Launcher_Troubleshooting.md) first.

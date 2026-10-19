@@ -476,7 +476,7 @@ answer with their own codes rather than a generic one:
   write from a pane keeps the on-screen rule, since any program printing to a pane can emit one.
 - Reading needs the launcher on screen. Off screen, `GET /v1/clipboard` answers 409
   `launcher_not_visible` — Android only lets the focused app read the clipboard anyway.
-- Reading also needs **Settings → Terminal → Let programs read the clipboard** (on by default), the
+- Reading also needs **Settings → Terminal → Clipboard & compatibility → Let programs read the clipboard** (on by default), the
   same switch that gates `OSC 52` queries. Off, `GET /v1/clipboard` is 403 `clipboard_read_disabled`.
 
 There is no separate clipboard history to keep in step: the Android clipboard is the one clipboard

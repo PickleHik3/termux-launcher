@@ -2194,8 +2194,10 @@ public final class PaneWallLayout extends ViewGroup {
         holdStillForSlide();
         float velocity = Math.max(-SLIDE_MAX_VELOCITY_PX_PER_SEC,
             Math.min(SLIDE_MAX_VELOCITY_PX_PER_SEC, velocityPxPerSec));
-        final SettleSpring spring = SettleSpring.of(mOffsetPx, velocity, SLIDE_OMEGA,
-            SLIDE_MAX_OMEGA);
+        // General › Animation speed: a slower or faster spring, read once per slide.
+        float time = com.termux.app.AnimationSpeed.springTime(getContext());
+        final SettleSpring spring = SettleSpring.of(mOffsetPx, velocity, SLIDE_OMEGA / time,
+            SLIDE_MAX_OMEGA / time);
         final long duration = spring.durationMs(SLIDE_REST_PX);
         // The animator is the ticker only. The slide reads its own clock off the ticker's play
         // time, a bounded step per frame (WallSlideClock), so the first frame — which pre-rolls

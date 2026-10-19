@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- General: the switches that cut across the launcher (vibration, battery, Recents), the app's own
+     pages (backup, permissions, diagnostics, about) and setting it as the home app. Every key is the
+     one it always was; App behavior, the old root rows and Apps' Set as default launcher folded in. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:key="general_motion" app:title="@string/settings_general_motion_header">
+        <ListPreference
+            app:key="animation_speed"
+            app:persistent="true"
+            app:title="@string/settings_animation_speed_title"
+            app:dialogTitle="@string/settings_animation_speed_title"
+            app:entries="@array/settings_animation_speed_entries"
+            app:entryValues="@array/settings_animation_speed_values"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="normal" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="general_vibration" app:title="@string/settings_behavior_vibration_header">
+        <SwitchPreferenceCompat
+            app:key="app_haptics_enabled"
+            app:title="@string/settings_behavior_vibration_title"
+            app:summary="@string/settings_behavior_vibration_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_row_haptics"
+            app:title="@string/settings_behavior_launcher_vibration_title"
+            app:summary="@string/settings_behavior_launcher_vibration_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="in_app_keyboard_haptics_enabled"
+            app:title="@string/settings_behavior_keyboard_vibration_title"
+            app:summary="@string/settings_behavior_keyboard_vibration_summary" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="general_battery" app:title="@string/settings_behavior_battery_header">
+        <SwitchPreferenceCompat
+            app:key="lazy_mode"
+            app:title="@string/settings_behavior_idle_title"
+            app:summary="@string/settings_behavior_idle_summary"
+            app:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="low_memory_preset"
+            app:title="@string/settings_behavior_low_memory_title"
+            app:summary="@string/settings_behavior_low_memory_summary"
+            app:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="general_more" app:title="@string/settings_general_more_header">
+        <Preference
+            app:key="backup_restore"
+            app:persistent="false"
+            app:title="@string/settings_destination_backup_restore"
+            app:summary="@string/settings_destination_backup_restore_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.BackupRestorePreferencesFragment" />
+        <Preference
+            app:key="services_permissions"
+            app:persistent="false"
+            app:title="@string/settings_destination_services_permissions"
+            app:summary="@string/settings_destination_services_permissions_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.ServicesPermissionsPreferencesFragment" />
+        <Preference
+            app:key="advanced_diagnostics"
+            app:persistent="false"
+            app:title="@string/settings_destination_advanced_diagnostics"
+            app:summary="@string/settings_destination_advanced_diagnostics_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.AdvancedDiagnosticsPreferencesFragment" />
+        <Preference
+            app:key="about_support"
+            app:persistent="false"
+            app:title="@string/settings_destination_about_support"
+            app:summary="@string/settings_destination_about_support_summary"
+            app:fragment="com.termux.app.fragments.settings.AboutSupportPreferencesFragment" />
+        <Preference
+            app:key="app_launcher_help"
+            app:persistent="false"
+            app:title="@string/help_settings_title"
+            app:summary="@string/help_settings_summary" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="general_home_app" app:title="@string/settings_general_home_app_header">
+        <Preference
+            app:key="app_launcher_set_home"
+            app:persistent="false"
+            app:title="@string/settings_set_default_launcher_title"
+            app:summary="@string/settings_set_default_launcher_summary" />
+        <SwitchPreferenceCompat
+            app:key="show_in_recents_when_not_default"
+            app:title="@string/settings_show_recents_title"
+            app:summary="@string/settings_show_recents_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+</PreferenceScreen>

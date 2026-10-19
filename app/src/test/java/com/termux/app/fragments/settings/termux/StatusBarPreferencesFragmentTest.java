@@ -63,10 +63,10 @@ public class StatusBarPreferencesFragmentTest {
         assertTrue(screen.findPreference("status_widget_media") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("status_widget_weather") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("status_widget_weather_fahrenheit") instanceof SwitchPreferenceCompat);
-        // Moved to the Notifications page; a link row points there instead.
+        // Moved to the Notifications page, which has one home now: no link row here either.
         assertNull(screen.findPreference("top_pane_notification_access"));
         assertNull(screen.findPreference("essential_notification_rules_manage"));
-        assertTrue(screen.findPreference("status_bar_notifications_link") != null);
+        assertNull(screen.findPreference("status_bar_notifications_link"));
 
         // Moved to the Terminal page: not reachable here any more.
         assertNull(screen.findPreference("split_pane_controls"));

@@ -8,7 +8,7 @@ These are the launcher's default shortcuts. They work from a hardware keyboard, 
 
 - Latch **Ctrl** and **Alt** on the built-in keyboard and every key with a shortcut lights up,
   coloured by what it does, with a legend in the top-right corner. Press a lit key to run it.
-- **Settings → Terminal → Sessions and panes → Shortcut hints** ("Show pane shortcuts while holding
+- **Settings → Terminal → Windows & panes → Shortcut hints** ("Show pane shortcuts while holding
   Ctrl+Alt. Off lights the ? key instead.") turns that legend off.
 - The [command palette](Command_Palette_And_Actions.md) shows each action's shortcut beside it, and
   you can search by shortcut: typing `ctrl+alt+w` finds what it runs.
@@ -18,7 +18,7 @@ letter in a shortcut means Shift, so `Ctrl+Alt+R` is `Ctrl+Alt+Shift+R`.
 
 ## Which column applies
 
-**Settings → Terminal → Sessions and panes → Split-pane controls** is on by default. With it on,
+**Settings → Terminal → Windows & panes → Split-pane controls** is on by default. With it on,
 the terminal has windows and panes and the **Split panes on** column applies. Turning it off gives
 traditional single-pane Termux behaviour and the **Split panes off** column applies. "(to the shell)" means
 the keys go to the shell.

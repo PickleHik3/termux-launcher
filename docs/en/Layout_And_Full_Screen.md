@@ -8,7 +8,7 @@ All of it is arranged in the **Layout** tab of **Appearance**.
 Open **Appearance** in any of these ways, then tap **Layout** in the pill at the top
 (**Wallpaper | Look | Layout | Icon pack**):
 
-- **Settings → Appearance → Wallpaper, look and layout**.
+- **Settings → Look → Wallpaper, look and layout**.
 - Hold a corner of a page and tap **Appearance**.
 - Long-press the terminal and choose **Appearance**.
 
@@ -107,10 +107,10 @@ The page border stays drawn in minimal mode, so you can still swipe along it to 
 
 ## Full screen
 
-- **Settings → Terminal → Full screen** ("Hide system bars while using the launcher") hides
+- **Settings → Terminal → Text & display → Full screen** ("Hide system bars while using the launcher") hides
   Android's status and navigation bars. It is off by default.
 - Hiding the launcher's own status bar in Layout gives its band to the content too.
-- **Settings → Terminal → Extend edge colors** ("Match pane padding to nearby terminal colors.", on
+- **Settings → Terminal → Text & display → Extend edge colors** ("Match pane padding to nearby terminal colors.", on
   by default) fills the padding around a pane with the colours at its edge, so a full-screen
   program reaches the screen's edge.
 

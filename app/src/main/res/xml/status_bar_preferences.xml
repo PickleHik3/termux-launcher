@@ -47,14 +47,4 @@
             app:summary="@string/settings_weather_location_summary_device"
             app:dependency="status_widget_weather" />
     </PreferenceCategory>
-
-    <PreferenceCategory app:title="@string/settings_status_more_header">
-        <Preference
-            app:key="status_bar_notifications_link"
-            app:persistent="false"
-            app:title="@string/settings_destination_notifications"
-            app:summary="@string/settings_status_bar_notifications_link_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.NotificationsPreferencesFragment" />
-    </PreferenceCategory>
-
 </PreferenceScreen>

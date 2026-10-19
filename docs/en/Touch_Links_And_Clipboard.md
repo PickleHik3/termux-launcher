@@ -90,7 +90,7 @@ The app never edits your rc files. Open a new shell afterwards; scrollback from 
 - Copy a selection with **Copy**, or **Copy selected text** in the palette.
 - Paste with the paste key on the keyboard, **Paste** in the selection menu, or **Paste** in the
   palette (`Ctrl+Alt+V` with **Split-pane controls** off).
-- **Settings → Terminal → Clipboard → Clean up clipboard text** ("Trim trailing spaces and
+- **Settings → Terminal → Clipboard & compatibility → Clean up clipboard text** ("Trim trailing spaces and
   single-line paste newlines."), on by default, tidies copied text.
 - **Pictures.** When the clipboard holds a picture, pasting saves a copy and pastes the path to it,
   such as `/data/data/com.termux/files/usr/tmp/clipboard/clip-20261012-080910.png` (each edition
@@ -110,7 +110,7 @@ A program in the terminal can write the clipboard with the OSC 52 escape or kitt
 `kitten clipboard` does), and with OSC 5522 it can copy and read pictures too; a write from a pane
 needs the launcher on screen. A picture a program copies pastes into other apps like any copied
 picture. Reading it back needs
-the launcher on screen and **Settings → Terminal → Clipboard → Let programs read the clipboard**
+the launcher on screen and **Settings → Terminal → Clipboard & compatibility → Let programs read the clipboard**
 ("Programs in the terminal can paste what you copied."), on by default. Turn it off if you would
 rather programs could not read what you copied. `launcherctl clipboard copy` writes even while the
 launcher is in the background. See [Programs inside the terminal](Programs_Inside_The_Terminal.md).

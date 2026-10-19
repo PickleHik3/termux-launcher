@@ -175,7 +175,7 @@ launcherctl clipboard paste
 
 Writes or reads the Android clipboard, the one the terminal, the keyboard, the display and every
 app share. `copy` works whether or not the launcher is on screen. `paste` only answers while the
-launcher is on screen and **Settings → Terminal → Let programs read the clipboard** is on.
+launcher is on screen and **Settings → Terminal → Clipboard & compatibility → Let programs read the clipboard** is on.
 
 ```sh
 git diff | launcherctl clipboard copy

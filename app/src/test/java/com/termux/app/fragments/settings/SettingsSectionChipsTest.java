@@ -22,7 +22,7 @@ import com.google.android.material.chip.ChipGroup;
 import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.termux.KeyboardHardwarePreferencesFragment;
-import com.termux.app.fragments.settings.termux.TerminalPreferencesFragment;
+import com.termux.app.fragments.settings.termux.GeneralPreferencesFragment;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -84,7 +84,7 @@ public class SettingsSectionChipsTest {
 
     @Test
     public void chipsAppearOnAMultiSectionPage() {
-        TerminalPreferencesFragment fragment = launch(TerminalPreferencesFragment.class);
+        GeneralPreferencesFragment fragment = launch(GeneralPreferencesFragment.class);
         PreferenceScreen screen = fragment.getPreferenceScreen();
         List<PreferenceCategory> sections = SettingsSectionChips.visibleSections(screen);
         assertTrue("fixture page needs 3+ sections for this test to mean anything",
@@ -117,7 +117,7 @@ public class SettingsSectionChipsTest {
 
     @Test
     public void tappingASectionChipShowsOnlyThatSection() {
-        TerminalPreferencesFragment fragment = launch(TerminalPreferencesFragment.class);
+        GeneralPreferencesFragment fragment = launch(GeneralPreferencesFragment.class);
         PreferenceScreen screen = fragment.getPreferenceScreen();
         List<PreferenceCategory> sections = SettingsSectionChips.visibleSections(screen);
         SettingsSectionChips.FilteringAdapter adapter =
@@ -144,7 +144,7 @@ public class SettingsSectionChipsTest {
 
     @Test
     public void allRestoresTheWholePageAndReselectingTheSameChipDoesToo() {
-        TerminalPreferencesFragment fragment = launch(TerminalPreferencesFragment.class);
+        GeneralPreferencesFragment fragment = launch(GeneralPreferencesFragment.class);
         PreferenceScreen screen = fragment.getPreferenceScreen();
         List<PreferenceCategory> sections = SettingsSectionChips.visibleSections(screen);
         SettingsSectionChips.FilteringAdapter adapter =
@@ -171,15 +171,15 @@ public class SettingsSectionChipsTest {
 
     @Test
     public void aRowThePageHidStaysHiddenUnderEveryFilterIncludingAll() {
-        TerminalPreferencesFragment fragment = launch(TerminalPreferencesFragment.class);
+        GeneralPreferencesFragment fragment = launch(GeneralPreferencesFragment.class);
         PreferenceScreen screen = fragment.getPreferenceScreen();
         SettingsSectionChips.FilteringAdapter adapter =
             (SettingsSectionChips.FilteringAdapter) fragment.getListView().getAdapter();
 
-        // Hiding every row of the clipboard section (as a page's own gating logic would) empties
+        // Hiding every row of the battery section (as a page's own gating logic would) empties
         // it, so this also exercises "the selected section disappeared -> back to All" in the
         // same test.
-        Preference clipboardRow = fragment.findPreference("terminal_osc52_clipboard_read_enabled");
+        Preference clipboardRow = fragment.findPreference("lazy_mode");
         assertNotNull(clipboardRow);
         PreferenceCategory clipboardSection = SettingsSectionChips.topCategoryOf(clipboardRow, screen);
         assertNotNull(clipboardSection);
@@ -189,7 +189,7 @@ public class SettingsSectionChipsTest {
         assertEquals(clipboardSection, SettingsSectionChips.topCategoryOf(adapter.getItem(0), screen));
 
         clipboardRow.setVisible(false);
-        fragment.findPreference("terminal_clipboard_cleanup").setVisible(false);
+        fragment.findPreference("low_memory_preset").setVisible(false);
         idle(); // let PreferenceGroupAdapter's deferred sync run and notify our wrapper.
 
         // The section has no visible rows, so it no longer qualifies: the filter must have fallen

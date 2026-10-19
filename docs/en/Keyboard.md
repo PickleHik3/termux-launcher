@@ -39,7 +39,7 @@ away, since nothing there takes typing. On the Display place its keys go to the 
   it until you tap it again.
 - Latch **Ctrl** and **Alt** together and the keys that carry a launcher shortcut light up,
   coloured by what they do, with a short legend in the top-right corner. Pressing a lit key runs
-  that shortcut. With **Settings → Terminal → Sessions and panes → Shortcut hints** off, only the
+  that shortcut. With **Settings → Terminal → Windows & panes → Shortcut hints** off, only the
   **?** key lights instead. See [Keyboard shortcuts](Keyboard_Shortcuts.md).
 - An upper-case letter counts as Shift in a shortcut, so `Ctrl+Alt+r` and `Ctrl+Alt+R` are
   different shortcuts.
@@ -90,7 +90,7 @@ While the clipboard holds a picture, the paste key shows a photo instead, and pa
 picture as a file. A screenshot taken in the last half hour, after your last copy, is offered the
 same way: paste puts it in once, then the key goes back to the clipboard. Paste with a modifier
 (plain paste) always takes the clipboard. Offering screenshots needs the storage permission
-(**Settings → Permissions & services → Files and media**, or `termux-setup-storage`).
+(**Settings → General → Permissions & services → Files and media**, or `termux-setup-storage`).
 
 ## Docked, floating or split
 
@@ -140,7 +140,7 @@ each set separately for portrait and landscape:
   internal storage; **Use system default** goes back. With a custom font the space bar's icons
   keep the bundled symbols font.
 
-The Keyboard theme page is also in **Settings → Appearance** under **Keyboard look**, beside
+The Keyboard theme page is also in **Settings → Keyboard → Look**, beside
 **Surface style**; **Look and feel settings** in the palette opens the same page. See
 [Look and themes](Look_And_Themes.md).
 
@@ -150,7 +150,7 @@ The Keyboard theme page is also in **Settings → Appearance** under **Keyboard 
 
 - **Adaptive touch accuracy** ("Adjust key detection to your typing."), off by default, and
   **Reset learned taps**.
-- **Vibration** links to **Settings → App behavior**, where **Allow vibration**, **Keyboard
+- **Vibration** links to **Settings → General**, where **Allow vibration**, **Keyboard
   vibration** and **Launcher vibration** live.
 - **Key sound** uses the system touch-sound volume.
 - **Key preview** ("Show the pressed key above your finger."), on by default.
@@ -163,7 +163,7 @@ The Keyboard theme page is also in **Settings → Appearance** under **Keyboard 
 - **Android language shortcut**: "Ctrl+Space switches Android keyboard languages. Off sends it to
   the terminal." Off by default.
 
-If the Android keyboard covers terminal content, try **Settings → Terminal → Compatibility →
+If the Android keyboard covers terminal content, try **Settings → Terminal → Clipboard & compatibility →
 Keyboard resize workaround**; turn it off if it causes gaps or jumpy resizing.
 
 ## Your own layout

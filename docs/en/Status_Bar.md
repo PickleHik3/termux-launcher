@@ -1,7 +1,7 @@
 # Status bar
 
 The status bar shows where you are, your sessions and windows, the time and how the phone is doing.
-This page covers what it shows, how to open it, and its settings under **Settings → Status bar**
+This page covers what it shows, how to open it, and its settings under **Settings → Terminal → Status bar**
 ("Clock, indicators and weather"). Pinned notification cards in the bar are on
 [Notifications](Notifications.md).
 
@@ -56,7 +56,7 @@ Coding agents add a dot before the label: **Working**, **Needs you** or **Idle**
 
 ## Clock
 
-- **Settings → Status bar → Clock → 12-hour time** ("Show AM and PM."), off by default.
+- **Settings → Terminal → Status bar → Clock → 12-hour time** ("Show AM and PM."), off by default.
 - The face and alignment are part of the look. Open **Appearance**, go to **Look**, slide to
   **Custom**, tap the status bar and tap **Clock**. Faces: **Flip**, **LCD**, **Minimal**, **LED
   matrix**, **Tape**, **Slab**. Alignment: **Left**, **Center**, **Right**.
@@ -71,13 +71,13 @@ While an app is playing, the open bar shows a media row: the album art next to t
 and the title. Tap the art or the title to open the app that is playing. The row needs
 **Notification access**; see [Permissions and Shizuku](Shizuku.md#permissions).
 
-To hide the row, turn off **Settings → Status bar → Indicators → Media** (on by default). The bar
+To hide the row, turn off **Settings → Terminal → Status bar → Indicators → Media** (on by default). The bar
 then keeps the clock, beside any pinned cards, while something plays; the **Media** widget on the
 Widgets page is not affected.
 
 ## Indicators
 
-Under **Settings → Status bar → Indicators**:
+Under **Settings → Terminal → Status bar → Indicators**:
 
 - **CPU usage**: off by default. Tap the reading for cores, load and top processes.
 - **Memory usage**: off by default.
@@ -87,7 +87,7 @@ The readings describe the whole phone, not only your shells.
 
 ## Weather
 
-Under **Settings → Status bar → Weather**:
+Under **Settings → Terminal → Status bar → Weather**:
 
 - **Weather**: on by default.
 - **Fahrenheit**: "Show °F instead of °C."
@@ -112,5 +112,5 @@ tab still opens Appearance, so you can bring it back. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
 The bar's blur, opacity, grain and tint are set in Appearance → **Look**; see
-[Look and themes](Look_And_Themes.md). **Settings → Status bar → More → Notifications** leads to the
+[Look and themes](Look_And_Themes.md). **Settings → Notifications** holds the
 notification settings.

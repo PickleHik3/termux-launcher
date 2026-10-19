@@ -36,6 +36,19 @@ public final class SettingsLayoutUtils {
         applyLayouts(screen, false);
     }
 
+    /** A row added after the page was built (a search result) gets a sub-page row's look. */
+    public static void applyRowLayout(@NonNull Preference preference) {
+        applyItemLayout(preference, false);
+    }
+
+    /** A section header added after the page was built; the first on a page has no hairline. */
+    public static void applyCategoryLayout(@NonNull PreferenceCategory category, boolean first) {
+        category.setIconSpaceReserved(false);
+        category.setLayoutResource(first
+            ? R.layout.preference_settings_category_first
+            : R.layout.preference_settings_category);
+    }
+
     private static void applyLayouts(@NonNull PreferenceGroup screen, boolean rootRows) {
         boolean seenCategory = false;
         for (int i = 0; i < screen.getPreferenceCount(); i++) {

@@ -1233,7 +1233,52 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
 - 2026-10-19 · same · Settings → Display → Linux apps has no Display badge row and otherwise looks
   exactly as before · pong, screenshot against the previous build.
 
+### Settings restructure (10-19)
+- 2026-10-19 · feat(settings) motion · The four motions feel right and never stutter on a long
+  page (Keyboard, Linux apps); the row ring reads as "here it is", not as an alarm · pong, by hand.
+Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
+- 2026-10-19 · commit "refactor(settings): regroup Settings by the wall's halves" · Before/after
+  screenshots of every moved screen: the root, Home, Dock & drawer, Terminal and its four new
+  subpages, Linux apps, Look, Keyboard (with its Look group), General. Every row looks as it did
+  (row height, chevrons, switches, pills, slider, the search pill); only the grouping changed ·
+  emulator, light, dark and black, the Material You scheme, font scale 1.3, against the previous
+  build.
+- 2026-10-19 · same · Home › Layout and Terminal › Layout open the Layout editor on that half;
+  closing the editor returns to Settings on the page it was opened from · emulator.
+- 2026-10-19 · same · Open Settings on Status bar with the previous build, force-stop the app,
+  install this build, reopen within 30 minutes: Terminal › Status bar shows, Back goes to Terminal,
+  then the root · emulator.
+- 2026-10-19 · commit "feat(settings): search every screen and land on the row" · On the root
+  type "vibration": the sections give way to results with their paths; tap one: its page opens
+  scrolled to the row, which rings once (fades in and out, nothing keeps moving); Back walks up
+  through its section. The keyboard's search key opens the first result. From Home's toolbar
+  search the field opens focused with the keyboard up, reading "Search Home" · emulator, light
+  and dark, font scale 1.3.
+- 2026-10-19 · commit "feat(settings): Material motion between settings screens" · Root → Terminal
+  → Text & display slides forward, Back slides back; Keyboard → Keyboard theme grows out of its
+  row and fades away on Back; a search result fades through; Home › Layout opens the editor
+  growing from the row; with Remove animations on, every one of these is an instant cut ·
+  emulator, screen recording.
+- 2026-10-19 · commits "feat(settings): two panes on wide screens", "fix(settings): two panes
+  only on tablets" · A tablet-sized screen (`wm size 1600x2560`, density 320): the list beside
+  Home; tap Terminal: the right side fades to Terminal; Text & display slides in on the right;
+  Back, then Back again leaves Settings. A phone turned to landscape stays one pane, with no
+  rebuild flash on rotation · emulator with `wm size`, then the Surface.
+- 2026-10-19 · same · Doors from outside Settings land where they did: the display window's cog
+  (Linux apps), the Apps bar opener (Dock & drawer), Look and feel (Look), the drawer's settings
+  (Drawer layout), the keyboard theme from the Appearance editor, Edit extra keys · emulator.
+
 ## Developer
+
+### Settings restructure (10-19)
+- 2026-10-19 · feat(settings) two panes · The Surface in landscape and portrait: the list and the
+  section read well side by side (row widths, the root's icon tiles, the hairline), light and
+  dark · the Surface, by hand.
+- 2026-10-19 · feat(settings) animation speed · General › Animation speed at Slower, Faster and
+  Off: a Home page swipe, the palette opening and a terminal window floating out each take
+  visibly longer, shorter, or land at once; Normal feels exactly as before · pong, by hand.
+- 2026-10-19 · settings restructure · Taste check of the new root and the Home and Terminal
+  sections against the approved plan page: names, order, summaries · pong, by hand.
 
 - 2026-10-19 · feat(wall) display as a window · The display window's arrival and departure feel
   like a window switch (no flash of an empty frame, no frame of black where the surface was), and
