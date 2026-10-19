@@ -20981,6 +20981,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
                 // Home is always on the row; the Workspace while there is a window to show.
                 @Override public boolean hasWindow() { return isWorkspaceOnRow(); }
+                // Home's swipe past its last page into an empty Workspace (ADR 0008, amended
+                // 2026-10-19): the same fresh shell the Terminal entry starts there.
+                @Override public boolean canStartWorkspace() {
+                    return isSplitPanesEnabled() && mPaneController != null
+                        && getTermuxTerminalSessionClient() != null;
+                }
+                @Override public boolean startWorkspaceShell() {
+                    if (!canStartWorkspace()) return false;
+                    getTermuxTerminalSessionClient().addNewSession(false, null);
+                    return true;
+                }
                 @Override public int innerCount(@NonNull com.termux.app.wall.PaneWallPage page) {
                     return wallInnerCount(page);
                 }

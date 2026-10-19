@@ -49,8 +49,9 @@ with a window's arrival from the window bar (over every window it jumps). A Home
 added or removed re-spreads the picture at once: the pan snaps to the new step rather than
 animating. Gated as before (portrait, the launcher drawing a managed wallpaper itself, the switch on,
 animations on). A forward swipe on the last Home page crosses the seam to the first
-window when the Workspace has one, and stops there when it has none; a swipe back never leaves
-Home. From the first window the border drag back returns to the last Home page. The seam is
+window. When the Workspace has none it crosses all the same: the empty Workspace comes in under the
+finger and, once the release commits to it, a fresh shell opens as window 1 (a swipe that springs
+back starts nothing). A swipe back never leaves Home. From the first window the border drag back returns to the last Home page. The seam is
 continuous but never silent: the Workspace's chrome (status bar, extra keys, corner tabs, borders)
 arrives with the first window, and the window's status bar fades on the way back to Home.
 

@@ -227,8 +227,8 @@ _Avoid_: pill (the retired control; the dictation pill is another thing), header
 
 **Wall**:
 The one horizontal row the launcher pages along: the **Home pages**, then the **Workspace**. Swiping
-past the last Home page reaches the first window; dragging back before the first window returns to
-the last Home page. In code it is still `PaneWallController` and `PaneWallLayout`, and a page is a
+past the last Home page reaches the first window, opening a fresh one when the Workspace has none;
+dragging back before the first window returns to the last Home page. In code it is still `PaneWallController` and `PaneWallLayout`, and a page is a
 `PaneWallPage`. See ADR 0008.
 _Avoid_: pane wall (the retired name), pager, strip, carousel, home screen
 
