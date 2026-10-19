@@ -3010,14 +3010,11 @@ public class TerminalPaneController {
             @Override public boolean floatYieldsSideways(@NonNull View child, float x, float y) {
                 if (!(child instanceof FloatingPaneContainer)) return false;
                 FloatingPaneContainer container = (FloatingPaneContainer) child;
-                TerminalView view = mPaneViews.get(container.mLeaf.session);
-                TerminalEmulator emulator = view == null ? null : view.mEmulator;
-                // A press just under a titlebar button is the button's too (its reach).
-                return HomeFloatPolicy.bodySwipePagesHome(
-                    y < titlebarBandPx() || container.buttonReachAt(x, y) != null,
-                    container.dragModeAt(x, y) == FloatingPaneContainer.DRAG_RESIZE,
-                    view != null && view.isSelectingText(),
-                    emulator != null && emulator.isMouseTrackingActive());
+                // A press just under a titlebar button is the button's too (its reach); the
+                // titlebar moves the float, and the resize corner sizes it.
+                boolean onChrome = y < titlebarBandPx() || container.buttonReachAt(x, y) != null
+                    || container.dragModeAt(x, y) == FloatingPaneContainer.DRAG_RESIZE;
+                return terminalYieldsSideways(mPaneViews.get(container.mLeaf.session), onChrome);
             }
         });
         // Fractions only become pixels against the live room: a turn or a resize re-lays them.
@@ -3660,6 +3657,20 @@ public class TerminalPaneController {
     public boolean isHostedFloatInSlot(@NonNull Window w) {
         HostedFloatContainer container = mHostedContainers.get(w);
         return container != null && container.isInSlot();
+    }
+
+    /**
+     * Whether {@code view}'s terminal gives a sideways swipe away ({@link
+     * TerminalBodySwipe#yieldsSideways}): no selection, no program tracking the mouse or asking
+     * for touch reports, not in mouse mode. A press on the pane's own chrome ({@code onChrome})
+     * never does.
+     */
+    private static boolean terminalYieldsSideways(@Nullable TerminalView view, boolean onChrome) {
+        if (view == null) return false;
+        TerminalEmulator emulator = view.mEmulator;
+        return TerminalBodySwipe.yieldsSideways(onChrome, view.isSelectingText(),
+            emulator != null && emulator.isMouseTrackingActive(),
+            emulator != null && emulator.isTouchReportsMode(), view.isTouchMouseMode());
     }
 
     /** Whether a press at this screen point lands on the focused hosted float's widget. */
