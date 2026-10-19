@@ -101,6 +101,8 @@ public final class FloatTitlebarView extends FrameLayout {
     @ColorInt private int mReadingGround;
     /** Where the readings the last layout fitted end, from the leading edge; 0 for none. */
     private int mReadingsEndPx;
+    /** Whether the readings' own height fits the strip at the font scale in force. */
+    private boolean mReadingsFitHeight = true;
 
     public FloatTitlebarView(@NonNull Context context, boolean hasMinimiseTarget,
                              @NonNull Listener listener) {
@@ -333,8 +335,14 @@ public final class FloatTitlebarView extends FrameLayout {
         for (ImageButton button : mButtons)
             button.measure(MeasureSpec.makeMeasureSpec(slot, MeasureSpec.EXACTLY), exactHeight);
         if (mCpu != null && mDot != null && mRam != null) {
-            // At their own width, as the status bar lays them; the layout decides which fit.
+            // At their own size first, as the status bar lays them: a reading taller than the
+            // strip (a large font scale) is dropped rather than clipped.
             int free = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+            mCpu.measure(free, free);
+            mRam.measure(free, free);
+            mReadingsFitHeight = FloatTitlebarPolicy.readingsFitHeight(height,
+                Math.max(mCpu.getMeasuredHeight(), mRam.getMeasuredHeight()));
+            // Then at their own width and the strip's height; the layout decides which fit.
             mCpu.measure(free, exactHeight);
             mRam.measure(free, exactHeight);
             int dot = MeasureSpec.makeMeasureSpec(dp(DOT_DP), MeasureSpec.EXACTLY);
@@ -374,8 +382,8 @@ public final class FloatTitlebarView extends FrameLayout {
     private void layoutReadings(int width, int height, int buttons, boolean rtl) {
         mReadingsEndPx = 0;
         if (mCpu == null || mDot == null || mRam == null) return;
-        boolean cpu = mCpu.getVisibility() == VISIBLE;
-        boolean ram = mRam.getVisibility() == VISIBLE;
+        boolean cpu = mReadingsFitHeight && mCpu.getVisibility() == VISIBLE;
+        boolean ram = mReadingsFitHeight && mRam.getVisibility() == VISIBLE;
         int inset = dp(FloatTitlebarPolicy.READINGS_INSET_DP);
         int cpuEnd = inset + mCpu.getMeasuredWidth();
         int dotStart = cpuEnd + dp(DOT_SIDE_DP);

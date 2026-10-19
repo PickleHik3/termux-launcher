@@ -25463,14 +25463,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long nowMs = android.os.SystemClock.uptimeMillis();
         com.termux.app.statusbar.StatusBarWidgetView cpu = findViewById(R.id.terminal_status_widget_cpu);
         com.termux.app.statusbar.StatusBarWidgetView ram = findViewById(R.id.terminal_status_widget_ram);
-        if (cpu != null && cpu.getVisibility() == View.VISIBLE
-            && mBarCpuSmoother.offer(stats.cpuPercent, nowMs)) {
+        // The smoothers feed the bar's widgets and, on Home, the focused float's titlebar: a
+        // widget left hidden inside Home's absent bar must not freeze the titlebar's readings.
+        boolean titlebar = homeFloatReadingsShown();
+        boolean cpuBar = cpu != null && cpu.getVisibility() == View.VISIBLE;
+        if ((cpuBar || (titlebar && statusCpuReadingOn()))
+            && mBarCpuSmoother.offer(stats.cpuPercent, nowMs) && cpuBar) {
             cpu.setValue(mBarCpuSmoother.text());
         }
-        if (ram != null && ram.getVisibility() == View.VISIBLE) {
+        boolean ramBar = ram != null && ram.getVisibility() == View.VISIBLE;
+        if (ramBar || (titlebar && statusRamReadingOn())) {
             int memPct = stats.memTotalKb > 0
                 ? (int) Math.round(100.0 * stats.memUsedKb / stats.memTotalKb) : -1;
-            if (mBarMemorySmoother.offer(memPct, nowMs)) ram.setValue(mBarMemorySmoother.text());
+            if (mBarMemorySmoother.offer(memPct, nowMs) && ramBar)
+                ram.setValue(mBarMemorySmoother.text());
         }
         if (mStatsCardView != null && mStatusCardHost.isShowing()) {
             mStatsCardView.bind(stats);

@@ -355,6 +355,38 @@ public class FloatTitlebarTest {
                 sawDrop |= !strip.readingShown(false);
             }
             assertTrue("a narrow float drops a reading", sawDrop);
+
+            // In the 24dp strip at 1.3 the readings stand at their own height, unclipped.
+            FloatTitlebarView wide = strip(true, new ArrayList<>());
+            wide.setReadings("100%", "100%");
+            laidOut(wide, Math.round(400 * density));
+            assertTrue(wide.readingShown(true));
+            int free = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+            View cpu = wide.readingView(true);
+            cpu.measure(free, free);
+            assertTrue("the text fits the strip's height",
+                cpu.getMeasuredHeight() <= wide.getHeight());
+        } finally {
+            RuntimeEnvironment.setFontScale(previous);
+        }
+    }
+
+    @Test
+    public void readings_tallerThanTheStripAtAHugeFontScaleAreDroppedNotClipped() {
+        assertTrue(FloatTitlebarPolicy.readingsFitHeight(48, 40));
+        assertTrue(FloatTitlebarPolicy.readingsFitHeight(48, 48));
+        assertFalse(FloatTitlebarPolicy.readingsFitHeight(48, 49));
+        assertFalse("unmeasured", FloatTitlebarPolicy.readingsFitHeight(48, 0));
+
+        float previous = context().getResources().getConfiguration().fontScale;
+        RuntimeEnvironment.setFontScale(2f);
+        try {
+            float density = context().getResources().getDisplayMetrics().density;
+            FloatTitlebarView strip = strip(true, new ArrayList<>());
+            strip.setReadings("100%", "100%");
+            laidOut(strip, Math.round(400 * density));
+            assertFalse(strip.readingShown(true));
+            assertFalse(strip.readingShown(false));
         } finally {
             RuntimeEnvironment.setFontScale(previous);
         }
