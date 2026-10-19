@@ -58,8 +58,59 @@ public final class KeyboardOverlayPolicy {
      */
     public static int overlapPx(boolean dockOverlays, int stackHeightPx, int stackBottomMarginPx,
                                 int keyboardOverlapPx) {
+        return overlapPx(dockOverlays, stackHeightPx, stackBottomMarginPx, keyboardOverlapPx, 0);
+    }
+
+    /**
+     * The same, with the system keyboard's take on the content root counted
+     * ({@link #systemImeTakePx}): on a Home page the content reaches past it too, so the widget
+     * grid keeps the height it has with the keyboard down and the system keyboard, with the dock
+     * riding on it, covers the grid instead of squeezing it. Everywhere else the take stays the
+     * content's to give up, as it always was: the text there wants the room.
+     */
+    public static int overlapPx(boolean dockOverlays, int stackHeightPx, int stackBottomMarginPx,
+                                int keyboardOverlapPx, int systemImeTakePx) {
         if (!dockOverlays) return Math.max(0, keyboardOverlapPx);
-        return Math.max(0, stackHeightPx) + Math.max(0, stackBottomMarginPx);
+        return Math.max(0, stackHeightPx) + Math.max(0, stackBottomMarginPx)
+            + Math.max(0, systemImeTakePx);
+    }
+
+    /**
+     * How much shorter the system keyboard leaves the content root. The root fits the system
+     * windows: a window that resizes for the keyboard pads its bottom by the keyboard
+     * ({@code rootFitBottomPx}, the legacy system-window inset) where it would otherwise pad it by
+     * the bars ({@code restFitBottomPx}, the navigation bar and any cutout below); a keyboard the
+     * insets miss is answered by the root's own bottom margin instead
+     * ({@code rootBottomMarginPx}). The sum is how far the root's bottom stands above where it
+     * stands with the keyboard down; 0 with it down.
+     */
+    public static int systemImeTakePx(int rootFitBottomPx, int restFitBottomPx,
+                                      int rootBottomMarginPx) {
+        return Math.max(0, rootFitBottomPx - Math.max(0, restFitBottomPx))
+            + Math.max(0, rootBottomMarginPx);
+    }
+
+    /**
+     * Where the dock's top stands on screen with no system keyboard under it, given the bottom of
+     * the accessory stack as the next layout leaves it ({@code stackBottomPx}) and how far a
+     * system keyboard has pushed the stack up ({@code imePushPx}). Home floats are laid out above
+     * this: the system keyboard, like the in-app one, is no resize of their room.
+     */
+    public static int homeDockRestTopPx(int stackBottomPx, int dockPx, int imePushPx) {
+        return stackBottomPx + Math.max(0, imePushPx) - Math.max(0, dockPx);
+    }
+
+    /**
+     * The top of what covers Home from below while a keyboard is up, on screen, or -1 while none
+     * is: the top of the accessory stack, the dock riding on the keyboard. Up for the in-app
+     * keyboard ({@code inAppKeyboardShown}, the stack holding it) and for a system keyboard that
+     * pushes the stack up ({@code imePushPx}, the stack standing on it). Floats and terminal
+     * widgets on Home meet this edge, whichever keyboard it is.
+     */
+    public static int homeKeyboardTopPx(boolean inAppKeyboardShown, int imePushPx,
+                                        int stackBottomPx, int stackPx) {
+        if (!inAppKeyboardShown && imePushPx <= 0) return -1;
+        return Math.max(0, stackBottomPx - Math.max(0, stackPx));
     }
 
     /**

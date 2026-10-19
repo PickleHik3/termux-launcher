@@ -1315,6 +1315,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             | (bars.left << 8) | bars.right;
     }
     private int mImeLiftPx;
+    /** The root's bottom fit inset now and with no keyboard ({@link #noteRootFitBottom}). */
+    private int mRootFitBottomPx, mRootRestFitBottomPx;
+    /** The system keyboard's take the content's bottom margin reaches past on Home; 0 elsewhere. */
+    private int mHomeContentImeReachPx;
     /** Set only after this activity explicitly requests a system IME in its current visible run. */
     private final LruCache<String, Integer> mLaunchIconColorCache = new LruCache<>(64);
 
@@ -1921,6 +1925,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         content.setOnApplyWindowInsetsListener((v, insets) -> {
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
+            noteRootFitBottom(insetsCompat);
             applyAppDrawerEdgeBleed(insetsCompat);
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
             applyDockImeOffset(0);
@@ -9082,6 +9087,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The bottom inset the root, which fits the system windows, pads itself by
+     * ({@link #mRootFitBottomPx}), and the one it pads by with no keyboard
+     * ({@link #mRootRestFitBottomPx}), read off the insets the root is about to be given. On a
+     * Home page a change in their difference moves the content's reach at once, ahead of this
+     * traversal's measure, so the window resizing for the system keyboard never lays the widget
+     * grid out shorter even for the frame before the geometry pass, which writes the same reach
+     * ({@link KeyboardOverlayPolicy#overlapPx(boolean, int, int, int, int)}).
+     */
+    @SuppressWarnings("deprecation")
+    private void noteRootFitBottom(@NonNull WindowInsetsCompat insets) {
+        mRootFitBottomPx = insets.getSystemWindowInsetBottom();
+        mRootRestFitBottomPx = insets.getInsets(Type.systemBars() | Type.displayCutout()).bottom;
+        if (mTravelHoldsContent
+            || !com.termux.app.place.HomeChromePolicy.dockOverlays(mLastWallPage)) return;
+        int reach = systemImeTakePx();
+        int delta = reach - mHomeContentImeReachPx;
+        if (delta == 0) return;
+        View content = findViewById(R.id.terminal_content_column);
+        if (content == null || !(content.getLayoutParams() instanceof ViewGroup.MarginLayoutParams))
+            return;
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) content.getLayoutParams();
+        params.bottomMargin -= delta;
+        content.setLayoutParams(params);
+        mHomeContentImeReachPx = reach;
+    }
+
+    /** How much shorter the system keyboard leaves the root ({@link KeyboardOverlayPolicy#systemImeTakePx}). */
+    private int systemImeTakePx() {
+        View root = mTermuxActivityRootView;
+        ViewGroup.LayoutParams params = root == null ? null : root.getLayoutParams();
+        int margin = params instanceof ViewGroup.MarginLayoutParams
+            ? ((ViewGroup.MarginLayoutParams) params).bottomMargin : 0;
+        return KeyboardOverlayPolicy.systemImeTakePx(mRootFitBottomPx, mRootRestFitBottomPx, margin);
+    }
+
+    /**
      * IME lift for the dock, owned by insets only while system bars are hidden (fullscreen property
      * or externally forced immersive). With bars visible, {@link TermuxActivityRootView}'s
      * visible-frame probe already lifts the whole root above the keyboard, so applying an inset
@@ -15068,17 +15109,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         );
         // Home floats are laid out between the status bar and the dock, and lifted over the
         // keyboard: they hear the stack's rows from this pass.
+        // The system keyboard's take on the root: Home's content reaches past it, and the floats
+        // meet the stack it pushes up as they meet the in-app keyboard.
+        int systemImeTakePx = systemImeTakePx();
         mHomeFloatDockPx = dockContentHeightPx + terminalFlushPaddingPx;
         mHomeFloatStackPx = combinedHeight;
         mHomeFloatKeyboardShown = state.keyboardShown;
+        mHomeFloatImePushPx = systemImeTakePx
+            + (state.toolbarShown || state.keyboardShown ? Math.max(0, mImeLiftPx) : 0);
         syncHomeFloatObstructions();
-        // On a Home page the dock floats with the keyboard: the grid keeps its whole height.
+        // On a Home page the dock floats with the keyboard, either keyboard: the grid keeps its
+        // whole height.
         boolean dockOverlays = com.termux.app.place.HomeChromePolicy.dockOverlays(mLastWallPage);
+        int homeImeReachPx = dockOverlays ? systemImeTakePx : 0;
         keyboardOverlapPx = KeyboardOverlayPolicy.overlapPx(
-            dockOverlays, combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx);
+            dockOverlays, combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx,
+            homeImeReachPx);
         // A side rail on Home ends above the dock, as it does on the Workspace.
         if (applySideStackDockInsets(dockOverlays, KeyboardOverlayPolicy.overlapPx(true,
-                combinedHeight, accessoryBottomMarginPx, 0)))
+                combinedHeight, accessoryBottomMarginPx, 0, homeImeReachPx)))
             mChrome.onArrangementChanged();
         // While the wall travels with chrome pre-rolled, the content keeps exactly the room it
         // was committed with: whatever the stack grew by for the slide, the content reaches under
@@ -15087,7 +15136,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             keyboardOverlapPx = com.termux.app.place.PlaceChromeTravel.heldOverlapPx(
                 combinedHeight, accessoryBottomMarginPx, mTravelHeldReservationPx);
             mTravelHeldOverlapPx = keyboardOverlapPx;
+            homeImeReachPx = 0;
         }
+        mHomeContentImeReachPx = homeImeReachPx;
         // With the stack away the content is the surface on the bottom edge, and it keeps the
         // same gap from it the dock would (ChromePolicy.bottomEdgeGapPx): a gone stack's margin
         // positions nothing, so the content carries the gap itself. The reservation below counts
@@ -22507,6 +22558,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The dock's, the stack's and the margin's heights as the last geometry pass laid them. */
     private int mHomeFloatDockPx, mHomeFloatStackPx;
     private boolean mHomeFloatKeyboardShown;
+    /** How far the system keyboard pushes the stack up, as the last geometry pass laid it. */
+    private int mHomeFloatImePushPx;
 
     /**
      * Tells the float layer what covers it, in screen pixels: the status bar (or the system bar)
@@ -22521,8 +22574,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int[] at = new int[2];
         stack.getLocationOnScreen(at);
         int stackBottom = Math.round(at[1] - stack.getTranslationY()) + stack.getHeight();
-        int dockTop = stackBottom - Math.max(0, mHomeFloatDockPx);
-        int keyboardTop = mHomeFloatKeyboardShown ? stackBottom - Math.max(0, mHomeFloatStackPx) : -1;
+        // A root margin written since the last layout moves the stack by as much on the next one,
+        // and so does its own (the system keyboard's lift with the bars hidden): it stands on its
+        // parent's bottom, less the margin.
+        if (mTermuxActivityRootView != null)
+            stackBottom += mTermuxActivityRootView.unlaidBottomMarginGivebackPx();
+        if (stack.getParent() instanceof ViewGroup
+            && stack.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup parent = (ViewGroup) stack.getParent();
+            int laidMargin = parent.getHeight() - parent.getPaddingBottom() - stack.getBottom();
+            if (parent.getHeight() > 0 && stack.getHeight() > 0)
+                stackBottom += laidMargin
+                    - ((ViewGroup.MarginLayoutParams) stack.getLayoutParams()).bottomMargin;
+        }
+        // The dock's top at rest, wherever a system keyboard has pushed it: the floats' room is
+        // the same with either keyboard up, and they meet the keyboard's top instead.
+        int dockTop = KeyboardOverlayPolicy.homeDockRestTopPx(stackBottom, mHomeFloatDockPx,
+            mHomeFloatImePushPx);
+        int keyboardTop = KeyboardOverlayPolicy.homeKeyboardTopPx(mHomeFloatKeyboardShown,
+            mHomeFloatImePushPx, stackBottom, mHomeFloatStackPx);
         root.getLocationOnScreen(at);
         int roomTop = at[1];
         androidx.core.view.WindowInsetsCompat insets =
