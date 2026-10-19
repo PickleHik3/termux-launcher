@@ -49,6 +49,9 @@ public final class HomePagesEditor {
         default void onClosed() { }
     }
 
+    /** A cap that only a font far past the system's largest scale reaches. */
+    private static final int DETAIL_MAX_LINES = 3;
+
     private final Context context;
     private final Host host;
     private final LinearLayout list;
@@ -123,7 +126,9 @@ public final class HomePagesEditor {
             ? context.getString(R.string.home_pages_editor_default_detail, what) : what);
         detail.setTextColor(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY));
-        detail.setSingleLine(true);
+        // Wraps rather than cuts: beside four buttons the default page's "Home opens here" alone
+        // is wider than the column at a large font scale. The row grows with it.
+        detail.setMaxLines(DETAIL_MAX_LINES);
         detail.setEllipsize(TextUtils.TruncateAt.END);
         text.addView(detail);
         row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
