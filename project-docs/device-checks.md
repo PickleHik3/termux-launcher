@@ -1234,6 +1234,12 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · wave 2, Home (F5–F11) · Screenshots of Settings › Home top to bottom against the
+  wave-1 build: the new groups (Icons and labels, Folders, the five gesture rows, Page transition,
+  Page indicator, Edit pages, Lock Home layout) wear the same row look (height, chevron-less
+  value rows, switches, category headers), nothing clipped at font scale 1.3; search "transition",
+  "two-finger", "lock home" lands on each row · emulator, light, dark and black, the Material You
+  scheme.
 - 2026-10-19 · commit "feat(home): folder density and max folder size" · A Home folder of 14 apps
   opens as before at the defaults (four across); Compact shows five across in smaller cells,
   Comfortable three across in larger ones, and no density's popup runs off a 360 dp screen. Max

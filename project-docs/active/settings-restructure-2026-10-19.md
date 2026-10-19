@@ -137,13 +137,13 @@ The list does not mark the open section yet.
 | F2 | The four transitions | 1 |
 | F3 | General › Animation speed, one multiplier for settings, page swipes, palette and floats | 1 |
 | F4 | Two panes at a smallest width of 600 dp | 1 |
-| F5 | Page transition picker with live preview (Slide, Depth, Fade, Carousel, Stack), Home pages only, frame-rate checked on pong with glass | 2 |
-| F6 | Gestures table (swipe up/down, double tap, two-finger), privileged routes shown only when available | 2 |
-| F7 | Icon scale, label size, two-line labels, label shadow | 2 |
-| F8 | Page indicator: dots or off | 2 |
-| F9 | Lock Home layout, unlock from the Home sheet | 2 |
-| F10 | Edit pages: add, remove, reorder, default page | 2 |
-| F11 | Folder density and max size | 2 |
+| F5 | Page transition picker with live preview (Slide, Depth, Fade, Carousel, Stack), Home pages only, frame-rate checked on pong with glass | 2 (built; frame time owed on pong) |
+| F6 | Gestures table (swipe up/down, double tap, two-finger), privileged routes shown only when available | 2 (built) |
+| F7 | Icon scale, label size, two-line labels, label shadow | 2 (built) |
+| F8 | Page indicator: dots or off | 2 (built) |
+| F9 | Lock Home layout, unlock from the Home sheet | 2 (built) |
+| F10 | Edit pages: add, remove, reorder, default page | 2 (built) |
+| F11 | Folder density and max size | 2 (built) |
 | F12 | Open the only match | 2 |
 | F13 | Remember drawer position | 2 |
 | F14 | Start the drawer in the lower half | 2 |
@@ -156,6 +156,25 @@ F18 (app language) waits for translated strings. Wave 2 builds one feature per c
 its own pure policy and test, in the order above; its rows take the places the plan's mocks show
 (Home's Page transition, Gestures, Page indicator and Lock rows; Dock & drawer's A–Z row;
 Notifications' badge style; General's What's new and Restart).
+
+## Home, wave 2 (F5–F11)
+
+Every row reads and writes through `HomeSettings` (`app/.../launcher/home/`), in the app's default
+preferences; Settings' page store hands it every key it owns. Every default is Home as it was, so
+nothing is pinned for existing installs. The launcher pushes them into the pane as it comes to the
+front (`TermuxActivity.applyHomeSettings`), never per frame. Settings › Home now reads: Layout ·
+Icons and labels · Folders · Gestures · Widgets · Pages (Page transition, Page indicator, Edit
+pages, Wallpaper scrolls with pages, Lock Home layout, Start in).
+
+| | Decision | Where |
+|---|---|---|
+| F5 | All five effects kept. They are view properties on the page's content (translation, scale, alpha, `rotationY`): a frame is a render-node property change, no layout and no bitmap, and glass is not sampled again (it is aimed through the wall page's transform only). Depth, Fade and Stack set alpha, which draws the page through a transient layer for the frames of the motion; that and Carousel's turn owe the frame-time check on pong. Home turns only: the seam into the Terminal and the rubber band at either end still slide, the wallpaper pans by the content's shift whatever the effect, and widget edit mode turns pages with the slide. The settle scales with Animation speed (Off and reduce motion cut). The preview is an editor screen (container transform from its row) that plays once on open and per pick. | `HomePageTransition`, `WidgetPaneView`, `HomePageTransitionFragment` |
+| F6 | Swipe up keeps the old key and its `swipe_up`/`off` values. A swipe down with a palette open or a keyboard to put away does that first. Double tap and two fingers are watched only while set to something, from the free area only. Notifications, Quick settings and Lock screen need the accessibility service or Shizuku (target SDK 28 holds no `EXPAND_STATUS_BAR`); they are listed only while one is there, with a row saying what to turn on. | `HomeGestures`, `HomeGestureActions`, `HomeGesturesRows` |
+| F7 | Icon size 80–120 %, labels 10/11/13 sp, two lines only where the cell keeps a labelled icon, shadow on or off; Home icons, folders and an open folder's apps. The dock has its own renderer and is untouched. | `HomeIconStyle`, `HomeIconLabels`, `HomeAppIconMetrics` |
+| F8 | Home already drew dots past one page; Off hides them and keeps their band, so no cell resizes. | `HomePageIndicator` |
+| F9 | Locked: holds on widgets, icons and folders, the pencil, the +, the picker and page removal are refused with a notice; taps launch; the sheet offers Unlock under Terminal and drops its Add and Edit rows. | `HomeLayoutLock`, `HomeActionsSheetPolicy` |
+| F10 | Edit pages is a list dialog over Home, from the sheet and a Settings row (the sheet's pencil row is now Edit widgets). Moves and removals are mappings applied to the records, the floats (a float on a removed page moves to the page in its place, shell kept) and the default page, which the Home press and a cold start on Home land on. There is no page cap. Not handled: the shelved other orientation's layout is not reordered with the live one, and pages the automatic empty-page trim renumbers do not carry the default page or the floats (as before). | `HomePageEdits`, `HomePagesEditor`, `LauncherWidgetRepository.movePage` |
+| F11 | Density: Compact five across in 64 × 76 dp, Default four across in 76 × 84 (as before), Comfortable three across in 92 × 104, never wider than the pane. Max size 9, 12, 16 (default) or 20; a folder past a lowered cap keeps its apps. Folders are read back up to 20 apps, so a downgrade to an older build drops a folder's apps past 16. Dock folders unchanged. | `HomeFolderDensity`, `HomeFolderPolicy` |
 
 ## Rules that keep the settings look
 
