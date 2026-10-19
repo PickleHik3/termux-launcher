@@ -3490,6 +3490,53 @@ public class TerminalPaneController {
             container.titlebar().applyRim(glassShape, radiusPx, border, mSurfaceStyle, 1f, focused);
             container.invalidate();
         }
+        applyHomeFloatReadings();
+    }
+
+    /** The system readings the focused Home float's titlebar carries; null for one not shown. */
+    @Nullable private CharSequence mHomeReadingCpu;
+    @Nullable private CharSequence mHomeReadingRam;
+    @Nullable private FloatTitlebarView.ReadingInk mHomeReadingInk;
+
+    /**
+     * The CPU and RAM readings for the focused Home float's titlebar, as the status bar shows them
+     * (either null for one its settings hide, both null for none), and the rule they are inked
+     * by. Only the focused float's strip carries them; every other float's strip stays plain.
+     */
+    public void setHomeFloatReadings(@Nullable CharSequence cpu, @Nullable CharSequence ram,
+                                     @Nullable FloatTitlebarView.ReadingInk ink) {
+        mHomeReadingCpu = cpu;
+        mHomeReadingRam = ram;
+        mHomeReadingInk = ink;
+        applyHomeFloatReadings();
+    }
+
+    /**
+     * Whether the focused Home float's titlebar is on screen in the float layer: a float holds
+     * Home's focus, and it is shown on the page in view rather than minimised. A hosted float has
+     * no titlebar and never counts.
+     */
+    public boolean isFocusedHomeFloatTitlebarShown() {
+        Window w = mFocusedHomeFloat;
+        if (w == null || w.minimised || w.active == null || !mHomeFloats.contains(w)) return false;
+        FloatingPaneContainer container = mHomeFloatContainers.get(w.active);
+        return container != null && container.getVisibility() == View.VISIBLE;
+    }
+
+    /** The readings onto the focused Home float's strip, and off every other one. */
+    private void applyHomeFloatReadings() {
+        for (Window w : mHomeFloats) {
+            FloatingPaneContainer container = w.active == null ? null
+                : mHomeFloatContainers.get(w.active);
+            if (container == null) continue;
+            FloatTitlebarView strip = container.titlebar();
+            if (w == mFocusedHomeFloat) {
+                strip.setReadingInk(mHomeReadingInk);
+                strip.setReadings(mHomeReadingCpu, mHomeReadingRam);
+            } else {
+                strip.setReadings(null, null);
+            }
+        }
     }
 
     /** A float's container, a window's floating pane's or a Home float's. */

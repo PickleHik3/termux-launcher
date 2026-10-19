@@ -20053,6 +20053,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Home wears its own Style, Corners and Margin: a crossing between halves that differ
         // dresses the chrome for the arriving one, as the variant above re-arranged it.
         restyleChromeForHalfIfChanged(left, page);
+        // The readings live in a focused Home float's titlebar on Home, in the bar elsewhere.
+        syncHomeFloatReadings();
         return true;
     }
 
@@ -25063,19 +25065,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The role colour a status tier is written in; its hue is the tier, and the toning keeps it. */
     private int statusInkSeed(@NonNull com.termux.app.statusbar.StatusBarWidgetView.ColorRole role) {
-        int primary = MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorPrimary,
-            androidx.core.content.ContextCompat.getColor(this, R.color.termux_primary));
-        switch (role) {
-            case SECONDARY:
-                return MaterialColors.getColor(this,
-                    com.termux.shared.R.attr.termuxColorSecondary,
-                    androidx.core.content.ContextCompat.getColor(this, R.color.termux_secondary));
-            case TERTIARY:
-                return MaterialColors.getColor(this,
-                    com.termux.shared.R.attr.termuxColorTertiary, primary);
-            default:
-                return primary;
-        }
+        return com.termux.app.statusbar.StatusBarWidgetView.seedFor(this, role);
     }
 
     // ---- Trailing status widgets (CPU / RAM / weather) + their anchored detail cards ----
@@ -25105,8 +25095,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (cpu != null) {
             cpu.setVisibility(cpuOn ? View.VISIBLE : View.GONE);
-            cpu.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
-            cpu.setIconGlyph("\uf4bc");   // nf-oct-cpu
+            cpu.dressAsCpu();
             // Seeded from the smoother every pass: onStatsUpdated skips hidden widgets, so a value
             // published while this one was off or covered is otherwise only repainted when the
             // reading next changes \u2014 and before the first sample this is what puts "--" on screen
@@ -25119,8 +25108,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (ram != null) {
             ram.setVisibility(ramOn ? View.VISIBLE : View.GONE);
-            ram.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-            ram.setIconGlyph("\uefc5");   // nf-fa-memory
+            ram.dressAsRam();
             if (ramOn) ram.setValue(mBarMemorySmoother.text());
             if (ram.getTag() == null) {
                 ram.setTag("wired");
@@ -25162,9 +25150,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 statsInterval(cardShowing ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS),
                 cardShowing);
             // The sampler pauses while nothing shows its numbers (StatsPollCadence).
-            View barHost = findViewById(R.id.terminal_window_bar_host);
-            mStatsController.setConsumerVisible(cardShowing
-                || (barHost != null && barHost.getVisibility() == View.VISIBLE));
+            mStatsController.setConsumerVisible(statsConsumerVisible());
         } else if (mStatsController != null) {
             mStatsController.stop();
         }
@@ -25178,6 +25164,65 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ensureAiIndicatorController();
         // The tiers just moved, and a tier is which hue this widget's ink is toned from.
         syncStatusBarInk();
+        // A reading switched on or off reaches the focused Home float's titlebar too.
+        syncHomeFloatReadings();
+    }
+
+    /**
+     * Whether anything showing the CPU and RAM readings is on screen, for the sampler's pause
+     * (StatsPollCadence): the open stats card, the status bar, or the focused Home float's
+     * titlebar on Home.
+     */
+    private boolean statsConsumerVisible() {
+        boolean cardShowing = mStatusCardHost.isShowing() && mStatsCardView != null;
+        View barHost = findViewById(R.id.terminal_window_bar_host);
+        return cardShowing || (barHost != null && barHost.getVisibility() == View.VISIBLE)
+            || homeFloatReadingsShown();
+    }
+
+    /** The status bar's ink rule, asked on a titlebar's own ground; built once. */
+    @Nullable private com.termux.app.terminal.FloatTitlebarView.ReadingInk mTitlebarReadingInk;
+
+    /**
+     * Whether the focused Home float's titlebar carries the readings now: the wall rests on Home,
+     * a Home float there holds focus with its titlebar on screen, and the status bar's settings
+     * show CPU or RAM. Home wears no status bar, so this is where its readings are.
+     */
+    private boolean homeFloatReadingsShown() {
+        return mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS
+            && mPaneController != null && mPaneController.isFocusedHomeFloatTitlebarShown()
+            && (statusCpuReadingOn() || statusRamReadingOn());
+    }
+
+    /** The status bar's CPU reading is on: its setting, with the access it needs. */
+    private boolean statusCpuReadingOn() {
+        return com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
+            mPreferences != null && mPreferences.isStatusWidgetCpuEnabled(),
+            PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
+    }
+
+    private boolean statusRamReadingOn() {
+        return mPreferences != null && mPreferences.isStatusWidgetRamEnabled();
+    }
+
+    /**
+     * The focused Home float's titlebar readings: CPU and RAM from the status bar's own smoothers,
+     * at the sampler's cadence, while {@link #homeFloatReadingsShown}; none otherwise. The sampler
+     * follows, so it runs on Home only while a focused float shows them. Each value is set only
+     * on a change, so a steady reading repaints nothing.
+     */
+    private void syncHomeFloatReadings() {
+        if (mPaneController == null) return;
+        if (mTitlebarReadingInk == null && mChrome != null) {
+            mTitlebarReadingInk = (ground, seed, target) ->
+                mChrome.ink().inkOnGround(ground, seed, seed, target);
+        }
+        boolean shown = homeFloatReadingsShown();
+        mPaneController.setHomeFloatReadings(
+            shown && statusCpuReadingOn() ? mBarCpuSmoother.text() : null,
+            shown && statusRamReadingOn() ? mBarMemorySmoother.text() : null,
+            mTitlebarReadingInk);
+        if (mStatsController != null) mStatsController.setConsumerVisible(statsConsumerVisible());
     }
 
     /**
@@ -25252,6 +25297,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mStatsCardView != null && mStatusCardHost.isShowing()) {
             mStatsCardView.bind(stats);
         }
+        syncHomeFloatReadings();
     }
 
     private void toggleStatsCard(@NonNull View anchor) {
@@ -26370,6 +26416,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Workspace's chips for them among it.
      */
     private void onHomeFloatsChangedInActivity() {
+        syncHomeFloatReadings();
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
         scheduleArrangementAutosave();
@@ -26794,6 +26841,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mFirstBootTour != null)
                 mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
             refreshTerminalWindowBar();
+            // A Home float took focus or gave it up: its titlebar's readings follow.
+            syncHomeFloatReadings();
         }
 
         @Override public void onTreesChanged() {

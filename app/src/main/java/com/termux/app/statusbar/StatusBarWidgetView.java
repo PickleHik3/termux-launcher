@@ -34,6 +34,44 @@ public final class StatusBarWidgetView extends LinearLayout {
 
     public enum ColorRole { PRIMARY, SECONDARY, TERTIARY }
 
+    /** The CPU reading's glyph (nf-oct-cpu), wherever the launcher shows the reading. */
+    public static final String CPU_GLYPH = "\uf4bc";
+    /** The memory reading's glyph (nf-fa-memory). */
+    public static final String RAM_GLYPH = "\uefc5";
+
+    /** Dresses this widget as the CPU reading: its glyph and its tier, the primary role. */
+    public void dressAsCpu() {
+        setColorRole(ColorRole.PRIMARY);
+        setIconGlyph(CPU_GLYPH);
+    }
+
+    /** Dresses this widget as the memory reading: its glyph and its tier, the secondary role. */
+    public void dressAsRam() {
+        setColorRole(ColorRole.SECONDARY);
+        setIconGlyph(RAM_GLYPH);
+    }
+
+    /**
+     * The role colour a tier is written in, from {@code context}'s theme (the launcher's scheme
+     * chrome included): the seed every reading's measured ink is toned from.
+     */
+    @ColorInt
+    public static int seedFor(@NonNull Context context, @NonNull ColorRole role) {
+        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+            ContextCompat.getColor(context, R.color.termux_primary));
+        switch (role) {
+            case SECONDARY:
+                return MaterialColors.getColor(context,
+                    com.termux.shared.R.attr.termuxColorSecondary,
+                    ContextCompat.getColor(context, R.color.termux_secondary));
+            case TERTIARY:
+                return MaterialColors.getColor(context,
+                    com.termux.shared.R.attr.termuxColorTertiary, primary);
+            default:
+                return primary;
+        }
+    }
+
     private final GaugeIcon mIcon;
     private final TextView mGlyph;
     @Nullable private LottieAnimationView mAnimation;

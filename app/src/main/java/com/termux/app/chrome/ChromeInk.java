@@ -916,6 +916,18 @@ public final class ChromeInk {
     @ColorInt
     public int inkOn(@NonNull OnGlass.Resolution resolved, @ColorInt int ground,
                      @ColorInt int darkInk, @ColorInt int paleInk, double target) {
+        return inkOnGround(ground, darkInk, paleInk, target);
+    }
+
+    /**
+     * {@link #inkOn(OnGlass.Resolution, int, int, int, double)} for content that draws its own
+     * ground and stands on no measured band at all — a float's titlebar, whose readings take
+     * their ink by the status bar's rule on the strip's own surface. The chrome's polarity is the
+     * preference it is there, and the contrast floor still never gives way.
+     */
+    @ColorInt
+    public int inkOnGround(@ColorInt int ground, @ColorInt int darkInk, @ColorInt int paleInk,
+                           double target) {
         boolean pale = polarity() == Polarity.PALE_INK;
         // Asked in the Default level's tiers like every band, held to the user's level.
         target = mLevel.target(target);
@@ -927,9 +939,9 @@ public final class ChromeInk {
         Integer known = mInkAnswers.get(question);
         if (known != null) return known;
         int ink = pale ? paleInk : darkInk;
-        int answer = OnGlass.inkOnBand(resolved, opaqueGround, ink, ink, target, pale);
+        int answer = OnGlass.inkOnGround(opaqueGround, ink, ink, target, pale);
         if (OnGlass.ratio(answer, opaqueGround) < target)
-            answer = OnGlass.inkOnBand(resolved, opaqueGround, darkInk, paleInk, target, null);
+            answer = OnGlass.inkOnGround(opaqueGround, darkInk, paleInk, target, null);
         if (mInkAnswers.size() >= MAX_INK_ANSWERS) mInkAnswers.clear();
         mInkAnswers.put(question, answer);
         return answer;
@@ -944,7 +956,7 @@ public final class ChromeInk {
         return mInkAnswers.size();
     }
 
-    /** Everything {@link #inkOn(OnGlass.Resolution, int, int, int, double)} answers from. */
+    /** Everything {@link #inkOnGround} answers from. */
     private static final class InkQuestion {
         final boolean pale;
         final int ground;
