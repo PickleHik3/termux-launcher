@@ -1346,6 +1346,16 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_FANCIER_GLASS_CLARITY = 100;
 
         /**
+         * Motion light: while a glass pane moves its rim bends a little further and a faint colour
+         * fringe shows on the edge that leads, and a press sends one soft light along the rim;
+         * both settle back to the resting look within about a third of a second. Fancier Glass
+         * only (Android 13+); the phone's animations being off, Animation speed's Off, lazy mode
+         * and battery saver all keep it dark.
+         */
+        public static final String KEY_FANCIER_GLASS_MOTION_LIGHT = "fancier_glass_motion_light";
+        public static final boolean DEFAULT_VALUE_FANCIER_GLASS_MOTION_LIGHT = true;
+
+        /**
          * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.
          * When off, nothing appears on its own: the {@code ?} cap lights up under the prefix and
          * pressing it opens the full table on demand.

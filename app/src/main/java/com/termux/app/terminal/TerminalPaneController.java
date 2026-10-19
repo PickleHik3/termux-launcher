@@ -4929,6 +4929,8 @@ public class TerminalPaneController {
     private float mPlankTop;
     private float mPlankWidth;
     private float mPlankHeight;
+    /** Scratch for the pressed slab's place on screen, for its press light. */
+    private final int[] mPressGlassLocation = new int[2];
 
     /**
      * Feed one touch to whichever pane it landed on. Observes only — the event is never consumed,
@@ -4958,6 +4960,13 @@ public class TerminalPaneController {
                 mPressedPlank = plank;
                 plank.onPointerDown((ev.getRawX() - mPlankLeft) / mPlankWidth,
                     (ev.getRawY() - mPlankTop) / mPlankHeight);
+                // Motion light: one soft light runs along the slab's rim toward the finger.
+                View glass = frame.findViewById(R.id.terminal_pane_glass);
+                if (glass instanceof PaneGlassBackdropView && glass.getVisibility() == View.VISIBLE) {
+                    glass.getLocationOnScreen(mPressGlassLocation);
+                    ((PaneGlassBackdropView) glass).pressLight(ev.getRawX() - mPressGlassLocation[0],
+                        ev.getRawY() - mPressGlassLocation[1]);
+                }
                 break;
             }
             case MotionEvent.ACTION_MOVE:

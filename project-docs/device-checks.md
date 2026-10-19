@@ -1531,7 +1531,38 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   border-drag settles. Window switches by chip and chord keep their own fixed time under every
   speed, as they did before · emulator.
 
+### Motion light (10-19)
+- 2026-10-19 · feat(glass) motion light · Fancier Glass on, pane glass, Motion light on: a chip-tap
+  window switch, a seam fling, a pane swap (FLIP move), a float drag released quickly and a focus
+  grow each show the slab's rim bending a little further and a faint colour fringe on the edge
+  that leads (all round on a pane that only grows), peaking mid-motion and gone within about a
+  third of a second of landing; a slow divider or float drag stays calm. Screenrecord, frames at
+  the quarters and 400 ms after landing · emulator (AGSL needs API 33+).
+- 2026-10-19 · feat(glass) motion light · A tap on a terminal pane runs one soft light along its
+  rim from the far side toward the finger, then nothing; scrolling the terminal still works · emulator.
+- 2026-10-19 · feat(glass) motion light · Each of these keeps every case above at the resting look,
+  with no light at all: Look › Fancier Glass › Motion light off; Developer options' animator scale
+  off (animations removed); General › Motion › Animation speed Off; lazy mode; battery saver.
+  Slower and Faster stretch and shorten the light · emulator.
+- 2026-10-19 · feat(glass) motion light · At rest nothing draws: `dumpsys gfxinfo` over 30 s
+  untouched after a window switch matches the build before (5 frames in 30 s on pong's baseline),
+  i.e. the light stops asking for frames once it has settled · emulator for the count's shape.
+- 2026-10-19 · feat(glass) motion light · Settings › Look shows Fancier Glass › Motion light (on by
+  default), a search for "motion light" lands on it; below Android 13 the category is hidden ·
+  emulator, API 33+ and an API 31 or 32 image.
+
 ## Developer
+
+### Motion light (10-19)
+- 2026-10-19 · feat(glass) motion light · Taste on pong: whether the swell, the fringe and the press
+  sweep read as glass rather than as an effect, on a dark and on a pale wallpaper, under Clear and
+  Mist; and whether the light at rest is exactly as before (screenshot before and after a slide,
+  pixel-compare the rim) · pong, by hand (ask first).
+- 2026-10-19 · feat(glass) motion light · Frame time of a seam fling and a chip-tap window switch,
+  glass on, two panes, Motion light on against off (`scripts/perf-frametime.sh`): the light adds a
+  few uniform writes per moved frame and up to about 350 ms of slab redraws after landing; report
+  any p90 worse than off by more than the noise, per docs/agents/performance.md · pong, by hand
+  (ask first).
 
 ### Page transition across the wall (10-19), by hand
 - 2026-10-19 · feat(wall) page transition across the wall · Glass on (pane glass, a glass widget
