@@ -101,6 +101,27 @@ public class HomePillsViewTest {
         assertTrue(pills.layoutNow().windowsRight < before);
     }
 
+    @Test public void eachPillStandsOnGlassOfItsOwnBuiltAtItsCornerAndNotPerFrame() {
+        HomePillsView pills = pills();
+        List<Float> radii = new ArrayList<>();
+        pills.setGlassGround(radius -> {
+            radii.add(radius);
+            return new android.graphics.drawable.ColorDrawable(0x40ffffff);
+        });
+        assertTrue(pills.hasGlass());
+        float radius = pills.layoutNow().radius;
+        assertEquals("one glass per pill", Arrays.asList(radius, radius), radii);
+        // A reading or a focus change moves the pills, not their corners: nothing is rebuilt.
+        pills.setStats("13%", "48%", "", "21°", "CPU 13%, Memory 48%, Weather 21°");
+        pills.setWindows(FLOATS, 0);
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(pills.getWidth(),
+            pills.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+        pills.draw(new android.graphics.Canvas(bitmap));
+        assertEquals(2, radii.size());
+        pills.setGlassGround(null);
+        assertFalse(pills.hasGlass());
+    }
+
     private static HomePillsView pills() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         HomePillsView pills = new HomePillsView(activity);

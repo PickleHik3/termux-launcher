@@ -9,6 +9,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.text.TextPaint;
 import android.text.TextUtils;
@@ -39,7 +40,9 @@ import java.util.List;
 /**
  * The status bar's look on a Home page ({@link HomePillsPolicy}): the windows pill at the start
  * and the stats pill at the end. A child of the bar ({@link StatusBarSwipeLayout}), which draws
- * its own glass only inside {@link #pillsPath} while this shows, so the pills are the bar's glass.
+ * nothing of its own while this shows. Each pill stands on glass of its own, built by the activity
+ * from the status bar's surface values ({@link #setGlassGround}), so the pills are glass wherever
+ * the bar stands and whatever its own layers are doing on the Workspace.
  *
  * <p>Dumb: the activity hands it the floats, the focused one and the readings; the policy places
  * them; this draws and reports taps. Nothing here repaints at rest: a focus change moves the
@@ -50,6 +53,11 @@ public final class HomePillsView extends View {
     /** A section of the windows pill was tapped. */
     public interface Listener {
         void onSectionTapped(int index);
+    }
+
+    /** Builds the glass one pill stands on, for a pill of {@code cornerRadiusPx}. */
+    public interface GlassGround {
+        @Nullable Drawable pill(float cornerRadiusPx);
     }
 
     private static final float GLYPH_SP = 15f;
@@ -92,6 +100,12 @@ public final class HomePillsView extends View {
     @ColorInt private int mSurfaceBase;
     @ColorInt private int mPanel;
     private boolean mGlass;
+    @Nullable private GlassGround mGround;
+    /** Each pill's own glass, built at {@link #mGroundRadius}; drawn inside {@link #pillsPath}. */
+    @Nullable private Drawable mWindowsGlass;
+    @Nullable private Drawable mStatsGlass;
+    private float mGroundRadius = -1f;
+    private final Path mGlassClip = new Path();
     @Nullable private ChromeInk.Polarity mPolarity;
     private boolean mInkResolved;
 
@@ -182,14 +196,41 @@ public final class HomePillsView extends View {
     /** The layout on screen now, for tests. */
     @NonNull HomePillsPolicy.Layout layoutNow() { return mNow; }
 
-    /** Whether the bar draws its glass: the pills read their ink against it or the plain panel. */
-    void setGlass(boolean glass) {
-        if (glass == mGlass && mInkResolved) return;
-        mGlass = glass;
+    /**
+     * The glass the pills stand on, or null for none (the pills then read their ink against the
+     * plain panel). Built once per pill now and again only when the pills' corner radius changes;
+     * the caller hands a new ground when a glass value or the wallpaper frame moves.
+     */
+    public void setGlassGround(@Nullable GlassGround ground) {
+        mGround = ground;
+        mGlass = ground != null;
         mInkResolved = false;
+        buildGlass(mTarget.radius);
+        invalidate();
     }
 
-    /** The two pills' outline, for the bar to clip its glass to. Empty while nothing shows. */
+    /** Whether the pills stand on glass, for tests. */
+    boolean hasGlass() { return mWindowsGlass != null || mStatsGlass != null; }
+
+    private void buildGlass(float radius) {
+        if (mWindowsGlass != null) mWindowsGlass.setCallback(null);
+        if (mStatsGlass != null) mStatsGlass.setCallback(null);
+        mWindowsGlass = null;
+        mStatsGlass = null;
+        mGroundRadius = radius;
+        if (mGround == null || radius <= 0f) return;
+        mWindowsGlass = mGround.pill(radius);
+        mStatsGlass = mGround.pill(radius);
+        // A crossfading frame redraws itself through the view it is on.
+        if (mWindowsGlass != null) mWindowsGlass.setCallback(this);
+        if (mStatsGlass != null) mStatsGlass.setCallback(this);
+    }
+
+    @Override protected boolean verifyDrawable(@NonNull Drawable who) {
+        return who == mWindowsGlass || who == mStatsGlass || super.verifyDrawable(who);
+    }
+
+    /** The two pills' outline, which their glass is clipped to. Empty while nothing shows. */
     void pillsPath(@NonNull Path out) {
         out.reset();
         HomePillsPolicy.Layout layout = mNow;
@@ -238,6 +279,8 @@ public final class HomePillsView extends View {
             ? HomePillsPolicy.EMPTY
             : HomePillsPolicy.layout(mDensity, getWidth(), getHeight(), mInsetStart, mInsetEnd,
                 glyphs, mFocused, name, stats);
+        // The glass is built here, never in a draw: only a new pill height changes its corners.
+        if (mGround != null && target.radius != mGroundRadius) buildGlass(target.radius);
         if (target.equals(mTarget) && mMove == null) {
             invalidatePills();
             return;
@@ -298,6 +341,7 @@ public final class HomePillsView extends View {
         float half = mStrokePaint.getStrokeWidth() / 2f;
         float radius = Math.max(0f, layout.radius - half);
         float centerY = (layout.pillTop + layout.pillBottom) / 2f;
+        drawGlass(canvas, layout);
         if (layout.windowsShown) {
             mRect.set(layout.windowsLeft + half, layout.pillTop + half,
                 layout.windowsRight - half, layout.pillBottom - half);
@@ -349,6 +393,26 @@ public final class HomePillsView extends View {
                 x += mStatsValueWidths[i];
             }
         }
+    }
+
+    /** Each pill's glass, inside the pills' outline, under the stroke and the ink. */
+    private void drawGlass(@NonNull Canvas canvas, @NonNull HomePillsPolicy.Layout layout) {
+        if (mWindowsGlass == null && mStatsGlass == null) return;
+        pillsPath(mGlassClip);
+        if (mGlassClip.isEmpty()) return;
+        int saved = canvas.save();
+        canvas.clipPath(mGlassClip);
+        if (layout.windowsShown && mWindowsGlass != null) {
+            mWindowsGlass.setBounds(Math.round(layout.windowsLeft), layout.pillTop,
+                Math.round(layout.windowsRight), layout.pillBottom);
+            mWindowsGlass.draw(canvas);
+        }
+        if (layout.statsShown && mStatsGlass != null) {
+            mStatsGlass.setBounds(Math.round(layout.statsLeft), layout.pillTop,
+                Math.round(layout.statsRight), layout.pillBottom);
+            mStatsGlass.draw(canvas);
+        }
+        canvas.restoreToCount(saved);
     }
 
     /** The focused name, ellipsized once per room rather than per frame. */

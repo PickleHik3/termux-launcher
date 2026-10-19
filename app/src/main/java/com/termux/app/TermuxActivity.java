@@ -1765,7 +1765,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // keyboard crashes its next draw exactly like recycling it under a frost would.
             return frame != null
                 && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
-                    || frame == mFrameGutterBackdropBitmap
+                    || frame == mFrameGutterBackdropBitmap || frame == mHomePillsBackdropBitmap
                     || isSharedWallpaperBlurFrameInUse(frame));
         }
 
@@ -4016,6 +4016,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View gutterBody = frameGlassHost();
         if (gutterBody != null && shouldUseWallpaperPassthroughMode())
             applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && hasDockedFrameCard());
+        // So do Home's pills, and they let go of it once they are off screen.
+        applyHomePillsGlass(false);
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -24364,6 +24366,73 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         applyStatusBarStyle(host);
         applyTerminalWindowBarBackdropInsets();
+        applyHomePillsGlass(true);
+    }
+
+    /** The shared frame Home's pills are drawing, for the blur cache's in-use scan. */
+    @Nullable private Bitmap mHomePillsBackdropBitmap;
+    /** What the pills' glass was last built from; null while they have none. */
+    @Nullable private List<Object> mHomePillsGlassKey;
+
+    /**
+     * Home's pills stand on glass of their own rather than on the bar's layers clipped to them:
+     * the bar's glass rests on the dock's plank, stands down under a joined frame and waits on its
+     * frost pass, and each of those left the pills on nothing. Built from exactly the values the
+     * bar's glass is ({@link #applyTerminalWindowBarGlass}: the status bar's surface, or the
+     * dock's while the bar stands on the bottom edge), each pill a card of its own with the frost
+     * sampled at its place on screen. {@code force} rebuilds whatever the key says (a glass value
+     * or the theme the factory reads may have moved); otherwise only a new frame or value does.
+     */
+    private void applyHomePillsGlass(boolean force) {
+        com.termux.app.statusbar.HomePillsView pills = findViewById(R.id.terminal_home_pills);
+        if (pills == null) return;
+        if (!pills.isShown() || mChrome == null || mPreferences == null) {
+            if (mHomePillsGlassKey != null) pills.setGlassGround(null);
+            mHomePillsGlassKey = null;
+            mHomePillsBackdropBitmap = null;
+            return;
+        }
+        boolean joinsDock = mStatusBarEdge == PlaceLayout.Edge.BOTTOM;
+        float opacity = (joinsDock ? mPreferences.getAppBarOpacity()
+            : mPreferences.getStatusBarOpacity()) / 100f;
+        int blurRadiusDp = joinsDock
+            ? getEffectiveExtraKeysBlurRadius() : getEffectiveStatusBarBlurRadius();
+        int grain = joinsDock ? mPreferences.getDockGlassGrain() : mPreferences.getStatusBarGrain();
+        int tint = joinsDock ? mPreferences.getDockTintStrength()
+            : mPreferences.getStatusBarTintStrength();
+        Bitmap frame = null;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (shouldUseWallpaperPassthroughMode() && ChromePolicy.dockBlurEnabled(blurRadiusDp)
+                && wallpaperFrame != null) {
+            frame = mChrome.blurCache().obtain(blurRadiusDp, wallpaperFrame);
+            if (frame != null && frame.isRecycled()) frame = null;
+        }
+        Rect frameRect = new Rect(mChrome.blurCache().frameRectRef());
+        List<Object> key = Arrays.asList(frame, frameRect, blurRadiusDp, opacity, grain, tint,
+            mFancierGlassLook);
+        if (!force && key.equals(mHomePillsGlassKey)) return;
+        mHomePillsGlassKey = key;
+        mHomePillsBackdropBitmap = frame;
+        float density = getResources().getDisplayMetrics().density;
+        Bitmap clear = frame == null ? null : glassClearFrame(blurRadiusDp);
+        com.termux.app.chrome.GlassRefraction.Look look = mFancierGlassLook;
+        Bitmap ground = frame;
+        pills.setGlassGround(radius -> {
+            com.termux.app.chrome.SharedFrameDrawable backdrop = null;
+            if (ground != null && !ground.isRecycled()) {
+                backdrop = new com.termux.app.chrome.SharedFrameDrawable(ground, frameRect,
+                    mWallpaperParallax, com.termux.app.chrome.GlassAnchor.screen(pills));
+                backdrop.setClearFrame(clear);
+            }
+            // A card all round, with the bar's foot; the pills lay their own stroke.
+            com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec
+                .of(blurRadiusDp, opacity, grain, radius, look)
+                .withRim(false)
+                .withSlice(1f, true)
+                .withTintStrength(tint);
+            return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
+                backdrop);
+        });
     }
 
     /**
