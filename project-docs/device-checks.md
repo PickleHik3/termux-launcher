@@ -1238,6 +1238,18 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · fixes after the emulator pass of 0fa4635f7 · Drawer search, with a keyboard that
+  draws (Gboard or AOSP, not Mobilerun's headless IME): open the drawer from Home and from the
+  Terminal, tap Search apps, type "fir": the grid filters, nothing reaches the shell behind; with
+  the in-app keyboard on, its keys filter too. Back once with the system keyboard up closes the
+  keyboard (Android's), again clears the query, again closes the drawer. Use Android keyboard on:
+  same, and a hardware/adb key typed before the field is tapped lands in the query, not the shell.
+  Settings › Home with Lock Home layout on: Edit pages is dimmed, has no chevron and a tap or a
+  D-pad focus does nothing; off: as before. Edit pages at font scale 1.3: the default page's
+  "Home opens here · …" wraps whole. Settings root: search "12-hour", open the result, Back to
+  the root: the search box is empty and the root's own rows show. Open a search result: the old
+  results fade out before the page fades in, no frame with both. Restart launcher with a Home
+  float on screen: no black float frame · emulator, light and dark, font scale 1.3.
 - 2026-10-19 · waves 3 and 4 (F12-F17, F19) · Drawer, emulator, light and dark, font scale 1.3.
   Settings › Dock & drawer › App search › Open the only match on: type a name that matches one app,
   it opens after a short pause, typing on cancels it; off: only Enter opens it. Drawer layout page:

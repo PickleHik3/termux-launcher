@@ -76,6 +76,19 @@ public final class SettingsSearchPreference extends Preference {
         mShowImeOnNextBind = true;
     }
 
+    /**
+     * Empties the field and reports the empty query, so the screen's own rows come back. The field
+     * goes back to waiting for a tap, as on a fresh visit.
+     */
+    public void clearQuery() {
+        if (mQuery.isEmpty()) return;
+        mQuery = "";
+        mUserFocused = false;
+        mShowImeOnNextBind = false;
+        if (mListener != null) mListener.onQueryChanged(mQuery);
+        notifyChanged();
+    }
+
     /** Exposed for tests driving a query without a bound view. */
     @Nullable
     public OnQueryChangedListener getOnQueryChangedListener() {

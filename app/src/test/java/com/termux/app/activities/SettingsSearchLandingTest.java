@@ -87,6 +87,48 @@ public class SettingsSearchLandingTest {
         assertEquals(null, SettingsRowRing.sLastRungKey);
     }
 
+    /** The search is spent by the result it opened: Back finds the root's own rows, not the query. */
+    @Test
+    public void backFromAResultFindsTheRootWithoutTheQuery() {
+        SettingsActivity activity = open(new Intent(RuntimeEnvironment.getApplication(), SettingsActivity.class));
+        SettingsActivity.RootPreferencesFragment root = (SettingsActivity.RootPreferencesFragment) shown(activity);
+        EditText field = root.getView().findViewById(R.id.settings_search_input);
+        field.setText("12-hour");
+        assertFalse(root.searchResults().results().isEmpty());
+
+        SettingsSearchPreference search = root.findPreference("settings_search");
+        search.getOnQuerySubmitListener().onQuerySubmit("12-hour");
+        idle(activity);
+        FragmentManager fm = activity.getSupportFragmentManager();
+        fm.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        idle(activity);
+
+        assertTrue(shown(activity) instanceof SettingsActivity.RootPreferencesFragment);
+        SettingsActivity.RootPreferencesFragment back = (SettingsActivity.RootPreferencesFragment) shown(activity);
+        EditText again = back.getView().findViewById(R.id.settings_search_input);
+        assertEquals("", again.getText().toString());
+        assertTrue(back.searchResults().results().isEmpty());
+        assertEquals(null, back.findPreference("settings_search_results"));
+    }
+
+    /**
+     * A page fades through as one: its rows are laid out after the move captures its views, so a
+     * page the transition met row by row let the arriving rows draw over the leaving ones.
+     */
+    @Test
+    public void aPageIsOneTargetForItsTransition() {
+        SettingsActivity activity = open(new Intent(RuntimeEnvironment.getApplication(), SettingsActivity.class));
+        assertTrue(androidx.core.view.ViewGroupCompat.isTransitionGroup(
+            (android.view.ViewGroup) shown(activity).getView()));
+        SettingsSearchPreference search = ((SettingsActivity.RootPreferencesFragment) shown(activity))
+            .findPreference("settings_search");
+        search.getOnQueryChangedListener().onQueryChanged("12-hour");
+        search.getOnQuerySubmitListener().onQuerySubmit("12-hour");
+        idle(activity);
+        assertTrue(androidx.core.view.ViewGroupCompat.isTransitionGroup(
+            (android.view.ViewGroup) shown(activity).getView()));
+    }
+
     @Test
     public void everyOtherScreenSearchesFromTheToolbarScopedToItsSection() {
         Intent home = SettingsActivity.createFragmentIntent(RuntimeEnvironment.getApplication(),

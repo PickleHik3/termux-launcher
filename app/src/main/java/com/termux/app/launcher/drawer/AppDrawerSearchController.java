@@ -107,9 +107,9 @@ public final class AppDrawerSearchController
 
     /**
      * The Android-keyboard search: a focused text field owns typing, deleting and caret movement,
-     * and reports the result through {@link #replaceQuery}. The hardware-key channel then keeps
-     * only the strokes that mean something to the drawer rather than to the text — Enter, Esc and
-     * Back — and the in-app keyboard's interceptor is left to the yielded keyboard.
+     * and reports the result through {@link #replaceQuery}. Strokes still reaching the terminal's
+     * channels are the ones the field never saw, and are typed into the query as in the pill
+     * search; the in-app keyboard's interceptor is left to the yielded keyboard.
      */
     public void setTextFieldOwnsInput(boolean owns) {
         mTextFieldOwnsInput = owns;
@@ -267,32 +267,11 @@ public final class AppDrawerSearchController
      */
     public boolean handleKeyDown(int keyCode, @NonNull KeyEvent event) {
         if (!isActive()) return false;
-        if (mTextFieldOwnsInput) {
-            // Letters, backspace and the arrows are the field's; only the strokes that act on the
-            // drawer are claimed, and on the down stroke alone so the field never sees a stray up.
-            // A stroke reaching this channel at all means the terminal still holds focus — the
-            // field only takes it while its keyboard is up — so nothing claimed here is taken
-            // from a field that was about to be typed into.
-            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            switch (keyCode) {
-                case KeyEvent.KEYCODE_ENTER:
-                case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                    commit();
-                    return true;
-                case KeyEvent.KEYCODE_ESCAPE:
-                case KeyEvent.KEYCODE_BACK:
-                    // Back is the drawer's, never the field's, and it has to be claimed here even
-                    // though the field would answer one that reached it: while the plane is up the
-                    // activity swallows the *release* of every stroke, so a Back this channel
-                    // declines is dropped on the floor — onBackPressed() never runs and the press
-                    // neither collapses a category nor closes the drawer. Spends the press on the
-                    // same hierarchy Esc does.
-                    dismiss();
-                    return true;
-                default:
-                    return false;
-            }
-        }
+        // Whichever keyboard the search uses, a stroke that reaches this channel was sent to the
+        // terminal, never to the drawer's text field: a focused field takes its own keys. So it is
+        // typed into the query here, in either mode — declining it would hand it to the shell
+        // behind a full-screen plane (a hardware key before the pill is tapped, or a field that has
+        // not taken focus yet). The field is written back from the query it settles on.
         if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
         if (handleKeyCode(keyCode)) return true;
         // A chord is a shortcut, not a letter; swallowed rather than typed, as the palette does.
