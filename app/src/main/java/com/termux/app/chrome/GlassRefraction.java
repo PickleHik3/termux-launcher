@@ -596,6 +596,7 @@ public final class GlassRefraction {
         "const float kLagMaxDp = " + GlassMotionLight.LAG_MAX_DP + ";\n" +
         "const float kLagBend = " + GlassRefraction.LAG_BEND + ";\n" +
         "const float kLagBand = " + GlassRefraction.LAG_BAND + ";\n" +
+        "const float kLagLean = " + GlassRefraction.LAG_LEAN_GAIN + ";\n" +
         "const float kDentRadiusDp = " + GlassRefraction.DENT_RADIUS_DP + ";\n" +
         "const float kDentPeak = " + GlassRefraction.DENT_PEAK + ";\n" +
         "const float kLiveDisp = " + GlassRefraction.LIVE_DISPERSION + ";\n" +
@@ -679,7 +680,7 @@ public final class GlassRefraction {
         "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || uDent.z != 0.0;\n" +
         "    float2 bendV = float2(0.0, 0.0);\n" +
         "    if (live) {\n" +
-        "        float lean = clamp(dot(n, uLag) / (kLagMaxDp * uDensity), -1.0, 1.0);\n" +
+        "        float lean = clamp(kLagLean * dot(n, uLag) / (kLagMaxDp * uDensity), -1.0, 1.0);\n" +
         "        float tl = clamp(inside / (uBand * (1.0 + kLagBand * lean)), 0.0, 1.0);\n" +
         "        float bent = edgeProfile(tl) * min(uStrength * (1.0 + kLagBend * lean), min(b.x, b.y)) * edge;\n" +
         "        bendV = n * max(bent - pull, 0.0);\n" +
@@ -1091,13 +1092,18 @@ public final class GlassRefraction {
 
     /**
      * How much thicker the bend is on the edge a whole lag faces, as a share of its strength:
-     * half again; the edge behind it is as much thinner. {@code kLagBend}.
+     * twice it at a whole lean; the edge behind it thins to flat. {@code kLagBend}.
      */
-    static final float LAG_BEND = 0.5f;
+    static final float LAG_BEND = 1.0f;
     /** How much deeper the band reaches on that edge, and shallower behind it. {@code kLagBand}. */
-    static final float LAG_BAND = 0.3f;
+    static final float LAG_BAND = 0.8f;
+    /**
+     * How many times its share of {@link GlassMotionLight#LAG_MAX_DP} a lag leans the bend: the
+     * whole lean at a quarter of the clamp, so an ordinary slide shows. {@code kLagLean}.
+     */
+    static final float LAG_LEAN_GAIN = 4f;
     /** The dent's radius: about a fingertip. {@code kDentRadiusDp}. */
-    static final float DENT_RADIUS_DP = 28f;
+    static final float DENT_RADIUS_DP = 44f;
     /**
      * The dent's shape {@code s (1 - s²)²} at its steepest ({@code s = 1/√5}), so the depth is how
      * far the picture moves there: {@code 16 / (25 √5)}. {@code kDentPeak}. A literal, so it is a
@@ -1108,14 +1114,14 @@ public final class GlassRefraction {
      * The least colour split a live bend takes, as a share of how much further it bends than at
      * rest: the Edge slider's own share where that is more. {@code kLiveDisp}.
      */
-    static final float LIVE_DISPERSION = 0.05f;
+    static final float LIVE_DISPERSION = 0.15f;
 
     /**
      * The program's {@code lean}: how much of a whole lag an edge with outward normal
      * {@code (nx, ny)} takes for a lag of {@code (lagX, lagY)} px, -1 (behind) to 1 (facing it).
      */
     static float lagLean(float nx, float ny, float lagXPx, float lagYPx, float density) {
-        float lean = (nx * lagXPx + ny * lagYPx) / (GlassMotionLight.LAG_MAX_DP * density);
+        float lean = LAG_LEAN_GAIN * (nx * lagXPx + ny * lagYPx) / (GlassMotionLight.LAG_MAX_DP * density);
         return Math.max(-1f, Math.min(1f, lean));
     }
 

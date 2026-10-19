@@ -58,13 +58,13 @@ public final class GlassMotionLight {
      */
     static final float LAG_MAX_DP = 160f;
     /** How far the picture moves under the middle of a full dent, dp at its steepest. */
-    static final float DENT_DEPTH_DP = 2.5f;
+    static final float DENT_DEPTH_DP = 10f;
     /** Lag under this, at a rate under {@link #LAG_REST_DP_PER_S}, is none: well under a pixel of bend. */
     static final float LAG_REST_DP = 1.0f;
     static final float LAG_REST_DP_PER_S = 20f;
     /** A dent within this of where it is going, at a rate under {@link #DENT_REST_DP_PER_S}, is there. */
-    static final float DENT_REST_DP = 0.02f;
-    static final float DENT_REST_DP_PER_S = 0.5f;
+    static final float DENT_REST_DP = 0.08f;
+    static final float DENT_REST_DP_PER_S = 2.0f;
     /** Two draws further apart than this are not one motion. */
     static final long MAX_GAP_MS = 100L;
     /**

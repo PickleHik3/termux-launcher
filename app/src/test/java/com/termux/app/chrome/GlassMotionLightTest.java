@@ -383,7 +383,7 @@ public class GlassMotionLightTest {
         assertEquals(1f, GlassRefraction.lagLean(1f, 0f, whole * 2f, 0f, DENSITY), 0f);
         assertEquals(-1f, GlassRefraction.lagLean(-1f, 0f, whole * 2f, 0f, DENSITY), 0f);
         assertEquals(0f, GlassRefraction.lagLean(0f, 1f, whole, 0f, DENSITY), 0f);
-        assertEquals(0.5f, GlassRefraction.lagLean(1f, 0f, whole * 0.5f, 0f, DENSITY), 1e-6f);
+        assertEquals(0.5f, GlassRefraction.lagLean(1f, 0f, whole * 0.5f / GlassRefraction.LAG_LEAN_GAIN, 0f, DENSITY), 1e-6f);
     }
 
     @Test
@@ -425,6 +425,7 @@ public class GlassMotionLightTest {
         assertTrue(agsl.indexOf("sn = split > 0.0 ? sv / split : n;") > agsl.lastIndexOf("if (live) {"));
         // The constants are the Java ones.
         assertConst(agsl, "kLagMaxDp", GlassMotionLight.LAG_MAX_DP);
+        assertConst(agsl, "kLagLean", GlassRefraction.LAG_LEAN_GAIN);
         assertConst(agsl, "kLagBend", GlassRefraction.LAG_BEND);
         assertConst(agsl, "kLagBand", GlassRefraction.LAG_BAND);
         assertConst(agsl, "kDentRadiusDp", GlassRefraction.DENT_RADIUS_DP);
