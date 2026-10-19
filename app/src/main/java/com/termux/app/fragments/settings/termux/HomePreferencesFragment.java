@@ -71,8 +71,5 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
         // The accessibility service or Shizuku may have come or gone while the page was away.
         HomeGesturesRows.bind(this);
         showEditPagesRow(HomeSettings.isLayoutLocked(context));
-        Preference transition = findPreference(HomeSettings.KEY_PAGE_TRANSITION);
-        if (transition != null) transition.setSummary(
-            HomePageTransitionFragment.titleOf(HomeSettings.pageTransition(context)));
     }
 }
