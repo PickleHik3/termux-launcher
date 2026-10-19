@@ -126,7 +126,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             // The one Appearance editor; nothing is preselected (SPEC §3.1).
             intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
+            SettingsEditorDoors.open(this, preference, intent);
             return true;
         });
 

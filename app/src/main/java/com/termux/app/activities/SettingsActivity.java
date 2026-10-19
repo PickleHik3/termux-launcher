@@ -25,6 +25,9 @@ import androidx.preference.PreferenceManager;
 import androidx.preference.PreferenceScreen;
 import com.termux.R;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.fragments.settings.SettingsMotion;
+import com.termux.app.fragments.settings.SettingsMotionPolicy;
+import com.termux.app.fragments.settings.SettingsTransitions;
 import com.termux.app.fragments.settings.SettingsMaterialDialogs;
 import com.termux.app.fragments.settings.SettingsRowRing;
 import com.termux.app.fragments.settings.SettingsSearchFragment;
@@ -193,11 +196,19 @@ public class SettingsActivity extends AppCompatActivity implements
             // and back stack they had instead of popping to root.
             return;
         }
+        // A deep link into an open Settings crosses the tree: whatever is on show fades through
+        // to the page it names, in one batch, so nothing in between is drawn.
+        FragmentManager fm = getSupportFragmentManager();
+        boolean instant = SettingsMotion.isInstant(this);
+        Fragment visible = fm.findFragmentById(R.id.settings);
+        if (visible != null) SettingsTransitions.leaveByJump(this, visible, instant);
         mPushedScreens.clear();
-        getSupportFragmentManager().popBackStackImmediate(null,
-            FragmentManager.POP_BACK_STACK_INCLUSIVE);
-        getSupportFragmentManager().beginTransaction()
-            .replace(R.id.settings, buildInitialFragment())
+        fm.popBackStack(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        Fragment base = buildInitialFragment();
+        SettingsTransitions.arriveByJump(this, base, instant);
+        fm.beginTransaction()
+            .setReorderingAllowed(true)
+            .replace(R.id.settings, base)
             .commit();
         setTitleFromIntent(intent);
     }
@@ -259,8 +270,9 @@ public class SettingsActivity extends AppCompatActivity implements
         SettingsBackStackState saved = SettingsBackStackState.parse(raw);
         if (saved == null || !saved.isFresh(System.currentTimeMillis())) return false;
 
+        Fragment out = new RootPreferencesFragment();
         getSupportFragmentManager().beginTransaction()
-            .replace(R.id.settings, new RootPreferencesFragment())
+            .replace(R.id.settings, out)
             .commit();
 
         // A stack saved before the restructure names pages that moved: replay it in today's tree.
@@ -279,8 +291,11 @@ public class SettingsActivity extends AppCompatActivity implements
                 args = new Bundle();
                 if (entry.place != null) args.putString(EXTRA_INITIAL_PLACE, entry.place);
                 if (entry.scrollToKey != null) args.putString(EXTRA_SCROLL_TO_KEY, entry.scrollToKey);
+                // It rang when it was first opened.
+                SettingsRowRing.markRung(args);
             }
-            pushScreen(screenClass, entry.titleResId, entry.titleText, args);
+            out = pushScreen(screenClass, entry.titleResId, entry.titleText, args,
+                SettingsMotionPolicy.Move.RESTORE, null, out);
         }
         return true;
     }
@@ -353,7 +368,7 @@ public class SettingsActivity extends AppCompatActivity implements
         Fragment shown = getSupportFragmentManager().findFragmentById(R.id.settings);
         SettingsTree.Section scope = shown == null ? null : SettingsTree.sectionOf(shown.getClass().getName());
         pushScreen(SettingsSearchFragment.class, R.string.settings_search_hint, null,
-            SettingsSearchFragment.arguments(scope));
+            SettingsSearchFragment.arguments(scope), SettingsMotionPolicy.Move.JUMP, null, shown);
     }
 
     /**
@@ -366,8 +381,23 @@ public class SettingsActivity extends AppCompatActivity implements
         List<SettingsTree.Screen> path = SettingsTree.path(screenClass);
         if (path.isEmpty()) return;
         hideKeyboard();
+        jumpTo(path, key);
+    }
+
+    /**
+     * Replaces whatever is open with {@code path} (a section's page down to one of its screens),
+     * the last one scrolled to {@code key}. The screen on show fades through to the last one; the
+     * screens between are pushed paired with shared-axis motion, so Back walks up the tree as if
+     * the reader had come down it. One batch: nothing in between is drawn.
+     */
+    private void jumpTo(@NonNull List<SettingsTree.Screen> path, @Nullable String key) {
+        FragmentManager fm = getSupportFragmentManager();
+        boolean instant = SettingsMotion.isInstant(this);
+        Fragment visible = fm.findFragmentById(R.id.settings);
+        if (visible != null) SettingsTransitions.leaveByJump(this, visible, instant);
         mPushedScreens.clear();
-        getSupportFragmentManager().popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        fm.popBackStack(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        Fragment out = null;
         for (int i = 0; i < path.size(); i++) {
             SettingsTree.Screen screen = path.get(i);
             Bundle args = null;
@@ -375,8 +405,11 @@ public class SettingsActivity extends AppCompatActivity implements
                 args = new Bundle();
                 args.putString(EXTRA_SCROLL_TO_KEY, key);
             }
-            pushScreen(loadScreenClass(screen.className), screen.titleRes, null, args);
+            out = pushScreen(loadScreenClass(screen.className), screen.titleRes, null, args,
+                SettingsMotionPolicy.Move.PUSH, null, out);
         }
+        if (out != null) SettingsTransitions.arriveByJump(this, out, instant);
+        fm.executePendingTransactions();
     }
 
     @SuppressWarnings("unchecked")
@@ -429,11 +462,20 @@ public class SettingsActivity extends AppCompatActivity implements
      */
     public void openScreen(@NonNull Class<? extends Fragment> fragmentClass, @StringRes int titleResId,
                            @Nullable Bundle args) {
-        pushScreen(fragmentClass, titleResId, null, args);
+        pushScreen(fragmentClass, titleResId, null, args, SettingsMotionPolicy.Move.PUSH, null,
+            getSupportFragmentManager().findFragmentById(R.id.settings));
     }
 
-    private void pushScreen(@NonNull Class<? extends Fragment> fragmentClass, int titleResId,
-                            @Nullable String titleText, @Nullable Bundle args) {
+    /**
+     * Pushes one screen. {@code out} is the screen it replaces (the one on show, or the previous
+     * one of a batch); {@code fromRow} the row it was opened from, when on screen. The motion is
+     * {@link SettingsMotionPolicy}'s choice for {@code move}. Returns the pushed fragment.
+     */
+    @NonNull
+    private Fragment pushScreen(@NonNull Class<? extends Fragment> fragmentClass, int titleResId,
+                                @Nullable String titleText, @Nullable Bundle args,
+                                @NonNull SettingsMotionPolicy.Move move, @Nullable View fromRow,
+                                @Nullable Fragment out) {
         String place = args == null ? null : args.getString(EXTRA_INITIAL_PLACE);
         String scrollToKey = args == null ? null : args.getString(EXTRA_SCROLL_TO_KEY);
         // A saved or external entry for an old page, scrolled to a row that moved, opens the
@@ -444,13 +486,22 @@ public class SettingsActivity extends AppCompatActivity implements
         if (args != null) fragment.setArguments(args);
         mPushedScreens.add(new SettingsBackStackState.Entry(
             className, titleResId, titleText, place, scrollToKey));
+        SettingsMotionPolicy.Kind kind = SettingsMotionPolicy.choose(move,
+            out == null ? null : out.getClass().getName(), className, fromRow != null,
+            SettingsMotion.isInstant(this));
+        // Reordering lets a batch (a jump, a restored stack) run as one move from the screen on
+        // show to the last one, skipping the screens in between.
+        androidx.fragment.app.FragmentTransaction transaction =
+            getSupportFragmentManager().beginTransaction().setReorderingAllowed(true);
+        SettingsTransitions.apply(this, kind, out, fragment, transaction, fromRow);
         // Named by its position so it always pops exactly one entry at a time, staying aligned
         // with mPushedScreens (see onBackStackChanged).
-        getSupportFragmentManager().beginTransaction()
+        transaction
             .replace(R.id.settings, fragment)
             .addToBackStack(String.valueOf(mPushedScreens.size()))
             .commit();
         updateTitleForCurrentStack();
+        return fragment;
     }
 
     /**
@@ -487,6 +538,8 @@ public class SettingsActivity extends AppCompatActivity implements
                                                   Bundle savedInstanceState) {
                     // The toolbar's search action depends on which screen is showing.
                     invalidateOptionsMenu();
+                    // An editor growing out of its row takes the row's transition name.
+                    SettingsTransitions.nameContainer(fragment, view);
                     if (!(fragment instanceof PreferenceFragmentCompat)) return;
                     PreferenceFragmentCompat preferenceFragment = (PreferenceFragmentCompat) fragment;
                     // Root rows rely on the category header hairline, sub-screens on theirs; a
@@ -612,7 +665,10 @@ public class SettingsActivity extends AppCompatActivity implements
             @SuppressWarnings("unchecked")
             Class<? extends Fragment> screenClass = (Class<? extends Fragment>) fragmentClass;
             CharSequence title = preference.getTitle();
-            pushScreen(screenClass, 0, title == null ? null : title.toString(), preference.getExtras());
+            Bundle extras = preference.getExtras();
+            pushScreen(screenClass, 0, title == null ? null : title.toString(),
+                extras.isEmpty() ? null : new Bundle(extras), SettingsMotionPolicy.Move.PUSH,
+                SettingsTransitions.rowView(caller, preference), caller);
             return true;
         } catch (ClassNotFoundException e) {
             return false;

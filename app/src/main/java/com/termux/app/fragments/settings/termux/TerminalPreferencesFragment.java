@@ -45,7 +45,7 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
         androidx.preference.Preference layout = findPreference("terminal_layout_editor");
         if (layout != null) layout.setOnPreferenceClickListener(row -> {
-            SettingsEditorDoors.openLayoutEditor(this, com.termux.app.wall.PaneWallPage.TERMINAL);
+            SettingsEditorDoors.openLayoutEditor(this, row, com.termux.app.wall.PaneWallPage.TERMINAL);
             return true;
         });
         SettingsLayoutUtils.applyScreenLayout(this);

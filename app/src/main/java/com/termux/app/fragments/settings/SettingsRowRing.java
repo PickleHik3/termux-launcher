@@ -36,6 +36,11 @@ public final class SettingsRowRing {
     @VisibleForTesting
     @Nullable public static String sLastRungKey;
 
+    /** Marks a page's arguments as already rung: a stack rebuilt after a restart stays quiet. */
+    public static void markRung(@NonNull Bundle arguments) {
+        arguments.putBoolean(ARG_RUNG, true);
+    }
+
     /** Rings the row the page was opened on, if any and not already rung. */
     public static void ringIfAsked(@NonNull PreferenceFragmentCompat fragment) {
         Bundle arguments = fragment.getArguments();

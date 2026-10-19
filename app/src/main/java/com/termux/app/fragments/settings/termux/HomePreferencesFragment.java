@@ -31,7 +31,7 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
         super.onCreatePreferences(savedInstanceState, rootKey);
         Preference layout = findPreference("home_layout_editor");
         if (layout != null) layout.setOnPreferenceClickListener(row -> {
-            SettingsEditorDoors.openLayoutEditor(this, PaneWallPage.WIDGETS);
+            SettingsEditorDoors.openLayoutEditor(this, row, PaneWallPage.WIDGETS);
             return true;
         });
     }

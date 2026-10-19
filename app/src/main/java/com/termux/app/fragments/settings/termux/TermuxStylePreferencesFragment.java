@@ -80,7 +80,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             intent.putExtra(TermuxActivity.EXTRA_WALLPAPER_STYLE, true);
             intent.putExtra(TermuxActivity.EXTRA_APPEARANCE_FROM_SETTINGS, true);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
+            SettingsEditorDoors.open(this, preference, intent);
             return true;
         });
         configureTerminalContrastPreference();

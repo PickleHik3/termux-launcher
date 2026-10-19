@@ -1234,6 +1234,8 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · feat(settings) motion · The four motions feel right and never stutter on a long
+  page (Keyboard, Linux apps); the row ring reads as "here it is", not as an alarm · pong, by hand.
 Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
 - 2026-10-19 · commit "refactor(settings): regroup Settings by the wall's halves" · Before/after
   screenshots of every moved screen: the root, Home, Dock & drawer, Terminal and its four new
@@ -1252,6 +1254,11 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
   through its section. The keyboard's search key opens the first result. From Home's toolbar
   search the field opens focused with the keyboard up, reading "Search Home" · emulator, light
   and dark, font scale 1.3.
+- 2026-10-19 · commit "feat(settings): Material motion between settings screens" · Root → Terminal
+  → Text & display slides forward, Back slides back; Keyboard → Keyboard theme grows out of its
+  row and fades away on Back; a search result fades through; Home › Layout opens the editor
+  growing from the row; with Remove animations on, every one of these is an instant cut ·
+  emulator, screen recording.
 - 2026-10-19 · same · Doors from outside Settings land where they did: the display window's cog
   (Linux apps), the Apps bar opener (Dock & drawer), Look and feel (Look), the drawer's settings
   (Drawer layout), the keyboard theme from the Appearance editor, Edit extra keys · emulator.
