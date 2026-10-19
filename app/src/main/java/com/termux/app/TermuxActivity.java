@@ -12373,10 +12373,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (intent == null || !intent.getBooleanExtra(EXTRA_SURFACE_EDITOR, false))
             return;
         String initialSection = intent.getStringExtra(EXTRA_SURFACE_EDITOR_SECTION);
+        boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
+        intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
         openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LOOK,
             initialSection, null, null);
+        // Keyboard's Appearance row in Settings: closing the editor goes back to Settings.
+        if (fromSettings) mAppearanceFromSettings = true;
     }
 
     /** Settings' "Appearance" row: the launcher comes forward with the Appearance surface open. */

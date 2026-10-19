@@ -21,7 +21,8 @@ import com.termux.app.wall.PaneWallPage;
  * Layout rows at the top of Home and of Terminal, Look's Appearance row and Keyboard's. The launcher
  * comes forward growing out of the row that opened it (the window's scale-up from the row's
  * bounds: the container transform's equivalent across two activities), or at once under reduced
- * motion. Closing the Layout or Appearance editor comes back to Settings.
+ * motion. Every one of these marks its Intent {@code EXTRA_APPEARANCE_FROM_SETTINGS}, so closing
+ * the editor comes back to Settings.
  */
 public final class SettingsEditorDoors {
 
