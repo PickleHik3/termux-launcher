@@ -740,7 +740,11 @@ are void.
     settings → that reading goes; no weather. Narrow a float, and at font scale 1.3 on a 360 dp
     phone: RAM drops first, then CPU, never over the grip or a button; dragging the strip over the
     readings still moves the float. With no focused float on Home the CPU sampler is idle
-    (`dumpsys` or the stats card's cadence): only a focused float's readings wake it.
+    (`dumpsys` or the stats card's cadence): only a focused float's readings wake it. Height: at
+    font scale 1.3 the readings' glyphs and figures sit whole inside the 24dp strip (no clipped
+    tops or descenders, centred on the buttons' line); at 1.5 and above they are gone rather than
+    clipped, and the strip is the plain one. Readings keep ticking on Home while the Workspace
+    bar has CPU/RAM on.
   - Float chips: minimise a float → it flies into a small glass chip centred just above the dock
     (glyph and short name), the chip lands where the flight ends; minimise a second on another Home
     page → two chips, both on every page; tap a chip → Home pages to its float, which comes back
@@ -751,8 +755,13 @@ are void.
     closes unless always on). Chips wear the dock's glass (Opacity, Blur, Grain and Tint, inherited
     and detached; a wallpaper change updates them), readable in light/dark/black/Material You;
     Docked and Floating; many floats (8+) at font 1.3: names drop, then chips narrow, none overlap;
-    a tap between chips reaches the widget under; on the Workspace there are no chips (the bar's
-    chips still list the floats); palette Minimise all / Restore floats update the row.
+    a tap between chips reaches the widget under, a sideways swipe between or on chips pages Home,
+    a vertical swipe beside the row opens the palette as elsewhere, and a press between chips gives
+    Home its focus back; a press on a chip that slides past a few pixels does not restore; on the
+    Workspace there are no chips (the bar's chips still list the floats); palette Minimise all /
+    Restore floats update the row; a chip's label follows its float's program (rename the window,
+    run `vim` before minimising); change the scheme or Material You colours without restarting:
+    the chips' glass and ink follow.
 
 ### Wall rework phase two: slice 2, Style, Corners and Margin on Home (feat/wall-rework-phase2)
 - 2026-10-18 · commit "feat(wall): the chrome wears the Style, Corners and Margin of the half on
