@@ -92,7 +92,9 @@ public final class HomeChromePolicy {
      * Whether the status bar floats over the page's content rather than taking room from it. A
      * Home page wears no status bar of any kind (2026-10-19), so this only says what a bar there
      * would do: overlay the page as the dock does, leaving the widget grid its whole height. On a
-     * window the bar takes its band as always ({@link EdgeStackPolicy#topOverlapPx}).
+     * window the bar takes its band as always. Applied per page ({@link PageTopInsets}): wherever
+     * a Home page can be on screen the canvas reaches up under the bar, a Home page starts at its
+     * top and a window one band below it, so a slide across the seam moves neither at settle.
      */
     public static boolean statusOverlays(@NonNull PaneWallPage page) {
         return isHome(page);
