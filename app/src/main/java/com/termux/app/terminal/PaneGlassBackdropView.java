@@ -12,6 +12,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.view.View;
+import android.view.animation.AnimationUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -19,6 +20,8 @@ import androidx.annotation.Nullable;
 import com.termux.app.chrome.FrameCrossfade;
 import com.termux.app.chrome.GlassAnchor;
 import com.termux.app.chrome.GlassFilters;
+import com.termux.app.chrome.GlassMotionGate;
+import com.termux.app.chrome.GlassMotionLight;
 import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.chrome.WallpaperParallax;
 
@@ -60,6 +63,14 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     private final int[] mRootLocation = new int[2];
     private final Rect mFrameRect = new Rect();
     private final RectF mClipRect = new RectF();
+    /**
+     * Motion light ({@link GlassMotionLight}): fed this slab's screen rect on every draw it already
+     * makes, built on the first draw through the program. Null until then, and while the slab
+     * draws plain.
+     */
+    @Nullable private GlassMotionLight mMotionLight;
+    /** Scratch for the slab's corners on screen; a draw never allocates. */
+    private final float[] mMotionCorners = new float[4];
 
     @Nullable private Bitmap mFrame;
     @Nullable private BitmapShader mFrameShader;
@@ -465,6 +476,53 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         }
     }
 
+    /**
+     * A finger pressed this slab at {@code (x, y)} in its own px: one soft light runs along its
+     * rim toward the finger ({@link GlassMotionLight#press}). Nothing on a slab drawn plain, and
+     * nothing where Motion light is off or motion is stopped.
+     */
+    public void pressLight(float x, float y) {
+        if (mProgram == null || getWidth() <= 0 || getHeight() <= 0) return;
+        if (motionLight().press(AnimationUtils.currentAnimationTimeMillis(), x, y, getWidth(),
+                getHeight())) {
+            postInvalidateOnAnimation();
+        }
+    }
+
+    @NonNull
+    private GlassMotionLight motionLight() {
+        GlassMotionLight light = mMotionLight;
+        if (light == null) {
+            light = new GlassMotionLight(getResources().getDisplayMetrics().density,
+                GlassMotionGate.of(getContext()));
+            mMotionLight = light;
+        }
+        return light;
+    }
+
+    /**
+     * Hands the light this slab's rect on screen, read off the placement this draw already took
+     * (the page's slide, sink and tilt and any published motion in it). True while it is lit.
+     */
+    private boolean driveMotionLight(int width, int height) {
+        float[] corners = mMotionCorners;
+        corners[0] = 0f;
+        corners[1] = 0f;
+        corners[2] = width;
+        corners[3] = height;
+        mPlacement.toScreen.mapPoints(corners);
+        return motionLight().onDraw(AnimationUtils.currentAnimationTimeMillis(),
+            Math.min(corners[0], corners[2]), Math.min(corners[1], corners[3]),
+            Math.max(corners[0], corners[2]), Math.max(corners[1], corners[3]));
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        // A slab that comes back starts from rest, never from the light it left with.
+        if (mMotionLight != null) mMotionLight.reset();
+    }
+
     /** The colour laid over the arcs: the wall's dim over its wallpaper, or a flat colour alone. */
     public void setCornerMaskFallbackColor(int color) {
         if (mCornerMaskFallbackColor == color) return;
@@ -542,6 +600,14 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             }
             float parallax = mParallax == null ? 0f : mParallax.offsetPx();
             GlassRefraction.Program program = mProgram;
+            if (program != null) {
+                // Where the slab stands now against where it stood last draw: the light follows its
+                // speed, and asks for the frames it needs to settle. At rest it is dark and asks
+                // for none.
+                if (driveMotionLight(width, height)) postInvalidateOnAnimation();
+                program.setMotionLight(mMotionLight);
+                if (mPreviousProgram != null) mPreviousProgram.setMotionLight(mMotionLight);
+            }
             if (mAimStale || aimShader != mLastAimShader || !mPlacement.toScreen.equals(mLastToScreen)
                 || width != mLastWidth || height != mLastHeight || parallax != mLastParallax) {
                 mAimStale = false;

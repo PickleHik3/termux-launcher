@@ -835,6 +835,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 TERMUX_APP.MAX_FANCIER_GLASS_CLARITY), false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_MOTION_LIGHT}. */
+    public boolean isFancierGlassMotionLightEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FANCIER_GLASS_MOTION_LIGHT, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_MOTION_LIGHT);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_MOTION_LIGHT}. */
+    public void setFancierGlassMotionLightEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FANCIER_GLASS_MOTION_LIGHT, value, false);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_SHOW_KEY_HINTS}. */
     public boolean isShowKeyHintsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
