@@ -63,13 +63,12 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   it, and **Fn** with the paste key types the text out instead, for an app that has its own idea
   of what Ctrl+V means. The two sides share by default; **Settings → Display → Input → Share the
   clipboard** keeps them apart.
-- **Switching apps.** The keyboard's window actions work on the display's apps: swipe the space
-  bar from its top corners (**Next window** at the top right, **Previous window** at the top
-  left) to step through the display's apps, in the order the sessions drawer lists them. Over the
-  display the status bar keeps your windows' chips, with the display's own selected and wearing
-  its front app's icon. The same
-  actions on the extra-keys row, a key chord or `launcherctl` do the same while a display window
-  is showing.
+- **Switching.** The display window is one of your windows, so **Next window** and **Previous
+  window** (the space bar's top corners, the extra-keys row, a key chord, `launcherctl`) step from
+  it to the windows beside it and back, as from any window. Over the display the status bar keeps
+  your windows' chips, with the display's own selected and wearing its front app's icon. To bring
+  one of the display's apps forward, tap it under **Displays** in the sessions drawer, or use the
+  display's own window manager.
 - **The keyboard follows text fields.** In Touchscreen touch mode, tapping a text field on the
   display brings the keyboard up and tapping elsewhere puts it down; see
   [The keyboard follows text fields](#the-keyboard-follows-text-fields).

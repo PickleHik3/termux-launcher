@@ -1208,14 +1208,28 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
 - 2026-10-19 · same · × on the display's chip with xeyes open: asked first, xeyes closes, the
   server stops (`pgrep -f termux-x11` empty), the window on its left comes in front; with no app
   open it stops at once; on an unstarted display (no xkeyboard-config) it just goes · pong.
-- 2026-10-19 · same · Close the last terminal window while the display window is in the row: the
-  display window takes the Workspace instead of Home sliding in · pong.
+- 2026-10-19 · same, review fixes · Close the last terminal window while the display window is in
+  the row: the display window comes in from the left instead of Home sliding in; in a row a, D, b
+  close b while it is in front: the display window takes the front (no blank page) · pong.
+- 2026-10-19 · review fixes · On the display window: the Terminal key (`wall.terminal`) and the
+  dock's Terminal entry bring the terminal window behind it in front (a fresh shell when the row
+  has none); Ctrl+Alt+X from the palette or `launcherctl window.close` stops the display (asked
+  first with an app open) and never closes the hidden terminal window; Rename window does
+  nothing; `launcherctl pane.expel to=right` answers `display_window` · pong.
+- 2026-10-19 · review fixes · From the display window to a terminal by chip or border drag: the
+  display keeps its picture while it slides out (no black or frozen frame), and typing reaches the
+  terminal at once; then a dark/light mode switch (activity recreate) with the display window
+  second in the row and in front: it comes back second and in front · pong.
+- 2026-10-19 · review fixes · Palette window jumps with the display window first in the row: each
+  jump lands on the window it names; `launcherctl pane.list` reports `rowIndex` one more than
+  `index` for windows after the display · pong.
 - 2026-10-19 · same · `launcherctl wall.go page=display` and the `wall.display` key: open the
   display when none is up, bring the window in front when one is; from another session's row it
   moves into this session's row at its end · pong.
 - 2026-10-19 · same · Keyboard form on the display window: in landscape the keyboard floats over
   the display, in portrait it makes room, as before; mouse mode's key swaps pad and keyboard; the
-  space bar's corner swipes still step through the display's apps · pong.
+  space bar's corner swipes step from the display window to its neighbours in the row and back
+  (no longer through the display's apps) · pong.
 - 2026-10-19 · same · Settings → Display → Linux apps has no Display badge row and otherwise looks
   exactly as before · pong, screenshot against the previous build.
 
