@@ -74,7 +74,14 @@ import java.util.Properties;
  * edit-row deep link, all of which now land in Settings rather than in a sheet over the terminal.
  */
 @Keep
-public class ExtraKeysEditorFragment extends Fragment {
+public class ExtraKeysEditorFragment extends Fragment
+    implements com.termux.app.fragments.settings.SettingsUnsavedChanges {
+
+    @Override
+    public boolean hasUnsavedChanges() {
+        return backCallback.isEnabled();
+    }
+
 
     /** Height of one row of the live toolbar, before the user's {@code terminal-toolbar-height}. */
     private static final float ROW_HEIGHT_DP = 37.5f;
