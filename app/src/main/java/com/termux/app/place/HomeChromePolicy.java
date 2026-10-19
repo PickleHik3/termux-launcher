@@ -50,7 +50,8 @@ public final class HomeChromePolicy {
      * Whether the page wears Home's own Style, Corners and Margin rather than the Workspace's. A
      * Home page does, whatever minimal mode says; a window wears the Workspace's. Home's are
      * seeded from the Workspace's (they read them while unset), so the two differ only once the
-     * user has set Home apart. The chrome on screen switches at settle, with the layout variant.
+     * user has set Home apart. At rest the chrome wears the committed page's; mid-slide across the
+     * seam each surface wears the half it belongs to ({@link SeamDress}).
      */
     public static boolean wearsHomeShape(@NonNull PaneWallPage page) {
         return isHome(page);

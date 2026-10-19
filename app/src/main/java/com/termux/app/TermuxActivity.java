@@ -787,6 +787,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private PlaceLayout mTravelSeamOtherLayout;
     @NonNull private com.termux.app.place.SeamTravel.DockPlan mTravelSeamPlan =
         com.termux.app.place.SeamTravel.DockPlan.NONE;
+    /**
+     * Whether the two halves dress the stack differently for this gesture (SeamDress.StackDress),
+     * and so whether the stack has to be dressed again when it changes halves; whether it then
+     * dips whole, keyboard included; and which of the two halves keeps a keyboard in the stack.
+     */
+    private boolean mTravelSeamDressDiffers, mTravelSeamShapeDiffers, mTravelSeamWholeStack;
+    private boolean mTravelSeamCommittedKeyboard, mTravelSeamOtherKeyboard;
+    /**
+     * The page whose half the stack wears while a slide across the seam stands the other half's
+     * rows (SeamDress.stackPage): its Style, Corners, Margin and its layout's sizes. Null while the
+     * stack wears the committed page's, which is always at rest.
+     */
+    @Nullable private com.termux.app.wall.PaneWallPage mTravelStackDressPage;
+    /** The stack changed halves while they dress it differently: the seam's pass dresses it. */
+    private boolean mTravelStackRestylePending;
     /** Where the status bar was last drawn from its rest as it travels with the Workspace's page. */
     private float mStatusTravelXPx;
     /**
@@ -1730,7 +1745,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean roundedDockStyle() {
-            return isRoundedDockStyle();
+            return isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         }
 
         @Override public void onWindowBarFrostEdge(boolean drawsEdge) {
@@ -1757,7 +1772,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public int statusBarSeamEdges() {
-            return com.termux.app.chrome.LiveChromeShape.seamEdges(chromeShape(),
+            return com.termux.app.chrome.LiveChromeShape.seamEdges(chromeShape(com.termux.app.place.SeamDress.Surface.STATUS),
                 Collections.singletonList(com.termux.app.place.ChromeShape.PieceId.STATUS));
         }
 
@@ -3295,7 +3310,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * rounded insert.
      */
     private float terminalEdgeCornerRadiusPx() {
-        return layoutCornersPx();
+        return layoutCornersPx(com.termux.app.place.SeamDress.Surface.FRAME);
     }
 
     /**
@@ -3437,7 +3452,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
     private int terminalFrameInsetPx(boolean vertical) {
-        return terminalFrameInsetPx(chromeShape(), vertical);
+        return terminalFrameInsetPx(chromeShape(com.termux.app.place.SeamDress.Surface.FRAME), vertical);
     }
 
     /**
@@ -3446,7 +3461,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * vertical. The shape is the same answer both calls built, built once.
      */
     private void terminalFrameInsetsPx(@NonNull int[] out) {
-        com.termux.app.place.ChromeShape shape = chromeShape();
+        com.termux.app.place.ChromeShape shape = chromeShape(com.termux.app.place.SeamDress.Surface.FRAME);
         out[0] = terminalFrameInsetPx(shape, false);
         out[1] = terminalFrameInsetPx(shape, true);
     }
@@ -3630,7 +3645,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private Drawable terminalBorderRim(@NonNull View borderView, float cornerRadiusPx) {
         int strokePx = Math.max(1, Math.round(dpToPx(1)));
-        boolean line = !isRoundedDockStyle();
+        boolean line = !isRoundedStyle(com.termux.app.place.SeamDress.Surface.FRAME);
         Drawable rim = mTerminalBorderRim;
         if (rim != null && borderView.getBackground() == rim
             && Float.compare(cornerRadiusPx, mTerminalBorderRimRadiusPx) == 0
@@ -3652,7 +3667,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * are edge cards and the gutter is the wallpaper, as it is under Floating.
      */
     private boolean hasDockedFrameCard() {
-        for (com.termux.app.place.ChromeShape.Card card : chromeShape().cards())
+        com.termux.app.place.ChromeShape shape =
+            chromeShape(com.termux.app.place.SeamDress.Surface.FRAME);
+        for (com.termux.app.place.ChromeShape.Card card : shape.cards())
             if (card.frame) return true;
         return false;
     }
@@ -3669,6 +3686,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || !isTerminalPaneGlassActive()) return false;
         return com.termux.app.chrome.FrameGlassPolicy.sheetsStandDown(true, true,
             hasDockedFrameCard());
+    }
+
+    /**
+     * {@link #frameStandsDown} for the stack's own sheets (the dock's, the keyboard's): they stand
+     * down on the frame's glass only while they wear the frame's dress. Mid-slide across the seam,
+     * dressed for the other half (SeamDress), they keep sheets of their own.
+     */
+    private boolean stackStandsDownOnFrame() {
+        return !stackDressedApart() && frameStandsDown();
     }
 
     /** Whether the sheets were last dressed standing down; see {@link #syncFrameStandDown}. */
@@ -3970,7 +3996,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public boolean paneOpeningLine() {
                 // Docked: the insert is a window in the frame, read by its line, not by its tone.
-                return !isRoundedDockStyle();
+                return !isRoundedStyle(com.termux.app.place.SeamDress.Surface.FRAME);
             }
 
             @Override @Nullable public Drawable paneGlassRim(float radiusPx) {
@@ -4002,7 +4028,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public int paneCornerRadiusDp() {
                 // The pane wears Corners under both Styles, a stored 0 being square corners.
-                return Math.round(layoutCornersPx() / getResources().getDisplayMetrics().density);
+                return Math.round(layoutCornersPx(com.termux.app.place.SeamDress.Surface.FRAME) / getResources().getDisplayMetrics().density);
             }
 
             @Override public int paneGapDp() {
@@ -4010,7 +4036,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // cards, the gutter of frame glass between Docked inserts, and the strip the
                 // divider is dragged by.
                 return Math.max(Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_FLOOR_DP),
-                    Math.min(Math.round(layoutMarginPx() / getResources()
+                    Math.min(Math.round(layoutMarginPx(com.termux.app.place.SeamDress.Surface.FRAME) / getResources()
                         .getDisplayMetrics().density),
                         Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_CAP_DP)));
             }
@@ -5377,26 +5403,66 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Whether the chrome on screen wears Home's own Style, Corners and Margin rather than the
-     * Workspace's (HomeChromePolicy): read off the page the chrome is committed to, so it switches
-     * at settle with the layout variant, and a settle that crosses between halves that differ
-     * dresses the chrome again ({@link #restyleChromeForHalfIfChanged}).
+     * Workspace's (HomeChromePolicy). Each surface wears the half it belongs to (SeamDress): at
+     * rest that is the page the chrome is committed to, so it switches at settle with the layout
+     * variant, and a settle that crosses between halves that differ dresses the chrome again
+     * ({@link #restyleChromeForHalfIfChanged}). Mid-slide across the seam the stack wears the half
+     * whose rows it stands, the status bar the Workspace's, and the frame the committed half's.
+     * The reads without a surface are the stack's, which is most of the chrome.
      */
     private boolean chromeWearsHomeShape() {
-        return com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage);
+        return chromeWearsHomeShape(com.termux.app.place.SeamDress.Surface.STACK);
+    }
+
+    private boolean chromeWearsHomeShape(@NonNull com.termux.app.place.SeamDress.Surface surface) {
+        return com.termux.app.place.SeamDress.wearsHome(surface, mLastWallPage, stackDressPage(),
+            mTravelSeamOther != null);
+    }
+
+    /** The page whose half the stack wears: the committed one, except across the seam. */
+    @NonNull
+    private com.termux.app.wall.PaneWallPage stackDressPage() {
+        return mTravelStackDressPage != null ? mTravelStackDressPage : mLastWallPage;
+    }
+
+    /**
+     * Whether the stack wears a dress apart from the frame's: mid-slide, once it stands the rows of
+     * a half that dresses it differently. It then draws its own sheets rather than standing down
+     * on a joined Docked frame that belongs to the other half.
+     */
+    private boolean stackDressedApart() {
+        return mTravelSeamShapeDiffers && mTravelStackDressPage != null
+            && com.termux.app.place.HomeChromePolicy.wearsHomeShape(mTravelStackDressPage)
+                != com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage);
+    }
+
+    /** {@link #isRoundedDockStyle()} for one surface's dress. */
+    private boolean isRoundedStyle(@NonNull com.termux.app.place.SeamDress.Surface surface) {
+        return mPreferences != null
+            && mPreferences.getLayoutStyle(chromeWearsHomeShape(surface))
+                == com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle.FLOATING;
     }
 
     /** Corners in dp as stored for the chrome on screen (-1 is the auto token). */
     private int chromeCornersDp() {
+        return chromeCornersDp(com.termux.app.place.SeamDress.Surface.STACK);
+    }
+
+    private int chromeCornersDp(@NonNull com.termux.app.place.SeamDress.Surface surface) {
         return mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS
-            : mPreferences.getLayoutCornersDp(chromeWearsHomeShape());
+            : mPreferences.getLayoutCornersDp(chromeWearsHomeShape(surface));
     }
 
     /** Margin in dp as stored for the chrome on screen. */
     private int chromeMarginDp() {
+        return chromeMarginDp(com.termux.app.place.SeamDress.Surface.STACK);
+    }
+
+    private int chromeMarginDp(@NonNull com.termux.app.place.SeamDress.Surface surface) {
         return mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP
-            : mPreferences.getLayoutMarginDp(chromeWearsHomeShape());
+            : mPreferences.getLayoutMarginDp(chromeWearsHomeShape(surface));
     }
 
     /**
@@ -5438,14 +5504,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Corners, the one Floating radius, in px: the half's corner radius, or the auto token. */
     private float layoutCornersPx() {
-        int dp = chromeCornersDp();
+        return layoutCornersPx(com.termux.app.place.SeamDress.Surface.STACK);
+    }
+
+    private float layoutCornersPx(@NonNull com.termux.app.place.SeamDress.Surface surface) {
+        int dp = chromeCornersDp(surface);
         if (dp < 0) dp = TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(null, true);
         return dpToPx(dp);
     }
 
     /** Margin, the air between and around Floating cards, in px. */
     private float layoutMarginPx() {
-        return dpToPx(Math.max(0, chromeMarginDp()));
+        return layoutMarginPx(com.termux.app.place.SeamDress.Surface.STACK);
+    }
+
+    private float layoutMarginPx(@NonNull com.termux.app.place.SeamDress.Surface surface) {
+        return dpToPx(Math.max(0, chromeMarginDp(surface)));
     }
 
     /** The device's screen radius, which a Docked frame's outer corners take; 28dp when unknown. */
@@ -5476,7 +5550,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (measured > 0) return measured;
         }
         if (element == Element.STATUS)
-            return targetStatusBarHeightPx(isRoundedDockStyle(), isStatusBarCompact());
+            return targetStatusBarHeightPx(
+                isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS),
+                isStatusBarCompact());
         // Not laid out yet: a side column's band is the shared frame width, the same the host
         // is given, so the insert's gutter lines up with the glass from the first frame.
         if (edge.isOnSide()) {
@@ -5494,12 +5570,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private com.termux.app.place.ChromeShape chromeShape() {
-        return chromeShape(currentPlaceLayout());
+        return chromeShape(com.termux.app.place.SeamDress.Surface.STACK);
+    }
+
+    /**
+     * The same, in one surface's dress (SeamDress): the status bar's and the frame's pieces are
+     * read off the model in their own half's Style, Corners and Margin while a slide across the
+     * seam dresses the stack in the other half's.
+     */
+    @NonNull
+    private com.termux.app.place.ChromeShape chromeShape(
+            @NonNull com.termux.app.place.SeamDress.Surface surface) {
+        return chromeShape(surface, currentPlaceLayout());
     }
 
     /** The same, for a layout in hand: it may not be the stored one during a slide or a pre-roll. */
     @NonNull
     private com.termux.app.place.ChromeShape chromeShape(@NonNull PlaceLayout stored) {
+        return chromeShape(com.termux.app.place.SeamDress.Surface.STACK, stored);
+    }
+
+    @NonNull
+    private com.termux.app.place.ChromeShape chromeShape(
+            @NonNull com.termux.app.place.SeamDress.Surface surface, @NonNull PlaceLayout stored) {
         View root = hotView(R.id.activity_termux_root_view);
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
         int width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
@@ -5521,10 +5614,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : mKeyboardGeometry.desiredHeightPx()) : 0f;
         return com.termux.app.chrome.LiveChromeShape.of(layout,
             mPreferences == null ? TermuxAppSharedPreferences.LayoutStyle.DOCKED
-                : mPreferences.getLayoutStyle(chromeWearsHomeShape()), width, height,
+                : mPreferences.getLayoutStyle(chromeWearsHomeShape(surface)), width, height,
             com.termux.app.place.ChromeShapeModel.Thickness.of(status, status, apps, apps, az, az,
                 keys, keys, keyboard),
-            layoutCornersPx(), layoutMarginPx(), screenRadiusPx(),
+            layoutCornersPx(surface), layoutMarginPx(surface), screenRadiusPx(),
             metrics.density, Math.max(1, visiblePaneCount()),
             width >= height ? com.termux.app.place.ChromeShapeModel.SplitAxis.SIDE_BY_SIDE
                 : com.termux.app.place.ChromeShapeModel.SplitAxis.STACKED, 0f, null);
@@ -5544,12 +5637,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private com.termux.app.chrome.LiveChromeShape.Clip chromeClipOf(
         @NonNull com.termux.app.place.ChromeShape.PieceId... ids) {
-        return com.termux.app.chrome.LiveChromeShape.outlineOf(chromeShape(), Arrays.asList(ids));
+        return com.termux.app.chrome.LiveChromeShape.outlineOf(chromeShape(surfaceOf(ids)),
+            Arrays.asList(ids));
     }
 
     /** What the views standing where {@code ids} stand draw rim light on, as edge bits. */
     private int chromeRimEdges(@NonNull com.termux.app.place.ChromeShape.PieceId... ids) {
-        return com.termux.app.chrome.LiveChromeShape.rimEdges(chromeShape(), Arrays.asList(ids));
+        return com.termux.app.chrome.LiveChromeShape.rimEdges(chromeShape(surfaceOf(ids)),
+            Arrays.asList(ids));
+    }
+
+    /** The surface whose dress the model's {@code ids} are read in: the status bar's, or the stack's. */
+    @NonNull
+    private static com.termux.app.place.SeamDress.Surface surfaceOf(
+            @NonNull com.termux.app.place.ChromeShape.PieceId... ids) {
+        for (com.termux.app.place.ChromeShape.PieceId id : ids)
+            if (id == com.termux.app.place.ChromeShape.PieceId.STATUS)
+                return com.termux.app.place.SeamDress.Surface.STATUS;
+        return com.termux.app.place.SeamDress.Surface.STACK;
     }
 
     /**
@@ -5559,7 +5664,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * clip so the blur + glass read as the same capsule geometry as the Rounded dock.
      */
     private void applyStatusBarStyle(@NonNull View host) {
-        boolean capsule = isRoundedDockStyle();
+        boolean capsule = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         boolean collapsed = isStatusBarCompact();
         ViewGroup.LayoutParams lp = host.getLayoutParams();
         if (lp instanceof ViewGroup.MarginLayoutParams) {
@@ -5794,7 +5899,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (collapsed) return 0;
         View clock = findViewById(R.id.terminal_status_column_clock);
         if (clock == null) return 0;
-        int width = targetStatusBarHeightPx(isRoundedDockStyle(), false);
+        int width = targetStatusBarHeightPx(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), false);
         clock.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         return clock.getMeasuredHeight() + Math.round(dpToPx(6));
@@ -5802,7 +5907,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The margin a floating column keeps from the edge it stands on; docked hugs it. */
     private int statusBarColumnOuterMarginPx() {
-        return isRoundedDockStyle() ? Math.round(dpToPx(2)) : 0;
+        return isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS) ? Math.round(dpToPx(2)) : 0;
     }
 
     /**
@@ -5866,8 +5971,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int resolveStatusBarHorizontalInsetPx() {
         return resolveSurfaceHorizontalInsetPx(mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET
-            : TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp()),
-            isRoundedDockStyle());
+            : TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp(com.termux.app.place.SeamDress.Surface.STATUS)),
+            isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS));
     }
 
     /**
@@ -5901,7 +6006,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The largest corner the model gives the status bar under Docked: Corners at its bottom, or none. */
     private float statusPieceCornerRadiusPx() {
         com.termux.app.place.ChromeShape.Piece piece =
-            chromeShape().piece(com.termux.app.place.ChromeShape.PieceId.STATUS);
+            chromeShape(com.termux.app.place.SeamDress.Surface.STATUS).piece(com.termux.app.place.ChromeShape.PieceId.STATUS);
         if (piece == null) return 0f;
         return Math.max(Math.max(piece.corners.topLeft, piece.corners.topRight),
             Math.max(piece.corners.bottomRight, piece.corners.bottomLeft));
@@ -5930,7 +6035,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** A Floating card's radius for a surface this tall: Corners, never past half the surface. */
     private float resolveStatusBarCapsuleCornerRadiusPx(int surfaceHeightPx) {
-        return Math.min(layoutCornersPx(), Math.max(0, surfaceHeightPx) / 2f);
+        return Math.min(layoutCornersPx(com.termux.app.place.SeamDress.Surface.STATUS), Math.max(0, surfaceHeightPx) / 2f);
     }
 
     /**
@@ -6270,7 +6375,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean shouldUseAccessoryRenderEffectBlur(@NonNull ChromeSpec state) {
         return state.toolbarShown
             && state.blurEnabled
-            && !frameStandsDown();
+            && !stackStandsDownOnFrame();
     }
 
     /**
@@ -7113,7 +7218,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Under a joined Docked frame the frame's glass is the sheet behind the keys; the keys keep
         // their own glass.
-        if (frameStandsDown()) {
+        if (stackStandsDownOnFrame()) {
             surfaceHost.setBackground(null);
             clearInAppKeyboardBackdrop();
             return;
@@ -7157,7 +7262,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         GradientDrawable fill = buildInAppKeyboardSolidSurface(capsule ? cornerRadiusPx : 0f);
         fill.setAlpha(Math.round(255f * mKeyboardTravelSolidness));
         mKeyboardTravelSolidFill = fill;
-        Drawable glass = isUnifiedAccessoryBackdropReady(state) || frameStandsDown() ? null
+        Drawable glass = isUnifiedAccessoryBackdropReady(state) || stackStandsDownOnFrame() ? null
             : buildInAppKeyboardSurfaceBackground(state, surfaceHost, capsule, cornerRadiusPx);
         Drawable material = glass == null ? fill
             : new LayerDrawable(new Drawable[] {glass, fill});
@@ -7629,7 +7734,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return !state.toolbarShown;
         }
         // Under a joined Docked frame the dock has no blur of its own to keep alive.
-        if (frameStandsDown()) return true;
+        if (stackStandsDownOnFrame()) return true;
         boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
         if (useRenderEffectBlur) {
             ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
@@ -8461,7 +8566,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // slice [0, f] of the shared model (strip renders [f, 1]) — one foot under the pill.
             // Keyboard-on, the dock is a distinct plank above the keyboard, so it keeps the full model.
             // Under a joined Docked frame the frame's glass is this sheet.
-            extraKeysBackground.setBackground(frameStandsDown() ? null
+            extraKeysBackground.setBackground(stackStandsDownOnFrame() ? null
                 : mChrome.glass().dockSurface(state.barAlpha,
                     0f, state.keyboardShown ? 1f : defaultDockGlassFootFraction(), false));
             // Opacity is baked into the drawable (translucent base) so the glass light model survives.
@@ -8853,7 +8958,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private com.termux.app.chrome.ChromeEdgeRule.TopLead topEdgeStackLead() {
-        if (isRoundedDockStyle()) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
+        if (isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS)) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
         View lead = topEdgeStackLeadView();
         if (lead == null) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
         int id = lead.getId();
@@ -8869,7 +8974,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.chrome.ChromeEdgeRule.TopLead statusInsetStripLead() {
         // Under a joined Docked frame the frame's glass runs up under the system bar: no strip.
         if (frameStandsDown()) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
-        return com.termux.app.chrome.ChromeEdgeRule.statusInsetLead(isRoundedDockStyle(),
+        return com.termux.app.chrome.ChromeEdgeRule.statusInsetLead(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS),
             !shouldEnableSeamlessStatusBackground(), mLastStatusBarInsetTop, topEdgeStackLead());
     }
 
@@ -13636,10 +13741,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (base == null || base.getSharedPreferences() == null)
             return base;
         mPlaceLayoutStore = new PlaceLayoutStore(base);
-        // The sizes are the layout's the chrome stands in: the Home layout's on a Home page.
+        // The sizes are the layout's the stack is dressed for: the Home layout's on a Home page,
+        // and mid-slide across the seam the half's whose rows the stack stands (SeamDress).
         base.setPlaceSizes(new PlaceSizePreferences(
             () -> mPlaceLayoutStore == null ? null
-                : mPlaceLayoutStore.forVariant(chromeVariant()),
+                : mPlaceLayoutStore.forVariant(stackVariant()),
             this::currentPlaceOrientation));
         return base;
     }
@@ -13763,6 +13869,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.place.LayoutVariant chromeVariant() {
         return com.termux.app.place.HomeChromePolicy.variant(mLastWallPage, isMinimalMode());
+    }
+
+    /**
+     * The layout whose dock height, keyboard height and chin the stack wears: the committed one,
+     * except mid-slide across the seam once the stack stands the other half's rows.
+     */
+    @NonNull
+    private com.termux.app.place.LayoutVariant stackVariant() {
+        return com.termux.app.place.HomeChromePolicy.variant(stackDressPage(), isMinimalMode());
     }
 
     /**
@@ -14538,7 +14653,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean dockedStatusStripLeadsWith(@NonNull PlaceLayout layout,
                                                @NonNull List<Element> elements) {
-        if (isRoundedDockStyle() || !shouldEnableSeamlessStatusBackground()
+        if (isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS) || !shouldEnableSeamlessStatusBackground()
             || mLastStatusBarInsetTop <= 0) return false;
         for (Element element : EdgeStackPolicy.stack(layout, PlaceLayout.Edge.TOP)) {
             if (element == Element.STATUS && !isSplitPanesEnabled()) continue;
@@ -14785,7 +14900,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private EdgeStackPolicy.Metrics buildEdgeStackMetrics() {
         DockLayout dockLayout = getDockLayout();
         float density = getResources().getDisplayMetrics().density;
-        boolean capsule = isRoundedDockStyle();
+        boolean capsule = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         boolean compact = isStatusBarCompact();
         // The page ticks are a band of the row's own host off the dock, so they are part of what
         // the row claims wherever it stands — on the dock the FX layers draw them over the glass
@@ -15059,7 +15174,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Which stack the host now stands in is the arrangement walk's answer; this only gives it
         // the band that edge asks for and turns its contents to face the right way.
         com.termux.app.statusbar.StatusBarEdgeArrangement.band(host, edge,
-            targetStatusBarHeightPx(isRoundedDockStyle(), isStatusBarCompact()));
+            targetStatusBarHeightPx(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), isStatusBarCompact()));
         com.termux.app.statusbar.StatusBarEdgeArrangement.apply((ViewGroup) host, edge);
         if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
@@ -15093,7 +15208,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (host == null || host.getVisibility() != View.VISIBLE) return 0;
         ViewGroup.LayoutParams params = host.getLayoutParams();
         int thicknessPx = params != null && params.height > 0
-            ? params.height : targetStatusBarHeightPx(isRoundedDockStyle(), isStatusBarCompact());
+            ? params.height : targetStatusBarHeightPx(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), isStatusBarCompact());
         return thicknessPx + statusBarColumnOuterMarginPx();
     }
 
@@ -15269,8 +15384,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // And it is the terminal's own device: it exists to land the dock on a whole terminal row.
         // On a place with no rows to land on it is only a height that changes as the keyboard comes
         // and goes — on the home place, a grid re-cut around every widget for nothing.
+        // The rows a slide across the seam brings in from Home are Home's, and do not wear it.
         boolean terminalOnScreen =
-            mLastWallPage == com.termux.app.wall.PaneWallPage.TERMINAL;
+            stackDressPage() == com.termux.app.wall.PaneWallPage.TERMINAL;
         int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown
             || visiblePaneCount() > 1 || activePaneFloating || isImeVisible() || !terminalOnScreen
             ? 0
@@ -20421,6 +20537,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.PlaceChromeTravel.Frame frame =
             com.termux.app.place.PlaceChromeTravel.at(pages, currentWallPlace(),
                 offsetPx, wall.getWidth(), mChromeRestStates, mLastWallPage);
+        // Across the seam, how the stack crosses and which half's dress it wears are read before
+        // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
+        readSeamTravel(frame);
         // The dock rows are always laid out by the layout on screen, the minimal one included
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
         if (!mTravelKeyboardPreRolled
@@ -20443,19 +20562,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float dockReveal = syncSeamTravel(frame);
         int keyboardPx = travelKeyboardLaidOutPx();
         int dockPx = travelDockLaidOutPx(keyboardPx);
+        // Between halves that dress the stack differently, the keyboard dips with the rows, so
+        // it is below the screen where the stack changes its dress (SeamDress.wholeStack).
+        float keyboardReveal = mTravelSeamWholeStack && mTravelSeamOther != null
+            ? com.termux.app.place.SeamDress.wholeStackKeyboardReveal(
+                com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage),
+                mTravelSeamCommittedKeyboard, mTravelSeamOtherKeyboard)
+            : frame.keyboardReveal;
         // With a keyboard in the stack the rows cannot leave by the stack's own translation, which
         // carries the keyboard too: they sink into the keyboard's top edge instead, and the stack
-        // moves only for the keyboard.
+        // moves only for the keyboard. A whole-stack dip moves both by the translation.
         boolean rowsSink = mTravelSeamPlan != com.termux.app.place.SeamTravel.DockPlan.NONE
-            && keyboardPx > 0;
+            && keyboardPx > 0 && !mTravelSeamWholeStack;
         applySeamRowSink(rowsSink
             ? travelDockRowsPx(keyboardPx) * (1f - Math.max(0f, Math.min(1f, dockReveal))) : 0f);
         float translation = com.termux.app.place.PlaceChromeTravel.stackTranslationPx(
-            frame.keyboardReveal, rowsSink ? 1f : dockReveal, keyboardPx, dockPx);
+            keyboardReveal, rowsSink ? 1f : dockReveal, keyboardPx, dockPx);
         if (translation != 0f || mDockTravelTranslationPx != 0f) mChromeTravelMoved = true;
         mDockTravelTranslationPx = translation;
         mKeyboardTravelSharePx = keyboardPx
-            * (1f - Math.max(0f, Math.min(1f, frame.keyboardReveal)));
+            * (1f - Math.max(0f, Math.min(1f, keyboardReveal)));
         applyAccessoryStackTranslation();
         // A keyboard up on both places crosses from one material to the other with the wall.
         syncKeyboardMaterialTravel(frame);
@@ -20476,26 +20602,122 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * One frame of the dock's rows across the seam between Home and the Workspace (SeamTravel):
-     * the other half's layout and the plan are read once per gesture, the stack stands the other
-     * half's rows from the frame the plan says — laid out there once, while none of them shows,
-     * under the content's hold — and from Home the Workspace's status bar is laid out as the
-     * slide starts, off screen with its page. Returns the dock's reveal for this frame.
+     * The seam as this frame reaches it. Once per gesture, on the first frame that reaches the
+     * other half: that half's layout, how its dock's rows cross (SeamTravel.dockPlan), and whether
+     * the halves dress the stack differently, which turns the crossing into one that changes the
+     * dress only where none of the stack shows (SeamDress.plan). The status bar wears the
+     * Workspace's dress from then on (SeamDress), so a bar about to be laid out over Home is
+     * dressed for it now. Every frame: which half's dress the stack wears, noting a change for the
+     * seam's layout pass (syncSeamTravel), which dresses it in the same frame.
      */
-    private float syncSeamTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
+    private void readSeamTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
         com.termux.app.wall.PaneWallPage other =
             com.termux.app.place.SeamTravel.otherHalfPage(frame, mLastWallPage);
         PlaceLayoutStore store = placeLayoutStore();
-        if (store == null || (other == null && mTravelSeamLayout == null
-            && mTravelSeamOther == null)) return frame.dockReveal;
-        PlaceOrientation orientation = currentPlaceOrientation();
+        if (store == null) return;
         if (other != null && other != mTravelSeamOther) {
+            boolean seamBegins = mTravelSeamOther == null;
+            PlaceOrientation orientation = currentPlaceOrientation();
+            PlaceLayout committed = committedPlaceLayout(orientation);
             PlaceLayout otherLayout = store.resolve(orientation, store.variantFor(other));
             mTravelSeamOther = other;
             mTravelSeamOtherLayout = otherLayout;
-            mTravelSeamPlan = com.termux.app.place.SeamTravel.dockPlan(
-                committedPlaceLayout(orientation), otherLayout);
+            com.termux.app.place.SeamDress.StackDress committedDress =
+                stackDressOf(mLastWallPage, orientation);
+            com.termux.app.place.SeamDress.StackDress otherDress =
+                stackDressOf(other, orientation);
+            mTravelSeamDressDiffers = !committedDress.equals(otherDress);
+            mTravelSeamShapeDiffers = !committedDress.shape.equals(otherDress.shape);
+            // A keyboard in the stack, not one floating in a frame of its own.
+            mTravelSeamCommittedKeyboard = committedKeyboardVisible() && !isKeyboardFloating()
+                && committed.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
+            mTravelSeamOtherKeyboard = mInAppKeyboard != null && mInAppKeyboard.isEnabled()
+                && wantsKeyboardOnEnter(other)
+                && otherLayout.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
+            boolean exchangeable = com.termux.app.place.SeamTravel.dockExchangeable(committed)
+                && com.termux.app.place.SeamTravel.dockExchangeable(otherLayout);
+            mTravelSeamPlan = com.termux.app.place.SeamDress.plan(
+                com.termux.app.place.SeamTravel.dockPlan(committed, otherLayout), exchangeable,
+                mTravelSeamDressDiffers,
+                mTravelSeamCommittedKeyboard
+                    || !EdgeStackPolicy.stack(committed, PlaceLayout.Edge.BOTTOM).isEmpty(),
+                mTravelSeamOtherKeyboard
+                    || !EdgeStackPolicy.stack(otherLayout, PlaceLayout.Edge.BOTTOM).isEmpty());
+            mTravelSeamWholeStack = com.termux.app.place.SeamDress.wholeStack(mTravelSeamPlan,
+                mTravelSeamDressDiffers);
+            // From Home, the bar takes off Home's dress for the Workspace's while it is still
+            // hidden, before any pass lays it out over Home.
+            if (seamBegins && mTravelSeamShapeDiffers
+                && com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage)) {
+                refreshTerminalWindowBar();
+                mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+            }
         }
+        if (mTravelSeamOther == null) return;
+        com.termux.app.wall.PaneWallPage stackPage = com.termux.app.place.SeamDress.stackPage(
+            mLastWallPage, mTravelSeamOther, mTravelSeamPlan,
+            com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage));
+        com.termux.app.wall.PaneWallPage dressPage = stackPage == mLastWallPage ? null : stackPage;
+        if (dressPage == mTravelStackDressPage) return;
+        mTravelStackDressPage = dressPage;
+        if (mTravelSeamDressDiffers) mTravelStackRestylePending = true;
+    }
+
+    /** What the stack wears on {@code page}'s half: its Style, Corners, Margin and its sizes. */
+    @NonNull
+    private com.termux.app.place.SeamDress.StackDress stackDressOf(
+            @NonNull com.termux.app.wall.PaneWallPage page,
+            @NonNull PlaceOrientation orientation) {
+        PlaceLayoutStore store = placeLayoutStore();
+        com.termux.app.place.WallHalfShape shape = com.termux.app.place.WallHalfShape.read(
+            mPreferences, com.termux.app.place.HomeChromePolicy.wearsHomeShape(page));
+        if (store == null)
+            return com.termux.app.place.SeamDress.StackDress.of(shape, Float.NaN, Float.NaN, -1);
+        PlaceLayoutStore sizes = store.forVariant(store.variantFor(page));
+        return com.termux.app.place.SeamDress.StackDress.of(shape,
+            sizes.dockHeightScale(orientation), sizes.keyboardHeightScale(orientation),
+            sizes.keyboardChinDp(orientation));
+    }
+
+    /**
+     * The stack dressed again for the half it now stands in, mid-slide: the dock's rows and its
+     * glass, the suggestion bar over the keyboard, and the chrome's crops and sheets. The status
+     * bar and the frame read their own dress (SeamDress) and come out as they were. The sizes, the
+     * keyboard's included, follow through the seam's layout pass that runs next, and the keyboard
+     * is dressed by the geometry pass that measures it. Only while the halves dress the stack
+     * differently, and only where none of it shows.
+     */
+    private void restyleStackForDress(boolean shapeDiffers) {
+        if (mPreferences == null || mChrome == null) return;
+        Trace.beginSection("Wall.seamDress");
+        try {
+            updateAppLauncherBarHeight();
+            applySuggestionBarSurfaceStyling();
+            if (shapeDiffers) {
+                mChrome.redressFromState();
+            } else {
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                    | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+            }
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * One frame of the dock's rows across the seam between Home and the Workspace (SeamTravel):
+     * the other half's layout and the plan are read once per gesture (readSeamTravel), the stack
+     * stands the other half's rows, dressed for that half, from the frame the plan says — laid out
+     * there once, while none of them shows, under the content's hold — and from Home the
+     * Workspace's status bar is laid out as the slide starts, off screen with its page. Returns
+     * the dock's reveal for this frame.
+     */
+    private float syncSeamTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
+        // readSeamTravel has read the other half for this gesture, if the frame reached it.
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null || (mTravelSeamLayout == null && mTravelSeamOther == null))
+            return frame.dockReveal;
+        PlaceOrientation orientation = currentPlaceOrientation();
         PlaceLayout otherLayout = mTravelSeamOtherLayout;
         if (otherLayout == null) return frame.dockReveal;
         float progress = com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage);
@@ -20509,7 +20731,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && com.termux.app.place.SeamTravel.statusCanArriveOver(
                 committedPlaceLayout(orientation))
             && isSplitPanesEnabled();
-        if (dockShown != mTravelSeamDockShown || statusShown != mTravelSeamStatusShown) {
+        if (dockShown != mTravelSeamDockShown || statusShown != mTravelSeamStatusShown
+            || mTravelStackRestylePending) {
             Trace.beginSection("Wall.seamLayout");
             try {
                 // The content keeps the room it was committed with: a stack that grows or shrinks
@@ -20527,6 +20750,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 mTravelSeamLayout = layout;
                 mChromeTravelMoved = true;
+                // The stack changes halves with its rows, so it is dressed for the half it now
+                // stands in this same pass, while none of it shows (SeamDress). The sizes follow
+                // through the pass below (applyPlaceSizes).
+                if (mTravelStackRestylePending) {
+                    mTravelStackRestylePending = false;
+                    restyleStackForDress(mTravelSeamShapeDiffers);
+                }
                 syncPlaceLayout();
                 // In this frame, so the stack's height the translation below reads is the new one.
                 mGeometry.requestNow(GeometryScheduler.Reason.PLACE_TRAVEL,
@@ -20963,9 +21193,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTravelSeamLayout = null;
             mTravelSeamDockShown = false;
             mTravelSeamStatusShown = false;
-            mTravelSeamOther = null;
             mTravelSeamOtherLayout = null;
             mTravelSeamPlan = com.termux.app.place.SeamTravel.DockPlan.NONE;
+            mTravelSeamWholeStack = false;
+            mTravelSeamCommittedKeyboard = false;
+            mTravelSeamOtherKeyboard = false;
+            mTravelStackRestylePending = false;
+            // The stack keeps the dress it travelled in, and the status bar the Workspace's,
+            // through the page's commit below, which dresses everything for the page it lands on:
+            // landed, that is the dress the stack already wears.
+            com.termux.app.wall.PaneWallPage stackDressedFor = mTravelStackDressPage;
+            boolean stackDressDiffered = mTravelSeamDressDiffers;
+            boolean stackShapeDiffered = mTravelSeamShapeDiffers;
             mTravelBarPage = null;
             applyStatusTravelX(0f);
             applySeamRowSink(0f);
@@ -20994,6 +21233,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mX11Display.onUserKeyboardIntent(true);
             }
             syncPlaceState(page, leavingKeyboardUp);
+            mTravelSeamOther = null;
+            mTravelStackDressPage = null;
+            mTravelSeamDressDiffers = false;
+            mTravelSeamShapeDiffers = false;
+            // A slide that came back past the swap without a frame there to undo it (the drawer
+            // or reduced motion took the last frames) leaves the stack dressed for the half it did
+            // not land on: it is dressed back now, in the frame that puts the stack back on screen.
+            if (stackDressDiffered && stackDressedFor != null
+                && com.termux.app.place.HomeChromePolicy.wearsHomeShape(stackDressedFor)
+                    != com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage)) {
+                restyleStackForDress(stackShapeDiffered);
+                syncPlaceLayout();
+            }
             // Resting on the Workspace, the canvas comes back down below the bar, its pages out of
             // the band with it, so nothing on screen moves (PageTopInsets).
             syncCanvasTopReach();
@@ -21935,7 +22187,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             lens.setPlaceAccents(mPlaceAccents);
             // The icons are chips of the same kit as the badge beside them: same corner.
             lens.setChipRadiusPx(resolveStatusIndicatorCornerRadiusPx(Math.round(dpToPx(20)),
-                isRoundedDockStyle()));
+                isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS)));
             // Nothing to keep clear of: a column stands in the canvas band, which already starts
             // below the system status bar and ends above the navigation bar.
             lens.setAlongInsets(0, 0);
@@ -25202,7 +25454,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.StatusBarSwipeLayout swipeHost = host instanceof
             com.termux.app.statusbar.StatusBarSwipeLayout
             ? (com.termux.app.statusbar.StatusBarSwipeLayout) host : null;
-        boolean capsule = isRoundedDockStyle();
+        boolean capsule = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         int targetHeight = targetStatusBarHeightPx(capsule, collapsed);
         boolean preferenceChanged = isStatusBarCompact() != collapsed;
         boolean geometryChanged = host != null && currentTopStatusBarHeight(host) != targetHeight;
@@ -25329,7 +25581,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View host = findViewById(R.id.terminal_window_bar_host);
         if (host == null) return;
         View topWidgets = findViewById(R.id.terminal_top_widget_area);
-        boolean capsule = isRoundedDockStyle();
+        boolean capsule = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         if (!mStatusBarFoldDragging) {
             // The drag's transition first: a landing it takes over hands it what that one moved.
             GeometryScheduler.Transition drag = beginStatusBarTerminalResize();
@@ -25375,7 +25627,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int beginBorderStatusFold(boolean expanding) {
         if (!isBorderStatusSwipeAvailable() || isStatusBarFoldInteractive()) return 0;
         if (isStatusBarCompact() != expanding) return 0;
-        boolean capsule = isRoundedDockStyle();
+        boolean capsule = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         int travel = targetStatusBarHeightPx(capsule, false)
             - targetStatusBarHeightPx(capsule, true);
         if (travel <= 0) return 0;
@@ -25514,7 +25766,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (blur != null) blur.setVisibility(windowBarBlurEnabled ? View.VISIBLE : View.GONE);
         // Nothing moves behind the bar at rest, so its blur rests too instead of repainting.
         restLiveBlur(blur, true);
-        boolean capsuleStatusBar = isRoundedDockStyle();
+        boolean capsuleStatusBar = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         View background = findViewById(R.id.terminal_window_bar_background);
         if (background != null) {
             // The capsule floats below the status bar as its own slab, so its glass spans the full
