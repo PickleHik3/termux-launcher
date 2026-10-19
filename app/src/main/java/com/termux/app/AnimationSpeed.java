@@ -16,8 +16,9 @@ import com.termux.shared.termux.TermuxConstants;
  *
  * <p>Readers, one place each: Settings' screen transitions and row ring
  * ({@code SettingsMotion}), the wall's page and window slide ({@code PaneWallLayout.startSlide}),
- * the command palette's springs ({@code TerminalCommandPaletteController.kick}) and the floating
- * windows' depth ramp ({@code Motion.floatDepthMs}). Each reads it when a motion starts, never per
+ * the command palette's springs ({@code TerminalCommandPaletteController.kick}), the floating
+ * windows' depth ramp ({@code Motion.floatDepthMs}), and window and session switches with the
+ * window bar's highlight ({@code TermuxActivity.windowSwitchMs}, {@code TerminalWindowBar}). Each reads it when a motion starts, never per
  * frame.
  */
 public final class AnimationSpeed {

@@ -1750,7 +1750,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         applyAnimatedTabSelection(previousSelected, selectedIndex, 0f);
         mTabs.setAnimatedHighlight(start);
         mSelectionAnimator = ValueAnimator.ofFloat(0f, 1f);
-        mSelectionAnimator.setDuration(WINDOW_SWITCH_ANIMATION_DURATION_MS);
+        mSelectionAnimator.setDuration(
+            com.termux.app.AnimationSpeed.scale(getContext(), WINDOW_SWITCH_ANIMATION_DURATION_MS));
         mSelectionAnimator.setInterpolator(settleInterpolator());
         mSelectionAnimator.addUpdateListener(animation -> {
             float progress = (Float) animation.getAnimatedValue();
@@ -1838,7 +1839,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private void animateScrollTo(int target) {
         cancelScrollAnimation();
         ValueAnimator animator = ValueAnimator.ofInt(getScrollX(), target);
-        animator.setDuration(WINDOW_SWITCH_ANIMATION_DURATION_MS);
+        animator.setDuration(
+            com.termux.app.AnimationSpeed.scale(getContext(), WINDOW_SWITCH_ANIMATION_DURATION_MS));
         animator.setInterpolator(settleInterpolator());
         animator.addUpdateListener(value -> scrollTo((Integer) value.getAnimatedValue(), 0));
         animator.addListener(new AnimatorListenerAdapter() {

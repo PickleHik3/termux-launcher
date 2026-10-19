@@ -22761,6 +22761,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS;
         if (width > 0) duration = Math.max(160L,
             Math.round(duration * Math.min(1f, Math.abs(start) / width)));
+        duration = windowSwitchMs(duration);
         // The display going off keeps its picture while it slides: its X view lets go of the
         // surface once the travel is over, not as it starts.
         mDeferDisplayDetach = !after;
@@ -22810,8 +22811,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A display window left before its display came up goes, once the window that took its
         // place has arrived.
         if (place != com.termux.app.wall.PaneWallPage.DISPLAY) {
-            dropUnstartedDisplayWhenSettled(
-                com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
+            dropUnstartedDisplayWhenSettled(windowSwitchMs(
+                com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS));
         }
     }
 
@@ -26975,6 +26976,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float remaining = Math.abs(fromPx);
         long duration = com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS;
         if (width > 0) duration = Math.max(160L, Math.round(duration * Math.min(1f, remaining / width)));
+        duration = windowSwitchMs(duration);
         animateTerminalArrival(steps > 0 ? 1 : -1, true, duration, remaining);
     }
 
@@ -27089,14 +27091,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void animateTerminalWindowArrival(int direction, int fromWindow) {
         animateTerminalArrival(direction, true,
-            com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS, 0f,
+            windowSwitchMs(com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS), 0f,
             fromWindow);
+    }
+
+    /**
+     * A window or session switch's duration at the chosen Animation speed: Slower stretches it,
+     * Faster shortens it, Off makes it instant (General › Motion).
+     */
+    private long windowSwitchMs(long durationMs) {
+        return com.termux.app.AnimationSpeed.scale(this, durationMs);
     }
 
     /** Session switch: the same arrival on the vertical axis. */
     void animateTerminalSessionArrival(int direction) {
         animateTerminalArrival(direction, false,
-            com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
+            windowSwitchMs(com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS));
     }
 
     /**
