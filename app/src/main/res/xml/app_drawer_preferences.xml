@@ -28,6 +28,12 @@
         app:summary="@string/settings_drawer_remember_position_summary"
         android:defaultValue="false" />
 
+    <SwitchPreferenceCompat
+        app:key="app_launcher_drawer_lower_start"
+        app:title="@string/settings_drawer_lower_start_title"
+        app:summary="@string/settings_drawer_lower_start_summary"
+        android:defaultValue="false" />
+
     <Preference
         app:key="app_launcher_category_sort"
         app:title="@string/settings_app_drawer_category_sort_title"

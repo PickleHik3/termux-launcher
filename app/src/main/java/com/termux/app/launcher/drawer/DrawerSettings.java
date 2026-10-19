@@ -25,8 +25,16 @@ public final class DrawerSettings {
     /** Drawer › Remember position. Off: the list starts at the top on every open. */
     public static final String KEY_REMEMBER_POSITION = "app_launcher_drawer_remember_position";
 
+    /** Drawer › Start in the lower half. Off: the list starts under the search pill. */
+    public static final String KEY_LOWER_START = "app_launcher_drawer_lower_start";
+
     public static boolean owns(@Nullable String key) {
-        return KEY_OPEN_ONLY_MATCH.equals(key) || KEY_REMEMBER_POSITION.equals(key);
+        return KEY_OPEN_ONLY_MATCH.equals(key) || KEY_REMEMBER_POSITION.equals(key)
+            || KEY_LOWER_START.equals(key);
+    }
+
+    public static boolean lowerStart(@NonNull Context context) {
+        return HomeSettings.getBoolean(context, KEY_LOWER_START, false);
     }
 
     public static boolean rememberPosition(@NonNull Context context) {
