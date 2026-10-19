@@ -105,7 +105,13 @@ final class HomeFolderView extends ViewGroup {
         if (style.equals(value)) return;
         style = value;
         HomeIconLabels.dress(label, value, density);
+        HomeIconLabels.fitLines(this, label, getWidth(), getHeight(), value, density, false);
         requestLayout();
+    }
+
+    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        HomeIconLabels.fitLines(this, label, w, h, style, density, true);
     }
 
     @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
