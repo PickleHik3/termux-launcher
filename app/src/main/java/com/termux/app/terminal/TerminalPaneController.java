@@ -5565,6 +5565,9 @@ public class TerminalPaneController {
         // A Home float laid out during the hold is owed that size: discarded, its shell never gets
         // an emulator and the pane draws nothing but black.
         visible.addAll(shownHomeFloatPaneViews());
+        // So is a terminal widget whose cell moved during the hold: discarded, its shell kept the
+        // old rows in a shorter cell and the rows past the cell, the prompt among them, were cut.
+        visible.addAll(shownHostedFloatPaneViews());
         for (TerminalView view : mPaneViews.values()) {
             if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, keepBottom, cause);
             else view.resumeTerminalSizeUpdatesDiscardingPending();

@@ -197,6 +197,34 @@ public class HostedFloatTest {
     }
 
     @Test
+    public void aWidgetsTerminalResizedWhileTheGridIsHeldIsSizedWhenTheHoldEnds() {
+        // The system keyboard holds the grid while the window resizes; the widget's cell is laid
+        // out at its new height meanwhile. A size discarded at the end of the hold leaves the
+        // shell's rows those of the old cell, and the rows below the new one, the prompt's among
+        // them, are cut off.
+        TerminalSession shell = terminal();
+        TerminalPaneController.Window window = mController.openHostedFloat(shell, WIDGET_ID);
+        mController.attachHostedFloat(window, mSlot);
+        idle();
+        TerminalView view = mController.getViewForSession(shell);
+        int[] sized = {0};
+        view.setSizeUpdateObserverForTests(v -> sized[0]++);
+
+        mController.beginHostSurfaceResize();
+        ViewGroup.LayoutParams cellParams = mCell.getLayoutParams();
+        cellParams.height = CELL_HEIGHT / 2;
+        mCell.setLayoutParams(cellParams);
+        idle();
+        assertTrue("laid out in the shorter cell: " + view.getHeight(),
+            view.getHeight() > 0 && view.getHeight() <= CELL_HEIGHT / 2);
+        assertEquals("held while the grid is held", 0, sized[0]);
+
+        mController.finishHostSurfaceResizeKeepingBottom();
+        idle();
+        assertTrue("the widget's shell is sized once the hold ends", sized[0] > 0);
+    }
+
+    @Test
     public void itsShellEndingLeavesTheWidgetStandingAndSaysWhichWidget() {
         TerminalSession shell = terminal();
         TerminalPaneController.Window window = mController.openHostedFloat(shell, WIDGET_ID);
