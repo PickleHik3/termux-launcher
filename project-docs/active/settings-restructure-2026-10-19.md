@@ -73,6 +73,18 @@ rebuilt from its section's page (old Status bar → Terminal › Status bar), en
 collapse, and a name that no longer exists falls back to the root. A stack saved against today's tree
 replays as it was.
 
+## Search (F1)
+
+One search, two doors. The root keeps its box as the first row; every other screen has a search
+action in the toolbar that opens the search screen, its placeholder naming the section it came from
+("Search Home"). Both search the whole tree (`SettingsSearchIndex`: every screen as itself, every
+titled row of its XML), the searched-from section's hits first, and show one list of results with
+the path under each title ("Terminal › Text & display"). A result, or the keyboard's search key for
+the first one, opens the page through its section (Back walks up the tree), scrolls the row into
+view and rings it once (`SettingsRowRing`, an outline in the row's overlay; no idle motion). A box on
+top of every screen was the other option; one toolbar action keeps every page's own rows as they
+were.
+
 ## Motion
 
 Four patterns, each tied to one kind of move, on the settings window only, one-shot, no idle

@@ -85,20 +85,21 @@ public class RootPreferencesSearchIndexTest {
     }
 
     @Test
-    public void searchingASubpageSettingFindsItsSection() {
+    public void typingInTheRootBoxSwapsTheSectionsForResultsAndClearingBringsThemBack() {
         SettingsActivity.RootPreferencesFragment root = launch();
         SettingsSearchPreference search = root.findPreference("settings_search");
         search.getOnQueryChangedListener().onQueryChanged("lazy mode");
-        assertTrue("Lazy mode lives on General", isVisible(root, "general"));
-        assertFalse(isVisible(root, "terminal"));
-        search.getOnQueryChangedListener().onQueryChanged("12-hour");
-        assertTrue("the status bar is the Terminal's", isVisible(root, "terminal"));
-        search.getOnQueryChangedListener().onQueryChanged("dpi");
-        assertTrue("Linux apps' resolution page is indexed under Terminal", isVisible(root, "terminal"));
+        assertFalse(isVisible(root, "root_your_launcher"));
+        assertFalse(isVisible(root, "root_system"));
+        PreferenceGroup results = root.findPreference("settings_search_results");
+        assertTrue(results != null && results.isVisible() && results.getPreferenceCount() > 0);
+        assertEquals("Reduce idle activity", String.valueOf(results.getPreference(0).getTitle()));
+        assertEquals("General", String.valueOf(results.getPreference(0).getSummary()));
+
         search.getOnQueryChangedListener().onQueryChanged("");
-        assertEquals("a cleared search restores the row's own page",
-            SettingsTree.sectionPage(SettingsTree.Section.TERMINAL).className,
-            root.findPreference("terminal").getFragment());
+        assertTrue(isVisible(root, "root_your_launcher"));
+        assertTrue(isVisible(root, "root_system"));
+        assertNull(root.findPreference("settings_search_results"));
     }
 
     private static boolean isVisible(SettingsActivity.RootPreferencesFragment root, String key) {

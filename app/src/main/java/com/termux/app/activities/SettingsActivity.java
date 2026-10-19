@@ -26,7 +26,10 @@ import androidx.preference.PreferenceScreen;
 import com.termux.R;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.SettingsMaterialDialogs;
+import com.termux.app.fragments.settings.SettingsRowRing;
+import com.termux.app.fragments.settings.SettingsSearchFragment;
 import com.termux.app.fragments.settings.SettingsSearchPreference;
+import com.termux.app.fragments.settings.SettingsSearchResults;
 import com.termux.app.fragments.settings.SettingsTree;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.logger.Logger;
@@ -37,12 +40,10 @@ import com.termux.shared.theme.NightMode;
 import com.termux.shared.theme.ThemeUtils;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 
-public class SettingsActivity extends AppCompatActivity implements PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
+public class SettingsActivity extends AppCompatActivity implements
+    PreferenceFragmentCompat.OnPreferenceStartFragmentCallback, SettingsSearchResults.Navigator {
 
     private static final String LOG_TAG = "SettingsActivity";
     private static final String SETTINGS_FRAGMENT_PACKAGE_PREFIX = "com.termux.app.fragments.settings.";
@@ -298,6 +299,102 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             mPushedScreens.remove(mPushedScreens.size() - 1);
         }
         updateTitleForCurrentStack();
+        invalidateOptionsMenu();
+    }
+
+    /** True when the list and the page stand side by side (600 dp and wider). */
+    public boolean isTwoPane() {
+        return false;
+    }
+
+    // ---- Search from every screen (F1) ----
+
+    private static final int MENU_SEARCH = 1;
+
+    @Override
+    public boolean onCreateOptionsMenu(@NonNull android.view.Menu menu) {
+        android.view.MenuItem item = menu.add(android.view.Menu.NONE, MENU_SEARCH, android.view.Menu.NONE,
+            R.string.settings_search_hint);
+        item.setIcon(R.drawable.ic_symbol_search);
+        item.setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
+        return true;
+    }
+
+    @Override
+    public boolean onPrepareOptionsMenu(@NonNull android.view.Menu menu) {
+        android.view.MenuItem item = menu.findItem(MENU_SEARCH);
+        if (item != null) item.setVisible(showsSearchAction());
+        return super.onPrepareOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull android.view.MenuItem item) {
+        if (item.getItemId() == MENU_SEARCH) {
+            openSearch();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    /**
+     * The toolbar's search action shows on every screen except where a search box already is:
+     * the root (its first row), the search screen itself, and every screen of the two-pane layout,
+     * whose list keeps the root's box in view.
+     */
+    boolean showsSearchAction() {
+        if (isTwoPane()) return false;
+        Fragment shown = getSupportFragmentManager().findFragmentById(R.id.settings);
+        return shown != null && !(shown instanceof RootPreferencesFragment)
+            && !(shown instanceof SettingsSearchFragment);
+    }
+
+    /** Opens the search screen, its placeholder naming the section on screen. */
+    void openSearch() {
+        Fragment shown = getSupportFragmentManager().findFragmentById(R.id.settings);
+        SettingsTree.Section scope = shown == null ? null : SettingsTree.sectionOf(shown.getClass().getName());
+        pushScreen(SettingsSearchFragment.class, R.string.settings_search_hint, null,
+            SettingsSearchFragment.arguments(scope));
+    }
+
+    /**
+     * A search result: its page opens in the tree (the path from its section down, so Back walks
+     * up), scrolled to the row, which rings once. Whatever was open, the search screen included,
+     * gives way to it.
+     */
+    @Override
+    public void openSearchResult(@NonNull String screenClass, @Nullable String key) {
+        List<SettingsTree.Screen> path = SettingsTree.path(screenClass);
+        if (path.isEmpty()) return;
+        hideKeyboard();
+        mPushedScreens.clear();
+        getSupportFragmentManager().popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        for (int i = 0; i < path.size(); i++) {
+            SettingsTree.Screen screen = path.get(i);
+            Bundle args = null;
+            if (i == path.size() - 1 && key != null) {
+                args = new Bundle();
+                args.putString(EXTRA_SCROLL_TO_KEY, key);
+            }
+            pushScreen(loadScreenClass(screen.className), screen.titleRes, null, args);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    @NonNull
+    private Class<? extends Fragment> loadScreenClass(@NonNull String className) {
+        try {
+            return (Class<? extends Fragment>) getClassLoader().loadClass(className);
+        } catch (ClassNotFoundException e) {
+            // SettingsTreeTest holds every name in the tree to an existing class.
+            throw new IllegalStateException(className, e);
+        }
+    }
+
+    private void hideKeyboard() {
+        android.view.inputmethod.InputMethodManager ime = (android.view.inputmethod.InputMethodManager)
+            getSystemService(Context.INPUT_METHOD_SERVICE);
+        View focus = getCurrentFocus();
+        if (ime != null && focus != null) ime.hideSoftInputFromWindow(focus.getWindowToken(), 0);
     }
 
     private void updateTitleForCurrentStack() {
@@ -388,17 +485,17 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 public void onFragmentViewCreated(@NonNull androidx.fragment.app.FragmentManager fm,
                                                   @NonNull Fragment fragment, @NonNull View view,
                                                   Bundle savedInstanceState) {
+                    // The toolbar's search action depends on which screen is showing.
+                    invalidateOptionsMenu();
                     if (!(fragment instanceof PreferenceFragmentCompat)) return;
                     PreferenceFragmentCompat preferenceFragment = (PreferenceFragmentCompat) fragment;
-                    if (fragment instanceof RootPreferencesFragment) {
-                        // Root rows rely on the category header hairline; a list divider here
-                        // creates the unwanted double-line seen between sections.
-                        preferenceFragment.setDivider(null);
-                        preferenceFragment.setDividerHeight(0);
-                    } else {
-                        preferenceFragment.setDivider(null);
-                        preferenceFragment.setDividerHeight(0);
-                    }
+                    // Root rows rely on the category header hairline, sub-screens on theirs; a
+                    // list divider creates the unwanted double line between sections.
+                    preferenceFragment.setDivider(null);
+                    preferenceFragment.setDividerHeight(0);
+                    // A page opened on a row (a search result, a link with a scroll key) lands on
+                    // it and rings it once.
+                    SettingsRowRing.ringIfAsked(preferenceFragment);
                 }
             }, true);
     }
@@ -524,29 +621,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
 
     public static class RootPreferencesFragment extends PreferenceFragmentCompat {
 
-        /** One indexed child preference: its display title, lowercase searchable text and page. */
-        private static final class ChildSearchEntry {
-            final String title;
-            final String searchable;
-            /** The subpage that holds it, or null when it is on the destination row's own page. */
-            @Nullable final String fragment;
-            ChildSearchEntry(String title, String searchable, @Nullable String fragment) {
-                this.title = title;
-                this.searchable = searchable;
-                this.fragment = fragment;
-            }
-        }
-
-        // Each destination row's own fragment, captured before a search may point it at a subpage.
-        private final Map<String, String> mOriginalFragments = new HashMap<>();
-
-        // Lazily built on first non-empty query; key -> indexed child preferences under it.
-        private final Map<String, List<ChildSearchEntry>> mChildSearchIndex = new HashMap<>();
-        private boolean mChildSearchIndexBuilt = false;
-
-        // Stashed original summaries for destination rows, keyed by preference key, so a
-        // "Contains: X, Y, Z" summary swapped in during a search can be restored afterwards.
-        private final Map<String, CharSequence> mOriginalSummaries = new HashMap<>();
+        @Nullable private SettingsSearchResults mSearch;
 
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -555,187 +630,23 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 return;
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
             SettingsLayoutUtils.applyRootLayout(this);
-            configureSearch();
+            SettingsSearchPreference search = findPreference("settings_search");
+            // The root searches everything: no section is ranked first.
+            if (search != null) mSearch = SettingsSearchResults.attach(this, search, null);
         }
 
         @Override
         public void onResume() {
             super.onResume();
-            if (getActivity() != null) {
+            if (getActivity() instanceof SettingsActivity && !((SettingsActivity) getActivity()).isTwoPane()) {
                 getActivity().setTitle(R.string.title_activity_termux_settings);
             }
         }
 
-        private void configureSearch() {
-            SettingsSearchPreference search = findPreference("settings_search");
-            if (search == null) return;
-            stashOriginalSummaries();
-            search.setOnQueryChangedListener(query -> {
-                String needle = query.trim().toLowerCase(Locale.ROOT);
-                PreferenceScreen screen = getPreferenceScreen();
-                if (screen == null) return;
-                if (!needle.isEmpty()) {
-                    ensureChildSearchIndexBuilt();
-                }
-                for (int i = 0; i < screen.getPreferenceCount(); i++) {
-                    Preference top = screen.getPreference(i);
-                    if (top == search) continue;
-                    if (top instanceof PreferenceCategory) {
-                        PreferenceGroup category = (PreferenceGroup) top;
-                        boolean anyChildVisible = false;
-                        for (int j = 0; j < category.getPreferenceCount(); j++) {
-                            if (filterDestinationRow(category.getPreference(j), needle)) {
-                                anyChildVisible = true;
-                            }
-                        }
-                        top.setVisible(needle.isEmpty() || anyChildVisible);
-                    } else {
-                        filterDestinationRow(top, needle);
-                    }
-                }
-            });
+        @androidx.annotation.VisibleForTesting
+        @Nullable
+        public SettingsSearchResults searchResults() {
+            return mSearch;
         }
-
-        /**
-         * Captures each row's original summary before the search box mutates it: the destination
-         * rows under their headers, and the mode row that stands above them on its own.
-         */
-        private void stashOriginalSummaries() {
-            PreferenceScreen screen = getPreferenceScreen();
-            if (screen == null) return;
-            for (int i = 0; i < screen.getPreferenceCount(); i++) {
-                Preference top = screen.getPreference(i);
-                if (top instanceof PreferenceCategory) {
-                    PreferenceGroup category = (PreferenceGroup) top;
-                    for (int j = 0; j < category.getPreferenceCount(); j++) {
-                        Preference row = category.getPreference(j);
-                        if (row.getKey() != null) {
-                            mOriginalSummaries.put(row.getKey(), row.getSummary());
-                            mOriginalFragments.put(row.getKey(), row.getFragment());
-                        }
-                    }
-                } else if (top.getKey() != null && !(top instanceof SettingsSearchPreference)) {
-                    mOriginalSummaries.put(top.getKey(), top.getSummary());
-                }
-            }
-        }
-
-        /**
-         * Shows/hides a single destination row for the given lowercase query and returns whether
-         * it should be visible. Matches on the row's own title/summary first; if that fails, falls
-         * back to the indexed child preferences reachable under it (every screen of its section in
-         * {@link SettingsTree}),
-         * swapping in a "Contains: ..." summary so the match reason is visible.
-         */
-        private boolean filterDestinationRow(@NonNull Preference row, @NonNull String needle) {
-            String key = row.getKey();
-            CharSequence originalSummary = key == null ? row.getSummary() : mOriginalSummaries.get(key);
-
-            if (key != null && mOriginalFragments.containsKey(key)) {
-                row.setFragment(mOriginalFragments.get(key));
-            }
-
-            if (needle.isEmpty()) {
-                row.setSummary(originalSummary);
-                row.setVisible(true);
-                return true;
-            }
-
-            CharSequence title = row.getTitle();
-            String ownSearchable = ((title == null ? "" : title.toString()) + " "
-                + (originalSummary == null ? "" : originalSummary.toString()))
-                .toLowerCase(Locale.ROOT);
-            if (ownSearchable.contains(needle)) {
-                row.setSummary(originalSummary);
-                row.setVisible(true);
-                return true;
-            }
-
-            List<ChildSearchEntry> childEntries = key == null ? null : mChildSearchIndex.get(key);
-            if (childEntries != null) {
-                List<String> matchedTitles = new ArrayList<>();
-                boolean anyChildMatch = false;
-                // The subpage every hit lives on, when they all live on the same one.
-                java.util.Set<String> matchedPages = new java.util.HashSet<>();
-                for (ChildSearchEntry entry : childEntries) {
-                    if (entry.searchable.contains(needle)) {
-                        anyChildMatch = true;
-                        matchedPages.add(entry.fragment == null ? "" : entry.fragment);
-                        if (!entry.title.isEmpty() && matchedTitles.size() < 3) {
-                            matchedTitles.add(entry.title);
-                        }
-                    }
-                }
-                if (anyChildMatch) {
-                    if (matchedPages.size() == 1) {
-                        String page = matchedPages.iterator().next();
-                        if (!page.isEmpty()) row.setFragment(page);
-                    }
-                    row.setSummary(row.getContext().getString(R.string.settings_search_contains,
-                        TextUtils.join(", ", matchedTitles)));
-                    row.setVisible(true);
-                    return true;
-                }
-            }
-
-            row.setSummary(originalSummary);
-            row.setVisible(false);
-            return false;
-        }
-
-        /**
-         * Inflates the XML resources reachable under each destination row into a scratch
-         * {@link PreferenceScreen} and walks them to build a searchable index of child titles and
-         * summaries. Runs once, lazily, on the first non-empty search query. A fresh
-         * {@link PreferenceManager} is used per inflate (rather than this fragment's own manager)
-         * so keys in these sub-screen XMLs cannot collide with the live root screen's preferences.
-         * Each XML is inflated in its own try/catch so a single misbehaving custom Preference
-         * constructor cannot break search for the rest.
-         */
-        private void ensureChildSearchIndexBuilt() {
-            if (mChildSearchIndexBuilt) return;
-            mChildSearchIndexBuilt = true;
-            Context context = getContext();
-            if (context == null) return;
-            for (SettingsTree.Screen screen : SettingsTree.screens()) {
-                if (screen.xmlRes == 0) continue;
-                List<ChildSearchEntry> entries = mChildSearchIndex.get(screen.section.rootKey);
-                if (entries == null) {
-                    entries = new ArrayList<>();
-                    mChildSearchIndex.put(screen.section.rootKey, entries);
-                }
-                try {
-                    PreferenceManager scratchManager = new PreferenceManager(context);
-                    PreferenceScreen inflated = scratchManager.inflateFromResource(context, screen.xmlRes, null);
-                    if (inflated != null) {
-                        // A hit on the section's own page opens the row's page as it is.
-                        collectChildSearchEntries(inflated, entries,
-                            screen.isSectionPage() ? null : screen.className);
-                    }
-                } catch (Exception e) {
-                    // Skip this XML; search degrades gracefully instead of crashing the screen.
-                }
-            }
-        }
-
-        private static void collectChildSearchEntries(@NonNull PreferenceGroup group,
-                                                       @NonNull List<ChildSearchEntry> out,
-                                                       @Nullable String page) {
-            for (int i = 0; i < group.getPreferenceCount(); i++) {
-                Preference child = group.getPreference(i);
-                CharSequence title = child.getTitle();
-                CharSequence summary = child.getSummary();
-                String titleText = title == null ? "" : title.toString();
-                String searchable = (titleText + " " + (summary == null ? "" : summary.toString()))
-                    .trim().toLowerCase(Locale.ROOT);
-                if (!searchable.isEmpty()) {
-                    out.add(new ChildSearchEntry(titleText, searchable, page));
-                }
-                if (child instanceof PreferenceGroup) {
-                    collectChildSearchEntries((PreferenceGroup) child, out, page);
-                }
-            }
-        }
-
     }
 }

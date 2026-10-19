@@ -19,6 +19,10 @@
     <string name="settings_section_general">General</string>
     <string name="settings_section_general_summary">Motion, vibration, battery, backup and about</string>
 
+    <string name="settings_search_in">Search %1$s</string>
+    <string name="settings_search_results_header">Results</string>
+    <string name="settings_search_no_results">No settings match</string>
+
     <string name="settings_layout_editor_title">Layout</string>
     <string name="settings_layout_editor_home_summary">Arrange Home in the Layout editor</string>
     <string name="settings_layout_editor_terminal_summary">Arrange the Terminal in the Layout editor</string>

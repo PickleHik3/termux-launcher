@@ -1246,6 +1246,12 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
 - 2026-10-19 · same · Open Settings on Status bar with the previous build, force-stop the app,
   install this build, reopen within 30 minutes: Terminal › Status bar shows, Back goes to Terminal,
   then the root · emulator.
+- 2026-10-19 · commit "feat(settings): search every screen and land on the row" · On the root
+  type "vibration": the sections give way to results with their paths; tap one: its page opens
+  scrolled to the row, which rings once (fades in and out, nothing keeps moving); Back walks up
+  through its section. The keyboard's search key opens the first result. From Home's toolbar
+  search the field opens focused with the keyboard up, reading "Search Home" · emulator, light
+  and dark, font scale 1.3.
 - 2026-10-19 · same · Doors from outside Settings land where they did: the display window's cog
   (Linux apps), the Apps bar opener (Dock & drawer), Look and feel (Look), the drawer's settings
   (Drawer layout), the keyboard theme from the Appearance editor, Edit extra keys · emulator.

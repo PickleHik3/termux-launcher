@@ -14,7 +14,11 @@ import androidx.preference.PreferenceViewHolder;
 
 import com.termux.R;
 
-/** Search field used on Settings home. Filtering stays in the owning fragment. */
+/**
+ * The search field: on the Settings root, and on the search screen any other screen opens. What a
+ * query shows stays with the owner ({@link SettingsSearchResults}); this row only reports the query
+ * as it changes and when the keyboard's search key submits it.
+ */
 @Keep
 public final class SettingsSearchPreference extends Preference {
 
@@ -22,8 +26,15 @@ public final class SettingsSearchPreference extends Preference {
         void onQueryChanged(@NonNull String query);
     }
 
+    /** The keyboard's search (or Enter) key on a query: open the first result. */
+    public interface OnQuerySubmitListener {
+        void onQuerySubmit(@NonNull String query);
+    }
+
     private String mQuery = "";
     private OnQueryChangedListener mListener;
+    @Nullable private OnQuerySubmitListener mSubmitListener;
+    @Nullable private CharSequence mHint;
     private boolean mUserFocused;
 
     public SettingsSearchPreference(@NonNull Context context, @Nullable AttributeSet attrs) {
@@ -36,6 +47,30 @@ public final class SettingsSearchPreference extends Preference {
 
     public void setOnQueryChangedListener(@Nullable OnQueryChangedListener listener) {
         mListener = listener;
+    }
+
+    public void setOnQuerySubmitListener(@Nullable OnQuerySubmitListener listener) {
+        mSubmitListener = listener;
+    }
+
+    /** Exposed for tests driving a submit without a bound view. */
+    @Nullable
+    public OnQuerySubmitListener getOnQuerySubmitListener() {
+        return mSubmitListener;
+    }
+
+    /** The field's placeholder, such as "Search Home"; null keeps the layout's own. */
+    public void setHint(@Nullable CharSequence hint) {
+        mHint = hint;
+        notifyChanged();
+    }
+
+    /**
+     * Opens with the field focused and the keyboard up: the search screen is opened to type in,
+     * unlike the root, where the field waits for a tap.
+     */
+    public void requestFocusOnBind() {
+        mUserFocused = true;
     }
 
     /** Exposed for tests driving a query without a bound view. */
@@ -55,6 +90,15 @@ public final class SettingsSearchPreference extends Preference {
         if (input == null) return;
         Object oldWatcher = input.getTag(R.id.settings_search_input);
         if (oldWatcher instanceof TextWatcher) input.removeTextChangedListener((TextWatcher) oldWatcher);
+        if (mHint != null && !mHint.equals(input.getHint())) input.setHint(mHint);
+        input.setOnEditorActionListener((view, actionId, event) -> {
+            boolean enter = event != null && event.getKeyCode() == android.view.KeyEvent.KEYCODE_ENTER
+                && event.getAction() == android.view.KeyEvent.ACTION_DOWN;
+            if (actionId != android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                && actionId != android.view.inputmethod.EditorInfo.IME_ACTION_DONE && !enter) return false;
+            if (mSubmitListener != null) mSubmitListener.onQuerySubmit(mQuery);
+            return true;
+        });
         if (!mQuery.contentEquals(input.getText())) {
             input.setText(mQuery);
             input.setSelection(input.length());
@@ -68,9 +112,15 @@ public final class SettingsSearchPreference extends Preference {
             if (hasFocus) mUserFocused = true;
         });
         if (mUserFocused || !mQuery.isEmpty()) {
+            boolean firstFocus = !input.hasFocus();
             mUserFocused = true;
-            if (!input.hasFocus()) input.requestFocus();
+            if (firstFocus) input.requestFocus();
             input.setSelection(input.length());
+            if (firstFocus) input.post(() -> {
+                android.view.inputmethod.InputMethodManager ime = (android.view.inputmethod.InputMethodManager)
+                    input.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (ime != null && input.hasFocus()) ime.showSoftInput(input, 0);
+            });
         } else {
             input.clearFocus();
             holder.itemView.setFocusableInTouchMode(true);
