@@ -191,8 +191,8 @@ keyboard layouts) shown with a Home action set:
   are asked to close, asked first when one is open, and the display window then leaves the row,
   handing the front to the window on its left. A display still starting simply closes.
 - Terminal=true Linux apps open a new terminal window after the current one, not a pane.
-- `active/display-fullscreen/PARKED.md` is answered: full-screen display is a display window in
-  minimal mode. Delete it when this ships.
+- The parked full-screen Display spec is answered: full-screen display is a display window in
+  minimal mode. It was deleted on 2026-10-19 (v3-redesign).
 
 ## 8. The sessions drawer
 

@@ -519,6 +519,12 @@ Not seen: everything else listed under the sections below.
   least 400 ms, then MOVE/UP (or a finger). If (a) still stays on the window, record the
   emulator's density and whether the drag moved the window at all · emulator, two Home pages.
 
+### Wall rework #80 widget snapshot
+- 2026-10-19 · issue #80 · With the Home layout's keyboard element set to always on, a Home page
+  whose grid is full: turning always on shrinks the grid rows to make room (no widget lost or
+  overlapped), and turning it off restores every widget to its earlier rows and size; repeat after
+  a force-stop with always on still set · emulator, then pong.
+
 ### Wall rework #78 Home layout
 - 2026-10-17 · commit "feat(home): Home pages wear the Home layout …" · A Home page shows no
   frame (no slab, no rim line, with pane glass on and off), no launcher status bar, no extra keys,

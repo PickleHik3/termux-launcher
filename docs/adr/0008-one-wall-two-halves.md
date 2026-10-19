@@ -39,8 +39,8 @@ the Workspace's, amended by phase two slice 2); Minimal mode stays Workspace-onl
 Appearance stays one look. The usage-mode, Display-switch and per-place preferences migrate once,
 with no toggle back to the old wall. The word place leaves the glossary; page, Home page, window,
 display window, Workspace and wall take over, and the saved sets called workspaces become Saved
-sessions so that the environment can own the word. `project-docs/active/display-fullscreen/PARKED.md`
-is answered by this decision: a full-screen display is a display window in minimal mode.
+sessions so that the environment can own the word. The parked full-screen Display spec
+was answered by this decision: a full-screen display is a display window in minimal mode.
 The spec is `project-docs/active/wall-rework-2026-10-17.md`.
 
 ## Amended 2026-10-17, same day: Home floats and the Home keyboard
