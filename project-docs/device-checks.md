@@ -1388,7 +1388,49 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
   panes › Swipe on the terminal to switch windows off: only the border pages; on again at the next
   touch. A Home float's terminal still pages Home by the same swipe · emulator, then pong.
 
+### Seam travel and Workspace dock (10-19)
+The Workspace's missing dock on pong is the developer's own Terminal layout (no pinned apps
+element), not a defect; nothing about the dock's presence changed.
+- 2026-10-19 · f2f54cc4b · Terminal layout without a dock, Home with apps and A–Z, keyboard down
+  on both: slide from the last Home page to the terminal and back, slowly by the border drag and
+  by a fling. Home's dock sinks below the screen's edge as the terminal comes in and rises as
+  Home comes back, in step with the page; nothing appears, vanishes or jumps at settle. Capture
+  the slide at 0, 25, 50, 75 and 100 % each way (`screenrecord`, frames pulled at the quarters) ·
+  emulator, then pong.
+- 2026-10-19 · f2f54cc4b · The shipped Terminal layout (apps, A–Z, extra keys) against Home's
+  apps and A–Z: the whole dock goes down over the first half and the other half's rows rise over
+  the second; at 50 % no dock row is on screen and nothing flashes there. Drag to 40 %, then to
+  60 %, and back again across the midpoint: the rows follow the finger both ways, never pop · emulator.
+- 2026-10-19 · f2f54cc4b · Keyboard up on the terminal (and Home with always on, then without):
+  the rows sink into the keyboard's top edge rather than carrying the keyboard down; the keyboard
+  ends where it rests on each side; the dock's glass has no seam or stale sliver at the keyboard's
+  edge at 50 % · emulator.
+- 2026-10-19 · f2f54cc4b · Status bar along the top: toward Home it slides out sideways with the
+  terminal page (chips, clock and glass together), toward the terminal it slides in with it from
+  the right edge; its window chips stay the Workspace's the whole way, the badge too; Docked and
+  Floating Style, light and dark, and the strip behind the system bar moves with the bar in Docked.
+  Under a joined Docked frame, look for the bar's glass staying behind while its content moves ·
+  emulator.
+- 2026-10-19 · f2f54cc4b · What still changes at settle, to judge rather than pass: the terminal
+  page moves down by the bar's band as it lands from Home (and Home's page up as it lands there),
+  and a Home Style, Corners or Margin set apart from the Workspace's re-dresses the dock at settle ·
+  emulator, then pong.
+- 2026-10-19 · f2f54cc4b · Unchanged elsewhere: a side rail or A–Z on a side edge in either
+  layout, the status bar on a side or the bottom, reduced motion (everything snaps at settle),
+  Animation speed Slower, a split terminal, landscape, the display window's slide to the terminal
+  (no seam: the bar stays put), and a Home float minimised to a chip (the chip keeps its place
+  during the slide, settles once) · emulator.
+
 ## Developer
+
+### Seam travel and Workspace dock (10-19)
+- 2026-10-19 · f2f54cc4b · Feel on pong of the Home ↔ terminal slide with your layouts: whether
+  the dock leaving and the bar arriving read as one motion, and the frame time of the slide
+  against the 1.1.0-pre.6 baseline (sliding between places: median 15–16 ms, worst page-change
+  frame 47 ms; pre-roll and settle frames 30–77 ms). The slide now lays the stack out once at its
+  start (from a Workspace without a dock, or bringing the bar from Home) or at its midpoint
+  (a dip): perfetto `Wall.seamLayout` is that frame; report it red if it is worse than the
+  pre-roll frames · pong, by hand (ask first).
 
 ### Terminal body swipe (10-19)
 - 2026-10-19 · feat(wall) body swipe · Feel on pong: whether 1.5x across-over-down is the right
