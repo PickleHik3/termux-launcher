@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Settings at 600 dp and wider (the Surface): the root list and the open section side by side
+<!-- Settings on a screen at least 600 dp in its smallest width (the Surface; never a phone,
+     even in landscape): the root list and the open section side by side
      (F4). The same ids as the phone layout, so a fragment restored across a width change finds its
      container; SettingsActivity rebuilds the stack for the new shape. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"

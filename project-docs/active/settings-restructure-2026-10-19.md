@@ -118,11 +118,12 @@ wins over every choice.
 
 ## Two panes (F4)
 
-At 600 dp and wider (`layout-w600dp/activity_settings.xml`) the root list stands on the left (two
+On a screen whose smallest width is 600 dp (`layout-sw600dp/activity_settings.xml`: tablets
+such as the Surface, never a phone turned to landscape) the root list stands on the left (two
 fifths) and the open section on the right, with a hairline between. The detail opens on Home; a list
 row switches the section (fade through); deeper pages stack in the detail on the shared axis; Back
 from a section's own page leaves Settings. The list's search box searches for the detail, so the
-toolbar has no search action there. A width change across 600 dp (rotation, fold, window resize)
+toolbar has no search action there. A smallest-width change across 600 dp (a fold, a window resize)
 rebuilds the stack for the new shape from the same bookkeeping: the phone gets the root back under
 the stack, the wide shape opens Home when the reader was at the root. Phones are unchanged; the
 phone layout carries a gone `settings_list` only so a restored fragment always has a container.
@@ -135,7 +136,7 @@ The list does not mark the open section yet.
 | F1 | Search from every screen, landing on the row; Enter opens the first result | 1 (this branch) |
 | F2 | The four transitions | 1 |
 | F3 | General › Animation speed, one multiplier for settings, page swipes, palette and floats | 1 |
-| F4 | Two panes at 600 dp and up | 1 |
+| F4 | Two panes at a smallest width of 600 dp | 1 |
 | F5 | Page transition picker with live preview (Slide, Depth, Fade, Carousel, Stack), Home pages only, frame-rate checked on pong with glass | 2 |
 | F6 | Gestures table (swipe up/down, double tap, two-finger), privileged routes shown only when available | 2 |
 | F7 | Icon scale, label size, two-line labels, label shadow | 2 |

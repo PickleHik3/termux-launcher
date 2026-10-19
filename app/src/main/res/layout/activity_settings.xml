@@ -28,7 +28,7 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <!-- The wide layout's list pane (layout-w600dp). Never shown here: it only gives a fragment
+    <!-- The wide layout's list pane (layout-sw600dp). Never shown here: it only gives a fragment
          restored from the wide shape a container while SettingsActivity rebuilds for this one. -->
     <FrameLayout
         android:id="@+id/settings_list"

@@ -1259,10 +1259,11 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
   row and fades away on Back; a search result fades through; Home › Layout opens the editor
   growing from the row; with Remove animations on, every one of these is an instant cut ·
   emulator, screen recording.
-- 2026-10-19 · commit "feat(settings): two panes on wide screens" · On a 600 dp+ window: the list
-  beside Home; tap Terminal: the right side fades to Terminal; Text & display slides in on the
-  right; Back, then Back again leaves Settings; rotate a phone-sized window across 600 dp with
-  Text & display open: the page stays, Back walks up · emulator with `wm size`, then the Surface.
+- 2026-10-19 · commits "feat(settings): two panes on wide screens", "fix(settings): two panes
+  only on tablets" · A tablet-sized screen (`wm size 1600x2560`, density 320): the list beside
+  Home; tap Terminal: the right side fades to Terminal; Text & display slides in on the right;
+  Back, then Back again leaves Settings. A phone turned to landscape stays one pane, with no
+  rebuild flash on rotation · emulator with `wm size`, then the Surface.
 - 2026-10-19 · same · Doors from outside Settings land where they did: the display window's cog
   (Linux apps), the Apps bar opener (Dock & drawer), Look and feel (Look), the drawer's settings
   (Drawer layout), the keyboard theme from the Appearance editor, Edit extra keys · emulator.

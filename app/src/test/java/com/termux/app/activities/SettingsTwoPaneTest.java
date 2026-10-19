@@ -28,12 +28,13 @@ import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.annotation.GraphicsMode;
 
 /**
- * F4: at 600 dp and wider the root list stands beside the open section; a list row switches the
- * section, deeper pages stack in the detail, Back from a section's page leaves Settings. Crossing
- * 600 dp rebuilds the stack for the new shape without losing the reader's place.
+ * F4: on a screen whose smallest width is 600 dp the root list stands beside the open section; a
+ * list row switches the section, deeper pages stack in the detail, Back from a section's page
+ * leaves Settings. A phone stays one pane even in landscape. Crossing 600 dp (a fold, a window
+ * resize) rebuilds the stack for the new shape without losing the reader's place.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, application = Application.class, qualifiers = "w900dp-h700dp")
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class, qualifiers = "sw700dp-w900dp-h700dp")
 @ConscryptMode(ConscryptMode.Mode.OFF)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class SettingsTwoPaneTest {
@@ -102,7 +103,7 @@ public class SettingsTwoPaneTest {
         tap(activity, (PreferenceFragmentCompat) list(activity), "terminal");
         tap(activity, (PreferenceFragmentCompat) detail(activity), "terminal_sub_text");
 
-        RuntimeEnvironment.setQualifiers("w400dp-h800dp");
+        RuntimeEnvironment.setQualifiers("sw400dp-w400dp-h800dp");
         controller.recreate();
         activity = controller.get();
         idle(activity);
@@ -116,7 +117,7 @@ public class SettingsTwoPaneTest {
         assertTrue("the phone shape has the root under the stack",
             detail(activity) instanceof SettingsActivity.RootPreferencesFragment);
 
-        RuntimeEnvironment.setQualifiers("w900dp-h700dp");
+        RuntimeEnvironment.setQualifiers("sw700dp-w900dp-h700dp");
         controller.recreate();
         activity = controller.get();
         idle(activity);
@@ -127,7 +128,16 @@ public class SettingsTwoPaneTest {
     }
 
     @Test
-    @Config(qualifiers = "w400dp-h800dp")
+    @Config(qualifiers = "sw400dp-w860dp-h400dp-land")
+    public void aPhoneInLandscapeStaysOnePane() {
+        SettingsActivity activity = open().get();
+        assertFalse(activity.isTwoPane());
+        assertNull(list(activity));
+        assertTrue(detail(activity) instanceof SettingsActivity.RootPreferencesFragment);
+    }
+
+    @Test
+    @Config(qualifiers = "sw400dp-w400dp-h800dp")
     public void aPhoneHasOnePane() {
         SettingsActivity activity = open().get();
         assertFalse(activity.isTwoPane());
