@@ -26,9 +26,10 @@ import java.util.List;
  * and the dissolve that carries it past the bar's end ran to nothing exactly where its glyph is
  * drawn, halving what was left. A fully peeked mark reached the glass at 31% of full ink. The
  * drain is now 15% and the dissolve keeps half its ink at the mark's outer edge, so
- * {@link Mark#effectiveInk} stands at or above {@link #EFFECTIVE_INK_FLOOR} for every peeking mark. The hierarchy that says which place you are on is carried where it costs no
- * legibility: the neighbour keeps the place's own colour and is faded in it, and only the mark at
- * home wears a glow.
+ * {@link Mark#effectiveInk} stands at or above {@link #EFFECTIVE_INK_FLOOR} for every peeking
+ * mark. The hierarchy that says which place you are on is carried where it costs no legibility:
+ * the neighbour keeps the place's own colour and is faded in it, and only the mark at home wears
+ * a glow.
  *
  * <h3>The same three colours as the row</h3>
  *

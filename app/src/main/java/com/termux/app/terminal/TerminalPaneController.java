@@ -5637,7 +5637,7 @@ public class TerminalPaneController {
      * {@link CornerZones#PANE_SIZE_DP}.
      *
      * <p>The corner tab itself is not drawn here. It is a {@link PaneControlsView}, the same view
-     * the Widgets and Display pages carry, told where the held pane is by a frame source; this
+     * the Widgets page and the display window carry, told where the held pane is by a frame source; this
      * overlay keeps the touches, as those pages keep theirs, and asks the view which button a
      * finger landed on. That is what lets the tab hold a list of buttons of any length instead of
      * the four slots it used to have, and scale them down on a narrow pane the way the pages' do.
@@ -6448,7 +6448,7 @@ public class TerminalPaneController {
 
         /**
          * The tab out of one corner. It comes out of the corner the finger asked at, as the
-         * Widgets and Display pages' do, and one already out at another corner starts again from
+         * Widgets page and the display window' do, and one already out at another corner starts again from
          * the new one rather than sliding across.
          */
         private void showControls(@Nullable Leaf leaf, int corner) {

@@ -7,7 +7,7 @@ import androidx.annotation.NonNull;
 
 /**
  * Where a corner tab goes, and what shape it is. Every frame on the wall answers a corner tap with
- * the same small tab of buttons — the Widgets page, the Display page and a terminal pane — and this
+ * the same small tab of buttons — the Widgets page, the display window and a terminal pane — and this
  * is the one place that decides where it lands, so all three agree to the pixel and none of them
  * can drift out of its own frame again.
  *

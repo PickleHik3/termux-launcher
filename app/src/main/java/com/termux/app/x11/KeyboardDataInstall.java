@@ -10,7 +10,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The command behind the Display page's "Install xkeyboard-config" button: the X keyboard data a
+ * The command behind the display window's "Install xkeyboard-config" button: the X keyboard data a
  * display cannot start without, installed in a terminal window the user watches.
  *
  * <p>Nothing here runs anything: an edition goes in, an argv comes out, and a test reads every

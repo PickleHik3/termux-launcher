@@ -17,7 +17,7 @@ public interface PaneSurfaceStyle {
     /**
      * True while the border preference is on: every place's frame wears a line — the slab's lit
      * rim on glass, the plain stroke otherwise — in every mode, so the border drag that pages the
-     * wall ({@code wall/BorderDrag}) has the same target on the Widgets and Display pages as on
+     * wall ({@code wall/BorderDrag}) has the same target on the Widgets page and the display window as on
      * the terminal. Off, the pages wear a rim only as part of their glass.
      */
     default boolean paneBorderEnabled() { return false; }
