@@ -157,15 +157,23 @@ public final class LauncherWidgetRepository {
     @Nullable
     public synchronized LauncherWidgetRecord mergeIntoFolder(int draggedId, int targetId,
                                                              @NonNull String fallbackName) {
+        return mergeIntoFolder(draggedId, targetId, fallbackName, HomeFolderPolicy.MAX_APPS);
+    }
+
+    /** {@link #mergeIntoFolder} with a folder taking up to {@code capacity} apps. */
+    @Nullable
+    public synchronized LauncherWidgetRecord mergeIntoFolder(int draggedId, int targetId,
+                                                             @NonNull String fallbackName,
+                                                             int capacity) {
         LauncherWidgetRecord dragged = records.get(draggedId);
         LauncherWidgetRecord target = records.get(targetId);
-        if (dragged == null || !HomeFolderPolicy.canTarget(dragged, target)) return null;
+        if (dragged == null || !HomeFolderPolicy.canTarget(dragged, target, capacity)) return null;
         LauncherWidgetRecord.FolderApp app = HomeFolderPolicy.entryOf(dragged);
         if (app == null) return null;
         LauncherWidgetRecord folder;
         if (target.isFolder()) {
             List<LauncherWidgetRecord.FolderApp> apps = HomeFolderPolicy.add(target.folderApps(),
-                app);
+                app, capacity);
             if (apps == null) return null;
             folder = target.withFolder(target.folderName(), apps);
         } else {
@@ -1269,7 +1277,7 @@ public final class LauncherWidgetRepository {
             JSONArray array = folder.getJSONArray("apps");
             List<LauncherWidgetRecord.FolderApp> apps = new ArrayList<>();
             java.util.HashSet<String> seen = new java.util.HashSet<>();
-            for (int i = 0; i < array.length() && apps.size() < HomeFolderPolicy.MAX_APPS; i++) {
+            for (int i = 0; i < array.length() && apps.size() < HomeFolderPolicy.HARD_MAX_APPS; i++) {
                 JSONObject entry = array.optJSONObject(i);
                 if (entry == null) continue;
                 try {

@@ -117,4 +117,38 @@
     </plurals>
     <string name="home_pages_editor_remove_confirm_floats">Terminals on it stay open on another page.</string>
     <string name="home_pages_editor_remove_confirm">Remove</string>
+
+    <!-- Folders (F11) -->
+    <string name="settings_home_folders_header">Folders</string>
+    <string name="settings_home_folder_density_title">Folder density</string>
+    <string name="settings_home_folder_density_compact">Compact</string>
+    <string name="settings_home_folder_density_default">Default</string>
+    <string name="settings_home_folder_density_comfortable">Comfortable</string>
+    <string-array name="settings_home_folder_density_entries" translatable="false">
+        <item>@string/settings_home_folder_density_compact</item>
+        <item>@string/settings_home_folder_density_default</item>
+        <item>@string/settings_home_folder_density_comfortable</item>
+    </string-array>
+    <string-array name="settings_home_folder_density_values" translatable="false">
+        <item>compact</item>
+        <item>default</item>
+        <item>comfortable</item>
+    </string-array>
+    <string name="settings_home_folder_capacity_title">Max folder size</string>
+    <string name="settings_home_folder_capacity_9">9 apps</string>
+    <string name="settings_home_folder_capacity_12">12 apps</string>
+    <string name="settings_home_folder_capacity_16">16 apps</string>
+    <string name="settings_home_folder_capacity_20">20 apps</string>
+    <string-array name="settings_home_folder_capacity_entries" translatable="false">
+        <item>@string/settings_home_folder_capacity_9</item>
+        <item>@string/settings_home_folder_capacity_12</item>
+        <item>@string/settings_home_folder_capacity_16</item>
+        <item>@string/settings_home_folder_capacity_20</item>
+    </string-array>
+    <string-array name="settings_home_folder_capacity_values" translatable="false">
+        <item>9</item>
+        <item>12</item>
+        <item>16</item>
+        <item>20</item>
+    </string-array>
 </resources>

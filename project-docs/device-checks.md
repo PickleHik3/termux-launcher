@@ -1234,6 +1234,13 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · commit "feat(home): folder density and max folder size" · A Home folder of 14 apps
+  opens as before at the defaults (four across); Compact shows five across in smaller cells,
+  Comfortable three across in larger ones, and no density's popup runs off a 360 dp screen. Max
+  folder size 9: a folder already holding 14 keeps them, takes no more (a drop beside it moves
+  instead of merging); 20: a folder takes 20 and still holds 20 after a force-stop. The folder's
+  apps wear Icons and labels' size. Dock folders unchanged · emulator, font scale 1.3, light and
+  dark.
 - 2026-10-19 · commit "feat(home): edit pages: reorder, remove, add and the default page" · From
   Home's sheet (Edit pages; the pencil's row now reads Edit widgets) and from Settings › Home ›
   Edit pages (grows from the row, lands on Home with the editor up, Done returns to Settings):

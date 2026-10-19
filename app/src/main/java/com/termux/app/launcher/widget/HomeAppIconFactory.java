@@ -92,6 +92,9 @@ public final class HomeAppIconFactory implements WidgetGridView.AppIconFactory,
         return view;
     }
 
+    /** How the icons and folders are drawn now. */
+    @NonNull HomeIconStyle style() { return style; }
+
     /** Settings › Home › Icons and labels changed: every icon and folder held here redresses. */
     public void setStyle(@NonNull HomeIconStyle value) {
         if (style.equals(value)) return;

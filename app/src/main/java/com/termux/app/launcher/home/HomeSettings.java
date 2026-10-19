@@ -39,10 +39,16 @@ public final class HomeSettings {
     /** Settings › Home › Lock Home layout. Off: Home as it was. */
     public static final String KEY_LAYOUT_LOCKED = "app_launcher_home_layout_locked";
 
+    /** Settings › Home › Folders: a {@code HomeFolderDensity} value. */
+    public static final String KEY_FOLDER_DENSITY = "app_launcher_home_folder_density";
+    /** The most apps a Home folder takes, one of {@code HomeFolderPolicy.CAPACITIES}. */
+    public static final String KEY_FOLDER_CAPACITY = "app_launcher_home_folder_capacity";
+
     /** Whether {@code key} is one of these rows. */
     public static boolean owns(@Nullable String key) {
         if (key == null) return false;
-        if (KEY_PAGE_INDICATOR.equals(key) || KEY_LAYOUT_LOCKED.equals(key)) return true;
+        if (KEY_PAGE_INDICATOR.equals(key) || KEY_LAYOUT_LOCKED.equals(key)
+            || KEY_FOLDER_DENSITY.equals(key) || KEY_FOLDER_CAPACITY.equals(key)) return true;
         if (KEY_PAGE_TRANSITION.equals(key) || KEY_ICON_SCALE.equals(key) || KEY_LABEL_SIZE.equals(key)
             || KEY_LABEL_TWO_LINES.equals(key) || KEY_LABEL_SHADOW.equals(key)) return true;
         for (HomeGestures.Gesture gesture : HomeGestures.Gesture.values()) {
@@ -67,6 +73,17 @@ public final class HomeSettings {
 
     public static void setDefaultPage(@NonNull Context context, int page) {
         preferences(context).edit().putInt(KEY_DEFAULT_PAGE, Math.max(0, page)).apply();
+    }
+
+    @NonNull
+    public static com.termux.app.launcher.widget.HomeFolderDensity folderDensity(@NonNull Context context) {
+        return com.termux.app.launcher.widget.HomeFolderDensity.fromValue(
+            getString(context, KEY_FOLDER_DENSITY, null));
+    }
+
+    public static int folderCapacity(@NonNull Context context) {
+        return com.termux.app.launcher.widget.HomeFolderPolicy.parseCapacity(
+            getString(context, KEY_FOLDER_CAPACITY, null));
     }
 
     public static boolean isLayoutLocked(@NonNull Context context) {

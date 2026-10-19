@@ -134,6 +134,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private int currentPage;
     /** Settings › Home › Lock Home layout: nothing on the pages moves or changes by hand. */
     private boolean layoutLocked;
+    /** Settings › Home › Folders: how many apps a folder takes, and how its popup lays them out. */
+    private int folderCapacity = HomeFolderPolicy.MAX_APPS;
+    @NonNull private HomeFolderDensity folderDensity = HomeFolderDensity.DEFAULT;
     private boolean editorFocusActive;
 
     public WidgetPaneController(@NonNull WidgetPaneView pane,
@@ -464,6 +467,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return true;
     }
 
+    /**
+     * Settings › Home › Folders: how tightly an open folder lays its apps out, and the most apps a
+     * folder takes. A folder already past a lower cap keeps its apps; it only takes no more.
+     */
+    public void setFolderStyle(@NonNull HomeFolderDensity density, int capacity) {
+        folderDensity = density;
+        folderCapacity = HomeFolderPolicy.clampCapacity(capacity);
+    }
+
     /** The dots under the grid, or none (Settings › Home › Page indicator). */
     public void setPageIndicator(@NonNull com.termux.app.launcher.home.HomePageIndicator indicator) {
         pane.setPageIndicator(indicator);
@@ -582,7 +594,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (pane.widgetEditActive()) return;
         LauncherWidgetRecord folder = widgets.repository().get(id);
         if (folder == null || !folder.isFolder()) return;
-        folderPopup().show(folder, anchor);
+        folderPopup().show(folder, anchor, folderDensity);
     }
 
     @NonNull private HomeFolderPopup folderPopup() {
@@ -1478,7 +1490,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (!canceled && record != null && edit.mergeTargetId != 0) {
             LauncherWidgetRecord target = widgets.repository().get(edit.mergeTargetId);
             HomeFolderPolicy.Drop drop = HomeFolderPolicy.dropAction(record, target,
-                SystemClock.uptimeMillis() - edit.mergeSince);
+                SystemClock.uptimeMillis() - edit.mergeSince, folderCapacity);
             if (drop != HomeFolderPolicy.Drop.MOVE && finishMerge(record, target)) return;
         }
         clearMergeTarget();
@@ -1551,7 +1563,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         for (LauncherWidgetRecord other : widgets.repository().recordsOnPage(edit.turn.page)) {
             if (other.appWidgetId == dragged.appWidgetId) continue;
             if (!metrics.boundsFor(other.cell).contains(centerX, centerY)) continue;
-            return HomeFolderPolicy.canTarget(dragged, other) ? other : null;
+            return HomeFolderPolicy.canTarget(dragged, other, folderCapacity) ? other : null;
         }
         return null;
     }
@@ -1562,7 +1574,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         LauncherWidgetRecord dragged = widgets.repository().get(edit.appWidgetId);
         LauncherWidgetRecord target = widgets.repository().get(edit.mergeTargetId);
         if (dragged == null || HomeFolderPolicy.dropAction(dragged, target,
-            SystemClock.uptimeMillis() - edit.mergeSince) == HomeFolderPolicy.Drop.MOVE) return;
+            SystemClock.uptimeMillis() - edit.mergeSince, folderCapacity)
+            == HomeFolderPolicy.Drop.MOVE) return;
         pane.widgetEditOverlay().setGhostBounds(paneBounds(target.cell), true);
         WidgetCellView cell = pane.grid().cellForId(target.appWidgetId);
         if (cell == null) return;
@@ -1600,7 +1613,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         clearMergeTarget();
         // Straight to the store, as a move commits: the session settles the page itself below.
         LauncherWidgetRecord folder = widgets.repository().mergeIntoFolder(appWidgetId,
-            target.appWidgetId, folderFallbackName());
+            target.appWidgetId, folderFallbackName(), folderCapacity);
         if (folder == null) return false;
         edit.moveCandidate = null;
         edit.dragStartBounds = null;
