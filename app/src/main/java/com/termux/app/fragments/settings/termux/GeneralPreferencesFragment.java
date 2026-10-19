@@ -98,6 +98,11 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
     public void onResume() {
         super.onResume();
         if (getActivity() != null) getActivity().setTitle(R.string.settings_section_general);
+        Context context = getContext();
+        Preference transition = context == null ? null
+            : findPreference(com.termux.app.launcher.home.HomeSettings.KEY_PAGE_TRANSITION);
+        if (transition != null) transition.setSummary(HomePageTransitionFragment.titleOf(
+            com.termux.app.launcher.home.HomeSettings.pageTransition(context)));
     }
 
     /** Keyboard vibration belongs to the keyboard's store; everything else to the launcher's. */

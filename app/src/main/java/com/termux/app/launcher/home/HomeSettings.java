@@ -21,7 +21,10 @@ public final class HomeSettings {
 
     private HomeSettings() {}
 
-    /** Settings › Home › Page transition: a {@link HomePageTransition} value. */
+    /**
+     * Settings › General › Page transition: a {@link HomePageTransition} value, for Home's pages
+     * and the wall's. The key is the one it had when the row was Home's.
+     */
     public static final String KEY_PAGE_TRANSITION = "app_launcher_home_page_transition";
 
     /** Settings › Home › Icons and labels: the icon's size, a percentage of the dock's 48 dp. */

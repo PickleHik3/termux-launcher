@@ -110,8 +110,6 @@ public final class SettingsTree {
         // Your launcher
         section(Section.HOME, PAGES + "HomePreferencesFragment", R.string.settings_section_home,
             R.xml.home_preferences);
-        editor(PAGES + "HomePreferencesFragment", PAGES + "HomePageTransitionFragment",
-            R.string.settings_home_page_transition_title);
 
         String dock = PAGES + "LauncherPreferencesFragment";
         section(Section.DOCK_DRAWER, dock, R.string.settings_section_dock_drawer, R.xml.launcher_preferences);
@@ -197,6 +195,8 @@ public final class SettingsTree {
         // System
         String general = PAGES + "GeneralPreferencesFragment";
         section(Section.GENERAL, general, R.string.settings_section_general, R.xml.general_preferences);
+        // Page transition turns every page, not only Home's: it sits under Motion.
+        editor(general, PAGES + "HomePageTransitionFragment", R.string.settings_home_page_transition_title);
         page(general, PAGES + "BackupRestorePreferencesFragment", R.string.settings_destination_backup_restore,
             R.xml.backup_restore_preferences);
         String permissions = PAGES + "ServicesPermissionsPreferencesFragment";
@@ -316,6 +316,9 @@ public final class SettingsTree {
                     return "GeneralPreferencesFragment";
                 if (key.equals("app_launcher_notifications_link")) return "NotificationsPreferencesFragment";
                 return null;
+            case "HomePreferencesFragment":
+                return key.equals("app_launcher_home_page_transition")
+                    ? "GeneralPreferencesFragment" : null;
             case "TermuxStylePreferencesFragment":
                 if (key.equals("terminal_fonts")) return "TerminalTextPreferencesFragment";
                 if (key.equals("keyboard_appearance") || key.equals("customize_keyboard_surface")

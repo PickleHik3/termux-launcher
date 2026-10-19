@@ -37,8 +37,9 @@ import com.termux.app.launcher.home.HomePageTransition;
 import com.termux.app.launcher.home.HomeSettings;
 
 /**
- * Settings › Home › Page transition: a miniature of two Home pages that turns with the effect
- * picked below it, and Apply. The miniature plays once when the screen opens and once per pick
+ * Settings › General › Page transition: a miniature of two pages that turns with the effect
+ * picked below it, and Apply. The effect turns Home's pages, the way between Home and the
+ * Workspace, and the Workspace's windows alike. The miniature plays once when the screen opens and once per pick
  * (a tap on it plays it again, the other way), then rests: nothing draws while nobody asks. It
  * runs the same {@link HomePageTransition} curve the Home pages do, at General › Animation speed,
  * and under reduce motion shows the page it lands on at once.
@@ -157,7 +158,8 @@ public class HomePageTransitionFragment extends Fragment {
             com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY);
         first = new MiniPage(context, 1, ink, tile, 0);
         second = new MiniPage(context, 2, ink, tile, 1);
-        float camera = 8000f * getResources().getDisplayMetrics().density;
+        float camera = HomePageTransition.CAMERA_DISTANCE_DP
+            * getResources().getDisplayMetrics().density;
         first.setCameraDistance(camera);
         second.setCameraDistance(camera);
         stage.addView(second, new FrameLayout.LayoutParams(
