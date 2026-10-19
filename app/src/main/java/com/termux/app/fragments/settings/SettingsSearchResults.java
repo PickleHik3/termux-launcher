@@ -33,7 +33,10 @@ public final class SettingsSearchResults {
     static final String KEY_RESULTS = "settings_search_results";
 
     @NonNull private final PreferenceFragmentCompat mFragment;
+    @NonNull private final SettingsSearchPreference mSearch;
     @Nullable private final SettingsTree.Section mScope;
+    /** A result was opened from this box: the query is spent once the reader is away. */
+    private boolean mResultOpened;
     @Nullable private SettingsSearchIndex mIndex;
     @NonNull private List<SettingsSearchIndex.Entry> mResults = new ArrayList<>();
     /** The screen's own top-level rows and whether each was visible before a search hid it. */
@@ -41,8 +44,10 @@ public final class SettingsSearchResults {
     @NonNull private final List<Boolean> mOwnVisible = new ArrayList<>();
 
     private SettingsSearchResults(@NonNull PreferenceFragmentCompat fragment,
+                                  @NonNull SettingsSearchPreference search,
                                   @Nullable SettingsTree.Section scope) {
         mFragment = fragment;
+        mSearch = search;
         mScope = scope;
     }
 
@@ -54,7 +59,7 @@ public final class SettingsSearchResults {
     public static SettingsSearchResults attach(@NonNull PreferenceFragmentCompat fragment,
                                                @NonNull SettingsSearchPreference search,
                                                @Nullable SettingsTree.Section scope) {
-        SettingsSearchResults results = new SettingsSearchResults(fragment, scope);
+        SettingsSearchResults results = new SettingsSearchResults(fragment, search, scope);
         Context context = search.getContext();
         if (scope != null) {
             search.setHint(context.getString(R.string.settings_search_in, context.getString(scope.titleRes)));
@@ -78,7 +83,19 @@ public final class SettingsSearchResults {
         return true;
     }
 
+    /**
+     * The screen's view went away. After a result was opened from it, the query is cleared then,
+     * under the departure rather than during it: the results stay on the screen while it leaves,
+     * and the reader who comes Back finds the screen itself, not the search they already used.
+     */
+    public void onViewDestroyed() {
+        if (!mResultOpened) return;
+        mResultOpened = false;
+        mSearch.clearQuery();
+    }
+
     private void open(@NonNull SettingsSearchIndex.Entry entry) {
+        mResultOpened = true;
         if (mFragment.getActivity() instanceof Navigator) {
             ((Navigator) mFragment.getActivity()).openSearchResult(entry.screenClass, entry.key);
         }

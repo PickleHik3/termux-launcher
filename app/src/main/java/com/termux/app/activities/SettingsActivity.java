@@ -881,6 +881,13 @@ public class SettingsActivity extends AppCompatActivity implements
             }
         }
 
+        @Override
+        public void onDestroyView() {
+            // A result opened from here replaced the root: Back returns to the root, not the search.
+            if (mSearch != null) mSearch.onViewDestroyed();
+            super.onDestroyView();
+        }
+
         @androidx.annotation.VisibleForTesting
         @Nullable
         public SettingsSearchResults searchResults() {
