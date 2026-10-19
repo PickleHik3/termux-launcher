@@ -32,6 +32,7 @@
     <string name="settings_home_gestures_helper_title">More gestures</string>
     <string name="settings_home_gestures_helper_summary">Turn on the launcher\'s accessibility service, or connect Shizuku, to lock the screen or open notifications and quick settings with a gesture.</string>
     <string name="home_gesture_needs_helper">Turn on the launcher\'s accessibility service or connect Shizuku for this gesture</string>
+    <string name="home_gesture_shade_failed">Shizuku couldn\'t open that. Check that it is running.</string>
     <string name="home_gesture_no_app">Choose an app for this gesture in Settings › Home</string>
 
     <!-- Icons and labels (F7) -->

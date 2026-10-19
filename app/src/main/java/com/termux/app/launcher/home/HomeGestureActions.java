@@ -3,6 +3,8 @@ package com.termux.app.launcher.home;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -37,6 +39,8 @@ public final class HomeGestureActions {
         void explainHelperNeeded();
         /** The gesture is set to open an app and none is picked, or it is gone. */
         void explainNoApp();
+        /** Shizuku was asked to pull the shade down and said no. Called on the main thread. */
+        void explainShadeFailed();
     }
 
     /** Whether the actions that need a helper can run: the accessibility service, or Shizuku. */
@@ -59,7 +63,7 @@ public final class HomeGestureActions {
             case LOCK_SCREEN: host.lockScreen(); break;
             case NOTIFICATIONS:
             case QUICK_SETTINGS:
-                if (!expandShade(context, action == HomeGestures.Action.QUICK_SETTINGS)) {
+                if (!expandShade(context, action == HomeGestures.Action.QUICK_SETTINGS, host)) {
                     host.explainHelperNeeded();
                 }
                 break;
@@ -73,14 +77,31 @@ public final class HomeGestureActions {
     }
 
     /** The shade (or quick settings) down through whichever helper is there; false for none. */
-    static boolean expandShade(@NonNull Context context, boolean quickSettings) {
+    static boolean expandShade(@NonNull Context context, boolean quickSettings, @NonNull Host host) {
         if (LauncherLockAccessibilityAccess.isEnabled(context)
             && LockAccessibilityService.expandShade(quickSettings)) return true;
         PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
         if (!manager.isPrivilegedAvailable()) return false;
+        Handler main = new Handler(Looper.getMainLooper());
         manager.executeCommand(quickSettings ? "cmd statusbar expand-settings"
-            : "cmd statusbar expand-notifications");
+                : "cmd statusbar expand-notifications")
+            .handle((output, error) -> {
+                if (error != null || !commandSucceeded(output)) main.post(host::explainShadeFailed);
+                return null;
+            });
         return true;
+    }
+
+    /**
+     * Whether a privileged command's output reads as done: empty, or nothing that names an error,
+     * a missing permission or no backend (the launcher's lock reads its commands the same way).
+     */
+    static boolean commandSucceeded(@Nullable String output) {
+        if (output == null) return false;
+        String lower = output.trim().toLowerCase(java.util.Locale.ROOT);
+        if (lower.isEmpty()) return true;
+        return !lower.startsWith("error") && !lower.contains("permission required")
+            && !lower.contains("no privileged backend") && !lower.contains("exception");
     }
 
     private static boolean launch(@NonNull Context context, @Nullable String app) {

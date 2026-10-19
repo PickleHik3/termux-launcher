@@ -20936,6 +20936,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void explainNoApp() {
                     AppNotice.show(TermuxActivity.this, R.string.home_gesture_no_app, false);
                 }
+                @Override public void explainShadeFailed() {
+                    AppNotice.show(TermuxActivity.this, R.string.home_gesture_shade_failed, false);
+                }
             });
     }
 
