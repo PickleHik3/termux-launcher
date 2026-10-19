@@ -1234,6 +1234,13 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · commit "feat(home): lock Home layout" · Long-press an empty spot: the sheet ends its
+  page group with Lock layout; tap it ("Home layout locked"). Now a long press on an icon, a
+  folder or a widget shows "Home is locked…" and nothing lifts; the corner tab's pencil and + show
+  the same and open no wheels; taps still launch apps and open folders. The sheet now shows
+  Unlock layout under Terminal and no Add or Edit rows; Unlock restores everything. Settings ›
+  Home › Lock Home layout shows the same state both ways. The sheet still fits at font scale 1.3
+  with every row (not the default home, an empty second page) · emulator, light and dark.
 - 2026-10-19 · commit "feat(home): page indicator, dots or off" · With two or more Home pages the
   dots show at the default; Page indicator Off hides them and no widget or icon moves or resizes
   (screenshot before and after); back to Dots brings them back · emulator, light and dark.

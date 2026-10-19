@@ -108,6 +108,12 @@
             app:title="@string/settings_wallpaper_parallax_title"
             app:summary="@string/settings_wallpaper_parallax_summary"
             android:defaultValue="true" />
+        <!-- The Home sheet's Lock and Unlock write the same key. -->
+        <SwitchPreferenceCompat
+            app:key="app_launcher_home_layout_locked"
+            app:title="@string/settings_home_layout_locked_title"
+            app:summary="@string/settings_home_layout_locked_summary"
+            android:defaultValue="false" />
         <!-- Start in: the page a cold start shows (ADR 0008). -->
         <ListPreference
             app:key="app_launcher_start_in"

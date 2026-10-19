@@ -36,16 +36,27 @@ public final class HomeSettings {
     /** Settings › Home › Page indicator: a {@link HomePageIndicator} value. */
     public static final String KEY_PAGE_INDICATOR = "app_launcher_home_page_indicator";
 
+    /** Settings › Home › Lock Home layout. Off: Home as it was. */
+    public static final String KEY_LAYOUT_LOCKED = "app_launcher_home_layout_locked";
+
     /** Whether {@code key} is one of these rows. */
     public static boolean owns(@Nullable String key) {
         if (key == null) return false;
-        if (KEY_PAGE_INDICATOR.equals(key)) return true;
+        if (KEY_PAGE_INDICATOR.equals(key) || KEY_LAYOUT_LOCKED.equals(key)) return true;
         if (KEY_PAGE_TRANSITION.equals(key) || KEY_ICON_SCALE.equals(key) || KEY_LABEL_SIZE.equals(key)
             || KEY_LABEL_TWO_LINES.equals(key) || KEY_LABEL_SHADOW.equals(key)) return true;
         for (HomeGestures.Gesture gesture : HomeGestures.Gesture.values()) {
             if (gesture.key.equals(key) || gesture.appKey().equals(key)) return true;
         }
         return false;
+    }
+
+    public static boolean isLayoutLocked(@NonNull Context context) {
+        return getBoolean(context, KEY_LAYOUT_LOCKED, false);
+    }
+
+    public static void setLayoutLocked(@NonNull Context context, boolean locked) {
+        putBoolean(context, KEY_LAYOUT_LOCKED, locked);
     }
 
     @NonNull

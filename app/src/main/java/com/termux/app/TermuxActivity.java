@@ -23063,7 +23063,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeActionsSheet.open(com.termux.app.launcher.home.HomeActionsSheetPolicy.itemsFor(
             isDefaultHomeApp(), hasPages,
             hasPages && mWidgetPaneController.currentPageEmpty(),
-            hasPages ? mWidgetPaneController.homePageCount() : 0));
+            hasPages ? mWidgetPaneController.homePageCount() : 0,
+            com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this)));
     }
 
     /**
@@ -23095,6 +23096,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWidgetPaneController.setIconStyle(com.termux.app.launcher.home.HomeSettings.iconStyle(this));
         mWidgetPaneController.setPageIndicator(
             com.termux.app.launcher.home.HomeSettings.pageIndicator(this));
+        mWidgetPaneController.setLayoutLocked(
+            com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this));
         mWidgetPaneController.setExtraGestures(
             com.termux.app.launcher.home.HomeGestures.watched(
                 com.termux.app.launcher.home.HomeSettings.gestureAction(this,
@@ -23140,6 +23143,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case REMOVE_PAGE:
                 if (mWidgetPaneController != null) mWidgetPaneController.removeCurrentPage();
                 break;
+            case LOCK_LAYOUT:
+            case UNLOCK_LAYOUT: {
+                boolean locked = item == com.termux.app.launcher.home.HomeActionsSheetPolicy.Item.LOCK_LAYOUT;
+                com.termux.app.launcher.home.HomeSettings.setLayoutLocked(this, locked);
+                if (mWidgetPaneController != null) mWidgetPaneController.setLayoutLocked(locked);
+                AppNotice.show(this, locked ? R.string.home_layout_locked_notice
+                    : R.string.home_layout_unlocked_notice, false);
+                break;
+            }
             case WALLPAPER:
                 openAppearanceSurface(
                     com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);

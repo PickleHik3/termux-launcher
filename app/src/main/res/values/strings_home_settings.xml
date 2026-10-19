@@ -82,4 +82,13 @@
         <item>dots</item>
         <item>off</item>
     </string-array>
+
+    <!-- Lock Home layout (F9) -->
+    <string name="settings_home_layout_locked_title">Lock Home layout</string>
+    <string name="settings_home_layout_locked_summary">Stop icons and widgets from being moved by accident. Taps still open them.</string>
+    <string name="home_actions_lock_layout">Lock layout</string>
+    <string name="home_actions_unlock_layout">Unlock layout</string>
+    <string name="home_layout_locked_notice">Home layout locked</string>
+    <string name="home_layout_unlocked_notice">Home layout unlocked</string>
+    <string name="home_layout_locked_refusal">Home is locked. Long-press an empty spot to unlock it.</string>
 </resources>

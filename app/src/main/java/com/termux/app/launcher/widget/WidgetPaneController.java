@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.termux.app.launcher.home.HomeLayoutLock;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetConfigSheet;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetHost;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetKind;
@@ -126,6 +127,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private String liveOrigin;
     private boolean awaitingExternal;
     private int currentPage;
+    /** Settings › Home › Lock Home layout: nothing on the pages moves or changes by hand. */
+    private boolean layoutLocked;
     private boolean editorFocusActive;
 
     public WidgetPaneController(@NonNull WidgetPaneView pane,
@@ -169,6 +172,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.picker().setSearchFocusListener(this::relayEditorFocus);
         pane.grid().setListener(new WidgetGridView.Listener() {
             @Override public void onWidgetLongPressed(int appWidgetId, float rawX, float rawY) {
+                if (refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
                 enterEditMode(appWidgetId, rawX, rawY);
             }
             @Override public void onWidgetEditDragMove(int appWidgetId, float rawX, float rawY) {
@@ -432,6 +436,29 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.setPageMotion(effect, speedMultiplier);
     }
 
+    /**
+     * Settings › Home › Lock Home layout, and the Home sheet's Lock and Unlock. Locking while the
+     * widgets are being edited closes the edit as its tick would.
+     */
+    public void setLayoutLocked(boolean locked) {
+        layoutLocked = locked;
+        if (locked && pane.widgetEditActive()) commitEditSession();
+    }
+
+    public boolean isLayoutLocked() {
+        return layoutLocked;
+    }
+
+    /**
+     * Whether {@code edit} is refused because the layout is locked; a refusal says so on the page,
+     * with the way to unlock.
+     */
+    boolean refusedWhileLocked(@NonNull HomeLayoutLock.Edit edit) {
+        if (HomeLayoutLock.allows(layoutLocked, edit)) return false;
+        pane.showNotice(pane.getContext().getString(R.string.home_layout_locked_refusal));
+        return true;
+    }
+
     /** The dots under the grid, or none (Settings › Home › Page indicator). */
     public void setPageIndicator(@NonNull com.termux.app.launcher.home.HomePageIndicator indicator) {
         pane.setPageIndicator(indicator);
@@ -483,6 +510,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * with the same gestures and the same ways out.
      */
     public boolean editWidgets() {
+        // Locked, the pencil is spent on the notice: no edit mode, and no grid wheels either.
+        if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_WIDGETS)) return true;
         return menuEditWidgets();
     }
 
@@ -507,6 +536,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * put something on it, and from then on it comes and goes with its widgets.
      */
     void menuAddPage() {
+        if (refusedWhileLocked(HomeLayoutLock.Edit.ADD_PAGE)) return;
         int appended = widgets.repository().addFreshPage();
         if (appended < 0) {
             pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
@@ -630,6 +660,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     void menuRemovePage() {
+        if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_PAGES)) return;
         if (!widgets.repository().removePage(currentPage)) return;
         currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
         render();
@@ -646,6 +677,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     public void openPicker() {
+        if (refusedWhileLocked(HomeLayoutLock.Edit.ADD_ITEM)) return;
         // Built-in widgets need nothing from the platform, so the picker opens even where app
         // widgets are unsupported; the catalogue simply lists the launcher's own.
         pane.picker().setReducedMotion(host.reducedMotion());

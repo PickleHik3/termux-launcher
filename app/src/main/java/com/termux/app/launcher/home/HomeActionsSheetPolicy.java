@@ -34,6 +34,10 @@ public final class HomeActionsSheetPolicy {
         LAYOUT(Group.PAGE),
         /** Takes the page on screen away; only an empty page, and never the last one. */
         REMOVE_PAGE(Group.PAGE),
+        /** Lock Home layout: nothing on the pages moves by hand until it is unlocked. */
+        LOCK_LAYOUT(Group.PAGE),
+        /** The way back from a locked layout, offered right under Terminal while it is locked. */
+        UNLOCK_LAYOUT(Group.PAGE),
         WALLPAPER(Group.LAUNCHER),
         /** The Appearance editor's Look page. */
         LOOK(Group.LAUNCHER),
@@ -61,19 +65,25 @@ public final class HomeActionsSheetPolicy {
      *                      so the page's widget, page, editor and Layout rows are offered
      * @param pageEmpty     the Home page on screen holds no widget
      * @param pageCount     how many Home pages there are; Remove page needs more than one
+     * @param locked        Lock Home layout is on: the rows that change the pages give way to
+     *                      Unlock ({@link HomeLayoutLock#sheetOffers})
      */
     @NonNull
     public static List<Item> itemsFor(boolean isDefaultHome, boolean hasPages,
-                                      boolean pageEmpty, int pageCount) {
+                                      boolean pageEmpty, int pageCount, boolean locked) {
         ArrayList<Item> items = new ArrayList<>();
         items.add(Item.TERMINAL);
         if (hasPages) {
-            items.add(Item.ADD_WIDGET);
-            items.add(Item.ADD_APP);
-            items.add(Item.ADD_PAGE);
-            items.add(Item.EDIT_PAGES);
-            items.add(Item.LAYOUT);
-            if (pageEmpty && pageCount > 1) items.add(Item.REMOVE_PAGE);
+            ArrayList<Item> page = new ArrayList<>();
+            page.add(Item.UNLOCK_LAYOUT);
+            page.add(Item.ADD_WIDGET);
+            page.add(Item.ADD_APP);
+            page.add(Item.ADD_PAGE);
+            page.add(Item.EDIT_PAGES);
+            page.add(Item.LAYOUT);
+            if (pageEmpty && pageCount > 1) page.add(Item.REMOVE_PAGE);
+            page.add(Item.LOCK_LAYOUT);
+            for (Item item : page) if (HomeLayoutLock.sheetOffers(locked, item)) items.add(item);
         }
         items.add(Item.WALLPAPER);
         items.add(Item.LOOK);
