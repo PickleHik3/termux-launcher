@@ -83,19 +83,9 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             startActivity(intent);
             return true;
         });
-        Preference customizeKeyboardSurface = findPreference("customize_keyboard_surface");
-        if (customizeKeyboardSurface != null) customizeKeyboardSurface.setOnPreferenceClickListener(preference -> {
-            Intent intent = new Intent(context, TermuxActivity.class);
-            // The one Appearance editor; nothing is preselected (SPEC §3.1).
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
-            return true;
-        });
         configureTerminalContrastPreference();
         configureThemeTemplatesPreference();
         configureDynamicColorsHint();
-        updateKeyboardLookEnabled(context);
         configureWallpaperAlignment(context);
     }
 
@@ -103,7 +93,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
     public void onResume() {
         super.onResume();
         if (getActivity() != null) {
-            getActivity().setTitle(R.string.settings_destination_appearance);
+            getActivity().setTitle(R.string.settings_section_look);
         }
         Context context = getContext();
         if (context != null) {
@@ -112,20 +102,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureTerminalContrastPreference();
         configureThemeTemplatesPreference();
         configureDynamicColorsHint();
-        if (context != null) updateKeyboardLookEnabled(context);
         if (context != null) updateWallpaperAlignmentVisibility(context);
-    }
-
-    /**
-     * The keyboard-look rows only matter for the built-in keyboard, so they grey out together
-     * when the Keyboard page's input-method choice is something else. That choice lives on a
-     * different page, so this is re-read on every resume rather than pushed as a live event.
-     */
-    private void updateKeyboardLookEnabled(@NonNull Context context) {
-        Preference category = findPreference("keyboard_appearance");
-        if (category == null) return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        category.setEnabled(preferences != null && preferences.isInAppKeyboardEnabled());
     }
 
     /**

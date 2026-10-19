@@ -40,7 +40,10 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_RESOLUTION_EXACT = "displayResolutionExact";
     private static final String KEY_RESOLUTION_CUSTOM = "displayResolutionCustom";
 
-    /** The overview is this class; each focused subpage names its own XML and title. */
+    /**
+     * The overview is this class, Terminal › Linux apps (the old Display section, with its Linux
+     * apps rows on top); each focused subpage names its own XML and title.
+     */
     @androidx.annotation.XmlRes
     protected int preferencesXml() {
         return R.xml.x11_display_preferences;
@@ -48,7 +51,7 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
 
     @androidx.annotation.StringRes
     protected int titleRes() {
-        return R.string.settings_destination_display;
+        return R.string.settings_terminal_sub_linux_apps_title;
     }
 
     @Override

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home: the Layout editor first, then the rows that shape the Home half. Every key is the one
+     it always was (the old Apps page, Appearance and the root's Start in row). -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <Preference
+        app:key="home_layout_editor"
+        app:persistent="false"
+        app:title="@string/settings_layout_editor_title"
+        app:summary="@string/settings_layout_editor_home_summary" />
+
+    <PreferenceCategory app:key="home_gestures" app:title="@string/settings_home_gestures_header">
+        <ListPreference
+            app:key="app_launcher_home_palette_gesture"
+            app:title="@string/settings_home_palette_gesture_title"
+            app:dialogTitle="@string/settings_home_palette_gesture_title"
+            app:entries="@array/settings_home_palette_gesture_entries"
+            app:entryValues="@array/settings_home_palette_gesture_values"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="swipe_up" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="home_widgets" app:title="@string/settings_home_widgets_header">
+        <SwitchPreferenceCompat
+            app:key="app_launcher_widget_pane_enabled"
+            app:title="@string/settings_widget_pane_enabled_title"
+            app:summary="@string/settings_widget_pane_enabled_summary"
+            android:defaultValue="true" />
+        <ListPreference
+            app:key="app_launcher_builtin_widget_style"
+            app:title="@string/settings_builtin_widget_style_title"
+            app:summary="@string/settings_builtin_widget_style_summary"
+            app:entries="@array/settings_builtin_widget_style_entries"
+            app:entryValues="@array/settings_builtin_widget_style_values"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="tonal" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="home_pages" app:title="@string/settings_home_pages_header">
+        <SwitchPreferenceCompat
+            app:key="wallpaper_parallax"
+            app:title="@string/settings_wallpaper_parallax_title"
+            app:summary="@string/settings_wallpaper_parallax_summary"
+            android:defaultValue="true" />
+        <!-- Start in: the page a cold start shows (ADR 0008). -->
+        <ListPreference
+            app:key="app_launcher_start_in"
+            app:title="@string/settings_start_in_title"
+            app:dialogTitle="@string/settings_start_in_title"
+            app:entries="@array/settings_start_in_entries"
+            app:entryValues="@array/settings_start_in_values"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+</PreferenceScreen>

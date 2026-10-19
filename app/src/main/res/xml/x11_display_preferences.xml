@@ -2,6 +2,40 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <!-- Terminal › Linux apps: the old Display section. Its Linux apps page folded in on top; the
+         display itself is a window of the Terminal now (docs/en/X11_Display.md). -->
+    <PreferenceCategory app:title="@string/settings_x11_category_apps">
+        <SwitchPreferenceCompat
+            app:key="x11_drawer_apps"
+            app:title="@string/settings_x11_drawer_apps_title"
+            app:summary="@string/settings_x11_drawer_apps_summary"
+            android:defaultValue="true" />
+        <Preference
+            app:key="x11_gui_apps_setup"
+            app:title="@string/settings_gui_apps_title"
+            app:summary="@string/settings_gui_apps_row_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment" />
+        <Preference
+            app:key="x11_hidden_apps"
+            app:title="@string/settings_x11_hidden_apps_title"
+            app:summary="@string/settings_x11_hidden_apps_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.HiddenAppsPreferencesFragment" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_x11_group_desktop">
+        <EditTextPreference
+            app:key="x11_window_manager"
+            app:title="@string/settings_x11_window_manager_title"
+            app:dialogMessage="@string/settings_x11_window_manager_summary"
+            android:defaultValue="openbox"
+            app:useSimpleSummaryProvider="true" />
+        <Preference
+            app:key="x11_window_manager_hint"
+            app:summary="@string/settings_x11_window_manager_hint"
+            app:selectable="false"
+            app:persistent="false" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/settings_x11_group_configure">
         <Preference
             app:key="x11_sub_input"
@@ -15,12 +49,6 @@
             app:title="@string/settings_x11_sub_resolution_title"
             app:summary="@string/settings_x11_sub_resolution_summary"
             app:fragment="com.termux.app.fragments.settings.termux.X11DisplayResolutionPreferencesFragment" />
-        <Preference
-            app:key="x11_sub_linux_apps"
-            app:persistent="false"
-            app:title="@string/settings_x11_sub_linux_apps_title"
-            app:summary="@string/settings_x11_sub_linux_apps_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayLinuxAppsPreferencesFragment" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_x11_group_support">

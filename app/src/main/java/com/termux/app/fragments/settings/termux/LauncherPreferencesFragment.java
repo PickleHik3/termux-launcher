@@ -32,7 +32,6 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
 
     private static final String KEY_STORAGE = "app_launcher_storage_access";
-    private static final String KEY_HELP = "app_launcher_help";
     private static final String KEY_NOTIFICATION_ACCESS = "app_launcher_notification_access";
     private static final String KEY_ACCESSIBILITY_LOCK = "app_launcher_accessibility_lock_access";
     private static final String KEY_NOTIFICATION_SETTINGS = "app_launcher_notification_settings";
@@ -50,7 +49,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
 
     @androidx.annotation.StringRes
     protected int titleRes() {
-        return R.string.settings_destination_launcher_apps;
+        return R.string.settings_section_dock_drawer;
     }
 
     @Override
@@ -63,7 +62,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(preferencesXml(), rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         configurePermissionActions(context);
-        configureHelp(context);
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();
 
@@ -82,14 +80,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             defaultAppsPreference.setOnPreferenceClickListener(preference -> {
                 Context ctx = getContext();
                 if (ctx != null) PinnedAppsEditor.show(ctx, null);
-                return true;
-            });
-        }
-
-        Preference setHomePreference = findPreference("app_launcher_set_home");
-        if (setHomePreference != null) {
-            setHomePreference.setOnPreferenceClickListener(preference -> {
-                openHomeLauncherSettings(context);
                 return true;
             });
         }
@@ -162,17 +152,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         });
         setClickListener(KEY_APP_PERMISSIONS, preference -> {
             openAppDetails(context);
-            return true;
-        });
-    }
-
-
-    /** Help, for a user who has not found the corner tabs yet: its own screen, over Settings. */
-    private void configureHelp(@NonNull Context context) {
-        setClickListener(KEY_HELP, preference -> {
-            // An ordinary screen on top of this one: Back comes back to Settings, so nothing
-            // has to bounce through the home screen to read the guide.
-            startActivity(com.termux.app.help.HelpActivity.intent(context, null, null, null));
             return true;
         });
     }
@@ -250,11 +229,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
-    }
-
-    /** The same chooser the run's last card offers, so both doors behave the same way. */
-    private void openHomeLauncherSettings(Context context) {
-        com.termux.app.HomeAppChooser.open(context);
     }
 
     private boolean startSettingsIntent(Context context, Intent intent) {

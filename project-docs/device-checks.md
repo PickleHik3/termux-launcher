@@ -1233,7 +1233,28 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
 - 2026-10-19 · same · Settings → Display → Linux apps has no Display badge row and otherwise looks
   exactly as before · pong, screenshot against the previous build.
 
+### Settings restructure (10-19)
+Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
+- 2026-10-19 · commit "refactor(settings): regroup Settings by the wall's halves" · Before/after
+  screenshots of every moved screen: the root, Home, Dock & drawer, Terminal and its four new
+  subpages, Linux apps, Look, Keyboard (with its Look group), General. Every row looks as it did
+  (row height, chevrons, switches, pills, slider, the search pill); only the grouping changed ·
+  emulator, light, dark and black, the Material You scheme, font scale 1.3, against the previous
+  build.
+- 2026-10-19 · same · Home › Layout and Terminal › Layout open the Layout editor on that half;
+  closing the editor returns to Settings on the page it was opened from · emulator.
+- 2026-10-19 · same · Open Settings on Status bar with the previous build, force-stop the app,
+  install this build, reopen within 30 minutes: Terminal › Status bar shows, Back goes to Terminal,
+  then the root · emulator.
+- 2026-10-19 · same · Doors from outside Settings land where they did: the display window's cog
+  (Linux apps), the Apps bar opener (Dock & drawer), Look and feel (Look), the drawer's settings
+  (Drawer layout), the keyboard theme from the Appearance editor, Edit extra keys · emulator.
+
 ## Developer
+
+### Settings restructure (10-19)
+- 2026-10-19 · settings restructure · Taste check of the new root and the Home and Terminal
+  sections against the approved plan page: names, order, summaries · pong, by hand.
 
 - 2026-10-19 · feat(wall) display as a window · The display window's arrival and departure feel
   like a window switch (no flash of an empty frame, no frame of black where the surface was), and

@@ -27,6 +27,7 @@ import com.termux.R;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.SettingsMaterialDialogs;
 import com.termux.app.fragments.settings.SettingsSearchPreference;
+import com.termux.app.fragments.settings.SettingsTree;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
@@ -97,86 +98,20 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
     }
 
     /**
-     * The deep-link arguments an Intent carries, or null when it carries none. Read by the
-     * initial fragment; nothing else in the Intent reaches it.
-     */
-    private static final String PAGES = "com.termux.app.fragments.settings.termux.";
-
-    /**
-     * A deep link that names an old page and a row that has since moved to a focused subpage
-     * (an external Intent, a saved Back stack, a search hit) is sent to the page that holds the row,
-     * with the same scroll key, so the row is still found. Any other class or key is returned as
-     * given, so a link without a key keeps opening the overview it always named.
+     * Where a link that names an old page and a row should land in today's tree: an old page name
+     * that folded into another gives that one, and a row that moved to another page sends the link
+     * there with the same scroll key, so the row is still found (an external Intent, a saved Back
+     * stack, a search hit). See {@link SettingsTree#redirect}.
      */
     @NonNull
     static String redirectLegacyPage(@NonNull String className, @Nullable String scrollToKey) {
-        if (scrollToKey == null) return className;
-        String page = null;
-        if ((PAGES + "KeyboardPreferencesFragment").equals(className)) {
-            if (scrollToKey.startsWith("keyboard_voice") || scrollToKey.equals("keyboard_docs_voice"))
-                page = "KeyboardVoicePreferencesFragment";
-            else if (scrollToKey.equals("in_app_keyboard_hide_on_hardware")
-                || scrollToKey.equals("pass_ctrl_space_to_android"))
-                page = "KeyboardHardwarePreferencesFragment";
-            else if (scrollToKey.equals("keyboard_layout") || scrollToKey.equals("in_app_keyboard_extra_keys")
-                || scrollToKey.equals("in_app_keyboard_layouts")
-                || scrollToKey.startsWith("keyboard_docs_") || scrollToKey.startsWith("keyboard_credits"))
-                page = "KeyboardLayoutPreferencesFragment";
-            else if (scrollToKey.equals("keyboard_shapes") || scrollToKey.startsWith("in_app_keyboard_floating_")
-                || scrollToKey.equals("in_app_keyboard_split_gap"))
-                page = "KeyboardSizePreferencesFragment";
-            else if (scrollToKey.equals("keyboard_typing") || scrollToKey.equals("keyboard_feedback")
-                || scrollToKey.startsWith("in_app_keyboard_tap_correction")
-                || scrollToKey.equals("in_app_keyboard_key_sound_enabled")
-                || scrollToKey.equals("in_app_keyboard_key_popup"))
-                page = "KeyboardTypingPreferencesFragment";
-            else if (scrollToKey.equals("in_app_keyboard_haptics_enabled"))
-                page = "AppBehaviorPreferencesFragment";
-        } else if ((PAGES + "LauncherPreferencesFragment").equals(className)) {
-            if (scrollToKey.equals("app_launcher_input_char") || scrollToKey.equals("app_launcher_reset_usage_ranking"))
-                page = "LauncherSearchPreferencesFragment";
-            else if (scrollToKey.equals("app_launcher_az_lock_method")
-                || scrollToKey.equals("app_launcher_az_double_tap_lock"))
-                page = "LauncherLockPreferencesFragment";
-            else if (scrollToKey.equals("app_launcher_most_used_page"))
-                page = "LauncherDockPreferencesFragment";
-            else if (scrollToKey.equals("app_haptics_enabled") || scrollToKey.equals("app_launcher_row_haptics")
-                || scrollToKey.equals("show_in_recents_when_not_default"))
-                page = "AppBehaviorPreferencesFragment";
-        } else if ((PAGES + "X11DisplayPreferencesFragment").equals(className)) {
-            switch (scrollToKey) {
-                case "touchMode": case "x11_android_keyboard": case "x11_keyboard_follows_text":
-                case "clipboardEnable":
-                    page = "X11DisplayInputPreferencesFragment"; break;
-                case "displayResolutionMode": case "displayScale": case "displayResolutionExact":
-                case "displayResolutionCustom": case "displayFilteringMode": case "x11_display_dpi":
-                    page = "X11DisplayResolutionPreferencesFragment"; break;
-                case "x11_display_autostart": case "x11_display_command": case "x11_set_display_env":
-                    page = "X11DisplayStartupPreferencesFragment"; break;
-                case "x11_legacy_drawing": case "x11_force_bgra":
-                    page = "X11DisplayTroubleshootingPreferencesFragment"; break;
-                case "x11_drawer_apps": case "x11_gui_apps_setup": case "x11_hidden_apps":
-                case "x11_window_manager": case "x11_window_manager_hint":
-                    page = "X11DisplayLinuxAppsPreferencesFragment"; break;
-                default: break;
-            }
-        } else if ((PAGES + "TaiPreferencesFragment").equals(className)) {
-            switch (scrollToKey) {
-                case "tai_runtime_actions": case "tai_runtime_stop": case "tai_runtime_unload":
-                case "tai_runtime_logs":
-                    page = "TaiRuntimePreferencesFragment"; break;
-                case "tai_server_category": case "tai_openai_auto_load": case "tai_endpoint_copy":
-                case "tai_api_auth_required": case "tai_lan_enabled":
-                    page = "TaiApiPreferencesFragment"; break;
-                case "tai_advanced_category": case "tai_parameters_defaults": case "tai_runtime_overrides":
-                case "tai_memory_limits": case "tai_share_diagnostics":
-                    page = "TaiAdvancedPreferencesFragment"; break;
-                default: break; // tai_remote_category and tai_remote_provider stay on the overview.
-            }
-        }
-        return page == null ? className : PAGES + page;
+        return SettingsTree.redirect(className, scrollToKey);
     }
 
+    /**
+     * The deep-link arguments an Intent carries, or null when it carries none. Read by the
+     * initial fragment; nothing else in the Intent reaches it.
+     */
     @Nullable
     static Bundle deepLinkArguments(@NonNull Intent intent) {
         String place = intent.getStringExtra(EXTRA_INITIAL_PLACE);
@@ -327,7 +262,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             .replace(R.id.settings, new RootPreferencesFragment())
             .commit();
 
-        for (SettingsBackStackState.Entry entry : saved.entries) {
+        // A stack saved before the restructure names pages that moved: replay it in today's tree.
+        for (SettingsBackStackState.Entry entry : saved.entriesForCurrentTree()) {
             Class<?> fragmentClass;
             try {
                 fragmentClass = getClassLoader().loadClass(entry.className);
@@ -588,81 +524,6 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
 
     public static class RootPreferencesFragment extends PreferenceFragmentCompat {
 
-        /**
-         * Maps each root destination row key to the XML preference resources that are reachable
-         * underneath it (including nested sub-screens), used to build the lazily-computed child
-         * search index below.
-         */
-        private static final Map<String, int[]> CHILD_XML_RESOURCES = new HashMap<>();
-        static {
-            CHILD_XML_RESOURCES.put("wallpaper_style", new int[]{
-                R.xml.termux_style_preferences, R.xml.termux_fonts_preferences});
-            CHILD_XML_RESOURCES.put("terminal", new int[]{
-                R.xml.terminal_preferences});
-            CHILD_XML_RESOURCES.put("status_bar", new int[]{
-                R.xml.status_bar_preferences});
-            CHILD_XML_RESOURCES.put("notifications", new int[]{
-                R.xml.notifications_preferences});
-            CHILD_XML_RESOURCES.put("keyboard_input", new int[]{
-                R.xml.termux_keyboard_preferences, R.xml.termux_keyboard_layout_preferences,
-                R.xml.termux_keyboard_size_preferences, R.xml.termux_keyboard_typing_preferences,
-                R.xml.termux_keyboard_voice_preferences, R.xml.termux_keyboard_voice_details_preferences,
-                R.xml.termux_keyboard_hardware_preferences,
-                R.xml.speech_model_preferences});
-            CHILD_XML_RESOURCES.put("display", new int[]{
-                R.xml.x11_display_preferences, R.xml.x11_display_input_preferences,
-                R.xml.x11_display_resolution_preferences, R.xml.x11_display_linux_apps_preferences,
-                R.xml.x11_display_startup_preferences, R.xml.x11_display_troubleshooting_preferences});
-            CHILD_XML_RESOURCES.put("launcher_apps", new int[]{
-                R.xml.launcher_preferences, R.xml.launcher_dock_preferences,
-                R.xml.launcher_search_preferences, R.xml.launcher_lock_preferences,
-                R.xml.app_drawer_preferences});
-            CHILD_XML_RESOURCES.put("app_behavior", new int[]{
-                R.xml.app_behavior_preferences});
-            CHILD_XML_RESOURCES.put("backup_restore", new int[]{
-                R.xml.backup_restore_preferences});
-            CHILD_XML_RESOURCES.put("services_permissions", new int[]{
-                R.xml.services_permissions_preferences,
-                R.xml.termux_privileged_access_preferences, R.xml.termux_api_preferences});
-            CHILD_XML_RESOURCES.put("on_device_ai", new int[]{
-                R.xml.termux_ai_preferences, R.xml.tai_runtime_preferences, R.xml.tai_api_preferences,
-                R.xml.tai_advanced_preferences, R.xml.tai_remote_preferences});
-            CHILD_XML_RESOURCES.put("advanced_diagnostics", new int[]{
-                R.xml.advanced_diagnostics_preferences});
-            CHILD_XML_RESOURCES.put("about_support", new int[]{
-                R.xml.about_support_preferences});
-        }
-
-        /**
-         * The focused subpage that holds each XML resource's rows, so a search hit can open the
-         * page the setting is on rather than only the overview above it. A resource not listed
-         * here belongs to the destination row's own page.
-         */
-        private static final String TERMUX_PAGES = "com.termux.app.fragments.settings.termux.";
-        private static final Map<Integer, String> CHILD_XML_PAGES = new HashMap<>();
-        static {
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_layout_preferences, TERMUX_PAGES + "KeyboardLayoutPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_size_preferences, TERMUX_PAGES + "KeyboardSizePreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_typing_preferences, TERMUX_PAGES + "KeyboardTypingPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_voice_preferences, TERMUX_PAGES + "KeyboardVoicePreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_voice_details_preferences, TERMUX_PAGES + "KeyboardVoiceDetailsPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_hardware_preferences, TERMUX_PAGES + "KeyboardHardwarePreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.speech_model_preferences, TERMUX_PAGES + "SpeechModelPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.launcher_dock_preferences, TERMUX_PAGES + "LauncherDockPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.launcher_search_preferences, TERMUX_PAGES + "LauncherSearchPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.launcher_lock_preferences, TERMUX_PAGES + "LauncherLockPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.app_drawer_preferences, TERMUX_PAGES + "AppDrawerPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.x11_display_input_preferences, TERMUX_PAGES + "X11DisplayInputPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.x11_display_resolution_preferences, TERMUX_PAGES + "X11DisplayResolutionPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.x11_display_linux_apps_preferences, TERMUX_PAGES + "X11DisplayLinuxAppsPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.x11_display_startup_preferences, TERMUX_PAGES + "X11DisplayStartupPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.x11_display_troubleshooting_preferences, TERMUX_PAGES + "X11DisplayTroubleshootingPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.tai_runtime_preferences, TERMUX_PAGES + "TaiRuntimePreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.tai_api_preferences, TERMUX_PAGES + "TaiApiPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.tai_advanced_preferences, TERMUX_PAGES + "TaiAdvancedPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.tai_remote_preferences, TERMUX_PAGES + "TaiRemotePreferencesFragment");
-        }
-
         /** One indexed child preference: its display title, lowercase searchable text and page. */
         private static final class ChildSearchEntry {
             final String title;
@@ -687,25 +548,13 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         // "Contains: X, Y, Z" summary swapped in during a search can be restored afterwards.
         private final Map<String, CharSequence> mOriginalSummaries = new HashMap<>();
 
-        /** The Start in row, the one root row that writes a preference. */
-        private static final String KEY_START_IN = "app_launcher_start_in";
-
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             Context context = getContext();
             if (context == null)
                 return;
-            // The Start in row reads and writes through the launcher's store, the same path the
-            // Appearance and Launcher pages take; every other root row only navigates.
-            getPreferenceManager().setPreferenceDataStore(
-                com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment
-                    .dataStore(context));
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
-            // A build made without the X server has no display to set up.
-            Preference display = findPreference("display");
-            if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
             SettingsLayoutUtils.applyRootLayout(this);
-            configureStartInRow();
             configureSearch();
         }
 
@@ -715,37 +564,6 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             if (getActivity() != null) {
                 getActivity().setTitle(R.string.title_activity_termux_settings);
             }
-        }
-
-        @Override
-        public void onDisplayPreferenceDialog(@NonNull Preference preference) {
-            // The Start in picker is the rich radio list the other pages' choices use: a bold
-            // name with its one line under it, rather than the platform's plain single-choice list.
-            if (getContext() != null && SettingsMaterialDialogs.show(getContext(), preference)) {
-                return;
-            }
-            super.onDisplayPreferenceDialog(preference);
-        }
-
-        /**
-         * The Start in row (ADR 0008): a quiet row above the destinations, its summary the choice.
-         * A destination row carries an icon tile; this one is a setting, so it takes the plain row
-         * every page below uses, with the chevron a chooser promises. The summary is set by hand
-         * rather than by a summary provider, since the search box writes every root row's summary.
-         */
-        private void configureStartInRow() {
-            ListPreference row = findPreference(KEY_START_IN);
-            if (row == null) return;
-            row.setLayoutResource(R.layout.preference_settings_row);
-            row.setWidgetLayoutResource(R.layout.preference_widget_chevron);
-            row.setSummary(row.getEntry());
-            row.setOnPreferenceChangeListener((preference, newValue) -> {
-                int index = row.findIndexOfValue(String.valueOf(newValue));
-                CharSequence summary = index < 0 ? null : row.getEntries()[index];
-                row.setSummary(summary);
-                mOriginalSummaries.put(KEY_START_IN, summary);
-                return true;
-            });
         }
 
         private void configureSearch() {
@@ -805,7 +623,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         /**
          * Shows/hides a single destination row for the given lowercase query and returns whether
          * it should be visible. Matches on the row's own title/summary first; if that fails, falls
-         * back to the indexed child preferences reachable under it (see {@link #CHILD_XML_RESOURCES}),
+         * back to the indexed child preferences reachable under it (every screen of its section in
+         * {@link SettingsTree}),
          * swapping in a "Contains: ..." summary so the match reason is visible.
          */
         private boolean filterDestinationRow(@NonNull Preference row, @NonNull String needle) {
@@ -878,20 +697,24 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             mChildSearchIndexBuilt = true;
             Context context = getContext();
             if (context == null) return;
-            for (Map.Entry<String, int[]> destination : CHILD_XML_RESOURCES.entrySet()) {
-                List<ChildSearchEntry> entries = new ArrayList<>();
-                for (int xmlRes : destination.getValue()) {
-                    try {
-                        PreferenceManager scratchManager = new PreferenceManager(context);
-                        PreferenceScreen inflated = scratchManager.inflateFromResource(context, xmlRes, null);
-                        if (inflated != null) {
-                            collectChildSearchEntries(inflated, entries, CHILD_XML_PAGES.get(xmlRes));
-                        }
-                    } catch (Exception e) {
-                        // Skip this XML; search degrades gracefully instead of crashing the screen.
-                    }
+            for (SettingsTree.Screen screen : SettingsTree.screens()) {
+                if (screen.xmlRes == 0) continue;
+                List<ChildSearchEntry> entries = mChildSearchIndex.get(screen.section.rootKey);
+                if (entries == null) {
+                    entries = new ArrayList<>();
+                    mChildSearchIndex.put(screen.section.rootKey, entries);
                 }
-                mChildSearchIndex.put(destination.getKey(), entries);
+                try {
+                    PreferenceManager scratchManager = new PreferenceManager(context);
+                    PreferenceScreen inflated = scratchManager.inflateFromResource(context, screen.xmlRes, null);
+                    if (inflated != null) {
+                        // A hit on the section's own page opens the row's page as it is.
+                        collectChildSearchEntries(inflated, entries,
+                            screen.isSectionPage() ? null : screen.className);
+                    }
+                } catch (Exception e) {
+                    // Skip this XML; search degrades gracefully instead of crashing the screen.
+                }
             }
         }
 

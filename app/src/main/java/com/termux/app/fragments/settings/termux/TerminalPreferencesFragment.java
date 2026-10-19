@@ -13,14 +13,23 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 
 /**
- * The terminal's own page: panes and their tmux-style controls, full screen, system
- * keyboard compatibility, and whether the launcher stays reachable from Recents.
- *
- * <p>Splits the terminal half out of the old combined Terminal &amp; status page; the clock and
- * status-widget half is now {@link StatusBarPreferencesFragment}.
+ * Terminal: the section for the Terminal half. The overview is this class itself, a Layout row and
+ * one row per part (windows and panes, status bar, text and display, clipboard, Linux apps); each
+ * focused subpage is a thin subclass naming its own XML and title, sharing this store, so every
+ * row writes the key it always did whichever page holds it. Every lookup here is null-tolerant.
  */
 @Keep
 public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
+
+    @androidx.annotation.XmlRes
+    protected int preferencesXml() {
+        return R.xml.terminal_preferences;
+    }
+
+    @androidx.annotation.StringRes
+    protected int titleRes() {
+        return R.string.settings_destination_terminal;
+    }
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -28,9 +37,17 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         if (context == null) return;
         PreferenceManager manager = getPreferenceManager();
         manager.setPreferenceDataStore(new TerminalPreferencesDataStore(context));
-        setPreferencesFromResource(R.xml.terminal_preferences, rootKey);
+        setPreferencesFromResource(preferencesXml(), rootKey);
         androidx.preference.Preference retro = findPreference("terminal_retro_effect");
         if (retro != null) retro.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
+        // A build made without the X server has no display to set up.
+        androidx.preference.Preference display = findPreference("display");
+        if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
+        androidx.preference.Preference layout = findPreference("terminal_layout_editor");
+        if (layout != null) layout.setOnPreferenceClickListener(row -> {
+            SettingsEditorDoors.openLayoutEditor(this, com.termux.app.wall.PaneWallPage.TERMINAL);
+            return true;
+        });
         SettingsLayoutUtils.applyScreenLayout(this);
     }
 
@@ -38,7 +55,7 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
     public void onResume() {
         super.onResume();
         if (getActivity() != null) {
-            getActivity().setTitle(R.string.settings_destination_terminal);
+            getActivity().setTitle(titleRes());
         }
     }
 
