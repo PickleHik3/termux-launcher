@@ -48,7 +48,10 @@ _Avoid_: UI (too wide), decoration
 One X display, shown whole by the embedded X server (`x11-server/`) as a **window** in the
 **Workspace**: a Linux desktop or the X11 apps on it, managed inside by the display's own window
 manager. It appears when something asks for it (a **Linux app** tapped in the drawer, the Display
-entry under Linux Apps) and leaves when the display stops. There is no switch and no mode for it.
+entry under Linux Apps), joining the end of the current session's row, and leaves when the display
+stops. It is an ordinary window of the row (2026-10-19): it has a chip among the windows' chips,
+can be dragged to another place in the row, and its chip's × closes it, which stops the display.
+There is one at most, no Display page, and no switch or mode for it.
 See `docs/en/X11_Display.md`.
 _Avoid_: Display place, Display page, the third place, X11 page, Termux:X11 (the server is our fork
 of it, but the window is the display)

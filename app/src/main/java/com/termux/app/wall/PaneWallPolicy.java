@@ -45,8 +45,9 @@ public final class PaneWallPolicy {
     private PaneWallPolicy() {}
 
     /**
-     * The page kinds of the old three-place wall, for the callers that still ask by usage mode
-     * (the extra keys' wall row). The wall itself is built from {@link #rowPages}.
+     * The places of the old three-place wall, for the callers that still ask by usage mode (the
+     * extra keys' place switches). The wall itself is built from {@link #rowPages}, and the
+     * display is a window of the Workspace there, never a page.
      *
      * @param terminalOnly   the terminal-only usage mode: no home surfaces at all
      * @param widgetsEnabled the widget pane is switched on
@@ -64,30 +65,26 @@ public final class PaneWallPolicy {
 
     /**
      * The wall's row, by the kind of page that stands in each stretch of it (ADR 0008): the Home
-     * pages first, always there; then the Workspace's windows, only while the current session
-     * has one; then the display window while a display is up. A Home page and a window are each
-     * one entry here however many of them there are: the Home pages page inside the widget grid
-     * and the windows inside the terminal ({@link WallRow}), and the wall only slides between the
-     * stretches.
+     * pages first, always there; then the Workspace's windows, only while the current session's
+     * row has one — a terminal window, or the display window ({@link DisplaySlot}). A Home page and
+     * a window are each one entry here however many of them there are: the Home pages page inside
+     * the widget grid and the windows inside the Workspace's view ({@link WallRow}), and the wall
+     * only slides between the stretches.
      *
-     * @param hasWindow the current session has at least one window
-     * @param displayUp a display is up: running, or asked for and starting. Nothing switches it
-     *                  on; it comes and goes with the display itself.
+     * @param hasWindow the current session's row has at least one window, the display's included
      */
     @NonNull
-    public static List<PaneWallPage> rowPages(boolean hasWindow, boolean displayUp) {
-        List<PaneWallPage> pages = new ArrayList<>(3);
+    public static List<PaneWallPage> rowPages(boolean hasWindow) {
+        List<PaneWallPage> pages = new ArrayList<>(2);
         pages.add(PaneWallPage.WIDGETS);
         if (hasWindow) pages.add(PaneWallPage.TERMINAL);
-        if (displayUp) pages.add(PaneWallPage.DISPLAY);
         return Collections.unmodifiableList(pages);
     }
 
     /**
      * Where the wall goes when the page it rests on leaves the row: the nearest page to its left
-     * that is still there. The display going down lands on the windows, or on Home when there is
-     * no window; the last window closing lands on Home. A page the old row did not have hands
-     * over to Home.
+     * that is still there: the last window closing lands on Home. A page the old row did not have
+     * hands over to Home.
      *
      * @param before the row as it was
      * @param after  the row as it is now
@@ -113,14 +110,15 @@ public final class PaneWallPolicy {
     /**
      * How far {@code page} stands in from the wall's edge on one side, in px, from the terminal
      * page's margin there ({@code terminalMarginPx}, the chrome shape's opening plus the terminal
-     * border's own air) and that air ({@code terminalFrameAirPx}). A window keeps its whole
-     * margin. The Display page stands at the opening itself, the margin less the air. A Home page
+     * border's own air) and that air ({@code terminalFrameAirPx}). A terminal window keeps its
+     * whole margin. The display window's card stands at the opening itself, the margin less the
+     * air: the wall asks for it as a page it does not know ({@code null}). A Home page
      * has no frame (HomeChromePolicy#bordersShown), so it stands at none: it reaches the wall's
      * edge and its content keeps Home's Margin as its own rim, the widget grid's, which makes the
      * air from the screen's edge to the first cell exactly one Margin, as the dock's cards and the
      * Home floats' room have it. Standing it in the opening as well had the grid's rim inside the
      * opening's Margin: two Margins of air, and the caps worked out on a grid a Margin narrower.
-     * {@code null} is a page the wall does not know, kept at the opening as before.
+     * {@code null} is a page the wall does not know, kept at the opening: the display window's.
      */
     public static int pageInsetPx(@Nullable PaneWallPage page, int terminalMarginPx,
                                   int terminalFrameAirPx) {
@@ -291,7 +289,11 @@ public final class PaneWallPolicy {
         return hasNeighbour(pages, current, offsetPx > 0f ? -1 : 1);
     }
 
-    /** Resolves the {@code page=} argument of {@code wall.go}, or null when it names nothing. */
+    /**
+     * Resolves the {@code page=} argument of {@code wall.go}, or null when it names nothing.
+     * {@code display} names a window, not a page: the activity opens or brings in the display
+     * window for it before asking here.
+     */
     @Nullable
     public static PaneWallPage parsePage(@NonNull List<PaneWallPage> pages,
                                          @NonNull PaneWallPage current, @Nullable String name) {
@@ -308,8 +310,6 @@ public final class PaneWallPolicy {
             case "workspace":
             case "terminal":
                 return pages.contains(PaneWallPage.TERMINAL) ? PaneWallPage.TERMINAL : null;
-            case "display":
-                return pages.contains(PaneWallPage.DISPLAY) ? PaneWallPage.DISPLAY : null;
             default:
                 return null;
         }

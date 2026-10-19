@@ -26,9 +26,9 @@ import java.util.Collections;
 
 /**
  * The controller's jobs on the wall's row (ADR 0008): which pages exist (Home always, the
- * Workspace while there is a window, the display window while a display is up), the seam both
- * ways, where the home press and a cold start land, and keeping the row position across an
- * activity recreate.
+ * Workspace while its row has a window, the display window's included), the seam both ways,
+ * where the home press and a cold start land, keeping the row position across an activity
+ * recreate, and the display window standing as the Workspace's page while it is in front.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P)
@@ -38,7 +38,6 @@ public class PaneWallControllerTest {
     private static final class Host implements PaneWallController.Host {
         boolean reduced = true;
         boolean hasWindow = true;
-        boolean display = true;
         int homePages = 3;
         int homePage;
         int windows = 3;
@@ -66,7 +65,6 @@ public class PaneWallControllerTest {
         }
         @Override public boolean isPlankTiltEnabled() { return !reduced; }
         @Override public boolean hasWindow() { return hasWindow; }
-        @Override public boolean isDisplayUp() { return display; }
         @Override public int innerCount(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? homePages
                 : page == PaneWallPage.TERMINAL ? (hasWindow ? windows : 0) : 1;
@@ -128,12 +126,7 @@ public class PaneWallControllerTest {
         assertEquals(Boolean.FALSE, host.terminalOffScreen);
     }
 
-    @Test public void theRowIsHomeThenTheWorkspaceThenTheDisplay() {
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY),
-            controller.pages());
-
-        host.display = false;
-        controller.refreshPages();
+    @Test public void theRowIsHomeThenTheWorkspace() {
         assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.pages());
 
         // No window: the Workspace leaves the row, and Home is all there is.
@@ -147,12 +140,11 @@ public class PaneWallControllerTest {
         assertTrue(controller.goTo("left"));
         assertEquals("nothing is left of Home page 1", PaneWallPage.WIDGETS,
             controller.currentPage());
-        assertTrue(controller.goTo("display"));
+        assertFalse("display names a window, not a page", controller.goTo("display"));
         assertTrue(controller.goTo("right"));
-        assertEquals("nothing is right of the Display page", PaneWallPage.DISPLAY,
+        assertTrue(controller.goTo("right"));
+        assertEquals("nothing is right of the Workspace", PaneWallPage.TERMINAL,
             controller.currentPage());
-        assertTrue(controller.goTo("left"));
-        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
         assertTrue(controller.goTo("home"));
         assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
         assertFalse(controller.goTo("nowhere"));
@@ -160,29 +152,7 @@ public class PaneWallControllerTest {
         assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
     }
 
-    @Test public void theDisplayGoingDownLandsOnTheLastWindow() {
-        host.current = 0;
-        assertTrue(controller.goTo(PaneWallPage.DISPLAY, false));
-        host.display = false;
-        controller.refreshPages();
-        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
-        assertEquals("the window next to where the display stood", 2, host.current);
-    }
-
-    @Test public void theDisplayGoingDownWithNoWindowLandsOnTheLastHomePage() {
-        host.hasWindow = false;
-        controller.refreshPages();
-        assertTrue(controller.goTo(PaneWallPage.DISPLAY, false));
-        host.homePage = 0;
-        host.display = false;
-        controller.refreshPages();
-        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
-        assertEquals(2, host.homePage);
-    }
-
     @Test public void theLastWindowClosingLandsOnTheLastHomePage() {
-        host.display = false;
-        controller.refreshPages();
         controller.goTo(PaneWallPage.TERMINAL, false);
         host.homePage = 0;
         host.hasWindow = false;
@@ -192,10 +162,10 @@ public class PaneWallControllerTest {
         assertFalse(controller.isTerminalShowing());
     }
 
-    @Test public void aPageLeavingElsewhereLeavesTheWallWhereItIs() {
+    @Test public void aWindowLeavingElsewhereLeavesTheWallWhereItIs() {
         controller.goTo(PaneWallPage.TERMINAL, false);
         host.current = 1;
-        host.display = false;
+        host.windows = 2;
         controller.refreshPages();
         assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
         assertEquals(1, host.current);
@@ -207,11 +177,7 @@ public class PaneWallControllerTest {
 
         host.hasWindow = false;
         controller.refreshPages();
-        assertTrue("the Display page still follows Home", controller.homeSeam().canLeaveForward());
-
-        host.display = false;
-        controller.refreshPages();
-        assertFalse("no window, no display and no shell to start: the swipe stops",
+        assertFalse("no window and no shell to start: the swipe stops",
             controller.homeSeam().canLeaveForward());
         host.canStart = true;
         assertTrue("an empty Workspace that can start still takes the swipe",
@@ -221,7 +187,6 @@ public class PaneWallControllerTest {
     @Test public void theSeamIntoAnEmptyWorkspaceStartsItsShellOnlyWhenItCommits() {
         controller.goTo(PaneWallPage.WIDGETS, false);
         host.hasWindow = false;
-        host.display = false;
         host.canStart = true;
         controller.refreshPages();
         assertEquals(Collections.singletonList(PaneWallPage.WIDGETS), controller.pages());
@@ -242,7 +207,6 @@ public class PaneWallControllerTest {
     @Test public void aCrossingThatWavers_beforeItsWindowArrives_startsOneShell() {
         controller.goTo(PaneWallPage.WIDGETS, false);
         host.hasWindow = false;
-        host.display = false;
         host.canStart = true;
         controller.refreshPages();
 
@@ -259,7 +223,6 @@ public class PaneWallControllerTest {
     @Test public void aSwipeIntoAnEmptyWorkspaceThatSpringsBackLeavesNothing() {
         controller.goTo(PaneWallPage.WIDGETS, false);
         host.hasWindow = false;
-        host.display = false;
         host.canStart = true;
         controller.refreshPages();
 
@@ -286,16 +249,6 @@ public class PaneWallControllerTest {
         assertEquals("the Workspace turns to window 1 before it slides in", 0, host.current);
         controller.homeSeam().drag(-900f);
         controller.homeSeam().end(-3000f);
-        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
-    }
-
-    @Test public void aDragOffTheDisplayPageReachesTheLastWindow() {
-        controller.goTo(PaneWallPage.DISPLAY, false);
-        host.current = 0;
-        wall.beginPlainDrag();
-        assertEquals(2, host.current);
-        wall.dragTo(900f);
-        wall.endDrag(3000f);
         assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
     }
 
@@ -328,7 +281,6 @@ public class PaneWallControllerTest {
     @Test public void aHomePageHasNoBorderToPageBy() {
         assertFalse(controller.isBorderPagingEnabled(PaneWallPage.WIDGETS));
         assertTrue(controller.isBorderPagingEnabled(PaneWallPage.TERMINAL));
-        assertTrue(controller.isBorderPagingEnabled(PaneWallPage.DISPLAY));
         assertFalse("Home's pages page inside the grid, never by the wall",
             controller.hasInnerPage(PaneWallPage.WIDGETS, 1));
     }
@@ -350,7 +302,7 @@ public class PaneWallControllerTest {
     }
 
     @Test public void aColdStartFollowsStartIn() {
-        controller.goTo(PaneWallPage.DISPLAY, false);
+        controller.goTo(PaneWallPage.TERMINAL, false);
         host.homePage = 1;
         controller.landOnColdStart(WallRow.START_IN_HOME);
         assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
@@ -391,12 +343,15 @@ public class PaneWallControllerTest {
         assertEquals(PaneWallPage.WIDGETS, recreated.currentPage());
         assertEquals(1, again.homePage);
 
-        controller.goTo(PaneWallPage.DISPLAY, false);
-        Bundle display = new Bundle();
-        controller.onSaveInstanceState(display);
-        assertEquals(WallRow.HALF_WORKSPACE, display.getString(PaneWallController.ARG_HALF));
-        assertTrue(recreated.restoreInstanceState(display));
-        assertEquals(PaneWallPage.DISPLAY, recreated.currentPage());
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        host.current = 2;
+        Bundle workspace = new Bundle();
+        controller.onSaveInstanceState(workspace);
+        assertEquals(WallRow.HALF_WORKSPACE, workspace.getString(PaneWallController.ARG_HALF));
+        assertEquals(2, workspace.getInt(PaneWallController.ARG_INDEX));
+        recreated.goTo(PaneWallPage.WIDGETS, false);
+        assertTrue(recreated.restoreInstanceState(workspace));
+        assertEquals(PaneWallPage.TERMINAL, recreated.currentPage());
     }
 
     @Test public void restoreToleratesNothingAndNonsense() {
@@ -421,7 +376,7 @@ public class PaneWallControllerTest {
         PaneWallController built = new PaneWallController(bare, new Host());
         built.attachTerminalPage(terminal);
         assertFalse(built.hasWidgetsPage());
-        assertNull(built.displayPage());
+        assertNull(built.displayWindow());
         assertNull("registered on the wall only once built", bare.pageView(PaneWallPage.WIDGETS));
 
         LayoutInflater inflater = LayoutInflater.from(activity);
@@ -468,7 +423,6 @@ public class PaneWallControllerTest {
     @Test public void aTopAirSlideOffTheFirstWindowReachesTheLastHomePage() {
         Host moving = new Host();
         moving.reduced = false;
-        moving.display = false;
         moving.windows = 1;
         PaneWallController row = laidOutOnAWindow(moving);
         PaneWallLayout layout = row.wall();
@@ -497,7 +451,6 @@ public class PaneWallControllerTest {
     @Test public void aHeldLeftBorderDragOffTheFirstWindowReachesTheLastHomePage() {
         Host moving = new Host();
         moving.reduced = false;
-        moving.display = false;
         moving.windows = 2;
         PaneWallController row = laidOutOnAWindow(moving);
         PaneWallLayout layout = row.wall();
@@ -526,7 +479,6 @@ public class PaneWallControllerTest {
     @Test public void aSideBorderSwipeWithNoHoldReachesTheLastHomePage() {
         Host moving = new Host();
         moving.reduced = false;
-        moving.display = false;
         moving.windows = 1;
         PaneWallController row = laidOutOnAWindow(moving);
         PaneWallLayout layout = row.wall();
@@ -594,8 +546,8 @@ public class PaneWallControllerTest {
     private static final float ROW_EPS = 0.01f;
 
     @Test public void eachPageRestsAtItsPlaceInTheRow() {
-        // Three Home pages, three windows, the Display page: seven pages.
-        assertEquals(7, controller.rowCount());
+        // Three Home pages and three windows, the display window counted among them if it is up.
+        assertEquals(6, controller.rowCount());
         controller.goTo(PaneWallPage.WIDGETS, false);
         host.homePage = 0;
         assertEquals(0f, controller.rowPosition(), ROW_EPS);
@@ -605,17 +557,10 @@ public class PaneWallControllerTest {
         host.current = 1;
         assertEquals("window 2 comes after the three Home pages", 4f, controller.rowPosition(),
             ROW_EPS);
-        controller.goTo(PaneWallPage.DISPLAY, false);
-        assertEquals("the Display page is the row's last", 6f, controller.rowPosition(), ROW_EPS);
     }
 
-    @Test public void anEmptyWorkspaceLeavesHomeAndTheDisplayPage() {
+    @Test public void anEmptyWorkspaceLeavesHomeAlone() {
         host.hasWindow = false;
-        controller.refreshPages();
-        assertEquals(4, controller.rowCount());
-        controller.goTo(PaneWallPage.DISPLAY, false);
-        assertEquals(3f, controller.rowPosition(), ROW_EPS);
-        host.display = false;
         controller.refreshPages();
         assertEquals("Home pages only", 3, controller.rowCount());
     }
@@ -623,7 +568,129 @@ public class PaneWallControllerTest {
     @Test public void aWorkspaceWhoseWindowsAreNotKnownYetIsOnePage() {
         host.windows = 0;
         controller.refreshPages();
-        assertEquals(5, controller.rowCount());
+        assertEquals(4, controller.rowCount());
+    }
+
+    // ---- The display window as the Workspace's window in front (amended 2026-10-19) -----------
+
+    /** The display window's frame on the wall, waiting off screen as attachDisplayWindow leaves it. */
+    private View displayFrame() {
+        View frame = new FrameLayout(activity);
+        wall.addView(frame);
+        wall.setDisplayView(frame);
+        wall.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(1800, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, 1080, 1800);
+        return frame;
+    }
+
+    @Test public void theDisplayWindowWaitsOffScreenUntilItIsInFront() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        View terminal = wall.pageView(PaneWallPage.TERMINAL);
+        View frame = displayFrame();
+        assertSame(terminal, wall.pageView(PaneWallPage.TERMINAL));
+        assertEquals(View.INVISIBLE, frame.getVisibility());
+        assertTrue(controller.isTerminalShowing());
+
+        controller.setDisplayInFront(true);
+        assertSame("the display window stands as the Workspace's page", frame,
+            wall.pageView(PaneWallPage.TERMINAL));
+        assertEquals(View.VISIBLE, frame.getVisibility());
+        assertEquals(0f, frame.getTranslationX(), 0f);
+        assertEquals("the pane host waits off screen", 0f, terminal.getAlpha(), 0f);
+        assertTrue(Math.abs(terminal.getTranslationX()) >= 1080f);
+        assertEquals(Boolean.TRUE, host.terminalOffScreen);
+        assertFalse("the terminal is not what is showing", controller.isTerminalShowing());
+        assertEquals("the wall stays on the Workspace", PaneWallPage.TERMINAL,
+            controller.currentPage());
+
+        controller.setDisplayInFront(false);
+        assertSame(terminal, wall.pageView(PaneWallPage.TERMINAL));
+        assertEquals(1f, terminal.getAlpha(), 0f);
+        assertEquals(View.INVISIBLE, frame.getVisibility());
+        assertTrue(controller.isTerminalShowing());
+    }
+
+    @Test public void thePaneHostKeepsItsSizeWhileTheDisplayWindowIsInFront() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        View terminal = wall.pageView(PaneWallPage.TERMINAL);
+        android.view.ViewGroup.MarginLayoutParams margins =
+            (android.view.ViewGroup.MarginLayoutParams) terminal.getLayoutParams();
+        margins.setMargins(30, 30, 30, 30);
+        terminal.setLayoutParams(margins);
+        wall.setTerminalFrameAirPx(6);
+        View frame = displayFrame();
+        int width = terminal.getWidth();
+        controller.setDisplayInFront(true);
+        wall.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(1800, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, 1080, 1800);
+        assertEquals("no resize of the terminal for the display window", width,
+            terminal.getWidth());
+        assertEquals("the display's card stands at the opening, the margin less the air",
+            1080 - 2 * (30 - 6), frame.getWidth());
+    }
+
+    @Test public void aSwapCarriesTheWindowThatWasInFrontOffBesideTheOneComingIn() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        View terminal = wall.pageView(PaneWallPage.TERMINAL);
+        View frame = displayFrame();
+        host.terminalOffScreen = null;
+        // Started half a width out on the right: the pane host stands one width to its left.
+        assertTrue(controller.swapDisplayInFront(true, 540f, WallParallax.ADJACENT, 300L, null,
+            null));
+        assertEquals(540f, frame.getTranslationX(), 0.5f);
+        assertEquals(-540f, terminal.getTranslationX(), 0.5f);
+        assertEquals(1f, terminal.getAlpha(), 0f);
+        assertNull("the pane host never went off screen between the swap and the travel",
+            host.terminalOffScreen);
+        idle();
+        assertEquals(0f, frame.getTranslationX(), 0.5f);
+        assertEquals("parked once the travel is done", 0f, terminal.getAlpha(), 0f);
+        assertEquals(Boolean.TRUE, host.terminalOffScreen);
+    }
+
+    @Test public void aSwapWithoutTravelLeavesNothingForALaterNudgeToCarry() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        View terminal = wall.pageView(PaneWallPage.TERMINAL);
+        View frame = displayFrame();
+        // The display comes in front at once (the Home seam, a session switch), then goes behind
+        // again at once, and a terminal window switch travels later.
+        controller.setDisplayInFront(true);
+        controller.setDisplayInFront(false);
+        controller.nudgeTerminalPage(540f, WallParallax.ADJACENT, 300L, null, null);
+        assertEquals(540f, terminal.getTranslationX(), 0.5f);
+        assertEquals("the display's frame is not carried along", View.INVISIBLE,
+            frame.getVisibility());
+        assertTrue(Math.abs(frame.getTranslationX()) >= 1080f);
+        idle();
+    }
+
+    @Test public void aSwapThatCannotTravelLandsAtOnceAndStillEnds() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        View frame = displayFrame();
+        int[] ended = {0};
+        assertTrue(controller.swapDisplayInFront(true, 0f, WallParallax.ADJACENT, 300L, null,
+            () -> ended[0]++));
+        assertEquals(1, ended[0]);
+        assertEquals(0f, frame.getTranslationX(), 0f);
+        assertEquals(View.VISIBLE, frame.getVisibility());
+    }
+
+    @Test public void theDisplayGoingDownHandsThePageBackToThePaneHost() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        View terminal = wall.pageView(PaneWallPage.TERMINAL);
+        displayFrame();
+        controller.setDisplayInFront(true);
+        wall.setDisplayView(null);
+        assertFalse(controller.isDisplayInFront());
+        assertSame(terminal, wall.pageView(PaneWallPage.TERMINAL));
+        assertEquals(1f, terminal.getAlpha(), 0f);
+    }
+
+    @Test public void aDisplayWindowWithoutAFrameNeverStandsInFront() {
+        controller.setDisplayInFront(true);
+        assertFalse(controller.isDisplayInFront());
     }
 
     @Test public void homesOwnSwipeMovesTheRowBetweenHomePages() {

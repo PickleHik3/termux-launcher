@@ -30,7 +30,7 @@ import com.termux.view.HoldTiming;
 import com.termux.x11.LorieView;
 
 /**
- * The wall's Display page: the embedded X server's surface, wearing a terminal pane's rim, radius
+ * The wall's display window: the embedded X server's surface, wearing a terminal pane's rim, radius
  * and gap.
  *
  * <p>It carries the same glass slab the panes and the Widgets page do, taken from the same
@@ -677,7 +677,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     @NonNull
     public LorieView display() {
-        if (mDisplay == null) throw new IllegalStateException("Display page is not inflated");
+        if (mDisplay == null) throw new IllegalStateException("display window is not inflated");
         return mDisplay;
     }
 
@@ -1188,7 +1188,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     /**
      * Dress the page from the surface style — the same values the panes beside it read, so the
-     * Display page follows the Canvas surface with the rest of the wall.
+     * display window follows the Canvas surface with the rest of the wall.
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;

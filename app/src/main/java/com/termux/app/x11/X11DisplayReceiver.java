@@ -13,7 +13,7 @@ import com.termux.shared.logger.Logger;
 /**
  * How a display server announces itself. {@code termux-x11 :0} starts the server in its own
  * process, which broadcasts a Binder the moment an X client knocks on the port; this hands it to
- * the {@link X11DisplayHostController} that owns the Display page.
+ * the {@link X11DisplayHostController} that owns the display window.
  *
  * <p>Declared in the manifest, never exported, and guarded by a signature-level permission. The
  * server process runs under the launcher's own uid and signature, so it holds that permission; a

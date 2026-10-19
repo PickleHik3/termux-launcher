@@ -489,11 +489,16 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void switchWindow(boolean forward);
 
+    /**
+     * Brings the row's window at place {@code index} in front, counted from 0 along the row as
+     * the window chips stand — the display window's place included while it is in the row.
+     */
     boolean selectWindow(int index);
 
     /**
-     * Moves the window at {@code from} to {@code to} in the current session's row, both counted
-     * from 0; the current window stays current. False when either is outside the row.
+     * Moves the window at {@code from} to {@code to} in the current session's row, both row
+     * places counted from 0 as {@link #selectWindow} counts them; the window in front stays in
+     * front. False when either is outside the row.
      */
     boolean moveWindow(int from, int to);
 
@@ -511,9 +516,24 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      */
     boolean expelPane(boolean toLeft);
 
+    /** How many windows the current row has, the display window's included. */
     int currentWindowCount();
 
+    /** The row place of the window in front, as {@link #selectWindow} counts it, or -1. */
     int currentWindowIndex();
+
+    /**
+     * The row place of the session's terminal window {@code window}, as
+     * {@link #currentSessionWindows()} and {@code pane.list} count them: the same number unless
+     * the display window stands before it in the row.
+     */
+    default int rowIndexOf(int window) { return window; }
+
+    /**
+     * Whether the window in front of the current row is the display window, which has no panes:
+     * the pane and window-content actions answer that plainly rather than acting behind it.
+     */
+    default boolean isDisplayWindowInFront() { return false; }
 
     boolean promptCurrentWindowRename();
 

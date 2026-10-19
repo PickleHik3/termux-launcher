@@ -38,7 +38,7 @@ public final class X11DisplayHostController {
     /** How long to wait before asking the server for its socket again. */
     private static final long CONNECT_RETRY_MS = 250L;
 
-    /** What the Display page and the status-bar tile want to know. */
+    /** What the display window and the status-bar tile want to know. */
     public interface Listener {
         /** A server came up, or the one that was there has gone. */
         void onDisplayRunningChanged(boolean running);
@@ -154,7 +154,7 @@ public final class X11DisplayHostController {
 
     /**
      * The page's surface is available: take the view and connect it. Called every time the wall
-     * settles on the Display page, because a hidden page detaches its surface.
+     * settles on the display window, because a hidden page detaches its surface.
      */
     public void attachView(@NonNull LorieView view) {
         // A view that has left a window has dropped its clipboard listener with it, so every

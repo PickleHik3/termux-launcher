@@ -464,7 +464,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     /**
      * The launcher's own chord space, for a surface that has taken the keyboard away from the
-     * terminal — the wall's Display page, where an X client owns every ordinary key.
+     * terminal — the display window, where an X client owns every ordinary key.
      *
      * <p>The rule is deliberately narrow: only a stroke holding <em>both</em> Ctrl and Alt is
      * the launcher's, and only when it resolves to a binding. Every default binding lives in

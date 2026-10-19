@@ -167,8 +167,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                 launcher.setX11DisplayCommand(value == null ? "" : value);
             } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_WINDOW_MANAGER.equals(key)) {
                 launcher.setX11WindowManager(value);
-            } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_RUNTIME_BADGE.equals(key)) {
-                launcher.setX11RuntimeBadge(value);
             }
         }
 
@@ -185,9 +183,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_WINDOW_MANAGER.equals(key)) {
                 return launcher.getX11WindowManager();
-            }
-            if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_RUNTIME_BADGE.equals(key)) {
-                return launcher.getX11RuntimeBadge();
             }
             return defValue;
         }

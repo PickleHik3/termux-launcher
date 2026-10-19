@@ -151,9 +151,12 @@ keyboard layouts) shown with a Home action set:
 
 ## 6. The Workspace
 
-- **Windows in a row**: the current session's windows in their order, then the display windows.
-  Switching sessions (drawer, Ctrl+Alt+Shift+C) swaps the window part; the display windows stay.
-  Home floats are session windows but are never in the row.
+- **Windows in a row**: the current session's windows in their order, the display window among
+  them (amended 2026-10-19: it joins the end of the current session's row when it opens and is an
+  ordinary window from then on — reordered, stepped onto and closed like the others; one at most).
+  Switching sessions (drawer, Ctrl+Alt+Shift+C) swaps the row; opening a Linux app or Display
+  brings the display window into the session in front. Home floats are session windows but are
+  never in the row.
 - **A window** is what it is today: a terminal window with its split tree, or (new) a display
   window. Ctrl+Alt+V and Ctrl+Alt+H split inside a window; Ctrl+Alt+C opens a window; Ctrl+Alt+Shift+C
   opens a session. Nothing about panes changes.
@@ -161,9 +164,10 @@ keyboard layouts) shown with a Home action set:
   right after the current window. No drag-to-reorder in phase one; phase two's slice 5a adds it (a
   long press lifts a window's chip in the window bar, a drag moves the window along the row, and
   `window.move` does it from keys and scripts).
-- **Switching**: the border drag, the window chips in the status bar (display windows are chips
-  too; Home floats are chips marked as floats), the Ctrl+Alt shortcuts and the drawer. The screen
-  glyph jumps to the first display window, or starts the display if none is up.
+- **Switching**: the border drag, the window chips in the status bar (the display window's chip
+  stands at its place among them; Home floats are chips marked as floats), the Ctrl+Alt shortcuts
+  and the drawer. There is no screen mark at the bar's edge any more (2026-10-19); Go to Display
+  (`wall.display`, `wall.go display`) opens or brings in the display window.
 - **Chrome and layout** are today's, unchanged: the Workspace layout (normal and minimal), Style,
   Corners, Margin, status bar, dock with extra keys, corner tabs, keyboard swipe, status swipe.
   Display windows wear the same chrome as terminal windows.
@@ -183,7 +187,9 @@ keyboard layouts) shown with a Home action set:
   setting stays.
 - **The Display switch and the usage mode retire.** Linux apps list whenever Show Linux apps in
   drawer is on. Nothing about X11 is a mode.
-- **Stopping**: long-press Stop as today; the display window then leaves the row.
+- **Stopping**: long-press Stop as today, or the display window's chip's × (2026-10-19): the apps
+  are asked to close, asked first when one is open, and the display window then leaves the row,
+  handing the front to the window on its left. A display still starting simply closes.
 - Terminal=true Linux apps open a new terminal window after the current one, not a pane.
 - `active/display-fullscreen/PARKED.md` is answered: full-screen display is a display window in
   minimal mode. Delete it when this ships.

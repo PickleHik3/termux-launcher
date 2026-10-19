@@ -24,13 +24,12 @@ import java.util.List;
  * A neighbour is quieter than the place you are on; it is not meant to be a puzzle. Two things used
  * to take turns dimming it, and they multiplied: the mark lost 38% of its ink to being a neighbour,
  * and the dissolve that carries it past the bar's end ran to nothing exactly where its glyph is
- * drawn, halving what was left. A fully peeked mark reached the glass at 31% of full ink, and a
- * stopped Display at 19%. The drain is now 15%, the dissolve keeps half its ink at the mark's outer
- * edge, and {@link #PEEK_INK_FLOOR} catches the stopped Display before it falls through — so
- * {@link Mark#effectiveInk} stands at or above {@link #EFFECTIVE_INK_FLOOR} for every peeking mark,
- * running or not. The hierarchy that says which place you are on is carried where it costs no
- * legibility: the neighbour keeps the place's own colour and is faded in it, and only the mark at
- * home wears a glow.
+ * drawn, halving what was left. A fully peeked mark reached the glass at 31% of full ink. The
+ * drain is now 15% and the dissolve keeps half its ink at the mark's outer edge, so
+ * {@link Mark#effectiveInk} stands at or above {@link #EFFECTIVE_INK_FLOOR} for every peeking
+ * mark. The hierarchy that says which place you are on is carried where it costs no legibility:
+ * the neighbour keeps the place's own colour and is faded in it, and only the mark at home wears
+ * a glow.
  *
  * <h3>The same three colours as the row</h3>
  *
@@ -76,10 +75,6 @@ public final class StatusBarLensMetrics {
         com.termux.shared.termux.extrakeys.PlaceSwitchGlyph.UNFOCUSED_ALPHA / 255f;
     /** How much ink a mark loses to being a neighbour rather than the place on screen. */
     public static final float PEEK_INK_DRAIN = 0.15f;
-    /** What a Display that is not running keeps of its ink. */
-    public static final float STOPPED_DISPLAY_INK = 0.6f;
-    /** No peeking mark carries less ink than this, whatever else has dimmed it. */
-    public static final float PEEK_INK_FLOOR = 0.7f;
     /** How much of its ink the dissolve takes at a fully peeked mark's outer edge. */
     public static final float FADE_DEPTH = 0.5f;
     /** The floor {@link Mark#effectiveInk} is held to for a peeking mark. */
@@ -314,16 +309,16 @@ public final class StatusBarLensMetrics {
      */
     @NonNull
     public static List<Mark> marks(@NonNull Bar bar, @NonNull List<PaneWallPage> pages,
-                                   @NonNull PaneWallPage current, float offsetPx, int wallWidthPx,
-                                   boolean displayRunning) {
-        return marks(bar, pages, current, offsetPx, wallWidthPx, displayRunning, new MarkBuffer());
+                                   @NonNull PaneWallPage current, float offsetPx,
+                                   int wallWidthPx) {
+        return marks(bar, pages, current, offsetPx, wallWidthPx, new MarkBuffer());
     }
 
-    /** {@link #marks(Bar, List, PaneWallPage, float, int, boolean)}, written into {@code buffer}. */
+    /** {@link #marks(Bar, List, PaneWallPage, float, int)}, written into {@code buffer}. */
     @NonNull
     public static List<Mark> marks(@NonNull Bar bar, @NonNull List<PaneWallPage> pages,
                                    @NonNull PaneWallPage current, float offsetPx, int wallWidthPx,
-                                   boolean displayRunning, @NonNull MarkBuffer buffer) {
+                                   @NonNull MarkBuffer buffer) {
         buffer.clear();
         if (bar.widthPx <= 0 || bar.heightPx <= 0 || wallWidthPx <= 0 || pages.size() < 2) {
             return buffer.marks();
@@ -371,8 +366,7 @@ public final class StatusBarLensMetrics {
             float centerX = bar.vertical ? line : travelled;
             float centerY = bar.vertical ? travelled : line;
 
-            boolean stoppedDisplay = page == PaneWallPage.DISPLAY && !displayRunning;
-            float ink = alpha * inkFor(presence, stoppedDisplay);
+            float ink = alpha * inkFor(presence);
             boolean fades = presence > 0.05f && t != 0f;
             float fadeOuter = fades ? 1f - FADE_DEPTH * presence : 1f;
             // The glyph is drawn at the mark's middle, which is halfway along the dissolve: that is
@@ -397,7 +391,7 @@ public final class StatusBarLensMetrics {
             }
 
             mark.set(page, t, presence, page == current, centerX, centerY, size, radius,
-                size * GLYPH_SHARE, alpha * glyphInkFor(presence, stoppedDisplay), ink,
+                size * GLYPH_SHARE, alpha * glyphInkFor(presence), ink,
                 effectiveInk, fadeOuter, glow, fades, t < 0f);
         }
         return buffer.marks();
@@ -405,26 +399,19 @@ public final class StatusBarLensMetrics {
 
     /**
      * How much ink a mark carries at this distance from home. The place on screen is painted in
-     * full — or at {@link #STOPPED_DISPLAY_INK} when it is a Display with nothing running, which is
-     * what it has always been — and a neighbour gives up {@link #PEEK_INK_DRAIN} of that, but never
-     * falls below {@link #PEEK_INK_FLOOR}. The floor is what a stopped Display peeking past the
-     * bar's end lands on, and the only reason it exists.
+     * full, and a neighbour gives up {@link #PEEK_INK_DRAIN} of that.
      */
-    public static float inkFor(float presence, boolean stoppedDisplay) {
-        float atHome = stoppedDisplay ? STOPPED_DISPLAY_INK : 1f;
-        float peeking = Math.max(PEEK_INK_FLOOR, (1f - PEEK_INK_DRAIN) * atHome);
-        return lerp(atHome, peeking, Math.max(0f, Math.min(1f, presence)));
+    public static float inkFor(float presence) {
+        return lerp(1f, 1f - PEEK_INK_DRAIN, Math.max(0f, Math.min(1f, presence)));
     }
 
     /**
      * How bright a mark's glyph is at this distance from home, before the travel alpha: the place
-     * in front at full strength — or at {@link #STOPPED_DISPLAY_INK} when it is a Display with
-     * nothing running — fading to {@link #UNFOCUSED_GLYPH_SHARE} of that as it reaches an end.
+     * in front at full strength, fading to {@link #UNFOCUSED_GLYPH_SHARE} as it reaches an end.
      * Which is the row's rule for its place switches, applied to the mark as it travels.
      */
-    public static float glyphInkFor(float presence, boolean stoppedDisplay) {
-        float atHome = stoppedDisplay ? STOPPED_DISPLAY_INK : 1f;
-        return atHome * lerp(1f, UNFOCUSED_GLYPH_SHARE, Math.max(0f, Math.min(1f, presence)));
+    public static float glyphInkFor(float presence) {
+        return lerp(1f, UNFOCUSED_GLYPH_SHARE, Math.max(0f, Math.min(1f, presence)));
     }
 
     /** The smallest target the bar has room for on an axis it spans {@code extent} of. */

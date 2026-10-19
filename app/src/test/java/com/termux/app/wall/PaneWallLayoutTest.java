@@ -630,32 +630,6 @@ public class PaneWallLayoutTest {
         assertEquals(View.LAYER_TYPE_NONE, widgets.getLayerType());
     }
 
-    /**
-     * Changed with the Display's stand-in (2026-09-29): the listener no longer refuses the Display
-     * a tip, the wall decides. A Display page that cannot stand a copy in for its surface — a
-     * plain view here, as a page that is not a {@link SurfacePage} — keeps what a SurfaceView
-     * allows: no tilt, no layer. The stand-in's own tests are further down.
-     */
-    @Test
-    public void theDisplayPageNeverTipsNorTakesALayerEvenWithLeave() {
-        buildWithContent();
-        layOutEveryPage();
-        wall.setReducedMotion(false);
-        wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
-        });
-        // Held by the right border and pulled left: the Display page comes in from the right.
-        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
-            HEIGHT / 2f, 0L));
-        letTheHoldElapse();
-        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH - 304f,
-            HEIGHT / 2f, 400L));
-        assertTrue(terminal.getRotationY() > 0f);
-        assertFalse(wall.tiltPages().contains(display));
-        assertEquals(0f, display.getRotationY(), EPS);
-        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
-    }
-
     @Test
     public void theSlideCarriesOnFromTheReleaseAndNeverPassesItsRest() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
@@ -1313,34 +1287,6 @@ public class PaneWallLayoutTest {
         assertEquals(0f, terminal.getRotationY(), EPS);
         assertEquals(1f, terminal.getScaleX(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
-    }
-
-    /**
-     * A Display page with no stand-in (a plain view, not a {@link SurfacePage}) sinks by scale
-     * alone, as it did before there was one: its picture would be a SurfaceView a layer strands.
-     * With a stand-in up it takes the layer and the dim (see
-     * {@link #theDisplaysStandInSinksOnALayerAndTheRestGivesTheSurfaceBack}).
-     */
-    @Test
-    public void theDisplayPageSinksWithoutALayer() {
-        buildWithContent();
-        // Parked off screen at the first layout, the Display page is laid out once it is shown.
-        showAndLayOut(PaneWallPage.DISPLAY);
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
-        wall.setReducedMotion(false);
-        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 2f, 0L));
-        letTheHoldElapse();
-        letTheMotionSettle();
-        assertEquals(display, wall.sinkPage());
-        assertEquals(PageSink.SCALE, display.getScaleX(), EPS);
-        assertEquals("its picture is a SurfaceView a layer would strand", View.LAYER_TYPE_NONE,
-            display.getLayerType());
-        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_CANCEL, WIDTH / 2f, 4f,
-            3000L));
-        letTheMotionSettle();
-        assertNull(wall.sinkPage());
-        assertEquals(1f, display.getScaleX(), EPS);
-        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
     }
 
     @Test

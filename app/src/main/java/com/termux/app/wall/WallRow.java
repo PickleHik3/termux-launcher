@@ -5,8 +5,8 @@ import androidx.annotation.Nullable;
 
 /**
  * The wall's row as a list of pages (ADR 0008): Home page 1 … Home page n, then the Workspace's
- * windows, then the display window while a display is up. Pure, so the seam, the insertion of a new
- * window, Start in and the saved position read as arithmetic.
+ * windows, the display window among them while a display is up ({@link DisplaySlot}). Pure, so the
+ * seam, the insertion of a new window, Start in and the saved position read as arithmetic.
  *
  * <p>The wall does not hold a view per page. Home's pages are the widget grid's own pages, paged
  * by a plain swipe inside the grid; the windows are the terminal's, shown one at a time in its
@@ -64,12 +64,7 @@ public final class WallRow {
         return new Position(PaneWallPage.TERMINAL, index);
     }
 
-    @NonNull
-    public static Position display() {
-        return new Position(PaneWallPage.DISPLAY, 0);
-    }
-
-    /** The half a kind of page belongs to: Home, or the Workspace (windows and the display). */
+    /** The half a kind of page belongs to: Home, or the Workspace (its windows, the display's too). */
     @NonNull
     public static String halfOf(@NonNull PaneWallPage kind) {
         return kind == PaneWallPage.WIDGETS ? HALF_HOME : HALF_WORKSPACE;
@@ -147,8 +142,8 @@ public final class WallRow {
      * The kind of page the wall opens on, known before anything is laid out: the half a
      * recreation saved ({@code savedHalf}, {@link #HALF_HOME} or {@link #HALF_WORKSPACE}), else
      * the page Start in names. Only the half matters to what the chrome wears (HomeChromePolicy),
-     * so a Workspace half is the window page whether it lands on a window, the Display page, or
-     * waits for the windows to come back. A half this version does not know opens Home, as
+     * so a Workspace half is the window page whether it lands on a terminal window, the display
+     * window, or waits for the windows to come back. A half this version does not know opens Home, as
      * {@link #restore} does.
      */
     @NonNull
@@ -158,37 +153,36 @@ public final class WallRow {
     }
 
     /**
-     * The saved index of {@code position} within its half: a Home page's own index, a window's,
-     * and the Display page after the windows.
+     * The saved index of {@code position} within its half: a Home page's own index, or a window's
+     * place in the row, the display window's included.
      */
-    public static int savedIndex(@NonNull Position position, int windowCount) {
-        return position.kind == PaneWallPage.DISPLAY ? Math.max(0, windowCount) : position.index;
+    public static int savedIndex(@NonNull Position position) {
+        return position.index;
     }
 
     /**
      * The page a saved half and index come back to, on the row as it is now. A Home page past
-     * the last comes back as the last; a Workspace index past the windows is the Display page if
-     * it is up, else the last window. A half this version does not know, or a Workspace with
-     * nothing in it, comes back to Home page 1.
+     * the last comes back as the last, and so does a window past the last window — the display
+     * window, which is not saved with the windows, may not be back yet. A half this version does
+     * not know, or a Workspace with nothing in it, comes back to Home page 1.
      */
     @NonNull
     public static Position restore(@Nullable String half, int index, int homeCount,
-                                   int windowCount, boolean displayOn) {
+                                   int windowCount) {
         if (HALF_HOME.equals(half)) {
             return homePage(Math.min(Math.max(0, index), lastHomePage(homeCount)));
         }
-        if (HALF_WORKSPACE.equals(half)) {
-            if (index >= 0 && index < windowCount) return window(index);
-            if (displayOn) return display();
-            if (windowCount > 0) return window(windowCount - 1);
+        if (HALF_WORKSPACE.equals(half) && windowCount > 0) {
+            return window(Math.min(Math.max(0, index), windowCount - 1));
         }
         return homePage(0);
     }
 
     /**
-     * Whether the Workspace is on the row (spec §6, Lifetime): while the current session has a
-     * window. Home floats are shells but never windows of the row, so they do not count. Before
-     * the terminal service is bound nothing is known and the Workspace is assumed.
+     * Whether the Workspace is on the row (spec §6, Lifetime): while the current session's row has
+     * a window, the display window counting as one. Home floats are shells but never windows of
+     * the row, so they do not count. Before the terminal service is bound nothing is known and the
+     * Workspace is assumed.
      */
     public static boolean hasWorkspace(boolean serviceBound, int currentSessionWindows) {
         return !serviceBound || currentSessionWindows > 0;

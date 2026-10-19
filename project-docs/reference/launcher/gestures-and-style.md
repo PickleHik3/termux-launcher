@@ -43,7 +43,8 @@ not page; its own drag is the fold across it.
 A Home page has no border, no slab and no rim, so there is no border drag on it. It pages by a
 plain sideways swipe anywhere on the page, as any launcher does, inside the widget grid. Parallax
 runs across the whole row: the wallpaper's spare width is spread evenly from Home page 1 (the
-picture's left edge) to the row's last page, the last window or the Display page (its right edge),
+picture's left edge) to the row's last page, its last window (its right edge) — the display window
+counts where it stands in the row, as any window does —
 and pans continuously with Home's swipe, through the seam, with the border drag between windows and
 with a window's arrival from the window bar (over every window it jumps). A Home page or a window
 added or removed re-spreads the picture at once: the pan snaps to the new step rather than

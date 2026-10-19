@@ -156,7 +156,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 case "x11_legacy_drawing": case "x11_force_bgra":
                     page = "X11DisplayTroubleshootingPreferencesFragment"; break;
                 case "x11_drawer_apps": case "x11_gui_apps_setup": case "x11_hidden_apps":
-                case "x11_window_manager": case "x11_runtime_badge": case "x11_window_manager_hint":
+                case "x11_window_manager": case "x11_window_manager_hint":
                     page = "X11DisplayLinuxAppsPreferencesFragment"; break;
                 default: break;
             }

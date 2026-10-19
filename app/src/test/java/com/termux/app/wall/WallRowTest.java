@@ -100,9 +100,9 @@ public class WallRowTest {
         assertEquals("a half this version does not know opens Home", PaneWallPage.WIDGETS,
             WallRow.openingKind("display", WallRow.START_IN_WORKSPACE));
         // It agrees with where the restore lands, half for half.
-        assertEquals(WallRow.restore(WallRow.HALF_HOME, 0, 1, 0, false).kind,
+        assertEquals(WallRow.restore(WallRow.HALF_HOME, 0, 1, 0).kind,
             WallRow.openingKind(WallRow.HALF_HOME, null));
-        assertEquals(WallRow.restore(WallRow.HALF_WORKSPACE, 0, 1, 1, false).kind,
+        assertEquals(WallRow.restore(WallRow.HALF_WORKSPACE, 0, 1, 1).kind,
             WallRow.openingKind(WallRow.HALF_WORKSPACE, null));
     }
 
@@ -110,24 +110,21 @@ public class WallRowTest {
     public void theSavedPositionIsTheHalfAndTheIndexWithinIt() {
         assertEquals(WallRow.HALF_HOME, WallRow.halfOf(PaneWallPage.WIDGETS));
         assertEquals(WallRow.HALF_WORKSPACE, WallRow.halfOf(PaneWallPage.TERMINAL));
-        assertEquals(WallRow.HALF_WORKSPACE, WallRow.halfOf(PaneWallPage.DISPLAY));
-        assertEquals(1, WallRow.savedIndex(WallRow.homePage(1), 4));
-        assertEquals(2, WallRow.savedIndex(WallRow.window(2), 4));
-        assertEquals("the Display page stands after the windows", 4,
-            WallRow.savedIndex(WallRow.display(), 4));
+        assertEquals(1, WallRow.savedIndex(WallRow.homePage(1)));
+        assertEquals("a window's place in the row, the display window's included", 2,
+            WallRow.savedIndex(WallRow.window(2)));
     }
 
     @Test
     public void restoreFindsThePositionOnTheRowAsItIsNow() {
-        assertEquals(WallRow.homePage(1), WallRow.restore(WallRow.HALF_HOME, 1, 3, 2, false));
+        assertEquals(WallRow.homePage(1), WallRow.restore(WallRow.HALF_HOME, 1, 3, 2));
         assertEquals("a Home page that went is the last one", WallRow.homePage(1),
-            WallRow.restore(WallRow.HALF_HOME, 4, 2, 2, false));
-        assertEquals(WallRow.window(1), WallRow.restore(WallRow.HALF_WORKSPACE, 1, 3, 2, false));
-        assertEquals(WallRow.display(), WallRow.restore(WallRow.HALF_WORKSPACE, 2, 3, 2, true));
-        assertEquals("no display: the last window", WallRow.window(1),
-            WallRow.restore(WallRow.HALF_WORKSPACE, 2, 3, 2, false));
+            WallRow.restore(WallRow.HALF_HOME, 4, 2, 2));
+        assertEquals(WallRow.window(1), WallRow.restore(WallRow.HALF_WORKSPACE, 1, 3, 2));
+        assertEquals("the display window, not back yet: the last window", WallRow.window(1),
+            WallRow.restore(WallRow.HALF_WORKSPACE, 2, 3, 2));
         assertEquals("an empty Workspace: Home page 1", WallRow.homePage(0),
-            WallRow.restore(WallRow.HALF_WORKSPACE, 0, 3, 0, false));
+            WallRow.restore(WallRow.HALF_WORKSPACE, 0, 3, 0));
     }
 
     /**
@@ -145,8 +142,8 @@ public class WallRowTest {
 
     @Test
     public void unknownSavedNamesFallBackToHomePageOne() {
-        assertEquals(WallRow.homePage(0), WallRow.restore("TERMINAL", 2, 3, 3, true));
-        assertEquals(WallRow.homePage(0), WallRow.restore("WIDGETS", 2, 3, 3, true));
-        assertEquals(WallRow.homePage(0), WallRow.restore(null, 2, 3, 3, true));
+        assertEquals(WallRow.homePage(0), WallRow.restore("TERMINAL", 2, 3, 3));
+        assertEquals(WallRow.homePage(0), WallRow.restore("WIDGETS", 2, 3, 3));
+        assertEquals(WallRow.homePage(0), WallRow.restore(null, 2, 3, 3));
     }
 }
