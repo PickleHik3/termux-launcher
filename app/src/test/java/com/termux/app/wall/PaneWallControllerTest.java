@@ -631,19 +631,50 @@ public class PaneWallControllerTest {
             1080 - 2 * (30 - 6), frame.getWidth());
     }
 
-    @Test public void aNudgeCarriesTheWindowThatWasInFrontOffBesideTheOneComingIn() {
+    @Test public void aSwapCarriesTheWindowThatWasInFrontOffBesideTheOneComingIn() {
         controller.goTo(PaneWallPage.TERMINAL, false);
         View terminal = wall.pageView(PaneWallPage.TERMINAL);
         View frame = displayFrame();
-        controller.setDisplayInFront(true);
+        host.terminalOffScreen = null;
         // Started half a width out on the right: the pane host stands one width to its left.
-        controller.nudgeTerminalPage(540f, WallParallax.ADJACENT, 300L, null, null);
+        assertTrue(controller.swapDisplayInFront(true, 540f, WallParallax.ADJACENT, 300L, null,
+            null));
         assertEquals(540f, frame.getTranslationX(), 0.5f);
         assertEquals(-540f, terminal.getTranslationX(), 0.5f);
         assertEquals(1f, terminal.getAlpha(), 0f);
+        assertNull("the pane host never went off screen between the swap and the travel",
+            host.terminalOffScreen);
         idle();
         assertEquals(0f, frame.getTranslationX(), 0.5f);
-        assertEquals("parked again once the nudge is done", 0f, terminal.getAlpha(), 0f);
+        assertEquals("parked once the travel is done", 0f, terminal.getAlpha(), 0f);
+        assertEquals(Boolean.TRUE, host.terminalOffScreen);
+    }
+
+    @Test public void aSwapWithoutTravelLeavesNothingForALaterNudgeToCarry() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        View terminal = wall.pageView(PaneWallPage.TERMINAL);
+        View frame = displayFrame();
+        // The display comes in front at once (the Home seam, a session switch), then goes behind
+        // again at once, and a terminal window switch travels later.
+        controller.setDisplayInFront(true);
+        controller.setDisplayInFront(false);
+        controller.nudgeTerminalPage(540f, WallParallax.ADJACENT, 300L, null, null);
+        assertEquals(540f, terminal.getTranslationX(), 0.5f);
+        assertEquals("the display's frame is not carried along", View.INVISIBLE,
+            frame.getVisibility());
+        assertTrue(Math.abs(frame.getTranslationX()) >= 1080f);
+        idle();
+    }
+
+    @Test public void aSwapThatCannotTravelLandsAtOnceAndStillEnds() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        View frame = displayFrame();
+        int[] ended = {0};
+        assertTrue(controller.swapDisplayInFront(true, 0f, WallParallax.ADJACENT, 300L, null,
+            () -> ended[0]++));
+        assertEquals(1, ended[0]);
+        assertEquals(0f, frame.getTranslationX(), 0f);
+        assertEquals(View.VISIBLE, frame.getVisibility());
     }
 
     @Test public void theDisplayGoingDownHandsThePageBackToThePaneHost() {

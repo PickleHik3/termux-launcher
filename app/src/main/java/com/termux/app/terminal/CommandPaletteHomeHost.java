@@ -40,6 +40,15 @@ public interface CommandPaletteHomeHost {
         return false;
     }
 
+    /**
+     * The row place of the current session's terminal window {@code window} (its index in the
+     * session's list), as {@code window.select} counts places: one more when the display window
+     * stands before it in the row.
+     */
+    default int rowIndexOf(int window) {
+        return window;
+    }
+
     /** The zero-based Home page the float is pinned to, or {@link #UNKNOWN_PAGE}. */
     default int homeFloatPage(long windowId) {
         return UNKNOWN_PAGE;

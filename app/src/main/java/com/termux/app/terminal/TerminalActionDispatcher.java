@@ -1438,6 +1438,10 @@ public final class TerminalActionDispatcher {
                         return error(400, "bad_request", "Invalid 'to'; expected left or right");
                     }
                     boolean toLeft = side == ColumnPolicy.LEFT;
+                    if (host.isDisplayWindowInFront()) {
+                        return error(409, "display_window",
+                            "The display window is in front; it has no pane to expel");
+                    }
                     if (ColumnPolicy.expelTarget(host.currentWindowIndex(),
                             host.currentWindowCount(), toLeft) == ColumnPolicy.INVALID) {
                         return error(409, "no_window", "There is no window to expel a pane from");
@@ -2145,6 +2149,9 @@ public final class TerminalActionDispatcher {
         TerminalPaneController controller = host.paneController();
         JSONObject record = new JSONObject();
         record.put("index", index);
+        // Where the window stands in the row the window chips show, which window.select and
+        // window.move count: one more than index when the display window stands before it.
+        record.put("rowIndex", host.rowIndexOf(index));
         record.put("id", window.id);
         String windowName = controller == null ? null : controller.windowName(window);
         record.put("name", windowName == null ? JSONObject.NULL : windowName);

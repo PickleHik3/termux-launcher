@@ -243,8 +243,8 @@ public final class PaneWallLayout extends ViewGroup {
      * in front before the display window came in front or went back ({@link #setDisplayInFront}).
      */
     @Nullable private View mNudgeLeaving;
-    /** The view the last front swap took out, offered to the nudge that follows it. */
-    @Nullable private View mSwapLeaving;
+    /** A swap and its nudge are being set up: their positions are applied once, together. */
+    private boolean mDeferPositions;
     /** The Workspace's pane host: its page's view while a terminal window is in front. */
     @Nullable private View mTerminalHost;
     /** The display window's frame while a display is up; on the row with the windows. */
@@ -466,7 +466,7 @@ public final class PaneWallLayout extends ViewGroup {
         View previous = mDisplayView;
         mDisplayView = view;
         if (previous != null) {
-            if (previous == mNudgeLeaving || previous == mSwapLeaving) stopNudge();
+            if (previous == mNudgeLeaving) stopNudge();
             if (previous instanceof SurfacePage) ((SurfacePage) previous).dropStill();
         }
         applyPagePositions();
@@ -481,17 +481,46 @@ public final class PaneWallLayout extends ViewGroup {
      * Whether the display window is the Workspace's window in front. It then stands as the
      * Workspace's page — the slide, the border drag, the sink, the plank and the grabbers are its —
      * and the pane host waits off screen, laid out at its own size so the terminal never resizes
-     * for it. A nudge of the Workspace's page that follows ({@link #nudgePage}) carries the window
-     * that was in front off beside the one coming in, one width apart.
+     * for it. This swaps at once, with no travel; {@link #swapDisplayInFront} travels.
      */
     public void setDisplayInFront(boolean front) {
         boolean wanted = front && mDisplayView != null;
         if (wanted == mDisplayInFront) return;
         stopNudge();
-        View leaving = mPageViews.get(PaneWallPage.TERMINAL);
         mDisplayInFront = wanted;
         registerPageView(PaneWallPage.TERMINAL, wanted ? mDisplayView : mTerminalHost);
-        mSwapLeaving = leaving;
+    }
+
+    /**
+     * {@link #setDisplayInFront} as a window switch: the arriving window slides in from
+     * {@code fromPx} ({@link #nudgePage}) and the one that was in front goes off beside it, one
+     * width apart, in one motion. The swap and the nudge's first frame are placed together, so
+     * nothing is drawn, or reported off screen, at a position in between. Where no nudge can run
+     * (the wall moving, no travel) the swap simply lands. {@code onEnd} runs however it ends.
+     *
+     * @return whether the front changed
+     */
+    public boolean swapDisplayInFront(boolean front, float fromPx, long durationMs,
+                                      @Nullable android.view.animation.Interpolator interpolator,
+                                      @Nullable Runnable onEnd) {
+        boolean wanted = front && mDisplayView != null;
+        if (wanted == mDisplayInFront) {
+            if (onEnd != null) onEnd.run();
+            return false;
+        }
+        stopNudge();
+        View leaving = mPageViews.get(PaneWallPage.TERMINAL);
+        mDisplayInFront = wanted;
+        mDeferPositions = true;
+        try {
+            registerPageView(PaneWallPage.TERMINAL, wanted ? mDisplayView : mTerminalHost);
+        } finally {
+            mDeferPositions = false;
+        }
+        if (!startNudge(PaneWallPage.TERMINAL, fromPx, durationMs, interpolator, onEnd, leaving)) {
+            applyPagePositions();
+        }
+        return true;
     }
 
     public boolean isDisplayInFront() {
@@ -639,15 +668,23 @@ public final class PaneWallLayout extends ViewGroup {
     public void nudgePage(@NonNull PaneWallPage page, float fromPx, long durationMs,
                           @Nullable android.view.animation.Interpolator interpolator,
                           @Nullable Runnable onEnd) {
-        // The window a front swap just took out goes off beside the one coming in.
-        View leaving = page == PaneWallPage.TERMINAL ? mSwapLeaving : null;
+        startNudge(page, fromPx, durationMs, interpolator, onEnd, null);
+    }
+
+    /**
+     * {@link #nudgePage}, carrying {@code leaving} off beside the page coming in when it is the
+     * Workspace's other view. False when no nudge could start; {@code onEnd} has run then.
+     */
+    private boolean startNudge(@NonNull PaneWallPage page, float fromPx, long durationMs,
+                               @Nullable android.view.animation.Interpolator interpolator,
+                               @Nullable Runnable onEnd, @Nullable View leaving) {
         stopNudge();
         // Only the page the wall rests on is nudged: a page the wall has put away would otherwise
         // slide across the place the user is looking at.
         if (mPageViews.get(page) == null || page != mCurrent || isMoving() || mOffsetPx != 0f
                 || fromPx == 0f) {
             if (onEnd != null) onEnd.run();
-            return;
+            return false;
         }
         mNudgePage = page;
         mNudgePx = fromPx;
@@ -672,6 +709,7 @@ public final class PaneWallLayout extends ViewGroup {
         });
         mNudge = nudge;
         nudge.start();
+        return true;
     }
 
     private void stopNudge() {
@@ -680,7 +718,6 @@ public final class PaneWallLayout extends ViewGroup {
         mNudgePage = null;
         mNudgePx = 0f;
         mNudgeLeaving = null;
-        mSwapLeaving = null;
         // Cancelling runs the end listener, which repositions the page and runs onEnd.
         if (nudge != null) nudge.cancel();
     }
@@ -2258,6 +2295,7 @@ public final class PaneWallLayout extends ViewGroup {
      * nudge is carrying it off one width from the one coming in.
      */
     private void applyPagePositions() {
+        if (mDeferPositions) return;
         int width = getWidth();
         for (Map.Entry<PaneWallPage, View> entry : mPageViews.entrySet()) {
             View view = entry.getValue();

@@ -312,11 +312,26 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /**
      * Whether the display window is the Workspace's window in front: its frame then stands as the
-     * Workspace's page, and the next nudge of that page ({@link #nudgeTerminalPage}) carries the
-     * window that was in front off beside it.
+     * Workspace's page. At once, with no travel; {@link #swapDisplayInFront} travels.
      */
     public void setDisplayInFront(boolean front) {
         mWall.setDisplayInFront(front);
+    }
+
+    /**
+     * The same as a window switch: the arriving window slides in from {@code fromPx} and the one
+     * that was in front goes off beside it ({@link PaneWallLayout#swapDisplayInFront}).
+     *
+     * @param fromWindow the row place the arrival left, for the wallpaper's pan
+     * @param onEnd runs however the travel ends, at once where none could start
+     * @return whether the front changed
+     */
+    public boolean swapDisplayInFront(boolean front, float fromPx, int fromWindow,
+                                      long durationMs,
+                                      @Nullable android.view.animation.Interpolator interpolator,
+                                      @Nullable Runnable onEnd) {
+        mNudgeFromWindow = fromWindow;
+        return mWall.swapDisplayInFront(front, fromPx, durationMs, interpolator, onEnd);
     }
 
     public boolean isDisplayInFront() {

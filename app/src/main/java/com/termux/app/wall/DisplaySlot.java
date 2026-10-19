@@ -205,6 +205,18 @@ public final class DisplaySlot<W> {
     }
 
     /**
+     * The row place that takes the front after the window in front, at row place
+     * {@code removedRow}, left a row now holding {@code remainingRows}: its right-hand neighbour,
+     * which moved up into its place, or the left one when it was last ({@code WindowCloseFocus}'s
+     * rule, counted in row places so the display window can be that neighbour). NONE when the row
+     * is empty.
+     */
+    public static int rowAfterRemoval(int removedRow, int remainingRows) {
+        if (remainingRows <= 0) return NONE;
+        return Math.max(0, Math.min(removedRow, remainingRows - 1));
+    }
+
+    /**
      * Where the row lands when the display window leaves it while in front: the window that stood
      * on its left, or the first window when it stood first; NONE when no terminal window is left.
      */

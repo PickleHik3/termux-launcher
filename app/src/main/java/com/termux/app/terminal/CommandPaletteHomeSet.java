@@ -161,8 +161,8 @@ final class CommandPaletteHomeSet {
     /**
      * A jump row per window of the current session, in its order. A window the host reports as a
      * Home float jumps there (paging Home and restoring it) and says so with its page when the host
-     * knows it; any other window runs {@code window.select} with its own index, as Ctrl+Alt+digit
-     * does.
+     * knows it; any other window runs {@code window.select} with its place in the row (the
+     * display window counted where it stands), as Ctrl+Alt+digit does.
      */
     @NonNull
     static List<CommandPaletteFilter.Entry> jumpEntries(
@@ -193,7 +193,7 @@ final class CommandPaletteHomeSet {
             }
             JSONObject arguments = new JSONObject();
             try {
-                arguments.put("index", window.index);
+                arguments.put("index", host.rowIndexOf(window.index));
             } catch (JSONException ignored) {
             }
             out.add(new CommandPaletteFilter.Entry(

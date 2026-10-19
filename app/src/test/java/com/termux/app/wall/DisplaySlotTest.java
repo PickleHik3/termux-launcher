@@ -155,6 +155,17 @@ public class DisplaySlotTest {
     }
 
     @Test
+    public void aWindowClosingInFrontHandsTheFrontToItsRightNeighbourTheDisplayIncluded() {
+        // a b D: b closes (row 1); a D remain and the display moved up into its place.
+        assertTrue(DisplaySlot.isDisplay(DisplaySlot.rowAfterRemoval(1, 2), 1));
+        // a D b: b, the tail, closes: its left neighbour, the display.
+        assertTrue(DisplaySlot.isDisplay(DisplaySlot.rowAfterRemoval(2, 2), 1));
+        // D a b: a closes: b moves up.
+        assertFalse(DisplaySlot.isDisplay(DisplaySlot.rowAfterRemoval(1, 2), 0));
+        assertEquals("nothing left", DisplaySlot.NONE, DisplaySlot.rowAfterRemoval(0, 0));
+    }
+
+    @Test
     public void leavingForgetsThePlaceAndTheFront() {
         List<String> windows = windows("a");
         DisplaySlot<String> display = new DisplaySlot<>();

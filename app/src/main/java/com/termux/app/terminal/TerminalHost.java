@@ -529,6 +529,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      */
     default int rowIndexOf(int window) { return window; }
 
+    /**
+     * Whether the window in front of the current row is the display window, which has no panes:
+     * the pane and window-content actions answer that plainly rather than acting behind it.
+     */
+    default boolean isDisplayWindowInFront() { return false; }
+
     boolean promptCurrentWindowRename();
 
     boolean renameCurrentWindowTo(@Nullable String name);
