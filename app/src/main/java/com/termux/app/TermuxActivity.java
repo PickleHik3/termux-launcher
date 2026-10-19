@@ -1769,7 +1769,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // keyboard crashes its next draw exactly like recycling it under a frost would.
             return frame != null
                 && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
-                    || frame == mFrameGutterBackdropBitmap || frame == mHomePillsBackdropBitmap
+                    || frame == mFrameGutterBackdropBitmap || frame == mHomeFloatChipsBackdropBitmap
                     || isSharedWallpaperBlurFrameInUse(frame));
         }
 
@@ -3104,6 +3104,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mChrome.redressFromState();
         applyTerminalSurfaceAppearance();
         updateTerminalGlassFrost();
+        refreshHomeFloatChipsLook(true);
+    }
+
+    /**
+     * The float chips follow a theme, scheme or Material You change made without recreating the
+     * activity: their ink re-reads the theme, and their glass rebuilds ({@code force}, from a
+     * chrome restyle) or rebuilds when the theme's glass base moved.
+     */
+    private void refreshHomeFloatChipsLook(boolean force) {
+        if (mHomeFloatChips == null) return;
+        mHomeFloatChips.refreshTheme();
+        applyHomeFloatChipsGlass(force);
     }
 
     private void applyTerminalSurfaceAppearance() {
@@ -3128,6 +3140,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // applyInAppKeyboardSurfaceState — stays glass. doApplyChromeSpec owns extrakeys_background
         // and builds it from the glass model; nothing else may write it.
         applyGlassSurfaceColor(R.id.activity_termux_bottom_space_background, accessoryBaseColor);
+        // The float chips stand on the dock's glass: they follow the same base.
+        refreshHomeFloatChipsLook(false);
 
         if (wallpaperMode) {
             boolean showSurface = shouldShowTerminalOverlaySurface();
@@ -4021,8 +4035,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View gutterBody = frameGlassHost();
         if (gutterBody != null && shouldUseWallpaperPassthroughMode())
             applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && hasDockedFrameCard());
-        // So do Home's pills, and they let go of it once they are off screen.
-        applyHomePillsGlass(false);
+        // So do the minimised Home floats' chips, and they let go of it once they are off screen.
+        applyHomeFloatChipsGlass(false);
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -8793,20 +8807,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
     }
 
-    /** Whether the bar is showing Home's pills rather than itself. */
-    private boolean isShowingHomePills() {
-        View host = findViewById(R.id.terminal_window_bar_host);
-        return host instanceof com.termux.app.statusbar.StatusBarSwipeLayout
-            && ((com.termux.app.statusbar.StatusBarSwipeLayout) host).isShowingHomePills();
-    }
-
     /** The lead the strip behind the system status bar continues, or NONE while it is not shown. */
     @NonNull
     private com.termux.app.chrome.ChromeEdgeRule.TopLead statusInsetStripLead() {
         // Under a joined Docked frame the frame's glass runs up under the system bar: no strip.
         if (frameStandsDown()) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
-        // Home's pills float on their own: nothing runs on from them under the system bar.
-        if (isShowingHomePills()) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
         return com.termux.app.chrome.ChromeEdgeRule.statusInsetLead(isRoundedDockStyle(),
             !shouldEnableSeamlessStatusBackground(), mLastStatusBarInsetTop, topEdgeStackLead());
     }
@@ -13668,8 +13673,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return true;
         }
-        // On Home the bar only ever comes in compact, carrying the floats' chips.
-        if (com.termux.app.place.HomeChromePolicy.statusForcedCompact(mLastWallPage)) return true;
         // The Look editor holds the bar open without touching the stored choice.
         if (mStatusBarExpandedForEditor) {
             return false;
@@ -13697,26 +13700,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCachedPlaceLayoutOrientation = orientation;
             mCachedPlaceLayoutVariant = variant;
             mCachedPlaceLayoutRevision = store.revision();
-            mCachedFloatBarLayout = null;
-        }
-        // Home wears the bar as the pills' band, or down a side for the floats' chips
-        // (HomeChromePolicy.homeStatusBarShown); otherwise it has none.
-        if (variant == com.termux.app.place.LayoutVariant.HOME && mHomeBarInLayout) {
-            if (mCachedFloatBarLayout == null) {
-                mCachedFloatBarLayout = com.termux.app.place.HomeChromePolicy.withFloatStatusBar(
-                    mCachedPlaceLayout, store.statusBarEdge(orientation), true);
-            }
-            return mCachedFloatBarLayout;
         }
         return mCachedPlaceLayout;
     }
-
-    /** The Home layout with the status bar brought in for the floats, built once per resolve. */
-    @Nullable private PlaceLayout mCachedFloatBarLayout;
-    /** Whether the status bar stands on Home (homeStatusBarWanted), kept through its slide out. */
-    private boolean mHomeBarInLayout;
-    /** Home's bar is sliding out; it leaves the layout when the slide ends. */
-    private boolean mHomeBarLeaving;
 
     /** Horizontal display-cutout insets from the last insets pass; the rail never draws narrower. */
     private int mLastDisplayCutoutInsetLeft;
@@ -14539,10 +14525,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean applyEdgeStacksAndInvalidate(@NonNull PlaceLayout layout) {
         boolean moved = applyEdgeStacks(layout);
         EdgeStackPolicy.Metrics metrics = buildEdgeStackMetrics();
-        // A bar along the top on Home is the pills' band, which the grid gives its room to.
-        boolean statusOverlays = com.termux.app.place.HomeChromePolicy.statusOverlays(
-            mLastWallPage, com.termux.app.statusbar.HomePillsPolicy.shown(true,
-                layout.slot(Element.STATUS).edge));
+        boolean statusOverlays =
+            com.termux.app.place.HomeChromePolicy.statusOverlays(mLastWallPage);
         moved |= applyTopStackOverlap(EdgeStackPolicy.topOverlapPx(layout, metrics,
             statusOverlays));
         // The side stacks ride up with the canvas; they start back at the bar's edge.
@@ -14617,14 +14601,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : lettersOffDock
                 ? AzBarHostGeometry.rowHeightPx(azBarHostMarginPx(), azBarThicknessPx())
                 : dockLayout.azRowHeightPx;
-        // On Home the row is the pills' band, one rule with the Layout editor's miniature.
-        int statusRowPx = com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage)
-            ? Math.round(com.termux.app.statusbar.HomePillsPolicy.bandDp(capsule) * density)
-            : com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(
-                PlaceLayout.Edge.TOP, capsule, compact, density);
         return EdgeStackPolicy.Metrics.builder()
             .cutout(mLastDisplayCutoutInsetLeft, mLastDisplayCutoutInsetRight)
-            .status(statusRowPx,
+            .status(com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(
+                        PlaceLayout.Edge.TOP, capsule, compact, density),
                 com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(
                         PlaceLayout.Edge.LEFT, capsule, compact, density)
                     + statusBarColumnOuterMarginPx())
@@ -14649,7 +14629,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // of the screen — or a grip dragged in the Layout editor — has to re-read them. The look
         // itself is every place's, so nothing else here depends on where the wall stands.
         boolean sizesMoved = applyPlaceSizes();
-        adoptHomeStatusBar();
         PlaceLayout layout = currentPlaceLayout();
         PlaceLayout previous = mAppliedPlaceLayout;
         boolean arrangementChanged = !layout.equals(previous);
@@ -20090,6 +20069,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Home wears its own Style, Corners and Margin: a crossing between halves that differ
         // dresses the chrome for the arriving one, as the variant above re-arranged it.
         restyleChromeForHalfIfChanged(left, page);
+        // The readings live in a focused Home float's titlebar on Home, in the bar elsewhere.
+        syncHomeFloatReadings();
+        // The chips' glass is built on arrival at Home and let go of on leaving it, whatever the
+        // frost pass's timing.
+        applyHomeFloatChipsGlass(false);
         return true;
     }
 
@@ -20255,7 +20239,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean keyboardUp = place == mLastWallPage ? committedKeyboardVisible()
             : wantsKeyboardOnEnter(place);
         // A Home page has no status bar: the window's fades on the way there (HomeChromePolicy).
-        if (!com.termux.app.place.HomeChromePolicy.statusShownAtRest(place, mHomeBarInLayout))
+        if (!com.termux.app.place.HomeChromePolicy.statusShownAtRest(place))
             return keyboardUp ? REST_HOME_KEYBOARD_UP : REST_HOME_KEYBOARD_DOWN;
         return keyboardUp ? REST_KEYBOARD_UP : REST_KEYBOARD_DOWN;
     }
@@ -21373,8 +21357,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // badge and the chips agree, so the row reads as one thing rather than three.
         Integer placeAccent = accent;
         // The row's badge is the terminal session's and shows nowhere else; the chips are the
-        // terminal's windows or the display's apps, and on the Widgets place the Home floats,
-        // while there is one: without a float its widgets speak for themselves.
+        // terminal's windows or the display's apps, and the Widgets place has none: Home wears no
+        // status bar, and its minimised floats come back from chips above the dock.
         com.termux.app.statusbar.SessionsIndicatorView sessions =
             findViewById(R.id.terminal_sessions_indicator);
         if (sessions != null) {
@@ -21382,9 +21366,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             sessions.setVisibility(page == com.termux.app.wall.PaneWallPage.TERMINAL
                 ? View.VISIBLE : View.GONE);
         }
-        // On Home the chips are the Home floats; the bar comes onto Home only to carry them.
-        boolean windowsShown = com.termux.app.place.HomeChromePolicy.windowChipsShown(page,
-            mPaneController != null && mPaneController.homeFloatCount() > 0);
+        boolean windowsShown = page != com.termux.app.wall.PaneWallPage.WIDGETS;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) {
             // The chips are drawn on glass, so they ask the chrome what they are standing on
@@ -22416,9 +22398,136 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(view instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
         com.termux.app.terminal.HomeFloatLayer layer =
             new com.termux.app.terminal.HomeFloatLayer(this);
+        // The minimised floats' chips ride in the float layer, under the floats, so they slide
+        // with Home and are never on the Workspace.
+        com.termux.app.terminal.HomeFloatChipsView chips =
+            new com.termux.app.terminal.HomeFloatChipsView(this);
+        chips.setListener(index -> {
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> minimised =
+                minimisedHomeFloats();
+            if (index >= 0 && index < minimised.size()) showHomeFloat(minimised.get(index));
+        });
+        layer.addView(chips, new android.widget.FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL));
+        mHomeFloatChips = chips;
         ((com.termux.app.launcher.widget.WidgetPaneView) view).setPagePinnedLayer(layer);
         mPaneController.setHomeFloatLayer(layer);
+        syncHomeFloatChips();
         syncHomeFloatObstructions();
+    }
+
+    /** The row of chips minimised Home floats come back from, above the dock on Home. */
+    @Nullable private com.termux.app.terminal.HomeFloatChipsView mHomeFloatChips;
+    /** Whether the floats' room last gave up the chips' band ({@link #syncHomeFloatObstructions}). */
+    private boolean mHomeFloatChipsBandTaken;
+    /** The dock's resting top and the keyboard's top on screen as last measured, for the chips. */
+    private int mHomeChipsDockTopPx = Integer.MAX_VALUE;
+    private int mHomeChipsKeyboardTopPx = -1;
+
+    /** The minimised Home floats, in the order they were opened: one chip each. */
+    @NonNull
+    private java.util.List<com.termux.app.terminal.TerminalPaneController.Window>
+            minimisedHomeFloats() {
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> minimised =
+            new java.util.ArrayList<>();
+        for (com.termux.app.terminal.TerminalPaneController.Window window : chipFloats()) {
+            if (window.isMinimised() && window.homePage() >= 0) minimised.add(window);
+        }
+        return minimised;
+    }
+
+    /**
+     * The chips follow the minimised floats: the float's glyph and short name, as its window chip
+     * wears them. Whether the row shows decides whether the floats' room gives up its band, so a
+     * row that came or went re-measures the room.
+     */
+    private void syncHomeFloatChips() {
+        boolean was = mHomeFloatChips != null && mHomeFloatChips.getVisibility() == View.VISIBLE;
+        if (!fillHomeFloatChips()) return;
+        boolean shown = mHomeFloatChips.getVisibility() == View.VISIBLE;
+        // The glass is dressed as the row comes; a row that stays keeps the ground it has.
+        if (shown != was) applyHomeFloatChipsGlass(false);
+        if (shown != mHomeFloatChipsBandTaken) syncHomeFloatObstructions();
+    }
+
+    /** Hands the chips the minimised floats; false while there is no row to hand them to. */
+    private boolean fillHomeFloatChips() {
+        com.termux.app.terminal.HomeFloatChipsView chips = mHomeFloatChips;
+        if (chips == null || mPaneController == null) return false;
+        java.util.List<com.termux.app.terminal.HomeFloatChipsPolicy.Chip> list =
+            new java.util.ArrayList<>();
+        java.util.List<Integer> pids = new java.util.ArrayList<>();
+        for (com.termux.app.terminal.TerminalPaneController.Window window : minimisedHomeFloats()) {
+            com.termux.app.terminal.TerminalWindowBar.WindowItem item = buildWindowItem(
+                mPaneController.windowActiveSession(window), list.size(), pids,
+                mPaneController.windowName(window));
+            list.add(com.termux.app.terminal.HomeFloatChipsPolicy.Chip.of(item.label,
+                getString(R.string.home_float_chip_description, item.spokenLabel,
+                    window.homePage() + 1)));
+        }
+        chips.setChips(list);
+        return true;
+    }
+
+    /** The shared frame the chips are drawing, for the blur cache's in-use scan. */
+    @Nullable private Bitmap mHomeFloatChipsBackdropBitmap;
+    /** What the chips' glass was last built from; null while they have none. */
+    @Nullable private List<Object> mHomeFloatChipsGlassKey;
+
+    /**
+     * The chips stand on glass like the dock's: built from exactly the dock's surface values
+     * (its opacity, blur, grain and tint, as the resolver answers them, inherited or detached),
+     * each chip a card of its own with the frost sampled at its place on screen. Rebuilt when a
+     * value, the frame or the theme's glass base moves, or on {@code force} (a chrome restyle,
+     * whose factory may read a new scheme); let go of while the row is off screen.
+     */
+    private void applyHomeFloatChipsGlass(boolean force) {
+        com.termux.app.terminal.HomeFloatChipsView chips = mHomeFloatChips;
+        if (chips == null) return;
+        if (!chips.isShown() || mPreferences == null) {
+            if (mHomeFloatChipsGlassKey != null) chips.setGlassGround(null);
+            mHomeFloatChipsGlassKey = null;
+            mHomeFloatChipsBackdropBitmap = null;
+            return;
+        }
+        float opacity = mPreferences.getAppBarOpacity() / 100f;
+        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        int grain = mPreferences.getDockGlassGrain();
+        int tint = mPreferences.getDockTintStrength();
+        Bitmap frame = null;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (shouldUseWallpaperPassthroughMode() && ChromePolicy.dockBlurEnabled(blurRadiusDp)
+                && wallpaperFrame != null) {
+            frame = mChrome.blurCache().obtain(blurRadiusDp, wallpaperFrame);
+            if (frame != null && frame.isRecycled()) frame = null;
+        }
+        Rect frameRect = new Rect(mChrome.blurCache().frameRectRef());
+        List<Object> key = Arrays.asList(frame, frameRect, blurRadiusDp, opacity, grain, tint,
+            mFancierGlassLook, resolveAccessoryGlassBaseColor());
+        if (!force && key.equals(mHomeFloatChipsGlassKey)) return;
+        mHomeFloatChipsGlassKey = key;
+        mHomeFloatChipsBackdropBitmap = frame;
+        float density = getResources().getDisplayMetrics().density;
+        Bitmap clear = frame == null ? null : glassClearFrame(blurRadiusDp);
+        com.termux.app.chrome.GlassRefraction.Look look = mFancierGlassLook;
+        Bitmap ground = frame;
+        chips.setGlassGround(radius -> {
+            com.termux.app.chrome.SharedFrameDrawable backdrop = null;
+            if (ground != null && !ground.isRecycled()) {
+                backdrop = new com.termux.app.chrome.SharedFrameDrawable(ground, frameRect,
+                    mWallpaperParallax, com.termux.app.chrome.GlassAnchor.screen(chips));
+                backdrop.setClearFrame(clear);
+            }
+            // A card all round, with the dock's foot; the chips lay their own stroke.
+            com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec
+                .of(blurRadiusDp, opacity, grain, radius, look)
+                .withRim(false)
+                .withSlice(1f, true)
+                .withTintStrength(tint);
+            return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
+                backdrop);
+        });
     }
 
     /**
@@ -22601,10 +22710,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             roomTop += insets.getInsets(
                 androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
         }
-        // The room starts under the top edge's whole stack, Home's bar included, whether it takes
-        // its band from the grid or overlays it (HomeChromePolicy.statusOverlays).
-        // Read off the layout, not the bar's live position: a float born as the bar arrives sits
-        // where the bar settles, not where its slide has got to.
+        // The room starts under the top edge's whole stack, read off the layout. Home wears no
+        // status bar, so on Home that is the system bar's inset and whatever dock rows stand on
+        // the top edge.
         View column = findViewById(R.id.terminal_content_column);
         if (column != null) {
             column.getLocationOnScreen(at);
@@ -22612,10 +22720,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             roomTop = Math.max(roomTop, columnTop + EdgeStackPolicy.stackThicknessPx(
                 currentPlaceLayout(), PlaceLayout.Edge.TOP, buildEdgeStackMetrics()));
         }
+        // The minimised floats' chips stand just above the dock, or above the keyboard while one
+        // is up, and while they show the floats' room ends above them.
+        mHomeChipsDockTopPx = dockTop;
+        mHomeChipsKeyboardTopPx = keyboardTop;
+        boolean chipsShown = placeHomeFloatChips(dockTop, keyboardTop);
+        mHomeFloatChipsBandTaken = chipsShown;
+        int chipsBand = com.termux.app.terminal.HomeFloatChipsPolicy.bandPx(
+            getResources().getDisplayMetrics().density, chipsShown);
+        dockTop -= chipsBand;
+        if (keyboardTop >= 0) keyboardTop -= chipsBand;
         // The floats breathe Home's Margin inside all that, the same air as the widget grid's
         // rim: Home's own, read explicitly, since floats are laid out while a window is in front.
         mPaneController.setHomeFloatObstructions(roomTop, dockTop, keyboardTop,
             Math.round(dpToPx(homeMarginDp())));
+    }
+
+    /**
+     * Stands the chips' row on the edge that covers Home from below
+     * ({@link com.termux.app.terminal.HomeFloatChipsPolicy#rowTopPx}), as a translation in the
+     * float layer, set only on a change. Whether the row shows.
+     */
+    private boolean placeHomeFloatChips(int dockTopPx, int keyboardTopPx) {
+        com.termux.app.terminal.HomeFloatChipsView chips = mHomeFloatChips;
+        com.termux.app.terminal.HomeFloatLayer layer = mPaneController == null ? null
+            : mPaneController.homeFloatLayer();
+        if (chips == null || layer == null || chips.getVisibility() != View.VISIBLE) return false;
+        int[] at = new int[2];
+        layer.getLocationOnScreen(at);
+        float y = com.termux.app.terminal.HomeFloatChipsPolicy.rowTopPx(
+            getResources().getDisplayMetrics().density, dockTopPx, keyboardTopPx)
+            - at[1] - chips.getTop();
+        if (chips.getTranslationY() != y) chips.setTranslationY(y);
+        return true;
     }
 
     /** Linux apps tapped in the drawer run on the display; this is what runs them. */
@@ -24330,6 +24467,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void doRefreshTerminalWindowBar() {
+        // The float chips wear the same labels as the window chips, refreshed with them; an
+        // unchanged list changes nothing.
+        syncHomeFloatChips();
         View host = findViewById(R.id.terminal_window_bar_host);
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (host == null || bar == null) return;
@@ -24447,73 +24587,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         applyStatusBarStyle(host);
         applyTerminalWindowBarBackdropInsets();
-        applyHomePillsGlass(true);
-    }
-
-    /** The shared frame Home's pills are drawing, for the blur cache's in-use scan. */
-    @Nullable private Bitmap mHomePillsBackdropBitmap;
-    /** What the pills' glass was last built from; null while they have none. */
-    @Nullable private List<Object> mHomePillsGlassKey;
-
-    /**
-     * Home's pills stand on glass of their own rather than on the bar's layers clipped to them:
-     * the bar's glass rests on the dock's plank, stands down under a joined frame and waits on its
-     * frost pass, and each of those left the pills on nothing. Built from exactly the values the
-     * bar's glass is ({@link #applyTerminalWindowBarGlass}: the status bar's surface, or the
-     * dock's while the bar stands on the bottom edge), each pill a card of its own with the frost
-     * sampled at its place on screen. {@code force} rebuilds whatever the key says (a glass value
-     * or the theme the factory reads may have moved); otherwise only a new frame or value does.
-     */
-    private void applyHomePillsGlass(boolean force) {
-        com.termux.app.statusbar.HomePillsView pills = findViewById(R.id.terminal_home_pills);
-        if (pills == null) return;
-        if (!pills.isShown() || mChrome == null || mPreferences == null) {
-            if (mHomePillsGlassKey != null) pills.setGlassGround(null);
-            mHomePillsGlassKey = null;
-            mHomePillsBackdropBitmap = null;
-            return;
-        }
-        boolean joinsDock = mStatusBarEdge == PlaceLayout.Edge.BOTTOM;
-        float opacity = (joinsDock ? mPreferences.getAppBarOpacity()
-            : mPreferences.getStatusBarOpacity()) / 100f;
-        int blurRadiusDp = joinsDock
-            ? getEffectiveExtraKeysBlurRadius() : getEffectiveStatusBarBlurRadius();
-        int grain = joinsDock ? mPreferences.getDockGlassGrain() : mPreferences.getStatusBarGrain();
-        int tint = joinsDock ? mPreferences.getDockTintStrength()
-            : mPreferences.getStatusBarTintStrength();
-        Bitmap frame = null;
-        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        if (shouldUseWallpaperPassthroughMode() && ChromePolicy.dockBlurEnabled(blurRadiusDp)
-                && wallpaperFrame != null) {
-            frame = mChrome.blurCache().obtain(blurRadiusDp, wallpaperFrame);
-            if (frame != null && frame.isRecycled()) frame = null;
-        }
-        Rect frameRect = new Rect(mChrome.blurCache().frameRectRef());
-        List<Object> key = Arrays.asList(frame, frameRect, blurRadiusDp, opacity, grain, tint,
-            mFancierGlassLook);
-        if (!force && key.equals(mHomePillsGlassKey)) return;
-        mHomePillsGlassKey = key;
-        mHomePillsBackdropBitmap = frame;
-        float density = getResources().getDisplayMetrics().density;
-        Bitmap clear = frame == null ? null : glassClearFrame(blurRadiusDp);
-        com.termux.app.chrome.GlassRefraction.Look look = mFancierGlassLook;
-        Bitmap ground = frame;
-        pills.setGlassGround(radius -> {
-            com.termux.app.chrome.SharedFrameDrawable backdrop = null;
-            if (ground != null && !ground.isRecycled()) {
-                backdrop = new com.termux.app.chrome.SharedFrameDrawable(ground, frameRect,
-                    mWallpaperParallax, com.termux.app.chrome.GlassAnchor.screen(pills));
-                backdrop.setClearFrame(clear);
-            }
-            // A card all round, with the bar's foot; the pills lay their own stroke.
-            com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec
-                .of(blurRadiusDp, opacity, grain, radius, look)
-                .withRim(false)
-                .withSlice(1f, true)
-                .withTintStrength(tint);
-            return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
-                backdrop);
-        });
     }
 
     /**
@@ -24539,9 +24612,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
             new java.util.ArrayList<>();
         java.util.List<Integer> foregroundPids = new java.util.ArrayList<>();
-        // The Home pills' windows: the Home floats' sections, filled on Home only.
-        java.util.List<com.termux.app.statusbar.HomePillsPolicy.Section> homeSections =
-            new java.util.ArrayList<>();
         int selected = -1;
         // Whether the chips below stand for this session's terminal windows at all. The row is
         // shared with the other places, which fill it with something else entirely.
@@ -24550,15 +24620,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // bar once swapped them for the display's apps there (the old Display place), so a tap on
         // the display's chip left a bar of one chip.
         if (isWidgetsPageShowing()) {
-            // On Home the chips are the Home floats, from every page, each with its page; the
-            // focused one is selected. Without a float there is no bar here at all.
+            // Home wears no status bar: the row is empty there, and the minimised Home floats
+            // come back from the chips above the dock instead.
             selected = -1;
-            if (mPaneController != null) {
-                addHomeFloatChips(items, foregroundPids, homeSections);
-                com.termux.app.terminal.TerminalPaneController.Window focused =
-                    mPaneController.focusedHomeFloat();
-                if (focused != null) selected = chipFloats().indexOf(focused);
-            }
         } else if (mCurrentWSession != null && mPaneController != null) {
             terminalWindows = true;
             long now = android.os.SystemClock.uptimeMillis();
@@ -24601,7 +24665,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     .withIcon(displayChipIcon()));
             }
             // Home floats are windows of the session too: chips after the row's, marked as floats.
-            addHomeFloatChips(items, foregroundPids, null);
+            addHomeFloatChips(items, foregroundPids);
         }
         // Only the row's own windows can be dragged to reorder: not the display's chip or the
         // Home floats' after them, and nothing on the places that fill the row with other things.
@@ -24619,7 +24683,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setWindows(items, selected);
-        syncHomePills(homeSections, selected);
         syncBackgroundProcessStack();
         scheduleShellPhaseJudgement();
         java.util.List<Integer> pids = collectAllPanePids();
@@ -25180,19 +25243,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The role colour a status tier is written in; its hue is the tier, and the toning keeps it. */
     private int statusInkSeed(@NonNull com.termux.app.statusbar.StatusBarWidgetView.ColorRole role) {
-        int primary = MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorPrimary,
-            androidx.core.content.ContextCompat.getColor(this, R.color.termux_primary));
-        switch (role) {
-            case SECONDARY:
-                return MaterialColors.getColor(this,
-                    com.termux.shared.R.attr.termuxColorSecondary,
-                    androidx.core.content.ContextCompat.getColor(this, R.color.termux_secondary));
-            case TERTIARY:
-                return MaterialColors.getColor(this,
-                    com.termux.shared.R.attr.termuxColorTertiary, primary);
-            default:
-                return primary;
-        }
+        return com.termux.app.statusbar.StatusBarWidgetView.seedFor(this, role);
     }
 
     // ---- Trailing status widgets (CPU / RAM / weather) + their anchored detail cards ----
@@ -25222,8 +25273,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (cpu != null) {
             cpu.setVisibility(cpuOn ? View.VISIBLE : View.GONE);
-            cpu.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
-            cpu.setIconGlyph("\uf4bc");   // nf-oct-cpu
+            cpu.dressAsCpu();
             // Seeded from the smoother every pass: onStatsUpdated skips hidden widgets, so a value
             // published while this one was off or covered is otherwise only repainted when the
             // reading next changes \u2014 and before the first sample this is what puts "--" on screen
@@ -25236,8 +25286,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (ram != null) {
             ram.setVisibility(ramOn ? View.VISIBLE : View.GONE);
-            ram.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-            ram.setIconGlyph("\uefc5");   // nf-fa-memory
+            ram.dressAsRam();
             if (ramOn) ram.setValue(mBarMemorySmoother.text());
             if (ram.getTag() == null) {
                 ram.setTag("wired");
@@ -25279,9 +25328,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 statsInterval(cardShowing ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS),
                 cardShowing);
             // The sampler pauses while nothing shows its numbers (StatsPollCadence).
-            View barHost = findViewById(R.id.terminal_window_bar_host);
-            mStatsController.setConsumerVisible(cardShowing
-                || (barHost != null && barHost.getVisibility() == View.VISIBLE));
+            mStatsController.setConsumerVisible(statsConsumerVisible());
         } else if (mStatsController != null) {
             mStatsController.stop();
         }
@@ -25295,8 +25342,65 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ensureAiIndicatorController();
         // The tiers just moved, and a tier is which hue this widget's ink is toned from.
         syncStatusBarInk();
-        // The stats pill may have gained its first reading or lost its last: Home's bar follows.
-        syncHomeStatusBar();
+        // A reading switched on or off reaches the focused Home float's titlebar too.
+        syncHomeFloatReadings();
+    }
+
+    /**
+     * Whether anything showing the CPU and RAM readings is on screen, for the sampler's pause
+     * (StatsPollCadence): the open stats card, the status bar, or the focused Home float's
+     * titlebar on Home.
+     */
+    private boolean statsConsumerVisible() {
+        boolean cardShowing = mStatusCardHost.isShowing() && mStatsCardView != null;
+        View barHost = findViewById(R.id.terminal_window_bar_host);
+        return cardShowing || (barHost != null && barHost.getVisibility() == View.VISIBLE)
+            || homeFloatReadingsShown();
+    }
+
+    /** The status bar's ink rule, asked on a titlebar's own ground; built once. */
+    @Nullable private com.termux.app.terminal.FloatTitlebarView.ReadingInk mTitlebarReadingInk;
+
+    /**
+     * Whether the focused Home float's titlebar carries the readings now: the wall rests on Home,
+     * a Home float there holds focus with its titlebar on screen, and the status bar's settings
+     * show CPU or RAM. Home wears no status bar, so this is where its readings are.
+     */
+    private boolean homeFloatReadingsShown() {
+        return mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS
+            && mPaneController != null && mPaneController.isFocusedHomeFloatTitlebarShown()
+            && (statusCpuReadingOn() || statusRamReadingOn());
+    }
+
+    /** The status bar's CPU reading is on: its setting, with the access it needs. */
+    private boolean statusCpuReadingOn() {
+        return com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
+            mPreferences != null && mPreferences.isStatusWidgetCpuEnabled(),
+            PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
+    }
+
+    private boolean statusRamReadingOn() {
+        return mPreferences != null && mPreferences.isStatusWidgetRamEnabled();
+    }
+
+    /**
+     * The focused Home float's titlebar readings: CPU and RAM from the status bar's own smoothers,
+     * at the sampler's cadence, while {@link #homeFloatReadingsShown}; none otherwise. The sampler
+     * follows, so it runs on Home only while a focused float shows them. Each value is set only
+     * on a change, so a steady reading repaints nothing.
+     */
+    private void syncHomeFloatReadings() {
+        if (mPaneController == null) return;
+        if (mTitlebarReadingInk == null && mChrome != null) {
+            mTitlebarReadingInk = (ground, seed, target) ->
+                mChrome.ink().inkOnGround(ground, seed, seed, target);
+        }
+        boolean shown = homeFloatReadingsShown();
+        mPaneController.setHomeFloatReadings(
+            shown && statusCpuReadingOn() ? mBarCpuSmoother.text() : null,
+            shown && statusRamReadingOn() ? mBarMemorySmoother.text() : null,
+            mTitlebarReadingInk);
+        if (mStatsController != null) mStatsController.setConsumerVisible(statsConsumerVisible());
     }
 
     /**
@@ -25359,19 +25463,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long nowMs = android.os.SystemClock.uptimeMillis();
         com.termux.app.statusbar.StatusBarWidgetView cpu = findViewById(R.id.terminal_status_widget_cpu);
         com.termux.app.statusbar.StatusBarWidgetView ram = findViewById(R.id.terminal_status_widget_ram);
-        if (cpu != null && cpu.getVisibility() == View.VISIBLE
-            && mBarCpuSmoother.offer(stats.cpuPercent, nowMs)) {
+        // The smoothers feed the bar's widgets and, on Home, the focused float's titlebar: a
+        // widget left hidden inside Home's absent bar must not freeze the titlebar's readings.
+        boolean titlebar = homeFloatReadingsShown();
+        boolean cpuBar = cpu != null && cpu.getVisibility() == View.VISIBLE;
+        if ((cpuBar || (titlebar && statusCpuReadingOn()))
+            && mBarCpuSmoother.offer(stats.cpuPercent, nowMs) && cpuBar) {
             cpu.setValue(mBarCpuSmoother.text());
         }
-        if (ram != null && ram.getVisibility() == View.VISIBLE) {
+        boolean ramBar = ram != null && ram.getVisibility() == View.VISIBLE;
+        if (ramBar || (titlebar && statusRamReadingOn())) {
             int memPct = stats.memTotalKb > 0
                 ? (int) Math.round(100.0 * stats.memUsedKb / stats.memTotalKb) : -1;
-            if (mBarMemorySmoother.offer(memPct, nowMs)) ram.setValue(mBarMemorySmoother.text());
+            if (mBarMemorySmoother.offer(memPct, nowMs) && ramBar)
+                ram.setValue(mBarMemorySmoother.text());
         }
         if (mStatsCardView != null && mStatusCardHost.isShowing()) {
             mStatsCardView.bind(stats);
         }
-        syncHomePillsStats();
+        syncHomeFloatReadings();
     }
 
     private void toggleStatsCard(@NonNull View anchor) {
@@ -25544,7 +25654,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWeatherCardView != null && mStatusCardHost.isShowing()) {
             mWeatherCardView.bind(weather);
         }
-        syncHomePillsStats();
     }
 
     private void toggleWeatherCard(@NonNull View anchor) {
@@ -26487,109 +26596,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Home floats came, went, were minimised or restored: what shows them follows. Where Home
-     * wears no bar of its own (a side bar, or a stats pill with nothing to show), the first float
-     * brings the status bar down onto Home, compact, and the last one closing takes it back up.
+     * Home floats came, went, were minimised or restored: what shows them follows, the
+     * Workspace's chips for them among it.
      */
     private void onHomeFloatsChangedInActivity() {
-        syncHomeStatusBar();
+        syncHomeFloatChips();
+        syncHomeFloatReadings();
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
         scheduleArrangementAutosave();
-    }
-
-    /**
-     * Whether Home wears the status bar now (HomeChromePolicy.homeStatusBarShown): the pills'
-     * band along the top or the bottom while the stats pill has a reading or a float exists, a
-     * side bar only for the floats.
-     */
-    private boolean homeStatusBarWanted() {
-        PlaceLayoutStore store = placeLayoutStore();
-        if (store == null) return false;
-        boolean stats = com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
-                mPreferences != null && mPreferences.isStatusWidgetCpuEnabled(),
-                PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi())
-            || (mPreferences != null && (mPreferences.isStatusWidgetRamEnabled()
-                || mPreferences.isStatusWidgetWeatherEnabled()));
-        return com.termux.app.place.HomeChromePolicy.homeStatusBarShown(
-            store.statusBarEdge(currentPlaceOrientation()),
-            mPaneController != null && mPaneController.homeFloatCount() > 0, stats);
-    }
-
-    /**
-     * Home's bar follows {@link #homeStatusBarWanted} with a slide: brought down onto Home, or
-     * taken back up and out of the layout at the end of the way out. Called when the floats, the
-     * stats settings or the CPU's access change.
-     */
-    private void syncHomeStatusBar() {
-        // Before the first layout pass there is nothing on screen to slide: that pass adopts it.
-        if (mAppliedPlaceLayout == null) return;
-        boolean want = homeStatusBarWanted();
-        if (want && (!mHomeBarInLayout || mHomeBarLeaving)) {
-            boolean slide = !mHomeBarInLayout;
-            mHomeBarInLayout = true;
-            mHomeBarLeaving = false;
-            mCachedFloatBarLayout = null;
-            syncPlaceLayout();
-            refreshTerminalWindowBar();
-            if (slide) slideHomeStatusBar(true, null);
-            syncHomeFloatObstructions();
-        } else if (!want && mHomeBarInLayout && !mHomeBarLeaving) {
-            mHomeBarLeaving = true;
-            slideHomeStatusBar(false, () -> {
-                if (!mHomeBarLeaving) return;
-                mHomeBarLeaving = false;
-                if (homeStatusBarWanted()) return;
-                mHomeBarInLayout = false;
-                mCachedFloatBarLayout = null;
-                syncPlaceLayout();
-                refreshTerminalWindowBar();
-                syncHomeFloatObstructions();
-            });
-        }
-    }
-
-    /**
-     * The layout pass's own read of Home's bar: a change that came without a slide (the bar's edge
-     * moved in the Layout editor, the first pass after a start) is taken at once. A bar on its way
-     * out keeps its place until its slide ends.
-     */
-    private void adoptHomeStatusBar() {
-        if (mHomeBarLeaving) return;
-        boolean want = homeStatusBarWanted();
-        if (want == mHomeBarInLayout) return;
-        mHomeBarInLayout = want;
-        mCachedFloatBarLayout = null;
-    }
-
-    /**
-     * The status bar slides down onto Home from the top ({@code in}), or back up out of it; the
-     * layout follows at the end of the way out. Off Home, and with reduced motion, nothing slides.
-     */
-    private void slideHomeStatusBar(boolean in, @Nullable Runnable end) {
-        View host = findViewById(R.id.terminal_window_bar_host);
-        boolean onHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
-        if (host == null || !onHome || isReducedMotionEnabled()) {
-            if (host != null) host.setTranslationY(0f);
-            if (end != null) end.run();
-            return;
-        }
-        host.animate().cancel();
-        if (in) {
-            // Laid out first, so the slide starts a whole bar above where it settles.
-            host.post(() -> {
-                host.setTranslationY(-Math.max(1, host.getHeight()));
-                host.animate().translationY(0f).setDuration(220L)
-                    .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
-            });
-        } else {
-            host.animate().translationY(-Math.max(1, host.getHeight())).setDuration(180L)
-                .setInterpolator(new android.view.animation.AccelerateInterpolator())
-                .withEndAction(() -> {
-                    host.setTranslationY(0f);
-                    if (end != null) end.run();
-                }).start();
-        }
     }
 
     /**
@@ -26615,8 +26630,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The Home floats the window chips stand for after the row's: on Home they are the only chips,
-     * across every page; in the Workspace they follow the windows and the display, marked as floats.
+     * The Home floats the window chips stand for after the row's: in the Workspace they follow the
+     * windows and the display, marked as floats.
      */
     @NonNull
     private java.util.List<com.termux.app.terminal.TerminalPaneController.Window> chipFloats() {
@@ -26644,107 +26659,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return at >= 0 && at < floats.size() ? floats.get(at) : null;
     }
 
-    /**
-     * One chip per Home float, each carrying its page, appended to {@code items}; and, given
-     * {@code sections}, the Home pills' section for each (the chip's glyph and name, without the
-     * page mark, and the chip's spoken label).
-     */
+    /** One chip per Home float, each carrying its page, appended to {@code items}. */
     private void addHomeFloatChips(
             @NonNull java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items,
-            @NonNull java.util.List<Integer> foregroundPids,
-            @Nullable java.util.List<com.termux.app.statusbar.HomePillsPolicy.Section> sections) {
+            @NonNull java.util.List<Integer> foregroundPids) {
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
         for (int i = 0; i < floats.size(); i++) {
             com.termux.app.terminal.TerminalPaneController.Window window = floats.get(i);
             TerminalSession session = mPaneController.windowActiveSession(window);
-            com.termux.app.terminal.TerminalWindowBar.WindowItem item = buildWindowItem(session,
-                items.size(), foregroundPids, mPaneController.windowName(window))
+            items.add(buildWindowItem(session, items.size(), foregroundPids,
+                mPaneController.windowName(window))
                 .withHomeFloat(window.homePage(),
-                    getString(R.string.window_chip_home_float, window.homePage() + 1));
-            items.add(item);
-            if (sections != null) {
-                String mark = com.termux.app.terminal.HomeFloatPolicy.chipPageMark(
-                    window.homePage());
-                String label = item.label.endsWith(mark)
-                    ? item.label.substring(0, item.label.length() - mark.length()) : item.label;
-                sections.add(com.termux.app.statusbar.HomePillsPolicy.Section.of(label,
-                    item.spokenLabel));
-            }
+                    getString(R.string.window_chip_home_float, window.homePage() + 1)));
         }
-    }
-
-    /**
-     * Home's look: on a Home page with the bar along the top or the bottom, the bar shows the
-     * Home pills (HomePillsPolicy) instead of itself, with the floats' sections, the focused one
-     * expanded, and the stats; anywhere else the bar is itself.
-     */
-    private void syncHomePills(
-            @NonNull java.util.List<com.termux.app.statusbar.HomePillsPolicy.Section> sections,
-            int focused) {
-        View host = findViewById(R.id.terminal_window_bar_host);
-        com.termux.app.statusbar.HomePillsView pills = findViewById(R.id.terminal_home_pills);
-        if (!(host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) || pills == null) {
-            return;
-        }
-        boolean on = com.termux.app.statusbar.HomePillsPolicy.shown(isWidgetsPageShowing(),
-            mStatusBarEdge);
-        com.termux.app.statusbar.StatusBarSwipeLayout bar =
-            (com.termux.app.statusbar.StatusBarSwipeLayout) host;
-        boolean was = bar.isShowingHomePills();
-        bar.setHomePills(on);
-        // The bar's glass was dressed for the other look this pass (the strip behind the system
-        // bar runs on from the bar, never from the pills): dress it again, once, after this pass.
-        if (was != bar.isShowingHomePills()) host.post(this::refreshTerminalWindowBar);
-        if (!on) return;
-        if (pills.getTag() == null) {
-            pills.setTag("wired");
-            pills.setListener(index -> {
-                java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats =
-                    chipFloats();
-                if (index >= 0 && index < floats.size()) showHomeFloat(floats.get(index));
-            });
-        }
-        pills.setAnimationsEnabled(!isReducedMotionEnabled());
-        int inset = statusBarContentEdgeInsetPx(isRoundedDockStyle());
-        pills.setHorizontalInsets(inset, inset);
-        pills.setWindows(sections, focused);
-        syncHomePillsStats();
-    }
-
-    /**
-     * The stats pill's readings: CPU and RAM from the bar's own smoothers, the weather from the
-     * weather's cache, each only while the status bar's settings show it. The same samplers the
-     * bar reads; the pills add none.
-     */
-    private void syncHomePillsStats() {
-        com.termux.app.statusbar.HomePillsView pills = findViewById(R.id.terminal_home_pills);
-        if (pills == null || pills.getVisibility() != View.VISIBLE) return;
-        boolean cpuOn = com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
-            mPreferences != null && mPreferences.isStatusWidgetCpuEnabled(),
-            PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
-        boolean ramOn = mPreferences != null && mPreferences.isStatusWidgetRamEnabled();
-        boolean weatherOn = mPreferences != null && mPreferences.isStatusWidgetWeatherEnabled();
-        String cpu = cpuOn ? mBarCpuSmoother.text() : null;
-        String ram = ramOn ? mBarMemorySmoother.text() : null;
-        String weatherGlyph = null;
-        String weather = null;
-        if (weatherOn) {
-            com.termux.app.statusbar.WeatherController.Weather cached =
-                mWeatherController == null ? null : mWeatherController.cache();
-            if (cached != null && cached.valid) {
-                weatherGlyph = com.termux.app.statusbar.WeatherController.glyphFor(
-                    cached.currentCode);
-                weather = com.termux.app.statusbar.WeatherController.formatTemp(cached.currentC,
-                    mPreferences != null && mPreferences.isStatusWidgetWeatherFahrenheit());
-            } else {
-                weather = "--°";
-            }
-        }
-        java.util.List<String> spoken = new java.util.ArrayList<>(3);
-        if (cpu != null) spoken.add(getString(R.string.home_pills_cpu, cpu));
-        if (ram != null) spoken.add(getString(R.string.home_pills_memory, ram));
-        if (weather != null) spoken.add(getString(R.string.home_pills_weather, weather));
-        pills.setStats(cpu, ram, weatherGlyph, weather, android.text.TextUtils.join(", ", spoken));
     }
 
     /**
@@ -27099,6 +27026,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mFirstBootTour != null)
                 mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
             refreshTerminalWindowBar();
+            // A Home float took focus or gave it up: its titlebar's readings follow.
+            syncHomeFloatReadings();
         }
 
         @Override public void onTreesChanged() {
@@ -27122,15 +27051,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean homeFloatChipOnScreen(
                 @NonNull com.termux.app.terminal.TerminalPaneController.Window window,
                 @NonNull android.graphics.Rect out) {
-            com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
-            if (bar == null || !bar.isShown()) return false;
-            int at = chipFloats().indexOf(window);
-            View chip = at < 0 ? null : bar.chipViewAt(firstFloatChipIndex() + at);
-            if (chip == null || chip.getWidth() <= 0) return false;
+            // Asked as the float is minimised: its chip joins the row now, so the flight lands
+            // where the chip will stand, above the dock, or above a keyboard that stays up.
+            com.termux.app.terminal.HomeFloatLayer layer = mPaneController == null ? null
+                : mPaneController.homeFloatLayer();
+            if (layer == null || !fillHomeFloatChips() || layer.getWidth() <= 0) return false;
+            int at = minimisedHomeFloats().indexOf(window);
+            Rect chip = new Rect();
+            if (at < 0 || !mHomeFloatChips.chipBoundsInParent(at, layer.getWidth(), chip))
+                return false;
+            if (mHomeChipsDockTopPx == Integer.MAX_VALUE) return false;
+            // Minimise gives the focus back first, which starts the keyboard's close: it stays up
+            // only while Home keeps it always on, or another float still holds the focus.
+            boolean keyboardWasUp = committedKeyboardVisible() || isImeVisible();
+            boolean keyboardStays = keyboardWasUp
+                && (wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)
+                    || mPaneController.focusedHomeFloat() != null);
+            int top = com.termux.app.terminal.HomeFloatChipsPolicy.rowTopPx(
+                getResources().getDisplayMetrics().density, mHomeChipsDockTopPx,
+                keyboardStays ? mHomeChipsKeyboardTopPx : -1);
             int[] onScreen = new int[2];
-            chip.getLocationOnScreen(onScreen);
-            out.set(onScreen[0], onScreen[1], onScreen[0] + chip.getWidth(),
-                onScreen[1] + chip.getHeight());
+            layer.getLocationOnScreen(onScreen);
+            out.set(onScreen[0] + chip.left, top, onScreen[0] + chip.right,
+                top + chip.height());
             return true;
         }
 

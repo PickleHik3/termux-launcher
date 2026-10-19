@@ -13,6 +13,7 @@ import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -23,6 +24,9 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.chrome.ChromeInk;
 import com.termux.app.chrome.ChromeShade;
+import com.termux.app.chrome.OnGlass;
+import com.termux.app.statusbar.MaterialDotSeparatorView;
+import com.termux.app.statusbar.StatusBarWidgetView;
 
 /**
  * The titlebar of a float: one glass strip along its top carrying the drag handle and the buttons
@@ -35,9 +39,15 @@ import com.termux.app.chrome.ChromeShade;
  * {@link PaneShape#radiusForBounds}, the rule every slab follows, and it wears the rim its pane
  * wears ({@link #applyRim}), so a focused float's strip carries the active rim with it.
  *
+ * <p>The focused Home float's strip also carries the system readings at its leading end
+ * ({@link #setReadings}): CPU and RAM, drawn by the status bar's own reading widget
+ * ({@link StatusBarWidgetView}) with the bar's glyphs, tiers and type, and inked by the bar's rule
+ * on the strip's surface ({@link ReadingInk}). Leading to trailing the strip is readings, handle,
+ * buttons; readings that do not fit drop whole ({@link FloatTitlebarPolicy#readingsThatFit}).
+ *
  * <p>The strip's own touch is the drag handle, which the float's container owns: a drag moves the
  * float and a long press opens the handle's menu. This view only answers {@link #actionAt} so the
- * container knows when a press belongs to a button instead.
+ * container knows when a press belongs to a button instead; the readings take no touch.
  */
 public final class FloatTitlebarView extends FrameLayout {
 
@@ -51,6 +61,21 @@ public final class FloatTitlebarView extends FrameLayout {
          */
         default void onHandleMenu() {}
     }
+
+    /**
+     * The status bar's ink rule for a reading: {@code seed}, the reading's role colour, toned until
+     * it clears {@code target} on {@code ground}, on the chrome's polarity
+     * ({@link ChromeInk#inkOnGround}).
+     */
+    public interface ReadingInk {
+        @ColorInt int on(@ColorInt int ground, @ColorInt int seed, double target);
+    }
+
+    /** The dot between the CPU and RAM readings and the air round it, as the status bar has them. */
+    private static final int DOT_DP = 3;
+    private static final int DOT_SIDE_DP = 1;
+    /** The air before the RAM reading, after the dot. */
+    private static final int RAM_GAP_DP = 3;
 
     private final PaneGlassBackdropView mGlass;
     private final int[] mActions;
@@ -66,6 +91,18 @@ public final class FloatTitlebarView extends FrameLayout {
     private int mInk;
     /** The chrome's polarity {@link #mInk} was resolved on; a wallpaper change can move it. */
     @Nullable private ChromeInk.Polarity mInkPolarity;
+
+    /** The readings, built on first use: only a focused Home float's strip ever shows them. */
+    @Nullable private StatusBarWidgetView mCpu;
+    @Nullable private MaterialDotSeparatorView mDot;
+    @Nullable private StatusBarWidgetView mRam;
+    @Nullable private ReadingInk mReadingInk;
+    /** The opaque colour the readings stand on: the strip's glass or its panel. */
+    @ColorInt private int mReadingGround;
+    /** Where the readings the last layout fitted end, from the leading edge; 0 for none. */
+    private int mReadingsEndPx;
+    /** Whether the readings' own height fits the strip at the font scale in force. */
+    private boolean mReadingsFitHeight = true;
 
     public FloatTitlebarView(@NonNull Context context, boolean hasMinimiseTarget,
                              @NonNull Listener listener) {
@@ -148,6 +185,85 @@ public final class FloatTitlebarView extends FrameLayout {
         return FloatTitlebarPolicy.ACTION_NONE;
     }
 
+    /**
+     * The readings the strip shows at its leading end: CPU and RAM as their values, either null
+     * for a reading not shown. Both null puts them away. Each value is set only on a change, so a
+     * steady reading costs nothing.
+     */
+    public void setReadings(@Nullable CharSequence cpu, @Nullable CharSequence ram) {
+        if ((cpu != null || ram != null) && mCpu == null) buildReadings();
+        if (mCpu == null || mDot == null || mRam == null) return;
+        if (cpu != null) mCpu.setValue(cpu);
+        if (ram != null) mRam.setValue(ram);
+        show(mCpu, cpu != null);
+        show(mRam, ram != null);
+        show(mDot, cpu != null && ram != null);
+    }
+
+    /** The rule the readings are inked by; null leaves them in their tier's own colour. */
+    public void setReadingInk(@Nullable ReadingInk ink) {
+        if (ink == mReadingInk) return;
+        mReadingInk = ink;
+        inkReadings();
+    }
+
+    /** Whether the strip shows {@code which} reading now, laid out in its room; for tests. */
+    boolean readingShown(boolean cpu) {
+        StatusBarWidgetView reading = cpu ? mCpu : mRam;
+        return reading != null && reading.getVisibility() == VISIBLE && reading.getWidth() > 0;
+    }
+
+    /** The reading widgets, CPU first; null before any reading was shown. For tests. */
+    @Nullable
+    StatusBarWidgetView readingView(boolean cpu) {
+        return cpu ? mCpu : mRam;
+    }
+
+    private void buildReadings() {
+        Context context = getContext();
+        mCpu = reading(context, R.string.termux_status_widget_cpu_content_description);
+        mCpu.dressAsCpu();
+        mDot = new MaterialDotSeparatorView(context, null);
+        mDot.setColorRole(StatusBarWidgetView.ColorRole.SECONDARY);
+        mDot.setVisibility(GONE);
+        mRam = reading(context, R.string.termux_status_widget_ram_content_description);
+        mRam.dressAsRam();
+        addView(mCpu);
+        addView(mDot);
+        addView(mRam);
+        inkReadings();
+    }
+
+    @NonNull
+    private static StatusBarWidgetView reading(@NonNull Context context, int description) {
+        StatusBarWidgetView reading = new StatusBarWidgetView(context);
+        // A glance, not a control: the strip's drag owns every touch on it.
+        reading.setClickable(false);
+        reading.setFocusable(false);
+        reading.setContentDescription(context.getString(description));
+        reading.setVisibility(GONE);
+        return reading;
+    }
+
+    private static void show(@NonNull View view, boolean shown) {
+        int visibility = shown ? VISIBLE : GONE;
+        if (view.getVisibility() != visibility) view.setVisibility(visibility);
+    }
+
+    /** Each reading's ink on the strip's ground, by the status bar's tiers. */
+    private void inkReadings() {
+        if (mReadingInk == null || mCpu == null || mDot == null || mRam == null) return;
+        Context context = getContext();
+        for (StatusBarWidgetView reading : new StatusBarWidgetView[]{mCpu, mRam}) {
+            int seed = StatusBarWidgetView.seedFor(context, reading.colorRole());
+            int label = mReadingInk.on(mReadingGround, seed, OnGlass.TARGET_BODY_TEXT);
+            reading.setInk(label, mReadingInk.on(mReadingGround, seed, OnGlass.TARGET_LARGE_TEXT),
+                label);
+        }
+        mDot.setInk(mReadingInk.on(mReadingGround,
+            StatusBarWidgetView.seedFor(context, mDot.colorRole()), OnGlass.TARGET_DECORATION));
+    }
+
     /** Maximise reads as Restore while the float fills its host. */
     public void setMaximised(boolean maximised) {
         if (mMaximised == maximised) return;
@@ -218,6 +334,20 @@ public final class FloatTitlebarView extends FrameLayout {
         mGlass.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), exactHeight);
         for (ImageButton button : mButtons)
             button.measure(MeasureSpec.makeMeasureSpec(slot, MeasureSpec.EXACTLY), exactHeight);
+        if (mCpu != null && mDot != null && mRam != null) {
+            // At their own size first, as the status bar lays them: a reading taller than the
+            // strip (a large font scale) is dropped rather than clipped.
+            int free = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+            mCpu.measure(free, free);
+            mRam.measure(free, free);
+            mReadingsFitHeight = FloatTitlebarPolicy.readingsFitHeight(height,
+                Math.max(mCpu.getMeasuredHeight(), mRam.getMeasuredHeight()));
+            // Then at their own width and the strip's height; the layout decides which fit.
+            mCpu.measure(free, exactHeight);
+            mRam.measure(free, exactHeight);
+            int dot = MeasureSpec.makeMeasureSpec(dp(DOT_DP), MeasureSpec.EXACTLY);
+            mDot.measure(dot, dot);
+        }
     }
 
     @Override
@@ -228,9 +358,11 @@ public final class FloatTitlebarView extends FrameLayout {
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         // Trailing-aligned, Close outermost: walk the buttons from the last one inward.
         int edge = rtl ? 0 : width;
+        int buttons = 0;
         for (int i = mButtons.length - 1; i >= 0; i--) {
             ImageButton button = mButtons[i];
             int slot = button.getMeasuredWidth();
+            buttons += slot;
             if (rtl) {
                 button.layout(edge, 0, edge + slot, height);
                 edge += slot;
@@ -238,6 +370,49 @@ public final class FloatTitlebarView extends FrameLayout {
                 button.layout(edge - slot, 0, edge, height);
                 edge -= slot;
             }
+        }
+        layoutReadings(width, height, buttons, rtl);
+    }
+
+    /**
+     * The readings from the leading edge, CPU, the dot, RAM, as many as leave the handle its
+     * least span ({@link FloatTitlebarPolicy#readingsThatFit}); a reading that does not fit is
+     * laid out at no size, so nothing here asks for another layout.
+     */
+    private void layoutReadings(int width, int height, int buttons, boolean rtl) {
+        mReadingsEndPx = 0;
+        if (mCpu == null || mDot == null || mRam == null) return;
+        boolean cpu = mReadingsFitHeight && mCpu.getVisibility() == VISIBLE;
+        boolean ram = mReadingsFitHeight && mRam.getVisibility() == VISIBLE;
+        int inset = dp(FloatTitlebarPolicy.READINGS_INSET_DP);
+        int cpuEnd = inset + mCpu.getMeasuredWidth();
+        int dotStart = cpuEnd + dp(DOT_SIDE_DP);
+        int ramStart = cpu ? dotStart + dp(DOT_DP) + dp(DOT_SIDE_DP) + dp(RAM_GAP_DP) : inset;
+        int ramEnd = ramStart + mRam.getMeasuredWidth();
+        int[] ends = cpu && ram ? new int[]{cpuEnd, ramEnd}
+            : cpu ? new int[]{cpuEnd} : ram ? new int[]{ramEnd} : new int[0];
+        int handleMin = dp(FloatTitlebarPolicy.GRIP_WIDTH_DP)
+            + 2 * dp(FloatTitlebarPolicy.GRIP_AIR_DP);
+        int fit = FloatTitlebarPolicy.readingsThatFit(width, buttons, handleMin, ends);
+        boolean cpuFits = cpu && fit >= 1;
+        boolean ramFits = ram && fit >= (cpu ? 2 : 1);
+        placeLeading(mCpu, cpuFits, inset, cpuEnd, 0, height, width, rtl);
+        int dotTop = (height - dp(DOT_DP)) / 2;
+        placeLeading(mDot, cpuFits && ramFits, dotStart, dotStart + dp(DOT_DP), dotTop,
+            dotTop + dp(DOT_DP), width, rtl);
+        placeLeading(mRam, ramFits, ramStart, ramEnd, 0, height, width, rtl);
+        mReadingsEndPx = fit == 0 ? 0 : ends[fit - 1];
+    }
+
+    /** Lays {@code view} out between {@code start} and {@code end} from the leading edge, or at no size. */
+    private static void placeLeading(@NonNull View view, boolean fits, int start, int end, int top,
+                                     int bottom, int width, boolean rtl) {
+        if (!fits) {
+            view.layout(0, 0, 0, 0);
+        } else if (rtl) {
+            view.layout(width - end, top, width - start, bottom);
+        } else {
+            view.layout(start, top, end, bottom);
         }
     }
 
@@ -247,14 +422,16 @@ public final class FloatTitlebarView extends FrameLayout {
         // the floats; the strip follows it on the next frame, as the dock's rim does.
         if (ChromeShade.polarity() != mInkPolarity) updateInk(mGlass.getVisibility() == VISIBLE);
         super.dispatchDraw(canvas);
-        // The handle: a grip bar centred in the span the buttons leave, when it fits there.
+        // The handle: a grip bar centred in the span between the readings and the buttons, when
+        // it fits there.
         int buttons = 0;
         for (ImageButton button : mButtons) buttons += button.getWidth();
-        float free = getWidth() - buttons;
         float grip = dp(FloatTitlebarPolicy.GRIP_WIDTH_DP);
-        if (free < grip + 2 * dp(8)) return;
+        float center = FloatTitlebarPolicy.gripCenterPx(getWidth(), buttons, mReadingsEndPx,
+            Math.round(grip), dp(FloatTitlebarPolicy.GRIP_AIR_DP));
+        if (center < 0f) return;
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
-        float centerX = rtl ? buttons + free / 2f : free / 2f;
+        float centerX = rtl ? getWidth() - center : center;
         float centerY = getHeight() / 2f;
         float half = dp(1.75f);
         mGripRect.set(centerX - grip / 2f, centerY - half, centerX + grip / 2f, centerY + half);
@@ -303,6 +480,15 @@ public final class FloatTitlebarView extends FrameLayout {
             ContextCompat.getColor(getContext(), R.color.termux_surface_base));
         int ink = FloatTitlebarPolicy.glyphInk(glass, mInkPolarity, onSurface, surfaceBase,
             surface, mFocused);
+        // The readings stand on what the glyphs do: the chrome's nominal glass on glass (the
+        // surface the chrome's own constants are measured against), else the strip's panel.
+        int nominal = ChromeShade.nominalGlass();
+        int ground = OnGlass.opaque(glass && nominal != android.graphics.Color.TRANSPARENT
+            ? nominal : surface);
+        // Re-asked on every pass: the polarity may have moved, and each reading sets its ink only
+        // on a change.
+        mReadingGround = ground;
+        inkReadings();
         if (ink == mInk) return;
         mInk = ink;
         ColorStateList tint = ColorStateList.valueOf(ink);

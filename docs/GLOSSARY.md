@@ -40,7 +40,8 @@ _Avoid_: edge swipe, status bar swipe, page swipe
 Everything the launcher draws around a page: the status bar, dock, keyboard, borders and corner
 tabs. The **Workspace** wears all of it; a **Home page** wears only the dock (without the extra
 keys) and the keyboard, both as overlays that take no room from the grid, under Android's own
-system bar, and the status bar only while a **Home float** exists.
+system bar. It wears no launcher status bar at all (2026-10-19): the focused **Home float**'s
+**titlebar** carries the CPU and RAM readings there, and minimised floats wait in **float chips**.
 _Avoid_: UI (too wide), decoration
 
 **Display**, **display window**:
@@ -82,19 +83,18 @@ _Avoid_: place, widgets page, desktop
 A **window** of the current session drawn floating over one Home page instead of in the Workspace's
 row: born full-size, moved only by its **titlebar** (a sideways swipe on its terminal pages Home as
 a swipe beside it does), resized at its bottom-right corner, minimised into
-its chip in the status bar and docked into the row by the titlebar's Dock. It is what Terminal from
-Home opens. Chips, the drawer and the shortcuts see it like any window.
+its **float chip** above the dock and docked into the row by the titlebar's Dock. It is what
+Terminal from Home opens. The Workspace's chips, the drawer and the shortcuts see it like any
+window.
 _Avoid_: floating terminal (in prose), scratchpad (that is the toggled one), popup
 
-**Home pills**:
-The status bar's look on a **Home page**: two pills on the bar's glass instead of the bar, in a
-band the widget grid gives its room to. The stats pill, at the end, is always there while it has
-something to show: CPU, RAM and the weather as the status bar's settings show them, and no clock,
-battery or notification dots. The windows pill, at the start, comes while a **Home float**
-exists, with one section per float showing its glyph, the focused one its name too; a tap brings
-that float in front, paging Home to it. A bar down a side keeps its column of chips, and comes to
-Home only for the floats.
-_Avoid_: capsule (the removed form), Home bar
+**Float chip**:
+A minimised **Home float**'s chip: a small glass chip, like the dock's glass, in a row centred
+just above the dock on Home (above the keyboard while one is up), showing the float's glyph and
+short name. A tap brings the float back onto its page; Minimise flies the float into it. While the
+row shows, Home floats keep clear of it. Never on the Workspace, where the window chips stand for
+the floats.
+_Avoid_: Home pills (removed 2026-10-19), windows pill, minimised pill
 
 **Keyboard swipe**:
 The one way to the keyboard in the **Workspace**: an up or down swipe that starts on the window's
@@ -222,8 +222,9 @@ _Avoid_: terminal icon (in prose), Create Pane, Open Workspace
 **Titlebar**:
 The translucent glass strip along the top of every floating pane, Home float and the scratchpad:
 the drag handle and Minimise, Maximise and Close; Dock is in the menu a long press on the handle
-opens. It replaces the floating pane's move corner and pill; resizing stays at the bottom-right
-corner.
+opens. The focused Home float's titlebar also carries the CPU and RAM readings at its leading end,
+drawn as the status bar draws them; on a narrow float RAM gives way first, then CPU. It replaces
+the floating pane's move corner and pill; resizing stays at the bottom-right corner.
 _Avoid_: pill (the retired control; the dictation pill is another thing), header, handle bar
 
 **Wall**:

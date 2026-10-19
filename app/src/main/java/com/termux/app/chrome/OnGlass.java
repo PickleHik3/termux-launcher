@@ -364,7 +364,7 @@ public final class OnGlass {
     }
 
     @ColorInt
-    private static int inkOnGround(@ColorInt int ground, @ColorInt int preferredInk,
+    static int inkOnGround(@ColorInt int ground, @ColorInt int preferredInk,
                                    @ColorInt int alternateInk, double target,
                                    @Nullable Boolean paleSide) {
         boolean preferredOnSide = paleSide == null

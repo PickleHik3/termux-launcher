@@ -442,8 +442,8 @@ public class TerminalPaneController {
      * Home floats a terminal widget hosts, in the order they were opened. Each is also in
      * {@link #mWindows}, so a shell finds it as a window and no adoption makes a second one, but
      * none is in {@link #mHomeFloats}: everything that lists, counts or lays out Home floats
-     * (chips, the windows pill, the status bar, minimise, the page's floats, the birth cascade,
-     * Saved sessions) reads that list and so never sees one.
+     * (the window chips, the float chips above the dock, minimise, the page's floats, the birth
+     * cascade, Saved sessions) reads that list and so never sees one.
      */
     private final List<Window> mHostedFloats = new ArrayList<>();
     /** Each hosted float's container, kept while its widget is off screen. */
@@ -3329,8 +3329,12 @@ public class TerminalPaneController {
     }
 
     private void relayHomeFloats() {
-        for (Map.Entry<Leaf, FloatingPaneContainer> entry : mHomeFloatContainers.entrySet())
+        for (Map.Entry<Leaf, FloatingPaneContainer> entry : mHomeFloatContainers.entrySet()) {
+            // A float on its way into its chip keeps the place its flight set out from: the room
+            // the chips take from the others is measured while it flies. It is laid out on landing.
+            if (entry.getValue().mFlying) continue;
             applyFloatBounds(entry.getKey(), entry.getValue());
+        }
         applyHomeFloatLift();
     }
 
@@ -3379,8 +3383,8 @@ public class TerminalPaneController {
     }
 
     /**
-     * Minimise's flight: the float shrinks into its chip in the status bar, or, with no chip on
-     * screen yet, up and away toward where the bar comes in. Hidden when it lands.
+     * Minimise's flight: the float shrinks into its chip above the dock, or, with no chip to aim
+     * at, down and away toward the dock. Hidden when it lands.
      */
     private boolean flyIntoChip(@NonNull Window w, @NonNull FloatingPaneContainer container) {
         if (container.getWidth() <= 0 || container.getHeight() <= 0) return false;
@@ -3397,7 +3401,7 @@ public class TerminalPaneController {
             scaleX = .2f;
             scaleY = .2f;
             toX = container.getTranslationX() + container.getWidth() * .4f;
-            toY = container.getTranslationY() - at[1];
+            toY = container.getTranslationY() + container.getHeight() * .8f;
         }
         container.mFlying = true;
         container.setPivotX(0f);
@@ -3409,6 +3413,7 @@ public class TerminalPaneController {
                 if (done) return;
                 done = true;
                 settleMinimiseFlight(container);
+                applyFloatBounds(container.mLeaf, container);
                 applyHomeFloatPage();
             }
         };
@@ -3489,6 +3494,53 @@ public class TerminalPaneController {
             }
             container.titlebar().applyRim(glassShape, radiusPx, border, mSurfaceStyle, 1f, focused);
             container.invalidate();
+        }
+        applyHomeFloatReadings();
+    }
+
+    /** The system readings the focused Home float's titlebar carries; null for one not shown. */
+    @Nullable private CharSequence mHomeReadingCpu;
+    @Nullable private CharSequence mHomeReadingRam;
+    @Nullable private FloatTitlebarView.ReadingInk mHomeReadingInk;
+
+    /**
+     * The CPU and RAM readings for the focused Home float's titlebar, as the status bar shows them
+     * (either null for one its settings hide, both null for none), and the rule they are inked
+     * by. Only the focused float's strip carries them; every other float's strip stays plain.
+     */
+    public void setHomeFloatReadings(@Nullable CharSequence cpu, @Nullable CharSequence ram,
+                                     @Nullable FloatTitlebarView.ReadingInk ink) {
+        mHomeReadingCpu = cpu;
+        mHomeReadingRam = ram;
+        mHomeReadingInk = ink;
+        applyHomeFloatReadings();
+    }
+
+    /**
+     * Whether the focused Home float's titlebar is on screen in the float layer: a float holds
+     * Home's focus, and it is shown on the page in view rather than minimised. A hosted float has
+     * no titlebar and never counts.
+     */
+    public boolean isFocusedHomeFloatTitlebarShown() {
+        Window w = mFocusedHomeFloat;
+        if (w == null || w.minimised || w.active == null || !mHomeFloats.contains(w)) return false;
+        FloatingPaneContainer container = mHomeFloatContainers.get(w.active);
+        return container != null && container.getVisibility() == View.VISIBLE;
+    }
+
+    /** The readings onto the focused Home float's strip, and off every other one. */
+    private void applyHomeFloatReadings() {
+        for (Window w : mHomeFloats) {
+            FloatingPaneContainer container = w.active == null ? null
+                : mHomeFloatContainers.get(w.active);
+            if (container == null) continue;
+            FloatTitlebarView strip = container.titlebar();
+            if (w == mFocusedHomeFloat) {
+                strip.setReadingInk(mHomeReadingInk);
+                strip.setReadings(mHomeReadingCpu, mHomeReadingRam);
+            } else {
+                strip.setReadings(null, null);
+            }
         }
     }
 

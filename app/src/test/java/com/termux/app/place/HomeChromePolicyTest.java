@@ -38,39 +38,6 @@ public class HomeChromePolicyTest {
         assertTrue(HomeChromePolicy.minimalModeApplies(PaneWallPage.DISPLAY));
     }
 
-    /**
-     * The stats pill is always on Home along the top or the bottom, the windows pill joins it with
-     * the floats; a side bar comes only for the floats; with nothing to show there is no bar.
-     */
-    @Test
-    public void homeWearsThePillsBandAlongTheTopOrBottomAndASideBarOnlyForFloats() {
-        for (PlaceLayout.Edge edge : new PlaceLayout.Edge[] {PlaceLayout.Edge.TOP,
-                PlaceLayout.Edge.BOTTOM}) {
-            assertTrue(HomeChromePolicy.homeStatusBarShown(edge, false, true));
-            assertTrue(HomeChromePolicy.homeStatusBarShown(edge, true, true));
-            assertTrue("the windows pill alone", HomeChromePolicy.homeStatusBarShown(edge, true,
-                false));
-            assertFalse("nothing to show", HomeChromePolicy.homeStatusBarShown(edge, false,
-                false));
-        }
-        for (PlaceLayout.Edge edge : new PlaceLayout.Edge[] {PlaceLayout.Edge.LEFT,
-                PlaceLayout.Edge.RIGHT}) {
-            assertFalse(HomeChromePolicy.homeStatusBarShown(edge, false, true));
-            assertTrue(HomeChromePolicy.homeStatusBarShown(edge, true, true));
-            assertTrue(HomeChromePolicy.homeStatusBarShown(edge, true, false));
-        }
-    }
-
-    @Test
-    public void homeHasTheStatusBarOnlyWhileItWearsItAndThenCompact() {
-        assertFalse(HomeChromePolicy.statusShownAtRest(HOME, false));
-        assertTrue(HomeChromePolicy.statusShownAtRest(HOME, true));
-        assertTrue(HomeChromePolicy.statusShownAtRest(WINDOW, false));
-        assertTrue(HomeChromePolicy.statusShownAtRest(WINDOW, true));
-        assertTrue(HomeChromePolicy.statusForcedCompact(HOME));
-        assertFalse(HomeChromePolicy.statusForcedCompact(WINDOW));
-    }
-
     @Test
     public void aHomePageWearsNoBordersAndNoStatusBarAndItsDockFloats() {
         assertFalse(HomeChromePolicy.bordersShown(HOME));
@@ -175,68 +142,30 @@ public class HomeChromePolicyTest {
     }
 
     @Test
-    public void onlyABarThatIsNotThePillsBandOverlaysAHomePage() {
-        assertFalse("the pills' band takes its room", HomeChromePolicy.statusOverlays(HOME, true));
-        assertTrue(HomeChromePolicy.statusOverlays(HOME, false));
-        assertFalse(HomeChromePolicy.statusOverlays(WINDOW, true));
-        assertFalse(HomeChromePolicy.statusOverlays(WINDOW, false));
+    public void aBarWouldOverlayAHomePageAndTakesItsRowOnAWindow() {
+        assertTrue(HomeChromePolicy.statusOverlays(HOME));
+        assertFalse(HomeChromePolicy.statusOverlays(WINDOW));
     }
 
-    /** Nothing on the grid lies under a pill: the grid starts below the pills' band. */
+    /**
+     * Home wears no status bar of any kind (2026-10-19): its layout keeps the bar put away, so
+     * nothing stands on the top edge for it and the grid starts where the page's top does, below
+     * the system bar's inset alone.
+     */
     @Test
-    public void theGridGivesThePillsBandItsRoom() {
+    public void homeWearsNoStatusBarSoTheGridStartsAtThePagesTop() {
         PlaceLayout home = new PlaceLayout(PlaceLayout.Edge.TOP, PlaceLayout.RowPlacement.BOTTOM,
             true, PlaceLayout.Edge.BOTTOM, PlaceLayout.RowPlacement.HIDDEN,
             PlaceLayout.KeyboardMode.RESIZE, PlaceLayout.KeyboardForm.DOCKED, 4, 5)
             .withSlot(Element.STATUS, Slot.hiddenFrom(PlaceLayout.Edge.TOP, 0));
         EdgeStackPolicy.Metrics metrics = EdgeStackPolicy.Metrics.builder()
             .status(120, 200).apps(150, 90).az(40, 60).extraKeys(80, 100).build();
-        PlaceLayout withBar = HomeChromePolicy.withFloatStatusBar(home, PlaceLayout.Edge.TOP, true);
-        boolean overlays = HomeChromePolicy.statusOverlays(HOME, true);
-        int gridTopWithout = EdgeStackPolicy.contentInsets(home, metrics).top
-            - EdgeStackPolicy.topOverlapPx(home, metrics, overlays);
-        int gridTopWith = EdgeStackPolicy.contentInsets(withBar, metrics).top
-            - EdgeStackPolicy.topOverlapPx(withBar, metrics, overlays);
-        assertEquals("the band", gridTopWithout + 120, gridTopWith);
-        // The floats' room starts at the bar's edge, under the whole top stack.
-        assertEquals(120, EdgeStackPolicy.stackThicknessPx(withBar, PlaceLayout.Edge.TOP, metrics));
-    }
-
-    /**
-     * Landscape on Home with the dock a rail on the left and the bar on the top: the rail starts at
-     * the bar's edge whether the bar is the pills' band (taking its row, as on the Workspace) or
-     * overlays the page (the canvas reaching up under it, the rail inset back down), so the rail's
-     * first icon never covers the bar (devcheck w2-d-1s).
-     */
-    @Test
-    public void aSideDockOnHomeStartsBelowTheBar() {
-        PlaceLayout home = new PlaceLayout(PlaceLayout.Edge.TOP, PlaceLayout.RowPlacement.LEFT,
-            true, PlaceLayout.Edge.BOTTOM, PlaceLayout.RowPlacement.HIDDEN,
-            PlaceLayout.KeyboardMode.RESIZE, PlaceLayout.KeyboardForm.DOCKED, 4, 5)
-            .withSlot(Element.STATUS, Slot.hiddenFrom(PlaceLayout.Edge.TOP, 0));
-        EdgeStackPolicy.Metrics metrics = EdgeStackPolicy.Metrics.builder()
-            .status(120, 200).apps(150, 90).az(40, 60).extraKeys(80, 100).build();
-        PlaceLayout withBar = HomeChromePolicy.withFloatStatusBar(home, PlaceLayout.Edge.TOP, true);
-        assertEquals(PlaceLayout.Edge.LEFT, EdgeStackPolicy.edgeOf(withBar, Element.APPS));
-        for (boolean pillsBand : new boolean[] {true, false}) {
-            boolean overlays = HomeChromePolicy.statusOverlays(HOME, pillsBand);
-            int overlap = EdgeStackPolicy.topOverlapPx(withBar, metrics, overlays);
-            assertEquals(pillsBand ? 0 : 120, overlap);
-            int railTop = EdgeStackPolicy.stackThicknessPx(withBar, PlaceLayout.Edge.TOP, metrics)
-                - overlap
-                + EdgeStackPolicy.sideStackTopInsetPx(withBar, PlaceLayout.Edge.LEFT, metrics,
-                    overlays);
-            assertEquals("the rail starts at the bar's edge", 120, railTop);
-            assertEquals("an empty side keeps no inset", 0,
-                EdgeStackPolicy.sideStackTopInsetPx(withBar, PlaceLayout.Edge.RIGHT, metrics,
-                    overlays));
-            assertEquals("no bar, no inset", 0,
-                EdgeStackPolicy.sideStackTopInsetPx(home, PlaceLayout.Edge.LEFT, metrics,
-                    overlays));
-        }
-        assertEquals("a window's bar takes its row, so its rail needs none", 0,
-            EdgeStackPolicy.sideStackTopInsetPx(withBar, PlaceLayout.Edge.LEFT, metrics,
-                HomeChromePolicy.statusOverlays(WINDOW, false)));
+        boolean overlays = HomeChromePolicy.statusOverlays(HOME);
+        assertEquals(0, EdgeStackPolicy.contentInsets(home, metrics).top
+            - EdgeStackPolicy.topOverlapPx(home, metrics, overlays));
+        assertEquals(0, EdgeStackPolicy.stackThicknessPx(home, PlaceLayout.Edge.TOP, metrics));
+        assertEquals(0, EdgeStackPolicy.sideStackTopInsetPx(home, PlaceLayout.Edge.LEFT, metrics,
+            overlays));
     }
 
     /**

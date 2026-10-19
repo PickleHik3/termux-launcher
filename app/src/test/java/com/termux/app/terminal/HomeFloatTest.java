@@ -16,10 +16,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.place.Element;
 import com.termux.app.place.HomeChromePolicy;
-import com.termux.app.place.PlaceLayout;
-import com.termux.app.place.Slot;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
@@ -34,8 +31,6 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 
-import java.util.EnumMap;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -1002,40 +997,12 @@ public class HomeFloatTest {
     }
 
     @Test
-    public void homeHasTheStatusBarExactlyWhileFloatsExist() {
-        PaneWallPage home = PaneWallPage.WIDGETS;
-        assertFalse(HomeChromePolicy.statusShownAtRest(home, false));
-        assertTrue(HomeChromePolicy.statusShownAtRest(home, true));
-        assertTrue(HomeChromePolicy.statusShownAtRest(PaneWallPage.TERMINAL, false));
-        assertTrue("compact on Home", HomeChromePolicy.statusForcedCompact(home));
-        assertFalse(HomeChromePolicy.statusForcedCompact(PaneWallPage.TERMINAL));
-
-        Map<Element, Slot> slots = new EnumMap<>(Element.class);
-        slots.put(Element.STATUS, Slot.hiddenFrom(PlaceLayout.Edge.TOP, 0));
-        PlaceLayout homeLayout = new PlaceLayout(slots, PlaceLayout.KeyboardMode.RESIZE,
-            PlaceLayout.KeyboardForm.DOCKED, 4, 4);
-        assertSame(homeLayout,
-            HomeChromePolicy.withFloatStatusBar(homeLayout, PlaceLayout.Edge.TOP, false));
-        PlaceLayout withBar =
-            HomeChromePolicy.withFloatStatusBar(homeLayout, PlaceLayout.Edge.TOP, true);
-        assertFalse(withBar.slot(Element.STATUS).hidden);
-        assertEquals(PlaceLayout.Edge.TOP, withBar.slot(Element.STATUS).edge);
-    }
-
-    @Test
-    public void onHomeTheBarShowsTheFloatsChipsExactlyWhileFloatsExist() {
-        // The bar came onto Home with the first float but its chips stayed hidden, so a minimised
-        // float had nothing to be tapped back from.
-        assertTrue(HomeChromePolicy.windowChipsShown(PaneWallPage.WIDGETS, true));
-        assertFalse("no float, no chips on Home",
-            HomeChromePolicy.windowChipsShown(PaneWallPage.WIDGETS, false));
-        assertTrue(HomeChromePolicy.windowChipsShown(PaneWallPage.TERMINAL, false));
-        assertTrue(HomeChromePolicy.windowChipsShown(PaneWallPage.DISPLAY, false));
-        for (boolean floats : new boolean[] {false, true}) {
-            assertEquals("the chips show wherever the bar rests on Home",
-                HomeChromePolicy.statusShownAtRest(PaneWallPage.WIDGETS, floats),
-                HomeChromePolicy.windowChipsShown(PaneWallPage.WIDGETS, floats));
-        }
+    public void homeWearsNoStatusBarWhetherFloatsExistOrNot() {
+        // 2026-10-19: no bar comes onto Home with the floats; minimised ones wait in chips above
+        // the dock instead.
+        assertFalse(HomeChromePolicy.statusShownAtRest(PaneWallPage.WIDGETS));
+        assertTrue(HomeChromePolicy.statusShownAtRest(PaneWallPage.TERMINAL));
+        assertTrue(HomeChromePolicy.statusShownAtRest(PaneWallPage.DISPLAY));
     }
 
     // --- The float's shell gets its size ---

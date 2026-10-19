@@ -382,15 +382,6 @@
                     </LinearLayout>
                 </com.termux.app.statusbar.StatusRowLayout>
 
-                <!-- Home's look: the windows pill and the stats pill, each on glass of its own
-                     built from the bar's surface values; the bar draws nothing else while they
-                     show (HomePillsPolicy). -->
-                <com.termux.app.statusbar.HomePillsView
-                    android:id="@+id/terminal_home_pills"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:visibility="gone" />
-
             </com.termux.app.statusbar.StatusBarSwipeLayout>
 
             <!-- The alphabets bar standing along the top, when the place on screen asks for

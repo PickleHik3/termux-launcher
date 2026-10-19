@@ -112,60 +112,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     /**
-     * Home's look ({@link HomePillsPolicy}): the bar draws nothing of its own, glass or content (the
-     * pills stand on glass of their own), and hands every touch to the pills, which keep only those on a
-     * pill, so the page under the rest of the band keeps its own. No fold while it holds.
-     */
-    public void setHomePills(boolean on) {
-        HomePillsView pills = homePills();
-        boolean shown = on && pills != null;
-        if (pills != null) {
-            int visibility = shown ? VISIBLE : GONE;
-            if (pills.getVisibility() != visibility) pills.setVisibility(visibility);
-        }
-        if (shown == mHomePills) return;
-        mHomePills = shown;
-        if (mGesture != null) mGesture.cancel();
-        cancelFoldDrag();
-        cancelPullHint();
-        requestStructuralReset();
-        invalidate();
-    }
-
-    public boolean isShowingHomePills() { return mHomePills; }
-
-    @Nullable
-    private HomePillsView homePills() {
-        if (mHomePillsView == null) {
-            View view = findViewById(R.id.terminal_home_pills);
-            if (view instanceof HomePillsView) mHomePillsView = (HomePillsView) view;
-        }
-        return mHomePillsView;
-    }
-
-    private boolean mHomePills;
-    @Nullable private HomePillsView mHomePillsView;
-
-    @Override protected boolean drawChild(@NonNull android.graphics.Canvas canvas,
-                                          @NonNull View child, long drawingTime) {
-        if (!mHomePills) return super.drawChild(canvas, child, drawingTime);
-        // The bar's glass and content stay laid out for the Workspace and are not drawn here: the
-        // pills carry their own glass, so they do not depend on what the bar's layers are doing
-        // (resting on the dock's plank, standing down for a frame, a frost not yet aimed).
-        if (child != mHomePillsView) return false;
-        return super.drawChild(canvas, child, drawingTime);
-    }
-
-    @Override public void addChildrenForAccessibility(java.util.ArrayList<View> outChildren) {
-        if (mHomePills && mHomePillsView != null) {
-            // Only the pills speak on Home; the bar's own content is not on screen there.
-            outChildren.add(mHomePillsView);
-            return;
-        }
-        super.addChildrenForAccessibility(outChildren);
-    }
-
-    /**
      * The edge the bar stands on. It decides which way a drag folds the bar; a live stream is
      * dropped rather than reinterpreted mid-gesture.
      */
@@ -310,17 +256,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        HomePillsView pills = mHomePillsView;
-        if (mHomePills && pills != null) {
-            float dx = getScrollX() - pills.getLeft();
-            float dy = getScrollY() - pills.getTop();
-            event.offsetLocation(dx, dy);
-            try {
-                return pills.dispatchTouchEvent(event);
-            } finally {
-                event.offsetLocation(-dx, -dy);
-            }
-        }
         mDispatchInProgress = true;
         try {
             int action = event.getActionMasked();
