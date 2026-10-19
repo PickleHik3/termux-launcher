@@ -542,11 +542,11 @@ public class MediaWidgetView extends BuiltinWidgetView {
      * rounded to the card's corner less {@code insetDp}. It fills what its parent gives it.
      */
     @NonNull private ArtFrame artFrame(@NonNull BuiltinWidgetUi ui, int insetDp, int bandDp) {
-        ArtFrame frame = new ArtFrame(getContext());
-        float radius = ui.innerRadius(insetDp);
+        ArtFrame frame = ui.followCorner(new ArtFrame(getContext()));
         frame.setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
+                    ui.innerRadius(insetDp));
             }
         });
         frame.setClipToOutline(true);

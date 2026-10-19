@@ -1462,7 +1462,49 @@ element), not a defect; nothing about the dock's presence changed.
   pointer, the Appearance editor's terminal outline, the Layout editor's miniature, and the top
   border's swipe that folds the bar (it starts below the bar, not under it) · emulator.
 
+### Widgets wear the Look's glass (10-19)
+Built-in widgets with Glass on now wear the Look's (Base's) blur, opacity, tint, grain, rim and
+Fancier Glass through the terminal pane's slab, and every built-in widget is cut at Base's Corners.
+Glass off is now the solid card everywhere (it used to go see-through while the terminal panes were
+glass). Third-party widgets are unchanged: the launcher draws no card behind them.
+- 2026-10-19 · feat(widgets) Look's glass · Wallpaper mode, a Clock, a Battery and a Terminal
+  widget on Home with Glass on: each shows the wallpaper's blur, tint and grain as the terminal
+  pane does with every surface inherited, with the gradient rim, and the Terminal widget's text
+  sits on that glass (no second opaque card under it). Turn Glass off on one: it becomes the solid
+  card at once, the others keep their glass · emulator.
+- 2026-10-19 · feat(widgets) Look's glass · Appearance editor, shared (Base) layer: drag Blur,
+  Opacity, Grain, Tint and Corners, then pick two Looks from the menu; the glass widgets follow
+  each change live without flicker or reflow, and every built-in widget (Glass on or off, the
+  Terminal widget's terminal included) takes the new corner. Then detach the terminal (and the
+  keyboard, status bar, dock) and move only its values: the widgets do not change · emulator.
+- 2026-10-19 · fix(widgets) corners in place · During a Corners or Opacity drag, the widgets'
+  corners and inner shapes (Notes' square, a notification card, Media's art, Calendar's today)
+  follow every tick with no flicker, a clock keeps ticking, and the Terminal widget's text is not
+  redrawn from scratch; its text clearance and ground land once, about a quarter second after the
+  slider stops (perfetto: no `Choreographer#doFrame` layout pass per tick from the widgets) ·
+  emulator.
+- 2026-10-19 · feat(widgets) Look's glass · Home's own Corners set apart from the Workspace's in
+  the Layout editor: widgets keep Base's Corners, not Home's (decided: they follow the Look) ·
+  emulator.
+- 2026-10-19 · feat(widgets) Look's glass · Wallpaper mode off: a Glass-on widget shows the
+  see-through card with no blur; on again, the blur comes back without leaving the page. Light,
+  dark and black themes, Material You and the launcher's scheme chrome: the glass widgets' tint
+  follows the dock's glass colour in each · emulator.
+- 2026-10-19 · feat(widgets) Look's glass · Memory: with no Glass-on widget, `dumpsys meminfo`
+  PSS at rest is unchanged against the build before; with Glass on and a Base blur that no surface
+  uses (every surface detached to another blur), at most one more blur frame is resident and it is
+  let go when the last widget turns Glass off and the page is next dressed · emulator.
+- 2026-10-19 · feat(widgets) Look's glass · A small widget (1×1) at a large Base Corners (40dp):
+  the card, the glass and the content clip all round at the same, capped corner; no content is
+  cut in the corners of Notes, Media or Calendar at Corners 0, 24 and 40 · emulator.
+
 ## Developer
+
+### Widgets wear the Look's glass (10-19)
+- 2026-10-19 · feat(widgets) Look's glass · Legibility on pong with your Look: widgets' text on
+  the Look's glass at its own opacity (a Clear Look at 2–10 % can leave light text on a bright
+  wallpaper), and whether Glass off's solid card is what you want where the cards used to go
+  see-through with the terminal panes · pong, by hand (ask first).
 
 ### Seam travel and Workspace dock (10-19)
 - 2026-10-19 · f2f54cc4b · Feel on pong of the Home ↔ terminal slide with your layouts: whether

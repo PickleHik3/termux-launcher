@@ -33,10 +33,12 @@ import java.util.Map;
  */
 public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
     WidgetProviderCatalogLoader.BuiltinSource {
-    /** Where the page's look comes from: the direction setting and whether the page is glass. */
+    /**
+     * Where the widgets' style setting comes from. Their corners and glass are the Look's
+     * ({@link com.termux.app.chrome.LookGlassSpec}), never a page's or another surface's.
+     */
     public interface StyleSource {
         @NonNull BuiltinWidgetStyle.Direction direction();
-        boolean glass();
     }
 
     private final Context context;
@@ -57,8 +59,8 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
     /** The current style, resolved once and kept until {@link #onStyleChanged()}. */
     @NonNull public BuiltinWidgetStyle style() {
         if (style == null) {
-            style = BuiltinWidgetStyle.resolve(context, styleSource.direction(),
-                styleSource.glass(), services.host().monoTypeface());
+            style = BuiltinWidgetStyle.resolve(context, styleSource.direction(), false,
+                services.host().monoTypeface());
         }
         return style;
     }
@@ -67,7 +69,7 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
     public void onStyleChanged() {
         style = null;
         BuiltinWidgetStyle next = style();
-        for (BuiltinWidgetView view : views.values()) view.applyStyle(next);
+        for (BuiltinWidgetView view : new ArrayList<>(views.values())) view.applyStyle(next);
     }
 
     // ----- grid factory ---------------------------------------------------------------------

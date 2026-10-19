@@ -26,9 +26,16 @@ import androidx.annotation.Nullable;
 public final class BuiltinWidgetUi {
     @NonNull public final Context context;
     @NonNull public final BuiltinWidgetStyle style;
+    /** The widget's live corner, which the inner shapes are cut from. */
+    @NonNull public final BuiltinWidgetCorner corner;
 
     public BuiltinWidgetUi(@NonNull Context context, @NonNull BuiltinWidgetStyle style) {
-        this.context = context; this.style = style;
+        this(context, style, new BuiltinWidgetCorner(style.cornerRadiusPx, style.density));
+    }
+
+    public BuiltinWidgetUi(@NonNull Context context, @NonNull BuiltinWidgetStyle style,
+                           @NonNull BuiltinWidgetCorner corner) {
+        this.context = context; this.style = style; this.corner = corner;
     }
 
     public int dp(float value) { return style.dp(value); }
@@ -223,9 +230,23 @@ public final class BuiltinWidgetUi {
         return shape;
     }
 
-    /** The inner radius: the card's corner less the inset, never below zero. */
+    /** The inner radius: the card's corner less the inset, never below zero, as it stands now. */
     public float innerRadius(int insetDp) {
-        return Math.max(0f, style.cornerRadiusPx - dp(insetDp));
+        return corner.innerRadiusPx(insetDp);
+    }
+
+    /**
+     * A container {@code insetDp} inside the card, rounded to the card's corner less that, and
+     * kept so whenever the Look's Corners move (in place: no rebuild).
+     */
+    @NonNull public android.graphics.drawable.GradientDrawable innerRounded(@ColorInt int fill,
+                                                                           int insetDp) {
+        return corner.track(rounded(fill, 0f), insetDp);
+    }
+
+    /** {@code view} draws or clips with the corner it reads at the time; it redraws as it moves. */
+    @NonNull public <V extends View> V followCorner(@NonNull V view) {
+        return corner.follow(view);
     }
 
     // ----- small views ----------------------------------------------------------------------

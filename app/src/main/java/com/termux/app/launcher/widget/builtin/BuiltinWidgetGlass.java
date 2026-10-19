@@ -6,12 +6,12 @@ import androidx.annotation.Nullable;
 import java.util.Map;
 
 /**
- * The Glass switch every built-in widget's settings carry, per widget: off by default, the card
- * exactly as it has always been; on, the card is the launcher's glass. The wallpaper's shared
- * blur ({@code PaneGlassBackdropView}, the slab the panes and pages wear) is drawn under a
- * see-through card in the scheme's surface colour, with the glass rim, so the widget's ink keeps
- * reading as it does on the solid card. Where the launcher has no blur to give (no wallpaper
- * glass configured), the see-through card alone is the glass.
+ * The Glass switch every built-in widget's settings carry, per widget: off by default, the solid
+ * card; on, the widget wears the Look's glass — Base's blur, opacity, tint, grain, rim and Fancier
+ * Glass, from the shared blur frames, drawn by the same slab a terminal pane wears
+ * ({@code PaneGlass} over {@code LookGlassStyle}). A detached terminal, keyboard, status bar or
+ * dock never reaches it. Where the launcher is not on the wallpaper there is no glass to wear,
+ * and the see-through card alone stands in for it.
  *
  * <p>Pure: the view asks here and applies the answer.
  */
@@ -34,18 +34,19 @@ public final class BuiltinWidgetGlass {
     }
 
     /**
-     * Whether the widget's card is see-through: always while the whole page is glass (as before),
-     * and while the widget's own switch is on.
+     * Whether the widget wears the Look's slab: its switch on, a live widget (a picker preview
+     * samples nothing), and the Look's glass worn at all (the launcher on the wallpaper).
      */
-    public static boolean cardGlass(boolean pageGlass, boolean widgetGlass) {
-        return pageGlass || widgetGlass;
+    public static boolean slabShown(boolean widgetGlass, boolean preview, boolean lookGlass) {
+        return widgetGlass && !preview && lookGlass;
     }
 
     /**
-     * Whether the widget draws the wallpaper's blur under its card: its switch on, a live widget
-     * (a picker preview samples nothing), and the launcher's glass up with a frame to give.
+     * Whether the Look's corner a widget is fed really moved from the one it wears, so its card
+     * and inner shapes are re-dressed (in place). Compared at a quarter pixel, so float noise from
+     * the same dp redraws nothing.
      */
-    public static boolean slabShown(boolean widgetGlass, boolean preview, boolean launcherGlass) {
-        return widgetGlass && !preview && launcherGlass;
+    public static boolean cornersMoved(float styleRadiusPx, float lookRadiusPx) {
+        return Math.abs(styleRadiusPx - lookRadiusPx) > 0.25f;
     }
 }

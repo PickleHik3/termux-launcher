@@ -331,7 +331,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
             icon.setPadding(0, ui.dp(1), 0, 0);
             LinearLayout card = ui.row(8, icon, BuiltinWidgetUi.flex(lines));
             card.setGravity(Gravity.TOP);
-            card.setBackground(ui.rounded(s.container, ui.innerRadius(12)));
+            card.setBackground(ui.innerRounded(s.container, 12));
             card.setPadding(ui.dp(8), ui.dp(7), ui.dp(8), ui.dp(7));
             clickable(card, item);
             list.addRow(card, ui.dp(8));

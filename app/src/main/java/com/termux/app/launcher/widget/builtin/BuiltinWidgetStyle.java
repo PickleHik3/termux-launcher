@@ -17,14 +17,15 @@ import com.termux.app.material.M3;
 
 /**
  * The resolved look of every built-in widget: the design's two directions, in the launcher's
- * scheme colours, on either a solid page or a glass one.
+ * scheme colours, on either the solid card or the see-through one.
  *
- * <p><b>Tonal</b> is Material containers — 24dp corners, sans captions, light mono numerals,
- * pill bars, a filled clock face. <b>Pane</b> dresses a widget like a terminal pane — 12dp
- * corners, a hairline rim, mono path captions led by a Nerd glyph, medium numerals, square bars,
- * an outlined face. Every colour is a scheme role read through {@link M3}, so a widget follows the
- * terminal scheme, Material You and the scheme-chrome override exactly as the rest of the chrome
- * does.</p>
+ * <p><b>Tonal</b> is Material containers — sans captions, light mono numerals, pill bars, a
+ * filled clock face. <b>Pane</b> dresses a widget like a terminal pane — a hairline rim, mono path
+ * captions led by a Nerd glyph, medium numerals, square bars, an outlined face. Both are cut at
+ * the Look's Corners (Base's, {@link com.termux.app.chrome.LookGlassSpec}), which every surface
+ * shares; a detached surface's never reaches a widget. Every colour is a scheme role read through
+ * {@link M3}, so a widget follows the terminal scheme, Material You and the scheme-chrome override
+ * exactly as the rest of the chrome does.</p>
  */
 public final class BuiltinWidgetStyle {
     public enum Direction {
@@ -37,7 +38,7 @@ public final class BuiltinWidgetStyle {
     }
 
     @NonNull public final Direction direction;
-    /** True when the widgets page is glass: the card is translucent with a light rim. */
+    /** True for the see-through card a widget with its Glass switch on wears. */
     public final boolean glass;
     public final float density;
 
@@ -80,12 +81,12 @@ public final class BuiltinWidgetStyle {
     @Nullable public final Typeface nerd;
 
     private BuiltinWidgetStyle(@NonNull Context context, @NonNull Direction direction,
-                               boolean glass, @Nullable Typeface monoFace) {
+                               boolean glass, @Nullable Typeface monoFace, float cornerRadiusPx) {
         this.direction = direction;
         this.glass = glass;
         density = context.getResources().getDisplayMetrics().density;
         boolean pane = direction == Direction.PANE;
-        cornerRadiusPx = (pane ? 12f : 24f) * density;
+        this.cornerRadiusPx = cornerRadiusPx;
         barRadiusPx = (pane ? 1f : 99f) * density;
 
         onSurface = M3.onSurface(context);
@@ -144,13 +145,21 @@ public final class BuiltinWidgetStyle {
     }
 
     /**
-     * Resolves the style for {@code direction} on a page that is {@code glass} or not, with the
-     * terminal's own monospace face when one is known.
+     * Resolves the style for {@code direction}, on the see-through card or not, with the
+     * terminal's own monospace face when one is known, cut at the Look's Corners as stored now.
      */
     @NonNull public static BuiltinWidgetStyle resolve(@NonNull Context context,
                                                       @NonNull Direction direction, boolean glass,
                                                       @Nullable Typeface monoFace) {
-        return new BuiltinWidgetStyle(context, direction, glass, monoFace);
+        return new BuiltinWidgetStyle(context, direction, glass, monoFace,
+            lookCornerRadiusPx(context));
+    }
+
+    /** The Look's Corners in px, which every built-in widget's card is cut at. */
+    public static float lookCornerRadiusPx(@NonNull Context context) {
+        return com.termux.app.chrome.LookGlassSpec.cornerRadiusDp(
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(
+                context, false)) * context.getResources().getDisplayMetrics().density;
     }
 
     /**
@@ -158,7 +167,8 @@ public final class BuiltinWidgetStyle {
      * faces, with the glass card and rim. Itself when it already is glass.
      */
     @NonNull public BuiltinWidgetStyle glassVariant(@NonNull Context context) {
-        return glass ? this : new BuiltinWidgetStyle(context, direction, true, mono);
+        return glass ? this : new BuiltinWidgetStyle(context, direction, true, mono,
+            cornerRadiusPx);
     }
 
     public boolean isPane() { return direction == Direction.PANE; }

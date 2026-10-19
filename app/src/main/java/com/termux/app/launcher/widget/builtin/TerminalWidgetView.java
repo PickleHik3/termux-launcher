@@ -87,6 +87,7 @@ public final class TerminalWidgetView extends BuiltinWidgetView implements Hoste
     }
 
     @Override protected void onStop() {
+        removeCallbacks(redressPane);
         if (widgetId() != NO_WIDGET_ID) services.host().detachTerminalWidget(widgetId(), this);
     }
 
@@ -122,10 +123,33 @@ public final class TerminalWidgetView extends BuiltinWidgetView implements Hoste
         return getParent() instanceof View ? (View) getParent() : this;
     }
 
-    @Override public float cornerRadiusPx() { return style().cornerRadiusPx; }
+    @Override public float cornerRadiusPx() { return lookCornerRadiusPx(); }
 
-    @Override public int groundAlpha() {
-        BuiltinWidgetStyle style = style();
-        return style.glass ? Color.alpha(style.card) : 255;
+    /** The card's ground: whole on the solid card, the Look's tint on its glass. */
+    @Override public int groundAlpha() { return cardAlpha(); }
+
+    /**
+     * How long the card's ground or corner has to rest before the pane in it is dressed again. A
+     * slider drags them through many values; the card's own clip follows every one in place, and
+     * the pane (its text clearance, its ground) is dressed once, where the slider settles.
+     */
+    static final long REDRESS_SETTLE_MS = 250L;
+
+    private final Runnable redressPane = this::redressPane;
+
+    @Override protected void onCardChanged() { scheduleRedress(); }
+
+    @Override protected void onCornerChanged() { scheduleRedress(); }
+
+    private void scheduleRedress() {
+        removeCallbacks(redressPane);
+        if (isStarted() && widgetId() != NO_WIDGET_ID) postDelayed(redressPane, REDRESS_SETTLE_MS);
+    }
+
+    /** The pane in the card is dressed again, in place, as it is when it comes on screen. */
+    private void redressPane() {
+        if (isStarted() && widgetId() != NO_WIDGET_ID) {
+            services.host().attachTerminalWidget(widgetId(), this);
+        }
     }
 }
