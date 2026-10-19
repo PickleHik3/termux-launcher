@@ -36,6 +36,8 @@ public final class HomePagesEditor {
         int pageCount();
         /** How many widgets, icons and folders page {@code page} holds; they go with it. */
         int itemsOn(int page);
+        /** How many apps the folders on page {@code page} hold; they go with their folders. */
+        default int folderAppsOn(int page) { return 0; }
         /** How many floats stand on page {@code page}; they move to another page, shells kept. */
         int floatsOn(int page);
         int defaultPage();
@@ -165,6 +167,11 @@ public final class HomePagesEditor {
         StringBuilder message = new StringBuilder();
         if (items > 0) message.append(context.getResources().getQuantityString(
             R.plurals.home_pages_editor_remove_confirm_items, items, items));
+        int folderApps = host.folderAppsOn(page);
+        if (folderApps > 0) {
+            message.append(' ').append(context.getResources().getQuantityString(
+                R.plurals.home_pages_editor_remove_confirm_folder_apps, folderApps, folderApps));
+        }
         if (floats > 0) {
             if (message.length() > 0) message.append(' ');
             message.append(context.getString(R.string.home_pages_editor_remove_confirm_floats));

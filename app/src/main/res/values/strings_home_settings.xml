@@ -117,7 +117,12 @@
     </plurals>
     <string name="home_pages_editor_remove_confirm_floats">Terminals on it stay open on another page.</string>
     <string name="home_pages_editor_remove_confirm">Remove</string>
+    <plurals name="home_pages_editor_remove_confirm_folder_apps">
+        <item quantity="one">That includes the app in its folder.</item>
+        <item quantity="other">That includes the %1$d apps in its folders.</item>
+    </plurals>
     <string name="home_pages_editor_remove_pending">A widget is still being added to this page</string>
+    <string name="settings_home_edit_pages_locked">Unlock the Home layout to edit pages</string>
 
     <!-- Folders (F11) -->
     <string name="settings_home_folders_header">Folders</string>

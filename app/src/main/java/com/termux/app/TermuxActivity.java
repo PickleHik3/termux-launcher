@@ -23160,6 +23160,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public int itemsOn(int page) {
                     return mWidgetPaneController == null ? 0 : mWidgetPaneController.itemsOnPage(page);
                 }
+                @Override public int folderAppsOn(int page) {
+                    return mWidgetPaneController == null ? 0
+                        : mWidgetPaneController.folderAppsOnPage(page);
+                }
                 @Override public int floatsOn(int page) {
                     return mPaneController == null ? 0 : mPaneController.homeFloatCountOn(page);
                 }
@@ -23179,8 +23183,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.launcher.home.HomeSettings.setDefaultPage(TermuxActivity.this, page);
                 }
                 @Override public void onClosed() {
-                    if (fromSettings) startActivity(new Intent(TermuxActivity.this,
-                        com.termux.app.activities.SettingsActivity.class));
+                    // Back to the page the row is on, Settings › Home, not Settings' root.
+                    if (fromSettings) startActivity(
+                        com.termux.app.activities.SettingsActivity.createFragmentIntent(
+                            TermuxActivity.this,
+                            com.termux.app.fragments.settings.termux.HomePreferencesFragment.class,
+                            R.string.settings_section_home));
                 }
             });
     }

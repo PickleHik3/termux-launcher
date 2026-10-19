@@ -37,6 +37,11 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
             return true;
         });
         HomeGesturesRows.bind(this);
+        Preference lock = findPreference(HomeSettings.KEY_LAYOUT_LOCKED);
+        if (lock != null) lock.setOnPreferenceChangeListener((row, value) -> {
+            showEditPagesRow(Boolean.TRUE.equals(value));
+            return true;
+        });
         Preference pages = findPreference("home_edit_pages");
         if (pages != null) pages.setOnPreferenceClickListener(row -> {
             Context context = getContext();
@@ -46,6 +51,15 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
         });
     }
 
+    /** Edit pages changes the layout: while it is locked, its row waits for the lock to come off. */
+    private void showEditPagesRow(boolean locked) {
+        Preference pages = findPreference("home_edit_pages");
+        if (pages == null) return;
+        pages.setEnabled(!locked);
+        pages.setSummary(locked ? R.string.settings_home_edit_pages_locked
+            : R.string.settings_home_edit_pages_summary);
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -53,6 +67,7 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
         if (context == null) return;
         // The accessibility service or Shizuku may have come or gone while the page was away.
         HomeGesturesRows.bind(this);
+        showEditPagesRow(HomeSettings.isLayoutLocked(context));
         Preference transition = findPreference(HomeSettings.KEY_PAGE_TRANSITION);
         if (transition != null) transition.setSummary(
             HomePageTransitionFragment.titleOf(HomeSettings.pageTransition(context)));
