@@ -187,7 +187,7 @@ public class NotesWidgetView extends BuiltinWidgetView
     @NonNull private LinearLayout buildOne(@NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle style = ui.style;
         FrameLayout square = new FrameLayout(getContext());
-        square.setBackground(ui.rounded(style.tertiaryContainer, ui.innerRadius(10)));
+        square.setBackground(ui.innerRounded(style.tertiaryContainer, 10));
         square.addView(ui.glyph(GLYPH_NOTE, 18f, style.onTertiaryContainer),
             new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -245,7 +245,7 @@ public class NotesWidgetView extends BuiltinWidgetView
         LinearLayout pill = ui.row(7, ui.glyph(GLYPH_NOTE, 12f, style.onTertiaryContainer),
             ui.text(getContext().getString(R.string.bw_files_notes_note), 12f, style.sansBold,
                 style.onTertiaryContainer));
-        pill.setBackground(ui.rounded(style.tertiaryContainer, ui.innerRadius(8)));
+        pill.setBackground(ui.innerRounded(style.tertiaryContainer, 8));
         pill.setPadding(ui.dp(14), 0, ui.dp(14), 0);
         pill.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ui.dp(44)));
         pill.setClickable(true);

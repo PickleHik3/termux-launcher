@@ -665,8 +665,8 @@ public final class WidgetPaneFrame extends PaneContentFrame
         if (border) mRim.apply(this, glass, radiusPx, PaneBorderStyle.lone(), style);
         else mRim.clear(this);
         // The widgets take the Look this pass hands out, in the same pass as every pane, so none
-        // of them is left drawing a frame the cache has let go. A copy: a widget whose Corners
-        // moved restyles them all, which may re-register them.
+        // of them is left drawing a frame the cache has let go. A copy: a widget whose card
+        // changes may register again while it is fed.
         syncLookWorn();
         PaneSurfaceStyle look = widgetGlassStyle();
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget

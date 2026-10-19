@@ -42,9 +42,9 @@ public final class BuiltinWidgetGlass {
     }
 
     /**
-     * Whether a widget fed the Look's corner radius has to be styled again: the style it was
-     * built with was cut at another one. Compared at a quarter pixel, so float noise from the
-     * same dp never restyles.
+     * Whether the Look's corner a widget is fed really moved from the one it wears, so its card
+     * and inner shapes are re-dressed (in place). Compared at a quarter pixel, so float noise from
+     * the same dp redraws nothing.
      */
     public static boolean cornersMoved(float styleRadiusPx, float lookRadiusPx) {
         return Math.abs(styleRadiusPx - lookRadiusPx) > 0.25f;

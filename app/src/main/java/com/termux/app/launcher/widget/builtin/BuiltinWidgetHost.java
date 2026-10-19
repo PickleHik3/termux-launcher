@@ -52,8 +52,6 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
         this.context = context;
         this.services = services;
         this.styleSource = styleSource;
-        // A widget fed a Look whose Corners differ from the style's asks for this, once.
-        services.setRestyleRequest(this::onStyleChanged);
     }
 
     @NonNull public BuiltinWidgetServices services() { return services; }

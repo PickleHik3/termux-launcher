@@ -63,9 +63,16 @@ public class BuiltinWidgetGlassTest {
             super(context, BuiltinWidgetKind.BATTERY, services, style);
         }
 
+        int builds;
+        @Nullable GradientDrawable inner;
+
         @Override protected void onBuild(@NonNull FrameLayout frame, @NonNull BuiltinWidgetSpan span,
                                          @NonNull BuiltinWidgetUi ui) {
-            frame.addView(new TextView(getContext()));
+            builds++;
+            TextView follower = ui.followCorner(new TextView(getContext()));
+            inner = ui.innerRounded(0xFF000000, 10);
+            follower.setBackground(inner);
+            frame.addView(follower);
         }
 
         int groundAlpha() { return cardAlpha(); }
@@ -240,16 +247,35 @@ public class BuiltinWidgetGlassTest {
     }
 
     @Test
-    public void cornersThatMovedUnderTheWidgetAskForOneRestyle() {
-        int[] restyles = {0};
-        services.setRestyleRequest(() -> restyles[0]++);
-        Plain view = new Plain(context, services, style);
-        view.bind(null);
-        view.onGlassStyle(glass(true, null));
-        assertEquals("the Look's corners are the style's", 0, restyles[0]);
-        view.onGlassStyle(glass(true, null, 8));
-        assertEquals(1, restyles[0]);
-        view.onGlassStyle(null);
-        assertEquals("no Look to read: nothing asked", 1, restyles[0]);
+    public void aCornersChangeReDressesInPlaceWithoutARebuild() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        Page page = new Page(activity);
+        page.glass = glass(true, Bitmap.createBitmap(10, 20, Bitmap.Config.ARGB_8888));
+        Plain view = new Plain(activity, services, style);
+        view.bind(glassOn());
+        page.addView(view, new FrameLayout.LayoutParams(400, 400));
+        activity.setContentView(page);
+        int builds = view.builds;
+        float density = context.getResources().getDisplayMetrics().density;
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS * density,
+            view.corner().radiusPx(), 0.01f);
+
+        // A Corners slider's ticks: every one lands, none builds the layout again.
+        for (int dp : new int[] {30, 36, 40}) {
+            view.onGlassStyle(glass(true, null, dp));
+            assertEquals(dp * density, view.corner().radiusPx(), 0.01f);
+            assertEquals("the inner shape follows: the corner less its 10dp inset",
+                Math.max(0f, (dp - 10) * density), view.inner.getCornerRadius(), 0.01f);
+        }
+        view.onGlassStyle(glass(true, null, 0));
+        assertEquals("square corners reach the inner shape too", 0f,
+            view.inner.getCornerRadius(), 0f);
+        assertEquals("nothing was built again", builds, view.builds);
+        assertEquals("the layout's shape and follower", 2, view.corner().trackedCount());
+
+        // A real rebuild forgets the old layout's shapes and registers its own.
+        view.applyStyle(style);
+        assertEquals(builds + 1, view.builds);
+        assertEquals(2, view.corner().trackedCount());
     }
 }

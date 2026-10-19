@@ -123,6 +123,11 @@ public abstract class BuiltinWidgetView extends FrameLayout {
 
     private final View background;
     private final FrameLayout content;
+    /**
+     * The Look's corner as this widget wears it, live: the card, the slab, the clips and the inner
+     * shapes the layout cut from it all read it, so a Corners change re-dresses them in place.
+     */
+    private final BuiltinWidgetCorner corner;
 
     protected BuiltinWidgetView(@NonNull Context context, @NonNull BuiltinWidgetKind kind,
                                 @NonNull BuiltinWidgetServices services,
@@ -132,6 +137,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         this.services = services;
         this.hostStyle = style;
         this.style = style;
+        corner = new BuiltinWidgetCorner(style.cornerRadiusPx, style.density);
         background = new View(context);
         background.setId(android.R.id.background);
         background.setClipToOutline(true);
@@ -377,6 +383,8 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     public final void applyStyle(@NonNull BuiltinWidgetStyle next) {
         hostStyle = next;
         resolveStyle();
+        // Freshly resolved, so the Look's corner as stored now; the rebuild cuts its shapes at it.
+        corner.set(next.cornerRadiusPx);
         applyChrome();
         dressSlab();
         if (built) rebuild();
@@ -389,27 +397,48 @@ public abstract class BuiltinWidgetView extends FrameLayout {
 
     /**
      * The Look, from the page: its glass under the card while Glass is on, and its Corners for
-     * every widget. Called whenever the Look or its blur frame moves; a re-feed with what the
-     * widget already wears costs nothing. Corners that moved resolve every widget's style again
-     * through the host, once, so the card, its inner shapes and the slab agree.
+     * every widget. Called whenever the Look or its blur frame moves, a Corners slider's every
+     * tick included; a re-feed with what the widget already wears costs nothing, and a corner
+     * that moved is re-dressed in place ({@link #takeCorner}): nothing is rebuilt or laid out.
      */
     public final void onGlassStyle(@Nullable com.termux.app.terminal.PaneSurfaceStyle source) {
-        if (source != null && BuiltinWidgetGlass.cornersMoved(hostStyle.cornerRadiusPx,
-                com.termux.app.terminal.PaneGlass.radiusPx(source,
-                    getResources().getDisplayMetrics().density))) {
-            services.requestRestyle();
-        }
         dressSlab(source);
     }
+
+    /**
+     * The Look's corner from {@code source}: the card's drawable, its clips, the inner shapes and
+     * the slab take it where they stand. Redraws only.
+     */
+    private void takeCorner(@NonNull com.termux.app.terminal.PaneSurfaceStyle source) {
+        if (!corner.set(com.termux.app.terminal.PaneGlass.radiusPx(source,
+                getResources().getDisplayMetrics().density))) {
+            return;
+        }
+        if (background.getBackground() instanceof GradientDrawable)
+            ((GradientDrawable) background.getBackground()).setCornerRadius(cardRadiusPx());
+        background.invalidateOutline();
+        content.invalidateOutline();
+        onCornerChanged();
+    }
+
+    /** The Look's corner moved under the widget, already re-dressed in place; see {@link #lookCornerRadiusPx}. */
+    protected void onCornerChanged() { }
+
+    /** The Look's corner as this widget wears it now, before the card holds it to its size. */
+    protected final float lookCornerRadiusPx() { return corner.radiusPx(); }
 
     /**
      * The card's corner at its size now: the Look's, never more than a third of the card's
      * shorter side, as a pane's is ({@link com.termux.app.terminal.PaneShape#radiusForBounds}).
      */
     protected final float cardRadiusPx() {
-        return com.termux.app.terminal.PaneShape.radiusForBounds(style.cornerRadiusPx, getWidth(),
+        return com.termux.app.terminal.PaneShape.radiusForBounds(corner.radiusPx(), getWidth(),
             getHeight());
     }
+
+    /** The widget's live corner; for tests. */
+    @androidx.annotation.VisibleForTesting
+    @NonNull final BuiltinWidgetCorner corner() { return corner; }
 
     /**
      * How opaque the card's own ground is: whole on the solid card, the Look's tint on the Look's
@@ -420,7 +449,10 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         return style.glass ? android.graphics.Color.alpha(style.card) : 255;
     }
 
-    /** The card changed how it is drawn (its ground or its corner); see {@link #cardAlpha}. */
+    /**
+     * The card changed its ground ({@link #cardAlpha}): the Glass switch, the Look's glass worn
+     * or put down, or its opacity moving, a slider's every tick included.
+     */
     protected void onCardChanged() { }
 
     @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
@@ -466,6 +498,8 @@ public abstract class BuiltinWidgetView extends FrameLayout {
      * no fill of its own: the slab's tint is the card.
      */
     private void dressSlab(@Nullable com.termux.app.terminal.PaneSurfaceStyle source) {
+        // Every widget wears the Look's corner, glass or not.
+        if (source != null) takeCorner(source);
         boolean shown = BuiltinWidgetGlass.slabShown(glassOn, preview,
             com.termux.app.terminal.PaneGlass.isActive(source));
         if (!shown) {
@@ -488,7 +522,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
             addView(slab, 0, new LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.MATCH_PARENT));
         }
-        com.termux.app.terminal.PaneGlass.apply(source, this, slab, style.cornerRadiusPx);
+        com.termux.app.terminal.PaneGlass.apply(source, this, slab, corner.radiusPx());
         slab.setRim(cardRadiusPx(), source);
         slab.invalidateOutline();
         int tintAlpha = android.graphics.Color.alpha(source.paneGlassTintColor());
@@ -560,12 +594,15 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     /** The content frame the span layout goes into. */
     @NonNull protected final FrameLayout content() { return content; }
 
-    @NonNull protected final BuiltinWidgetUi ui() { return new BuiltinWidgetUi(getContext(), style); }
+    @NonNull protected final BuiltinWidgetUi ui() {
+        return new BuiltinWidgetUi(getContext(), style, corner);
+    }
 
     protected final void rebuild() {
         boolean wasStarted = started;
         if (wasStarted) stopInternal();
         content.removeAllViews();
+        corner.forgetShapes();
         onBuild(content, span, ui());
         built = true;
         forgetZoom();

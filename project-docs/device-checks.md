@@ -1455,6 +1455,12 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   each change live without flicker or reflow, and every built-in widget (Glass on or off, the
   Terminal widget's terminal included) takes the new corner. Then detach the terminal (and the
   keyboard, status bar, dock) and move only its values: the widgets do not change · emulator.
+- 2026-10-19 · fix(widgets) corners in place · During a Corners or Opacity drag, the widgets'
+  corners and inner shapes (Notes' square, a notification card, Media's art, Calendar's today)
+  follow every tick with no flicker, a clock keeps ticking, and the Terminal widget's text is not
+  redrawn from scratch; its text clearance and ground land once, about a quarter second after the
+  slider stops (perfetto: no `Choreographer#doFrame` layout pass per tick from the widgets) ·
+  emulator.
 - 2026-10-19 · feat(widgets) Look's glass · Home's own Corners set apart from the Workspace's in
   the Layout editor: widgets keep Base's Corners, not Home's (decided: they follow the Look) ·
   emulator.

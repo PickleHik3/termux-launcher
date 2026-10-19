@@ -23,6 +23,8 @@ import java.util.Map;
  */
 final class CalendarWeekStripView extends View {
     private final BuiltinWidgetStyle style;
+    /** The widget's live corner: today's fill is cut at half of it, as it moves. */
+    private final BuiltinWidgetCorner corner;
     private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint dayPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -41,9 +43,10 @@ final class CalendarWeekStripView extends View {
     private final boolean dots;
 
     CalendarWeekStripView(@NonNull Context context, @NonNull BuiltinWidgetStyle style,
-                          float daySp, boolean dots) {
+                          @NonNull BuiltinWidgetCorner corner, float daySp, boolean dots) {
         super(context);
         this.style = style;
+        this.corner = corner;
         this.dots = dots;
         padPx = style.dp(5);
         innerGapPx = style.dp(2);
@@ -107,7 +110,7 @@ final class CalendarWeekStripView extends View {
         float dayHeight = height(dayPaint);
         float dayBaseline = padPx + letterHeight + innerGapPx - metrics.ascent;
         float dotCenter = padPx + letterHeight + innerGapPx + dayHeight + innerGapPx + dotPx / 2f;
-        float radius = Math.min(style.cornerRadiusPx / 2f, cellWidth / 2f);
+        float radius = Math.min(corner.radiusPx() / 2f, cellWidth / 2f);
         for (int i = 0; i < count; i++) {
             float left = getPaddingLeft() + i * (cellWidth + cellGapPx);
             float cx = left + cellWidth / 2f;

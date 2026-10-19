@@ -222,7 +222,8 @@ public class CalendarWidgetView extends BuiltinWidgetView {
                 CalendarWidgetFormats.isoWeek(start)),
             11f, ui.style.sansBold, ui.style.onSurfaceVariant);
         heading.setPadding(ui.dp(4), 0, 0, 0);
-        CalendarWeekStripView strip = new CalendarWeekStripView(getContext(), ui.style, 12.5f, false);
+        CalendarWeekStripView strip = ui.followCorner(
+            new CalendarWeekStripView(getContext(), ui.style, ui.corner, 12.5f, false));
         strip.set(start, 7, day.today, null, day.locale);
         LinearLayout root = ui.column(8, CalendarWidgetSupport.wide(heading), CalendarWidgetSupport.wide(strip));
         root.setGravity(Gravity.CENTER_VERTICAL);
@@ -252,7 +253,8 @@ public class CalendarWidgetView extends BuiltinWidgetView {
         heading.setPadding(ui.dp(4), 0, ui.dp(4), 0);
         Map<LocalDate, Integer> marks = CalendarWidgetFormats.dayColors(day.events, start,
             start.plusDays(14), day.zone, ui.style.primary);
-        CalendarWeekStripView strip = new CalendarWeekStripView(context, ui.style, 12f, true);
+        CalendarWeekStripView strip = ui.followCorner(
+            new CalendarWeekStripView(context, ui.style, ui.corner, 12f, true));
         strip.set(start, 14, day.today, marks, day.locale);
         LinearLayout root = ui.column(6, CalendarWidgetSupport.wide(heading), CalendarWidgetSupport.wide(strip));
         root.setGravity(Gravity.CENTER_VERTICAL);
