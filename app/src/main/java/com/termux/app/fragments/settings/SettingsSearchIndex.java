@@ -67,6 +67,25 @@ public final class SettingsSearchIndex {
         return Collections.unmodifiableList(mEntries);
     }
 
+    /** The index built once per process (and again for another language), shared by every box. */
+    @Nullable private static SettingsSearchIndex sCached;
+    @Nullable private static java.util.Locale sCachedLocale;
+
+    /**
+     * The index, built on the first query and kept: every search box of the process shares it, so
+     * a keystroke never inflates anything. Built on the main thread, where the rows' own
+     * constructors expect to run; a language change builds it anew.
+     */
+    @NonNull
+    public static synchronized SettingsSearchIndex get(@NonNull Context context) {
+        java.util.Locale locale = context.getResources().getConfiguration().locale;
+        if (sCached == null || !locale.equals(sCachedLocale)) {
+            sCached = build(context);
+            sCachedLocale = locale;
+        }
+        return sCached;
+    }
+
     /** Builds the index of every screen in the tree. A screen the build leaves out is skipped. */
     @NonNull
     public static SettingsSearchIndex build(@NonNull Context context) {
@@ -85,8 +104,11 @@ public final class SettingsSearchIndex {
             if (screen.xmlRes == 0) continue;
             String rowTrail = trail.length() == 0 ? pageTitle : trail + PATH_SEPARATOR + pageTitle;
             try {
-                PreferenceScreen inflated = new PreferenceManager(context)
-                    .inflateFromResource(context, screen.xmlRes, null);
+                // A store that writes nothing: attaching the rows sets their defaults, which must
+                // not land in the real preferences just because someone searched.
+                PreferenceManager manager = new PreferenceManager(context);
+                manager.setPreferenceDataStore(NO_WRITES);
+                PreferenceScreen inflated = manager.inflateFromResource(context, screen.xmlRes, null);
                 if (inflated != null) collect(inflated, rowTrail, screen, entries);
             } catch (Exception e) {
                 // One XML that cannot inflate here costs its rows, not the whole search.
@@ -94,6 +116,27 @@ public final class SettingsSearchIndex {
         }
         return new SettingsSearchIndex(entries);
     }
+
+    /** Rows a page hides on a phone that lacks their feature, so a result never points at nothing. */
+    private static boolean hiddenOnThisPhone(@Nullable String key) {
+        return "terminal_retro_effect".equals(key) && !com.termux.app.terminal.PaneRetroEffect.available();
+    }
+
+    /** Reads give the default; writes go nowhere. */
+    private static final androidx.preference.PreferenceDataStore NO_WRITES = new androidx.preference.PreferenceDataStore() {
+        @Override public void putString(String key, @Nullable String value) {}
+        @Override public void putStringSet(String key, @Nullable java.util.Set<String> values) {}
+        @Override public void putInt(String key, int value) {}
+        @Override public void putLong(String key, long value) {}
+        @Override public void putFloat(String key, float value) {}
+        @Override public void putBoolean(String key, boolean value) {}
+        // With a store every row reads its initial value, default or not; a multi-select without
+        // one would be handed null.
+        @Nullable
+        @Override public java.util.Set<String> getStringSet(String key, @Nullable java.util.Set<String> defValues) {
+            return defValues != null ? defValues : new java.util.HashSet<>();
+        }
+    };
 
     private static boolean availableInThisBuild(@NonNull SettingsTree.Screen screen) {
         if (com.termux.BuildConfig.X11_SERVER) return true;
@@ -117,6 +160,7 @@ public final class SettingsSearchIndex {
             if (row.getFragment() != null && SettingsTree.find(row.getFragment()) != null) continue;
             CharSequence title = row.getTitle();
             if (title == null || title.length() == 0 || !row.isVisible()) continue;
+            if (hiddenOnThisPhone(row.getKey())) continue;
             CharSequence summary = row.getSummary();
             out.add(new Entry(title.toString(), summary == null ? null : summary.toString(), breadcrumb,
                 screen.className, row.getKey(), screen.section));

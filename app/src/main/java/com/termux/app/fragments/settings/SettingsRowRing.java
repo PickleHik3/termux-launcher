@@ -46,13 +46,23 @@ public final class SettingsRowRing {
         Bundle arguments = fragment.getArguments();
         if (arguments == null || arguments.getBoolean(ARG_RUNG, false)) return;
         String key = arguments.getString(SettingsActivity.EXTRA_SCROLL_TO_KEY);
-        if (key == null || fragment.findPreference(key) == null) return;
+        androidx.preference.Preference row = key == null ? null : fragment.findPreference(key);
+        // A row the page hides right now (a feature this phone lacks): the page itself is the
+        // landing, with nothing to point at.
+        if (row == null || !isShown(row)) return;
         arguments.putBoolean(ARG_RUNG, true);
         RecyclerView list = fragment.getListView();
         if (list == null) return;
         fragment.scrollToPreference(key);
         // Two frames: the scroll lands, then the row's holder is there to draw on.
         list.post(() -> list.post(() -> ring(fragment, list, key)));
+    }
+
+    private static boolean isShown(@NonNull androidx.preference.Preference row) {
+        for (androidx.preference.Preference step = row; step != null; step = step.getParent()) {
+            if (!step.isVisible()) return false;
+        }
+        return true;
     }
 
     private static void ring(@NonNull PreferenceFragmentCompat fragment, @NonNull RecyclerView list,
@@ -79,7 +89,17 @@ public final class SettingsRowRing {
         boolean still = SettingsMotion.isInstant(context);
         if (still) {
             outline.setAlpha(255);
-            row.postDelayed(() -> row.getOverlay().remove(outline), HOLD_MS + 2 * FADE_MS);
+            Runnable remove = () -> row.getOverlay().remove(outline);
+            row.postDelayed(remove, HOLD_MS + 2 * FADE_MS);
+            // A row recycled or detached before the hold is over takes the ring off with it.
+            row.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(@NonNull View v) {}
+                @Override public void onViewDetachedFromWindow(@NonNull View v) {
+                    v.removeCallbacks(remove);
+                    remove.run();
+                    v.removeOnAttachStateChangeListener(this);
+                }
+            });
             return;
         }
         long fade = SettingsMotion.scaled(context, FADE_MS);

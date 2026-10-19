@@ -74,6 +74,17 @@ public final class SettingsTransitions {
                 grow.setAllContainerColors(ThemeUtils.getSystemAttrColor(context,
                     com.termux.shared.R.attr.termuxColorSurfaceBase, Color.BLACK));
                 grow.setDuration(duration);
+                // The row is a recycled list view: once the move is over it must not carry the
+                // name into a later move.
+                View row = fromRow;
+                grow.addListener(new androidx.transition.TransitionListenerAdapter() {
+                    @Override public void onTransitionEnd(@NonNull androidx.transition.Transition transition) {
+                        ViewCompat.setTransitionName(row, null);
+                    }
+                    @Override public void onTransitionCancel(@NonNull androidx.transition.Transition transition) {
+                        ViewCompat.setTransitionName(row, null);
+                    }
+                });
                 in.setSharedElementEnterTransition(grow);
                 // Back fades the editor away over the page it came from, which waits beneath:
                 // the row it grew from is a new view by then, so there is nothing to shrink into.

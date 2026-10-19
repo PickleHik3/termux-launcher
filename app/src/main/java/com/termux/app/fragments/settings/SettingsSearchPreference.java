@@ -36,6 +36,8 @@ public final class SettingsSearchPreference extends Preference {
     @Nullable private OnQuerySubmitListener mSubmitListener;
     @Nullable private CharSequence mHint;
     private boolean mUserFocused;
+    /** Set by {@link #requestFocusOnBind}: the next bind brings the keyboard up, once. */
+    private boolean mShowImeOnNextBind;
 
     public SettingsSearchPreference(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -71,6 +73,7 @@ public final class SettingsSearchPreference extends Preference {
      */
     public void requestFocusOnBind() {
         mUserFocused = true;
+        mShowImeOnNextBind = true;
     }
 
     /** Exposed for tests driving a query without a bound view. */
@@ -112,15 +115,19 @@ public final class SettingsSearchPreference extends Preference {
             if (hasFocus) mUserFocused = true;
         });
         if (mUserFocused || !mQuery.isEmpty()) {
-            boolean firstFocus = !input.hasFocus();
             mUserFocused = true;
-            if (firstFocus) input.requestFocus();
+            if (!input.hasFocus()) input.requestFocus();
             input.setSelection(input.length());
-            if (firstFocus) input.post(() -> {
-                android.view.inputmethod.InputMethodManager ime = (android.view.inputmethod.InputMethodManager)
-                    input.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-                if (ime != null && input.hasFocus()) ime.showSoftInput(input, 0);
-            });
+            // Only the search screen's first bind asks for the keyboard; a rebind (Back to the
+            // screen, a results refresh) leaves it as the reader left it.
+            if (mShowImeOnNextBind) {
+                mShowImeOnNextBind = false;
+                input.post(() -> {
+                    android.view.inputmethod.InputMethodManager ime = (android.view.inputmethod.InputMethodManager)
+                        input.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if (ime != null && input.hasFocus()) ime.showSoftInput(input, 0);
+                });
+            }
         } else {
             input.clearFocus();
             holder.itemView.setFocusableInTouchMode(true);

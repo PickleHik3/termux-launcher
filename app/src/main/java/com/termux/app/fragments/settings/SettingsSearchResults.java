@@ -89,7 +89,7 @@ public final class SettingsSearchResults {
         Context context = mFragment.getContext();
         if (screen == null || context == null) return;
         boolean searching = !query.trim().isEmpty();
-        if (searching && mIndex == null) mIndex = SettingsSearchIndex.build(context);
+        if (searching && mIndex == null) mIndex = SettingsSearchIndex.get(context);
         mResults = searching ? mIndex.search(query, mScope, LIMIT) : new ArrayList<>();
 
         PreferenceCategory list = screen.findPreference(KEY_RESULTS);
