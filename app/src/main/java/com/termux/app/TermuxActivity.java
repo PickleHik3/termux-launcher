@@ -772,6 +772,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The place {@link #mTravelRoomChangePx} was worked out for, so a frame costs one lookup. */
     @Nullable private com.termux.app.wall.PaneWallPage mTravelRoomArriving;
     private int mTravelRoomChangePx;
+    /**
+     * The arrangement the chrome stands in while a slide across the seam between Home and the
+     * Workspace (SeamTravel) has laid out the other half's dock rows, or brought the Workspace's
+     * status bar in from Home: the committed layout with those slots taken from the other half's.
+     * Null whenever the chrome stands in the committed layout itself. {@link #placeLayout} answers
+     * it, so every pass the slide runs reads one arrangement.
+     */
+    @Nullable private PlaceLayout mTravelSeamLayout;
+    /** Whether {@link #mTravelSeamLayout} stands the other half's dock rows, and its status bar. */
+    private boolean mTravelSeamDockShown, mTravelSeamStatusShown;
+    /** The other half's page the seam was last read for, its layout and the dock's plan. */
+    @Nullable private com.termux.app.wall.PaneWallPage mTravelSeamOther;
+    @Nullable private PlaceLayout mTravelSeamOtherLayout;
+    @NonNull private com.termux.app.place.SeamTravel.DockPlan mTravelSeamPlan =
+        com.termux.app.place.SeamTravel.DockPlan.NONE;
+    /** Where the status bar was last drawn from its rest as it travels with the Workspace's page. */
+    private float mStatusTravelXPx;
+    /**
+     * The page the status bar is dressed for while it travels with the Workspace's page across the
+     * seam (syncPlaceBar), whichever page the wall has committed to; null otherwise.
+     */
+    @Nullable private com.termux.app.wall.PaneWallPage mTravelBarPage;
     /** Something was moved or faded during this slide, so settle has transforms to put back. */
     private boolean mChromeTravelMoved;
     /** The accessory stack's share of its translationY that the wall's travel owns. */
@@ -13762,6 +13784,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The layout the chrome on screen is arranged by: the minimal one while it is minimal. */
     @NonNull
     private PlaceLayout placeLayout(@NonNull PlaceOrientation orientation) {
+        // A slide across the seam stands the other half's dock rows or status bar for its length.
+        if (mTravelSeamLayout != null && orientation == currentPlaceOrientation())
+            return mTravelSeamLayout;
+        return committedPlaceLayout(orientation);
+    }
+
+    /** The layout of the page the chrome is committed to, whatever a slide is standing. */
+    @NonNull
+    private PlaceLayout committedPlaceLayout(@NonNull PlaceOrientation orientation) {
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return NO_PREFERENCES_PLACE_LAYOUT;
         com.termux.app.place.LayoutVariant variant = chromeVariant();
@@ -20301,10 +20332,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int givenBack = travelRoomChangePx(arriving);
             if (givenBack > 0) preRollTravelContent(givenBack);
         }
+        // Across the seam the dock's rows and the status bar are the halves' own: the stack is
+        // given the other half's rows where none of them shows, and their reveal is the seam's.
+        float dockReveal = syncSeamTravel(frame);
         int keyboardPx = travelKeyboardLaidOutPx();
         int dockPx = travelDockLaidOutPx(keyboardPx);
-        float translation = com.termux.app.place.PlaceChromeTravel.stackTranslationPx(frame,
-            keyboardPx, dockPx);
+        // With a keyboard in the stack the rows cannot leave by the stack's own translation, which
+        // carries the keyboard too: they sink into the keyboard's top edge instead, and the stack
+        // moves only for the keyboard.
+        boolean rowsSink = mTravelSeamPlan != com.termux.app.place.SeamTravel.DockPlan.NONE
+            && keyboardPx > 0;
+        applySeamRowSink(rowsSink
+            ? travelDockRowsPx(keyboardPx) * (1f - Math.max(0f, Math.min(1f, dockReveal))) : 0f);
+        float translation = com.termux.app.place.PlaceChromeTravel.stackTranslationPx(
+            frame.keyboardReveal, rowsSink ? 1f : dockReveal, keyboardPx, dockPx);
         if (translation != 0f || mDockTravelTranslationPx != 0f) mChromeTravelMoved = true;
         mDockTravelTranslationPx = translation;
         mKeyboardTravelSharePx = keyboardPx
@@ -20318,10 +20359,137 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncTerminalTravelDisplacement(frame, arriving);
             syncTerminalTravelCover(translation);
         }
+        // The status bar travels with the Workspace's page wherever the frame reaches Home; it
+        // fades in place only where it cannot ride (a bar on a side or the bottom edge).
+        boolean barRides = syncStatusTravel(frame);
+        float statusAlpha = barRides ? 1f : frame.statusReveal;
         // The status strip's content and the side and top bars fade as the places' rests say;
         // the minimal layout's bars fade like the normal one's.
-        if (frame.statusReveal != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
-        applyChromeTravelAlpha(frame.statusReveal, frame.dockReveal);
+        if (statusAlpha != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
+        applyChromeTravelAlpha(statusAlpha, frame.dockReveal);
+    }
+
+    /**
+     * One frame of the dock's rows across the seam between Home and the Workspace (SeamTravel):
+     * the other half's layout and the plan are read once per gesture, the stack stands the other
+     * half's rows from the frame the plan says — laid out there once, while none of them shows,
+     * under the content's hold — and from Home the Workspace's status bar is laid out as the
+     * slide starts, off screen with its page. Returns the dock's reveal for this frame.
+     */
+    private float syncSeamTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
+        com.termux.app.wall.PaneWallPage other =
+            com.termux.app.place.SeamTravel.otherHalfPage(frame, mLastWallPage);
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null || (other == null && mTravelSeamLayout == null
+            && mTravelSeamOther == null)) return frame.dockReveal;
+        PlaceOrientation orientation = currentPlaceOrientation();
+        if (other != null && other != mTravelSeamOther) {
+            PlaceLayout otherLayout = store.resolve(orientation, store.variantFor(other));
+            mTravelSeamOther = other;
+            mTravelSeamOtherLayout = otherLayout;
+            mTravelSeamPlan = com.termux.app.place.SeamTravel.dockPlan(
+                committedPlaceLayout(orientation), otherLayout);
+        }
+        PlaceLayout otherLayout = mTravelSeamOtherLayout;
+        if (otherLayout == null) return frame.dockReveal;
+        float progress = com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage);
+        boolean dockShown = com.termux.app.place.SeamTravel.showsOtherDock(mTravelSeamPlan,
+            progress);
+        // Only from Home: the Workspace's bar is the one that travels with its page.
+        boolean statusShown = progress > 0f
+            && com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage)
+            && !com.termux.app.place.HomeChromePolicy.isHome(mTravelSeamOther)
+            && com.termux.app.place.SeamTravel.statusRides(otherLayout)
+            && com.termux.app.place.SeamTravel.statusCanArriveOver(
+                committedPlaceLayout(orientation))
+            && isSplitPanesEnabled();
+        if (dockShown != mTravelSeamDockShown || statusShown != mTravelSeamStatusShown) {
+            Trace.beginSection("Wall.seamLayout");
+            try {
+                // The content keeps the room it was committed with: a stack that grows or shrinks
+                // here, or a bar that comes, moves nothing it holds.
+                beginTravelHold();
+                mTravelSeamDockShown = dockShown;
+                mTravelSeamStatusShown = statusShown;
+                PlaceLayout layout = null;
+                if (dockShown || statusShown) {
+                    layout = committedPlaceLayout(orientation);
+                    if (dockShown)
+                        layout = com.termux.app.place.SeamTravel.withDockOf(layout, otherLayout);
+                    if (statusShown)
+                        layout = com.termux.app.place.SeamTravel.withStatusOf(layout, otherLayout);
+                }
+                mTravelSeamLayout = layout;
+                mChromeTravelMoved = true;
+                syncPlaceLayout();
+                // In this frame, so the stack's height the translation below reads is the new one.
+                mGeometry.requestNow(GeometryScheduler.Reason.PLACE_TRAVEL,
+                    GeometryScheduler.ResizePolicy.AT_SETTLE);
+            } finally {
+                Trace.endSection();
+            }
+        }
+        if (mTravelSeamPlan == com.termux.app.place.SeamTravel.DockPlan.NONE)
+            return frame.dockReveal;
+        mChromeTravelMoved = true;
+        return com.termux.app.place.SeamTravel.dockReveal(mTravelSeamPlan, progress);
+    }
+
+    /**
+     * The status bar drawn where the Workspace's page stands (SeamTravel.workspaceScreenXPx) on
+     * any frame that reaches a Home page, with the strip behind the system bar when it continues
+     * the bar's glass: a translation, and the bar dressed for that page rather than the one the
+     * wall has committed to, so its chips do not change while it is on screen. Whether it rides.
+     */
+    private boolean syncStatusTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
+        View host = hotView(R.id.terminal_window_bar_host);
+        boolean rides = host != null && host.getVisibility() == View.VISIBLE
+            && mStatusBarEdge == PlaceLayout.Edge.TOP && mPaneWallController != null
+            && (com.termux.app.place.HomeChromePolicy.isHome(frame.from)
+                || com.termux.app.place.HomeChromePolicy.isHome(frame.toward));
+        float x = rides ? com.termux.app.place.SeamTravel.workspaceScreenXPx(frame,
+            mPaneWallController.wall().getWidth()) : 0f;
+        applyStatusTravelX(x);
+        com.termux.app.wall.PaneWallPage barPage = null;
+        if (rides) {
+            mChromeTravelMoved = true;
+            barPage = !com.termux.app.place.HomeChromePolicy.isHome(frame.toward) ? frame.toward
+                : !com.termux.app.place.HomeChromePolicy.isHome(frame.from) ? frame.from
+                : com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage) ? null
+                : mLastWallPage;
+            // The bar carries its place content with it: the strip does not also pan inside it.
+            View strip = hotView(R.id.terminal_status_place_content);
+            if (strip != null) {
+                if (strip.getTranslationX() != 0f) strip.setTranslationX(0f);
+                if (strip.getTranslationY() != 0f) strip.setTranslationY(0f);
+                if (strip.getAlpha() != 1f) strip.setAlpha(1f);
+                if (strip.getClipBounds() != null) strip.setClipBounds(null);
+            }
+        }
+        if (barPage != mTravelBarPage) {
+            mTravelBarPage = barPage;
+            syncPlaceBar();
+        }
+        return rides;
+    }
+
+    /**
+     * The status bar, and the strip behind the system bar while it continues the bar's glass, at
+     * {@code x} from their rest. Their glass samples the wallpaper where it is drawn, and a
+     * transform alone redraws nothing, so the bar's backdrop is re-aimed with the move.
+     */
+    private void applyStatusTravelX(float x) {
+        if (x == mStatusTravelXPx) return;
+        mStatusTravelXPx = x;
+        View host = hotView(R.id.terminal_window_bar_host);
+        if (host != null) host.setTranslationX(x);
+        View strip = hotView(R.id.terminal_status_bar_background);
+        if (strip != null) {
+            float stripX = x != 0f && continuesIntoStatusInsetStrip(host) ? x : 0f;
+            if (strip.getTranslationX() != stripX) strip.setTranslationX(stripX);
+        }
+        View backdrop = hotView(R.id.terminal_window_bar_wallpaper_backdrop);
+        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
     }
 
     /**
@@ -20553,10 +20721,56 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View stack = hotView(R.id.accessory_stack_container);
         if (stack == null) return 0;
         ViewGroup.LayoutParams params = stack.getLayoutParams();
-        int height = params != null && params.height > 0 ? params.height : 0;
         int margin = params instanceof ViewGroup.MarginLayoutParams
             ? Math.max(0, ((ViewGroup.MarginLayoutParams) params).bottomMargin) : 0;
-        return Math.max(0, height - keyboardPx - bottomStatusBandPx()) + margin;
+        return travelDockRowsPx(keyboardPx) + margin;
+    }
+
+    /** The dock's rows alone as the stack lays them out above the keyboard, without the margin. */
+    private int travelDockRowsPx(int keyboardPx) {
+        View stack = hotView(R.id.accessory_stack_container);
+        if (stack == null) return 0;
+        ViewGroup.LayoutParams params = stack.getLayoutParams();
+        int height = params != null && params.height > 0 ? params.height : 0;
+        return Math.max(0, height - keyboardPx - bottomStatusBandPx());
+    }
+
+    /** The dock rows' layers, which sink into the keyboard together (applySeamRowSink). */
+    private static final int[] SEAM_ROW_LAYERS = {R.id.accessory_surface_host,
+        R.id.apps_bar_az_fx_underlay, R.id.accessory_row_stack, R.id.apps_bar_az_fx_overlay,
+        R.id.apps_bar_az_label_overlay};
+
+    /** How far the dock rows' layers last sank into the keyboard's top edge. */
+    private float mSeamRowSinkPx;
+
+    /**
+     * The dock's rows drawn {@code sinkPx} lower than they are laid out, each layer cut at its own
+     * laid-out bottom, which is the keyboard's top: the rows go into the keyboard's edge rather
+     * than across it, while the keyboard stays where its own travel puts it. Over the seam only,
+     * with a keyboard in the stack; 0 puts every layer back.
+     */
+    private void applySeamRowSink(float sinkPx) {
+        if (sinkPx == mSeamRowSinkPx) return;
+        mSeamRowSinkPx = sinkPx;
+        int hidden = Math.round(sinkPx);
+        for (int id : SEAM_ROW_LAYERS) {
+            View layer = hotView(id);
+            if (layer == null) continue;
+            if (layer.getTranslationY() != sinkPx) layer.setTranslationY(sinkPx);
+            if (hidden <= 0) {
+                if (layer.getClipBounds() != null) layer.setClipBounds(null);
+                continue;
+            }
+            // Generous above and to the sides, as the stack's own clip is: only the bottom is cut.
+            int width = Math.max(1, layer.getWidth());
+            mTmpTravelClip.set(-width, -Math.max(layer.getHeight(),
+                getResources().getDisplayMetrics().heightPixels), 2 * width,
+                Math.max(0, layer.getHeight() - hidden));
+            layer.setClipBounds(mTmpTravelClip);
+        }
+        // The dock's glass samples the wallpaper where it is drawn; a transform redraws nothing.
+        View backdrop = hotView(R.id.accessory_blur_backdrop);
+        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
     }
 
     /**
@@ -20635,6 +20849,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // pass below paints that material plainly, and the blend's layers go with it.
             mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
             mKeyboardTravelSolidFill = null;
+            // The seam's arrangement gives way to the committed one: landed on the other half,
+            // commitWallPage arranges it by that half's layout, which stands the same rows; back
+            // where it started, the pass below puts the committed rows back, already off screen.
+            boolean seamLaidOut = mTravelSeamLayout != null;
+            boolean barTravelled = mTravelBarPage != null;
+            mTravelSeamLayout = null;
+            mTravelSeamDockShown = false;
+            mTravelSeamStatusShown = false;
+            mTravelSeamOther = null;
+            mTravelSeamOtherLayout = null;
+            mTravelSeamPlan = com.termux.app.place.SeamTravel.DockPlan.NONE;
+            mTravelBarPage = null;
+            applyStatusTravelX(0f);
+            applySeamRowSink(0f);
             applyAccessoryStackTranslation();
             applyChromeTravelAlpha(1f, 1f);
             // The panes' clip comes off with the hold: the geometry pass below lays them out at
@@ -20660,6 +20888,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mX11Display.onUserKeyboardIntent(true);
             }
             syncPlaceState(page, leavingKeyboardUp);
+            // A pass that finds the arrangement already applied changes nothing.
+            if (seamLaidOut) syncPlaceLayout();
+            if (barTravelled) syncPlaceBar();
             // The pre-roll came and went quietly; the tour still hears where the keyboard ended
             // up, or it keeps the visibility from before the slide and misses the next change.
             if (keyboardPreRolled && mFirstBootTour != null && mInAppKeyboard != null)
@@ -21545,7 +21776,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Dress the bar for the place on screen: row content, accents, summary, icons and tint. */
     private void syncPlaceBar() {
-        com.termux.app.wall.PaneWallPage page = currentWallPage();
+        // A bar travelling with the Workspace's page across the seam stays that page's.
+        com.termux.app.wall.PaneWallPage page =
+            mTravelBarPage != null ? mTravelBarPage : currentWallPage();
         // The display window is a window of the Workspace: the bar over it wears the Workspace's
         // accent, so the badge and the chips keep their colour as the row steps onto it.
         int accent = com.termux.app.statusbar.StatusBarLensView.accentFor(this,
@@ -23285,6 +23518,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncHomeFloatObstructions() {
         if (mPaneController == null || mPaneController.homeFloatLayer() == null) return;
+        // A slide across the seam stands the other half's rows or bar for its length: the floats
+        // and their chips keep the room they had, and the settle's pass gives them the new one.
+        if (mTravelSeamLayout != null) return;
         View stack = findViewById(R.id.accessory_stack_container);
         View root = findViewById(R.id.activity_termux_root_view);
         if (stack == null || root == null) return;
