@@ -46,45 +46,36 @@ public class PaneWallPolicyTest {
             .contains(PaneWallPage.TERMINAL));
     }
 
+    /**
+     * The row is Home, then the Workspace while its row has a window — the display window counts
+     * as one (ADR 0008, amended 2026-10-19). There is no Display page any more.
+     */
     @Test
-    public void theRowIsHomeThenTheWorkspaceThenTheDisplay() {
-        assertEquals(List.of(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY),
-            PaneWallPolicy.rowPages(true, true));
+    public void theRowIsHomeThenTheWorkspaceAndNeverADisplayPage() {
         assertEquals(List.of(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL),
-            PaneWallPolicy.rowPages(true, false));
+            PaneWallPolicy.rowPages(true));
         // No window: the Workspace is not on the row; Home always is.
-        assertEquals(List.of(PaneWallPage.WIDGETS), PaneWallPolicy.rowPages(false, false));
-        assertEquals(List.of(PaneWallPage.WIDGETS, PaneWallPage.DISPLAY),
-            PaneWallPolicy.rowPages(false, true));
+        assertEquals(List.of(PaneWallPage.WIDGETS), PaneWallPolicy.rowPages(false));
+        assertFalse(PaneWallPolicy.rowPages(true).contains(PaneWallPage.DISPLAY));
         assertEquals("the home press lands on Home", PaneWallPage.WIDGETS,
             PaneWallPolicy.homePage());
     }
 
     @Test
     public void aPageThatLeavesHandsTheWallToItsLeftNeighbour() {
-        List<PaneWallPage> full = PaneWallPolicy.rowPages(true, true);
-        assertEquals("the display going down lands on the windows", PaneWallPage.TERMINAL,
-            PaneWallPolicy.pageAfterRemoval(full, PaneWallPolicy.rowPages(true, false),
-                PaneWallPage.DISPLAY));
-        assertEquals("with no window it lands on Home", PaneWallPage.WIDGETS,
-            PaneWallPolicy.pageAfterRemoval(PaneWallPolicy.rowPages(false, true),
-                PaneWallPolicy.rowPages(false, false), PaneWallPage.DISPLAY));
-        assertEquals("the display and the windows going at once land on Home",
-            PaneWallPage.WIDGETS, PaneWallPolicy.pageAfterRemoval(full,
-                PaneWallPolicy.rowPages(false, false), PaneWallPage.DISPLAY));
         assertEquals("the last window closing lands on Home", PaneWallPage.WIDGETS,
-            PaneWallPolicy.pageAfterRemoval(full, PaneWallPolicy.rowPages(false, true),
-                PaneWallPage.TERMINAL));
+            PaneWallPolicy.pageAfterRemoval(PaneWallPolicy.rowPages(true),
+                PaneWallPolicy.rowPages(false), PaneWallPage.TERMINAL));
     }
 
     @Test
     public void theSeamFromHomeStopsWithoutAWindow() {
-        assertTrue(PaneWallPolicy.hasNeighbour(PaneWallPolicy.rowPages(true, false),
+        assertTrue(PaneWallPolicy.hasNeighbour(PaneWallPolicy.rowPages(true),
             PaneWallPage.WIDGETS, 1));
-        assertFalse(PaneWallPolicy.hasNeighbour(PaneWallPolicy.rowPages(false, false),
+        assertFalse(PaneWallPolicy.hasNeighbour(PaneWallPolicy.rowPages(false),
             PaneWallPage.WIDGETS, 1));
         assertFalse("nothing before Home page 1", PaneWallPolicy.hasNeighbour(
-            PaneWallPolicy.rowPages(true, true), PaneWallPage.WIDGETS, -1));
+            PaneWallPolicy.rowPages(true), PaneWallPage.WIDGETS, -1));
     }
 
     @Test
@@ -256,10 +247,10 @@ public class PaneWallPolicyTest {
         List<PaneWallPage> pages = all();
         assertEquals(PaneWallPage.WIDGETS,
             PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "widgets"));
-        assertEquals(PaneWallPage.DISPLAY,
-            PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, " Display "));
         assertEquals(PaneWallPage.TERMINAL,
             PaneWallPolicy.parsePage(pages, PaneWallPage.WIDGETS, "right"));
+        assertNull("display names a window, which the activity opens; never a page",
+            PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, " Display "));
         assertEquals(PaneWallPage.WIDGETS,
             PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "left"));
         assertNull(PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "nowhere"));
@@ -319,12 +310,12 @@ public class PaneWallPolicyTest {
 
     @Test
     public void wallGoNamesHomeAndTheWorkspace() {
-        List<PaneWallPage> row = PaneWallPolicy.rowPages(true, false);
+        List<PaneWallPage> row = PaneWallPolicy.rowPages(true);
         assertEquals(PaneWallPage.WIDGETS, PaneWallPolicy.parsePage(row, PaneWallPage.TERMINAL, "home"));
         assertEquals(PaneWallPage.TERMINAL,
             PaneWallPolicy.parsePage(row, PaneWallPage.WIDGETS, "workspace"));
         assertNull("no window, no Workspace to go to", PaneWallPolicy.parsePage(
-            PaneWallPolicy.rowPages(false, false), PaneWallPage.WIDGETS, "terminal"));
+            PaneWallPolicy.rowPages(false), PaneWallPage.WIDGETS, "terminal"));
     }
 
     @Test
@@ -341,14 +332,14 @@ public class PaneWallPolicyTest {
         int margin = 48 + 3;
         assertEquals("a window keeps its whole margin", margin,
             PaneWallPolicy.pageInsetPx(PaneWallPage.TERMINAL, margin, 3));
-        assertEquals("the Display page stands at the opening", 48,
-            PaneWallPolicy.pageInsetPx(PaneWallPage.DISPLAY, margin, 3));
+        assertEquals("the display window, a view the wall does not page, stands at the opening",
+            48, PaneWallPolicy.pageInsetPx(null, margin, 3));
         assertEquals("a Home page has no frame", 0,
             PaneWallPolicy.pageInsetPx(PaneWallPage.WIDGETS, margin, 3));
         assertEquals("a view that is no page keeps the opening", 48,
             PaneWallPolicy.pageInsetPx(null, margin, 3));
         assertEquals("air wider than the margin leaves none", 0,
-            PaneWallPolicy.pageInsetPx(PaneWallPage.DISPLAY, 2, 3));
+            PaneWallPolicy.pageInsetPx(null, 2, 3));
 
         // The air from the screen's edge to Home's first cell: the page's inset plus the grid's
         // rim, which is Home's Margin. One Margin, as the dock's cards keep.

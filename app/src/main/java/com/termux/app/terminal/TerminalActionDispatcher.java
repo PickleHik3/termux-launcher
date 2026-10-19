@@ -891,7 +891,7 @@ public final class TerminalActionDispatcher {
                     // With the launcher on screen the switch is the window strip's, travel and
                     // all; stopped, there is nobody to animate for, as with pane.focus.
                     if (host.isVisible()) {
-                        host.selectWindow(index);
+                        host.selectWindow(host.rowIndexOf(index));
                     } else {
                         TerminalSession focused = controller.windowActiveSession(window);
                         if (focused != null) host.activateSessionInPanes(focused);
@@ -2148,7 +2148,7 @@ public final class TerminalActionDispatcher {
         record.put("id", window.id);
         String windowName = controller == null ? null : controller.windowName(window);
         record.put("name", windowName == null ? JSONObject.NULL : windowName);
-        record.put("current", index == host.currentWindowIndex());
+        record.put("current", host.rowIndexOf(index) == host.currentWindowIndex());
         TerminalSession focused = controller == null ? null : controller.windowActiveSession(window);
         record.put("focusedPane", focused == null ? JSONObject.NULL : focused.mHandle);
         record.put("owned", controller != null && isWindowOwned(controller, window));

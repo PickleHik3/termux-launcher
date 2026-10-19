@@ -196,10 +196,10 @@ public class StatusBarLensPolicyTest {
     private static final int COMPACT_H = 68;   // 34dp
     private static final int EXPANDED_H = 136; // 68dp
 
-    private static List<Mark> landscapeMarks(TopStatusBarState state, boolean displayRunning) {
+    private static List<Mark> landscapeMarks(TopStatusBarState state) {
         int height = state == TopStatusBarState.COMPACT ? COMPACT_H : EXPANDED_H;
         return StatusBarLensMetrics.marks(Bar.of(BAR_W, height, DENSITY, false, state),
-            ROW, PaneWallPage.TERMINAL, 0f, BAR_W, displayRunning);
+            ROW, PaneWallPage.TERMINAL, 0f, BAR_W);
     }
 
     private static Mark markFor(List<Mark> marks, PaneWallPage page) {
@@ -215,7 +215,7 @@ public class StatusBarLensPolicyTest {
             int height = state == TopStatusBarState.COMPACT ? COMPACT_H : EXPANDED_H;
             float minAlong = StatusBarLensMetrics.minTargetPx(DENSITY, BAR_W);
             float minAcross = StatusBarLensMetrics.minTargetPx(DENSITY, height);
-            for (Mark mark : landscapeMarks(state, true)) {
+            for (Mark mark : landscapeMarks(state)) {
                 assertTrue(state + " " + mark.page + " target " + mark.target,
                     mark.target.width() >= minAlong - 0.01f);
                 assertTrue(state + " " + mark.page + " target " + mark.target,
@@ -228,7 +228,7 @@ public class StatusBarLensPolicyTest {
     }
 
     @Test public void aNeighboursTargetReachesInwardBecauseItsOuterHalfIsPastTheBar() {
-        List<Mark> marks = landscapeMarks(TopStatusBarState.COMPACT, true);
+        List<Mark> marks = landscapeMarks(TopStatusBarState.COMPACT);
         // The compact row carries no mark at home, so the two neighbours are all there is.
         assertEquals(2, marks.size());
         Mark left = markFor(marks, PaneWallPage.WIDGETS);
@@ -248,13 +248,13 @@ public class StatusBarLensPolicyTest {
         // It used to read at 0.62 ink, halved again by a dissolve that ran to nothing exactly where
         // the glyph is drawn: 0.31 reaching the glass, which is the fragment the review saw.
         for (TopStatusBarState state : TopStatusBarState.values()) {
-            for (Mark mark : landscapeMarks(state, true)) {
+            for (Mark mark : landscapeMarks(state)) {
                 if (mark.home) continue;
                 assertTrue(state + " " + mark.page + " ink " + mark.effectiveInk,
                     mark.effectiveInk >= StatusBarLensMetrics.EFFECTIVE_INK_FLOOR);
             }
         }
-        Mark peek = markFor(landscapeMarks(TopStatusBarState.COMPACT, true), PaneWallPage.WIDGETS);
+        Mark peek = markFor(landscapeMarks(TopStatusBarState.COMPACT), PaneWallPage.WIDGETS);
         assertEquals(0.85f, peek.ink, 0.001f);
         assertEquals(0.5f, peek.fadeOuterAlpha, 0.001f);
         assertEquals(0.6375f, peek.effectiveInk, 0.001f);
@@ -263,7 +263,7 @@ public class StatusBarLensPolicyTest {
         // only the mark at home wears a glow.
         assertEquals(StatusBarLensMetrics.UNFOCUSED_GLYPH_SHARE, peek.glyphInk, 0.001f);
         assertEquals(0f, peek.glow, 0.001f);
-        Mark home = markFor(landscapeMarks(TopStatusBarState.EXPANDED, true), PaneWallPage.TERMINAL);
+        Mark home = markFor(landscapeMarks(TopStatusBarState.EXPANDED), PaneWallPage.TERMINAL);
         assertEquals(1f, home.ink, 0.001f);
         assertEquals(1f, home.glyphInk, 0.001f);
         assertTrue(home.glow > 0f);
@@ -275,35 +275,20 @@ public class StatusBarLensPolicyTest {
      */
     @Test public void aNeighboursGlyphIsFadedByTheSameShareTheKeyRowFadesItsSwitchesBy() {
         assertEquals(145 / 255f, StatusBarLensMetrics.UNFOCUSED_GLYPH_SHARE, 0.0001f);
-        assertEquals(1f, StatusBarLensMetrics.glyphInkFor(0f, false), 0.001f);
+        assertEquals(1f, StatusBarLensMetrics.glyphInkFor(0f), 0.001f);
         assertEquals(StatusBarLensMetrics.UNFOCUSED_GLYPH_SHARE,
-            StatusBarLensMetrics.glyphInkFor(1f, false), 0.001f);
-        assertTrue(StatusBarLensMetrics.glyphInkFor(0.5f, false)
-            > StatusBarLensMetrics.glyphInkFor(1f, false));
-        // A Display with nothing running is quieter again, at home and peeking alike.
-        assertEquals(StatusBarLensMetrics.STOPPED_DISPLAY_INK,
-            StatusBarLensMetrics.glyphInkFor(0f, true), 0.001f);
-        assertTrue(StatusBarLensMetrics.glyphInkFor(1f, true)
-            < StatusBarLensMetrics.glyphInkFor(1f, false));
+            StatusBarLensMetrics.glyphInkFor(1f), 0.001f);
+        assertTrue(StatusBarLensMetrics.glyphInkFor(0.5f)
+            > StatusBarLensMetrics.glyphInkFor(1f));
     }
 
-    @Test public void aDisplayThatIsNotRunningIsQuieterButNeverFallsThroughTheFloor() {
-        // At home it reads exactly as it always has: 0.6 of full ink says nothing is running.
-        List<Mark> atHome = StatusBarLensMetrics.marks(
-            Bar.of(BAR_W, EXPANDED_H, DENSITY, false, TopStatusBarState.EXPANDED),
-            ROW, PaneWallPage.DISPLAY, 0f, BAR_W, false);
-        assertEquals(StatusBarLensMetrics.STOPPED_DISPLAY_INK,
-            markFor(atHome, PaneWallPage.DISPLAY).ink, 0.001f);
-        // Peeking, 0.6 of an already drained mark used to leave 0.37 ink and 0.19 on the glass.
-        // The floor catches it first, and the dissolve keeps three quarters of that.
+    @Test public void aPeekingMarkNeverFallsThroughTheInkFloor() {
         for (TopStatusBarState state : TopStatusBarState.values()) {
-            Mark stopped = markFor(landscapeMarks(state, false), PaneWallPage.DISPLAY);
-            assertEquals(StatusBarLensMetrics.PEEK_INK_FLOOR, stopped.ink, 0.001f);
-            assertEquals(0.525f, stopped.effectiveInk, 0.001f);
-            assertTrue(stopped.effectiveInk >= StatusBarLensMetrics.EFFECTIVE_INK_FLOOR);
-            // Still the quieter of the two neighbours, which is the whole point of the dimming.
-            Mark running = markFor(landscapeMarks(state, true), PaneWallPage.DISPLAY);
-            assertTrue(stopped.ink < running.ink);
+            for (Mark mark : landscapeMarks(state)) {
+                if (mark.home) continue;
+                assertEquals(1f - StatusBarLensMetrics.PEEK_INK_DRAIN, mark.ink, 0.001f);
+                assertTrue(mark.effectiveInk >= StatusBarLensMetrics.EFFECTIVE_INK_FLOOR);
+            }
         }
     }
 
@@ -312,7 +297,7 @@ public class StatusBarLensPolicyTest {
         int columnH = 600;
         List<Mark> marks = StatusBarLensMetrics.marks(
             Bar.of(columnW, columnH, DENSITY, true, TopStatusBarState.COMPACT),
-            ROW, PaneWallPage.TERMINAL, 0f, columnH, true);
+            ROW, PaneWallPage.TERMINAL, 0f, columnH);
         assertEquals(2, marks.size());
         Mark above = markFor(marks, PaneWallPage.WIDGETS);
         assertEquals(columnW / 2f, above.centerX, 0.01f);
@@ -328,7 +313,7 @@ public class StatusBarLensPolicyTest {
         // Two widths away the leaving mark has dissolved; nothing of it is reported.
         List<Mark> marks = StatusBarLensMetrics.marks(
             Bar.of(BAR_W, EXPANDED_H, DENSITY, false, TopStatusBarState.EXPANDED),
-            ROW, PaneWallPage.TERMINAL, BAR_W, BAR_W, true);
+            ROW, PaneWallPage.TERMINAL, BAR_W, BAR_W);
         for (Mark mark : marks) assertTrue(mark.page != PaneWallPage.DISPLAY);
     }
 

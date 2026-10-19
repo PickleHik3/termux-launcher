@@ -55,19 +55,16 @@ public class WallParallaxTest {
     // ---- the row ------------------------------------------------------------------------------
 
     @Test
-    public void theRowIsHomePagesThenWindowsThenTheDisplayPage() {
-        assertEquals(6, WallParallax.rowCount(2, 3, true));
-        assertEquals(5, WallParallax.rowCount(2, 3, false));
+    public void theRowIsHomePagesThenWindowsTheDisplayWindowAmongThem() {
+        assertEquals(5, WallParallax.rowCount(2, 3));
         // Home always has a page, even before its repository has counted any.
-        assertEquals(1, WallParallax.rowCount(0, 0, false));
+        assertEquals(1, WallParallax.rowCount(0, 0));
 
         assertEquals(0, WallParallax.rowIndex(PaneWallPage.WIDGETS, 0, 2, 3));
         assertEquals(1, WallParallax.rowIndex(PaneWallPage.WIDGETS, 1, 2, 3));
         assertEquals("window 1 sits right after the last Home page", 2,
             WallParallax.rowIndex(PaneWallPage.TERMINAL, 0, 2, 3));
         assertEquals(4, WallParallax.rowIndex(PaneWallPage.TERMINAL, 2, 2, 3));
-        assertEquals("the Display page comes after every window", 5,
-            WallParallax.rowIndex(PaneWallPage.DISPLAY, 0, 2, 3));
     }
 
     @Test
@@ -78,9 +75,9 @@ public class WallParallaxTest {
     }
 
     @Test
-    public void anEmptyWorkspacePutsTheDisplayPageRightAfterHome() {
-        assertEquals(3, WallParallax.rowCount(2, 0, true));
-        assertEquals(2, WallParallax.rowIndex(PaneWallPage.DISPLAY, 0, 2, 0));
+    public void aRowOfTheDisplayWindowAlonePutsItRightAfterHome() {
+        assertEquals(3, WallParallax.rowCount(2, 1));
+        assertEquals(2, WallParallax.rowIndex(PaneWallPage.TERMINAL, 0, 2, 1));
     }
 
     // ---- rest positions: the whole spare over the row --------------------------------------------
@@ -116,13 +113,14 @@ public class WallParallaxTest {
     }
 
     @Test
-    public void theDisplayPageIsTheRowsLastPageAtThePicturesRightEdge() {
-        int count = WallParallax.rowCount(2, 2, true);
-        int display = WallParallax.rowIndex(PaneWallPage.DISPLAY, 0, 2, 2);
+    public void theRowsLastWindowIsAtThePicturesRightEdge() {
+        // Two terminal windows and the display window last: five pages.
+        int count = WallParallax.rowCount(2, 3);
+        int display = WallParallax.rowIndex(PaneWallPage.TERMINAL, 2, 2, 3);
         assertEquals(SPARE, WallParallax.offsetPx(display, count, SPARE), EPS);
-        // The last window sits one step short of it.
-        int lastWindow = WallParallax.rowIndex(PaneWallPage.TERMINAL, 1, 2, 2);
-        assertEquals(SPARE * 3f / 4f, WallParallax.offsetPx(lastWindow, count, SPARE), EPS);
+        // The window before it sits one step short of it.
+        int before = WallParallax.rowIndex(PaneWallPage.TERMINAL, 1, 2, 3);
+        assertEquals(SPARE * 3f / 4f, WallParallax.offsetPx(before, count, SPARE), EPS);
     }
 
     @Test

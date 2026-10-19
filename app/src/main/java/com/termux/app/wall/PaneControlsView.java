@@ -47,7 +47,7 @@ import java.util.Objects;
  * out of whichever edge that corner is on — down from a top corner, up from a bottom one — and
  * lines up with whichever side it is on.
  *
- * <p>What the tab holds is the page's own business — the Display page offers power and its
+ * <p>What the tab holds is the page's own business — the display window offers power and its
  * settings, the Widgets page offers its settings and an edit pencil, and while a widget is being
  * edited the same corner reads out the grid's size — so the buttons are handed in as
  * {@link Action}s and this view knows only how to lay them out, draw them and say which one a
@@ -600,7 +600,7 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * Whether one button reads as an alert: the error colour, as a close does. The Display page's
+     * Whether one button reads as an alert: the error colour, as a close does. The display window's
      * power glyph turns while a display is running.
      */
     public void setActionAlert(int id, boolean alert) {
@@ -848,7 +848,7 @@ public final class PaneControlsView extends View {
     /**
      * The tab's material, inside {@link #mPath}: the app's wallpaper blur at this tab's place
      * on screen under the panel scrim, or the scrim alone, stronger, when there is no blur. One
-     * recipe for every screen — a terminal pane, the Display page, the Widgets page — so the
+     * recipe for every screen — a terminal pane, the display window, the Widgets page — so the
      * buttons read the same wherever the corner is.
      *
      * @param radiusPx the tab's one free corner, which the refraction's rim turns

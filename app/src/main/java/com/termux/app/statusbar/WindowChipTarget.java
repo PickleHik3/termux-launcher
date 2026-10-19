@@ -4,64 +4,48 @@ import androidx.annotation.NonNull;
 
 /**
  * What a tap on a window chip in the Workspace's bar brings in front. The chips are the row's
- * windows, then the display window's chip while a display is up, then the Home floats. They are
- * the same on every page of the Workspace, the display window's included: the display is a window
- * of the Workspace (ADR 0008), so its page wears the Workspace's chips with its own selected,
- * rather than a bar of the display's own apps.
+ * windows in row order — the display window's among them, at its place in the row
+ * ({@link com.termux.app.wall.DisplaySlot}) — then the Home floats. The display window is a window
+ * of the Workspace like any other (ADR 0008, amended 2026-10-19), so its chip is a window chip: the
+ * activity tells which window a row place holds.
  *
- * <p>Pure: the activity hands it the counts and the page, and applies the answer.
+ * <p>Pure: the activity hands it the counts, and applies the answer.
  */
 public final class WindowChipTarget {
 
     /** What the chip stands for. */
-    public enum Kind { NONE, WINDOW, DISPLAY, HOME_FLOAT }
+    public enum Kind { NONE, WINDOW, HOME_FLOAT }
 
     @NonNull public final Kind kind;
     /** The window's place in the row, or the float's among the floats; -1 otherwise. */
     public final int index;
-    /**
-     * The wall has to move to show it: a terminal window's chip tapped on the display window, or
-     * the display's chip tapped on a terminal window. A float's chip moves the wall to Home itself.
-     */
-    public final boolean moveWall;
 
-    private WindowChipTarget(@NonNull Kind kind, int index, boolean moveWall) {
+    private WindowChipTarget(@NonNull Kind kind, int index) {
         this.kind = kind;
         this.index = index;
-        this.moveWall = moveWall;
     }
 
-    private static final WindowChipTarget NONE = new WindowChipTarget(Kind.NONE, -1, false);
+    private static final WindowChipTarget NONE = new WindowChipTarget(Kind.NONE, -1);
 
     /**
-     * The chip at {@code chip} of a bar standing over a terminal window or, with
-     * {@code onDisplay}, over the display window. {@code windows} counts the row's windows and
-     * {@code floats} the Home floats; {@code displayUp} says whether the display has its chip.
+     * The chip at {@code chip}. {@code windows} counts the row's windows, the display window's
+     * included, and {@code floats} the Home floats.
      */
     @NonNull
-    public static WindowChipTarget of(int chip, boolean onDisplay, int windows, boolean displayUp,
-                                      int floats) {
+    public static WindowChipTarget of(int chip, int windows, int floats) {
         if (chip < 0) return NONE;
-        if (chip < windows) return new WindowChipTarget(Kind.WINDOW, chip, onDisplay);
+        if (chip < windows) return new WindowChipTarget(Kind.WINDOW, chip);
         int afterWindows = chip - windows;
-        if (displayUp) {
-            if (afterWindows == 0) return new WindowChipTarget(Kind.DISPLAY, -1, !onDisplay);
-            afterWindows--;
-        }
-        if (afterWindows < floats) return new WindowChipTarget(Kind.HOME_FLOAT, afterWindows, true);
+        if (afterWindows < floats) return new WindowChipTarget(Kind.HOME_FLOAT, afterWindows);
         return NONE;
     }
 
-    /**
-     * The chip the bar selects: the display's, after the row's windows, while the display window
-     * is in front; otherwise the current window's, held to the row.
-     */
-    public static int selectedChip(boolean onDisplay, boolean displayUp, int current, int windows) {
-        if (onDisplay && displayUp) return Math.max(0, windows);
+    /** The chip the bar selects: the row's window in front, held to the row. */
+    public static int selectedChip(int current, int windows) {
         return Math.max(0, Math.min(current, windows - 1));
     }
 
     @NonNull @Override public String toString() {
-        return "WindowChipTarget{" + kind + ", index=" + index + ", moveWall=" + moveWall + "}";
+        return "WindowChipTarget{" + kind + ", index=" + index + "}";
     }
 }

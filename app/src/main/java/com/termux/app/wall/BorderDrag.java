@@ -8,7 +8,7 @@ import androidx.annotation.NonNull;
  * beside it, in every mode.
  *
  * <p>The border lives outside the page. Its zone ({@link Zone}) is the strip between each edge of
- * the page — the terminal, the Widgets page, the Display page — and the wall's own edge on that
+ * the page — the terminal, the Widgets page, the display window — and the wall's own edge on that
  * side: the frame line drawn there and the air beyond it, up to whatever stands next to the wall
  * (the status bar, the dock or the keyboard, the screen's edge). Which border a press is on is
  * which page edge it lies beyond. The page's text is never the zone, so a tap, a long press or a

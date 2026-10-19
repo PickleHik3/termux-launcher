@@ -7,11 +7,11 @@ import androidx.annotation.NonNull;
  *
  * <p>A managed wallpaper is picked one and a half screens wide, and the half screen of spare width
  * is spread over the whole row (ADR 0008): Home page 1 at the picture's left edge, the row's last
- * page — the last window, or the Display page while a display is up — at its right edge, and every
- * page between at an even step. The pan is a continuous function of the row's live position, so a
- * Home page swipe, the seam into the Workspace, a border drag between windows and a slide to the
- * Display page all move the picture on their own curve and timing, with no jump where one stretch
- * of the row meets the next. Nothing here knows about frames or views; the activity turns the
+ * window — the display window among them when it is last — at its right edge, and every page
+ * between at an even step. The pan is a continuous function of the row's live position, so a
+ * Home page swipe, the seam into the Workspace and a border drag between windows all move the
+ * picture on their own curve and timing, with no jump where one stretch of the row meets the
+ * next. Nothing here knows about frames or views; the activity turns the
  * answer into an x-offset every glass surface samples the shared frame at.
  */
 public final class WallParallax {
@@ -52,17 +52,17 @@ public final class WallParallax {
     }
 
     /**
-     * How many pages the row has: the Home pages (at least one), then the windows, then the
-     * Display page while a display is up.
+     * How many pages the row has: the Home pages (at least one), then the windows, the display
+     * window counted among them while it is on the row.
      */
-    public static int rowCount(int homeCount, int windowCount, boolean displayUp) {
-        return Math.max(1, homeCount) + Math.max(0, windowCount) + (displayUp ? 1 : 0);
+    public static int rowCount(int homeCount, int windowCount) {
+        return Math.max(1, homeCount) + Math.max(0, windowCount);
     }
 
     /**
      * Where a page sits in the row, counting from 0: Home page {@code index} is {@code index},
-     * window {@code index} comes after every Home page, and the Display page after every window.
-     * An index past its kind's end is held at the kind's last page.
+     * and window {@code index} — the display window by its place in the row — comes after every
+     * Home page. An index past its kind's end is held at the kind's last page.
      */
     public static int rowIndex(@NonNull PaneWallPage kind, int index, int homeCount,
                                int windowCount) {
@@ -72,10 +72,8 @@ public final class WallParallax {
             case WIDGETS:
                 return clamp(index, 0, homes - 1);
             case TERMINAL:
-                return homes + clamp(index, 0, Math.max(0, windows - 1));
-            case DISPLAY:
             default:
-                return homes + windows;
+                return homes + clamp(index, 0, Math.max(0, windows - 1));
         }
     }
 

@@ -39,7 +39,7 @@ import com.termux.view.HoldTiming;
  * <p>The grid view is moved in rather than inflated: there is one widget grid in the app, and it
  * keeps its app-widget host views across the move.
  *
- * <p>A <em>hold</em> on one of the page's four corners drops the same tab the Display page's
+ * <p>A <em>hold</em> on one of the page's four corners drops the same tab the display window's
  * corners drop, with the page's own buttons: the pencil that starts editing the widgets, the plus
  * that adds a page, the wallpaper and help. Home has no minimal mode (ADR 0008,
  * {@link com.termux.app.place.HomeChromePolicy#minimalModeApplies}), so the minimal button every

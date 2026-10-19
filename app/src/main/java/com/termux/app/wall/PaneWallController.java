@@ -10,9 +10,9 @@ import androidx.annotation.Nullable;
 import com.termux.app.terminal.PaneSurfaceStyle;
 
 /**
- * Owns the wall: its row of pages (Home pages, then the Workspace's windows, then the display
- * window while a display is up; ADR 0008), which page is in front, and every way in and out of
- * them. The activity hands it the layout and the answers it cannot work out for itself — whether
+ * Owns the wall: its row of pages (Home pages, then the Workspace's windows, the display window
+ * among them while a display is up; ADR 0008), which page is in front, and every way in and out
+ * of them. The activity hands it the layout and the answers it cannot work out for itself — whether
  * the current session has a window, how many Home pages and windows there are and which is in
  * front — and nothing else needs to know the wall exists.
  */
@@ -23,8 +23,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         /** Honour the system's reduce-motion setting for the page slide. */
         boolean reducedMotion();
         /**
-         * Whether the current session has a window, so the Workspace is on the row. Home is on
-         * it always; the usage mode is not asked.
+         * Whether the current session's row has a window — a terminal window, or the display
+         * window — so the Workspace is on the row. Home is on it always; the usage mode is not
+         * asked.
          */
         default boolean hasWindow() { return true; }
         /**
@@ -39,13 +40,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         default boolean startWorkspaceShell() { return false; }
         /**
-         * A display is up, so its window is on the row: running, or asked for and starting.
-         * Nothing switches it on (ADR 0008).
-         */
-        boolean isDisplayUp();
-        /**
-         * How many pages of its own kind {@code page} holds: the Home pages, the current
-         * session's windows; 1 for the Display page.
+         * How many pages of its own kind {@code page} holds: the Home pages, or the windows of
+         * the current session's row, the display window's included.
          */
         default int innerCount(@NonNull PaneWallPage page) { return 1; }
         /** Which of them is in front, counting from 0. */
@@ -155,7 +151,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @NonNull private final PaneWallLayout mWall;
     @NonNull private final Host mHost;
     @Nullable private WidgetPaneFrame mWidgetsPage;
-    @Nullable private com.termux.app.x11.X11PaneFrame mDisplayPage;
+    @Nullable private com.termux.app.x11.X11PaneFrame mDisplayWindow;
     @Nullable private PaneSurfaceStyle mStyle;
     /** How much of the pages' outlines the last frame left showing; 1 at rest. */
     private float mOutlineAlpha = 1f;
@@ -187,7 +183,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return mWall;
     }
 
-    /** The terminal's pane host is the wall's middle page. */
+    /** The terminal's pane host is the Workspace's page while a terminal window is in front. */
     public void attachTerminalPage(@NonNull View paneHost) {
         mWall.setPageView(PaneWallPage.TERMINAL, paneHost);
     }
@@ -202,17 +198,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * Re-read what decides the row: whether there is a window, and whether a display is up. A
-     * page that leaves while the wall rests on it hands the wall to the page on its left, turned
-     * to its last: the last window when the display goes down, the last Home page when the last
-     * window closes.
+     * Re-read what decides the row: whether the current session's row has a window. A page that
+     * leaves while the wall rests on it hands the wall to the page on its left, turned to its
+     * last: the last Home page when the last window closes.
      */
     public void refreshPages() {
         mWall.setReducedMotion(mHost.reducedMotion());
         PaneWallPage before = mWall.currentPage();
         boolean hasWindow = mHost.hasWindow();
         if (hasWindow) { mSeamIntoEmpty = false; mSeamShellStarted = false; }
-        mWall.setPages(PaneWallPolicy.rowPages(hasWindow || mSeamIntoEmpty, mHost.isDisplayUp()));
+        mWall.setPages(PaneWallPolicy.rowPages(hasWindow || mSeamIntoEmpty));
         PaneWallPage after = mWall.currentPage();
         if (after != before && !mWall.pages().contains(before)) {
             mHost.showInnerPage(after, Math.max(0, mHost.innerCount(after) - 1));
@@ -279,38 +274,53 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * Put the embedded display on the wall as its Display page. Inflated here rather than in the
-     * layout file so an install that never turns the display on never builds its surface.
+     * Build the display window's frame on the wall, waiting off screen until the display window
+     * is the Workspace's window in front ({@link #setDisplayInFront}). Inflated here rather than in
+     * the layout file so an install that never runs a display never builds its surface.
      */
     @Nullable
-    public com.termux.app.x11.X11PaneFrame attachDisplayPage(@NonNull LayoutInflater inflater) {
-        if (mDisplayPage != null) return mDisplayPage;
+    public com.termux.app.x11.X11PaneFrame attachDisplayWindow(@NonNull LayoutInflater inflater) {
+        if (mDisplayWindow != null) return mDisplayWindow;
         com.termux.app.x11.X11PaneFrame frame = (com.termux.app.x11.X11PaneFrame) inflater.inflate(
             com.termux.R.layout.view_x11_pane, mWall, false);
         mWall.addView(frame);
-        mDisplayPage = frame;
-        mWall.setPageView(PaneWallPage.DISPLAY, frame);
+        mDisplayWindow = frame;
+        mWall.setDisplayView(frame);
         applyStyle(mStyle);
         return frame;
     }
 
     @Nullable
-    public com.termux.app.x11.X11PaneFrame displayPage() {
-        return mDisplayPage;
+    public com.termux.app.x11.X11PaneFrame displayWindow() {
+        return mDisplayWindow;
     }
 
     /**
-     * Take the Display place off the wall: the page's view goes, and the X view's native context
-     * goes with it when the view leaves the window. The wall is told about its places first, so
-     * one resting on the Display page hands over to the terminal while the page is still there.
+     * Take the display window's frame off the wall: the view goes, and the X view's native context
+     * goes with it when the view leaves the window. A frame standing in front hands the
+     * Workspace's page back to the pane host first, and the row is re-read for a Workspace that
+     * held nothing else.
      */
-    public void detachDisplayPage() {
-        com.termux.app.x11.X11PaneFrame page = mDisplayPage;
-        if (page == null) return;
-        mDisplayPage = null;
+    public void detachDisplayWindow() {
+        com.termux.app.x11.X11PaneFrame frame = mDisplayWindow;
+        if (frame == null) return;
+        mDisplayWindow = null;
+        mWall.setDisplayView(null);
         refreshPages();
-        mWall.setPageView(PaneWallPage.DISPLAY, null);
-        mWall.removeView(page);
+        mWall.removeView(frame);
+    }
+
+    /**
+     * Whether the display window is the Workspace's window in front: its frame then stands as the
+     * Workspace's page, and the next nudge of that page ({@link #nudgeTerminalPage}) carries the
+     * window that was in front off beside it.
+     */
+    public void setDisplayInFront(boolean front) {
+        mWall.setDisplayInFront(front);
+    }
+
+    public boolean isDisplayInFront() {
+        return mWall.isDisplayInFront();
     }
 
     /**
@@ -323,7 +333,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // The grabber wears the rims' accent; a re-dress is where a scheme change arrives.
         mWall.refreshGrabberColor();
         if (mWidgetsPage != null) mWidgetsPage.applyStyle(style);
-        if (mDisplayPage != null) mDisplayPage.applyStyle(style);
+        if (mDisplayWindow != null) mDisplayWindow.applyStyle(style);
     }
 
     /** The places this install has, in spatial order. */
@@ -337,6 +347,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return mWall.currentPage();
     }
 
+    /** Whether a terminal window is the place the user is on, at rest: not the display window. */
     public boolean isTerminalShowing() {
         return !mWall.isMoving() && terminalHasPixels();
     }
@@ -362,8 +373,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * slide is cut short, and that is logged once per episode so the path that cut it can be found.
      */
     private boolean terminalHasPixels() {
-        boolean pixels = mWall.isPageOnScreen(PaneWallPage.TERMINAL);
-        boolean record = mWall.currentPage() == PaneWallPage.TERMINAL;
+        boolean pixels = mWall.isTerminalHostOnScreen();
+        boolean record = mWall.currentPage() == PaneWallPage.TERMINAL && !mWall.isDisplayInFront();
         if (mWall.isMoving() || pixels == record) {
             mDisagreementLogged = false;
         } else if (!mDisagreementLogged) {
@@ -379,6 +390,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         View terminal = mWall.pageView(PaneWallPage.TERMINAL);
         return "page=" + mWall.currentPage() + " moving=" + mWall.isMoving()
             + " dragging=" + mWall.isDragging() + " offset=" + mWall.offsetPx()
+            + " displayInFront=" + mWall.isDisplayInFront()
             + " width=" + mWall.getWidth()
             + " terminalX=" + (terminal == null ? "none" : String.valueOf(terminal.getTranslationX()))
             + " terminalVisibility=" + (terminal == null ? "none" : String.valueOf(terminal.getVisibility()));
@@ -404,21 +416,19 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     // ---- The row's live position, for the wallpaper's pan ----------------------------------
 
     /**
-     * How many pages the row has: the Home pages, the windows (the Workspace counts as one page
-     * while it is on the row before its windows are known), and the Display page while a display
-     * is up. See {@link WallParallax#rowCount}.
+     * How many pages the row has: the Home pages, and the windows, the display window's included
+     * (the Workspace counts as one page while it is on the row before its windows are known). See
+     * {@link WallParallax#rowCount}.
      */
     public int rowCount() {
-        java.util.List<PaneWallPage> pages = mWall.pages();
-        return WallParallax.rowCount(rowHomeCount(), rowWindowCount(pages),
-            pages.contains(PaneWallPage.DISPLAY));
+        return WallParallax.rowCount(rowHomeCount(), rowWindowCount(mWall.pages()));
     }
 
     /**
      * Where the row is right now, in pages from Home page 1: whole at rest, fractional while
      * anything moves it. Composed from the three things that move the row, none of which knows
-     * about the others: the wall's offset between its views (the seam, the slide to the Display
-     * page, a border drag between windows), Home's own swipe between Home pages, and the
+     * about the others: the wall's offset between its views (the seam, a border drag between
+     * windows), Home's own swipe between Home pages, and the
      * terminal page's nudge as a window arrives. Read on every frame the wallpaper pans, so
      * nothing here allocates.
      */
@@ -459,8 +469,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /** Where the page {@code kind}'s view shows sits in the row. */
     private int rowIndexOf(@NonNull PaneWallPage kind, int homes, int windows) {
-        int index = kind == PaneWallPage.DISPLAY ? 0 : mHost.innerIndex(kind);
-        return WallParallax.rowIndex(kind, index, homes, windows);
+        return WallParallax.rowIndex(kind, mHost.innerIndex(kind), homes, windows);
     }
 
     private int rowHomeCount() {
@@ -533,7 +542,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @NonNull
     public WallRow.Position currentPosition() {
         PaneWallPage page = mWall.currentPage();
-        return new WallRow.Position(page, page == PaneWallPage.DISPLAY ? 0 : mHost.innerIndex(page));
+        return new WallRow.Position(page, mHost.innerIndex(page));
     }
 
     /** Hold the wall still while another surface owns the gesture. */
@@ -551,8 +560,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public void onSaveInstanceState(@NonNull Bundle state) {
         WallRow.Position position = currentPosition();
         state.putString(ARG_HALF, WallRow.halfOf(position.kind));
-        state.putInt(ARG_INDEX, WallRow.savedIndex(position,
-            mHost.innerCount(PaneWallPage.TERMINAL)));
+        state.putInt(ARG_INDEX, WallRow.savedIndex(position));
     }
 
     /**
@@ -570,8 +578,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int windows = mWall.pages().contains(PaneWallPage.TERMINAL)
             ? mHost.innerCount(PaneWallPage.TERMINAL) : 0;
         WallRow.Position position = WallRow.restore(half, index,
-            mHost.innerCount(PaneWallPage.WIDGETS), windows,
-            mWall.pages().contains(PaneWallPage.DISPLAY));
+            mHost.innerCount(PaneWallPage.WIDGETS), windows);
         if (WallRow.HALF_WORKSPACE.equals(half) && windows <= 0) {
             landInWorkspace();
             return true;
@@ -579,10 +586,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (position.kind == PaneWallPage.WIDGETS) {
             mHost.showInnerPage(PaneWallPage.WIDGETS, position.index);
             goTo(PaneWallPage.WIDGETS, false);
-        } else if (position.kind == PaneWallPage.TERMINAL) {
-            landInWorkspace();
         } else {
-            goTo(position.kind, false);
+            landInWorkspace();
         }
         return true;
     }
@@ -634,10 +639,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * The row is one line: past the last Home page comes the first window, and before the
-     * Display page the last one. The Workspace's view shows one window at a time, so a drag that
-     * may bring it in from the side turns it to the window beside the seam first, while it is
-     * still off screen.
+     * The row is one line: past the last Home page comes the first window. The Workspace's view
+     * shows one window at a time, so a drag that may bring it in from the side turns it to the
+     * window beside the seam first, while it is still off screen.
      */
     @Override
     public void onWallDragBegin(@NonNull PaneWallPage page) {
@@ -654,8 +658,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (windows <= 0 || !mWall.pages().contains(PaneWallPage.TERMINAL)) return;
         if (page == PaneWallPage.WIDGETS) {
             mHost.showInnerPage(PaneWallPage.TERMINAL, 0);
-        } else if (page == PaneWallPage.DISPLAY) {
-            mHost.showInnerPage(PaneWallPage.TERMINAL, windows - 1);
         }
     }
 
@@ -684,7 +686,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (alpha == mOutlineAlpha) return;
         mOutlineAlpha = alpha;
         if (mWidgetsPage != null) mWidgetsPage.setOutlineTravelAlpha(alpha);
-        if (mDisplayPage != null) mDisplayPage.setOutlineTravelAlpha(alpha);
+        if (mDisplayWindow != null) mDisplayWindow.setOutlineTravelAlpha(alpha);
         mHost.onWallOutlineAlphaChanged(alpha);
     }
 
@@ -762,14 +764,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     private void reaimPages() {
         if (mWidgetsPage != null) mWidgetsPage.onWallMoved();
-        if (mDisplayPage != null) mDisplayPage.onWallMoved();
+        if (mDisplayWindow != null) mDisplayWindow.onWallMoved();
     }
 
     @Override
     public boolean isPlankTiltEnabled(@NonNull PaneWallPage page) {
-        // Every place, the Display too: its picture is a SurfaceView a rotation leaves flat, so the
-        // wall tips it only while a still copy stands in for the surface (SurfacePage), and slides
-        // it flat until then.
+        // Every page, the display window too: its picture is a SurfaceView a rotation leaves flat,
+        // so the wall tips it only while a still copy stands in for the surface (SurfacePage), and
+        // slides it flat until then.
         return mHost.isPlankTiltEnabled();
     }
 }

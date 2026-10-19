@@ -32,9 +32,9 @@ public class StatusBarLensMarkBufferTest {
             int wall = vertical ? 600 : BAR_W;
             for (float offset = -1.6f * wall; offset <= 1.6f * wall; offset += wall / 7f) {
                 List<Mark> fresh = StatusBarLensMetrics.marks(bar, RING, PaneWallPage.TERMINAL,
-                    offset, wall, offset > 0f);
+                    offset, wall);
                 List<Mark> reused = StatusBarLensMetrics.marks(bar, RING, PaneWallPage.TERMINAL,
-                    offset, wall, offset > 0f, buffer);
+                    offset, wall, buffer);
                 assertEquals(fresh.size(), reused.size());
                 for (int i = 0; i < fresh.size(); i++) assertSameMark(fresh.get(i), reused.get(i));
             }
@@ -46,14 +46,14 @@ public class StatusBarLensMarkBufferTest {
         MarkBuffer buffer = new MarkBuffer();
         Bar bar = new Bar(BAR_W, 136, DENSITY, false, false, 1f, 0, 0, -1f, -1f, -1f);
         List<Mark> first = StatusBarLensMetrics.marks(bar, RING, PaneWallPage.TERMINAL, 0f, BAR_W,
-            true, buffer);
+            buffer);
         Mark firstMark = first.get(0);
         List<Mark> second = StatusBarLensMetrics.marks(bar, RING, PaneWallPage.TERMINAL, 40f,
-            BAR_W, true, buffer);
+            BAR_W, buffer);
         assertSame(firstMark, second.get(0));
         // A wall of one place empties the buffer rather than leaving last frame's marks in it.
         assertTrue(StatusBarLensMetrics.marks(bar, Arrays.asList(PaneWallPage.TERMINAL),
-            PaneWallPage.TERMINAL, 0f, BAR_W, true, buffer).isEmpty());
+            PaneWallPage.TERMINAL, 0f, BAR_W, buffer).isEmpty());
     }
 
     @Test
