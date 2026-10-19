@@ -6346,15 +6346,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * so it rises in the material it will keep.
      */
     private boolean inAppKeyboardOverlays() {
-        com.termux.app.wall.PaneWallPage place = mTravelKeyboardPlace != null
-            ? mTravelKeyboardPlace : mLastWallPage;
-        return KeyboardOverlayPolicy.overlays(place, currentPlaceLayout());
+        return KeyboardOverlayPolicy.overlays(inAppKeyboardPlace(), currentPlaceLayout());
+    }
+
+    /** Whether that same place is Home, whose overlaying keyboard still wears the glass. */
+    private boolean inAppKeyboardOnHome() {
+        return inAppKeyboardPlace() == com.termux.app.wall.PaneWallPage.WIDGETS;
+    }
+
+    @NonNull
+    private com.termux.app.wall.PaneWallPage inAppKeyboardPlace() {
+        return mTravelKeyboardPlace != null ? mTravelKeyboardPlace : mLastWallPage;
     }
 
     /** Glass, one opaque panel, or nothing at all — see {@link KeyboardMaterialPolicy}. */
     @NonNull
     private KeyboardMaterialPolicy.Material inAppKeyboardMaterial() {
-        return KeyboardMaterialPolicy.hostMaterial(inAppKeyboardForm(), inAppKeyboardOverlays());
+        return KeyboardMaterialPolicy.hostMaterial(inAppKeyboardForm(), inAppKeyboardOverlays(),
+            inAppKeyboardOnHome());
     }
 
     /**
@@ -6995,8 +7004,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // first. A split keyboard is painted as the docked one is; only its keys part.
         PlaceLayout.KeyboardForm form = inAppKeyboardForm();
         boolean overlays = inAppKeyboardOverlays();
+        boolean home = inAppKeyboardOnHome();
         KeyboardMaterialPolicy.Material material =
-            KeyboardMaterialPolicy.hostMaterial(form, overlays);
+            KeyboardMaterialPolicy.hostMaterial(form, overlays, home);
         if (material == KeyboardMaterialPolicy.Material.NONE) {
             surfaceHost.setBackground(null);
             clearInAppKeyboardBackdrop();
@@ -7014,10 +7024,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A keyboard that overlays its place is one opaque panel in the overlay surface role: no
         // wallpaper frost, no glass slice, no rim, and the Keyboard surface's opacity and scheme
         // background colour are ignored, because both say how much of the wallpaper shows through
-        // a material that is no longer there. The dock underneath keeps its glass.
+        // a material that is no longer there. The dock underneath keeps its glass. Home is the
+        // exception: its keyboard lies over the wallpaper, not over text, and wears the glass below.
         if (material == KeyboardMaterialPolicy.Material.SOLID) {
             surfaceHost.setBackground(buildInAppKeyboardSolidSurface(
-                KeyboardMaterialPolicy.solidFillIsRounded(form, overlays, capsule)
+                KeyboardMaterialPolicy.solidFillIsRounded(form, overlays, home, capsule)
                     ? cornerRadiusPx : 0f));
             clearInAppKeyboardBackdrop();
             return;
@@ -7084,9 +7095,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncKeyboardMaterialTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
         PlaceLayout layout = currentPlaceLayout();
-        float solidness = KeyboardMaterialPolicy.travelSolidness(inAppKeyboardForm(),
-            KeyboardOverlayPolicy.overlays(frame.from, layout),
-            KeyboardOverlayPolicy.overlays(frame.toward, layout),
+        PlaceLayout.KeyboardForm form = inAppKeyboardForm();
+        float solidness = KeyboardMaterialPolicy.travelSolidness(
+            KeyboardMaterialPolicy.hostMaterial(form, KeyboardOverlayPolicy.overlays(frame.from,
+                layout), frame.from == com.termux.app.wall.PaneWallPage.WIDGETS),
+            KeyboardMaterialPolicy.hostMaterial(form, KeyboardOverlayPolicy.overlays(frame.toward,
+                layout), frame.toward == com.termux.app.wall.PaneWallPage.WIDGETS),
             chromeRestOf(frame.from).keyboardReveal() > 0f,
             chromeRestOf(frame.toward).keyboardReveal() > 0f, frame.chromeFraction);
         if (solidness == mKeyboardTravelSolidness) return;
@@ -7160,7 +7174,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // overlaying keyboard ignores them for the other reason (D3): it is opaque, and both say
         // how much of the wallpaper shows through.
         boolean normalized = isInAppKeyboardOpacityLinked()
-            || !KeyboardMaterialPolicy.opacityApplies(inAppKeyboardForm(), inAppKeyboardOverlays());
+            || !KeyboardMaterialPolicy.opacityApplies(inAppKeyboardForm(), inAppKeyboardOverlays(),
+                inAppKeyboardOnHome());
         Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
         int blurRadiusDp = getEffectiveInAppKeyboardBlurRadius();
         // Render only the keyboard's slice of the shared light model — the under-pill nav strip
