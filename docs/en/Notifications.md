@@ -3,13 +3,13 @@
 The launcher can show your Android notifications in four ways: dots on pinned apps, pinned cards in
 the status bar, two widgets, and a history your shell can search. All of them are set up under
 **Settings → Notifications** ("Dots, pinned alerts and history"), which is also linked from
-**Settings → Status bar** and **Settings → Apps**.
+**Settings → Terminal → Status bar** and **Settings → Dock & drawer**.
 
 ## Notification access
 
 Everything on this page needs Android's notification access for the launcher. The first row,
 **Access → Notification access**, shows whether it is on and opens Android's setting. The same row
-is on **Settings → Permissions & services**.
+is on **Settings → General → Permissions & services**.
 
 ## Notification dots
 
@@ -99,5 +99,5 @@ See [launcherctl](LauncherCtl.md) for the other options.
 
 Programs in the terminal can post their own Android notifications with `launcherctl notify`, or
 with an OSC 99 escape sequence; buttons they send become notification actions. Those use the
-launcher's **App notifications** permission under **Settings → Permissions & services**. See
+launcher's **App notifications** permission under **Settings → General → Permissions & services**. See
 [launcherctl](LauncherCtl.md).

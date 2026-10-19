@@ -62,7 +62,7 @@ wallpaper colours and glass:
 - Agenda and Calendar ask for calendar access on the card itself. Notifications and Media ask for
   notification access the same way.
 
-**Settings → Apps → Built-in widget style** chooses how they are drawn: **Tonal** ("soft cards with
+**Settings → Home → Built-in widget style** chooses how they are drawn: **Tonal** ("soft cards with
 rounded corners") or **Pane** ("squared cards with a hairline rim, like a terminal pane").
 
 ## Move, resize and remove

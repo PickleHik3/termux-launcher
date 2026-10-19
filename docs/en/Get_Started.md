@@ -46,7 +46,7 @@ unless you have a backup: Android deletes the app's private data on uninstall.
    - **Wallpaper**: lets the launcher colour itself after your wallpaper.
    - **Weather**: "Shows the weather for a place you pick, or for where you are." Type a city in
      the search field under the row and pick a place; the row then says "Now:" with the place name
-     and asks for no permission. It is the same search as **Settings → Status bar → Weather →
+     and asks for no permission. It is the same search as **Settings → Terminal → Status bar → Weather →
      Location**, and Open-Meteo answers it. Or tap
      **Use my location** under the field: it clears the picked place and asks for the location
      permission (after two refusals it opens Android settings), and the row then reads **Allowed**.
@@ -93,13 +93,13 @@ forced.
 
 ## Make it the home app
 
-- Open **Settings → Apps → Set as default launcher**, then pick Termux Launcher in Android's
+- Open **Settings → General → Set as default launcher**, then pick Termux Launcher in Android's
   default home app screen. The tour also asks **Use Termux as your home screen?** near its end.
 - To open Settings, hold a corner of the terminal and tap the cog, or long-press the terminal and
   choose **Settings**. From another launcher, long-press the Termux Launcher icon and choose its
   **Settings** shortcut.
 
-While you are trying the launcher out, **Settings → App behavior → Show in Recents when not the
+While you are trying the launcher out, **Settings → General → Show in Recents when not the
 default launcher** keeps it in Recents when another home app is active. It is on by default.
 
 ## First recovery commands

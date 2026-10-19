@@ -4,7 +4,7 @@ This page covers Home and launching apps: app icons on Home, the pinned apps row
 index, the app drawer, the Terminal entry, searching from the shell prompt and making the launcher your home app.
 Widgets have their own page, [Widgets](Widgets.md).
 
-Most of these settings are on **Settings → Apps** ("Dock, drawer and search").
+Most of these settings are on **Settings → Dock & drawer** and **Settings → Home**.
 
 ## Home and the Workspace
 
@@ -29,7 +29,7 @@ terminals floating over Home and around the dock, all at once. Minimal mode belo
 Workspace only. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
-**Settings → Start in** says where the launcher opens after a restart: **Home** (the default) or
+**Settings → Home → Start in** says where the launcher opens after a restart: **Home** (the default) or
 **Terminal**, which opens the Workspace with one fresh shell window.
 
 (Older versions had a usage mode and three places, Widgets, Terminal and Display, on a pane wall.
@@ -96,9 +96,8 @@ The apps row in the dock holds the apps you pin.
 - **Drag one app onto another** to make a folder. Tap a folder to open it; its popup can rename the
   folder.
 
-The full list is also under **Settings → Apps → Pinned apps** ("Choose and reorder dock apps."),
-and again under **Settings → Apps → Dock → Pinned apps**. **Settings → Apps → Dock → Most-used apps
-page** adds a page ranked by how often you launch apps from the launcher; it is off by default.
+The full list is also under **Settings → Dock & drawer → Pinned apps** ("Choose and reorder dock
+apps."). **Settings → Dock & drawer → Most-used apps page** adds a page ranked by how often you launch apps from the launcher; it is off by default.
 
 The apps row can stand on any edge, or be hidden, in Appearance → **Layout**. In landscape it is a
 rail on the left by default. See [Layout and full screen](Layout_And_Full_Screen.md).
@@ -121,7 +120,7 @@ lift your finger on it. The index is a browsing control, not a text field.
 While the A–Z index and the apps row share an edge, the index rides on the apps row. Move or hide it
 in Appearance → **Layout**.
 
-**Double-tap to lock.** **Settings → Apps → Double-tap to lock** sets a lock method for a double
+**Double-tap to lock.** **Settings → Dock & drawer → Double-tap to lock** sets a lock method for a double
 tap on the A–Z row: **Off** (the default), **Shizuku** (keeps the normal screen-off animation) or
 **Accessibility** (optional, and may flicker). See [Shizuku](Shizuku.md).
 
@@ -129,7 +128,7 @@ tap on the A–Z row: **Off** (the default), **Shizuku** (keeps the normal scree
 
 Swipe down on the apps row to open the full-screen app drawer, whether the row is at the top or the
 bottom. On a side rail, swipe right on a left rail or left on a right rail. The switch is
-**Settings → Apps → Swipe down for app drawer**, on by default.
+**Settings → Dock & drawer → Swipe down for app drawer**, on by default.
 
 You can also put an **App drawer** key on the extra-keys row; see
 [Extra keys](Extra_Keys.md).
@@ -141,7 +140,7 @@ Beside your Android apps, the drawer lists the **Terminal** entry and, under **L
 Linux apps installed in Termux or in a distro, with a **Display** entry that opens the bare Linux
 display. See [The Linux display](X11_Display.md#apps-on-the-display).
 
-**Settings → Apps → Drawer layout** opens the drawer's own page:
+**Settings → Dock & drawer → Drawer layout** opens the drawer's own page:
 
 - The layout: **Vertical**, **Horizontal pages** or **Categories**.
 - **Open keyboard automatically**: the keyboard comes up when the drawer opens.
@@ -173,9 +172,9 @@ At an idle prompt, type the app-search prefix and a query:
 The matches replace the normal dock content; tap one to launch it. Clear the query to get the dock
 back.
 
-- **Settings → Apps → App search → App search prefix** changes the `%` if it clashes with your
+- **Settings → Dock & drawer → App search → App search prefix** changes the `%` if it clashes with your
   shell.
-- **Settings → Apps → App search → Reset usage ranking** clears the learned ranking without
+- **Settings → Dock & drawer → App search → Reset usage ranking** clears the learned ranking without
   changing your pinned apps.
 
 The command palette lists installed apps too. Swipe up on the space bar, or on Home swipe up from
@@ -194,7 +193,7 @@ shortcut, and you can search by it. For the file format, see
 
 ## Make it the home app
 
-- **Settings → Apps → Set as default launcher** opens Android's default home app screen.
-- **Settings → App behavior → Show in Recents when not the default launcher** keeps the launcher in
+- **Settings → General → Set as default launcher** opens Android's default home app screen.
+- **Settings → General → Show in Recents when not the default launcher** keeps the launcher in
   Recents while another home app is active.
-- **Settings → Start in** chooses whether a restart opens on Home or in the Workspace.
+- **Settings → Home → Start in** chooses whether a restart opens on Home or in the Workspace.

@@ -5,7 +5,7 @@ and screen effects. Home, Terminal and Display share one look, so a change appli
 
 ## Appearance
 
-Open **Appearance** from **Settings → Appearance → Wallpaper, look and layout**, from
+Open **Appearance** from **Settings → Look → Wallpaper, look and layout**, from
 **Appearance** on a corner tab, or from the terminal's long-press menu. It has four tabs in a pill at the top: **Wallpaper | Look | Layout |
 Icon pack**. It opens on Wallpaper, or on the tab you last used if you were there in the last half
 hour.
@@ -69,11 +69,11 @@ phone can. That needs Android 13 and a wallpaper set through the Wallpaper tab o
 battery saver and reduced motion switch the extra motion off. There is no switch for it.
 
 The bars blur the system wallpaper only after you allow **Wallpaper access** under **Settings →
-Permissions & services**; until then they render flat.
+General → Permissions & services**; until then they render flat.
 
 ## Cursor trail and terminal effect
 
-Both are on the Terminal element at Custom, and under **Settings → Terminal → Terminal display**:
+Both are on the Terminal element at Custom, and under **Settings → Terminal → Text & display**:
 
 - **Cursor trail**: **Off**, **Default**, **Motion blur**, **Railgun**, **Torpedo**, **Pixie dust**,
   **Comet**.
@@ -88,7 +88,7 @@ the pinned apps.
 
 ## Appearance settings
 
-**Settings → Appearance** is a settings page; the command palette's **Look and feel settings** opens
+**Settings → Look** is a settings page; the command palette's **Look and feel settings** opens
 it too, and Settings search finds every row on it. Its first row, **Wallpaper, look and layout**,
 opens the Appearance editor above. Below that it holds:
 
@@ -179,7 +179,7 @@ The tokens are `surface`, `surface_dim`, `surface_bright`, `surface_container_lo
 
 ## Reduce idle activity
 
-**Settings → App behavior → Reduce idle activity** ("Lazy mode. Pause idle animations and update
+**Settings → General → Reduce idle activity** ("Lazy mode. Pause idle animations and update
 status less often.") is off by default. With it on, the clock swaps its digits instead of folding
 them, a working window's rim holds lit instead of breathing, the readings sample less often, and
 the weather icon rests on its last frame. Nothing repaints until something changes, which saves
