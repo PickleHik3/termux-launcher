@@ -231,6 +231,18 @@ public class SeamTravelTest {
     }
 
     @Test
+    public void theBarArrivesOverHomeOnlyWhereNothingOfHomesWouldMove() {
+        assertTrue(SeamTravel.statusCanArriveOver(homeWithDock()));
+        Map<Element, Slot> rail = new EnumMap<>(Element.class);
+        rail.put(Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS));
+        rail.put(Element.AZ, Slot.on(Edge.RIGHT, Element.AZ));
+        assertFalse(SeamTravel.statusCanArriveOver(layout(rail)));
+        Map<Element, Slot> top = new EnumMap<>(Element.class);
+        top.put(Element.APPS, Slot.on(Edge.TOP, Element.APPS));
+        assertFalse(SeamTravel.statusCanArriveOver(layout(top)));
+    }
+
+    @Test
     public void theBarStandsWhereTheWorkspacePageStands() {
         for (float fraction : new float[] {0f, 0.1f, 0.5f, 0.9f, 1f}) {
             // The terminal page comes in from the right: it is (1 - f) widths off its rest.

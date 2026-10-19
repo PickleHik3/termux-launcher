@@ -270,8 +270,18 @@ public final class PlaceChromeTravel {
      */
     public static float stackTranslationPx(@NonNull Frame frame, int keyboardLaidOutPx,
                                            int dockLaidOutPx) {
-        float keyboard = Math.max(0, keyboardLaidOutPx) * (1f - clamp01(frame.keyboardReveal));
-        float dock = Math.max(0, dockLaidOutPx) * (1f - clamp01(frame.dockReveal));
+        return stackTranslationPx(frame.keyboardReveal, frame.dockReveal, keyboardLaidOutPx,
+            dockLaidOutPx);
+    }
+
+    /**
+     * The same, for reveals the caller has worked out: the dock's across the seam between the
+     * wall's halves is {@link SeamTravel#dockReveal}'s rather than the frame's.
+     */
+    public static float stackTranslationPx(float keyboardReveal, float dockReveal,
+                                           int keyboardLaidOutPx, int dockLaidOutPx) {
+        float keyboard = Math.max(0, keyboardLaidOutPx) * (1f - clamp01(keyboardReveal));
+        float dock = Math.max(0, dockLaidOutPx) * (1f - clamp01(dockReveal));
         return keyboard + dock;
     }
 

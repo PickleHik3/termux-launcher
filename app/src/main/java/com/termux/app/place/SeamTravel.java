@@ -172,6 +172,18 @@ public final class SeamTravel {
     }
 
     /**
+     * Whether the Workspace's bar can be laid out over a Home page for a slide toward the
+     * Workspace without moving anything on that page: Home stands nothing on its top or side edges,
+     * whose stacks the bar's band would push in. The bar overlays Home's canvas
+     * ({@link HomeChromePolicy#statusOverlays}), so with those edges empty nothing on Home moves.
+     */
+    public static boolean statusCanArriveOver(@NonNull PlaceLayout home) {
+        return EdgeStackPolicy.stack(home, Edge.TOP).isEmpty()
+            && EdgeStackPolicy.stack(home, Edge.LEFT).isEmpty()
+            && EdgeStackPolicy.stack(home, Edge.RIGHT).isEmpty();
+    }
+
+    /**
      * Where the Workspace's page stands on screen in {@code frame}, as an x offset from its rest,
      * which is where the status bar is drawn while it travels with that page: 0 on a frame between
      * two windows, the page's own offset on a frame across the seam, and one width off to the
