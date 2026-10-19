@@ -87,7 +87,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureThemeTemplatesPreference();
         configureDynamicColorsHint();
         configureWallpaperAlignment(context);
-        // Motion light lives in Fancier Glass, which needs Android 13: hidden below it, not greyed.
+        // Living glass lives in Fancier Glass, which needs Android 13: hidden below it, not greyed.
         PreferenceCategory glass = findPreference("look_glass");
         if (glass != null)
             glass.setVisible(com.termux.app.chrome.FancierGlassPolicy.offered(Build.VERSION.SDK_INT));
@@ -331,7 +331,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     private static final long STYLE_SYNC_DEBOUNCE_MS = 140L;
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
-    /** Look › Glass › Motion light. */
+    /** Look › Glass › Living glass. */
     static final String KEY_MOTION_LIGHT =
         com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
             .KEY_FANCIER_GLASS_MOTION_LIGHT;

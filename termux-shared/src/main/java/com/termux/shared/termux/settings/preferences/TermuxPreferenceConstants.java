@@ -1346,11 +1346,12 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_FANCIER_GLASS_CLARITY = 100;
 
         /**
-         * Motion light: while a glass pane moves its rim bends a little further and a faint colour
-         * fringe shows on the edge that leads, and a press sends one soft light along the rim;
-         * both settle back to the resting look within about a third of a second. Fancier Glass
-         * only (Android 13+); the phone's animations being off, Animation speed's Off, lazy mode
-         * and battery saver all keep it dark.
+         * Living glass (the key keeps its first name, Motion light): a glass pane's bend lags it
+         * on a spring as it moves, thicker on the edge that leads and thinner behind, rocks back
+         * once as it lands, and a press dents the glass under the finger until it lifts; all of
+         * it settles to exactly the resting look. Fancier Glass only (Android 13+); the phone's
+         * animations being off, Animation speed's Off, lazy mode and battery saver all keep it
+         * still.
          */
         public static final String KEY_FANCIER_GLASS_MOTION_LIGHT = "fancier_glass_motion_light";
         public static final boolean DEFAULT_VALUE_FANCIER_GLASS_MOTION_LIGHT = true;

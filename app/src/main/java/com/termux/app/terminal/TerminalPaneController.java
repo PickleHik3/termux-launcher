@@ -4929,8 +4929,15 @@ public class TerminalPaneController {
     private float mPlankTop;
     private float mPlankWidth;
     private float mPlankHeight;
-    /** Scratch for the pressed slab's place on screen, for its press light. */
+    /** Scratch for the pressed slab's place on screen, for its dent. */
     private final int[] mPressGlassLocation = new int[2];
+    /**
+     * The slab dented under the finger (living glass), held from down to up, cancel, or the
+     * finger setting off on a drag; null when none is.
+     */
+    @Nullable private PaneGlassBackdropView mPressedGlass;
+    /** Where the finger came down on {@link #mPressedGlass}, raw px, and how far it may wander. */
+    private float mPressGlassDownX, mPressGlassDownY, mPressGlassSlop;
 
     /**
      * Feed one touch to whichever pane it landed on. Observes only — the event is never consumed,
@@ -4960,12 +4967,17 @@ public class TerminalPaneController {
                 mPressedPlank = plank;
                 plank.onPointerDown((ev.getRawX() - mPlankLeft) / mPlankWidth,
                     (ev.getRawY() - mPlankTop) / mPlankHeight);
-                // Motion light: one soft light runs along the slab's rim toward the finger.
+                // Living glass: the slab dents under the finger until it lifts.
                 View glass = frame.findViewById(R.id.terminal_pane_glass);
                 if (glass instanceof PaneGlassBackdropView && glass.getVisibility() == View.VISIBLE) {
-                    glass.getLocationOnScreen(mPressGlassLocation);
-                    ((PaneGlassBackdropView) glass).pressLight(ev.getRawX() - mPressGlassLocation[0],
+                    PaneGlassBackdropView slab = (PaneGlassBackdropView) glass;
+                    slab.getLocationOnScreen(mPressGlassLocation);
+                    slab.pressGlass(ev.getRawX() - mPressGlassLocation[0],
                         ev.getRawY() - mPressGlassLocation[1]);
+                    mPressedGlass = slab;
+                    mPressGlassDownX = ev.getRawX();
+                    mPressGlassDownY = ev.getRawY();
+                    mPressGlassSlop = ViewConfiguration.get(slab.getContext()).getScaledTouchSlop();
                 }
                 break;
             }
@@ -4973,6 +4985,13 @@ public class TerminalPaneController {
                 if (mPressedPlank != null && mPlankWidth > 0f && mPlankHeight > 0f) {
                     mPressedPlank.onPointerMove((ev.getRawX() - mPlankLeft) / mPlankWidth,
                         (ev.getRawY() - mPlankTop) / mPlankHeight);
+                }
+                // A finger that sets off is a scroll, a swipe or a border drag, not a press: the
+                // dent lets go. Those gestures are claimed below the window, where no cancel
+                // reaches this feed.
+                if (mPressedGlass != null && Math.hypot(ev.getRawX() - mPressGlassDownX,
+                        ev.getRawY() - mPressGlassDownY) > mPressGlassSlop) {
+                    releasePressedGlass();
                 }
                 break;
             case MotionEvent.ACTION_UP:
@@ -4990,9 +5009,18 @@ public class TerminalPaneController {
     }
 
     private void releasePressedPlank() {
+        releasePressedGlass();
         if (mPressedPlank == null) return;
         mPressedPlank.onPointerUp();
         mPressedPlank = null;
+    }
+
+    /** Let the dented slab spring back, if one is dented. */
+    private void releasePressedGlass() {
+        PaneGlassBackdropView glass = mPressedGlass;
+        if (glass == null) return;
+        mPressedGlass = null;
+        glass.releaseGlass();
     }
 
     /**
@@ -5021,6 +5049,8 @@ public class TerminalPaneController {
     /** Drop the rig of a pane that is going away, and neutralise a slab left mid-tilt. */
     private void releasePanePlank(@Nullable FrameLayout frame) {
         if (frame == null) return;
+        if (mPressedGlass != null && frame.findViewById(R.id.terminal_pane_glass) == mPressedGlass)
+            releasePressedGlass();
         DockPlankController plank = mPanePlanks.remove(frame);
         if (plank == null) return;
         if (mPressedPlank == plank) mPressedPlank = null;

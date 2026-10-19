@@ -62,10 +62,10 @@ import java.util.Arrays;
  *
  * <p>Nothing here animates. Uniforms are written only when what they describe moved — the
  * surface, the parallax, a knob — so a surface at rest costs nothing; a slide costs one uniform
- * write per moved frame and no allocation. Motion light is the caller's animation as well: a pane
- * that moves or is pressed writes {@code uMotion} and {@code uSweep} from its
- * {@link GlassMotionLight} on the frames it is lit, every term they add is skipped at 0, and at
- * rest both are 0.</p>
+ * write per moved frame and no allocation. Living glass is the caller's animation as well: a pane
+ * that moves or is pressed writes {@code uLag} and {@code uDent} from its {@link GlassMotionLight}
+ * on the frames its springs move, which deform the bend the program already draws; every term
+ * they add is skipped at 0, and at rest both are 0.</p>
  */
 public final class GlassRefraction {
 
@@ -528,13 +528,11 @@ public final class GlassRefraction {
         "uniform float2 uTouch;\n" +
         "uniform float uTouchRadius;\n" +
         "uniform float uTouchLens;\n" +
-        // Motion light (GlassMotionLight): the pane's motion, 0..1, and the way it leads, a
-        // vector of length 0..1 (a unit for a slide, 0 for a pane that only grows); and a press's
-        // sweep along the rim: its way across the pane (xy, a unit), where its band is in
-        // half-extents from the centre (z) and its strength (w). Both 0 at rest.
-        "uniform float uMotion;\n" +
-        "uniform float2 uMotionDir;\n" +
-        "uniform float4 uSweep;\n" +
+        // Living glass (GlassMotionLight): how far the slab is ahead of its bend, px (the lag
+        // spring's L), and a press's dent: where it is (xy, px) and how far it moves the picture
+        // at its steepest (z, px; negative as it rebounds). All 0 at rest.
+        "uniform float2 uLag;\n" +
+        "uniform float3 uDent;\n" +
         // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
         // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
         // refracting the wallpaper that shows through the transparent key cell. uLensActive carries
@@ -590,15 +588,17 @@ public final class GlassRefraction {
         "const float kBoldMixMax = 0.9;\n" +
         "const float3 kBoldWarm = float3(1.0, 0.45, 0.0);\n" +
         "const float3 kBoldCool = float3(0.0, 0.45, 1.0);\n" +
-        // Motion light at full motion: how much further the rim bends, the colour split on the
-        // leading edge as a share of the local pull and on the gathered light in dp, and the
-        // sweep's light and its band's half width in half-extents. MOTION_BEND,
-        // MOTION_DISPERSION, MOTION_RIM_SPLIT_DP, SWEEP_GAIN and SWEEP_WIDTH in Java.
-        "const float kMotionBend = " + GlassRefraction.MOTION_BEND + ";\n" +
-        "const float kMotionDisp = " + GlassRefraction.MOTION_DISPERSION + ";\n" +
-        "const float kMotionRimSplitDp = " + GlassRefraction.MOTION_RIM_SPLIT_DP + ";\n" +
-        "const float kSweepGain = " + GlassRefraction.SWEEP_GAIN + ";\n" +
-        "const float kSweepWidth = " + GlassRefraction.SWEEP_WIDTH + ";\n" +
+        // Living glass: the lag that is a whole lean, dp; how much thicker the bend gets on the
+        // edge the lag faces at a whole lean (and thinner behind), and how much deeper its band
+        // reaches; the dent's radius in dp and its shape's steepest share; and the least colour
+        // split a live bend takes, as a share of its extra bend. GlassMotionLight.LAG_MAX_DP and
+        // LAG_BEND, LAG_BAND, DENT_RADIUS_DP, DENT_PEAK and LIVE_DISPERSION in Java.
+        "const float kLagMaxDp = " + GlassMotionLight.LAG_MAX_DP + ";\n" +
+        "const float kLagBend = " + GlassRefraction.LAG_BEND + ";\n" +
+        "const float kLagBand = " + GlassRefraction.LAG_BAND + ";\n" +
+        "const float kDentRadiusDp = " + GlassRefraction.DENT_RADIUS_DP + ";\n" +
+        "const float kDentPeak = " + GlassRefraction.DENT_PEAK + ";\n" +
+        "const float kLiveDisp = " + GlassRefraction.LIVE_DISPERSION + ";\n" +
         "float sdRoundRect(float2 p, float2 b, float r) {\n" +
         "    float2 q = abs(p) - b + float2(r, r);\n" +
         "    return min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0, 0.0))) - r;\n" +
@@ -671,15 +671,35 @@ public final class GlassRefraction {
         // vanishes at t 1: a face pixel samples exactly where it is. A seam edge lies past the band
         // (rimRect), so it takes none. pullPx in Java is the same arithmetic.
         "    float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;\n" +
-        // Motion light: while the pane moves the bend swells with it, still held at half the
-        // short side, and the edge facing the way it moves leads (all round for a pane that only
-        // grows). At rest uMotion is 0 and none of this runs. motionLead and motionPullPx in Java.
-        "    float lead = 0.0;\n" +
-        "    if (uMotion > 0.0) {\n" +
-        "        lead = clamp(dot(n, uMotionDir), 0.0, 1.0) + (1.0 - min(length(uMotionDir), 1.0));\n" +
-        "        pull = edgeProfile(t) * min(uStrength * (1.0 + kMotionBend * uMotion), min(b.x, b.y)) * edge;\n" +
+        // Living glass: the slab's bend lags it on a spring. The edge the lag faces is thicker,
+        // bending more and reaching deeper; the edge behind it thinner; still held at half the
+        // short side. bendV keeps how much further each pixel's picture moved than at rest, for
+        // the colour split below. At rest uLag and uDent are 0 and none of this runs.
+        // livePullPx in Java.
+        "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || uDent.z != 0.0;\n" +
+        "    float2 bendV = float2(0.0, 0.0);\n" +
+        "    if (live) {\n" +
+        "        float lean = clamp(dot(n, uLag) / (kLagMaxDp * uDensity), -1.0, 1.0);\n" +
+        "        float tl = clamp(inside / (uBand * (1.0 + kLagBand * lean)), 0.0, 1.0);\n" +
+        "        float bent = edgeProfile(tl) * min(uStrength * (1.0 + kLagBend * lean), min(b.x, b.y)) * edge;\n" +
+        "        bendV = n * max(bent - pull, 0.0);\n" +
+        "        pull = bent;\n" +
         "    }\n" +
         "    float2 sampleCoord = fragCoord - n * pull;\n" +
+        // A press's dent: a shallow dip under the finger that spreads the picture outward around
+        // it, steepest part way out and flat again at its rim; a bump, gathering it in, while it
+        // rebounds. dentShiftPx in Java.
+        "    if (uDent.z != 0.0) {\n" +
+        "        float dr = kDentRadiusDp * uDensity;\n" +
+        "        float2 dq = fragCoord - uDent.xy;\n" +
+        "        float ds = length(dq) / dr;\n" +
+        "        if (ds < 1.0) {\n" +
+        "            float dw = 1.0 - ds * ds;\n" +
+        "            float2 dentOff = dq * (dw * dw * uDent.z / (dr * kDentPeak));\n" +
+        "            sampleCoord = sampleCoord + dentOff;\n" +
+        "            bendV = bendV - dentOff;\n" +
+        "        }\n" +
+        "    }\n" +
         // A finger on the glass: its reach, 1 under the fingertip and 0 at uTouchRadius. The
         // picture is drawn a little toward the touch (a shallow lens, uTouchLens of the distance
         // at most), and the glow and the rim light below reuse the same reach.
@@ -716,8 +736,15 @@ public final class GlassRefraction {
         // survives at the rim. A pixel with no split, every straight-edge middle and every face
         // pixel among them, takes the one sample.
         "    float split = uDisp > 0.0 ? pull * uDisp * cornerWeight(p, b) : 0.0;\n" +
-        // A moving pane's leading edge parts its colours a little, whatever the Edge slider says.
-        "    if (uMotion > 0.0) split = max(split, pull * kMotionDisp * uMotion * lead);\n" +
+        // Living glass parts the colours where it bends further than at rest, in step with that
+        // extra bend and along it (the dent's outward, the rim's inward), so the colour follows
+        // the glass. sn is the split's way: the normal at rest.
+        "    float2 sn = n;\n" +
+        "    if (live) {\n" +
+        "        float2 sv = n * split + bendV * max(uDisp, kLiveDisp);\n" +
+        "        split = length(sv);\n" +
+        "        sn = split > 0.0 ? sv / split : n;\n" +
+        "    }\n" +
         // The same split laid on the gathered light, which is sharp at the outline however frosted
         // the picture is: at the corners only, red's light as it stands a little further in and
         // blue's a little further out. A frosted rim (clarity 0, Mist and Tint) blurs the sampled
@@ -729,21 +756,11 @@ public final class GlassRefraction {
         "    float boldS = uDisp > kGlintDisp ? (uDisp - kGlintDisp) / (kMaxDisp - kGlintDisp) : 0.0;\n" +
         "    float rimSplit = uDisp > 0.0 ? min(uDisp, kGlintDisp) / kMaxDisp * rimCw * kRimSplitDp * uDensity\n" +
         "        * (1.0 - clamp(uClarity / kSharpClarity, 0.0, 1.0)) : 0.0;\n" +
-        // And its gathered light with it, so the fringe shows through a frosted rim too.
-        "    if (uMotion > 0.0) rimSplit = max(rimSplit, kMotionRimSplitDp * uDensity * uMotion * lead);\n" +
-        // A press's sweep: a soft band across the pane, lighting the rim where it crosses it.
-        // sweepShare in Java.
-        "    float sweepG = 0.0;\n" +
-        "    if (uSweep.w > 0.0) {\n" +
-        "        float ext = abs(uSweep.x) * b.x + abs(uSweep.y) * b.y;\n" +
-        "        float sw = (dot(p, uSweep.xy) / max(ext, 1.0) - uSweep.z) / kSweepWidth;\n" +
-        "        sweepG = exp(-sw * sw) * uSweep.w;\n" +
-        "    }\n" +
         "    half4 col = half4(0.0);\n" +
         "    if (split > 0.0) {\n" +
-        "        float2 fr = framePx(sampleCoord + n * split);\n" +
+        "        float2 fr = framePx(sampleCoord + sn * split);\n" +
         "        float2 fg = framePx(sampleCoord);\n" +
-        "        float2 fb = framePx(sampleCoord - n * split);\n" +
+        "        float2 fb = framePx(sampleCoord - sn * split);\n" +
         "        half4 g = content.eval(fg);\n" +
         "        col = half4(content.eval(fr).r, g.g, content.eval(fb).b, g.a);\n" +
         "        if (clarityK > 0.0) {\n" +
@@ -770,7 +787,6 @@ public final class GlassRefraction {
         "        float glow = exp(-max(inside, 0.0) / (kGlowDp * uDensity));\n" +
         "        float pale = dot(float3(col.rgb), kLumaW);\n" +
         "        float k = glow * (gatherShare(n) + 1.5 * touchG) * (1.0 - kPaleCut * pale) * uEdgeGain;\n" +
-        "        if (sweepG > 0.0) k += glow * kSweepGain * sweepG * (1.0 - kPaleCut * pale) * uEdgeGain;\n" +
         "        col.rgb = col.rgb * half(1.0 - glow * kEdgeShade);\n" +
         "        float peak = float(max(col.r, max(col.g, col.b)));\n" +
         "        float kRaw = k;\n" +
@@ -1070,56 +1086,61 @@ public final class GlassRefraction {
      */
     static final float TOUCH_LENS = 0.10f;
 
-    // Motion light at full motion ({@link GlassMotionLight}); each is the program's constant of the
-    // matching name, written from these. Subtle on purpose: it should read as glass, not as an
-    // effect.
-
-    /** How much further the rim bends: a third again. {@code kMotionBend}. */
-    static final float MOTION_BEND = 0.35f;
-    /**
-     * The leading edge's colour split, as a share of the local pull: under the Edge slider's
-     * 100% at a corner (0.08), so a moving pane's fringe stays faint. {@code kMotionDisp}.
-     */
-    static final float MOTION_DISPERSION = 0.05f;
-    /** How far red's and blue's gathered light part on the leading edge, in dp. {@code kMotionRimSplitDp}. */
-    static final float MOTION_RIM_SPLIT_DP = 0.6f;
-    /** The sweep's light at its peak, against the key light's 1 on its own side. {@code kSweepGain}. */
-    static final float SWEEP_GAIN = 1.0f;
-    /** The sweep band's half width, in half-extents of the pane. {@code kSweepWidth}. */
-    static final float SWEEP_WIDTH = 0.35f;
+    // Living glass ({@link GlassMotionLight}); each is the program's constant of the matching
+    // name, written from these. It deforms the bend the glass already has, so it reads as glass.
 
     /**
-     * The program's {@code lead}: how much of the motion an edge with outward normal
-     * {@code (nx, ny)} takes for motion direction {@code (dx, dy)} (length 0..1): all of it facing
-     * the way a slide goes, none behind it, all of it everywhere for a pane that only grows.
+     * How much thicker the bend is on the edge a whole lag faces, as a share of its strength:
+     * half again; the edge behind it is as much thinner. {@code kLagBend}.
      */
-    static float motionLead(float nx, float ny, float dx, float dy) {
-        float facing = Math.max(0f, Math.min(1f, nx * dx + ny * dy));
-        return facing + (1f - Math.min((float) Math.hypot(dx, dy), 1f));
+    static final float LAG_BEND = 0.5f;
+    /** How much deeper the band reaches on that edge, and shallower behind it. {@code kLagBand}. */
+    static final float LAG_BAND = 0.3f;
+    /** The dent's radius: about a fingertip. {@code kDentRadiusDp}. */
+    static final float DENT_RADIUS_DP = 28f;
+    /**
+     * The dent's shape {@code s (1 - s²)²} at its steepest ({@code s = 1/√5}), so the depth is how
+     * far the picture moves there: {@code 16 / (25 √5)}. {@code kDentPeak}. A literal, so it is a
+     * compile-time constant: {@link #AGSL} is built before any computed static is.
+     */
+    static final float DENT_PEAK = 0.2862167f;
+    /**
+     * The least colour split a live bend takes, as a share of how much further it bends than at
+     * rest: the Edge slider's own share where that is more. {@code kLiveDisp}.
+     */
+    static final float LIVE_DISPERSION = 0.05f;
+
+    /**
+     * The program's {@code lean}: how much of a whole lag an edge with outward normal
+     * {@code (nx, ny)} takes for a lag of {@code (lagX, lagY)} px, -1 (behind) to 1 (facing it).
+     */
+    static float lagLean(float nx, float ny, float lagXPx, float lagYPx, float density) {
+        float lean = (nx * lagXPx + ny * lagYPx) / (GlassMotionLight.LAG_MAX_DP * density);
+        return Math.max(-1f, Math.min(1f, lean));
     }
 
     /**
-     * {@link #pullPx} at {@code motion} (0..1): the strength swelled by {@link #MOTION_BEND} of
-     * itself, still held at the half short side. At motion 0 it is {@link #pullPx} itself.
+     * {@link #pullPx} on an edge at {@code lean}: the strength thickened by {@link #LAG_BEND} of
+     * itself and the band deepened by {@link #LAG_BAND} of itself per whole lean (thinned and
+     * shallowed behind), still held at the half short side. At lean 0 it is {@link #pullPx}.
      */
-    static float motionPullPx(float insidePx, float bandPx, float strengthPx, float halfShortPx,
-                              float rimWidthPx, float motion) {
-        if (motion <= 0f) return pullPx(insidePx, bandPx, strengthPx, halfShortPx, rimWidthPx);
-        return pullPx(insidePx, bandPx, strengthPx * (1f + MOTION_BEND * motion), halfShortPx,
-            rimWidthPx);
+    static float livePullPx(float insidePx, float bandPx, float strengthPx, float halfShortPx,
+                            float rimWidthPx, float lean) {
+        if (lean == 0f) return pullPx(insidePx, bandPx, strengthPx, halfShortPx, rimWidthPx);
+        return pullPx(insidePx, bandPx * (1f + LAG_BAND * lean),
+            strengthPx * (1f + LAG_BEND * lean), halfShortPx, rimWidthPx);
     }
 
     /**
-     * The program's {@code sweepG}: how much of the sweep a pixel at {@code (px, py)} from the
-     * centre of a pane of half size {@code (bx, by)} takes, for a sweep travelling
-     * {@code (dx, dy)} with its band at {@code position} and its strength {@code strength}.
+     * The program's dent: how far outward the picture moves at {@code distancePx} from the dent's
+     * centre, for a dent of {@code radiusPx} at {@code depthPx}. 0 at the centre and from the
+     * radius out, {@code depthPx} at its steepest; inward for a negative depth.
      */
-    static float sweepShare(float px, float py, float bx, float by, float dx, float dy,
-                            float position, float strength) {
-        if (strength <= 0f) return 0f;
-        float ext = Math.abs(dx) * bx + Math.abs(dy) * by;
-        float sw = ((px * dx + py * dy) / Math.max(ext, 1f) - position) / SWEEP_WIDTH;
-        return (float) Math.exp(-sw * sw) * strength;
+    static float dentShiftPx(float distancePx, float radiusPx, float depthPx) {
+        float s = distancePx / Math.max(radiusPx, 1f);
+        if (s >= 1f) return 0f;
+        float w = 1f - s * s;
+        return distancePx * w * w * depthPx / (Math.max(radiusPx, 1f) * DENT_PEAK);
     }
 
     /**
@@ -1146,8 +1167,8 @@ public final class GlassRefraction {
         private float mClarityWritten = Float.NaN;
         private boolean mTouchOn;
         private float mTouchX, mTouchY, mTouchRadius, mTouchIntensity;
-        private float mMotion = Float.NaN, mMotionDirX, mMotionDirY;
-        private float mSweepStrength = Float.NaN, mSweepDirX, mSweepDirY, mSweepPosition;
+        private float mLagX = Float.NaN, mLagY;
+        private float mDentX = Float.NaN, mDentY, mDentDepth;
 
         private Program(float density) {
             mShader = new RuntimeShader(AGSL);
@@ -1346,43 +1367,33 @@ public final class GlassRefraction {
         }
 
         /**
-         * Motion light ({@link GlassMotionLight}): {@code uMotion} at {@code motion} (0..1),
-         * leading toward {@code (dirX, dirY)}, a vector of length 0..1. Motion 0 is the resting
-         * look, whatever the direction says.
+         * Living glass's lag ({@link GlassMotionLight#lagXPx}): how far the slab is ahead of its
+         * bend, px. 0 is the resting look.
          */
-        public void setMotion(float motion, float dirX, float dirY) {
-            if (!(motion > 0f)) {
-                motion = 0f;
-                dirX = 0f;
-                dirY = 0f;
-            }
-            if (mMotion == motion && mMotionDirX == dirX && mMotionDirY == dirY) return;
-            mMotion = motion;
-            mMotionDirX = dirX;
-            mMotionDirY = dirY;
-            mShader.setFloatUniform("uMotion", motion);
-            mShader.setFloatUniform("uMotionDir", dirX, dirY);
+        public void setLag(float xPx, float yPx) {
+            if (Float.isNaN(xPx)) xPx = 0f;
+            if (Float.isNaN(yPx)) yPx = 0f;
+            if (mLagX == xPx && mLagY == yPx) return;
+            mLagX = xPx;
+            mLagY = yPx;
+            mShader.setFloatUniform("uLag", xPx, yPx);
         }
 
         /**
-         * A press's sweep along the rim ({@link GlassMotionLight#press}): travelling
-         * {@code (dirX, dirY)}, its band {@code position} half-extents from the centre, at
-         * {@code strength} (0..1). Strength 0 is none.
+         * Living glass's dent ({@link GlassMotionLight#dentDepthPx}): at {@code (x, y)} in the
+         * surface's own px, moving the picture {@code depthPx} at its steepest. Depth 0 is none.
          */
-        public void setSweep(float dirX, float dirY, float position, float strength) {
-            if (!(strength > 0f)) {
-                strength = 0f;
-                dirX = 0f;
-                dirY = 0f;
-                position = 0f;
+        public void setDent(float x, float y, float depthPx) {
+            if (depthPx == 0f || Float.isNaN(depthPx)) {
+                depthPx = 0f;
+                x = 0f;
+                y = 0f;
             }
-            if (mSweepStrength == strength && mSweepDirX == dirX && mSweepDirY == dirY
-                && mSweepPosition == position) return;
-            mSweepStrength = strength;
-            mSweepDirX = dirX;
-            mSweepDirY = dirY;
-            mSweepPosition = position;
-            mShader.setFloatUniform("uSweep", dirX, dirY, position, strength);
+            if (mDentX == x && mDentY == y && mDentDepth == depthPx) return;
+            mDentX = x;
+            mDentY = y;
+            mDentDepth = depthPx;
+            mShader.setFloatUniform("uDent", x, y, depthPx);
         }
 
         /** What {@code light} has now, or the resting look for none; nothing written when unchanged. */
@@ -1391,14 +1402,14 @@ public final class GlassRefraction {
                 clearMotion();
                 return;
             }
-            setMotion(light.motion(), light.dirX(), light.dirY());
-            setSweep(light.sweepDirX(), light.sweepDirY(), light.sweepPosition(), light.sweepStrength());
+            setLag(light.lagXPx(), light.lagYPx());
+            setDent(light.dentXPx(), light.dentYPx(), light.dentDepthPx());
         }
 
-        /** No motion and no sweep: the resting look, which is every surface at rest. */
+        /** No lag and no dent: the resting look, which is every surface at rest. */
         public void clearMotion() {
-            setMotion(0f, 0f, 0f);
-            setSweep(0f, 0f, 0f, 0f);
+            setLag(0f, 0f);
+            setDent(0f, 0f, 0f);
         }
 
         /**

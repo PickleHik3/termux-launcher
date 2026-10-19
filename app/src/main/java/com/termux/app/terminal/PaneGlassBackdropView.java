@@ -64,9 +64,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     private final Rect mFrameRect = new Rect();
     private final RectF mClipRect = new RectF();
     /**
-     * Motion light ({@link GlassMotionLight}): fed this slab's screen rect on every draw it already
-     * makes, built on the first draw through the program. Null until then, and while the slab
-     * draws plain.
+     * Living glass ({@link GlassMotionLight}): fed this slab's screen rect on every draw it already
+     * makes and the presses on it, built on the first draw through the program. Null until then,
+     * and while the slab draws plain.
      */
     @Nullable private GlassMotionLight mMotionLight;
     /** Scratch for the slab's corners on screen; a draw never allocates. */
@@ -477,14 +477,21 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     }
 
     /**
-     * A finger pressed this slab at {@code (x, y)} in its own px: one soft light runs along its
-     * rim toward the finger ({@link GlassMotionLight#press}). Nothing on a slab drawn plain, and
-     * nothing where Motion light is off or motion is stopped.
+     * A finger came down on this slab at {@code (x, y)} in its own px: the glass dents under it
+     * ({@link GlassMotionLight#press}) until {@link #releaseGlass}. Nothing on a slab drawn plain,
+     * and nothing where Living glass is off or motion is stopped.
      */
-    public void pressLight(float x, float y) {
+    public void pressGlass(float x, float y) {
         if (mProgram == null || getWidth() <= 0 || getHeight() <= 0) return;
-        if (motionLight().press(AnimationUtils.currentAnimationTimeMillis(), x, y, getWidth(),
-                getHeight())) {
+        if (motionLight().press(AnimationUtils.currentAnimationTimeMillis(), x, y)) {
+            postInvalidateOnAnimation();
+        }
+    }
+
+    /** The finger lifted or the gesture went elsewhere: the dent springs back. Safe to repeat. */
+    public void releaseGlass() {
+        GlassMotionLight light = mMotionLight;
+        if (light != null && light.release(AnimationUtils.currentAnimationTimeMillis())) {
             postInvalidateOnAnimation();
         }
     }
@@ -502,7 +509,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
 
     /**
      * Hands the light this slab's rect on screen, read off the placement this draw already took
-     * (the page's slide, sink and tilt and any published motion in it). True while it is lit.
+     * (the page's slide, sink and tilt and any published motion in it). True while its springs
+     * still move.
      */
     private boolean driveMotionLight(int width, int height) {
         float[] corners = mMotionCorners;
@@ -519,7 +527,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        // A slab that comes back starts from rest, never from the light it left with.
+        // A slab that comes back starts from rest, never from the bend it left with.
         if (mMotionLight != null) mMotionLight.reset();
     }
 
@@ -601,9 +609,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             float parallax = mParallax == null ? 0f : mParallax.offsetPx();
             GlassRefraction.Program program = mProgram;
             if (program != null) {
-                // Where the slab stands now against where it stood last draw: the light follows its
-                // speed, and asks for the frames it needs to settle. At rest it is dark and asks
-                // for none.
+                // Where the slab stands now against where it stood last draw: its bend follows on
+                // a spring and asks for the frames it needs to settle. At rest it asks for none
+                // and the program draws the resting look.
                 if (driveMotionLight(width, height)) postInvalidateOnAnimation();
                 program.setMotionLight(mMotionLight);
                 if (mPreviousProgram != null) mPreviousProgram.setMotionLight(mMotionLight);

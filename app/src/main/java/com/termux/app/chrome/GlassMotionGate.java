@@ -13,10 +13,10 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
  * The {@link GlassMotionLight.Gate} every glass pane asks as a motion or a press starts: the
- * Motion light setting, and the rule every Fancier Glass motion follows (the phone's animations
- * on, no reduced motion, no lazy mode, no battery saver), then Animation speed's multiplier, whose
- * Off is no light at all. Fancier Glass itself is the caller's: only a surface drawing through the
- * program has a light to ask about.
+ * Living glass setting, and the rule every Fancier Glass motion follows (the phone's animations
+ * on, no reduced motion, no lazy mode, no battery saver), then Animation speed's multiplier, which
+ * stretches the springs' time and whose Off keeps the glass still. Fancier Glass itself is the
+ * caller's: only a surface drawing through the program has glass to move.
  */
 public final class GlassMotionGate {
 
@@ -37,7 +37,7 @@ public final class GlassMotionGate {
         };
     }
 
-    /** The gate's answer from its facts: 0 for no light, else {@code speedMultiplier}. */
+    /** The gate's answer from its facts: 0 for still glass, else {@code speedMultiplier}. */
     @VisibleForTesting
     static float multiplier(boolean animatorsEnabled, boolean reducedMotion, boolean settingOn,
                             boolean lazyMode, boolean powerSave, float speedMultiplier) {
