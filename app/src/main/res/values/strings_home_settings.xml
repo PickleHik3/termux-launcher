@@ -91,4 +91,30 @@
     <string name="home_layout_locked_notice">Home layout locked</string>
     <string name="home_layout_unlocked_notice">Home layout unlocked</string>
     <string name="home_layout_locked_refusal">Home is locked. Long-press an empty spot to unlock it.</string>
+
+    <!-- Edit pages (F10) -->
+    <string name="settings_home_edit_pages_title">Edit pages</string>
+    <string name="settings_home_edit_pages_summary">Reorder, add or remove Home pages, and choose the one Home opens on</string>
+    <string name="home_actions_edit_widgets">Edit widgets</string>
+    <string name="home_pages_editor_title">Edit pages</string>
+    <string name="home_pages_editor_add">Add page</string>
+    <string name="home_pages_editor_done">Done</string>
+    <string name="home_pages_editor_page">Page %1$d</string>
+    <string name="home_pages_editor_empty">Empty</string>
+    <plurals name="home_pages_editor_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <string name="home_pages_editor_default_detail">Home opens here · %1$s</string>
+    <string name="home_pages_editor_move_up">Move page %1$d up</string>
+    <string name="home_pages_editor_move_down">Move page %1$d down</string>
+    <string name="home_pages_editor_make_default">Open Home on page %1$d</string>
+    <string name="home_pages_editor_remove">Remove page %1$d</string>
+    <string name="home_pages_editor_remove_confirm_title">Remove page %1$d?</string>
+    <plurals name="home_pages_editor_remove_confirm_items">
+        <item quantity="one">The item on it goes too.</item>
+        <item quantity="other">The %1$d items on it go too.</item>
+    </plurals>
+    <string name="home_pages_editor_remove_confirm_floats">Terminals on it stay open on another page.</string>
+    <string name="home_pages_editor_remove_confirm">Remove</string>
 </resources>

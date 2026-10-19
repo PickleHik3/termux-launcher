@@ -51,6 +51,24 @@ public final class HomeSettings {
         return false;
     }
 
+    /**
+     * Edit pages' default page: the Home page the Home press (and a cold start on Home) lands on,
+     * counting from 0. Page 1, as Home always did, until one is chosen.
+     */
+    public static final String KEY_DEFAULT_PAGE = "app_launcher_home_default_page";
+
+    public static int defaultPage(@NonNull Context context) {
+        try {
+            return Math.max(0, preferences(context).getInt(KEY_DEFAULT_PAGE, 0));
+        } catch (RuntimeException e) {
+            return 0;
+        }
+    }
+
+    public static void setDefaultPage(@NonNull Context context, int page) {
+        preferences(context).edit().putInt(KEY_DEFAULT_PAGE, Math.max(0, page)).apply();
+    }
+
     public static boolean isLayoutLocked(@NonNull Context context) {
         return getBoolean(context, KEY_LAYOUT_LOCKED, false);
     }

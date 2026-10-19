@@ -68,6 +68,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * keyboard, down puts them away (spec §5.1).
          */
         default void onHomePaletteSwipe(boolean up) { }
+        /**
+         * Edit pages moved or removed a page: {@code mapping} is each old page's new number
+         * ({@link com.termux.app.launcher.home.HomePageEdits}), for what else names a page.
+         */
+        default void onHomePagesRenumbered(@NonNull int[] mapping) { }
         /** A double tap on the page's free area (Settings › Home › Gestures). */
         default void onHomeDoubleTap() { }
         /** A two-finger swipe up ({@code up}) or down on the page's free area. */
@@ -453,7 +458,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * Whether {@code edit} is refused because the layout is locked; a refusal says so on the page,
      * with the way to unlock.
      */
-    boolean refusedWhileLocked(@NonNull HomeLayoutLock.Edit edit) {
+    public boolean refusedWhileLocked(@NonNull HomeLayoutLock.Edit edit) {
         if (HomeLayoutLock.allows(layoutLocked, edit)) return false;
         pane.showNotice(pane.getContext().getString(R.string.home_layout_locked_refusal));
         return true;
@@ -660,10 +665,69 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     void menuRemovePage() {
-        if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_PAGES)) return;
-        if (!widgets.repository().removePage(currentPage)) return;
-        currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
+        // The sheet offers it only for an empty page; the same path as Edit pages' remove.
+        removePage(currentPage);
+    }
+
+    /** How many things page {@code page} holds: widgets, icons and folders. */
+    public int itemsOnPage(int page) {
+        return widgets.repository().recordsOnPage(page).size();
+    }
+
+    /**
+     * Edit pages: page {@code from} moves to {@code to} with everything on it. The page on screen
+     * follows its page, and the host renumbers what else names a page (the floats, the default
+     * page) by the same mapping.
+     */
+    public boolean movePage(int from, int to) {
+        if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_PAGES)) return false;
+        LauncherWidgetRepository repository = widgets.repository();
+        int count = repository.pageCount();
+        if (!com.termux.app.launcher.home.HomePageEdits.canMove(count, from, to)
+            || !repository.movePage(from, to)) return false;
+        int[] mapping = com.termux.app.launcher.home.HomePageEdits.moveMapping(count, from, to);
+        currentPage = com.termux.app.launcher.home.HomePageEdits.remap(currentPage, mapping);
         render();
+        host.onHomePagesRenumbered(mapping);
+        return true;
+    }
+
+    /**
+     * Edit pages: page {@code page} goes, and with it every widget, icon and folder on it (the
+     * caller has asked first when it held any); a widget's allocation is given back as its own
+     * removal does. Never the last page. False when the page could not be taken away.
+     */
+    public boolean removePage(int page) {
+        if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_PAGES)) return false;
+        LauncherWidgetRepository repository = widgets.repository();
+        int count = repository.pageCount();
+        if (!com.termux.app.launcher.home.HomePageEdits.canRemove(count) || page < 0 || page >= count)
+            return false;
+        if (pane.widgetEditActive()) exitEditMode();
+        dismissFolderPopup();
+        for (LauncherWidgetRecord record : repository.recordsOnPage(page)) {
+            widgets.removeWidget(record.appWidgetId);
+        }
+        // A page emptied by those removals has gone with its last widget unless it was added by
+        // hand; one that is still there goes now.
+        if (repository.pageCount() == count && !repository.removePage(page)) {
+            render();
+            return false;
+        }
+        int[] mapping = com.termux.app.launcher.home.HomePageEdits.removeMapping(count, page);
+        currentPage = com.termux.app.launcher.home.HomePageEdits.remap(currentPage, mapping);
+        clampCurrentPage();
+        render();
+        host.onHomePagesRenumbered(mapping);
+        return true;
+    }
+
+    /** Edit pages' Add page: an empty page after the last, kept until something lands on it. */
+    public int addPage() {
+        if (refusedWhileLocked(HomeLayoutLock.Edit.ADD_PAGE)) return -1;
+        int appended = widgets.repository().addFreshPage();
+        if (appended >= 0) render();
+        return appended;
     }
 
     private void relayEditorFocus(@Nullable View editor) {

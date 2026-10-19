@@ -1234,6 +1234,17 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · commit "feat(home): edit pages: reorder, remove, add and the default page" · From
+  Home's sheet (Edit pages; the pencil's row now reads Edit widgets) and from Settings › Home ›
+  Edit pages (grows from the row, lands on Home with the editor up, Done returns to Settings):
+  three pages with widgets and icons and a Home float on page 2. Move page 1 down: its widgets
+  move with it and the float stays with its page; make page 3 the default ("Home opens here"):
+  the Home press from another app lands on it, and so does a cold start with Start in = Home;
+  remove the float's page: it asks first, naming the items, then the float (shell alive) stands on
+  the page now in its place; remove an empty page: no question; Add page adds an empty page at the
+  end that stays. The last page has no remove. Locked layout: the sheet has no Edit pages and the
+  Settings row shows the lock notice. Rotate after a reorder: the other orientation's layout is
+  still whole (it is not reordered; note what it shows) · emulator, light and dark, font scale 1.3.
 - 2026-10-19 · commit "feat(home): lock Home layout" · Long-press an empty spot: the sheet ends its
   page group with Lock layout; tap it ("Home layout locked"). Now a long press on an icon, a
   folder or a widget shows "Home is locked…" and nothing lifts; the corner tab's pencil and + show

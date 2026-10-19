@@ -103,6 +103,12 @@
             app:entryValues="@array/settings_home_page_indicator_values"
             app:useSimpleSummaryProvider="true"
             android:defaultValue="dots" />
+        <!-- Opens Edit pages over Home, as the Home sheet's Edit pages does. -->
+        <Preference
+            app:key="home_edit_pages"
+            app:persistent="false"
+            app:title="@string/settings_home_edit_pages_title"
+            app:summary="@string/settings_home_edit_pages_summary" />
         <SwitchPreferenceCompat
             app:key="wallpaper_parallax"
             app:title="@string/settings_wallpaper_parallax_title"

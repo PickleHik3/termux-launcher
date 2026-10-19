@@ -37,6 +37,13 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
             return true;
         });
         HomeGesturesRows.bind(this);
+        Preference pages = findPreference("home_edit_pages");
+        if (pages != null) pages.setOnPreferenceClickListener(row -> {
+            Context context = getContext();
+            if (context != null)
+                SettingsEditorDoors.open(this, row, SettingsEditorDoors.homePagesEditorIntent(context));
+            return true;
+        });
     }
 
     @Override

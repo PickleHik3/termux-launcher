@@ -38,7 +38,7 @@ public class HomeLayoutLockTest {
             assertTrue(item.name(), HomeLayoutLock.sheetOffers(true, item));
         }
         for (Item item : new Item[] {Item.ADD_WIDGET, Item.ADD_APP, Item.ADD_PAGE,
-                Item.EDIT_PAGES, Item.REMOVE_PAGE}) {
+                Item.EDIT_WIDGETS, Item.EDIT_PAGES, Item.REMOVE_PAGE}) {
             assertFalse(item.name(), HomeLayoutLock.sheetOffers(true, item));
             assertTrue(item.name(), HomeLayoutLock.sheetOffers(false, item));
         }

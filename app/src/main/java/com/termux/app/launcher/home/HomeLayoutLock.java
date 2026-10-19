@@ -39,6 +39,7 @@ public final class HomeLayoutLock {
             case ADD_WIDGET:
             case ADD_APP:
             case ADD_PAGE:
+            case EDIT_WIDGETS:
             case EDIT_PAGES:
             case REMOVE_PAGE:
                 return !locked;

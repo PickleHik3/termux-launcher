@@ -28,7 +28,9 @@ public final class HomeActionsSheetPolicy {
         /** An app icon on this page, from a list of the drawer's apps. */
         ADD_APP(Group.PAGE),
         ADD_PAGE(Group.PAGE),
-        /** The Home page editor: the corner tab's pencil. */
+        /** Edit widgets: the corner tab's pencil. */
+        EDIT_WIDGETS(Group.PAGE),
+        /** Edit pages: reorder, remove, add pages and choose the default one. */
         EDIT_PAGES(Group.PAGE),
         /** The Layout editor on Home. */
         LAYOUT(Group.PAGE),
@@ -79,6 +81,7 @@ public final class HomeActionsSheetPolicy {
             page.add(Item.ADD_WIDGET);
             page.add(Item.ADD_APP);
             page.add(Item.ADD_PAGE);
+            page.add(Item.EDIT_WIDGETS);
             page.add(Item.EDIT_PAGES);
             page.add(Item.LAYOUT);
             if (pageEmpty && pageCount > 1) page.add(Item.REMOVE_PAGE);

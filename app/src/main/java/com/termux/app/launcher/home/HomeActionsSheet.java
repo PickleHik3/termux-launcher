@@ -242,6 +242,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             case ADD_WIDGET: return R.string.home_actions_add_widget;
             case ADD_APP: return R.string.home_actions_add_app;
             case ADD_PAGE: return R.string.home_actions_add_page;
+            case EDIT_WIDGETS: return R.string.home_actions_edit_widgets;
             case EDIT_PAGES: return R.string.home_actions_edit_pages;
             case LAYOUT: return R.string.home_actions_layout;
             case REMOVE_PAGE: return R.string.home_actions_remove_page;
@@ -263,7 +264,8 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             case ADD_WIDGET: return R.drawable.ic_symbol_grid_view;
             case ADD_APP: return R.drawable.ic_symbol_apps;
             case ADD_PAGE: return R.drawable.ic_symbol_add;
-            case EDIT_PAGES: return R.drawable.ic_symbol_edit;
+            case EDIT_WIDGETS: return R.drawable.ic_symbol_edit;
+            case EDIT_PAGES: return R.drawable.ic_layout_home;
             case LAYOUT: return R.drawable.ic_layout_docked;
             case REMOVE_PAGE: return R.drawable.ic_symbol_delete;
             case LOCK_LAYOUT: return R.drawable.ic_symbol_lock;

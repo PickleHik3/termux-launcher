@@ -676,6 +676,28 @@ public final class LauncherWidgetRepository {
         return commitValidated(next, nextPending, grid, pageCount - 1, nextFresh, revision + 1);
     }
 
+    /**
+     * Moves page {@code from} to {@code to} (Edit pages), carrying everything on it, and renumbers
+     * the pages between ({@link com.termux.app.launcher.home.HomePageEdits#moveMapping}). One
+     * commit; refused for a page that is not there or a move that goes nowhere.
+     */
+    public synchronized boolean movePage(int from, int to) {
+        if (!com.termux.app.launcher.home.HomePageEdits.canMove(pageCount, from, to)) return false;
+        int[] mapping = com.termux.app.launcher.home.HomePageEdits.moveMapping(pageCount, from, to);
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>();
+        for (LauncherWidgetRecord record : records.values()) {
+            boolean onPage = record.page >= 0 && record.page < pageCount;
+            next.put(record.appWidgetId, onPage ? record.withPage(mapping[record.page]) : record);
+        }
+        WidgetAddTransaction nextPending = pending != null && pending.page >= 0 && pending.page < pageCount
+            ? pending.withPage(mapping[pending.page]) : pending;
+        LinkedHashSet<Integer> nextFresh = new LinkedHashSet<>();
+        for (Integer fresh : freshPages) {
+            if (fresh >= 0 && fresh < pageCount) nextFresh.add(mapping[fresh]);
+        }
+        return commitValidated(next, nextPending, grid, pageCount, nextFresh, revision + 1);
+    }
+
     public synchronized boolean putRecord(@NonNull LauncherWidgetRecord record) {
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
         LauncherWidgetRecord existing = next.get(record.appWidgetId);
