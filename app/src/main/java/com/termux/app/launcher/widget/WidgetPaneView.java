@@ -1,5 +1,8 @@
 package com.termux.app.launcher.widget;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.os.SystemClock;
@@ -21,6 +24,9 @@ import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
 
 import com.termux.R;
+import com.termux.app.launcher.home.HomeGestures;
+import com.termux.app.launcher.home.HomePageIndicator;
+import com.termux.app.launcher.home.HomePageTransition;
 
 import java.util.List;
 
@@ -46,6 +52,16 @@ public final class WidgetPaneView extends FrameLayout {
          * the picker.
          */
         default void onFreeAreaVerticalSwipe(boolean up) { }
+        /**
+         * Two taps in quick succession on the page's free area; sent only while
+         * {@link #setExtraGestures} watches for it.
+         */
+        default void onFreeAreaDoubleTap() { }
+        /**
+         * Two fingers that set off on the free area swiped up ({@code up}) or down and lifted;
+         * sent only while {@link #setExtraGestures} watches for it.
+         */
+        default void onFreeAreaTwoFingerSwipe(boolean up) { }
         /**
          * The page's content moved sideways: the swipe drags it, or a page slides in or back.
          * Per frame of that motion; {@link #contentShiftFraction} says where it stands.
@@ -108,6 +124,10 @@ public final class WidgetPaneView extends FrameLayout {
     private static final float PAGE_COMMIT_FRACTION = 1f / 3f;
     private static final float PAGE_COMMIT_VELOCITY_DP_PER_SEC = 900f;
     private static final float PAGE_EDGE_RESISTANCE = 0.35f;
+    /** How long a page takes to slide in or back once the finger has let go, at Normal speed. */
+    static final long PAGE_SETTLE_MS = 160L;
+    /** The camera's distance for Carousel's turn, in dp: far enough that a page never looms. */
+    private static final float CAMERA_DISTANCE_DP = 8000f;
 
     private final WidgetGridView grid;
     private final LinearLayout empty;
@@ -117,8 +137,25 @@ public final class WidgetPaneView extends FrameLayout {
     private final PageDotsView dots;
     private final Runnable hideNotice;
     private final int touchSlop;
+    private final int doubleTapSlop;
     private Listener listener;
     private boolean reducedMotion;
+    @NonNull private HomePageIndicator indicator = HomePageIndicator.DEFAULT;
+    /** How the page moves while a swipe turns it (Settings › Home › Page transition). */
+    @NonNull private HomePageTransition transition = HomePageTransition.DEFAULT;
+    /** General › Animation speed's multiplier on the settle; 0 is Off, the instant cut. */
+    private float motionScale = 1f;
+    /**
+     * Where the page's content stands off its rest, in px, positive to the right: the finger's
+     * drag and the settle move this, and the effect draws it ({@link #applyContentShift}). Kept
+     * apart from the views' own translation, which an effect may not move at all.
+     */
+    private float contentShiftPx;
+    @Nullable private ValueAnimator contentSettle;
+    /** The content is drawn through a hardware layer for an effect's motion; see {@link #setContentLayered}. */
+    private boolean contentLayered;
+    @NonNull private final HomePageTransition.Transform contentTransform =
+        new HomePageTransition.Transform();
 
     private int pageCount = 1;
     private int currentPage;
@@ -141,17 +178,37 @@ public final class WidgetPaneView extends FrameLayout {
      */
     private boolean verticalCandidate;
     private boolean verticalDragging;
+    /**
+     * Settings › Home › Gestures: whether a double tap and a two-finger swipe on the free area are
+     * watched for. Off (nothing set for them), the page reads taps and second fingers as before.
+     */
+    private boolean watchDoubleTap;
+    private boolean watchTwoFinger;
+    /** Whether the press now down landed on the free area and has not travelled. */
+    private boolean freePress;
+    /** The last tap's lift on the free area, for a double tap; -1 for none. */
+    private long lastTapUpMs = -1;
+    private float lastTapX, lastTapY;
+    /** The press now down is the second of a double tap, fired on its lift. */
+    private boolean secondTap;
+    /** Two fingers set off on the free area, watched for a vertical swipe; then claimed. */
+    private boolean twoFingerTracking;
+    private boolean twoFingerDragging;
+    private float twoFingerDownX, twoFingerDownY;
 
     public WidgetPaneView(@NonNull Context context, AttributeSet attrs) { this(context); }
 
     public WidgetPaneView(@NonNull Context context) {
         super(context); setId(R.id.widget_pane); setClipChildren(true); setClipToPadding(true);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        doubleTapSlop = ViewConfiguration.get(context).getScaledDoubleTapSlop();
         // Provider text inputs may take focus; the pane and its hosts never keep it themselves.
         setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
         setFocusable(false);
 
         grid = new WidgetGridView(context); grid.setId(R.id.widget_grid);
+        float cameraDistance = CAMERA_DISTANCE_DP * getResources().getDisplayMetrics().density;
+        grid.setCameraDistance(cameraDistance);
         // The page dots sit in a band below the grid, never over its last row. The band is kept
         // whether or not the dots show, so adding a page does not shrink every cell.
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
@@ -159,6 +216,7 @@ public final class WidgetPaneView extends FrameLayout {
         addView(grid, gridParams);
 
         empty = new LinearLayout(context); empty.setOrientation(LinearLayout.VERTICAL);
+        empty.setCameraDistance(cameraDistance);
         empty.setGravity(Gravity.CENTER);
         emptyMessage = new TextView(context); emptyMessage.setId(R.id.widget_empty_message);
         emptyMessage.setText(R.string.widget_empty_hint); emptyMessage.setGravity(Gravity.CENTER);
@@ -202,13 +260,18 @@ public final class WidgetPaneView extends FrameLayout {
      */
     public <T extends View & PagePinnedLayer> void setPagePinnedLayer(@Nullable T layer) {
         if (pinnedLayer == layer) return;
-        if (pinnedLayer != null) removeView(pinnedLayer);
+        if (pinnedLayer != null) {
+            if (contentLayered) pinnedLayer.setLayerType(LAYER_TYPE_NONE, null);
+            removeView(pinnedLayer);
+        }
         pinnedLayer = layer;
         if (layer == null) return;
         if (layer.getParent() instanceof ViewGroup) ((ViewGroup) layer.getParent()).removeView(layer);
         addView(layer, indexOfChild(empty) + 1,
             new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-        layer.setTranslationX(grid.getTranslationX());
+        layer.setCameraDistance(CAMERA_DISTANCE_DP * getResources().getDisplayMetrics().density);
+        if (contentLayered) layer.setLayerType(LAYER_TYPE_HARDWARE, null);
+        applyTransform(layer);
         layer.onHomePageShown(currentPage);
     }
 
@@ -232,6 +295,35 @@ public final class WidgetPaneView extends FrameLayout {
         listener = value; providerListener = providers;
     }
     public void setReducedMotion(boolean value) { reducedMotion = value; }
+
+    /**
+     * Settings › Home › Page indicator: the dots, or none. The band they stand in stays either
+     * way, so the grid keeps its height.
+     */
+    public void setPageIndicator(@NonNull HomePageIndicator value) {
+        if (indicator == value) return;
+        indicator = value;
+        setPageState(pageCount, currentPage);
+    }
+
+    /** Whether a double tap and a two-finger swipe on the free area are watched for. */
+    public void setExtraGestures(boolean doubleTap, boolean twoFinger) {
+        watchDoubleTap = doubleTap;
+        watchTwoFinger = twoFinger;
+        if (!doubleTap) lastTapUpMs = -1;
+    }
+
+    /**
+     * How the page moves while a swipe turns it, and General › Animation speed's multiplier on
+     * the settle (0 for Off). Read when the launcher comes to the front; a motion under way keeps
+     * what it started with.
+     */
+    public void setPageMotion(@NonNull HomePageTransition effect, float speedMultiplier) {
+        motionScale = Math.max(0f, speedMultiplier);
+        if (transition == effect) return;
+        transition = effect;
+        applyContentShift();
+    }
     @NonNull public WidgetGridView grid() { return grid; }
 
     /**
@@ -408,7 +500,8 @@ public final class WidgetPaneView extends FrameLayout {
         int previousPage = currentPage;
         pageCount = Math.max(1, count);
         currentPage = Math.max(0, Math.min(pageCount - 1, current));
-        dots.setVisibility(pageCount > 1 ? VISIBLE : GONE);
+        int dotsVisibility = indicator.dotsShown(pageCount) ? VISIBLE : GONE;
+        if (dots.getVisibility() != dotsVisibility) dots.setVisibility(dotsVisibility);
         dots.invalidate();
         if (pinnedLayer instanceof PagePinnedLayer)
             ((PagePinnedLayer) pinnedLayer).onHomePageShown(currentPage);
@@ -454,6 +547,14 @@ public final class WidgetPaneView extends FrameLayout {
                 // A swipe on a widget is the widget's, whichever way it goes, and a vertical one
                 // on a float is its terminal's scroll.
                 verticalCandidate = free && !onFloat && !onWidget(event);
+                freePress = verticalCandidate;
+                twoFingerTracking = false;
+                twoFingerDragging = false;
+                secondTap = watchDoubleTap && freePress && HomeGestures.isSecondTap(lastTapUpMs,
+                    lastTapX, lastTapY, event.getEventTime(), event.getX(), event.getY(),
+                    ViewConfiguration.getDoubleTapTimeout(), doubleTapSlop);
+                // Any press that is not a second tap ends whatever first tap came before it.
+                if (!secondTap) lastTapUpMs = -1;
                 pagingDownX = event.getX(); pagingDownY = event.getY();
                 pagingDownRawX = event.getRawX();
                 if (pagingTracking || verticalCandidate) {
@@ -463,6 +564,25 @@ public final class WidgetPaneView extends FrameLayout {
                 }
                 break;
             case MotionEvent.ACTION_MOVE:
+                if (twoFingerTracking) {
+                    float tdx = meanX(event) - twoFingerDownX;
+                    float tdy = meanY(event) - twoFingerDownY;
+                    if (Math.abs(tdy) > touchSlop && Math.abs(tdy) > Math.abs(tdx)) {
+                        // Two fingers going up or down on the free area: the gesture's, and
+                        // whatever was under the first finger is cancelled by the claim.
+                        twoFingerTracking = false;
+                        twoFingerDragging = true;
+                        return true;
+                    }
+                    if (Math.abs(tdx) > touchSlop) twoFingerTracking = false;
+                    break;
+                }
+                if (Math.abs(event.getX() - pagingDownX) > touchSlop
+                    || Math.abs(event.getY() - pagingDownY) > touchSlop) {
+                    // Travel is not a tap: neither the first nor the second of a double tap.
+                    freePress = false;
+                    secondTap = false;
+                }
                 if ((!pagingTracking && !verticalCandidate) || pagingDragging || verticalDragging)
                     break;
                 if (widgetEditActive()) {
@@ -506,19 +626,95 @@ public final class WidgetPaneView extends FrameLayout {
             case MotionEvent.ACTION_POINTER_DOWN:
                 pagingTracking = false;
                 verticalCandidate = false;
+                secondTap = false;
+                // The second finger of a two-finger swipe, when one is set and the first finger
+                // is still on the free area; a third finger is nobody's.
+                twoFingerTracking = watchTwoFinger && freePress && event.getPointerCount() == 2
+                    && !pagingDragging && !verticalDragging && !widgetEditActive();
+                freePress = false;
+                if (twoFingerTracking) {
+                    twoFingerDownX = meanX(event);
+                    twoFingerDownY = meanY(event);
+                }
                 break;
             case MotionEvent.ACTION_UP:
+                noteTapLift(event);
+                pagingTracking = false;
+                verticalCandidate = false;
+                twoFingerTracking = false;
+                break;
             case MotionEvent.ACTION_CANCEL:
                 pagingTracking = false;
                 verticalCandidate = false;
+                twoFingerTracking = false;
+                freePress = false;
+                secondTap = false;
                 break;
             default:
                 break;
         }
-        return pagingDragging || verticalDragging;
+        return pagingDragging || verticalDragging || twoFingerDragging;
+    }
+
+    /**
+     * A lift with no travel on the free area, short of a long press: the first tap of a double
+     * tap, or its second, which fires the gesture.
+     */
+    private void noteTapLift(@NonNull MotionEvent event) {
+        boolean tap = freePress && !pagingDragging && !verticalDragging
+            && event.getEventTime() - event.getDownTime() < ViewConfiguration.getLongPressTimeout();
+        boolean second = secondTap;
+        freePress = false;
+        secondTap = false;
+        if (!watchDoubleTap || !tap) {
+            lastTapUpMs = -1;
+            return;
+        }
+        if (second) {
+            lastTapUpMs = -1;
+            if (listener != null) listener.onFreeAreaDoubleTap();
+            return;
+        }
+        lastTapUpMs = event.getEventTime();
+        lastTapX = event.getX();
+        lastTapY = event.getY();
+    }
+
+    /** The two-finger swipe's stream after its claim: the lift of either finger decides. */
+    private boolean onTwoFingerTouch(@NonNull MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_POINTER_UP:
+            case MotionEvent.ACTION_UP: {
+                if (!twoFingerDragging) return true;
+                twoFingerDragging = false;
+                float commit = com.termux.app.wall.BorderDrag.KEYBOARD_COMMIT_DP
+                    * getResources().getDisplayMetrics().density;
+                int way = HomeGestures.twoFingerDirection(meanX(event) - twoFingerDownX,
+                    meanY(event) - twoFingerDownY, commit);
+                if (way != 0 && listener != null) listener.onFreeAreaTwoFingerSwipe(way < 0);
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                twoFingerDragging = false;
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /** The mean of the first two fingers' positions; the one finger's own when only one is down. */
+    private static float meanX(@NonNull MotionEvent event) {
+        return event.getPointerCount() < 2 ? event.getX()
+            : (event.getX(0) + event.getX(1)) / 2f;
+    }
+
+    private static float meanY(@NonNull MotionEvent event) {
+        return event.getPointerCount() < 2 ? event.getY()
+            : (event.getY(0) + event.getY(1)) / 2f;
     }
 
     @Override public boolean onTouchEvent(@NonNull MotionEvent event) {
+        if (twoFingerDragging) return onTwoFingerTouch(event);
         if (verticalDragging) return onVerticalTouch(event);
         if (!pagingDragging) return false;
         if (seamDragging) return onSeamTouch(event);
@@ -673,45 +869,101 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     private void enterFromSide(int direction, float dragX) {
-        if (reducedMotion) { setContentTranslationX(0f); return; }
+        if (instantMotion()) { setContentTranslationX(0f); return; }
         float start = direction > 0 ? getWidth() + dragX : dragX - getWidth();
         setContentTranslationX(start);
         animateContentTranslationX();
     }
 
     private void settleContentBack() {
-        if (reducedMotion || grid.getTranslationX() == 0f) { setContentTranslationX(0f); return; }
+        if (instantMotion() || contentShiftPx == 0f) { setContentTranslationX(0f); return; }
         animateContentTranslationX();
     }
 
+    /** Reduce motion, or Animation speed at Off: the page lands at once. */
+    private boolean instantMotion() {
+        return reducedMotion || motionScale <= 0f;
+    }
+
     private void setContentTranslationX(float value) {
-        grid.setTranslationX(value);
-        empty.setTranslationX(value);
+        if (contentSettle != null) contentSettle.cancel();
+        moveContent(value);
+    }
+
+    private void moveContent(float value) {
+        contentShiftPx = value;
+        applyContentShift();
+        if (listener != null) listener.onContentShifted();
+    }
+
+    /** Draws {@link #contentShiftPx} through the chosen effect onto everything the page shows. */
+    private void applyContentShift() {
+        int width = getWidth();
+        float position = width <= 0 ? 0f : contentShiftPx / width;
+        // A turn is a page with another page that way; a pull against either end only slides.
+        boolean turning = position < 0f ? currentPage < pageCount - 1
+            : position > 0f && currentPage > 0;
+        // A widget carried across pages in edit mode turns them with the plain slide: its drop
+        // is aimed at the grid, which must not be scaled or turned under it.
+        HomePageTransition effect = widgetEditActive() ? HomePageTransition.SLIDE : transition;
+        effect.transform(position, width, turning, contentTransform);
+        // An effect that scales, fades or turns the page draws it from one layer for the frames
+        // of the motion, so its widgets and floats are not drawn again under each new transform.
+        setContentLayered(effect != HomePageTransition.SLIDE && contentShiftPx != 0f);
+        applyTransform(grid);
+        applyTransform(empty);
         if (pinnedLayer != null) {
             pinnedLayer.animate().cancel();
-            pinnedLayer.setTranslationX(value);
+            applyTransform(pinnedLayer);
         }
-        if (listener != null) listener.onContentShifted();
+    }
+
+    /** Whether the page's content draws through a hardware layer: only while an effect moves it. */
+    private void setContentLayered(boolean layered) {
+        if (contentLayered == layered) return;
+        contentLayered = layered;
+        int type = layered ? LAYER_TYPE_HARDWARE : LAYER_TYPE_NONE;
+        grid.setLayerType(type, null);
+        empty.setLayerType(type, null);
+        if (pinnedLayer != null) pinnedLayer.setLayerType(type, null);
+    }
+
+    private void applyTransform(@NonNull View view) {
+        HomePageTransition.Transform t = contentTransform;
+        view.setTranslationX(t.translationX);
+        view.setScaleX(t.scale);
+        view.setScaleY(t.scale);
+        view.setAlpha(t.alpha);
+        view.setRotationY(t.rotationY);
+        int width = view.getWidth() > 0 ? view.getWidth() : getWidth();
+        view.setPivotX(t.pivotXFraction * width);
+        view.setPivotY(view.getHeight() / 2f);
     }
 
     /**
      * How far the page's content stands off its rest, as a fraction of the pane's width,
-     * positive to the right: mid-swipe, and while a page slides in or back. 0 at rest.
+     * positive to the right: mid-swipe, and while a page slides in or back. 0 at rest. The
+     * wallpaper pans by this whatever effect draws the page.
      */
     public float contentShiftFraction() {
         int width = getWidth();
-        return width <= 0 ? 0f : grid.getTranslationX() / width;
+        return width <= 0 ? 0f : contentShiftPx / width;
     }
 
     private void animateContentTranslationX() {
-        // The grid's slide reports each frame, so the wallpaper pans on the page's own curve.
-        grid.animate().translationX(0f).setDuration(160)
-            .setUpdateListener(animation -> {
-                if (listener != null) listener.onContentShifted();
-            })
-            .start();
-        empty.animate().translationX(0f).setDuration(160).start();
-        if (pinnedLayer != null) pinnedLayer.animate().translationX(0f).setDuration(160).start();
+        if (contentSettle != null) contentSettle.cancel();
+        ValueAnimator settle = ValueAnimator.ofFloat(contentShiftPx, 0f);
+        settle.setDuration(Math.round(PAGE_SETTLE_MS * (double) motionScale));
+        settle.setInterpolator(HomePageTransition.settleInterpolator());
+        // The page reports each frame, so the wallpaper pans on the page's own curve.
+        settle.addUpdateListener(animation -> moveContent((float) animation.getAnimatedValue()));
+        settle.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (contentSettle == animation) contentSettle = null;
+            }
+        });
+        contentSettle = settle;
+        settle.start();
     }
 
     private static boolean insideNestedScrollingChild(@NonNull ViewGroup parent,
@@ -735,6 +987,7 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
+        if (contentSettle != null) { contentSettle.end(); contentSettle = null; }
         if (pagingVelocity != null) { pagingVelocity.recycle(); pagingVelocity = null; }
         if (seamVelocity != null) { seamVelocity.recycle(); seamVelocity = null; }
         super.onDetachedFromWindow();

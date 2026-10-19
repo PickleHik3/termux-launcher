@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.termux.app.launcher.home.HomeLayoutLock;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetConfigSheet;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetHost;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetKind;
@@ -67,6 +68,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * keyboard, down puts them away (spec §5.1).
          */
         default void onHomePaletteSwipe(boolean up) { }
+        /**
+         * Edit pages moved or removed a page: {@code mapping} is each old page's new number
+         * ({@link com.termux.app.launcher.home.HomePageEdits}), for what else names a page.
+         */
+        default void onHomePagesRenumbered(@NonNull int[] mapping) { }
+        /** A double tap on the page's free area (Settings › Home › Gestures). */
+        default void onHomeDoubleTap() { }
+        /** A two-finger swipe up ({@code up}) or down on the page's free area. */
+        default void onHomeTwoFingerSwipe(boolean up) { }
         /**
          * The Home page's content moved sideways under Home's own swipe, or as a page slides in
          * or back; {@link #homePageShiftFraction} says where it stands. Per frame of the motion.
@@ -122,6 +132,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private String liveOrigin;
     private boolean awaitingExternal;
     private int currentPage;
+    /** Settings › Home › Lock Home layout: nothing on the pages moves or changes by hand. */
+    private boolean layoutLocked;
+    /** Settings › Home › Folders: how many apps a folder takes, and how its popup lays them out. */
+    private int folderCapacity = HomeFolderPolicy.MAX_APPS;
+    @NonNull private HomeFolderDensity folderDensity = HomeFolderDensity.DEFAULT;
     private boolean editorFocusActive;
 
     public WidgetPaneController(@NonNull WidgetPaneView pane,
@@ -165,6 +180,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.picker().setSearchFocusListener(this::relayEditorFocus);
         pane.grid().setListener(new WidgetGridView.Listener() {
             @Override public void onWidgetLongPressed(int appWidgetId, float rawX, float rawY) {
+                if (refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
                 enterEditMode(appWidgetId, rawX, rawY);
             }
             @Override public void onWidgetEditDragMove(int appWidgetId, float rawX, float rawY) {
@@ -188,6 +204,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             @Override public void onFreeAreaVerticalSwipe(boolean up) {
                 host.onHomePaletteSwipe(up);
             }
+            @Override public void onFreeAreaDoubleTap() { host.onHomeDoubleTap(); }
+            @Override public void onFreeAreaTwoFingerSwipe(boolean up) {
+                host.onHomeTwoFingerSwipe(up);
+            }
             @Override public void onContentShifted() { host.onHomePageShifted(); }
         }, new WidgetPickerAdapter.Listener() {
             @Override public void onProviderSelected(@NonNull WidgetProviderItem item) {
@@ -201,7 +221,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         widgets.setListener(this);
         // Pages saved before this rule, or left behind by a removed widget while the page was off
         // screen, are brought level with it once here; changes keep it from then on.
-        widgets.repository().trimEmptyPages();
+        trimPages();
         clampCurrentPage();
         render();
     }
@@ -415,6 +435,62 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         setCurrentPage(page);
     }
 
+    /**
+     * How a Home page moves while a swipe turns it, and Animation speed's multiplier on its
+     * settle; the activity pushes both in as it comes to the front.
+     */
+    public void setPageMotion(@NonNull com.termux.app.launcher.home.HomePageTransition effect,
+                              float speedMultiplier) {
+        pane.setPageMotion(effect, speedMultiplier);
+    }
+
+    /**
+     * Settings › Home › Lock Home layout, and the Home sheet's Lock and Unlock. Locking while the
+     * widgets are being edited closes the edit as its tick would.
+     */
+    public void setLayoutLocked(boolean locked) {
+        layoutLocked = locked;
+        if (locked && pane.widgetEditActive()) commitEditSession();
+    }
+
+    public boolean isLayoutLocked() {
+        return layoutLocked;
+    }
+
+    /**
+     * Whether {@code edit} is refused because the layout is locked; a refusal says so on the page,
+     * with the way to unlock.
+     */
+    public boolean refusedWhileLocked(@NonNull HomeLayoutLock.Edit edit) {
+        if (HomeLayoutLock.allows(layoutLocked, edit)) return false;
+        pane.showNotice(pane.getContext().getString(R.string.home_layout_locked_refusal));
+        return true;
+    }
+
+    /**
+     * Settings › Home › Folders: how tightly an open folder lays its apps out, and the most apps a
+     * folder takes. A folder already past a lower cap keeps its apps; it only takes no more.
+     */
+    public void setFolderStyle(@NonNull HomeFolderDensity density, int capacity) {
+        folderDensity = density;
+        folderCapacity = HomeFolderPolicy.clampCapacity(capacity);
+    }
+
+    /** The dots under the grid, or none (Settings › Home › Page indicator). */
+    public void setPageIndicator(@NonNull com.termux.app.launcher.home.HomePageIndicator indicator) {
+        pane.setPageIndicator(indicator);
+    }
+
+    /** How Home's app icons and folders are drawn (Settings › Home › Icons and labels). */
+    public void setIconStyle(@NonNull HomeIconStyle style) {
+        appIcons.setStyle(style);
+    }
+
+    /** Whether the page watches for a double tap and a two-finger swipe (each set to something). */
+    public void setExtraGestures(boolean doubleTap, boolean twoFinger) {
+        pane.setExtraGestures(doubleTap, twoFinger);
+    }
+
     /** The wall's seam out of the last Home page; see {@link WidgetPaneView.Seam}. */
     public void setSeam(@Nullable WidgetPaneView.Seam seam) {
         pane.setSeam(seam);
@@ -451,6 +527,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * with the same gestures and the same ways out.
      */
     public boolean editWidgets() {
+        // Locked, the pencil is spent on the notice: no edit mode, and no grid wheels either.
+        if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_WIDGETS)) return true;
         return menuEditWidgets();
     }
 
@@ -475,6 +553,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * put something on it, and from then on it comes and goes with its widgets.
      */
     void menuAddPage() {
+        if (refusedWhileLocked(HomeLayoutLock.Edit.ADD_PAGE)) return;
         int appended = widgets.repository().addFreshPage();
         if (appended < 0) {
             pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
@@ -505,6 +584,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      */
     private void onUnavailableAppTapped(int id) {
         if (pane.widgetEditActive()) return;
+        // The tap on a gone app opens edit mode to remove it: an edit like any hold.
+        if (refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
         beginEditSession(id);
     }
 
@@ -515,7 +596,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (pane.widgetEditActive()) return;
         LauncherWidgetRecord folder = widgets.repository().get(id);
         if (folder == null || !folder.isFolder()) return;
-        folderPopup().show(folder, anchor);
+        folderPopup().show(folder, anchor, folderDensity, layoutLocked);
     }
 
     @NonNull private HomeFolderPopup folderPopup() {
@@ -525,10 +606,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (theme == null) theme = PLAIN_MENU_THEME;
         popup = new HomeFolderPopup(pane, theme, appIcons, new HomeFolderPopup.Callbacks() {
             @Override public void onRemoveFromFolder(int folderId, @NonNull String stableId) {
+                if (refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
                 removeFromFolder(folderId, stableId);
             }
             @Override public void onBeginRename(int folderId, @NonNull String name,
                                                 @NonNull com.termux.app.launcher.folder.FolderRenameTitleView title) {
+                if (refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
                 // The name as stored now: the popup may have outlived a rename already.
                 LauncherWidgetRecord held = widgets.repository().get(folderId);
                 if (held == null || !held.isFolder()) return;
@@ -598,9 +681,107 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     void menuRemovePage() {
-        if (!widgets.repository().removePage(currentPage)) return;
-        currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
+        // The sheet offers it only for an empty page, and asks nothing: a page that has gained
+        // something since is not taken away from here (Edit pages asks first).
+        if (itemsOnPage(currentPage) > 0) return;
+        removePage(currentPage);
+    }
+
+    /** How many things page {@code page} holds: widgets, icons and folders. */
+    public int itemsOnPage(int page) {
+        return widgets.repository().recordsOnPage(page).size();
+    }
+
+    /** How many apps the folders on page {@code page} hold between them. */
+    public int folderAppsOnPage(int page) {
+        int apps = 0;
+        for (LauncherWidgetRecord record : widgets.repository().recordsOnPage(page)) {
+            if (record.isFolder()) apps += record.folderApps().size();
+        }
+        return apps;
+    }
+
+    /**
+     * Edit pages: page {@code from} moves to {@code to} with everything on it. The page on screen
+     * follows its page, and the host renumbers what else names a page (the floats, the default
+     * page) by the same mapping.
+     */
+    public boolean movePage(int from, int to) {
+        if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_PAGES)) return false;
+        LauncherWidgetRepository repository = widgets.repository();
+        int count = repository.pageCount();
+        if (!com.termux.app.launcher.home.HomePageEdits.canMove(count, from, to)
+            || !repository.movePage(from, to)) return false;
+        int[] mapping = com.termux.app.launcher.home.HomePageEdits.moveMapping(count, from, to);
+        currentPage = com.termux.app.launcher.home.HomePageEdits.remap(currentPage, mapping);
         render();
+        host.onHomePagesRenumbered(mapping);
+        return true;
+    }
+
+    /**
+     * Edit pages: page {@code page} goes, and with it every widget, icon and folder on it (the
+     * caller has asked first when it held any); a widget's allocation is given back as its own
+     * removal does. Never the last page. False when the page could not be taken away.
+     */
+    public boolean removePage(int page) {
+        if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_PAGES)) return false;
+        LauncherWidgetRepository repository = widgets.repository();
+        int count = repository.pageCount();
+        if (!com.termux.app.launcher.home.HomePageEdits.canRemove(count) || page < 0 || page >= count)
+            return false;
+        WidgetAddTransaction waiting = repository.pending();
+        if (waiting != null && waiting.page == page) {
+            // A widget is on its way to this page (its app's setup is open): it stays.
+            pane.showNotice(pane.getContext().getString(R.string.home_pages_editor_remove_pending));
+            return false;
+        }
+        if (pane.widgetEditActive()) exitEditMode();
+        dismissFolderPopup();
+        for (LauncherWidgetRecord record : repository.recordsOnPage(page)) {
+            if (widgets.removeWidget(record.appWidgetId)
+                    == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
+                // Stop where the store refused. What did go has been renumbered for by the trims
+                // its removals ran; the page stays with what is left on it.
+                pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
+                render();
+                return false;
+            }
+        }
+        int[] mapping = com.termux.app.launcher.home.HomePageEdits.removeMapping(count, page);
+        // A page emptied by those removals went with its last widget, and the trim that took it
+        // told the host already; a page added by hand is still there and goes now.
+        if (repository.pageCount() == count) {
+            if (!repository.removePage(page)) {
+                pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
+                render();
+                return false;
+            }
+            host.onHomePagesRenumbered(mapping);
+        }
+        // Edit pages acts on both orientations: the shelved one loses the same page.
+        repository.renumberShelvedPages(mapping);
+        currentPage = com.termux.app.launcher.home.HomePageEdits.remap(currentPage, mapping);
+        clampCurrentPage();
+        render();
+        return true;
+    }
+
+    /**
+     * Takes away every empty page ({@link LauncherWidgetRepository#trimEmptyPages}) and hands the
+     * renumbering on, so the floats and the default page follow their pages.
+     */
+    private void trimPages() {
+        int[] renumbered = widgets.repository().trimEmptyPagesRenumbering();
+        if (renumbered != null) host.onHomePagesRenumbered(renumbered);
+    }
+
+    /** Edit pages' Add page: an empty page after the last, kept until something lands on it. */
+    public int addPage() {
+        if (refusedWhileLocked(HomeLayoutLock.Edit.ADD_PAGE)) return -1;
+        int appended = widgets.repository().addFreshPage();
+        if (appended >= 0) render();
+        return appended;
     }
 
     private void relayEditorFocus(@Nullable View editor) {
@@ -614,6 +795,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     public void openPicker() {
+        if (refusedWhileLocked(HomeLayoutLock.Edit.ADD_ITEM)) return;
         // Built-in widgets need nothing from the platform, so the picker opens even where app
         // widgets are unsupported; the catalogue simply lists the launcher's own.
         pane.picker().setReducedMotion(host.reducedMotion());
@@ -732,7 +914,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     @Override public void onWidgetRepositoryChanged(@NonNull LauncherWidgetHostController.AddResult result) {
         // A widget arrived or left: a page with nothing on it goes with it. A carry that has made
         // a page for the widget in the air keeps it until the carry ends, which trims it then.
-        if (carry == null || carry.turn.createdPage < 0) widgets.repository().trimEmptyPages();
+        if (carry == null || carry.turn.createdPage < 0) trimPages();
         clampCurrentPage();
         render();
         if (result == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
@@ -1063,7 +1245,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         repository.setPages(snapshot.pageCount, snapshot.freshPages);
         // A widget binned during the session does not come back, so the page it was the last thing
         // on does not either: the restored count is trimmed to what the layout now holds.
-        repository.trimEmptyPages();
+        trimPages();
         clampCurrentPage();
         render();
     }
@@ -1350,7 +1532,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (!canceled && record != null && edit.mergeTargetId != 0) {
             LauncherWidgetRecord target = widgets.repository().get(edit.mergeTargetId);
             HomeFolderPolicy.Drop drop = HomeFolderPolicy.dropAction(record, target,
-                SystemClock.uptimeMillis() - edit.mergeSince);
+                SystemClock.uptimeMillis() - edit.mergeSince, folderCapacity);
             if (drop != HomeFolderPolicy.Drop.MOVE && finishMerge(record, target)) return;
         }
         clearMergeTarget();
@@ -1384,7 +1566,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.turn.createdPage = -1;
         // The drag is over: a page it made and did not land on goes again, and so does a page the
         // widget it carried away was the last thing on.
-        if (committed || created) widgets.repository().trimEmptyPages();
+        if (committed || created) trimPages();
         if (committed || crossed) {
             // The trim can have renumbered the pages under all this; the widget's own page is
             // where the pane belongs, whether it landed there or was sent home.
@@ -1423,7 +1605,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         for (LauncherWidgetRecord other : widgets.repository().recordsOnPage(edit.turn.page)) {
             if (other.appWidgetId == dragged.appWidgetId) continue;
             if (!metrics.boundsFor(other.cell).contains(centerX, centerY)) continue;
-            return HomeFolderPolicy.canTarget(dragged, other) ? other : null;
+            return HomeFolderPolicy.canTarget(dragged, other, folderCapacity) ? other : null;
         }
         return null;
     }
@@ -1434,7 +1616,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         LauncherWidgetRecord dragged = widgets.repository().get(edit.appWidgetId);
         LauncherWidgetRecord target = widgets.repository().get(edit.mergeTargetId);
         if (dragged == null || HomeFolderPolicy.dropAction(dragged, target,
-            SystemClock.uptimeMillis() - edit.mergeSince) == HomeFolderPolicy.Drop.MOVE) return;
+            SystemClock.uptimeMillis() - edit.mergeSince, folderCapacity)
+            == HomeFolderPolicy.Drop.MOVE) return;
         pane.widgetEditOverlay().setGhostBounds(paneBounds(target.cell), true);
         WidgetCellView cell = pane.grid().cellForId(target.appWidgetId);
         if (cell == null) return;
@@ -1472,7 +1655,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         clearMergeTarget();
         // Straight to the store, as a move commits: the session settles the page itself below.
         LauncherWidgetRecord folder = widgets.repository().mergeIntoFolder(appWidgetId,
-            target.appWidgetId, folderFallbackName());
+            target.appWidgetId, folderFallbackName(), folderCapacity);
         if (folder == null) return false;
         edit.moveCandidate = null;
         edit.dragStartBounds = null;
@@ -1482,7 +1665,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetCellView cell = pane.grid().cellForId(target.appWidgetId);
         if (cell != null) { cell.animate().cancel(); cell.setScaleX(1f); cell.setScaleY(1f); }
         // A page the drag made, or one the icon was the last thing on, goes again.
-        widgets.repository().trimEmptyPages();
+        trimPages();
         LauncherWidgetRecord settled = widgets.repository().get(folder.appWidgetId);
         if (settled != null) currentPage = settled.page;
         clampCurrentPage();
@@ -1687,7 +1870,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (state.turn.createdPage < 0) return;
         state.turn.createdPage = -1;
         int before = currentPage;
-        widgets.repository().trimEmptyPages();
+        trimPages();
         clampCurrentPage();
         if (!redraw) return;
         render();

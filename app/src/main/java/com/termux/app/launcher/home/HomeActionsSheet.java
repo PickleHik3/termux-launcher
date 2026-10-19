@@ -242,9 +242,12 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             case ADD_WIDGET: return R.string.home_actions_add_widget;
             case ADD_APP: return R.string.home_actions_add_app;
             case ADD_PAGE: return R.string.home_actions_add_page;
+            case EDIT_WIDGETS: return R.string.home_actions_edit_widgets;
             case EDIT_PAGES: return R.string.home_actions_edit_pages;
             case LAYOUT: return R.string.home_actions_layout;
             case REMOVE_PAGE: return R.string.home_actions_remove_page;
+            case LOCK_LAYOUT: return R.string.home_actions_lock_layout;
+            case UNLOCK_LAYOUT: return R.string.home_actions_unlock_layout;
             case WALLPAPER: return R.string.home_actions_wallpaper;
             case LOOK: return R.string.home_actions_look;
             case LAUNCHER_SETTINGS: return R.string.home_actions_launcher_settings;
@@ -261,9 +264,12 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             case ADD_WIDGET: return R.drawable.ic_symbol_grid_view;
             case ADD_APP: return R.drawable.ic_symbol_apps;
             case ADD_PAGE: return R.drawable.ic_symbol_add;
-            case EDIT_PAGES: return R.drawable.ic_symbol_edit;
+            case EDIT_WIDGETS: return R.drawable.ic_symbol_edit;
+            case EDIT_PAGES: return R.drawable.ic_layout_home;
             case LAYOUT: return R.drawable.ic_layout_docked;
             case REMOVE_PAGE: return R.drawable.ic_symbol_delete;
+            case LOCK_LAYOUT: return R.drawable.ic_symbol_lock;
+            case UNLOCK_LAYOUT: return R.drawable.ic_symbol_lock_open;
             case WALLPAPER: return R.drawable.ic_symbol_wallpaper;
             case LOOK: return R.drawable.ic_symbol_palette;
             case LAUNCHER_SETTINGS: return R.drawable.ic_settings;

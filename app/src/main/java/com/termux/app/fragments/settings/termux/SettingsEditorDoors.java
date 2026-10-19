@@ -39,6 +39,16 @@ public final class SettingsEditorDoors {
         return intent;
     }
 
+    /** The Intent that opens Edit pages over Home, marked as coming from Settings. */
+    @NonNull
+    public static Intent homePagesEditorIntent(@NonNull Context context) {
+        Intent intent = new Intent(context, TermuxActivity.class);
+        intent.putExtra(TermuxActivity.EXTRA_HOME_PAGES_EDITOR, true);
+        intent.putExtra(TermuxActivity.EXTRA_APPEARANCE_FROM_SETTINGS, true);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return intent;
+    }
+
     public static void openLayoutEditor(@NonNull PreferenceFragmentCompat page, @NonNull Preference row,
                                         @NonNull PaneWallPage place) {
         Context context = page.getContext();

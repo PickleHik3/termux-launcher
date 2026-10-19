@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings › Home rows added by the settings restructure's second wave, and what they show on
+     Home itself. -->
+<resources>
+    <!-- Page transition (F5) -->
+    <string name="settings_home_page_transition_title">Page transition</string>
+    <string name="settings_home_page_transition_hint">Tap the preview to play it again</string>
+    <string name="settings_home_page_transition_preview">Preview of the page transition</string>
+    <string name="settings_home_page_transition_apply">Apply</string>
+    <string name="settings_home_page_transition_slide">Slide</string>
+    <string name="settings_home_page_transition_depth">Depth</string>
+    <string name="settings_home_page_transition_fade">Fade</string>
+    <string name="settings_home_page_transition_carousel">Carousel</string>
+    <string name="settings_home_page_transition_stack">Stack</string>
+
+    <!-- Gestures (F6) -->
+    <string name="settings_home_gesture_swipe_up">Swipe up</string>
+    <string name="settings_home_gesture_swipe_down">Swipe down</string>
+    <string name="settings_home_gesture_double_tap">Double tap</string>
+    <string name="settings_home_gesture_two_finger_up">Two-finger swipe up</string>
+    <string name="settings_home_gesture_two_finger_down">Two-finger swipe down</string>
+    <string name="settings_home_gesture_action_none">Do nothing</string>
+    <string name="settings_home_gesture_action_palette">Command palette</string>
+    <string name="settings_home_gesture_action_drawer">App drawer</string>
+    <string name="settings_home_gesture_action_notifications">Notifications</string>
+    <string name="settings_home_gesture_action_quick_settings">Quick settings</string>
+    <string name="settings_home_gesture_action_lock">Lock screen</string>
+    <string name="settings_home_gesture_action_terminal">Terminal</string>
+    <string name="settings_home_gesture_action_app">Open an app…</string>
+    <string name="settings_home_gesture_opens_app">Opens %1$s</string>
+    <string name="settings_home_gesture_pick_app">Choose an app</string>
+    <string name="settings_home_gestures_helper_title">More gestures</string>
+    <string name="settings_home_gestures_helper_summary">Turn on the launcher\'s accessibility service, or connect Shizuku, to lock the screen or open notifications and quick settings with a gesture.</string>
+    <string name="home_gesture_needs_helper">Turn on the launcher\'s accessibility service or connect Shizuku for this gesture</string>
+    <string name="home_gesture_shade_failed">Shizuku couldn\'t open that. Check that it is running.</string>
+    <string name="home_gesture_no_app">Choose an app for this gesture in Settings › Home</string>
+
+    <!-- Icons and labels (F7) -->
+    <string name="settings_home_icons_header">Icons and labels</string>
+    <string name="settings_home_icon_scale_title">Icon size</string>
+    <string-array name="settings_home_icon_scale_entries" translatable="false">
+        <item>80%</item>
+        <item>90%</item>
+        <item>100%</item>
+        <item>110%</item>
+        <item>120%</item>
+    </string-array>
+    <string-array name="settings_home_icon_scale_values" translatable="false">
+        <item>80</item>
+        <item>90</item>
+        <item>100</item>
+        <item>110</item>
+        <item>120</item>
+    </string-array>
+    <string name="settings_home_label_size_title">Label size</string>
+    <string name="settings_home_label_size_small">Small</string>
+    <string name="settings_home_label_size_default">Default</string>
+    <string name="settings_home_label_size_large">Large</string>
+    <string-array name="settings_home_label_size_entries" translatable="false">
+        <item>@string/settings_home_label_size_small</item>
+        <item>@string/settings_home_label_size_default</item>
+        <item>@string/settings_home_label_size_large</item>
+    </string-array>
+    <string-array name="settings_home_label_size_values" translatable="false">
+        <item>small</item>
+        <item>default</item>
+        <item>large</item>
+    </string-array>
+    <string name="settings_home_label_two_lines_title">Two-line labels</string>
+    <string name="settings_home_label_two_lines_summary">Long app names wrap instead of being cut short</string>
+    <string name="settings_home_label_shadow_title">Label shadow</string>
+    <string name="settings_home_label_shadow_summary">Keeps labels readable on light wallpapers</string>
+
+    <!-- Page indicator (F8) -->
+    <string name="settings_home_page_indicator_title">Page indicator</string>
+    <string name="settings_home_page_indicator_dots">Dots</string>
+    <string name="settings_home_page_indicator_off">Off</string>
+    <string-array name="settings_home_page_indicator_entries" translatable="false">
+        <item>@string/settings_home_page_indicator_dots</item>
+        <item>@string/settings_home_page_indicator_off</item>
+    </string-array>
+    <string-array name="settings_home_page_indicator_values" translatable="false">
+        <item>dots</item>
+        <item>off</item>
+    </string-array>
+
+    <!-- Lock Home layout (F9) -->
+    <string name="settings_home_layout_locked_title">Lock Home layout</string>
+    <string name="settings_home_layout_locked_summary">Stop icons and widgets from being moved by accident. Taps still open them.</string>
+    <string name="home_actions_lock_layout">Lock layout</string>
+    <string name="home_actions_unlock_layout">Unlock layout</string>
+    <string name="home_layout_locked_notice">Home layout locked</string>
+    <string name="home_layout_unlocked_notice">Home layout unlocked</string>
+    <string name="home_layout_locked_refusal">Home is locked. Long-press an empty spot to unlock it.</string>
+
+    <!-- Edit pages (F10) -->
+    <string name="settings_home_edit_pages_title">Edit pages</string>
+    <string name="settings_home_edit_pages_summary">Reorder, add or remove Home pages, and choose the one Home opens on</string>
+    <string name="home_actions_edit_widgets">Edit widgets</string>
+    <string name="home_pages_editor_title">Edit pages</string>
+    <string name="home_pages_editor_add">Add page</string>
+    <string name="home_pages_editor_done">Done</string>
+    <string name="home_pages_editor_page">Page %1$d</string>
+    <string name="home_pages_editor_empty">Empty</string>
+    <plurals name="home_pages_editor_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <string name="home_pages_editor_default_detail">Home opens here · %1$s</string>
+    <string name="home_pages_editor_move_up">Move page %1$d up</string>
+    <string name="home_pages_editor_move_down">Move page %1$d down</string>
+    <string name="home_pages_editor_make_default">Open Home on page %1$d</string>
+    <string name="home_pages_editor_remove">Remove page %1$d</string>
+    <string name="home_pages_editor_remove_confirm_title">Remove page %1$d?</string>
+    <plurals name="home_pages_editor_remove_confirm_items">
+        <item quantity="one">The item on it goes too.</item>
+        <item quantity="other">The %1$d items on it go too.</item>
+    </plurals>
+    <string name="home_pages_editor_remove_confirm_floats">Terminals on it stay open on another page.</string>
+    <string name="home_pages_editor_remove_confirm">Remove</string>
+    <plurals name="home_pages_editor_remove_confirm_folder_apps">
+        <item quantity="one">That includes the app in its folder.</item>
+        <item quantity="other">That includes the %1$d apps in its folders.</item>
+    </plurals>
+    <string name="home_pages_editor_remove_pending">A widget is still being added to this page</string>
+    <string name="settings_home_edit_pages_locked">Unlock the Home layout to edit pages</string>
+
+    <!-- Folders (F11) -->
+    <string name="settings_home_folders_header">Folders</string>
+    <string name="settings_home_folder_density_title">Folder density</string>
+    <string name="settings_home_folder_density_compact">Compact</string>
+    <string name="settings_home_folder_density_default">Default</string>
+    <string name="settings_home_folder_density_comfortable">Comfortable</string>
+    <string-array name="settings_home_folder_density_entries" translatable="false">
+        <item>@string/settings_home_folder_density_compact</item>
+        <item>@string/settings_home_folder_density_default</item>
+        <item>@string/settings_home_folder_density_comfortable</item>
+    </string-array>
+    <string-array name="settings_home_folder_density_values" translatable="false">
+        <item>compact</item>
+        <item>default</item>
+        <item>comfortable</item>
+    </string-array>
+    <string name="settings_home_folder_capacity_title">Max folder size</string>
+    <string name="settings_home_folder_capacity_9">9 apps</string>
+    <string name="settings_home_folder_capacity_12">12 apps</string>
+    <string name="settings_home_folder_capacity_16">16 apps</string>
+    <string name="settings_home_folder_capacity_20">20 apps</string>
+    <string-array name="settings_home_folder_capacity_entries" translatable="false">
+        <item>@string/settings_home_folder_capacity_9</item>
+        <item>@string/settings_home_folder_capacity_12</item>
+        <item>@string/settings_home_folder_capacity_16</item>
+        <item>@string/settings_home_folder_capacity_20</item>
+    </string-array>
+    <string-array name="settings_home_folder_capacity_values" translatable="false">
+        <item>9</item>
+        <item>12</item>
+        <item>16</item>
+        <item>20</item>
+    </string-array>
+</resources>

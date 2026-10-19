@@ -30,6 +30,7 @@ final class HomeAppIconView extends ViewGroup {
     private final TextView label;
     private final float density;
     @NonNull private HomeAppIconMetrics metrics = HomeAppIconMetrics.of(0, 0, 0, 1f);
+    @NonNull private HomeIconStyle style = HomeIconStyle.DEFAULT;
 
     HomeAppIconView(@NonNull Context context) {
         super(context);
@@ -40,11 +41,9 @@ final class HomeAppIconView extends ViewGroup {
         addView(icon);
         label = new TextView(context);
         label.setGravity(Gravity.CENTER_HORIZONTAL);
-        label.setSingleLine(true);
         label.setEllipsize(TextUtils.TruncateAt.END);
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, LABEL_SP);
         label.setTextColor(Color.WHITE);
-        label.setShadowLayer(3f * density, 0f, density, 0x99000000);
+        HomeIconLabels.dress(label, style, density);
         label.setIncludeFontPadding(false);
         label.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         addView(label);
@@ -68,6 +67,23 @@ final class HomeAppIconView extends ViewGroup {
 
     @NonNull CharSequence labelText() { return label.getText(); }
 
+    /**
+     * How Home draws its icons and labels (Settings › Home › Icons and labels). Set when the
+     * style changes, never from a measure.
+     */
+    void setStyle(@NonNull HomeIconStyle value) {
+        if (style.equals(value)) return;
+        style = value;
+        HomeIconLabels.dress(label, value, density);
+        HomeIconLabels.fitLines(this, label, getWidth(), getHeight(), value, density, false);
+        requestLayout();
+    }
+
+    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        HomeIconLabels.fitLines(this, label, w, h, style, density, true);
+    }
+
     boolean labelShown() { return label.getVisibility() == VISIBLE; }
 
     int iconSizePx() { return metrics.iconPx; }
@@ -76,10 +92,7 @@ final class HomeAppIconView extends ViewGroup {
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
         setMeasuredDimension(width, height);
-        int inset = Math.round(HomeAppIconMetrics.INSET_DP * density);
-        label.measure(MeasureSpec.makeMeasureSpec(Math.max(0, width - 2 * inset),
-            MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
-        metrics = HomeAppIconMetrics.of(width, height, label.getMeasuredHeight(), density);
+        metrics = HomeIconLabels.measure(label, width, height, style, density);
         label.setVisibility(metrics.showLabel ? VISIBLE : GONE);
         int side = MeasureSpec.makeMeasureSpec(metrics.iconPx, MeasureSpec.EXACTLY);
         icon.measure(side, side);

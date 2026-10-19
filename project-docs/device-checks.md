@@ -1234,6 +1234,79 @@ Supersedes the screen-glyph and "lands on the last terminal window" parts of #77
   exactly as before · pong, screenshot against the previous build.
 
 ### Settings restructure (10-19)
+- 2026-10-19 · review fixes on wave 2 Home · Locked layout: tap a gone app's faded icon (nothing
+  opens), open a folder (its name is not a rename, holding an app offers nothing), and Settings ›
+  Home › Edit pages is greyed with "Unlock the Home layout to edit pages" (unlock with the switch
+  on the same page: the row comes back at once). Edit pages from Settings returns to Settings ›
+  Home on Done. Reorder pages in portrait, turn the phone: landscape shows the same order;
+  remove a page in landscape, turn back: portrait lost the same page. A Home float on a page
+  that empties (its last widget removed) follows to the page in its place, and the default page
+  follows a trim. A folder grown to 18 apps survives a force-stop. With the accessibility service
+  turned on, its description in Android's accessibility settings reads "Lets the launcher lock the
+  screen and open notifications or quick settings from your gestures." Notifications by Shizuku
+  with Shizuku stopped mid-way shows "Shizuku couldn't open that…" · emulator.
+- 2026-10-19 · wave 2, Home (F5–F11) · Screenshots of Settings › Home top to bottom against the
+  wave-1 build: the new groups (Icons and labels, Folders, the five gesture rows, Page transition,
+  Page indicator, Edit pages, Lock Home layout) wear the same row look (height, chevron-less
+  value rows, switches, category headers), nothing clipped at font scale 1.3; search "transition",
+  "two-finger", "lock home" lands on each row · emulator, light, dark and black, the Material You
+  scheme.
+- 2026-10-19 · commit "feat(home): folder density and max folder size" · A Home folder of 14 apps
+  opens as before at the defaults (four across); Compact shows five across in smaller cells,
+  Comfortable three across in larger ones, and no density's popup runs off a 360 dp screen. Max
+  folder size 9: a folder already holding 14 keeps them, takes no more (a drop beside it moves
+  instead of merging); 20: a folder takes 20 and still holds 20 after a force-stop. The folder's
+  apps wear Icons and labels' size. Dock folders unchanged · emulator, font scale 1.3, light and
+  dark.
+- 2026-10-19 · commit "feat(home): edit pages: reorder, remove, add and the default page" · From
+  Home's sheet (Edit pages; the pencil's row now reads Edit widgets) and from Settings › Home ›
+  Edit pages (grows from the row, lands on Home with the editor up, Done returns to Settings):
+  three pages with widgets and icons and a Home float on page 2. Move page 1 down: its widgets
+  move with it and the float stays with its page; make page 3 the default ("Home opens here"):
+  the Home press from another app lands on it, and so does a cold start with Start in = Home;
+  remove the float's page: it asks first, naming the items, then the float (shell alive) stands on
+  the page now in its place; remove an empty page: no question; Add page adds an empty page at the
+  end that stays. The last page has no remove. Locked layout: the sheet has no Edit pages and the
+  Settings row shows the lock notice. Rotate after a reorder: the other orientation's layout is
+  still whole (it is not reordered; note what it shows) · emulator, light and dark, font scale 1.3.
+- 2026-10-19 · commit "feat(home): lock Home layout" · Long-press an empty spot: the sheet ends its
+  page group with Lock layout; tap it ("Home layout locked"). Now a long press on an icon, a
+  folder or a widget shows "Home is locked…" and nothing lifts; the corner tab's pencil and + show
+  the same and open no wheels; taps still launch apps and open folders. The sheet now shows
+  Unlock layout under Terminal and no Add or Edit rows; Unlock restores everything. Settings ›
+  Home › Lock Home layout shows the same state both ways. The sheet still fits at font scale 1.3
+  with every row (not the default home, an empty second page) · emulator, light and dark.
+- 2026-10-19 · commit "feat(home): page indicator, dots or off" · With two or more Home pages the
+  dots show at the default; Page indicator Off hides them and no widget or icon moves or resizes
+  (screenshot before and after); back to Dots brings them back · emulator, light and dark.
+- 2026-10-19 · commit "feat(home): icon size, label size, two-line labels and label shadow" ·
+  Before/after screenshots of a Home page with app icons and a folder at the defaults: identical.
+  Then Icon size 80% and 120%, Label size Small and Large, Two-line labels on (a long app name
+  wraps to two lines, a short one keeps one, a small cell falls back to one), Label shadow off on a
+  light wallpaper. The dock's icons do not change. At font scale 1.3 (force-stop after the change)
+  and on a 5-row grid no label is cut at its bottom or sides · emulator, light and dark, the
+  Material You scheme.
+- 2026-10-19 · commit "feat(home): a gestures table for Home's free area" · With nothing set,
+  Home behaves exactly as before: swipe up opens the palette with the keyboard, swipe down closes
+  it (and puts a raised keyboard away), double tap and two fingers do nothing, a single tap on a
+  widget or icon launches at once. Set each gesture in turn and try it on the free area: Command
+  palette, App drawer, Terminal (the wall slides over), Open an app… (the chooser lists apps; the
+  row then reads "Opens <app>"). With the accessibility service off and Shizuku disconnected the
+  rows offer no Lock screen, Notifications or Quick settings and the "More gestures" row explains
+  why; turn the service on and come back: they appear, and each works. Swipe down set to something
+  still closes an open palette first. A double tap or two-finger swipe started on a widget, a Home
+  float, the A–Z rail or the dock does nothing new; sideways swipes still page Home and cross the
+  seam; a long press still opens the Home sheet; the bottom-border keyboard swipe and top-border
+  status swipe are unchanged · emulator, keyboard up and down, light and dark.
+- 2026-10-19 · commit "feat(home): page transition picker with a live preview" · Settings › Home ›
+  Page transition grows out of its row; the miniature plays once on open and once per pick, a tap
+  plays it back, then nothing moves; Apply returns to Home's page with the effect named under the
+  row. On a Home with three pages, each effect (Slide, Depth, Fade, Carousel, Stack) on a slow drag,
+  a release short of the commit (settles back), a fling, and a pull against page 1 and the last page
+  (only a slide); the seam from the last page into the Terminal still slides, and the wallpaper
+  pans with every effect. With a Home float and a glass widget on the page, both move with the
+  page and their glass shows no seam or jump. Animation speed Slower / Off and Remove animations:
+  the settle stretches, or lands at once · emulator, light and dark, keyboard up and down.
 - 2026-10-19 · feat(settings) motion · The four motions feel right and never stutter on a long
   page (Keyboard, Linux apps); the row ring reads as "here it is", not as an alarm · pong, by hand.
 Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
@@ -1271,6 +1344,18 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
 ## Developer
 
 ### Settings restructure (10-19)
+- 2026-10-19 · review fixes on wave 2 Home · With Depth and Carousel, a glass widget (built-in,
+  glass style) and a Home float on the page: during the drag and the settle the page is drawn
+  through a hardware layer and scaled or turned, while the glass is aimed at the untransformed
+  page. Judge whether the frosted wallpaper inside the widget and the float visibly slides or
+  misaligns against the wallpaper behind during the motion, and whether it snaps at rest; take
+  this together with the frame-time check above · pong, by hand (ask first).
+- 2026-10-19 · feat(home) page transition · Frame time of each effect on pong with glass on (Home
+  float and a glass widget on the page): `scripts/perf-frametime.sh` with a Home-page swipe
+  scenario, against Slide on the same build. Depth, Fade and Stack set the page's alpha, which
+  draws the page through a temporary layer for the frames of the motion; drop any effect whose
+  p90 is worse than Slide's by more than the noise, and report it red per
+  docs/agents/performance.md · pong, by hand (ask first).
 - 2026-10-19 · feat(settings) two panes · The Surface in landscape and portrait: the list and the
   section read well side by side (row widths, the root's icon tiles, the hairline), light and
   dark · the Surface, by hand.

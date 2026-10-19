@@ -256,6 +256,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public static final String EXTRA_APPEARANCE_FROM_SETTINGS = "com.termux.app.extra.APPEARANCE_FROM_SETTINGS";
     public static final String EXTRA_WALLPAPER_STYLE =
         "com.termux.app.extra.WALLPAPER_STYLE";
+    /** Opens Edit pages over Home: Settings › Home › Edit pages. */
+    public static final String EXTRA_HOME_PAGES_EDITOR =
+        "com.termux.app.extra.HOME_PAGES_EDITOR";
     /** Opens the Layout editor over the live place, from any door that sends an intent. */
     public static final String EXTRA_LAYOUT_EDITOR =
         "com.termux.app.extra.LAYOUT_EDITOR";
@@ -2002,6 +2005,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             handleInAppKeyboardHeightAdjustIntent(getIntent());
             handleSurfaceEditorIntent(getIntent());
             handleLayoutEditorIntent(getIntent());
+            handleHomePagesEditorIntent(getIntent());
             handleWallpaperStyleIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
             handleShowHelpIntent(getIntent());
@@ -2188,6 +2192,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleInAppKeyboardHeightAdjustIntent(intent);
         handleSurfaceEditorIntent(intent);
         handleLayoutEditorIntent(intent);
+        handleHomePagesEditorIntent(intent);
         handleWallpaperStyleIntent(intent);
         handleEditExtraKeysIntent(intent);
         handleShowHelpIntent(intent);
@@ -2241,6 +2246,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshWallpaperPictureOnArrival();
 
         if (mWidgetHostController != null) mWidgetHostController.onStart();
+        applyHomeSettings();
         if (mWidgetPaneController != null) mWidgetPaneController.onStart();
 
         mTerminalFrameMetricsMonitor.start(getWindow());
@@ -12433,6 +12439,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Settings › Home › Edit pages: the launcher comes forward on Home with the pages editor over
+     * it; closing it goes back to Settings.
+     */
+    private void handleHomePagesEditorIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_HOME_PAGES_EDITOR, false)) return;
+        boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
+        intent.removeExtra(EXTRA_HOME_PAGES_EDITOR);
+        intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
+        // A cold start delivers the intent before the wall and the pane are built.
+        View root = findViewById(R.id.activity_termux_root_view);
+        Runnable open = () -> {
+            if (mPaneWallController != null) mPaneWallController.goTo(
+                com.termux.app.wall.PaneWallPage.WIDGETS, false);
+            openHomePagesEditor(fromSettings);
+        };
+        if (root != null) root.post(open);
+        else open.run();
+    }
+
+    /**
      * Opens the editor in Layout mode on one place, or on the place the user is looking at for
      * null (SPEC §3.1: the Layout glyph and sheet item open the same screen in Layout mode).
      */
@@ -20838,10 +20864,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return isHomeKeyboardAlwaysOn();
         }
         if (palette.isOpen() || !isHomePaletteGestureEnabled()) return true;
+        openHomePalette(keyboardWasUp);
+        return true;
+    }
+
+    /**
+     * The Home palette with the keyboard, as one overlay: the swipe up's, and any other Home
+     * gesture set to the palette (Settings › Home › Gestures).
+     */
+    private void openHomePalette(boolean keyboardWasUp) {
+        com.termux.app.terminal.TerminalCommandPaletteController palette =
+            getCommandPaletteController();
+        if (palette.isOpen()) return;
         if (keyboardWasUp || !terminalHost().showInAppKeyboard(false)) {
             // Nothing raised (already up, or no in-app keyboard to raise): the palette alone.
             palette.showHomeOverlay(true);
-            return true;
+            return;
         }
         // A keyboard raised just now is laid out by the next frame; the palette sprouts from its
         // space bar, so it opens once the keyboard stands where it will be.
@@ -20854,7 +20892,77 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 lowerHomePaletteKeyboard();
             }
         });
-        return true;
+    }
+
+    /**
+     * A vertical swipe on a Home page's free area, by Settings › Home › Gestures. Swipe up set to
+     * the palette, or to nothing, and a swipe down that has a palette or a keyboard to put away,
+     * take the keyboard swipe's path exactly as before; anything else runs its action.
+     */
+    private void runHomeSwipe(boolean up) {
+        com.termux.app.launcher.home.HomeGestures.Gesture gesture = up
+            ? com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP
+            : com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_DOWN;
+        com.termux.app.launcher.home.HomeGestures.Action action =
+            com.termux.app.launcher.home.HomeSettings.gestureAction(this, gesture);
+        boolean keyboardSwipe = up
+            ? action == com.termux.app.launcher.home.HomeGestures.Action.PALETTE
+                || action == com.termux.app.launcher.home.HomeGestures.Action.NONE
+            : action == com.termux.app.launcher.home.HomeGestures.Action.NONE
+                || isCommandPaletteOpen()
+                || (committedKeyboardVisible() && !isHomeKeyboardAlwaysOn());
+        if (keyboardSwipe) {
+            applyBorderKeyboardSwipe(up);
+            return;
+        }
+        runHomeGesture(gesture);
+    }
+
+    /** Runs what {@code gesture} on a Home page is set to. */
+    private void runHomeGesture(@NonNull com.termux.app.launcher.home.HomeGestures.Gesture gesture) {
+        com.termux.app.launcher.home.HomeGestureActions.run(this,
+            com.termux.app.launcher.home.HomeSettings.gestureAction(this, gesture),
+            com.termux.app.launcher.home.HomeSettings.gestureApp(this, gesture),
+            new com.termux.app.launcher.home.HomeGestureActions.Host() {
+                @Override public void openPalette() { openHomePalette(committedKeyboardVisible()); }
+                @Override public void openDrawer() { openAppDrawerFromHome(); }
+                @Override public void goToTerminal() {
+                    if (mPaneWallController != null) mPaneWallController.returnToTerminal(true);
+                }
+                @Override public void lockScreen() { lockScreenFromHomeGesture(); }
+                @Override public void explainHelperNeeded() {
+                    AppNotice.show(TermuxActivity.this, R.string.home_gesture_needs_helper, false);
+                }
+                @Override public void explainNoApp() {
+                    AppNotice.show(TermuxActivity.this, R.string.home_gesture_no_app, false);
+                }
+                @Override public void explainShadeFailed() {
+                    AppNotice.show(TermuxActivity.this, R.string.home_gesture_shade_failed, false);
+                }
+            });
+    }
+
+    /** The app drawer, grown out of the pinned apps row wherever it lies, as the palette opens it. */
+    private void openAppDrawerFromHome() {
+        if (mPreferences == null || !mPreferences.isAppLauncherDrawerEnabled()) return;
+        PlaceLayout.Edge edge = PlaceChromePolicy.appsEdge(currentPlaceLayout());
+        getAppDrawerController().open(AppDrawerPullGeometry.pullFor(edge),
+            AppDrawerPullGeometry.seedFor(edge));
+    }
+
+    /**
+     * A Home gesture's lock: the accessibility service when it is on, else Shizuku, else the
+     * prompt that says how to turn the service on.
+     */
+    private void lockScreenFromHomeGesture() {
+        if (LauncherLockAccessibilityAccess.isEnabled(this) && LockAccessibilityService.lockScreen()) {
+            return;
+        }
+        if (PrivilegedBackendManager.getInstance().isPrivilegedAvailable()) {
+            lockScreenWithShizuku();
+            return;
+        }
+        showEnableAccessibilityLockDialog();
     }
 
     /** Whether the Home layout keeps the keyboard up on Home (always on). */
@@ -20863,9 +20971,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return store != null && store.isHomeKeyboardAlwaysOn();
     }
 
-    /** Whether the keyboard swipe up on a Home page opens the palette (Settings). */
+    /** Whether the swipe up on a Home page opens the palette (Settings › Home › Gestures). */
     private boolean isHomePaletteGestureEnabled() {
-        return mPreferences == null || mPreferences.isHomePaletteGestureEnabled();
+        return com.termux.app.launcher.home.HomeSettings.gestureAction(this,
+                com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP)
+            == com.termux.app.launcher.home.HomeGestures.Action.PALETTE;
     }
 
     /** The keyboard the Home palette raised goes down with it. */
@@ -21105,6 +21215,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void showInnerPage(@NonNull com.termux.app.wall.PaneWallPage page,
                                                     int index) {
                     showWallInnerPage(page, index);
+                }
+                // Edit pages' default page, held to the pages there are now.
+                @Override public int homePressPage() {
+                    return com.termux.app.launcher.home.HomePageEdits.clampDefault(
+                        com.termux.app.launcher.home.HomeSettings.defaultPage(TermuxActivity.this),
+                        wallInnerCount(com.termux.app.wall.PaneWallPage.WIDGETS));
                 }
                 // Home's own swipe between Home pages, for the wallpaper's pan over the row.
                 @Override public float innerShiftFraction(
@@ -22981,7 +23097,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeActionsSheet.open(com.termux.app.launcher.home.HomeActionsSheetPolicy.itemsFor(
             isDefaultHomeApp(), hasPages,
             hasPages && mWidgetPaneController.currentPageEmpty(),
-            hasPages ? mWidgetPaneController.homePageCount() : 0));
+            hasPages ? mWidgetPaneController.homePageCount() : 0,
+            com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this)));
     }
 
     /**
@@ -22998,6 +23115,96 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         android.widget.Toast.makeText(this, getString(R.string.home_app_added, page + 1),
             android.widget.Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * Settings › Home's rows that shape the Home pages ({@link
+     * com.termux.app.launcher.home.HomeSettings}), pushed into the pane as the launcher comes to
+     * the front: Settings is another activity, so a change there is always followed by this.
+     */
+    private void applyHomeSettings() {
+        if (mWidgetPaneController == null) return;
+        mWidgetPaneController.setPageMotion(
+            com.termux.app.launcher.home.HomeSettings.pageTransition(this),
+            com.termux.app.AnimationSpeed.multiplier(this));
+        mWidgetPaneController.setIconStyle(com.termux.app.launcher.home.HomeSettings.iconStyle(this));
+        mWidgetPaneController.setPageIndicator(
+            com.termux.app.launcher.home.HomeSettings.pageIndicator(this));
+        mWidgetPaneController.setLayoutLocked(
+            com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this));
+        mWidgetPaneController.setFolderStyle(
+            com.termux.app.launcher.home.HomeSettings.folderDensity(this),
+            com.termux.app.launcher.home.HomeSettings.folderCapacity(this));
+        mWidgetPaneController.setExtraGestures(
+            com.termux.app.launcher.home.HomeGestures.watched(
+                com.termux.app.launcher.home.HomeSettings.gestureAction(this,
+                    com.termux.app.launcher.home.HomeGestures.Gesture.DOUBLE_TAP)),
+            com.termux.app.launcher.home.HomeGestures.watched(
+                com.termux.app.launcher.home.HomeSettings.gestureAction(this,
+                    com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_UP))
+                || com.termux.app.launcher.home.HomeGestures.watched(
+                com.termux.app.launcher.home.HomeSettings.gestureAction(this,
+                    com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_DOWN)));
+    }
+
+    /**
+     * Edit pages over Home: from Home's sheet, or from Settings › Home ({@code fromSettings}),
+     * which it returns to when it closes. Refused, with the notice, while the layout is locked.
+     */
+    private void openHomePagesEditor(boolean fromSettings) {
+        if (mWidgetPaneController == null) return;
+        if (mWidgetPaneController.refusedWhileLocked(
+                com.termux.app.launcher.home.HomeLayoutLock.Edit.EDIT_PAGES)) return;
+        com.termux.app.launcher.home.HomePagesEditor.show(this,
+            new com.termux.app.launcher.home.HomePagesEditor.Host() {
+                @Override public int pageCount() {
+                    return mWidgetPaneController == null ? 1 : mWidgetPaneController.homePageCount();
+                }
+                @Override public int itemsOn(int page) {
+                    return mWidgetPaneController == null ? 0 : mWidgetPaneController.itemsOnPage(page);
+                }
+                @Override public int folderAppsOn(int page) {
+                    return mWidgetPaneController == null ? 0
+                        : mWidgetPaneController.folderAppsOnPage(page);
+                }
+                @Override public int floatsOn(int page) {
+                    return mPaneController == null ? 0 : mPaneController.homeFloatCountOn(page);
+                }
+                @Override public int defaultPage() {
+                    return com.termux.app.launcher.home.HomeSettings.defaultPage(TermuxActivity.this);
+                }
+                @Override public void movePage(int from, int to) {
+                    if (mWidgetPaneController != null) mWidgetPaneController.movePage(from, to);
+                }
+                @Override public void removePage(int page) {
+                    if (mWidgetPaneController != null) mWidgetPaneController.removePage(page);
+                }
+                @Override public void addPage() {
+                    if (mWidgetPaneController != null) mWidgetPaneController.addPage();
+                }
+                @Override public void setDefaultPage(int page) {
+                    com.termux.app.launcher.home.HomeSettings.setDefaultPage(TermuxActivity.this, page);
+                }
+                @Override public void onClosed() {
+                    // Back to the page the row is on, Settings › Home, not Settings' root.
+                    if (fromSettings) startActivity(
+                        com.termux.app.activities.SettingsActivity.createFragmentIntent(
+                            TermuxActivity.this,
+                            com.termux.app.fragments.settings.termux.HomePreferencesFragment.class,
+                            R.string.settings_section_home));
+                }
+            });
+    }
+
+    /**
+     * Edit pages moved or removed pages: the floats follow their pages and the default page its
+     * page, by the same mapping the pages took.
+     */
+    private void onHomePagesRenumbered(@NonNull int[] mapping) {
+        if (mPaneController != null) mPaneController.remapHomeFloatPages(mapping);
+        int before = com.termux.app.launcher.home.HomeSettings.defaultPage(this);
+        int after = com.termux.app.launcher.home.HomePageEdits.remap(before, mapping);
+        if (after != before) com.termux.app.launcher.home.HomeSettings.setDefaultPage(this, after);
     }
 
     /** Each row runs what the corner tab, the palette and Settings already run for it. */
@@ -23018,7 +23225,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     ((com.termux.app.launcher.widget.WidgetPaneView) pane).addWidgetPage();
                 break;
             }
-            case EDIT_PAGES: {
+            case EDIT_PAGES: openHomePagesEditor(false); break;
+            case EDIT_WIDGETS: {
                 com.termux.app.wall.WidgetPaneFrame page = mPaneWallController == null ? null
                     : mPaneWallController.widgetsPage();
                 if (page == null) break;
@@ -23033,6 +23241,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case REMOVE_PAGE:
                 if (mWidgetPaneController != null) mWidgetPaneController.removeCurrentPage();
                 break;
+            case LOCK_LAYOUT:
+            case UNLOCK_LAYOUT: {
+                boolean locked = item == com.termux.app.launcher.home.HomeActionsSheetPolicy.Item.LOCK_LAYOUT;
+                com.termux.app.launcher.home.HomeSettings.setLayoutLocked(this, locked);
+                if (mWidgetPaneController != null) mWidgetPaneController.setLayoutLocked(locked);
+                AppNotice.show(this, locked ? R.string.home_layout_locked_notice
+                    : R.string.home_layout_unlocked_notice, false);
+                break;
+            }
             case WALLPAPER:
                 openAppearanceSurface(
                     com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
@@ -24175,7 +24392,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 // The palette gesture starts on the page's free area: Home has no bottom border.
                 @Override public void onHomePaletteSwipe(boolean up) {
-                    if (isWidgetsPageShowing()) applyBorderKeyboardSwipe(up);
+                    if (isWidgetsPageShowing()) runHomeSwipe(up);
+                }
+                @Override public void onHomePagesRenumbered(@NonNull int[] mapping) {
+                    TermuxActivity.this.onHomePagesRenumbered(mapping);
+                }
+                @Override public void onHomeDoubleTap() {
+                    if (isWidgetsPageShowing()) runHomeGesture(
+                        com.termux.app.launcher.home.HomeGestures.Gesture.DOUBLE_TAP);
+                }
+                @Override public void onHomeTwoFingerSwipe(boolean up) {
+                    if (isWidgetsPageShowing()) runHomeGesture(up
+                        ? com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_UP
+                        : com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_DOWN);
                 }
                 @Override @NonNull
                 public com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host builtinWidgetHost() {
@@ -24239,6 +24468,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The grid preference was applied in onCreate, before this controller existed, straight
         // to the host; now the pane can hold it to what the wall fits, and re-cap on layout.
         applyWidgetGridPreference();
+        applyHomeSettings();
     }
 
     /** A window chip was tapped, in the row's pills or the column's stack. */

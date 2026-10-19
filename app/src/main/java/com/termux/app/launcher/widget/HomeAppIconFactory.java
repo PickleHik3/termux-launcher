@@ -66,6 +66,8 @@ public final class HomeAppIconFactory implements WidgetGridView.AppIconFactory,
     private boolean watching;
     private boolean warming;
     private boolean destroyed;
+    /** How the icons and folders are drawn; every view made or kept here wears it. */
+    @NonNull private HomeIconStyle style = HomeIconStyle.DEFAULT;
 
     public HomeAppIconFactory(@NonNull Context context, @NonNull Listener listener) {
         this.context = context;
@@ -82,11 +84,23 @@ public final class HomeAppIconFactory implements WidgetGridView.AppIconFactory,
         HomeAppIconView view = views.get(record.appWidgetId);
         if (view == null) {
             view = new HomeAppIconView(context);
+            view.setStyle(style);
             views.put(record.appWidgetId, view);
         }
         bound.put(record.appWidgetId, record);
         bind(view, record, ref);
         return view;
+    }
+
+    /** How the icons and folders are drawn now. */
+    @NonNull HomeIconStyle style() { return style; }
+
+    /** Settings › Home › Icons and labels changed: every icon and folder held here redresses. */
+    public void setStyle(@NonNull HomeIconStyle value) {
+        if (style.equals(value)) return;
+        style = value;
+        for (HomeAppIconView view : views.values()) view.setStyle(value);
+        for (HomeFolderView view : folders.values()) view.setStyle(value);
     }
 
     @Override public void release(int id) {
@@ -100,6 +114,7 @@ public final class HomeAppIconFactory implements WidgetGridView.AppIconFactory,
         HomeFolderView view = folders.get(record.appWidgetId);
         if (view == null) {
             view = new HomeFolderView(context);
+            view.setStyle(style);
             folders.put(record.appWidgetId, view);
         }
         bound.put(record.appWidgetId, record);

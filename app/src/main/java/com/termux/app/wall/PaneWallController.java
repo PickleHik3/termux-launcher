@@ -49,6 +49,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         /** Turn {@code page} to its {@code index}-th page at once (Home page n). */
         default void showInnerPage(@NonNull PaneWallPage page, int index) { }
         /**
+         * The Home page the Home press lands on, counting from 0: Edit pages' default page, page
+         * 1 until one is chosen.
+         */
+        default int homePressPage() { return 0; }
+        /**
          * How far the page in front of {@code page}'s view stands off its rest while that view's
          * own swipe turns it, as a fraction of a page width, positive to the right: Home's grid
          * mid-swipe and while the next Home page slides in. The windows' arrival is the wall's own
@@ -517,9 +522,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         goTo(PaneWallPage.TERMINAL, animate);
     }
 
-    /** Home page 1: where the home press lands while the launcher is in front. */
+    /**
+     * The default Home page (page 1 unless Edit pages chose another): where the home press lands
+     * while the launcher is in front.
+     */
     public void goHome(boolean animate) {
-        mHost.showInnerPage(PaneWallPage.WIDGETS, 0);
+        mHost.showInnerPage(PaneWallPage.WIDGETS, Math.max(0, mHost.homePressPage()));
         goTo(PaneWallPage.WIDGETS, animate);
     }
 

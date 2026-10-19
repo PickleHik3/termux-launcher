@@ -31,6 +31,13 @@ import java.util.List;
 public final class HomeFolderPolicy {
     /** The most apps one folder on Home holds: a 4×4 popup, the dock's popup grid at its default. */
     public static final int MAX_APPS = 16;
+    /**
+     * Settings › Home › Folders › Max folder size: the caps offered. {@link #MAX_APPS} is the
+     * default; a folder kept from a larger cap keeps its apps, it only takes no more.
+     */
+    public static final int[] CAPACITIES = {9, 12, 16, 20};
+    /** The largest cap offered: what a stored folder is read back up to. */
+    public static final int HARD_MAX_APPS = 20;
     /** How long a dragged icon rests over an icon or a folder before releasing it merges. */
     public static final long MERGE_HOVER_MS = 300L;
     /** The name of a folder whose first app has no label, before the caller's own translation. */
@@ -110,7 +117,14 @@ public final class HomeFolderPolicy {
      */
     @Nullable
     public static List<FolderApp> add(@NonNull List<FolderApp> apps, @NonNull FolderApp app) {
-        if (!canAdd(apps, app)) return null;
+        return add(apps, app, MAX_APPS);
+    }
+
+    /** {@link #add} under a cap of {@code capacity} apps. */
+    @Nullable
+    public static List<FolderApp> add(@NonNull List<FolderApp> apps, @NonNull FolderApp app,
+                                      int capacity) {
+        if (!canAdd(apps, app, capacity)) return null;
         List<FolderApp> next = new ArrayList<>(apps);
         next.add(app);
         return Collections.unmodifiableList(next);
@@ -118,8 +132,37 @@ public final class HomeFolderPolicy {
 
     /** Whether {@code app} may join {@code apps}: not there yet, and room left under the cap. */
     public static boolean canAdd(@NonNull List<FolderApp> apps, @NonNull FolderApp app) {
-        if (apps.size() >= MAX_APPS) return false;
+        return canAdd(apps, app, MAX_APPS);
+    }
+
+    /** {@link #canAdd} under a cap of {@code capacity} apps. */
+    public static boolean canAdd(@NonNull List<FolderApp> apps, @NonNull FolderApp app, int capacity) {
+        if (apps.size() >= clampCapacity(capacity)) return false;
         return indexOf(apps, app.stableId()) < 0;
+    }
+
+    /** The offered cap nearest {@code capacity}. */
+    public static int clampCapacity(int capacity) {
+        int best = MAX_APPS;
+        int distance = Integer.MAX_VALUE;
+        for (int offered : CAPACITIES) {
+            int d = Math.abs(offered - capacity);
+            if (d < distance) {
+                distance = d;
+                best = offered;
+            }
+        }
+        return best;
+    }
+
+    /** A stored cap, read leniently: unset or not a number is {@link #MAX_APPS}. */
+    public static int parseCapacity(@Nullable String stored) {
+        if (stored == null) return MAX_APPS;
+        try {
+            return clampCapacity(Integer.parseInt(stored.trim()));
+        } catch (NumberFormatException e) {
+            return MAX_APPS;
+        }
     }
 
     /** What taking the app {@code stableId} out of {@code apps} leaves. */
@@ -165,6 +208,12 @@ public final class HomeFolderPolicy {
      */
     public static boolean canTarget(@NonNull LauncherWidgetRecord dragged,
                                     @Nullable LauncherWidgetRecord target) {
+        return canTarget(dragged, target, MAX_APPS);
+    }
+
+    /** {@link #canTarget} with folders holding up to {@code capacity} apps. */
+    public static boolean canTarget(@NonNull LauncherWidgetRecord dragged,
+                                    @Nullable LauncherWidgetRecord target, int capacity) {
         if (target == null || target.appWidgetId == dragged.appWidgetId) return false;
         if (!dragged.isApp() || dragged.appRef() == null) return false;
         String draggedId = dragged.appRef().stableId();
@@ -172,7 +221,7 @@ public final class HomeFolderPolicy {
             return target.appRef() != null && !target.appRef().stableId().equals(draggedId);
         }
         if (target.isFolder()) {
-            return target.folderApps().size() < MAX_APPS
+            return target.folderApps().size() < clampCapacity(capacity)
                 && indexOf(target.folderApps(), draggedId) < 0;
         }
         return false;
@@ -185,7 +234,15 @@ public final class HomeFolderPolicy {
     @NonNull
     public static Drop dropAction(@NonNull LauncherWidgetRecord dragged,
                                   @Nullable LauncherWidgetRecord target, long hoveredMs) {
-        if (!canTarget(dragged, target) || hoveredMs < MERGE_HOVER_MS) return Drop.MOVE;
+        return dropAction(dragged, target, hoveredMs, MAX_APPS);
+    }
+
+    /** {@link #dropAction} with folders holding up to {@code capacity} apps. */
+    @NonNull
+    public static Drop dropAction(@NonNull LauncherWidgetRecord dragged,
+                                  @Nullable LauncherWidgetRecord target, long hoveredMs,
+                                  int capacity) {
+        if (!canTarget(dragged, target, capacity) || hoveredMs < MERGE_HOVER_MS) return Drop.MOVE;
         return target.isFolder() ? Drop.ADD_TO_FOLDER : Drop.CREATE_FOLDER;
     }
 

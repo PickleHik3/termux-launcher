@@ -3308,6 +3308,32 @@ public class TerminalPaneController {
         updateHomeFloatBorders();
     }
 
+    /** How many Home floats stand on Home page {@code page}, minimised ones included. */
+    public int homeFloatCountOn(int page) {
+        int count = 0;
+        for (Window w : mHomeFloats) if (w.homePage == page) count++;
+        return count;
+    }
+
+    /**
+     * Edit pages moved or removed Home pages: each float follows its page to its new number
+     * ({@link com.termux.app.launcher.home.HomePageEdits#remap}); a float whose page went stands on
+     * the page now in its place, its shell kept.
+     */
+    public void remapHomeFloatPages(@NonNull int[] mapping) {
+        boolean moved = false;
+        for (Window w : mHomeFloats) {
+            if (w.homePage < 0) continue;
+            int next = com.termux.app.launcher.home.HomePageEdits.remap(w.homePage, mapping);
+            if (next == w.homePage) continue;
+            w.homePage = next;
+            moved = true;
+        }
+        if (!moved) return;
+        applyHomeFloatPage();
+        mHost.onHomeFloatsChanged();
+    }
+
     /** Shows the floats of the Home page on screen and hides every other page's. */
     private void applyHomeFloatPage() {
         HomeFloatLayer layer = mHomeFloatLayer;

@@ -2015,7 +2015,7 @@
                 <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility</string>
                 <string name="termux_app_launcher_set_home_unavailable">Home launcher settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_title">Enable accessibility lock</string>
-                <string name="termux_app_launcher_accessibility_lock_prompt_message">Enable Termux Launcher Lock Service to lock the screen from the alphabets row.</string>
+                <string name="termux_app_launcher_accessibility_lock_prompt_message">Lets the launcher lock the screen and open notifications or quick settings from your gestures.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_enable">Enable</string>
                 <string name="termux_app_launcher_dock_style_default">Docked</string>
                 <string name="termux_app_launcher_dock_style_rounded">Floating</string>

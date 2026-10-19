@@ -60,6 +60,12 @@ public final class LauncherWidgetRepository {
      * v6 and older load unchanged.
      */
     private static final int FOLDER_VERSION = 7;
+    /**
+     * Written while a Home folder holds more apps than the old cap of 16 (Settings › Home ›
+     * Folders › Max folder size): the v7 payload, which a v7 build would read back cut to 16 apps
+     * a folder and then write over. The newer number makes it go read-only instead.
+     */
+    private static final int LARGE_FOLDER_VERSION = 8;
     /** v3 is read as v4 with no orientation named and no shelf: identical bytes, nothing moves. */
     private static final int LEGACY_PAGED_VERSION = 3;
     private static final String PREFS = "launcher_widget_repository";
@@ -157,15 +163,23 @@ public final class LauncherWidgetRepository {
     @Nullable
     public synchronized LauncherWidgetRecord mergeIntoFolder(int draggedId, int targetId,
                                                              @NonNull String fallbackName) {
+        return mergeIntoFolder(draggedId, targetId, fallbackName, HomeFolderPolicy.MAX_APPS);
+    }
+
+    /** {@link #mergeIntoFolder} with a folder taking up to {@code capacity} apps. */
+    @Nullable
+    public synchronized LauncherWidgetRecord mergeIntoFolder(int draggedId, int targetId,
+                                                             @NonNull String fallbackName,
+                                                             int capacity) {
         LauncherWidgetRecord dragged = records.get(draggedId);
         LauncherWidgetRecord target = records.get(targetId);
-        if (dragged == null || !HomeFolderPolicy.canTarget(dragged, target)) return null;
+        if (dragged == null || !HomeFolderPolicy.canTarget(dragged, target, capacity)) return null;
         LauncherWidgetRecord.FolderApp app = HomeFolderPolicy.entryOf(dragged);
         if (app == null) return null;
         LauncherWidgetRecord folder;
         if (target.isFolder()) {
             List<LauncherWidgetRecord.FolderApp> apps = HomeFolderPolicy.add(target.folderApps(),
-                app);
+                app, capacity);
             if (apps == null) return null;
             folder = target.withFolder(target.folderName(), apps);
         } else {
@@ -604,6 +618,22 @@ public final class LauncherWidgetRepository {
      * not held a widget yet. The page a reservation is waiting on counts as held.
      */
     public synchronized boolean trimEmptyPages() {
+        trimEmptyPagesRenumbering();
+        return !trimFailed;
+    }
+
+    /** Whether the last trim had pages to take away and could not write it. */
+    private boolean trimFailed;
+
+    /**
+     * {@link #trimEmptyPages()}, answering how it renumbered the pages: each old page's new number,
+     * {@link com.termux.app.launcher.home.HomePageEdits#REMOVED} for a page it took away, for what
+     * else names a page (the floats, the default page). Null when nothing changed, or when the
+     * write failed.
+     */
+    @Nullable
+    public synchronized int[] trimEmptyPagesRenumbering() {
+        trimFailed = false;
         boolean[] keep = new boolean[pageCount];
         for (LauncherWidgetRecord record : records.values()) {
             if (record.page >= 0 && record.page < pageCount) keep[record.page] = true;
@@ -617,7 +647,7 @@ public final class LauncherWidgetRepository {
         for (int page = 0; page < pageCount; page++) {
             renumbered[page] = keep[page] ? kept++ : -1;
         }
-        if (kept == pageCount) return true;
+        if (kept == pageCount) return null;
         // Nothing to keep means nothing to renumber either: one empty page is what is left.
         int target = Math.max(1, kept);
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>();
@@ -632,7 +662,11 @@ public final class LauncherWidgetRepository {
                 nextFresh.add(renumbered[page]);
             }
         }
-        return commitValidated(next, nextPending, grid, target, nextFresh, revision + 1);
+        if (!commitValidated(next, nextPending, grid, target, nextFresh, revision + 1)) {
+            trimFailed = true;
+            return null;
+        }
+        return renumbered;
     }
 
     /**
@@ -674,6 +708,70 @@ public final class LauncherWidgetRepository {
             nextFresh.add(fresh > page ? fresh - 1 : fresh);
         }
         return commitValidated(next, nextPending, grid, pageCount - 1, nextFresh, revision + 1);
+    }
+
+    /**
+     * Moves page {@code from} to {@code to} (Edit pages), carrying everything on it, and renumbers
+     * the pages between ({@link com.termux.app.launcher.home.HomePageEdits#moveMapping}). One
+     * commit; refused for a page that is not there or a move that goes nowhere.
+     */
+    public synchronized boolean movePage(int from, int to) {
+        if (!com.termux.app.launcher.home.HomePageEdits.canMove(pageCount, from, to)) return false;
+        int[] mapping = com.termux.app.launcher.home.HomePageEdits.moveMapping(pageCount, from, to);
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>();
+        for (LauncherWidgetRecord record : records.values()) {
+            boolean onPage = record.page >= 0 && record.page < pageCount;
+            next.put(record.appWidgetId, onPage ? record.withPage(mapping[record.page]) : record);
+        }
+        WidgetAddTransaction nextPending = pending != null && pending.page >= 0 && pending.page < pageCount
+            ? pending.withPage(mapping[pending.page]) : pending;
+        LinkedHashSet<Integer> nextFresh = new LinkedHashSet<>();
+        for (Integer fresh : freshPages) {
+            if (fresh >= 0 && fresh < pageCount) nextFresh.add(mapping[fresh]);
+        }
+        // Edit pages acts on both orientations: the shelved one's pages move the same way.
+        return commitValidated(next, nextPending, grid, pageCount, nextFresh, orientation,
+            shelfRenumbered(mapping), revision + 1);
+    }
+
+    /**
+     * Edit pages took a page away from the orientation on screen (its widgets went first, through
+     * their own removals): the shelved orientations' pages are renumbered by the same
+     * {@code mapping}, their cells on the removed page dropped (a widget placed there is laid out
+     * afresh when that orientation comes back). One commit; the live wall is unchanged.
+     */
+    public synchronized boolean renumberShelvedPages(@NonNull int[] mapping) {
+        if (layouts.isEmpty()) return true;
+        return commitValidated(records, pending, grid, pageCount, freshPages, orientation,
+            shelfRenumbered(mapping), revision + 1);
+    }
+
+    /** Every shelved orientation with its pages renumbered by an Edit pages mapping. */
+    @NonNull
+    private LinkedHashMap<String, OrientationLayout> shelfRenumbered(@NonNull int[] mapping) {
+        LinkedHashMap<String, OrientationLayout> next = new LinkedHashMap<>();
+        for (Map.Entry<String, OrientationLayout> entry : layouts.entrySet()) {
+            OrientationLayout layout = entry.getValue();
+            int pages = com.termux.app.launcher.home.HomePageEdits.pageCountAfter(
+                layout.pageCount, mapping);
+            LinkedHashMap<Integer, Placement> cells = new LinkedHashMap<>();
+            for (Map.Entry<Integer, Placement> cell : layout.cells.entrySet()) {
+                int page = com.termux.app.launcher.home.HomePageEdits.renumber(
+                    cell.getValue().page, mapping);
+                if (page < 0) continue;
+                cells.put(cell.getKey(), new Placement(cell.getValue().cell, page));
+                pages = Math.max(pages, page + 1);
+            }
+            LinkedHashSet<Integer> fresh = new LinkedHashSet<>();
+            for (Integer page : layout.freshPages) {
+                int renumbered = com.termux.app.launcher.home.HomePageEdits.renumber(page, mapping);
+                if (renumbered < 0) continue;
+                fresh.add(renumbered);
+                pages = Math.max(pages, renumbered + 1);
+            }
+            next.put(entry.getKey(), new OrientationLayout(layout.grid, pages, fresh, cells));
+        }
+        return next;
     }
 
     public synchronized boolean putRecord(@NonNull LauncherWidgetRecord record) {
@@ -955,7 +1053,7 @@ public final class LauncherWidgetRepository {
             // commit. Nothing moves for a user who never turns the screen.
             if (version != SCHEMA_VERSION && version != LEGACY_PAGED_VERSION
                 && version != BUILTIN_VERSION && version != APP_ITEM_VERSION
-                && version != FOLDER_VERSION) {
+                && version != FOLDER_VERSION && version != LARGE_FOLDER_VERSION) {
                 readOnlyUnknownVersion = true;
                 return;
             }
@@ -1076,7 +1174,8 @@ public final class LauncherWidgetRepository {
             JSONObject root = new JSONObject();
             boolean holdsFolder = holdsFolder(values.values());
             boolean writeKind = holdsFolder || holdsApp(values.values());
-            root.put("version", holdsFolder ? FOLDER_VERSION : writeKind ? APP_ITEM_VERSION
+            root.put("version", holdsLargeFolder(values.values()) ? LARGE_FOLDER_VERSION
+                : holdsFolder ? FOLDER_VERSION : writeKind ? APP_ITEM_VERSION
                 : holdsBuiltin(values.values()) ? BUILTIN_VERSION : SCHEMA_VERSION);
             root.put("revision", revision);
             root.put("grid", encodeGrid(definition));
@@ -1209,6 +1308,14 @@ public final class LauncherWidgetRepository {
         return false;
     }
 
+    /** Whether a folder holds more apps than a v7 build reads back. */
+    private static boolean holdsLargeFolder(@NonNull Collection<LauncherWidgetRecord> values) {
+        for (LauncherWidgetRecord record : values) {
+            if (record.isFolder() && record.folderApps().size() > HomeFolderPolicy.MAX_APPS) return true;
+        }
+        return false;
+    }
+
     private static boolean holdsFolder(@NonNull Collection<LauncherWidgetRecord> values) {
         for (LauncherWidgetRecord record : values) if (record.isFolder()) return true;
         return false;
@@ -1247,7 +1354,7 @@ public final class LauncherWidgetRepository {
             JSONArray array = folder.getJSONArray("apps");
             List<LauncherWidgetRecord.FolderApp> apps = new ArrayList<>();
             java.util.HashSet<String> seen = new java.util.HashSet<>();
-            for (int i = 0; i < array.length() && apps.size() < HomeFolderPolicy.MAX_APPS; i++) {
+            for (int i = 0; i < array.length() && apps.size() < HomeFolderPolicy.HARD_MAX_APPS; i++) {
                 JSONObject entry = array.optJSONObject(i);
                 if (entry == null) continue;
                 try {
