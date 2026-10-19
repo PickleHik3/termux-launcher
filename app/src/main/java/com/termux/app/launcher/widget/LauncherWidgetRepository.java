@@ -60,6 +60,12 @@ public final class LauncherWidgetRepository {
      * v6 and older load unchanged.
      */
     private static final int FOLDER_VERSION = 7;
+    /**
+     * Written while a Home folder holds more apps than the old cap of 16 (Settings › Home ›
+     * Folders › Max folder size): the v7 payload, which a v7 build would read back cut to 16 apps
+     * a folder and then write over. The newer number makes it go read-only instead.
+     */
+    private static final int LARGE_FOLDER_VERSION = 8;
     /** v3 is read as v4 with no orientation named and no shelf: identical bytes, nothing moves. */
     private static final int LEGACY_PAGED_VERSION = 3;
     private static final String PREFS = "launcher_widget_repository";
@@ -985,7 +991,7 @@ public final class LauncherWidgetRepository {
             // commit. Nothing moves for a user who never turns the screen.
             if (version != SCHEMA_VERSION && version != LEGACY_PAGED_VERSION
                 && version != BUILTIN_VERSION && version != APP_ITEM_VERSION
-                && version != FOLDER_VERSION) {
+                && version != FOLDER_VERSION && version != LARGE_FOLDER_VERSION) {
                 readOnlyUnknownVersion = true;
                 return;
             }
@@ -1106,7 +1112,8 @@ public final class LauncherWidgetRepository {
             JSONObject root = new JSONObject();
             boolean holdsFolder = holdsFolder(values.values());
             boolean writeKind = holdsFolder || holdsApp(values.values());
-            root.put("version", holdsFolder ? FOLDER_VERSION : writeKind ? APP_ITEM_VERSION
+            root.put("version", holdsLargeFolder(values.values()) ? LARGE_FOLDER_VERSION
+                : holdsFolder ? FOLDER_VERSION : writeKind ? APP_ITEM_VERSION
                 : holdsBuiltin(values.values()) ? BUILTIN_VERSION : SCHEMA_VERSION);
             root.put("revision", revision);
             root.put("grid", encodeGrid(definition));
@@ -1236,6 +1243,14 @@ public final class LauncherWidgetRepository {
 
     private static boolean holdsApp(@NonNull Collection<LauncherWidgetRecord> values) {
         for (LauncherWidgetRecord record : values) if (record.isApp()) return true;
+        return false;
+    }
+
+    /** Whether a folder holds more apps than a v7 build reads back. */
+    private static boolean holdsLargeFolder(@NonNull Collection<LauncherWidgetRecord> values) {
+        for (LauncherWidgetRecord record : values) {
+            if (record.isFolder() && record.folderApps().size() > HomeFolderPolicy.MAX_APPS) return true;
+        }
         return false;
     }
 
