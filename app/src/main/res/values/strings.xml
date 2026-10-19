@@ -412,8 +412,6 @@
     <string name="settings_x11_hidden_apps_hint">Uncheck an app to hide it from the app drawer.</string>
     <string name="settings_x11_hidden_apps_loading">Loading your GUI apps…</string>
     <string name="settings_x11_hidden_apps_empty">No GUI apps to show yet.</string>
-    <string name="settings_x11_runtime_badge_title">Display badge</string>
-    <string name="settings_x11_runtime_badge_summary">The mark on the Display place\'s badge in the status bar.</string>
     <string name="settings_x11_window_manager_title">Window manager</string>
     <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
     <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead.</string>
