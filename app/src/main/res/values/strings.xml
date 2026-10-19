@@ -131,6 +131,8 @@
     <string name="settings_pane_focus_grows_summary">Enlarge the active pane and shrink the others.</string>
     <string name="settings_pane_agent_api_title">Let programs and agents control panes</string>
     <string name="settings_pane_agent_api_summary">Programs you run can open, switch and close panes on their own.</string>
+    <string name="settings_terminal_body_swipe_title">Swipe on the terminal to switch windows</string>
+    <string name="settings_terminal_body_swipe_summary">Swipe sideways across the text to move between windows and Home.</string>
     <string name="settings_clock_status_header">Clock and status</string>
     <string name="settings_clock_alignment_title">Clock alignment</string>
     <string name="settings_clock_alignment_left">Left</string>

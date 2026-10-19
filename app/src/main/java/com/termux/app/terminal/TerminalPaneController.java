@@ -3010,14 +3010,11 @@ public class TerminalPaneController {
             @Override public boolean floatYieldsSideways(@NonNull View child, float x, float y) {
                 if (!(child instanceof FloatingPaneContainer)) return false;
                 FloatingPaneContainer container = (FloatingPaneContainer) child;
-                TerminalView view = mPaneViews.get(container.mLeaf.session);
-                TerminalEmulator emulator = view == null ? null : view.mEmulator;
-                // A press just under a titlebar button is the button's too (its reach).
-                return HomeFloatPolicy.bodySwipePagesHome(
-                    y < titlebarBandPx() || container.buttonReachAt(x, y) != null,
-                    container.dragModeAt(x, y) == FloatingPaneContainer.DRAG_RESIZE,
-                    view != null && view.isSelectingText(),
-                    emulator != null && emulator.isMouseTrackingActive());
+                // A press just under a titlebar button is the button's too (its reach); the
+                // titlebar moves the float, and the resize corner sizes it.
+                boolean onChrome = y < titlebarBandPx() || container.buttonReachAt(x, y) != null
+                    || container.dragModeAt(x, y) == FloatingPaneContainer.DRAG_RESIZE;
+                return terminalYieldsSideways(mPaneViews.get(container.mLeaf.session), onChrome);
             }
         });
         // Fractions only become pixels against the live room: a turn or a resize re-lays them.
@@ -3660,6 +3657,38 @@ public class TerminalPaneController {
     public boolean isHostedFloatInSlot(@NonNull Window w) {
         HostedFloatContainer container = mHostedContainers.get(w);
         return container != null && container.isInSlot();
+    }
+
+    /**
+     * Whether a sideways swipe that starts at this screen point pages the wall's row
+     * ({@link TerminalBodySwipe}): the point is on a pane of the window in front, on its text
+     * rather than on anything the panes' overlay takes for itself (a tab's button, the gap between
+     * two panes), and that pane's terminal can give the drag away. Any pane of a split answers
+     * alike: a swipe pages the row, never between panes. Asked once as a finger lands.
+     */
+    public boolean bodySwipePagesWall(float rawX, float rawY) {
+        if (mActiveWindow == null || !mInteractionOverlay.isShown()) return false;
+        mInteractionOverlay.getLocationOnScreen(mBodySwipeLocation);
+        float x = rawX - mBodySwipeLocation[0];
+        float y = rawY - mBodySwipeLocation[1];
+        if (mInteractionOverlay.takesPressAt(x, y)) return false;
+        Leaf leaf = mInteractionOverlay.leafAt(x, y);
+        return leaf != null && terminalYieldsSideways(mPaneViews.get(leaf.session), false);
+    }
+    private final int[] mBodySwipeLocation = new int[2];
+
+    /**
+     * Whether {@code view}'s terminal gives a sideways swipe away ({@link
+     * TerminalBodySwipe#yieldsSideways}): no selection, no program tracking the mouse or asking
+     * for touch reports, not in mouse mode. A press on the pane's own chrome ({@code onChrome})
+     * never does.
+     */
+    private static boolean terminalYieldsSideways(@Nullable TerminalView view, boolean onChrome) {
+        if (view == null) return false;
+        TerminalEmulator emulator = view.mEmulator;
+        return TerminalBodySwipe.yieldsSideways(onChrome, view.isSelectingText(),
+            emulator != null && emulator.isMouseTrackingActive(),
+            emulator != null && emulator.isTouchReportsMode(), view.isTouchMouseMode());
     }
 
     /** Whether a press at this screen point lands on the focused hosted float's widget. */
@@ -6381,6 +6410,26 @@ public class TerminalPaneController {
             if (hit == null) return CornerZones.NONE;
             mCornerTapLeaf = leaves.get(hit.index);
             return hit.corner;
+        }
+
+        /**
+         * Whether a press at {@code (x, y)} is the overlay's own from the DOWN: a button of the
+         * tab that is up, or the gap between two panes. A corner square is not: until its hold
+         * fires every event goes to the terminal under it.
+         */
+        boolean takesPressAt(float x, float y) {
+            return controlActionAt(x, y) != ACTION_NONE || !dividerGapsAt(x, y).isEmpty();
+        }
+
+        /** The pane of the window in front whose frame holds {@code (x, y)}, or null. */
+        @Nullable
+        Leaf leafAt(float x, float y) {
+            if (mActiveWindow == null) return null;
+            for (Leaf leaf : leavesOf(mActiveWindow.root)) {
+                RectF rect = paneRect(leaf, mHitPaneRect);
+                if (rect != null && rect.contains(x, y)) return leaf;
+            }
+            return null;
         }
 
         @Nullable

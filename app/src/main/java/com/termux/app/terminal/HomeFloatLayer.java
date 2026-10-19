@@ -30,7 +30,7 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
         /**
          * Whether a press on {@code child}, the float under the finger, at ({@code x}, {@code y})
          * in its own coordinates gives a sideways swipe to the page
-         * ({@link HomeFloatPolicy#bodySwipePagesHome}).
+         * ({@link TerminalBodySwipe#yieldsSideways}).
          */
         default boolean floatYieldsSideways(@NonNull View child, float x, float y) {
             return false;

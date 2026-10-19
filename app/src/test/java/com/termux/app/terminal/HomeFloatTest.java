@@ -908,20 +908,6 @@ public class HomeFloatTest {
     }
 
     @Test
-    public void aSidewaysSwipeOnAFloatsTerminalPagesHomeUnlessTheTerminalNeedsIt() {
-        assertTrue("its terminal at rest", HomeFloatPolicy.bodySwipePagesHome(false, false, false,
-            false));
-        assertFalse("the titlebar moves the float",
-            HomeFloatPolicy.bodySwipePagesHome(true, false, false, false));
-        assertFalse("the corner sizes it",
-            HomeFloatPolicy.bodySwipePagesHome(false, true, false, false));
-        assertFalse("a selection under way is extended",
-            HomeFloatPolicy.bodySwipePagesHome(false, false, true, false));
-        assertFalse("a program tracking the mouse gets the drag",
-            HomeFloatPolicy.bodySwipePagesHome(false, false, false, true));
-    }
-
-    @Test
     public void aFloatLowInTheRoomRisesOnlyAsFarAsTheRoomsTop() {
         assertEquals(0, HomeFloatPolicy.liftPx(0, 300, 80));
         assertEquals("the keyboard's ask, while there is room above", 120,

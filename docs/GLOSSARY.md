@@ -23,6 +23,19 @@ letter: scrub across it and the matches show. One of the Layout editor's element
 put away in the tray. See `docs/en/Launcher_Usage.md`.
 _Avoid_: alphabet bar (the Layout editor's file names still say `alphabets`), fast scroller
 
+**Body swipe**:
+A clearly sideways swipe that starts on a terminal's text and moves the place the terminal stands
+in, exactly as the **border drag** does: on a terminal **window** it pages the wall's row (between
+windows, the display window among them, and from the first window back to the last **Home page**);
+on a **Home float** it pages Home. Clearly sideways means at least 1.5 times as far across as up or
+down at the touch slop; anything steeper stays the terminal's scroll. The terminal keeps the swipe
+while it is selecting text, a program is tracking the mouse or asked for touch reports, or mouse
+mode is on; taps, the long press, vertical scrolls and pinches are always the terminal's. Any pane
+of a split pages the row, never between panes. Not on the display window's picture. On by default:
+Settings › Terminal › Windows & panes › Swipe on the terminal to switch windows (the Home float's
+is always on). One rule, `TerminalBodySwipe`.
+_Avoid_: terminal swipe, text swipe, rule B
+
 **Border drag**:
 The one-finger gesture that pages the wall from a **window**, in every mode. It starts on the
 current window's border: the frame line on any of its four sides and the air between it and the next
@@ -30,7 +43,8 @@ thing out, less the corner squares. Anywhere on it outside the window's text (th
 sides, and the side borders' 2 dp of clearance inside the frame) it is a plain sideways swipe that
 pages at once, past the touch slop, with no hold. A hold there still starts it too. Where the border
 reaches further into the window (a window almost flush with the wall) it is a hold and then a
-sideways drag, and a drag that starts in the terminal's text is the terminal's. The edge lights in
+sideways drag. A drag that starts in the terminal's text is the terminal's, unless it is a **body
+swipe**, which pages the same way. The edge lights in
 the accent colour inside the frame where a finger can page. A **Home page** has no border: it pages
 by a plain swipe anywhere on it, as any launcher does. Reach, hold, glow and tilt are
 specified in `project-docs/reference/launcher/gestures-and-style.md`.
@@ -84,7 +98,7 @@ _Avoid_: place, widgets page, desktop
 
 **Home float**:
 A **window** of the current session drawn floating over one Home page instead of in the Workspace's
-row: born full-size, moved only by its **titlebar** (a sideways swipe on its terminal pages Home as
+row: born full-size, moved only by its **titlebar** (a **body swipe** on its terminal pages Home as
 a swipe beside it does), resized at its bottom-right corner, minimised into
 its **float chip** above the dock and docked into the row by the titlebar's Dock. It is what
 Terminal from Home opens. The Workspace's chips, the drawer and the shortcuts see it like any

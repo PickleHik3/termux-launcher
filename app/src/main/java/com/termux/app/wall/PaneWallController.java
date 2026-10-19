@@ -103,6 +103,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         default boolean isBorderKeyboardSwipeEnabled() { return true; }
         /**
+         * Whether a sideways swipe that starts at this screen point, on a terminal window's text,
+         * pages the row ({@link PaneWallLayout.Listener#isBodySwipePaging}): Settings lets it,
+         * and the pane under the finger gives the swipe away. Asked as a finger lands.
+         */
+        default boolean bodySwipePagesWall(float rawX, float rawY) { return false; }
+        /**
          * The keyboard swipe was claimed, going up ({@code opening}) or down, and the keyboard is
          * to follow the finger: the keyboard's height in px the finger drives it over, or 0 where
          * it cannot follow, and the swipe then asks through {@link #onBorderKeyboardSwipe} on
@@ -688,6 +694,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public boolean isBorderPagingEnabled(@NonNull PaneWallPage page) {
         // A Home page has no border; it pages by a plain swipe anywhere.
         return page != PaneWallPage.WIDGETS;
+    }
+
+    /**
+     * A terminal window's text pages the row by a sideways swipe, as its border does. Not the
+     * display window's: what it shows takes every touch, and only its border pages.
+     */
+    @Override
+    public boolean isBodySwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
+        return page == PaneWallPage.TERMINAL && !mWall.isDisplayInFront()
+            && mHost.bodySwipePagesWall(rawX, rawY);
     }
 
     @Override

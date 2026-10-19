@@ -1373,7 +1373,28 @@ Spec: `project-docs/active/settings-restructure-2026-10-19.md`.
   (Linux apps), the Apps bar opener (Dock & drawer), Look and feel (Look), the drawer's settings
   (Drawer layout), the keyboard theme from the Appearance editor, Edit extra keys · emulator.
 
+### Terminal body swipe (10-19)
+- 2026-10-19 · feat(wall) "a sideways swipe on a window's text pages the row" · Three windows
+  and the display window, keyboard down then up: a horizontal swipe across the middle of window 1's
+  text goes to window 2, the same from the last terminal window to the display window, and right
+  from window 1 to Home's last page, each following the finger with the border drag's sink, plank
+  and settle; a short swipe springs back. A vertical swipe and a 45-degree one scroll the
+  transcript and never move the wall. A tap, a long press (selection starts), a pinch (font size)
+  and a link tap behave as before. With a selection up, in `htop` or `vim` with `set mouse=a`
+  (mouse tracking), and in mouse mode, a sideways drag stays the terminal's. On the display
+  window's picture a sideways drag goes to the X app, its border still pages. Split into two
+  panes: a swipe on either pages the row; a press on the gap between them still resizes, the
+  tab's buttons still work, a corner hold still raises the tab. Settings › Terminal › Windows &
+  panes › Swipe on the terminal to switch windows off: only the border pages; on again at the next
+  touch. A Home float's terminal still pages Home by the same swipe · emulator, then pong.
+
 ## Developer
+
+### Terminal body swipe (10-19)
+- 2026-10-19 · feat(wall) body swipe · Feel on pong: whether 1.5x across-over-down is the right
+  angle (a thumb's vertical scroll should never page, a lazy diagonal flick should), and whether a
+  swipe that starts on the text feels the same as one off the border. The constant is
+  `TerminalBodySwipe.SIDEWAYS_RATIO` · pong, by hand (ask first).
 
 ### Settings restructure (10-19)
 - 2026-10-19 · waves 3 and 4 · Taste check on pong: the new rows' wording (Open the only match,

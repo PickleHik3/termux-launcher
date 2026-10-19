@@ -1365,6 +1365,13 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_AGENT_PANES_ENABLED = "pane_agent_api";
         public static final boolean DEFAULT_AGENT_PANES_ENABLED = true;
 
+        /**
+         * Whether a sideways swipe on a terminal window's text pages the wall's row, as its
+         * border does (TerminalBodySwipe in the app).
+         */
+        public static final String KEY_TERMINAL_BODY_SWIPE = "terminal_body_swipe";
+        public static final boolean DEFAULT_TERMINAL_BODY_SWIPE = true;
+
         /** Clock renderer shown in the modular widget slot above the terminal window row. */
         public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
 

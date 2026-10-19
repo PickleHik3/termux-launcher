@@ -217,6 +217,16 @@ public final class PaneWallLayout extends ViewGroup {
          */
         default boolean isBorderPagingEnabled(@NonNull PaneWallPage page) { return true; }
         /**
+         * Whether a sideways swipe that starts at the screen point ({@code rawX}, {@code rawY})
+         * inside {@code page} — on a terminal's text — pages the wall as a slide off a border
+         * does ({@link BorderDrag}): the terminal there gives the swipe away
+         * ({@link com.termux.app.terminal.TerminalBodySwipe}). Asked once as a finger lands
+         * inside the page, on a wall that can page; it may look the point up in the views.
+         */
+        default boolean isBodySwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
+            return false;
+        }
+        /**
          * A drag is taking the wall from {@code page}, a border drag or Home's plain swipe past
          * its last page: the moment to put the neighbouring view on the page beside the seam
          * (the first window when leaving Home) while it is still off screen.
@@ -947,7 +957,10 @@ public final class PaneWallLayout extends ViewGroup {
      * <p>On any border outside the page's text — the air beyond the top and bottom edges, and the
      * air and clearance beside the left and right ones — a finger that sets off sideways before
      * the hold claims the wall by that move ({@link BorderDrag#slidePages}), and the drag begins
-     * there as the hold's would ({@link #takeBorderDrag}).
+     * there as the hold's would ({@link #takeBorderDrag}). So does one on the page's text that
+     * sets off clearly sideways, where the listener says the terminal under it gives the swipe
+     * away ({@link Listener#isBodySwipePaging}): the terminal has had the DOWN and the moves
+     * inside the slop, and is sent the cancel at the claim like any child under a border hold.
      *
      * <p>The keyboard swipe is claimed by the move rather than by the timer too: a
      * finger that sets off up or down from the bottom border, or from the box by its grabber a row
@@ -1109,9 +1122,13 @@ public final class PaneWallLayout extends ViewGroup {
         boolean statusSwipe = mListener != null && mListener.isBorderStatusSwipeEnabled();
         if (!canPage && !keyboardSwipe && !statusSwipe) return;
         if (!loadBorderZone(true)) return;
+        // On the page's text, the terminal there is asked whether it gives a sideways swipe away.
+        boolean bodySwipe = canPage && mListener != null
+            && mBorderZone.holds(event.getX(), event.getY())
+            && mListener.isBodySwipePaging(mCurrent, event.getRawX(), event.getRawY());
         boolean armed = mBorderDrag.down(event.getX(), event.getY(), mBorderZone,
             ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardSwipe,
-            statusSwipe, topGestureLimit());
+            statusSwipe, topGestureLimit(), bodySwipe);
         if (!armed) return;
         mBorderDownX = event.getX();
         mBorderDownY = event.getY();

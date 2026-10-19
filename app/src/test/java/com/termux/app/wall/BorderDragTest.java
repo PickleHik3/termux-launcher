@@ -1086,4 +1086,84 @@ public class BorderDragTest {
         assertEquals(BorderDrag.Border.BOTTOM, BorderDrag.pillAt(MID_X, BOTTOM - 10f, zone));
         assertEquals(BorderDrag.Border.NONE, BorderDrag.pillAt(MID_X, 1300f, zone));
     }
+
+    // ---- A sideways swipe on the page's text (TerminalBodySwipe) -----------------------------
+
+    /** A press on the page's text whose terminal gives the swipe away, on a wall that can page. */
+    private static BorderDrag onText(float x, float y, BorderDrag.Zone zone, float topLimit) {
+        BorderDrag drag = new BorderDrag();
+        drag.down(x, y, zone, SLOP, true, true, true, topLimit, true);
+        return drag;
+    }
+
+    @Test
+    public void aClearlySidewaysStartOnTheTextPagesAtOnce() {
+        BorderDrag drag = onText(MID_X, MID_Y, zone(GAP), NO_LIMIT);
+        assertTrue("armed on the text", drag.isArmed());
+        assertTrue(drag.bodySlides());
+        assertFalse("the text is no border", drag.holdPages());
+        assertEquals(BorderDrag.Border.NONE, drag.border());
+        assertEquals("inside the slop nothing is decided", BorderDrag.Claim.PENDING,
+            drag.move(MID_X + 10f, MID_Y));
+        assertEquals(BorderDrag.Claim.PAGING, drag.move(MID_X + 30f, MID_Y + 10f));
+        assertEquals("measured from the claim, so the wall does not jump by the slop", 10f,
+            drag.travel(MID_X + 40f), 0.01f);
+    }
+
+    @Test
+    public void aVerticalOrDiagonalStartOnTheTextStaysTheTerminals() {
+        BorderDrag vertical = onText(MID_X, MID_Y, zone(GAP), NO_LIMIT);
+        assertEquals("a scroll", BorderDrag.Claim.ABANDONED, vertical.move(MID_X + 5f, MID_Y + 30f));
+        BorderDrag diagonal = onText(MID_X, MID_Y, zone(GAP), NO_LIMIT);
+        assertEquals("more across than down, but not clearly", BorderDrag.Claim.ABANDONED,
+            diagonal.move(MID_X + 25f, MID_Y + 20f));
+        assertEquals("and the claim never changes", BorderDrag.Claim.ABANDONED,
+            diagonal.move(MID_X + 200f, MID_Y + 20f));
+    }
+
+    @Test
+    public void aStillFingerOnTheTextIsTheTerminalsLongPress() {
+        BorderDrag drag = onText(MID_X, MID_Y, zone(GAP), NO_LIMIT);
+        assertFalse("the hold never pages from the text", drag.holdElapsed());
+        assertEquals(BorderDrag.Claim.ABANDONED, drag.claim());
+        assertEquals("a drag after the hold is the selection's", BorderDrag.Claim.ABANDONED,
+            drag.move(MID_X + 100f, MID_Y));
+    }
+
+    @Test
+    public void theTextPagesOnlyWhereTheTerminalGivesTheSwipeAndTheWallCanPage() {
+        BorderDrag kept = new BorderDrag();
+        assertFalse("a terminal that keeps the swipe leaves the press unarmed",
+            kept.down(MID_X, MID_Y, zone(GAP), SLOP, true, true, true, NO_LIMIT, false));
+        BorderDrag alone = new BorderDrag();
+        assertFalse("a wall of one place",
+            alone.down(MID_X, MID_Y, zone(GAP), SLOP, false, true, true, NO_LIMIT, true));
+        BorderDrag high = onText(MID_X, TOP + 300f, zone(GAP), TOP + 400f);
+        assertFalse("not in the phone's own strip", high.bodySlides());
+        BorderDrag beside = onText(RIGHT + 10f, MID_Y, zone(GAP), NO_LIMIT);
+        assertFalse("a press beside the page is the border's slide", beside.bodySlides());
+        assertTrue(beside.slidePages());
+    }
+
+    @Test
+    public void thePillsBoxOnTheTextKeepsItsVerticalSwipeAndPagesSideways() {
+        BorderDrag up = new BorderDrag();
+        up.down(MID_X, BOTTOM - 10f, pillZone(MID_X), SLOP, true, true, true, NO_LIMIT, true);
+        assertEquals(BorderDrag.Claim.KEYBOARD, up.move(MID_X, BOTTOM - 10f - SLOP - 10f));
+        BorderDrag across = new BorderDrag();
+        across.down(MID_X, BOTTOM - 10f, pillZone(MID_X), SLOP, true, true, true, NO_LIMIT, true);
+        assertEquals(BorderDrag.Claim.PAGING, across.move(MID_X - SLOP - 10f, BOTTOM - 10f));
+    }
+
+    @Test
+    public void theMinimumBandOnTheTextPagesSidewaysAndStillHolds() {
+        // At Margin 0 the left zone reaches 18 px in; past the 6 px clearance it is text.
+        float x = LEFT + 10f;
+        BorderDrag across = onText(x, MID_Y, zone(0f), NO_LIMIT);
+        assertFalse(across.slidePages());
+        assertTrue(across.holdPages());
+        assertEquals(BorderDrag.Claim.PAGING, across.move(x + SLOP + 10f, MID_Y));
+        BorderDrag still = onText(x, MID_Y, zone(0f), NO_LIMIT);
+        assertTrue("the band's hold still pages", still.holdElapsed());
+    }
 }
