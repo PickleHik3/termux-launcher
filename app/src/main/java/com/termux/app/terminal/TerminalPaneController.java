@@ -3329,8 +3329,12 @@ public class TerminalPaneController {
     }
 
     private void relayHomeFloats() {
-        for (Map.Entry<Leaf, FloatingPaneContainer> entry : mHomeFloatContainers.entrySet())
+        for (Map.Entry<Leaf, FloatingPaneContainer> entry : mHomeFloatContainers.entrySet()) {
+            // A float on its way into its chip keeps the place its flight set out from: the room
+            // the chips take from the others is measured while it flies. It is laid out on landing.
+            if (entry.getValue().mFlying) continue;
             applyFloatBounds(entry.getKey(), entry.getValue());
+        }
         applyHomeFloatLift();
     }
 
@@ -3379,8 +3383,8 @@ public class TerminalPaneController {
     }
 
     /**
-     * Minimise's flight: the float shrinks into its chip in the status bar, or, with no chip on
-     * screen yet, up and away toward where the bar comes in. Hidden when it lands.
+     * Minimise's flight: the float shrinks into its chip above the dock, or, with no chip to aim
+     * at, down and away toward the dock. Hidden when it lands.
      */
     private boolean flyIntoChip(@NonNull Window w, @NonNull FloatingPaneContainer container) {
         if (container.getWidth() <= 0 || container.getHeight() <= 0) return false;
@@ -3397,7 +3401,7 @@ public class TerminalPaneController {
             scaleX = .2f;
             scaleY = .2f;
             toX = container.getTranslationX() + container.getWidth() * .4f;
-            toY = container.getTranslationY() - at[1];
+            toY = container.getTranslationY() + container.getHeight() * .8f;
         }
         container.mFlying = true;
         container.setPivotX(0f);
@@ -3409,6 +3413,7 @@ public class TerminalPaneController {
                 if (done) return;
                 done = true;
                 settleMinimiseFlight(container);
+                applyFloatBounds(container.mLeaf, container);
                 applyHomeFloatPage();
             }
         };
