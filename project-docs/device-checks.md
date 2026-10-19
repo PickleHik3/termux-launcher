@@ -724,6 +724,17 @@ are void.
     sideways drag extends it; in tmux/vim with mouse on, a sideways drag goes to the program; with
     a full-size float on the last page and an empty Workspace, a sideways swipe on it opens
     window 1. Terminal widgets on a Home page behave as before.
+  - Typing into a terminal widget with the phone's keyboard (Gboard, in-app keyboard off): the
+    Home grid keeps its size (the clock and every other widget unchanged, no one-frame squeeze as
+    the keyboard rises), the dock rides on the keyboard with the same gap it keeps above the
+    navigation bar, the widget rises so its prompt and cursor row sit just above the dock, never
+    above the grid's top, and its text stays (no blank card); closing the keyboard puts the widget,
+    the dock and the grid back exactly. The same with the in-app keyboard. Also: a widget resized
+    in edit mode shows the prompt at its new size; a tall widget whose prompt is at its bottom;
+    a widget high on the page (no lift needed); Home floats with the phone's keyboard end at the
+    dock's top as they do with the in-app keyboard; the Workspace with the phone's keyboard still
+    shrinks the terminal above it; a side rail on Home ends above the dock; fullscreen mode
+    (bars hidden). Light/dark, Docked and Floating, portrait and landscape.
 
 ### Wall rework phase two: slice 2, Style, Corners and Margin on Home (feat/wall-rework-phase2)
 - 2026-10-18 · commit "feat(wall): the chrome wears the Style, Corners and Margin of the half on
