@@ -954,6 +954,7 @@ public final class WidgetPaneView extends FrameLayout {
         if (contentSettle != null) contentSettle.cancel();
         ValueAnimator settle = ValueAnimator.ofFloat(contentShiftPx, 0f);
         settle.setDuration(Math.round(PAGE_SETTLE_MS * (double) motionScale));
+        settle.setInterpolator(HomePageTransition.settleInterpolator());
         // The page reports each frame, so the wallpaper pans on the page's own curve.
         settle.addUpdateListener(animation -> moveContent((float) animation.getAnimatedValue()));
         settle.addListener(new AnimatorListenerAdapter() {

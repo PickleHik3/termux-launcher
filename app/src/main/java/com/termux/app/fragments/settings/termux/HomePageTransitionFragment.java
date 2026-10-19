@@ -15,7 +15,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
-import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.RadioGroup;
@@ -181,9 +180,15 @@ public class HomePageTransitionFragment extends Fragment {
             place(2f);
             return;
         }
+        android.animation.TimeInterpolator settle = HomePageTransition.settleInterpolator();
         ValueAnimator run = ValueAnimator.ofFloat(0f, 2f);
         run.setDuration(Math.round(2 * HALF_MS * (double) speed));
-        run.setInterpolator(new PathInterpolator(0.4f, 0f, 0.2f, 1f));
+        // Each half on the curve the Home page settles on.
+        run.setInterpolator(input -> {
+            float half = input < 0.5f ? input * 2f : input * 2f - 1f;
+            float eased = settle.getInterpolation(half);
+            return input < 0.5f ? eased / 2f : 0.5f + eased / 2f;
+        });
         run.addUpdateListener(animation -> place((float) animation.getAnimatedValue()));
         run.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {

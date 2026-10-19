@@ -48,6 +48,15 @@ public enum HomePageTransition {
     /** How far Carousel turns a page that is a whole width away, in degrees. */
     static final float CAROUSEL_DEGREES = 60f;
 
+    /**
+     * The curve a page settles on once the finger lets go (and the Settings preview plays): the
+     * same ease in and out the page slide always had.
+     */
+    @NonNull
+    public static android.animation.TimeInterpolator settleInterpolator() {
+        return new android.view.animation.AccelerateDecelerateInterpolator();
+    }
+
     /** The effect a stored value names; anything unknown is the default. */
     @NonNull
     public static HomePageTransition fromValue(@Nullable String value) {
