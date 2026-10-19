@@ -566,6 +566,8 @@
     <string name="settings_app_drawer_view_type_vertical">Vertical</string>
     <string name="settings_app_drawer_view_type_horizontal">Horizontal pages</string>
     <string name="settings_app_drawer_view_type_categories">Categories</string>
+    <string name="settings_open_only_match_title">Open the only match</string>
+    <string name="settings_open_only_match_summary">Opens the app by itself when a search finds just one.</string>
     <string name="settings_app_drawer_search_on_open_title">Open keyboard automatically</string>
     <string name="settings_app_drawer_search_on_open_summary">When the app drawer opens.</string>
     <string name="settings_app_drawer_search_android_keyboard_title">Search keyboard</string>

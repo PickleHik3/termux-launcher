@@ -167,6 +167,9 @@ public final class AppDrawerContentView extends FrameLayout
     @Nullable private LauncherAppDataProvider mProvider;
     @Nullable private AppDrawerSearchController mSearch;
     @Nullable private Runnable mRevealListener;
+    /** Settings › App search › Open the only match; read once per open. */
+    private boolean mOpenOnlyMatch;
+    private final Runnable mAutoOpenOnlyMatch = this::autoOpenOnlyMatch;
     @Nullable private Runnable mKeyboardRequestListener;
     @Nullable private Runnable mFrameRequestListener;
     /** Rebuilt once per submitted list; the column's letters and the scrub's scroll targets. */
@@ -648,6 +651,7 @@ public final class AppDrawerContentView extends FrameLayout
     public void setInteractive(boolean interactive) {
         if (mInteractive == interactive) return;
         mInteractive = interactive;
+        if (!interactive) removeCallbacks(mAutoOpenOnlyMatch);
         if (!interactive) {
             if (mDragController != null) mDragController.cancel();
             cancelCellLongPresses();
@@ -957,6 +961,7 @@ public final class AppDrawerContentView extends FrameLayout
     public void resetSearch() {
         AppDrawerSearchController search = mSearch;
         mSearchRevealRequested = false;
+        removeCallbacks(mAutoOpenOnlyMatch);
         if (search != null) {
             search.reset();
         } else {
@@ -1084,7 +1089,34 @@ public final class AppDrawerContentView extends FrameLayout
         // typed arrives here too — the provider's warm-up callback lands a beat after every open —
         // and a keyboard asked for on the open, or by a pill tap, must survive it.
         if (queryChanged && !hasQuery()) mSearchRevealRequested = false;
+        scheduleOnlyMatchOpen(results.size());
         notifyRevealTarget();
+    }
+
+    /** Sets whether a search that narrows to one app opens it after a pause. */
+    public void setOpenOnlyMatch(boolean enabled) {
+        if (mOpenOnlyMatch == enabled) return;
+        mOpenOnlyMatch = enabled;
+        if (!enabled) removeCallbacks(mAutoOpenOnlyMatch);
+    }
+
+    /** Every result list restarts the pause, so typing on keeps the lone match from opening. */
+    private void scheduleOnlyMatchOpen(int resultCount) {
+        removeCallbacks(mAutoOpenOnlyMatch);
+        AppDrawerSearchController search = mSearch;
+        if (search == null || !mInteractive) return;
+        if (AppDrawerOnlyMatchPolicy.shouldAutoOpen(mOpenOnlyMatch, search.query(), resultCount)) {
+            postDelayed(mAutoOpenOnlyMatch, AppDrawerOnlyMatchPolicy.AUTO_OPEN_DELAY_MS);
+        }
+    }
+
+    private void autoOpenOnlyMatch() {
+        AppDrawerSearchController search = mSearch;
+        if (!mInteractive || search == null) return;
+        if (AppDrawerOnlyMatchPolicy.shouldAutoOpen(mOpenOnlyMatch, search.query(),
+            search.results().size())) {
+            launchFirstResult();
+        }
     }
 
     private void submitVisibleResults(boolean resetPosition) {
