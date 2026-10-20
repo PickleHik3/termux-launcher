@@ -98,9 +98,14 @@ public final class PromptLineFieldView extends View {
         invalidate();
     }
 
-    /** The terminal's scheme changed: the prompt takes its colours again. */
+    /**
+     * The terminal's scheme may have changed: the prompt takes its colours again, and redraws
+     * only when they moved, so a caller may ask on every scheme pass.
+     */
     public void refreshTheme() {
-        mInk = resolveInk();
+        PromptLineInk ink = resolveInk();
+        if (ink.sameAs(mInk)) return;
+        mInk = ink;
         mPressedWell = SchemeTone.toneShift(mInk.well, PRESSED_TONE_LIFT);
         invalidate();
     }

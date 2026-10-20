@@ -237,6 +237,20 @@ public final class DockIconReflection {
      */
     public boolean bind(@NonNull GlassRefraction.Program program, @NonNull View glassHost,
                         @NonNull View commonAncestor, float originX, float originY) {
+        return bind(program, glassHost, commonAncestor, originX, originY, 0f, 1f);
+    }
+
+    /**
+     * As {@link #bind(GlassRefraction.Program, View, View, float, float)}, for a slab that carries
+     * a band of its own under the icons (the Prompt line's field, {@code belowPx} tall, more than
+     * zero): the picture is aimed that much lower, so the lower bevel shows the icons as it would
+     * with the band away, and only there ({@link GlassRefraction.Program#setReflection(
+     * android.graphics.Shader, float, float, float, float, float, boolean)}), at
+     * {@code strengthScale} of the strength it shows now.
+     */
+    public boolean bind(@NonNull GlassRefraction.Program program, @NonNull View glassHost,
+                        @NonNull View commonAncestor, float originX, float originY,
+                        float belowPx, float strengthScale) {
         BitmapShader shader = mShader;
         // While a swipe fades it out the picture is still bound, at the fade's strength.
         if (!mEnabled || shader == null || mStrength <= 0f
@@ -252,8 +266,11 @@ public final class DockIconReflection {
         }
         float left = row[0] - host[0] + originX;
         float top = row[1] - host[1] + originY;
-        program.setReflectionStrength(mStrength);
-        program.setReflection(shader, left, top, top + mRow.getHeight(), mScaleX, mScaleY);
+        boolean below = belowPx > 0f;
+        if (below) top += belowPx;
+        float scale = Float.isNaN(strengthScale) ? 1f : Math.max(0f, Math.min(1f, strengthScale));
+        program.setReflectionStrength(mStrength * scale);
+        program.setReflection(shader, left, top, top + mRow.getHeight(), mScaleX, mScaleY, below);
         return true;
     }
 

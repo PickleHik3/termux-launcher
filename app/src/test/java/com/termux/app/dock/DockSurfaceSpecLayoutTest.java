@@ -101,6 +101,42 @@ public class DockSurfaceSpecLayoutTest {
     }
 
     @Test
+    public void thePromptLineIsTheTraysGlassWithTheField() {
+        assertSame(DockSurfaceSpec.PROMPT_LINE, DockSurfaceSpec.forStyle(DockStyle.PROMPT_LINE));
+        assertSame(DockSurfaceSpec.PROMPT_LINE, DockSurfaceSpec.forDock(true, DockStyle.PROMPT_LINE));
+        assertSame(DockSurfaceSpec.PLAIN, DockSurfaceSpec.forDock(false, DockStyle.PROMPT_LINE));
+        DockSurfaceSpec line = DockSurfaceSpec.PROMPT_LINE;
+        DockSurfaceSpec tray = DockSurfaceSpec.GLASS_TRAY;
+        assertTrue(line.promptField);
+        assertFalse(tray.promptField);
+        assertFalse(DockSurfaceSpec.LENS_BEADS.promptField);
+        assertFalse(DockSurfaceSpec.PLAIN.promptField);
+        assertFalse("one slab, never beads", line.beads);
+        assertEquals(tray.dashesAboveSlab, line.dashesAboveSlab);
+        assertEquals(tray.softRimDp, line.softRimDp, 0f);
+        assertEquals(tray.shelf, line.shelf, 0f);
+        assertEquals(tray.iconReflections, line.iconReflections);
+        assertEquals(tray.contactShadow, line.contactShadow);
+    }
+
+    @Test
+    public void onlyLensBeadsInsetTheRowMore() {
+        for (boolean capsule : new boolean[] {false, true}) {
+            DockLayout beads = DockLayoutPolicy.compute(inputs(capsule, true, true, 2.18f)
+                .surface(DockSurfaceSpec.LENS_BEADS).build());
+            assertEquals(LensBeadGeometry.rowSideInsetPx(DENSITY), beads.appsRowExtraSideInsetPx());
+            assertEquals(Math.round(9f * DENSITY), beads.appsRowExtraSideInsetPx());
+            for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN,
+                    DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.PROMPT_LINE}) {
+                DockLayout layout = DockLayoutPolicy.compute(inputs(capsule, true, true, 2.18f)
+                    .surface(other).promptFieldReveal(1f).build());
+                assertEquals(other.name, 0, layout.appsRowExtraSideInsetPx());
+            }
+        }
+    }
+
+
+    @Test
     public void theBeadsStandOnTheTraysRowGeometry() throws IllegalAccessException {
         // The beads change the glass, not the row: dashes above, equal air, the same icon.
         for (boolean capsule : new boolean[] {false, true}) {

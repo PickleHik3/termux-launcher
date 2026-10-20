@@ -17,21 +17,24 @@ import com.termux.app.chrome.GlassRefraction;
  * (project-docs/active/home-dock-styles-2026-10-20.md): one slab, equal air above and below the
  * icons, the dashes floating just above the slab, and the shared glass work every later style
  * builds on. {@link #LENS_BEADS} keeps the tray's geometry but draws no slab: each icon sits on
- * a round bead of glass ({@link LensBeadGeometry}). A later style is one more constant here, and
+ * a round bead of glass ({@link LensBeadGeometry}). {@link #PROMPT_LINE} is the tray made one
+ * taller slab: the apps row, then the command palette's field ({@link PromptLineFieldView}) on
+ * a darker well, both on the same glass. A later style is one more constant here, and
  * {@link #forStyle} picks it.</p>
  */
 public final class DockSurfaceSpec {
 
     /** The dock as it always was: dashes in the row's own air, the narrow rim, no shelf, no reflection. */
     @NonNull public static final DockSurfaceSpec PLAIN =
-        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false);
+        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false, false);
 
     /**
      * Home's Glass tray. Its glass numbers are the program's own constants, so the spec says only
      * that they are on.
      */
     @NonNull public static final DockSurfaceSpec GLASS_TRAY =
-        new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false);
+        new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
+            false);
 
     /**
      * Home's Lens beads: the tray's row geometry (dashes above, equal air) with no slab; each icon
@@ -41,7 +44,18 @@ public final class DockSurfaceSpec {
      * its own icon's reflection.
      */
     @NonNull public static final DockSurfaceSpec LENS_BEADS =
-        new DockSurfaceSpec("lens_beads", true, GlassRefraction.BEAD_SOFT_RIM_DP, 1f, true, true, true);
+        new DockSurfaceSpec("lens_beads", true, GlassRefraction.BEAD_SOFT_RIM_DP, 1f, true, true, true,
+            false);
+
+    /**
+     * Home's Prompt line: the tray's glass (dashes above, equal air, soft rim, shelf, shadow) on
+     * one taller slab, the apps row over the palette's field ({@link DockLayout#promptFieldBandPx}).
+     * The icons are reflected only in the lower bevel, under the field, where the tray's own air
+     * would have put them.
+     */
+    @NonNull public static final DockSurfaceSpec PROMPT_LINE =
+        new DockSurfaceSpec("prompt_line", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
+            true);
 
     /** A name for logs and tests. */
     @NonNull public final String name;
@@ -65,10 +79,15 @@ public final class DockSurfaceSpec {
      * beads, another band on the dock's glass) the dock falls back to the slab.
      */
     public final boolean beads;
+    /**
+     * The slab carries the command palette's field under the apps row, on the same glass; how
+     * much of it is laid out is {@link DockLayoutPolicy.DockInputs#promptFieldReveal}.
+     */
+    public final boolean promptField;
 
     private DockSurfaceSpec(@NonNull String name, boolean dashesAboveSlab, float softRimDp,
                             float shelf, boolean iconReflections, boolean contactShadow,
-                            boolean beads) {
+                            boolean beads, boolean promptField) {
         this.name = name;
         this.dashesAboveSlab = dashesAboveSlab;
         this.softRimDp = softRimDp;
@@ -76,6 +95,7 @@ public final class DockSurfaceSpec {
         this.iconReflections = iconReflections;
         this.contactShadow = contactShadow;
         this.beads = beads;
+        this.promptField = promptField;
     }
 
     /**
@@ -102,6 +122,8 @@ public final class DockSurfaceSpec {
         switch (DockStyle.effectiveStyle(style)) {
             case LENS_BEADS:
                 return LENS_BEADS;
+            case PROMPT_LINE:
+                return PROMPT_LINE;
             case GLASS_TRAY:
             default:
                 return GLASS_TRAY;

@@ -132,6 +132,16 @@ public final class DockLayoutPolicy {
      */
     public static final float SHARED_ROW_AIR_DP = AccessoryStackLayoutPolicy.AZ_ROW_CROWN_DP;
 
+    /**
+     * The Prompt line's field as it stands under the apps row: the field view's height (its tap
+     * target, {@link PromptLineFieldView#HIT_HEIGHT_DP}) and the well drawn centred in it
+     * ({@link PromptLineFieldView#WELL_HEIGHT_DP}).
+     */
+    public static final float PROMPT_FIELD_HEIGHT_DP = PromptLineFieldView.HIT_HEIGHT_DP;
+    public static final float PROMPT_FIELD_WELL_DP = PromptLineFieldView.WELL_HEIGHT_DP;
+    /** The field's side inset inside the slab: the dock's content inset, the row's 14 dp. */
+    public static final float PROMPT_FIELD_SIDE_INSET_DP = 14f;
+
     /** Everything the dock's numbers are a function of, snapshotted by the caller. */
     public static final class DockInputs {
         /** False before the preference store is attached; the rows collapse to zero then. */
@@ -198,8 +208,16 @@ public final class DockLayoutPolicy {
         public final boolean railOnRight;
         public final int displayCutoutInsetLeftPx;
         public final int displayCutoutInsetRightPx;
+        /**
+         * How much of the Prompt line's field the slab carries under the apps row, 0..1: 1 while
+         * Home's dock wears {@link DockSurfaceSpec#PROMPT_LINE}, 0 for every other dock, and
+         * between while a style switch eases the slab's height. Read off its own value rather
+         * than the spec, so the slab can ease out after the spec has already moved on.
+         */
+        public final float promptFieldReveal;
 
         private DockInputs(Builder b) {
+            this.promptFieldReveal = b.promptFieldReveal;
             this.preferencesAvailable = b.preferencesAvailable;
             this.capsule = b.capsule;
             this.appsRowOnEdge = b.appsRowOnEdge;
@@ -256,8 +274,10 @@ public final class DockLayoutPolicy {
             private boolean railOnRight;
             private int displayCutoutInsetLeftPx;
             private int displayCutoutInsetRightPx;
+            private float promptFieldReveal;
 
             public Builder preferencesAvailable(boolean v) { this.preferencesAvailable = v; return this; }
+            public Builder promptFieldReveal(float v) { this.promptFieldReveal = v; return this; }
             public Builder capsule(boolean v) { this.capsule = v; return this; }
             public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
             public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
@@ -413,6 +433,24 @@ public final class DockLayoutPolicy {
         out.appsRowBandHintPx = Math.max(0, out.appsRowBandPx - airPx - tickSideAirPx);
         out.appsBarHeightHintPx = appsRowEnabled ? out.appsRowBandHintPx : 0;
 
+        // The Prompt line's field, under the apps row on the same slab. Its well keeps the air
+        // over the icons from the slab's lower edge, so the slab's outer padding is equal top and
+        // bottom; the row's own air under the icons is the gap between the icons and the well.
+        // Only on the dock's own row: a row on another edge, or no row, carries no field.
+        float reveal = Float.isNaN(in.promptFieldReveal)
+            ? 0f : Math.max(0f, Math.min(1f, in.promptFieldReveal));
+        if (appsRowEnabled && reveal > 0f && out.appsBarHeightPx > 0) {
+            int fieldPx = promptFieldHeightPx(density);
+            int padPx = promptFieldBottomPadPx(airPx, density);
+            int fullPx = fieldPx + padPx;
+            out.promptFieldFullBandPx = fullPx;
+            out.promptFieldBandPx = Math.round(fullPx * reveal);
+            out.promptFieldHeightPx = Math.min(out.promptFieldBandPx, Math.round(fieldPx * reveal));
+            out.promptFieldBottomPadPx = out.promptFieldBandPx - out.promptFieldHeightPx;
+            out.promptFieldWellGapPx = airPx;
+            out.promptFieldSideInsetPx = out.horizontalInsetPx + promptFieldSideInsetPx(density);
+        }
+
         // The apps rail.
         boolean railActive = in.appsOnRail && in.preferencesAvailable && in.appsRowEnabledPref;
         out.railActive = railActive;
@@ -465,6 +503,31 @@ public final class DockLayoutPolicy {
      */
     public static int loneRowAirPx(float density) {
         return Math.round(Math.max(0f, density) * LONE_ROW_AIR_DP);
+    }
+
+    /** The Prompt line's field view, px: its whole tap target. */
+    public static int promptFieldHeightPx(float density) {
+        return Math.round(Math.max(0f, density) * PROMPT_FIELD_HEIGHT_DP);
+    }
+
+    /** How far the field's well stands inside the field view, above and below it, px. */
+    public static int promptFieldWellInsetPx(float density) {
+        float d = Math.max(0f, density);
+        return Math.round(d * (PROMPT_FIELD_HEIGHT_DP - PROMPT_FIELD_WELL_DP) / 2f);
+    }
+
+    /**
+     * The slab's padding under the field view, px: what the air over the icons ({@code airPx})
+     * needs on top of the field's own inset around its well, so the well stands as far from the
+     * slab's lower edge as the icons do from its upper one.
+     */
+    public static int promptFieldBottomPadPx(int airPx, float density) {
+        return Math.max(0, airPx - promptFieldWellInsetPx(density));
+    }
+
+    /** {@link #PROMPT_FIELD_SIDE_INSET_DP} in px. */
+    public static int promptFieldSideInsetPx(float density) {
+        return Math.round(Math.max(0f, density) * PROMPT_FIELD_SIDE_INSET_DP);
     }
 
     /**
