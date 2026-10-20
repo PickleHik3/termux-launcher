@@ -14,7 +14,7 @@ first within each section. Delete this file with the spec when the work is deliv
 | 4a Taskbar + run strip | built on a worker branch, unmerged, unchecked on device | 0e19815bc | In `DockStyle.BUILT`. Home tile (drawer glyph, apps' size) takes one of the row's slots, start/middle/end by long-press drag (`layout.home.taskbar_home_tile`, absent = start), still during finger page swipes. Run strip on its own frost card above the dock and its dashes, where the float chips stood (they are off under this style); built on Home from the window chips; eases in and out. Reflection at 0.6 of the tray's. Prompt line's field hides under the open palette in bf8032e46. |
 | 4b Prompt line | built on a worker branch, unmerged, unchecked on device | ba9a96bf4 | In `DockStyle.BUILT`. One taller slab: apps row, then the 48 dp field on its well (14 dp side inset, air over the icons = air under the well, well radius = dock radius − that air); tap opens the palette with keyboard and caret; Enter runs the top result (read, unchanged); a style switch eases the slab 240 ms. Lens beads row inset 9 dp a side in a054ad056. |
 | 4c Wall strip | built on a worker branch, unmerged, unchecked on device | 2b9a5d86a | In `DockStyle.BUILT` (all five now). One taller slab: the 84 dp `WallStripRowView` over the apps row in the row's own host (dashes still above the slab), the air over it = the air under the icons, tiles nest by it; side inset read off the first laid-out icon (14 dp inside the slab without one). Fed from the same chips as the run strip (row windows and the display window, split shapes from `paneCellGeometry`); tiles slide/resize ~420 ms on open/close; tile tap = Workspace in on it, `+` = new row window, long-press = a small menu (no chip menu exists). Reflection lower bevel only at 0.8. The clock ticks alone (tiles in their own RenderNode on API 29+). Style switches ease both bands at once (240 ms). |
-| Emulator pass 2 | not started | | |
+| Emulator pass 2 | done; fix round 2 in progress | d168d98ed | Pass: picker live switch + persist, Prompt line tap/caret/Enter/hidden under palette, Wall strip geometry 0–2 tiles, taps + menu + Close from Home, Taskbar Home tile drag and tap, run strip taps, drawer folder pull, no shader errors. Fix: Lens beads not rendering (regression), ~100 dp seam jump (Prompt line, Wall strip), tray padding unequal on screen, run strip square corners, empty glass under the palette, missing glyph in tile/strip names, run strip names all "ho…", light Prompt well pale, Wall strip ignores floats, partial page left-heavy, blurred-text flash at Workspace landing (cause unknown). |
 | 5 Pong install | not started | | |
 
 ## Side fixes
@@ -130,3 +130,7 @@ its reason so it can be reversed.
 - 2026-10-21 · Wall strip: the clock's minute redraws the row view only; its tiles stand in a
   RenderNode of their own (API 29+) recorded again only when they change, so the tick re-records
   the clock alone. The dock's glass and reflection are not touched by it.
+- 2026-10-21 · Wall strip lists Home floats as tiles too, with a float mark: they are terminal
+  windows of the same session, and the Taskbar's run strip already lists them.
+- 2026-10-21 · A dock page with fewer apps than slots is centred (unless the slot/drag mapping
+  makes that unclean; then left as is and noted).
