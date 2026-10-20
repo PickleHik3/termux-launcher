@@ -119,6 +119,22 @@ public class DockSurfaceSpecLayoutTest {
         assertEquals(tray.contactShadow, line.contactShadow);
     }
 
+    @Test
+    public void onlyLensBeadsInsetTheRowMore() {
+        for (boolean capsule : new boolean[] {false, true}) {
+            DockLayout beads = DockLayoutPolicy.compute(inputs(capsule, true, true, 2.18f)
+                .surface(DockSurfaceSpec.LENS_BEADS).build());
+            assertEquals(LensBeadGeometry.rowSideInsetPx(DENSITY), beads.appsRowExtraSideInsetPx());
+            assertEquals(Math.round(9f * DENSITY), beads.appsRowExtraSideInsetPx());
+            for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN,
+                    DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.PROMPT_LINE}) {
+                DockLayout layout = DockLayoutPolicy.compute(inputs(capsule, true, true, 2.18f)
+                    .surface(other).promptFieldReveal(1f).build());
+                assertEquals(other.name, 0, layout.appsRowExtraSideInsetPx());
+            }
+        }
+    }
+
 
     @Test
     public void theBeadsStandOnTheTraysRowGeometry() throws IllegalAccessException {

@@ -197,6 +197,48 @@ public class LensBeadGeometryTest {
         assertEquals(rest, LensBeadGeometry.follow(rest, 0f, new float[0], 0, 0f, width, 1f));
     }
 
+    /**
+     * Seven 120 px icons on a 411 dp phone at 2.625 (the default page), the row edge to edge but
+     * for {@code insetPx} a side, its slots even from its own edges, on a full-width host.
+     */
+    private static LensBeadGeometry.Beads sevenOnAPhone(float insetPx) {
+        float density = 2.625f;
+        float width = 411f * density;
+        float icon = 120f;
+        float air = 6.5f * density;
+        float slot = (width - 2f * insetPx) / 7f;
+        float[] boxes = new float[7 * 4];
+        for (int i = 0; i < 7; i++) {
+            float cx = insetPx + slot * (i + 0.5f);
+            boxes[i * 4] = cx - icon / 2f;
+            boxes[i * 4 + 1] = air;
+            boxes[i * 4 + 2] = cx + icon / 2f;
+            boxes[i * 4 + 3] = air + icon;
+        }
+        return LensBeadGeometry.compute(boxes, 7, 0f, 0f, width, air + icon + air, density);
+    }
+
+    @Test
+    public void theRowInsetFitsSevenBeadsClearOfTheScreensEdges() {
+        float density = 2.625f;
+        // Edge to edge the end beads reach the screen's edge.
+        LensBeadGeometry.Beads bare = sevenOnAPhone(0f);
+        assertNotNull(bare);
+        assertTrue("bare margin " + (bare.centerX(0) - bare.radiusPx) / density,
+            (bare.centerX(0) - bare.radiusPx) / density < 4f);
+        // Inset 9 dp a side, each bead is about 1.1 of its icon and 12 dp from the edges.
+        LensBeadGeometry.Beads beads = sevenOnAPhone(LensBeadGeometry.rowSideInsetPx(density));
+        assertNotNull(beads);
+        assertEquals(7, beads.count());
+        float ratio = 2f * beads.radiusPx / 120f;
+        assertTrue("ratio " + ratio, ratio >= 1.08f && ratio <= 1.12f);
+        float left = (beads.centerX(0) - beads.radiusPx) / density;
+        float right = (411f * density - beads.centerX(6) - beads.radiusPx) / density;
+        assertTrue("left " + left, left >= LensBeadGeometry.MIN_SCREEN_EDGE_DP - 0.05f);
+        assertTrue("right " + right, right >= LensBeadGeometry.MIN_SCREEN_EDGE_DP - 0.05f);
+        assertEquals(12f, LensBeadGeometry.MIN_SCREEN_EDGE_DP, 0f);
+    }
+
     @Test
     public void aSwipeNeverDrawsMoreBeadsThanTheProgramHolds() {
         // Eight icons at rest and eight staged: mid-swipe nine reach the glass, past the eight

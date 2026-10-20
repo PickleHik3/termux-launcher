@@ -16129,7 +16129,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The apps row reads with more side padding than the A–Z row because its icons are
         // space-between (half a slot of empty space at each edge). Trim the apps-row inset ~18%
         // so the icons sit closer to the edges and line up better with the A–Z row's letter span.
-        int appsContentInset = Math.round(contentInset * 0.82f);
+        // Lens beads narrow the row's slots a little more, so the end beads stand clear of the
+        // screen's edges (LensBeadGeometry.ROW_SIDE_INSET_DP); every other dock adds nothing.
+        int appsContentInset = Math.round(contentInset * 0.82f) + layout.appsRowExtraSideInsetPx();
 
         // The find strip is dock furniture: it spans exactly the dock's own width, whichever style
         // is set, so it reads as the bar's top edge rather than as a floating panel.

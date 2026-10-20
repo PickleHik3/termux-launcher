@@ -229,6 +229,15 @@ public final class DockLayout {
     }
 
     /**
+     * The extra side inset the dock's apps row takes under {@link DockSurfaceSpec#LENS_BEADS}, on
+     * each side ({@link LensBeadGeometry#ROW_SIDE_INSET_DP}): it narrows the row's slots so the
+     * end beads stand clear of the screen's edges. Zero for every other surface.
+     */
+    public int appsRowExtraSideInsetPx() {
+        return surface.beads ? LensBeadGeometry.rowSideInsetPx(density) : 0;
+    }
+
+    /**
      * The dock's stacked height for the given extra-keys toolbar height: its rows, and the
      * Prompt line's field band under the apps row.
      */

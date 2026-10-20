@@ -41,7 +41,25 @@ public final class LensBeadGeometry {
     /** Where {@link #follow} parks its one bead when none is in reach: far off every surface. */
     static final float PARKED_X = -1.0e6f;
 
+    /**
+     * How much more the dock's apps row is inset on each side under Lens beads, dp. Seven icons
+     * on a 411 dp phone with the row edge to edge are 58.7 dp slots, and a bead held by its
+     * neighbour's gap then reaches to the screen's edge; 9 dp a side makes them 56.1 dp, so a
+     * bead is about 1.1 of the 46 dp icon and the end ones stand at least
+     * {@link #MIN_SCREEN_EDGE_DP} from the edge.
+     * The row's slots are even and start at its own edge, so the end bead's margin is this inset
+     * plus half the neighbour's gap ({@link #MIN_GAP_DP}) at least, on every row.
+     */
+    public static final float ROW_SIDE_INSET_DP = 9f;
+    /** The least room between an end bead and the screen's edge the inset buys, dp. */
+    public static final float MIN_SCREEN_EDGE_DP = ROW_SIDE_INSET_DP + MIN_GAP_DP / 2f;
+
     private LensBeadGeometry() {}
+
+    /** {@link #ROW_SIDE_INSET_DP} in px. */
+    public static int rowSideInsetPx(float density) {
+        return Math.round(Math.max(0f, density) * ROW_SIDE_INSET_DP);
+    }
 
     /** One row of beads, in the coordinates of the surface they were computed for. */
     public static final class Beads {
