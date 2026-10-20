@@ -1547,16 +1547,16 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   refracts after the update (no fall back to the plain frost, no "Glass refraction shader failed"
   in logcat) · emulator, then pong.
 - 2026-10-19 · feat(glass) living glass · Each of these keeps every case above at the resting look:
-  Look › Fancier Glass › Living glass off; Developer options' animator scale off (animations
+  Developer options' animator scale off (animations
   removed); General › Motion › Animation speed Off; lazy mode; battery saver. Slower and Faster
   stretch and shorten the settle · emulator.
 - 2026-10-19 · feat(glass) living glass · At rest nothing draws: `dumpsys gfxinfo` over 30 s
   untouched after a window switch matches the build before (5 frames in 30 s on pong's baseline),
   i.e. the springs stop asking for frames once settled (about half a second after landing) ·
   emulator for the count's shape.
-- 2026-10-19 · feat(glass) living glass · Settings › Look shows Fancier Glass › Living glass (on by
-  default; an install that had Motion light off keeps it off), a search for "living glass" lands
-  on it; below Android 13 the category is hidden · emulator, API 33+ and an API 31 or 32 image.
+- 2026-10-20 · feat(glass) living glass always on · Settings › Look shows no Fancier Glass
+  category on any Android version, a search for "living glass" finds nothing, and an install that
+  had Motion light off now moves like the rest · emulator, API 33+.
 
 ### Tilted glass (10-20)
 - 2026-10-20 · feat(glass) tilted glass · Fancier Glass on, Living glass on, two wall pages with
