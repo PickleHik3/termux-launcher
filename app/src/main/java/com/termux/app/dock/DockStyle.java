@@ -37,7 +37,7 @@ public enum DockStyle {
      */
     @NonNull
     public static final Set<DockStyle> BUILT = Collections.unmodifiableSet(EnumSet.of(GLASS_TRAY, LENS_BEADS,
-        PROMPT_LINE));
+        TASKBAR, PROMPT_LINE));
 
     @NonNull private final String mId;
 

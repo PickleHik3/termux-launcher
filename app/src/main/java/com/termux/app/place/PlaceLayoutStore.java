@@ -7,6 +7,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.dock.DockStyle;
+import com.termux.app.dock.TaskbarHomeTilePolicy;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -149,6 +150,12 @@ public final class PlaceLayoutStore {
      * predates it.
      */
     private static final String KEY_HOME_DOCK_STYLE = "dock_style";
+    /**
+     * Where the Taskbar's Home tile stands in Home's dock row, one value for both orientations:
+     * {@code layout.home.taskbar_home_tile}, a {@link TaskbarHomeTilePolicy.Position} value.
+     * Absent is the start.
+     */
+    private static final String KEY_HOME_TASKBAR_HOME_TILE = "taskbar_home_tile";
     /**
      * Minimal mode, one flag for the whole launcher: {@code place.minimal}. Before version 7 each
      * place kept its own under {@code place.<p>.minimal}, which is the same unscoped key.
@@ -417,6 +424,27 @@ public final class PlaceLayoutStore {
         if (mStore == null || style == dockStyle()) return;
         mStore.edit().putString(homeKey(KEY_HOME_DOCK_STYLE), style.storageValue()).apply();
         mRevision.incrementAndGet();
+    }
+
+    /**
+     * Where the Taskbar's Home tile stands in Home's dock row; the start until the user drags it.
+     * Home's alone, whichever variant's view asks.
+     */
+    @NonNull
+    public TaskbarHomeTilePolicy.Position taskbarHomeTile() {
+        if (mStore == null) return TaskbarHomeTilePolicy.DEFAULT;
+        return TaskbarHomeTilePolicy.parse(
+            mStore.getString(homeKey(KEY_HOME_TASKBAR_HOME_TILE), null));
+    }
+
+    /**
+     * The Home tile dropped at {@code position}. Not a layout change: the dock row re-lays its
+     * slots itself, so the layout's revision is left alone.
+     */
+    public void setTaskbarHomeTile(@NonNull TaskbarHomeTilePolicy.Position position) {
+        if (mStore == null || position == taskbarHomeTile()) return;
+        mStore.edit().putString(homeKey(KEY_HOME_TASKBAR_HOME_TILE),
+            TaskbarHomeTilePolicy.persisted(position)).apply();
     }
 
     /** {@code layout.home.<key>}: the Home layout's own, for both orientations. */
