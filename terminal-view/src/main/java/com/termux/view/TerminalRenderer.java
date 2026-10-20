@@ -368,8 +368,15 @@ public final class TerminalRenderer {
     private final UrlUnderlines mUrlUnderlines = new UrlUnderlines();
 
     private final Paint mTextPaint = new Paint();
-    /** Fills for the find overlay, kept off the text paint's per-run state. */
-    private final Paint mOverlayPaint = new Paint();
+    /**
+     * Cell backgrounds. Solid and never anti-aliased, as kitty draws them: a fill covers exactly
+     * the pixels whose centres fall inside its cell box, so two boxes sharing an edge partition the
+     * pixels along it under any transform the frame is drawn with, and nothing of the ground under
+     * the grid shows between rows. The text paint is anti-aliased for its glyphs.
+     */
+    private final Paint mCellFillPaint = solidFillPaint();
+    /** Fills for the find overlay, kept off the text paint's per-run state; tiled the same way. */
+    private final Paint mOverlayPaint = solidFillPaint();
     private Typeface mCurrentTypeface;
 
     /**
@@ -2541,7 +2548,7 @@ public final class TerminalRenderer {
             final long style = lineObject.getStyle(column);
             if (TextStyle.isBitmap(style)) {
                 if (pendingStartColumn != -1) {
-                    drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mTextPaint);
+                    drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mCellFillPaint);
                     pendingStartColumn = -1;
                 }
                 column += 1;
@@ -2562,11 +2569,11 @@ public final class TerminalRenderer {
                 reverseVideo || invertCursorTextColor || insideSelection);
             if (insideCursor) {
                 if (pendingStartColumn != -1) {
-                    drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mTextPaint);
+                    drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mCellFillPaint);
                     pendingStartColumn = -1;
                 }
                 if (backColor != defaultBackColor)
-                    drawCellRect(canvas, column, column + cellColumns, top, y, horizontalOffset, backColor, mTextPaint);
+                    drawCellRect(canvas, column, column + cellColumns, top, y, horizontalOffset, backColor, mCellFillPaint);
                 if (cursorDrawColumn == -1) {
                     cursorDrawColumn = column;
                     cursorDrawColumns = cellColumns;
@@ -2576,13 +2583,13 @@ public final class TerminalRenderer {
                     pendingEndColumn = column + cellColumns;
                 } else {
                     if (pendingStartColumn != -1)
-                        drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mTextPaint);
+                        drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mCellFillPaint);
                     pendingStartColumn = column;
                     pendingEndColumn = column + cellColumns;
                     pendingColor = backColor;
                 }
             } else if (pendingStartColumn != -1) {
-                drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mTextPaint);
+                drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mCellFillPaint);
                 pendingStartColumn = -1;
             }
             column += codePointWcWidth;
@@ -2593,7 +2600,7 @@ public final class TerminalRenderer {
             }
         }
         if (pendingStartColumn != -1)
-            drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mTextPaint);
+            drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mCellFillPaint);
         if (cursorDrawColumn != -1) {
             // Over a block the span is the block's, so the fill covers all of it, the bar stands at
             // its left edge and the underline is drawn only on the row that is its bottom.
@@ -2806,12 +2813,27 @@ public final class TerminalRenderer {
      * edges with the same monotone function makes adjacent runs share one integer boundary, so the
      * fills tile exactly: no gap, no double coverage. This is the same pixel-snapping kitty and
      * alacritty apply to cell backgrounds.
+     *
+     * <p>The rounding only holds while the frame is drawn on whole pixels; a translation or a scale
+     * between this canvas and the screen puts the shared edge back on a fraction. So the paint is
+     * not anti-aliased either ({@link #solidFillPaint}): a non-anti-aliased fill takes exactly the
+     * pixels whose centres it covers, and two fills sharing an edge split those pixels between
+     * them wherever the edge lands.
      */
     private void drawCellRect(Canvas canvas, int startColumn, int endColumn, float top, float bottom,
                               float horizontalOffset, int color, Paint paint) {
         paint.setColor(color);
-        canvas.drawRect(Math.round(horizontalOffset + startColumn * mFontWidth), Math.round(top),
-            Math.round(horizontalOffset + endColumn * mFontWidth), Math.round(bottom), paint);
+        canvas.drawRect(GridPixels.columnEdge(horizontalOffset, mFontWidth, startColumn),
+            Math.round(top), GridPixels.columnEdge(horizontalOffset, mFontWidth, endColumn),
+            Math.round(bottom), paint);
+    }
+
+    /** A fill paint without anti-aliasing, which {@code new Paint()} turns on by default. */
+    private static Paint solidFillPaint() {
+        Paint paint = new Paint();
+        paint.setAntiAlias(false);
+        paint.setStyle(Paint.Style.FILL);
+        return paint;
     }
 
     /** Draw kitty-protocol cursors after the normal screen, so they do not perturb text run batching. */
