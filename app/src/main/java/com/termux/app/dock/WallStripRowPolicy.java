@@ -8,7 +8,9 @@ import java.util.List;
 
 /**
  * The Wall strip's first row (spec "Wall strip"): the Workspace's terminals as tiles above Home's
- * apps row, a large clock beside them while there are few.
+ * apps row, a large clock beside them while there are few. Home floats are terminals of the same
+ * session and stand in the row as tiles too, after the row's own windows; the row counts them
+ * like any terminal.
  *
  * <p>The row shares the apps row's side inset, so the clock's left edge lines up with the first
  * icon and the last tile ends where the last icon ends. The clock takes a share of the row
@@ -203,6 +205,80 @@ public final class WallStripRowPolicy {
         if (left < viewLeft) scroll -= viewLeft - left;
         else if (right > viewRight) scroll += right - viewRight;
         return Math.max(0f, Math.min(row.maxScrollPx, scroll));
+    }
+
+    /**
+     * How a terminal tile's title and split shape share it ({@link #tileText}): one title line or
+     * two, whether the process glyph is drawn, the label's room and the shape's height.
+     */
+    public static final class TileText {
+        /** Whether the label has a line of its own under the number's. */
+        public final boolean twoLines;
+        /** Whether the process glyph is drawn after the number. */
+        public final boolean showsGlyph;
+        /** The label's room on its line; the label ellipsizes into it. */
+        public final float labelRoomPx;
+        /** The split shape's height from the tile's top padding; zero when it has no room. */
+        public final float shapeHeightPx;
+
+        TileText(boolean twoLines, boolean showsGlyph, float labelRoomPx, float shapeHeightPx) {
+            this.twoLines = twoLines;
+            this.showsGlyph = showsGlyph;
+            this.labelRoomPx = labelRoomPx;
+            this.shapeHeightPx = shapeHeightPx;
+        }
+
+        @NonNull @Override public String toString() {
+            return "TileText{" + (twoLines ? "two lines" : "one line")
+                + (showsGlyph ? ", glyph" : "") + ", label " + labelRoomPx + ", shape "
+                + shapeHeightPx + "}";
+        }
+    }
+
+    /**
+     * A terminal tile's title under its split shape. The title is the window's number (and a
+     * float's mark), its process glyph, then its label, on one line while the label fits there
+     * whole, or keeps at least {@code minLabelPx}; the glyph goes first when room runs short.
+     * When the line leaves the label less than that, as at a raised font scale, the label takes a
+     * line of its own under the number and the shape shrinks to make room: the shape gives way
+     * before the title does, and is left out when less than {@code minShapePx} of it would show.
+     * The number is always kept.
+     *
+     * @param headWidthPx the number and, for a float, its mark, with the gap after them
+     * @param glyphWidthPx the process glyph with the gap after it; zero for none
+     * @param labelWidthPx the whole label's width; zero for none
+     */
+    @NonNull
+    public static TileText tileText(float tileWidthPx, float tileHeightPx, float padPx,
+                                    float lineHeightPx, float titleGapPx, float headWidthPx,
+                                    float glyphWidthPx, float labelWidthPx, float minLabelPx,
+                                    float minShapePx) {
+        float inner = Math.max(0f, tileWidthPx - 2f * padPx);
+        float glyph = Math.max(0f, glyphWidthPx);
+        float label = Math.max(0f, labelWidthPx);
+        float line = inner - Math.max(0f, headWidthPx);
+        float oneLineShape = shapeHeight(tileHeightPx, padPx, lineHeightPx, titleGapPx, 1,
+            minShapePx);
+        if (label <= 0f) {
+            return new TileText(false, glyph > 0f && glyph <= line, 0f, oneLineShape);
+        }
+        if (glyph > 0f && label <= line - glyph) {
+            return new TileText(false, true, line - glyph, oneLineShape);
+        }
+        if (label <= line || line >= minLabelPx) {
+            return new TileText(false, false, Math.max(0f, line), oneLineShape);
+        }
+        if (2f * lineHeightPx + 2f * padPx <= tileHeightPx) {
+            return new TileText(true, glyph > 0f && glyph <= line, inner,
+                shapeHeight(tileHeightPx, padPx, lineHeightPx, titleGapPx, 2, minShapePx));
+        }
+        return new TileText(false, false, Math.max(0f, line), oneLineShape);
+    }
+
+    private static float shapeHeight(float tileHeightPx, float padPx, float lineHeightPx,
+                                     float titleGapPx, int lines, float minShapePx) {
+        float height = tileHeightPx - 2f * padPx - lines * lineHeightPx - titleGapPx;
+        return height >= Math.max(1f, minShapePx) ? height : 0f;
     }
 
     /**

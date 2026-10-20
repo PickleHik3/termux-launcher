@@ -175,4 +175,107 @@ public class WallStripRowPolicyTest {
         assertArrayEquals(new float[]{0f, 0f, 1f, 1f},
             WallStripRowPolicy.splitShape(Arrays.asList(new int[]{0, 0, 0, 0})), EPS);
     }
+
+    // ---------------------------------------------------------------- a tile's title
+
+    /** The row's height, the tile's padding, the gap over the title and the least shape, in dp. */
+    private static final float TILE_H = 84f;
+    private static final float PAD = 7f;
+    private static final float TITLE_GAP = 5f;
+    private static final float MIN_SHAPE = 8f;
+    /** One terminal beside the clock at 411 dp: the tile's width. */
+    private static final float ONE_TERMINAL_TILE = 76.5f;
+
+    /**
+     * A tile's title for monospace text {@code charDp} wide a character (12 sp: 7.2 dp at font
+     * scale 1, 10.8 at 1.5): {@code number} and the label's character counts, a float's mark of
+     * 9 dp, gaps of 5 dp, and a glyph a character wide.
+     */
+    private static WallStripRowPolicy.TileText title(float tileWidth, float charDp, int number,
+                                                    boolean floating, boolean glyph,
+                                                    int labelChars) {
+        float line = charDp * 1.17f / 0.6f;
+        float head = number * charDp + 5f + (floating ? 9f + 5f : 0f);
+        return WallStripRowPolicy.tileText(tileWidth, TILE_H, PAD, line, TITLE_GAP, head,
+            glyph ? charDp + 5f : 0f, labelChars * charDp, 4f * charDp, MIN_SHAPE);
+    }
+
+    @Test
+    public void title_atFontScaleOne_isOneLine_withItsGlyph() {
+        WallStripRowPolicy.TileText text = title(ONE_TERMINAL_TILE, 7.2f, 1, false, true, 4);
+        assertFalse(text.twoLines);
+        assertTrue(text.showsGlyph);
+        assertTrue(text.labelRoomPx >= 4f * 7.2f);
+        assertTrue(text.shapeHeightPx > 0f);
+    }
+
+    @Test
+    public void title_theGlyphGoesBeforeTheLabelDoes() {
+        // Five characters fit beside the number, not with the glyph too.
+        float tile = 2f * PAD + 7.2f + 5f + 5f * 7.2f + 1f;
+        WallStripRowPolicy.TileText text = title(tile, 7.2f, 1, false, true, 5);
+        assertFalse(text.twoLines);
+        assertFalse(text.showsGlyph);
+        assertTrue(text.labelRoomPx >= 5f * 7.2f);
+    }
+
+    @Test
+    public void title_aLongLabel_atFontScaleOne_isCutOnItsLine_theShapeKept() {
+        WallStripRowPolicy.TileText text = title(ONE_TERMINAL_TILE, 7.2f, 1, false, true, 20);
+        assertFalse(text.twoLines);
+        assertTrue(text.labelRoomPx >= 4f * 7.2f);
+        float oneLineShape = TILE_H - 2f * PAD - 7.2f * 1.17f / 0.6f - TITLE_GAP;
+        assertEquals(oneLineShape, text.shapeHeightPx, EPS);
+    }
+
+    @Test
+    public void title_atFontScaleOneAndAHalf_takesASecondLine_andTheShapeShrinks() {
+        // A float's tile at 1.5: number, mark and the label do not share a line.
+        float charDp = 10.8f;
+        WallStripRowPolicy.TileText text = title(ONE_TERMINAL_TILE, charDp, 1, true, true, 8);
+        assertTrue(text.twoLines);
+        assertEquals(ONE_TERMINAL_TILE - 2f * PAD, text.labelRoomPx, EPS);
+        assertTrue(text.labelRoomPx >= 4f * charDp);
+        float line = charDp * 1.17f / 0.6f;
+        assertEquals(TILE_H - 2f * PAD - 2f * line - TITLE_GAP, text.shapeHeightPx, EPS);
+        assertTrue(text.shapeHeightPx > 0f);
+        // The two lines and the shape stay inside the tile, nothing over another.
+        assertTrue(PAD + text.shapeHeightPx + TITLE_GAP + 2f * line + PAD <= TILE_H + EPS);
+    }
+
+    @Test
+    public void title_atFontScaleOneAndAHalf_fourTerminals_keepsNumberAndTitle() {
+        // Four terminals: five equal tiles in 383 dp with four 10 dp gaps.
+        float tile = (CONTENT - 4f * GAP) / 5f;
+        WallStripRowPolicy.TileText text = title(tile, 10.8f, 2, false, true, 6);
+        assertTrue(text.twoLines);
+        assertTrue(text.labelRoomPx >= 4f * 10.8f);
+    }
+
+    @Test
+    public void title_theShapeIsLeftOut_beforeTheTitle() {
+        // Past font scale 2: two lines leave less than the least shape.
+        float charDp = 15f;
+        WallStripRowPolicy.TileText text = title(ONE_TERMINAL_TILE, charDp, 1, true, false, 8);
+        assertTrue(text.twoLines);
+        assertEquals(0f, text.shapeHeightPx, 0f);
+        assertTrue(text.labelRoomPx > 0f);
+    }
+
+    @Test
+    public void title_noRoomForTwoLines_staysOneLine_withTheNumber() {
+        WallStripRowPolicy.TileText text = WallStripRowPolicy.tileText(40f, 30f, 7f, 20f, 5f,
+            30f, 10f, 60f, 40f, 8f);
+        assertFalse(text.twoLines);
+        assertFalse(text.showsGlyph);
+        assertEquals(0f, text.shapeHeightPx, 0f);
+    }
+
+    @Test
+    public void title_noLabel_isTheNumberAndGlyph() {
+        WallStripRowPolicy.TileText text = title(ONE_TERMINAL_TILE, 7.2f, 1, false, true, 0);
+        assertFalse(text.twoLines);
+        assertTrue(text.showsGlyph);
+        assertEquals(0f, text.labelRoomPx, 0f);
+    }
 }

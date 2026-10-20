@@ -37,6 +37,7 @@ import com.termux.R;
 import com.termux.app.AnimationSpeed;
 import com.termux.app.ReducedMotion;
 import com.termux.app.theme.SchemeTone;
+import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.terminal.TerminalColors;
 import com.termux.terminal.TextStyle;
 
@@ -76,7 +77,10 @@ public final class WallStripRowView extends View {
         void onNewTerminalTapped();
     }
 
-    /** One terminal tile: a row window, its title and split shape. */
+    /**
+     * One terminal tile: a row window or a Home float (a terminal window of the same session),
+     * its number, glyph and label, and its split shape.
+     */
     public static final class Tile {
         /**
          * Who the tile is across bindings (its window, whatever its place in the row), so a tile
@@ -86,26 +90,39 @@ public final class WallStripRowView extends View {
         public final long key;
         /** The window's chip, as the window bar counts chips. */
         public final int chipIndex;
-        @NonNull public final String title;
+        /** The window's number, as the run strip's badge says it; always drawn. */
+        @NonNull public final String number;
+        /** The window's label, plain text ({@link RunStripModel.Entry#shortLabel}). */
+        @NonNull public final String label;
+        /** The process glyph, a Nerd Font symbol drawn only with the bundled face; or empty. */
+        @NonNull public final String glyph;
         @NonNull public final String spokenLabel;
         public final boolean current;
         public final boolean attention;
+        /** Whether this is a Home float: it wears the float mark after its number. */
+        public final boolean floating;
         /** The window's panes as fractions of it, four floats a pane. */
         @NonNull final float[] shape;
 
-        public Tile(int chipIndex, @NonNull String title, @NonNull String spokenLabel,
-                    boolean current, boolean attention, @NonNull float[] shape) {
-            this(chipIndex, chipIndex, title, spokenLabel, current, attention, shape);
+        public Tile(int chipIndex, @NonNull String number, @NonNull String label,
+                    @NonNull String spokenLabel, boolean current, boolean attention,
+                    @NonNull float[] shape) {
+            this(chipIndex, chipIndex, number, label, "", spokenLabel, current, attention, false,
+                shape);
         }
 
-        public Tile(long key, int chipIndex, @NonNull String title, @NonNull String spokenLabel,
-                    boolean current, boolean attention, @NonNull float[] shape) {
+        public Tile(long key, int chipIndex, @NonNull String number, @NonNull String label,
+                    @NonNull String glyph, @NonNull String spokenLabel, boolean current,
+                    boolean attention, boolean floating, @NonNull float[] shape) {
             this.key = key;
             this.chipIndex = chipIndex;
-            this.title = title;
+            this.number = number;
+            this.label = label;
+            this.glyph = glyph;
             this.spokenLabel = spokenLabel;
             this.current = current;
             this.attention = attention;
+            this.floating = floating;
             this.shape = shape.clone();
         }
 
@@ -115,14 +132,17 @@ public final class WallStripRowView extends View {
             if (!(o instanceof Tile)) return false;
             Tile that = (Tile) o;
             return key == that.key && chipIndex == that.chipIndex && current == that.current
-                && attention == that.attention && title.equals(that.title)
-                && spokenLabel.equals(that.spokenLabel) && Arrays.equals(shape, that.shape);
+                && attention == that.attention && floating == that.floating
+                && number.equals(that.number) && label.equals(that.label)
+                && glyph.equals(that.glyph) && spokenLabel.equals(that.spokenLabel)
+                && Arrays.equals(shape, that.shape);
         }
 
         @Override
         public int hashCode() {
-            return 31 * (31 * chipIndex + title.hashCode()) + Arrays.hashCode(shape)
-                + (current ? 1 : 0) + (attention ? 2 : 0) + Long.hashCode(key);
+            return 31 * (31 * (31 * chipIndex + number.hashCode()) + label.hashCode())
+                + Arrays.hashCode(shape) + (current ? 1 : 0) + (attention ? 2 : 0)
+                + (floating ? 4 : 0) + Long.hashCode(key);
         }
     }
 
@@ -130,14 +150,15 @@ public final class WallStripRowView extends View {
     static final long ADD_TILE_KEY = Long.MIN_VALUE;
 
     /**
-     * The tiles for the row's own entries ({@link RunStripModel#rowEntries}), each titled with its
-     * number and label. {@code shapes} runs alongside them ({@link WallStripRowPolicy#splitShape});
-     * a missing or null shape reads as one whole pane.
+     * The tiles for {@code entries}: the row's own ({@link RunStripModel#rowEntries}) or the row's
+     * and the Home floats ({@link RunStripModel#wallEntries}), each with its number, glyph and
+     * distinguishing label, a float marked as one. {@code shapes} runs alongside them
+     * ({@link WallStripRowPolicy#splitShape}); a missing or null shape reads as one whole pane.
      */
     @NonNull
-    public static List<Tile> tilesOf(@NonNull List<RunStripModel.Entry> rowEntries,
+    public static List<Tile> tilesOf(@NonNull List<RunStripModel.Entry> entries,
                                      @Nullable List<float[]> shapes) {
-        return tilesOf(rowEntries, shapes, null);
+        return tilesOf(entries, shapes, null);
     }
 
     /**
@@ -146,18 +167,17 @@ public final class WallStripRowView extends View {
      * key is the chip's index.
      */
     @NonNull
-    public static List<Tile> tilesOf(@NonNull List<RunStripModel.Entry> rowEntries,
+    public static List<Tile> tilesOf(@NonNull List<RunStripModel.Entry> entries,
                                      @Nullable List<float[]> shapes, @Nullable List<Long> keys) {
-        List<Tile> tiles = new ArrayList<>(rowEntries.size());
-        for (int i = 0; i < rowEntries.size(); i++) {
-            RunStripModel.Entry entry = rowEntries.get(i);
+        List<Tile> tiles = new ArrayList<>(entries.size());
+        for (int i = 0; i < entries.size(); i++) {
+            RunStripModel.Entry entry = entries.get(i);
             if (entry.kind == RunStripModel.Kind.NEW_WINDOW) continue;
             float[] shape = shapes != null && i < shapes.size() ? shapes.get(i) : null;
             Long key = keys != null && i < keys.size() ? keys.get(i) : null;
-            String title = entry.label.isEmpty() ? entry.number : entry.number + " " + entry.label;
-            tiles.add(new Tile(key != null ? key : entry.chipIndex, entry.chipIndex, title,
-                entry.spokenLabel, entry.current, entry.attention,
-                shape == null ? WallStripRowPolicy.splitShape(null) : shape));
+            tiles.add(new Tile(key != null ? key : entry.chipIndex, entry.chipIndex, entry.number,
+                entry.shortLabel, entry.glyph, entry.spokenLabel, entry.current, entry.attention,
+                entry.isFloat(), shape == null ? WallStripRowPolicy.splitShape(null) : shape));
         }
         return tiles;
     }
@@ -170,6 +190,14 @@ public final class WallStripRowView extends View {
     static final float SHAPE_GAP_DP = 2f;
     static final float SHAPE_RADIUS_DP = 3f;
     static final float TITLE_GAP_DP = 5f;
+    /** Room after the number, the float mark and the glyph on the title line. */
+    static final float TITLE_INNER_GAP_DP = 5f;
+    /** A Home float's mark after its number: two small stacked windows, this square. */
+    static final float FLOAT_MARK_DP = 9f;
+    /** Below this the split shape says nothing, and the tile leaves it out for its title. */
+    static final float MIN_SHAPE_DP = 8f;
+    /** The least of a label worth its line beside the number, in characters. */
+    static final String MIN_LABEL_SAMPLE = "abc…";
     static final float RING_DP = 1.5f;
     static final float DOT_DP = 7f;
     static final float TIME_SP = 50f;
@@ -202,8 +230,11 @@ public final class WallStripRowView extends View {
     private final TextPaint mDatePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint mTitlePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint mPlusPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    /** The process glyphs, in the bundled Nerd Font symbols face; null when it is missing. */
+    @Nullable private final TextPaint mGlyphPaint;
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mMarkStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mDashed = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mRect = new RectF();
     private final RowAccessibility mAccessibility;
@@ -226,7 +257,8 @@ public final class WallStripRowView extends View {
     private float mClockFullWidthPx;
     @NonNull private WallStripRowPolicy.Row mRow;
     private float mScrollPx;
-    @NonNull private CharSequence[] mTitles = new CharSequence[0];
+    /** Each tile's title fitted to it, from the last relayout. */
+    @NonNull private Fitted[] mTitles = new Fitted[0];
 
     @NonNull private String mTime = "";
     @NonNull private String mDate = "";
@@ -235,7 +267,9 @@ public final class WallStripRowView extends View {
 
     @ColorInt private int mAccent;
     @ColorInt private int mClockInk;
+    /** The tiles' well and how opaque it lies: a light scheme's is a dark tint over the glass. */
     @ColorInt private int mWell;
+    private float mWellAlpha = WELL_ALPHA;
     @ColorInt private int mTitleInk;
     @ColorInt private int mAmber;
     @ColorInt private int mOnSurface;
@@ -262,15 +296,29 @@ public final class WallStripRowView extends View {
     @Nullable private Object mTilesNode;
     private boolean mTilesDirty = true;
 
+    /** A tile's title fitted to it: its label cut to its room, and how title and shape share it. */
+    private static final class Fitted {
+        static final Fitted NONE = new Fitted("",
+            WallStripRowPolicy.tileText(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f));
+
+        @NonNull final CharSequence label;
+        @NonNull final WallStripRowPolicy.TileText text;
+
+        Fitted(@NonNull CharSequence label, @NonNull WallStripRowPolicy.TileText text) {
+            this.label = label;
+            this.text = text;
+        }
+    }
+
     /** A tile that has just left the row, drawn where it stood while it shrinks away. */
     private static final class Leaving {
         @NonNull final Tile tile;
-        @NonNull final CharSequence title;
+        @NonNull final Fitted title;
         final float left;
         final float width;
         final float alpha;
 
-        Leaving(@NonNull Tile tile, @NonNull CharSequence title, float left, float width,
+        Leaving(@NonNull Tile tile, @NonNull Fitted title, float left, float width,
                 float alpha) {
             this.tile = tile;
             this.title = title;
@@ -299,6 +347,17 @@ public final class WallStripRowView extends View {
         mTitlePaint.setTypeface(Typeface.MONOSPACE);
         mPlusPaint.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
         mPlusPaint.setTextAlign(Paint.Align.CENTER);
+        // The chips' process glyphs are Nerd Font symbols no system face has; only the bundled
+        // symbols face draws them, and without it the tiles leave them out.
+        Typeface symbols = NerdFontSpans.typeface(context);
+        if (symbols != null) {
+            mGlyphPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+            mGlyphPaint.setTypeface(symbols);
+        } else {
+            mGlyphPaint = null;
+        }
+        mMarkStroke.setStyle(Paint.Style.STROKE);
+        mMarkStroke.setStrokeWidth(Math.max(1f, mDensity));
         float ring = RING_DP * mDensity;
         mRim.setStyle(Paint.Style.STROKE);
         mRim.setStrokeWidth(ring);
@@ -370,7 +429,8 @@ public final class WallStripRowView extends View {
                 if (key == ADD_TILE_KEY || staying.contains(key)) {
                     from.put(key, mDrawn.clone());
                 } else if (i < mTiles.size()) {
-                    leaving.add(new Leaving(mTiles.get(i), i < mTitles.length ? mTitles[i] : "",
+                    leaving.add(new Leaving(mTiles.get(i),
+                        i < mTitles.length ? mTitles[i] : Fitted.NONE,
                         mDrawn[0], mDrawn[1], mDrawn[2]));
                 }
             }
@@ -579,15 +639,34 @@ public final class WallStripRowView extends View {
             mDockRadiusPx, mDockPaddingPx, mClockShare);
         if (mSlide == null) mClockFullWidthPx = mRow.clockWidthPx;
         mScrollPx = Math.max(0f, Math.min(mRow.maxScrollPx, mScrollPx));
-        float room = Math.max(0f, mRow.tileWidthPx - 2f * TILE_PAD_DP * mDensity);
-        CharSequence[] titles = new CharSequence[mTiles.size()];
-        for (int i = 0; i < titles.length; i++) {
-            titles[i] = room <= 0f ? ""
-                : TextUtils.ellipsize(mTiles.get(i).title, mTitlePaint, room,
-                    TextUtils.TruncateAt.END);
-        }
+        Fitted[] titles = new Fitted[mTiles.size()];
+        for (int i = 0; i < titles.length; i++) titles[i] = fit(mTiles.get(i));
         mTitles = titles;
         fitClockText();
+    }
+
+    /** Tile {@code tile}'s title fitted to the row's tile size ({@link WallStripRowPolicy#tileText}). */
+    @NonNull
+    private Fitted fit(@NonNull Tile tile) {
+        float inner = TITLE_INNER_GAP_DP * mDensity;
+        float head = mTitlePaint.measureText(tile.number) + inner
+            + (tile.floating ? FLOAT_MARK_DP * mDensity + inner : 0f);
+        float glyph = mGlyphPaint == null || tile.glyph.isEmpty() ? 0f
+            : mGlyphPaint.measureText(tile.glyph) + inner;
+        float label = tile.label.isEmpty() ? 0f : mTitlePaint.measureText(tile.label);
+        WallStripRowPolicy.TileText text = WallStripRowPolicy.tileText(mRow.tileWidthPx,
+            getHeight(), TILE_PAD_DP * mDensity, lineHeight(), TITLE_GAP_DP * mDensity, head,
+            glyph, label, mTitlePaint.measureText(MIN_LABEL_SAMPLE), MIN_SHAPE_DP * mDensity);
+        CharSequence fitted = text.labelRoomPx <= 0f || tile.label.isEmpty() ? ""
+            : TextUtils.ellipsize(tile.label, mTitlePaint, text.labelRoomPx,
+                TextUtils.TruncateAt.END);
+        return new Fitted(fitted, text);
+    }
+
+    /** One title line's height. */
+    private float lineHeight() {
+        Paint.FontMetrics metrics = mTitlePaint.getFontMetrics();
+        return -metrics.ascent + metrics.descent;
     }
 
     /** The time shrinks to the clock's full room, so the slide never squeezes the digits. */
@@ -727,10 +806,10 @@ public final class WallStripRowView extends View {
         for (int i = 0; i < mRow.tileCount(); i++) {
             drawnRect(i, mDrawn);
             if (i == mRow.addTileIndex()) {
-                drawTile(canvas, null, "", mDrawn[0], mDrawn[1], mDrawn[2]);
+                drawTile(canvas, null, Fitted.NONE, mDrawn[0], mDrawn[1], mDrawn[2]);
             } else {
-                drawTile(canvas, mTiles.get(i), i < mTitles.length ? mTitles[i] : "", mDrawn[0],
-                    mDrawn[1], mDrawn[2]);
+                drawTile(canvas, mTiles.get(i), i < mTitles.length ? mTitles[i] : Fitted.NONE,
+                    mDrawn[0], mDrawn[1], mDrawn[2]);
             }
         }
         canvas.restoreToCount(saved);
@@ -740,7 +819,7 @@ public final class WallStripRowView extends View {
      * One tile at {@code left}, {@code width} wide, at {@code alpha}: a terminal's, or the
      * {@code +} tile for a null {@code tile}. Its text stays inside it while it resizes.
      */
-    private void drawTile(@NonNull Canvas canvas, @Nullable Tile tile, @NonNull CharSequence title,
+    private void drawTile(@NonNull Canvas canvas, @Nullable Tile tile, @NonNull Fitted title,
                           float left, float width, float alpha) {
         if (width <= 0.5f || alpha <= 0f || left > getWidth() || left + width < 0f) return;
         int saved = alpha < 1f
@@ -780,22 +859,20 @@ public final class WallStripRowView extends View {
     }
 
     private void drawTerminalTile(@NonNull Canvas canvas, @NonNull Tile tile,
-                                  @NonNull CharSequence text, float left, float tileWidth) {
+                                  @NonNull Fitted fitted, float left, float tileWidth) {
         float radius = Math.min(mRow.tileRadiusPx, tileWidth / 2f);
         float half = mRim.getStrokeWidth() / 2f;
         mRect.set(left, 0f, left + tileWidth, getHeight());
-        mFill.setColor(SchemeTone.withAlpha(mWell, WELL_ALPHA));
+        mFill.setColor(SchemeTone.withAlpha(mWell, mWellAlpha));
         canvas.drawRoundRect(mRect, radius, radius, mFill);
 
-        // The split shape over the title.
+        // The split shape over the title, as tall as the title leaves it.
         float pad = TILE_PAD_DP * mDensity;
-        Paint.FontMetrics title = mTitlePaint.getFontMetrics();
-        float titleHeight = -title.ascent + title.descent;
         float shapeTop = pad;
-        float shapeBottom = getHeight() - pad - titleHeight - TITLE_GAP_DP * mDensity;
+        float shapeBottom = pad + fitted.text.shapeHeightPx;
         float shapeLeft = left + pad;
         float shapeRight = left + tileWidth - pad;
-        if (shapeBottom > shapeTop && shapeRight > shapeLeft) {
+        if (fitted.text.shapeHeightPx > 0f && shapeRight > shapeLeft) {
             float w = shapeRight - shapeLeft;
             float h = shapeBottom - shapeTop;
             float gap = SHAPE_GAP_DP * mDensity / 2f;
@@ -813,11 +890,7 @@ public final class WallStripRowView extends View {
                 canvas.drawRoundRect(mRect, paneRadius, paneRadius, mFill);
             }
         }
-        if (text.length() > 0) {
-            mTitlePaint.setColor(mTitleInk);
-            canvas.drawText(text, 0, text.length(), left + pad,
-                getHeight() - pad - title.descent, mTitlePaint);
-        }
+        drawTitle(canvas, tile, fitted, left + pad);
 
         // The ring: amber for a window asking, the accent for the one in front, a faint rim else.
         mRect.set(left + half, half, left + tileWidth - half, getHeight() - half);
@@ -831,6 +904,53 @@ public final class WallStripRowView extends View {
             mFill.setColor(mAmber);
             canvas.drawCircle(left + tileWidth - pad, pad, dot / 2f, mFill);
         }
+    }
+
+    /**
+     * The title from {@code x}: the number, a float's mark, the glyph, then the label on the same
+     * line or on a line of its own below.
+     */
+    private void drawTitle(@NonNull Canvas canvas, @NonNull Tile tile, @NonNull Fitted fitted,
+                           float x) {
+        Paint.FontMetrics metrics = mTitlePaint.getFontMetrics();
+        float inner = TITLE_INNER_GAP_DP * mDensity;
+        float lastBaseline = getHeight() - TILE_PAD_DP * mDensity - metrics.descent;
+        float headBaseline = fitted.text.twoLines ? lastBaseline - lineHeight() : lastBaseline;
+        mTitlePaint.setColor(mTitleInk);
+        canvas.drawText(tile.number, x, headBaseline, mTitlePaint);
+        float at = x + mTitlePaint.measureText(tile.number) + inner;
+        if (tile.floating) {
+            // Centred on the digits' height.
+            float digitsMiddle = headBaseline + (metrics.ascent * 0.72f) / 2f;
+            drawFloatMark(canvas, at, digitsMiddle, FLOAT_MARK_DP * mDensity);
+            at += FLOAT_MARK_DP * mDensity + inner;
+        }
+        if (fitted.text.showsGlyph && mGlyphPaint != null && !tile.glyph.isEmpty()) {
+            mGlyphPaint.setColor(mTitleInk);
+            canvas.drawText(tile.glyph, at, headBaseline, mGlyphPaint);
+            at += mGlyphPaint.measureText(tile.glyph) + inner;
+        }
+        CharSequence label = fitted.label;
+        if (label.length() == 0) return;
+        float labelX = fitted.text.twoLines ? x : at;
+        canvas.drawText(label, 0, label.length(), labelX, lastBaseline, mTitlePaint);
+    }
+
+    /**
+     * A Home float's mark, {@code size} square from {@code left}, centred on {@code centerY}: a
+     * window outlined behind and one filled in front of it, a window floating over another.
+     */
+    private void drawFloatMark(@NonNull Canvas canvas, float left, float centerY, float size) {
+        float box = size * 0.64f;
+        float corner = size * 0.14f;
+        float top = centerY - size / 2f;
+        float inset = mMarkStroke.getStrokeWidth() / 2f;
+        mMarkStroke.setColor(mTitleInk);
+        mRect.set(left + size - box + inset, top + inset, left + size - inset, top + box - inset);
+        canvas.drawRoundRect(mRect, corner, corner, mMarkStroke);
+        mFill.setColor(mTitleInk);
+        mRect.set(left, top + size - box, left + box, top + size);
+        canvas.drawRoundRect(mRect, corner, corner, mFill);
     }
 
     private void drawPlusTile(@NonNull Canvas canvas, float left, float tileWidth) {
@@ -855,6 +975,7 @@ public final class WallStripRowView extends View {
         int accent = mAccent;
         int onSurface = mOnSurface;
         int well = mWell;
+        float wellAlpha = mWellAlpha;
         int titleInk = mTitleInk;
         int amber = mAmber;
         int clockInk = mClockInk;
@@ -866,22 +987,28 @@ public final class WallStripRowView extends View {
         // The theme's ink until the dock hands the glass's.
         if (!mClockInkHanded) mClockInk = mOnSurface;
         // The tiles are terminals: their wells and titles come from the terminal's own scheme,
-        // the well a little below its background as the Prompt line's is.
+        // the well a darker recess as the Prompt line's is: on a dark scheme a little below its
+        // background, on a light one a dark tint over the glass. Inks are measured where they
+        // stand, against the well as the Prompt line reads it.
         int[] colors = TerminalColors.COLOR_SCHEME.mDefaultColors;
         PromptLineInk ink = PromptLineInk.resolve(colors[TextStyle.COLOR_INDEX_BACKGROUND],
             colors[TextStyle.COLOR_INDEX_FOREGROUND], colors[PromptLineInk.ANSI_BLUE],
             colors[PromptLineInk.ANSI_GREEN]);
         mWell = ink.well;
+        mWellAlpha = ink.tinted ? ink.wellAlpha : WELL_ALPHA;
         mTitleInk = SchemeTone.contrastTone(colors[TextStyle.COLOR_INDEX_FOREGROUND] | 0xFF000000,
-            mWell, PromptLineInk.TEXT_CONTRAST);
-        mAmber = SchemeTone.contrastTone(colors[ANSI_YELLOW] | 0xFF000000, mWell, MARK_CONTRAST);
+            ink.inkSurface, PromptLineInk.TEXT_CONTRAST);
+        mAmber = SchemeTone.contrastTone(colors[ANSI_YELLOW] | 0xFF000000, ink.inkSurface,
+            MARK_CONTRAST);
         return accent != mAccent || onSurface != mOnSurface || well != mWell
-            || titleInk != mTitleInk || amber != mAmber || clockInk != mClockInk;
+            || wellAlpha != mWellAlpha || titleInk != mTitleInk || amber != mAmber
+            || clockInk != mClockInk;
     }
 
     private void applyTextSizes() {
         mDatePaint.setTextSize(sp(DATE_SP));
         mTitlePaint.setTextSize(sp(TITLE_SP));
+        if (mGlyphPaint != null) mGlyphPaint.setTextSize(sp(TITLE_SP));
         mPlusPaint.setTextSize(sp(PLUS_SP));
     }
 
