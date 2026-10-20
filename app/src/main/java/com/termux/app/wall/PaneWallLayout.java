@@ -376,6 +376,8 @@ public final class PaneWallLayout extends ViewGroup {
     private final float[] mHomeHit = new float[4];
     /** The dock's top the Home grabber was last drawn over, so a dock that moves redraws it. */
     private float mDrawnDockTop = Float.NaN;
+    /** Whether the dock's page dashes stood in for Home's grabber when it was last drawn. */
+    private boolean mDrawnHomeDashes;
     /**
      * Watches the dock while Home shows its grabber: the dock rides up and down with the keyboard
      * by its own layout and translation, which the wall is not told of, and the grabber stands on
@@ -1292,6 +1294,19 @@ public final class PaneWallLayout extends ViewGroup {
         return mDockLocation[1] - mWindowLocation[1];
     }
 
+    /**
+     * Whether the dock's page dashes are on screen: the dock has more than one page, so its
+     * dashes float just over the slab where Home's grabber would stand, and they are the cue.
+     */
+    private boolean homeDockShowsPageDashes() {
+        View root = getRootView();
+        if (root == null || root == this) return false;
+        View dashes = root.findViewById(com.termux.R.id.apps_bar_indicator_band);
+        return dashes instanceof com.termux.app.launcher.paging.PageTickStripView
+            && isOnScreen(dashes)
+            && ((com.termux.app.launcher.paging.PageTickStripView) dashes).getPageCount() > 1;
+    }
+
     private static boolean isOnScreen(@Nullable View view) {
         return view != null && view.isShown() && view.getHeight() > 0;
     }
@@ -1302,8 +1317,10 @@ public final class PaneWallLayout extends ViewGroup {
         View home = mPageViews.get(PaneWallPage.WIDGETS);
         if (home == null || home.getVisibility() != VISIBLE) return;
         float top = dockTopInWall();
-        if (Float.compare(top, mDrawnDockTop) == 0) return;
+        boolean dashes = homeDockShowsPageDashes();
+        if (Float.compare(top, mDrawnDockTop) == 0 && dashes == mDrawnHomeDashes) return;
         mDrawnDockTop = top;
+        mDrawnHomeDashes = dashes;
         invalidate();
     }
 
@@ -1881,8 +1898,13 @@ public final class PaneWallLayout extends ViewGroup {
             float pivotY = page.getTop() + page.getTranslationY() + page.getPivotY();
             if (bottom && place == PaneWallPage.WIDGETS && loadHomeGrabber(page)) {
                 // Home's stands over the dock, centred on the screen, and slides with its page.
-                mGrabber.drawHome(canvas, mHomePill[0], mHomePill[1], mHomePill[2], mHomePill[3],
-                    page.getTranslationX(), visibility);
+                // Where the dock has pages its dashes stand there and are the cue themselves
+                // (one cue, never two stacked); the swipe that starts by it is unchanged.
+                mDrawnHomeDashes = homeDockShowsPageDashes();
+                if (!mDrawnHomeDashes) {
+                    mGrabber.drawHome(canvas, mHomePill[0], mHomePill[1], mHomePill[2],
+                        mHomePill[3], page.getTranslationX(), visibility);
+                }
             } else if (bottom) {
                 float bottomY = pivotY + (page.getHeight() - page.getPivotY()) * page.getScaleY();
                 mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), visibility);
