@@ -66,4 +66,18 @@ public interface CommandPaletteHomeHost {
 
     /** Puts away the keyboard the Home palette raised, as its overlay closes. */
     default void lowerKeyboard() { }
+
+    /** Whether the in-app keyboard stands up on the place in view. */
+    default boolean isKeyboardUp() {
+        return false;
+    }
+
+    /**
+     * Raises the in-app keyboard for the Home palette to open on.
+     *
+     * @return false when there is no keyboard to raise; the palette then opens alone
+     */
+    default boolean raiseKeyboard() {
+        return false;
+    }
 }

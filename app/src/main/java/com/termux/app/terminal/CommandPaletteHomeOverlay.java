@@ -1,5 +1,6 @@
 package com.termux.app.terminal;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
@@ -37,6 +38,33 @@ final class CommandPaletteHomeOverlay {
         boolean lower = mRaisedKeyboard && onHome && !alwaysOn;
         mRaisedKeyboard = false;
         return lower;
+    }
+
+    /** How a field-shaped entry to the palette opens it ({@link #fieldOpen}). */
+    enum FieldOpen {
+        /** Nothing to raise, or the keyboard is already up: the palette opens now, unpaired. */
+        NOW,
+        /** The keyboard is raised first and the palette opens on the next frame, paired with it. */
+        AFTER_KEYBOARD
+    }
+
+    /**
+     * How a tap on a field that stands for the palette's search (the Prompt line) opens it: with
+     * {@code withKeyboard} and the keyboard down, the keyboard comes first, since the palette
+     * sprouts from where the keyboard stands; otherwise the palette opens at once.
+     */
+    @NonNull
+    static FieldOpen fieldOpen(boolean withKeyboard, boolean keyboardUp) {
+        return withKeyboard && !keyboardUp ? FieldOpen.AFTER_KEYBOARD : FieldOpen.NOW;
+    }
+
+    /**
+     * After the keyboard was raised for a field's open, the frame it lands on: open the palette
+     * when Home is still in view; otherwise the keyboard raised for nothing goes down again,
+     * unless always on keeps it.
+     */
+    static boolean lowersRaisedKeyboard(boolean onHome, boolean alwaysOn) {
+        return !onHome && !alwaysOn;
     }
 
     /**

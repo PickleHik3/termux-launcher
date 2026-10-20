@@ -388,6 +388,41 @@ public final class TerminalCommandPaletteController
         if (!mOpen) endHomeOverlay();
     }
 
+    /**
+     * The door for a field that stands for the palette's search on Home (the dock's Prompt line):
+     * the Home palette opens with the caret in its query line, {@code initialQuery} already typed
+     * when there is one, and with {@code withKeyboard} the in-app keyboard raised as one overlay
+     * with it, which goes down again with the palette ({@link #showHomeOverlay}). An open palette
+     * is left as it is. Main thread only.
+     */
+    public void openFromField(@Nullable String initialQuery, boolean withKeyboard) {
+        if (mOpen) return;
+        String query = initialQuery == null ? "" : initialQuery;
+        CommandPaletteHomeOverlay.FieldOpen how = CommandPaletteHomeOverlay.fieldOpen(withKeyboard,
+            mHomeHost.isKeyboardUp());
+        if (how == CommandPaletteHomeOverlay.FieldOpen.NOW || !mHomeHost.raiseKeyboard()) {
+            // Nothing raised here, so nothing for the palette's close to put down.
+            showHomeOverlay(true);
+            if (mOpen) appendText(query);
+            return;
+        }
+        // A keyboard raised just now is laid out by the next frame; the palette sprouts from its
+        // space bar, so it opens once the keyboard stands where it will be.
+        mActivity.getWindow().getDecorView().post(() -> {
+            if (mOpen) return;
+            boolean onHome = mHomeHost.isOnHome();
+            if (CommandPaletteHomeOverlay.lowersRaisedKeyboard(onHome,
+                mHomeHost.isKeyboardAlwaysOn())) {
+                // The wall moved away before the palette could open: nothing to pair with.
+                mHomeHost.lowerKeyboard();
+                return;
+            }
+            if (!onHome) return;
+            showHomeOverlay(false);
+            if (mOpen) appendText(query);
+        });
+    }
+
     /** The palette closed: the keyboard the Home overlay raised goes down with it. */
     private void endHomeOverlay() {
         if (mHomeOverlay.closed(mHomeHost.isOnHome(), mHomeHost.isKeyboardAlwaysOn()))
