@@ -17005,9 +17005,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Feeds the row on Home from the windows the Workspace's bar shows: the row's terminal
-     * windows and the display window's at its place, each with its split shape. Nobody is looking
-     * at a row window from Home, so none is acknowledged here; the ringed tile is the window the
-     * Workspace has in front.
+     * windows and the display window's at its place, then Home's floats (as the Taskbar's run
+     * strip lists them), each with its split shape. Nobody is looking at a row window from Home,
+     * so none is acknowledged here; the ringed tile is the Home float in focus, else the window
+     * the Workspace has in front.
      */
     private void syncWallStrip(@NonNull java.util.List<Integer> foregroundPids) {
         com.termux.app.dock.WallStripRowView row = mWallStripRow;
@@ -17052,12 +17053,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 keys.add(WALL_STRIP_DISPLAY_KEY);
             }
         }
+        // Then Home's floats, as the Taskbar's run strip lists them: each a tile of its own after
+        // the row's, a minimised one marked, the float in focus ringed.
+        int firstFloat = items.size();
+        addHomeFloatChips(items, foregroundPids);
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
+        boolean[] minimised = new boolean[floats.size()];
+        com.termux.app.terminal.TerminalPaneController.Window focused =
+            mPaneController.focusedHomeFloat();
+        for (int i = 0; i < floats.size(); i++) {
+            com.termux.app.terminal.TerminalPaneController.Window window = floats.get(i);
+            minimised[i] = window.isMinimised();
+            if (window == focused && !window.isMinimised()) selected = firstFloat + i;
+            java.util.List<int[]> cells = new java.util.ArrayList<>();
+            for (TerminalSession shell : mPaneController.shellsOf(window))
+                cells.add(mPaneController.paneCellGeometry(shell));
+            shapes.add(com.termux.app.dock.WallStripRowPolicy.splitShape(cells));
+            keys.add((long) System.identityHashCode(window));
+        }
+        mWallStripRowCount = rowCount;
         java.util.List<com.termux.app.dock.RunStripModel.Entry> entries =
-            com.termux.app.dock.RunStripModel.build(items, selected, rowCount, displayChip, null,
-                getString(R.string.launcher_entry_new_window));
-        row.setTiles(com.termux.app.dock.WallStripRowView.tilesOf(
-            com.termux.app.dock.RunStripModel.rowEntries(entries), shapes, keys));
+            com.termux.app.dock.RunStripModel.build(items, selected, rowCount, displayChip,
+                minimised, getString(R.string.launcher_entry_new_window));
+        // Every entry but + is a tile (tilesOf leaves + out): the row's windows, then the floats,
+        // in the order the shapes and keys were laid down above.
+        row.setTiles(com.termux.app.dock.WallStripRowView.tilesOf(entries, shapes, keys));
     }
+
+    /** How many of the Wall strip's tiles were the row's windows, the display's included. */
+    private int mWallStripRowCount;
 
     /**
      * The row takes the windows as they are now, on Home where it shows; elsewhere it keeps what
@@ -17081,6 +17105,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void onWallStripTileTapped(int chipIndex) {
         if (mPaneController == null || mPaneWallController == null || chipIndex < 0) return;
+        // A Home float's tile brings it back on its page; Home stays in view.
+        if (chipIndex >= mWallStripRowCount) {
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats =
+                chipFloats();
+            int at = chipIndex - mWallStripRowCount;
+            if (at < floats.size()) showHomeFloat(floats.get(at));
+            return;
+        }
         mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
         showRowWindow(chipIndex);
     }
