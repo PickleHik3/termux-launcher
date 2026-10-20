@@ -412,7 +412,7 @@ public class GlassMotionLightTest {
             "kMotionBend", "kMotionDisp", "kMotionRimSplitDp", "lead"}) {
             assertFalse(gone + " is gone", Pattern.compile("\\b" + gone + "\\b").matcher(agsl).find());
         }
-        assertTrue(agsl.contains("bool live = uLag.x != 0.0 || uLag.y != 0.0 || uDent.z != 0.0;"));
+        assertTrue(agsl.contains("bool live = uLag.x != 0.0 || uLag.y != 0.0 || uDent.z != 0.0 || tilted;"));
         // The resting expressions are untouched, and every live term sits behind its gate.
         assertTrue(agsl.contains("float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;"));
         assertTrue(agsl.contains("float2 sampleCoord = fragCoord - n * pull;"));

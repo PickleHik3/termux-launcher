@@ -65,7 +65,11 @@ import java.util.Arrays;
  * write per moved frame and no allocation. Living glass is the caller's animation as well: a pane
  * that moves or is pressed writes {@code uLag} and {@code uDent} from its {@link GlassMotionLight}
  * on the frames its springs move, which deform the bend the program already draws; every term
- * they add is skipped at 0, and at rest both are 0.</p>
+ * they add is skipped at 0, and at rest both are 0. A pane that tips as well — the wall's plank
+ * under a dragging finger, a held border's press, a pane's own press rig — writes {@code uTilt}
+ * ({@link Program#setTilt}): the picture through the face is carried toward the edge going away,
+ * as a tilted slab displaces what is behind it, and the rim's lean takes the tilt on top of the
+ * lag's. Flat, it is 0 and draws nothing new.</p>
  */
 public final class GlassRefraction {
 
@@ -533,6 +537,10 @@ public final class GlassRefraction {
         // at its steepest (z, px; negative as it rebounds). All 0 at rest.
         "uniform float2 uLag;\n" +
         "uniform float3 uDent;\n" +
+        // How far the slab is tipped: the sine of its tilt about its own y axis and about its x
+        // axis, as a vector in its own px axes pointing at the edge going away from the viewer.
+        // (0, 0) flat, which is every surface but a tipping pane. tiltVector in Java.
+        "uniform float2 uTilt;\n" +
         // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
         // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
         // refracting the wallpaper that shows through the transparent key cell. uLensActive carries
@@ -600,6 +608,18 @@ public final class GlassRefraction {
         "const float kDentRadiusDp = " + GlassRefraction.DENT_RADIUS_DP + ";\n" +
         "const float kDentPeak = " + GlassRefraction.DENT_PEAK + ";\n" +
         "const float kLiveDisp = " + GlassRefraction.LIVE_DISPERSION + ";\n" +
+        // The tilted slab: how far its face carries the picture at the tilt's asymptote, dp, and
+        // the sine at which half of that is reached; how much it magnifies across the face per
+        // unit of that share and the most that moves the picture, dp; how many times its sine an
+        // edge's lean takes; and how much more of the gathered light an edge at a whole tilt lean
+        // catches (less on the edge going away). TILT_SHIFT_DP, TILT_SOFT, TILT_MAG,
+        // TILT_MAG_MAX_DP, TILT_LEAN_GAIN and TILT_LIGHT in Java.
+        "const float kTiltShiftDp = " + GlassRefraction.TILT_SHIFT_DP + ";\n" +
+        "const float kTiltSoft = " + GlassRefraction.TILT_SOFT + ";\n" +
+        "const float kTiltMag = " + GlassRefraction.TILT_MAG + ";\n" +
+        "const float kTiltMagMaxDp = " + GlassRefraction.TILT_MAG_MAX_DP + ";\n" +
+        "const float kTiltLean = " + GlassRefraction.TILT_LEAN_GAIN + ";\n" +
+        "const float kTiltLight = " + GlassRefraction.TILT_LIGHT + ";\n" +
         "float sdRoundRect(float2 p, float2 b, float r) {\n" +
         "    float2 q = abs(p) - b + float2(r, r);\n" +
         "    return min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0, 0.0))) - r;\n" +
@@ -651,6 +671,28 @@ public final class GlassRefraction {
         "    float r = k / max(kMax, 0.000001);\n" +
         "    return r <= 0.5 ? k : kMax * (1.0 - 0.25 / r);\n" +
         "}\n" +
+        // A tilted slab's face, for a pixel at p (from the centre) of a surface of half size b,
+        // inside px in from the outline: the picture is carried toward the edge going away, as a
+        // thick plate tipped under the eye displaces what is behind it, by a share of
+        // kTiltShiftDp that grows as the sine and gives way toward the asymptote, so a press's
+        // degree reads and a plank's 18 never tears. On it a gentle perspective: the half nearer
+        // the viewer shows its picture a little larger, the half going away a little smaller, a
+        // quadratic along the tilt that averages to nothing across the face and moves the picture
+        // kTiltMagMaxDp at most. Both ease in from the outline over twice their own reach, so the
+        // outline's pixel shows the picture just outside it, as the bend's does, and the picture
+        // never folds back on itself however thin the rim. Only called tilted. tiltOffsetPx in
+        // Java.
+        "float2 tiltOffset(float2 p, float2 b, float inside, float rimW) {\n" +
+        "    float s = length(uTilt);\n" +
+        "    float2 dir = uTilt / s;\n" +
+        "    float share = s / (s + kTiltSoft);\n" +
+        "    float shift = kTiltShiftDp * uDensity * share;\n" +
+        "    float h = max(abs(dir.x) * b.x + abs(dir.y) * b.y, 1.0);\n" +
+        "    float m = min(kTiltMag * share, kTiltMagMaxDp * uDensity / h);\n" +
+        "    float u = dot(p, dir);\n" +
+        "    float ease = smoothstep(0.0, max(rimW, 2.0 * (shift + m * h)), inside);\n" +
+        "    return dir * ((m * (u * u / h - h / 3.0) - shift) * ease);\n" +
+        "}\n" +
         "half4 main(float2 fragCoord) {\n" +
         "    float2 center = (uRectMin + uRectMax) * 0.5;\n" +
         "    float2 b = (uRectMax - uRectMin) * 0.5;\n" +
@@ -677,16 +719,35 @@ public final class GlassRefraction {
         // short side. bendV keeps how much further each pixel's picture moved than at rest, for
         // the colour split below. At rest uLag and uDent are 0 and none of this runs.
         // livePullPx in Java.
-        "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || uDent.z != 0.0;\n" +
+        // A tilted slab leans its rim the same way: the edge rising toward the viewer is the
+        // thicker, the edge going away the thinner, by kTiltLean times the tilt's sine along the
+        // edge's normal, summed with the lag's lean and held to a whole one. tiltLean keeps the
+        // tilt's part alone, for the gathered light below. Flat, uTilt is 0 and the lean is the
+        // lag's, expression for expression. liveLean and tiltLean in Java.
+        "    bool tilted = uTilt.x != 0.0 || uTilt.y != 0.0;\n" +
+        "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || uDent.z != 0.0 || tilted;\n" +
         "    float2 bendV = float2(0.0, 0.0);\n" +
+        "    float tiltLean = 0.0;\n" +
         "    if (live) {\n" +
-        "        float lean = clamp(kLagLean * dot(n, uLag) / (kLagMaxDp * uDensity), -1.0, 1.0);\n" +
+        "        float lean = kLagLean * dot(n, uLag) / (kLagMaxDp * uDensity);\n" +
+        "        if (tilted) {\n" +
+        "            tiltLean = clamp(-kTiltLean * dot(n, uTilt), -1.0, 1.0);\n" +
+        "            lean = lean + tiltLean;\n" +
+        "        }\n" +
+        "        lean = clamp(lean, -1.0, 1.0);\n" +
         "        float tl = clamp(inside / (uBand * (1.0 + kLagBand * lean)), 0.0, 1.0);\n" +
         "        float bent = edgeProfile(tl) * min(uStrength * (1.0 + kLagBend * lean), min(b.x, b.y)) * edge;\n" +
         "        bendV = n * max(bent - pull, 0.0);\n" +
         "        pull = bent;\n" +
         "    }\n" +
         "    float2 sampleCoord = fragCoord - n * pull;\n" +
+        // The tilted slab's face (tiltOffset). It moves the whole face's picture alike, so it
+        // takes no colour split of its own: split there, every edge in the wallpaper would wear a
+        // fringe, and the face would read three samples instead of one. The rim's extra bend
+        // above carries the colour, through bendV.
+        "    if (tilted) {\n" +
+        "        sampleCoord = sampleCoord + tiltOffset(p, b, inside, rimW);\n" +
+        "    }\n" +
         // A press's dent: a shallow dip under the finger that spreads the picture outward around
         // it, steepest part way out and flat again at its rim; a bump, gathering it in, while it
         // rebounds. dentShiftPx in Java.
@@ -788,6 +849,12 @@ public final class GlassRefraction {
         "        float glow = exp(-max(inside, 0.0) / (kGlowDp * uDensity));\n" +
         "        float pale = dot(float3(col.rgb), kLumaW);\n" +
         "        float k = glow * (gatherShare(n) + 1.5 * touchG) * (1.0 - kPaleCut * pale) * uEdgeGain;\n" +
+        // A tilted slab's edge rising toward the viewer catches more of the light, the edge going
+        // away less, by kTiltLight per whole tilt lean; still held under the headroom below.
+        // tiltLight in Java.
+        "        if (tilted) {\n" +
+        "            k = k * (1.0 + kTiltLight * tiltLean);\n" +
+        "        }\n" +
         "        col.rgb = col.rgb * half(1.0 - glow * kEdgeShade);\n" +
         "        float peak = float(max(col.r, max(col.g, col.b)));\n" +
         "        float kRaw = k;\n" +
@@ -1149,6 +1216,149 @@ public final class GlassRefraction {
         return distancePx * w * w * depthPx / (Math.max(radiusPx, 1f) * DENT_PEAK);
     }
 
+    // The tilted slab. A pane that tips — the wall's plank under a dragging finger (up to
+    // PlankTilt.MAX_TILT_DEG, 18), a held side border's press (PlankTilt.HOLD_TILT_DEG, 6), a
+    // terminal pane's own press rig (about a degree) — is a plate of glass tipped under the eye.
+    // Its sample is aimed past the whole transform, so without these the wallpaper in it looked
+    // exactly as if it lay flat. Each is the program's constant of the matching name.
+
+    /**
+     * How far the face carries the picture toward the edge going away, in dp, at the asymptote
+     * of {@link #tiltShare} ({@code kTiltShiftDp}). A slab of thickness {@code h} and index
+     * {@code n} tipped by {@code θ} displaces what is behind it by about
+     * {@code h sin θ (1 - 1/n)}: in proportion to the sine at a press's degree or two, giving way
+     * as the tip deepens. Held here under {@code shift(s) = 14 s / (s + 0.12)} dp of sine
+     * {@code s}: about 1.9 dp (5 px on pong) at the pane rig's 1.1 degrees, 4.2 at 3, 6.5 at the
+     * held border's 6, and 10.1 at the plank's 18 — the brief's ceiling of 10 to 14 with room
+     * for the magnification on top, and never past 12.5 at any tilt. A straight line through the
+     * same 10 dp at 18 would leave 0.6 dp at the press rig, a pixel and a half, which nobody
+     * sees through a blurred wallpaper.
+     */
+    static final float TILT_SHIFT_DP = 14f;
+    /** The sine at which the face shift is half its asymptote ({@code kTiltSoft}); see {@link #TILT_SHIFT_DP}. */
+    static final float TILT_SOFT = 0.12f;
+    /**
+     * How much the face magnifies across itself per unit of {@link #tiltShare} ({@code kTiltMag}):
+     * the picture's scale runs from {@code 1 - 2m} on the edge rising toward the viewer to
+     * {@code 1 + 2m} on the edge going away, the perspective of a lens plate, with
+     * {@code m = TILT_MAG * share}: ±0.8% at 1.1 degrees, ±1.7% at 3, ±2.6% at 6 and ±4% at 18.
+     * It eases the face's swim from a slide into a tip.
+     */
+    static final float TILT_MAG = 0.028f;
+    /**
+     * The most the magnification moves the picture at the face's ends, in dp
+     * ({@code kTiltMagMaxDp}): {@code m} is held under this over the half extent along the tilt,
+     * so a whole-screen pane, whose ends are far from its middle, tips no further than a small
+     * one. Two thirds of it shows at the ends, the quadratic averaging to nothing.
+     */
+    static final float TILT_MAG_MAX_DP = 4f;
+    /**
+     * How many times the tilt's sine along an edge's normal leans that edge's bend
+     * ({@code kTiltLean}), on the same lean the lag drives ({@link #LAG_BEND}, {@link #LAG_BAND}):
+     * a whole lean at about 5 degrees. 0.23 at the pane rig's 1.1 degrees, so the edge the finger
+     * is not on visibly gathers a quarter more bend; 0.63 at 3; whole at the held border's 6 and
+     * the plank's 18. Summed with the lag's lean and held at a whole one, so a slab that slides
+     * and tips at once still never bends more than a whole lean.
+     */
+    static final float TILT_LEAN_GAIN = 12f;
+    /**
+     * How much more of the gathered light an edge at a whole tilt lean catches
+     * ({@code kTiltLight}): 1.4 times it on the edge rising toward the viewer, 0.6 times on the
+     * edge going away. Not light added: the light the outline already gathers, shared between
+     * the edges by which way the plate faces, and held under the headroom as ever.
+     */
+    static final float TILT_LIGHT = 0.4f;
+    /**
+     * A tilt under this, in degrees, is flat ({@link #tiltVector}): a press rig's spring settles
+     * toward 0 without ever landing on it, and well under a tenth of a degree shifts the face by
+     * a tenth of a dp, so the slab is called flat there and draws the resting look exactly.
+     */
+    static final float TILT_REST_DEG = 0.05f;
+
+    /**
+     * {@code uTilt} for a slab whose transforms on the way up add to {@code rotationXDeg} and
+     * {@code rotationYDeg}, as {@code View.setRotationX}/{@code setRotationY} take them, into
+     * {@code out}: the sines, as a vector in the slab's own px axes (y down) pointing at the edge
+     * going away from the viewer. A positive rotationY takes the right edge away (as
+     * {@code PlankTilt} writes it), a positive rotationX the top edge (as the press rig's
+     * {@code -(ny - 0.5)} leans the pressed bottom away). Exactly {@code (0, 0)} under
+     * {@link #TILT_REST_DEG}, or for a non-finite angle.
+     */
+    public static void tiltVector(float rotationXDeg, float rotationYDeg, @NonNull float[] out) {
+        out[0] = 0f;
+        out[1] = 0f;
+        if (!Float.isFinite(rotationXDeg) || !Float.isFinite(rotationYDeg)) return;
+        float x = (float) Math.sin(Math.toRadians(rotationYDeg));
+        float y = (float) -Math.sin(Math.toRadians(rotationXDeg));
+        if (Math.hypot(x, y) < Math.sin(Math.toRadians(TILT_REST_DEG))) return;
+        out[0] = x;
+        out[1] = y;
+    }
+
+    /** How much of its asymptote a tilt of sine {@code s} carries the face: {@code s / (s + TILT_SOFT)}. */
+    static float tiltShare(float sine) {
+        float s = Math.abs(sine);
+        return s / (s + TILT_SOFT);
+    }
+
+    /** How far the face carries the picture at a tilt of sine {@code s}, px, before its ease and magnification. */
+    static float tiltShiftPx(float sine, float density) {
+        return TILT_SHIFT_DP * density * tiltShare(sine);
+    }
+
+    /**
+     * The program's {@code tiltOffset}: how far the sample of a pixel at {@code (px, py)} from the
+     * centre of a surface of half size {@code (bx, by)}, {@code insidePx} in from its outline,
+     * moves for a tilt {@code (tiltX, tiltY)} ({@link #tiltVector}), into {@code out}. Toward the
+     * edge rising toward the viewer, so the picture shows carried toward the edge going away.
+     * Nothing flat.
+     */
+    static void tiltOffsetPx(float px, float py, float bx, float by, float insidePx,
+                             float rimWidthPx, float tiltX, float tiltY, float density,
+                             @NonNull float[] out) {
+        out[0] = 0f;
+        out[1] = 0f;
+        float s = (float) Math.hypot(tiltX, tiltY);
+        if (s == 0f) return;
+        float dx = tiltX / s, dy = tiltY / s;
+        float share = tiltShare(s);
+        float shift = TILT_SHIFT_DP * density * share;
+        float h = Math.max(Math.abs(dx) * bx + Math.abs(dy) * by, 1f);
+        float m = Math.min(TILT_MAG * share, TILT_MAG_MAX_DP * density / h);
+        float u = px * dx + py * dy;
+        float ease = smoothstep(0f, Math.max(rimWidthPx, 2f * (shift + m * h)), insidePx);
+        float along = (m * (u * u / h - h / 3f) - shift) * ease;
+        out[0] = dx * along;
+        out[1] = dy * along;
+    }
+
+    /**
+     * The program's {@code tiltLean}: how much of a whole lean an edge with outward normal
+     * {@code (nx, ny)} takes for a tilt {@code (tiltX, tiltY)}, 1 for the edge rising toward the
+     * viewer, -1 for the edge going away.
+     */
+    static float tiltLean(float nx, float ny, float tiltX, float tiltY) {
+        float lean = -TILT_LEAN_GAIN * (nx * tiltX + ny * tiltY);
+        return Math.max(-1f, Math.min(1f, lean));
+    }
+
+    /**
+     * The program's {@code lean} once living: the lag's ({@link #lagLean} before its hold) and
+     * the tilt's ({@link #tiltLean}) summed, held to a whole lean. With no tilt it is
+     * {@link #lagLean} exactly.
+     */
+    static float liveLean(float nx, float ny, float lagXPx, float lagYPx, float tiltX, float tiltY,
+                          float density) {
+        float lean = LAG_LEAN_GAIN * (nx * lagXPx + ny * lagYPx) / (GlassMotionLight.LAG_MAX_DP * density);
+        if (tiltX != 0f || tiltY != 0f) lean += tiltLean(nx, ny, tiltX, tiltY);
+        return Math.max(-1f, Math.min(1f, lean));
+    }
+
+    /** The program's gathered light's strength on an edge at tilt lean {@code tiltLean}, as a factor; 1 flat. */
+    static float tiltLight(float tiltLean) {
+        return 1f + TILT_LIGHT * tiltLean;
+    }
+
     /**
      * One compiled program and the uniforms it was last given. Every setter compares before it
      * writes, so a draw that re-states an unmoved surface pushes nothing to the GPU. Held only on
@@ -1175,6 +1385,7 @@ public final class GlassRefraction {
         private float mTouchX, mTouchY, mTouchRadius, mTouchIntensity;
         private float mLagX = Float.NaN, mLagY;
         private float mDentX = Float.NaN, mDentY, mDentDepth;
+        private float mTiltX = Float.NaN, mTiltY;
 
         private Program(float density) {
             mShader = new RuntimeShader(AGSL);
@@ -1412,10 +1623,25 @@ public final class GlassRefraction {
             setDent(light.dentXPx(), light.dentYPx(), light.dentDepthPx());
         }
 
-        /** No lag and no dent: the resting look, which is every surface at rest. */
+        /**
+         * How far the slab is tipped ({@link GlassRefraction#tiltVector}): the sines of its tilt
+         * about its own y and x axes, pointing at the edge going away. (0, 0) is flat, the resting
+         * look; the caller hands it only while Living glass may move.
+         */
+        public void setTilt(float x, float y) {
+            if (Float.isNaN(x)) x = 0f;
+            if (Float.isNaN(y)) y = 0f;
+            if (mTiltX == x && mTiltY == y) return;
+            mTiltX = x;
+            mTiltY = y;
+            mShader.setFloatUniform("uTilt", x, y);
+        }
+
+        /** No lag, no dent and no tilt: the resting look, which is every surface at rest. */
         public void clearMotion() {
             setLag(0f, 0f);
             setDent(0f, 0f, 0f);
+            setTilt(0f, 0f);
         }
 
         /**

@@ -1557,6 +1557,26 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   default; an install that had Motion light off keeps it off), a search for "living glass" lands
   on it; below Android 13 the category is hidden · emulator, API 33+ and an API 31 or 32 image.
 
+### Tilted glass (10-20)
+- 2026-10-20 · feat(glass) tilted glass · Fancier Glass on, Living glass on, two wall pages with
+  glass: drag slowly between pages and hold mid-way (planks tipped, up to 18°): the picture inside
+  each slab sits a few dp off the wallpaper in the gap beside it, carried toward the edge going
+  away, a little larger on the near half; the near edge's rim bends more and is brighter, the far
+  edge's thins and dims. Released, it slides back as the pages lie flat, and the settled glass
+  matches a screenshot taken before the drag pixel for pixel. No fold, mirror strip or tear at
+  any slab edge, corners included. Screenrecord, frames at a quarter, half and landing ·
+  emulator (AGSL needs API 33+).
+- 2026-10-20 · feat(glass) tilted glass · Hold a wall page's left or right border until it sinks
+  (6° press tip): the same displacement and rim lean, toward the held side, while held; lifting
+  brings it back to flat. A finger on a terminal pane (the 1.1° press rig): the rim on the edge
+  away from the finger thickens a little and the face swims about 2 dp as the pane tips and
+  untips, on top of the dent · emulator.
+- 2026-10-20 · feat(glass) tilted glass · Living glass off, animator scale off, reduced motion,
+  lazy mode and battery saver each keep tipped slabs drawing exactly as flat ones (the plank
+  still tips; the glass in it does not swim). After a held press on a tipped pane is let go and
+  everything settles, `dumpsys gfxinfo` over 30 s shows no extra frames against the build before
+  (the slab stops asking for frames once its tilt is flat or has held still six draws) · emulator.
+
 ## Developer
 
 ### Living glass (10-19)
@@ -1570,6 +1590,18 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   uniform writes per moved frame, three samples instead of one on a pixel whose bend changed, and
   up to about half a second of slab redraws after landing; report any p90 worse than off by more
   than the noise, per docs/agents/performance.md · pong, by hand (ask first).
+
+### Tilted glass (10-20)
+- 2026-10-20 · feat(glass) tilted glass · Taste on pong, dark and pale wallpaper, Clear and Mist:
+  does a page drag (18°), a held border (6°) and a press on a terminal pane (about 1°) each read
+  as the wallpaper refracting through a tipped plate of glass — clearly at the press, strong but
+  not torn at the plank's full tip — rather than as a shimmer or a picture sliding about? If the
+  press reads too faint or the plank too strong, the knobs are `TILT_SHIFT_DP`/`TILT_SOFT` (face)
+  and `TILT_LEAN_GAIN`/`TILT_LIGHT` (rim) in GlassRefraction · pong, by hand (ask first).
+- 2026-10-20 · feat(glass) tilted glass · Frame time of a page drag held and released, two
+  panes, Living glass on against off (`scripts/perf-frametime.sh`): it adds one uniform write per
+  tipped frame and the rim's live path on tipped slabs, one face sample as before; report any p90
+  worse than off by more than the noise · pong, by hand (ask first).
 
 ### Page transition across the wall (10-19), by hand
 - 2026-10-19 · feat(wall) page transition across the wall · Glass on (pane glass, a glass widget
