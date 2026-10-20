@@ -15,6 +15,7 @@ first within each section. Delete this file with the spec when the work is deliv
 | 4b Prompt line | built on a worker branch, unmerged, unchecked on device | ba9a96bf4 | In `DockStyle.BUILT`. One taller slab: apps row, then the 48 dp field on its well (14 dp side inset, air over the icons = air under the well, well radius = dock radius − that air); tap opens the palette with keyboard and caret; Enter runs the top result (read, unchanged); a style switch eases the slab 240 ms. Lens beads row inset 9 dp a side in a054ad056. |
 | 4c Wall strip | built on a worker branch, unmerged, unchecked on device | 2b9a5d86a | In `DockStyle.BUILT` (all five now). One taller slab: the 84 dp `WallStripRowView` over the apps row in the row's own host (dashes still above the slab), the air over it = the air under the icons, tiles nest by it; side inset read off the first laid-out icon (14 dp inside the slab without one). Fed from the same chips as the run strip (row windows and the display window, split shapes from `paneCellGeometry`); tiles slide/resize ~420 ms on open/close; tile tap = Workspace in on it, `+` = new row window, long-press = a small menu (no chip menu exists). Reflection lower bevel only at 0.8. The clock ticks alone (tiles in their own RenderNode on API 29+). Style switches ease both bands at once (240 ms). |
 | Emulator pass 2 | done; fix round 2 merged, unchecked on device | 36700127f | Fixed: Lens beads fell back to the slab (row icons wider than a bead's slot, 4ec3b24b1); seam step of the Prompt line / Wall strip bands (36700127f); run strip square glass corners (2c699bc42); empty strip under the palette (b7bfbd122); Wall strip lists floats (622951639). Not changed: equal padding measures equal on pass 2's frames (21/21 px Floating); partial-page centring (see decisions); the landing's frosted frame is the terminal's reflow frost (predates). |
+| Emulator pass 3 | done; fix round 3 on a worker branch, unmerged, unchecked on device | 7de54a0fa | Fixed: the Done exit's keyboard flash (predates the dock work, e5011d8ce); float chips over the Wall strip (a917ad04b); the run strip's minimised mark on numbers-only entries (54bc5a89d); the Taskbar's `+` at font scale 1.5 (7de54a0fa). |
 | 5 Pong install | not started | | |
 
 ## Side fixes
@@ -167,3 +168,24 @@ its reason so it can be reversed.
   work and runs under every dock style. The dock's settle restyle (`restyleDockSurface`, from the
   page commit inside the settle) runs before the travel's displacement settles, so by code it
   joins the same reflow rather than adding one; not confirmed on a device. Not changed.
+- 2026-10-21 · Pass 3, the Done flash predates the dock work: a Done on a directly opened
+  editor page grew the frame back to full size (`AppearanceEditorFrame.hide`, the live root
+  scaled) with the keyboard the editor raises for its session still up, and took it down only in
+  `finishSession`, after the frame arrived. `SurfaceEditorController`, `AppearanceEditorFrame`
+  and `HomeChromePolicy` are unchanged since a47df0ac3; no dock restyle or band ease runs on
+  that path. The dock "going tall" was the dock standing over the keyboard (the Wall strip's
+  band makes it read taller). Fixed small: the session's end lowers that keyboard as the exit
+  starts (`lowerRaisedKeyboardAtEnd`, the same hide the Icons switch already does under a
+  scaled frame), keeping one Home's always-on keyboard wants (`isEndingSession` lets the host's
+  keep rule apply). The Overview path is unchanged.
+- 2026-10-21 · Pass 3, float chips: by code the Taskbar's chips were already stood down on
+  every path (the chips' one fill, `fillHomeFloatChips`, serves every sync and the minimise's
+  target ask); no Taskbar path that re-adds one was found, and pass 3's Taskbar frame shows
+  none. The Wall strip's were never stood down. Both now share one gate
+  (`homeFloatChipsCarriedByDock`): the run strip or the Wall strip's row, each fed only with
+  split panes on, so where neither feeds the floats the chips still do and no float is lost.
+- 2026-10-21 · Pass 3, run strip: the minimised mark has fixed room on every minimised entry and
+  draws after the badge on a numbers-only entry (it was tied to the label, which a strip of six
+  drops). It is 8 dp and wears the badges' opaque ink. The `+` is a stroked cross at 0.7 of the
+  label's text size, held to 0.6 of its badge, on a resting badge like a number's: it follows
+  the font scale as the labels do (the numbers stay capped to their 20 dp box).

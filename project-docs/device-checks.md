@@ -1887,6 +1887,30 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   reflow frost (TerminalView.frostReflow, 110 ms, since 356e6ca81 on 2026-09-27), there with
   every dock style; report only if it reads worse under one style · emulator.
 
+### Home dock: pass-3 fixes (10-21)
+- 2026-10-21 · fix(editor) "the keyboard the editor raised goes down with the Done exit" · Layout
+  editor opened directly (not through the Overview) on Home, keyboard down before it opened, each
+  dock style: Done, recording at 60 fps: the keyboard slides down while the frame grows back to
+  full size, and no frame shows the full-size launcher with the keyboard up and the dock standing
+  over it (pass 3's 12-done-wall, 13-pair1). With Home's keyboard always on: it stays up after
+  Done. Through the Overview: Done as before (the keyboard goes under the Overview) · emulator.
+- 2026-10-21 · fix(dock) "no float chips over the Wall strip" · Wall strip, then Taskbar, split
+  panes on, a Home float: minimise it, change the theme (light ⇄ dark), relaunch the activity
+  (`am force-stop` then launch), switch to the other of the two styles: no float chip ever shows
+  above the dock (the float is the Wall strip's tile / the run strip's marked entry); the minimise
+  flight shrinks away toward the dock. Switch to Glass tray, Lens beads, Prompt line: the chip is
+  there, centred above the dock, and brings the float back · emulator.
+- 2026-10-21 · fix(dock) "the run strip marks a minimised float with or without its label" ·
+  Taskbar, six windows and a minimised Home float (numbers only), then two windows and the float
+  (labels shown): the float's entry has a small downward triangle after its number (after its
+  label when there is one), readable on the strip's glass in light and dark; crop at 4x ·
+  emulator.
+- 2026-10-21 · fix(dock) "the Taskbar's + grows with the font scale and wears a badge" · Taskbar,
+  font scale 1.0 then 1.5 (`settings put system font_scale 1.5`), light and dark: `+` is a cross
+  on a faint badge the size of the number badges, as dark as the numbers, and larger at 1.5 than
+  at 1.0 (still inside its badge); tap it: a new window as before. Nothing at rest redraws ·
+  emulator.
+
 ## Developer
 
 ### Living glass (10-19)
