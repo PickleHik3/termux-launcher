@@ -49,4 +49,11 @@ public class DockStyleTest {
     public void theGlassTrayIsAlwaysBuilt() {
         assertEquals(DockStyle.GLASS_TRAY, DockStyle.effectiveStyle(DockStyle.GLASS_TRAY));
     }
+
+    @Test
+    public void lensBeadsAreBuilt() {
+        assertEquals(DockStyle.LENS_BEADS, DockStyle.effectiveStyle(DockStyle.LENS_BEADS));
+        assertEquals("the styles still to come draw as the tray", DockStyle.GLASS_TRAY,
+            DockStyle.effectiveStyle(DockStyle.TASKBAR));
+    }
 }

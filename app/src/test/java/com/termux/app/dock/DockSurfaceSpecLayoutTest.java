@@ -81,6 +81,47 @@ public class DockSurfaceSpecLayoutTest {
     }
 
     @Test
+    public void eachHomeStyleHasItsSpecAndTheWorkspaceStaysPlain() {
+        assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(DockStyle.GLASS_TRAY));
+        assertSame(DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.forStyle(DockStyle.LENS_BEADS));
+        assertSame("not built yet", DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(DockStyle.TASKBAR));
+        assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(null));
+        assertSame(DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.forDock(true, DockStyle.LENS_BEADS));
+        for (DockStyle style : DockStyle.values())
+            assertSame("the Workspace's dock has no style", DockSurfaceSpec.PLAIN,
+                DockSurfaceSpec.forDock(false, style));
+        assertTrue(DockSurfaceSpec.LENS_BEADS.beads);
+        assertFalse(DockSurfaceSpec.GLASS_TRAY.beads);
+        assertFalse(DockSurfaceSpec.PLAIN.beads);
+        assertTrue(DockSurfaceSpec.LENS_BEADS.wearsGlassFeatures());
+        assertTrue(DockSurfaceSpec.LENS_BEADS.iconReflections);
+        assertTrue(DockSurfaceSpec.LENS_BEADS.contactShadow);
+        assertTrue("a bead's band is tighter than the tray's",
+            DockSurfaceSpec.LENS_BEADS.softRimDp < DockSurfaceSpec.GLASS_TRAY.softRimDp);
+    }
+
+    @Test
+    public void theBeadsStandOnTheTraysRowGeometry() throws IllegalAccessException {
+        // The beads change the glass, not the row: dashes above, equal air, the same icon.
+        for (boolean capsule : new boolean[] {false, true}) {
+            for (boolean alone : new boolean[] {false, true}) {
+                for (boolean next : new boolean[] {false, true}) {
+                    for (int preset = 0; preset < DockLayoutPolicy.sizePresetCount(); preset++) {
+                        float scale = DockLayoutPolicy.sizePreset(preset);
+                        DockLayout tray = DockLayoutPolicy.compute(inputs(capsule, alone, next, scale)
+                            .surface(DockSurfaceSpec.GLASS_TRAY).build());
+                        DockLayout beads = DockLayoutPolicy.compute(inputs(capsule, alone, next, scale)
+                            .surface(DockSurfaceSpec.LENS_BEADS).build());
+                        assertSameGeometry("capsule=" + capsule + " alone=" + alone + " next="
+                            + next + " preset=" + preset, tray, beads);
+                        assertSame(DockSurfaceSpec.LENS_BEADS, beads.surface);
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     public void theTrayKeepsEqualAirAboveAndBelowTheIcons() {
         for (boolean capsule : new boolean[] {false, true}) {
             for (boolean alone : new boolean[] {false, true}) {

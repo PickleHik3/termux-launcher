@@ -1,6 +1,7 @@
 package com.termux.app.dock;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.GlassRefraction;
 
@@ -11,24 +12,36 @@ import com.termux.app.chrome.GlassRefraction;
  * {@link GlassRefraction.Program#setReflection}) and the shelf under the slab each read the part
  * that is theirs.
  *
- * <p>Two exist today. {@link #PLAIN} is the dock exactly as it was, which the Workspace's dock and
- * every surface that is not Home's dock keep. {@link #GLASS_TRAY} is Home's default style
+ * <p>{@link #PLAIN} is the dock exactly as it was, which the Workspace's dock and every surface
+ * that is not Home's dock keep. {@link #GLASS_TRAY} is Home's default style
  * (project-docs/active/home-dock-styles-2026-10-20.md): one slab, equal air above and below the
  * icons, the dashes floating just above the slab, and the shared glass work every later style
- * builds on. A later style is one more constant here, and the place that picks it.</p>
+ * builds on. {@link #LENS_BEADS} keeps the tray's geometry but draws no slab: each icon sits on
+ * a round bead of glass ({@link LensBeadGeometry}). A later style is one more constant here, and
+ * {@link #forStyle} picks it.</p>
  */
 public final class DockSurfaceSpec {
 
     /** The dock as it always was: dashes in the row's own air, the narrow rim, no shelf, no reflection. */
     @NonNull public static final DockSurfaceSpec PLAIN =
-        new DockSurfaceSpec("plain", false, 0f, 0f, false, false);
+        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false);
 
     /**
      * Home's Glass tray. Its glass numbers are the program's own constants, so the spec says only
      * that they are on.
      */
     @NonNull public static final DockSurfaceSpec GLASS_TRAY =
-        new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true);
+        new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false);
+
+    /**
+     * Home's Lens beads: the tray's row geometry (dashes above, equal air) with no slab; each icon
+     * on its own round glass bead with a tight, stronger rim band
+     * ({@link GlassRefraction#BEAD_SOFT_RIM_DP}), the shelf in miniature (its lip and a small
+     * contact shadow under each bead, whatever the dock's Style, since a bead always floats) and
+     * its own icon's reflection.
+     */
+    @NonNull public static final DockSurfaceSpec LENS_BEADS =
+        new DockSurfaceSpec("lens_beads", true, GlassRefraction.BEAD_SOFT_RIM_DP, 1f, true, true, true);
 
     /** A name for logs and tests. */
     @NonNull public final String name;
@@ -46,24 +59,53 @@ public final class DockSurfaceSpec {
     public final boolean iconReflections;
     /** A soft contact shadow and a faint glow of light on the wallpaper under a floating slab. */
     public final boolean contactShadow;
+    /**
+     * No slab: the glass is drawn as one round bead under each icon, and the shelf and the shadow
+     * are each bead's own. Where the row cannot be drawn as beads (more icons than the program's
+     * beads, another band on the dock's glass) the dock falls back to the slab.
+     */
+    public final boolean beads;
 
     private DockSurfaceSpec(@NonNull String name, boolean dashesAboveSlab, float softRimDp,
-                            float shelf, boolean iconReflections, boolean contactShadow) {
+                            float shelf, boolean iconReflections, boolean contactShadow,
+                            boolean beads) {
         this.name = name;
         this.dashesAboveSlab = dashesAboveSlab;
         this.softRimDp = softRimDp;
         this.shelf = shelf;
         this.iconReflections = iconReflections;
         this.contactShadow = contactShadow;
+        this.beads = beads;
     }
 
     /**
-     * The spec the dock wears on a page: Home's dock is the Glass tray, every other page's the
-     * plain dock. Where a Dock style preference exists, this is where it is read.
+     * The spec the dock wears on a page in Home's default style: Home's dock is the Glass tray,
+     * every other page's the plain dock.
      */
     @NonNull
     public static DockSurfaceSpec forDock(boolean homeDock) {
-        return homeDock ? GLASS_TRAY : PLAIN;
+        return forDock(homeDock, DockStyle.GLASS_TRAY);
+    }
+
+    /**
+     * The spec the dock wears on a page: Home's dock wears Home's dock style as it draws
+     * ({@link DockStyle#effectiveStyle}), every other page's the plain dock whatever the style.
+     */
+    @NonNull
+    public static DockSurfaceSpec forDock(boolean homeDock, @Nullable DockStyle homeStyle) {
+        return homeDock ? forStyle(homeStyle) : PLAIN;
+    }
+
+    /** The spec a Home dock style draws with; a style not built yet is the Glass tray. */
+    @NonNull
+    public static DockSurfaceSpec forStyle(@Nullable DockStyle style) {
+        switch (DockStyle.effectiveStyle(style)) {
+            case LENS_BEADS:
+                return LENS_BEADS;
+            case GLASS_TRAY:
+            default:
+                return GLASS_TRAY;
+        }
     }
 
     /** Whether the glass program has anything of this spec's to draw. */
