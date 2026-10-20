@@ -86,7 +86,14 @@ public final class RunStripView extends View {
     static final int LIT_RIM_ALPHA = 115;
     static final int BADGE_REST_ALPHA = 36;
     static final int REST_INK_ALPHA = 200;
-    static final int PLUS_INK_ALPHA = 160;
+    /**
+     * The {@code +}'s cross against the label's text size, held inside its badge: it grows with
+     * the font scale as the labels do (a {@code +} character in the badge's capped face stayed a
+     * speck at 1.5x, pass 3) and never spills out of the box.
+     */
+    static final float PLUS_TO_LABEL = 0.7f;
+    static final float PLUS_MAX_OF_BADGE = 0.6f;
+    static final float PLUS_STROKE_OF_SIZE = 0.17f;
 
     private final float mDensity;
     private final int mTouchSlop;
@@ -96,6 +103,7 @@ public final class RunStripView extends View {
     @Nullable private final TextPaint mGlyphPaint;
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mPlus = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path mMark = new Path();
     private final RectF mRect = new RectF();
     private final StripAccessibility mAccessibility;
@@ -142,6 +150,8 @@ public final class RunStripView extends View {
         }
         mRim.setStyle(Paint.Style.STROKE);
         mRim.setStrokeWidth(Math.max(1f, Math.round(mDensity)));
+        mPlus.setStyle(Paint.Style.STROKE);
+        mPlus.setStrokeCap(Paint.Cap.ROUND);
         applyTextSizes();
         readThemeColors();
         mAccessibility = new StripAccessibility(this);
@@ -284,6 +294,21 @@ public final class RunStripView extends View {
         return mGlyphPaint.measureText(entry.glyph) + INNER_GAP_DP * mDensity;
     }
 
+    /** Whether entry {@code i} draws the minimised mark, from the last relayout; for tests. */
+    boolean marks(int i) {
+        return i >= 0 && i < mMarks.length && mMarks[i];
+    }
+
+    /** Entry {@code i}'s width from the last relayout; for tests. */
+    float entryWidth(int i) {
+        return i >= 0 && i < mLefts.length ? mRights[i] - mLefts[i] : 0f;
+    }
+
+    /** Entry {@code i}'s fitted label from the last relayout; for tests. */
+    @NonNull CharSequence labelOf(int i) {
+        return i >= 0 && i < mLabels.length ? mLabels[i] : "";
+    }
+
     /** The entry under {@code x}, or -1 between entries. */
     int entryAt(float x) {
         for (int i = 0; i < mLefts.length; i++) {
@@ -323,15 +348,16 @@ public final class RunStripView extends View {
             }
             float badgeLeft = rtl ? right - startPad - badge : left + startPad;
             mRect.set(badgeLeft, centerY - badge / 2f, badgeLeft + badge, centerY + badge / 2f);
-            if (entry.kind != RunStripModel.Kind.NEW_WINDOW) {
-                mFill.setColor(badgeFill(entry));
-                canvas.drawRoundRect(mRect, badgeRadius, badgeRadius, mFill);
+            // The + wears a resting badge and the numbers' opaque ink, as a number does.
+            mFill.setColor(badgeFill(entry));
+            canvas.drawRoundRect(mRect, badgeRadius, badgeRadius, mFill);
+            if (entry.kind == RunStripModel.Kind.NEW_WINDOW) {
+                drawPlus(canvas, mRect.centerX(), mRect.centerY(), badge);
+            } else {
+                mBadgePaint.setColor(entry.current ? mOnAccent : mOnSurface);
+                canvas.drawText(entry.number, mRect.centerX(), baseline(mBadgePaint, centerY),
+                    mBadgePaint);
             }
-            mBadgePaint.setColor(entry.kind == RunStripModel.Kind.NEW_WINDOW
-                ? ColorUtils.setAlphaComponent(mOnSurface, PLUS_INK_ALPHA)
-                : entry.current ? mOnAccent : mOnSurface);
-            canvas.drawText(entry.number, mRect.centerX(), baseline(mBadgePaint, centerY),
-                mBadgePaint);
             if (entry.attention) {
                 float dot = DOT_DP * mDensity;
                 float cx = rtl ? mRect.left + dot / 3f : mRect.right - dot / 3f;
@@ -378,6 +404,24 @@ public final class RunStripView extends View {
         mMark.close();
         mFill.setColor(mOnSurface);
         canvas.drawPath(mMark, mFill);
+    }
+
+    /** The {@code +}: a cross of round strokes in its badge, sized by {@link #plusSizePx}. */
+    private void drawPlus(@NonNull Canvas canvas, float cx, float cy, float badge) {
+        float size = plusSizePx(mLabelPaint.getTextSize(), badge);
+        float arm = size / 2f;
+        mPlus.setStrokeWidth(Math.max(mDensity * 1.5f, size * PLUS_STROKE_OF_SIZE));
+        mPlus.setColor(mOnSurface);
+        canvas.drawLine(cx - arm, cy, cx + arm, cy, mPlus);
+        canvas.drawLine(cx, cy - arm, cx, cy + arm, mPlus);
+    }
+
+    /**
+     * The {@code +}'s cross, end to end: {@link #PLUS_TO_LABEL} of the label's text size, so it
+     * follows the font scale with the labels, at most {@link #PLUS_MAX_OF_BADGE} of the badge.
+     */
+    static float plusSizePx(float labelTextPx, float badgePx) {
+        return Math.min(labelTextPx * PLUS_TO_LABEL, badgePx * PLUS_MAX_OF_BADGE);
     }
 
     /** The badge's fill: the accent when lit, otherwise the window kind's own tint. */
