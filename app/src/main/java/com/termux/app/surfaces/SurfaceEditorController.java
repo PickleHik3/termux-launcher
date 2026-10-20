@@ -3912,9 +3912,33 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         if (mOpen) {
             dismiss(-1f, 0f, this::finishSession);
+            // The keyboard the editor raised goes down as the frame grows back, not after it:
+            // left up, it filled the full-size launcher for the exit's length and then dropped
+            // (pass 3, 2026-10-21). One the place keeps at the session's end stays.
+            lowerRaisedKeyboardAtEnd();
             return;
         }
         finishSession();
+    }
+
+    /** Set while {@link #lowerRaisedKeyboardAtEnd} asks the host: the session's end is under way. */
+    private boolean mEndingSession;
+
+    /** Whether the session is ending: the host keeps a keyboard the place wants at the end. */
+    public boolean isEndingSession() {
+        return mEndingSession;
+    }
+
+    private void lowerRaisedKeyboardAtEnd() {
+        if (!mRaisedKeyboard || !mSession)
+            return;
+        mEndingSession = true;
+        try {
+            mHost.hideInAppKeyboardForEditor();
+        } finally {
+            mEndingSession = false;
+        }
+        mRaisedKeyboard = false;
     }
 
     private void finishSession() {

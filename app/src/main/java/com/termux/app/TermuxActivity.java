@@ -13177,7 +13177,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void hideInAppKeyboardForEditor() {
             // At the session's end, Home with always on keeps it: it is the keyboard Home wants.
             PlaceLayoutStore store = placeLayoutStore();
-            if (!mSurfaceEditor.isActive() && store != null
+            if ((!mSurfaceEditor.isActive() || mSurfaceEditor.isEndingSession()) && store != null
                 && com.termux.app.place.HomeChromePolicy.editorEndKeepsKeyboard(mLastWallPage,
                     store.isHomeKeyboardAlwaysOn()))
                 return;
@@ -24995,8 +24995,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.terminal.HomeFloatChipsPolicy.Chip> list =
             new java.util.ArrayList<>();
         java.util.List<Integer> pids = new java.util.ArrayList<>();
-        // Under the Taskbar the run strip carries the floats, a minimised one marked: no chips.
-        if (runStripWanted()) {
+        // Under the Taskbar the run strip carries the floats, a minimised one marked, and under
+        // the Wall strip its row does, as tiles: no chips under either, on every path (the
+        // minimise's flight asks here too, and finds no chip to land on).
+        if (homeFloatChipsCarriedByDock()) {
             chips.setChips(list);
             return true;
         }
@@ -25010,6 +25012,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         chips.setChips(list);
         return true;
+    }
+
+    /**
+     * Whether Home's dock lists the floats itself, so their chips stand down: the Taskbar's run
+     * strip or the Wall strip's row, each fed only with split panes on (as the floats are). Glass
+     * tray, Lens beads and Prompt line keep the chips.
+     */
+    private boolean homeFloatChipsCarriedByDock() {
+        return runStripWanted() || (wallStripWanted() && isSplitPanesEnabled());
     }
 
     /** The shared frame the chips are drawing, for the blur cache's in-use scan. */
