@@ -27,8 +27,19 @@ public final class LensBeadGeometry {
     public static final float MIN_GAP_DP = 6f;
     /** How far inside the glass's bounds a bead stays, dp, so its edge is never clipped. */
     public static final float EDGE_CLEARANCE_DP = 1f;
-    /** The most beads the glass program draws ({@code uBeadXA} and {@code uBeadXB}: two float4s). */
+    /**
+     * The most beads a row at rest is drawn with; a row of more keeps the slab. The program reads
+     * {@link #MAX_DRAWN_BEADS}, so a page swipe has room for the neighbouring page's beads too.
+     */
     public static final int MAX_BEADS = 8;
+    /**
+     * The most beads drawn at once ({@code uBeadXA}, {@code uBeadXB}, {@code uBeadXC}: three
+     * float4s, {@code GlassRefraction.BEAD_SLOTS}): a full row at rest and the two or three of
+     * the neighbouring page a swipe carries in beside it.
+     */
+    public static final int MAX_DRAWN_BEADS = 12;
+    /** Where {@link #follow} parks its one bead when none is in reach: far off every surface. */
+    static final float PARKED_X = -1.0e6f;
 
     private LensBeadGeometry() {}
 
@@ -88,6 +99,53 @@ public final class LensBeadGeometry {
         public String toString() {
             return "Beads{" + Arrays.toString(mCentersX) + " y=" + centerY + " r=" + radiusPx + "}";
         }
+    }
+
+    /**
+     * The beads as the row draws its icons while a page swipe carries them, so each bead rides
+     * under its own icon and no frame shows an icon off its bead or a bead with no icon: the
+     * beads at rest ({@code rest}) moved by {@code offsetPx}, then one under each icon of the
+     * neighbouring page the swipe stages ({@code neighbourCentersX}, {@code neighbourCount} of
+     * them, already in the surface's coordinates), every one the rest's size times
+     * {@code scale} (the row's fade while a switch fades it, 1 otherwise). Only the beads whose
+     * circle reaches into {@code left..right} (where the row's drawing is clipped) are kept,
+     * left to right; past {@link #MAX_DRAWN_BEADS} the ones nearest the middle. With none in
+     * reach one bead is parked far off, so the glass stays beads with nothing drawn rather than
+     * dropping back to the slab for a frame.
+     */
+    @NonNull
+    public static Beads follow(@NonNull Beads rest, float offsetPx,
+                               @NonNull float[] neighbourCentersX, int neighbourCount,
+                               float left, float right, float scale) {
+        float s = Float.isNaN(scale) ? 1f : Math.max(0f, Math.min(1f, scale));
+        // Never quite nothing: a radius of 0 is the program's "no beads", which is the slab.
+        float radius = Math.max(0.5f, rest.radiusPx * s);
+        int neighbours = Math.max(0, Math.min(neighbourCount, neighbourCentersX.length));
+        float[] all = new float[rest.count() + neighbours];
+        int n = 0;
+        for (int i = 0; i < rest.count(); i++) {
+            float cx = rest.centerX(i) + offsetPx;
+            if (cx + radius > left && cx - radius < right) all[n++] = cx;
+        }
+        for (int i = 0; i < neighbours; i++) {
+            float cx = neighbourCentersX[i];
+            if (cx + radius > left && cx - radius < right) all[n++] = cx;
+        }
+        if (n == 0) {
+            return new Beads(new float[] {PARKED_X}, rest.centerY, radius, rest.iconHalfPx);
+        }
+        float[] kept = Arrays.copyOf(all, n);
+        if (n > MAX_DRAWN_BEADS) {
+            // Keep the ones nearest the middle: the ones at the ends are leaving or arriving.
+            final float middle = (left + right) * 0.5f;
+            Float[] boxed = new Float[n];
+            for (int i = 0; i < n; i++) boxed[i] = kept[i];
+            Arrays.sort(boxed, (a, b) -> Float.compare(Math.abs(a - middle), Math.abs(b - middle)));
+            kept = new float[MAX_DRAWN_BEADS];
+            for (int i = 0; i < MAX_DRAWN_BEADS; i++) kept[i] = boxed[i];
+        }
+        Arrays.sort(kept);
+        return new Beads(kept, rest.centerY, radius, rest.iconHalfPx);
     }
 
     /**

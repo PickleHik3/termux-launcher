@@ -48,8 +48,14 @@ public final class DockShelfView extends View {
      * shadow and glow of its own, and the slab none.
      */
     @Nullable private com.termux.app.dock.LensBeadGeometry.Beads mBeads;
-    @NonNull private Paint[] mBeadShadows = new Paint[0];
-    @NonNull private Paint[] mBeadGlows = new Paint[0];
+    /**
+     * One bead's shadow and glow, drawn about x = 0 and moved to each bead as it is drawn, so a
+     * row of beads moving with a page swipe rebuilds only their outline, never their paints.
+     */
+    private final Paint mBeadShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mBeadGlow = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** The bead radius and lower edge the two paints were built for. */
+    private float mBeadPaintRadius = Float.NaN, mBeadPaintBottom = Float.NaN;
     private final Path mBeadPath = new Path();
     @Nullable private View mHost;
 
@@ -114,38 +120,32 @@ public final class DockShelfView extends View {
         invalidate();
     }
 
-    /** The beads' paints and outline at the host's current offset. */
+    /**
+     * The beads' outline at the host's current offset, and their one shadow and glow, built
+     * again only when the beads' size or line moved.
+     */
     private void rebuildBeads() {
         com.termux.app.dock.LensBeadGeometry.Beads beads = mBeads;
         mBeadPath.reset();
-        if (beads == null || !mHasSlab) {
-            mBeadShadows = new Paint[0];
-            mBeadGlows = new Paint[0];
-            return;
-        }
+        if (beads == null || !mHasSlab) return;
         float density = getResources().getDisplayMetrics().density;
         float dx = mSlab.left;
         float dy = mSlab.top;
         float r = beads.radiusPx;
         float bottom = beads.centerY + dy + r;
-        float rise = DockGlassRendering.BEAD_SHADOW_RISE_DP * density;
-        int count = beads.count();
-        mBeadShadows = new Paint[count];
-        mBeadGlows = new Paint[count];
-        for (int i = 0; i < count; i++) {
-            float cx = beads.centerX(i) + dx;
-            mBeadPath.addCircle(cx, beads.centerY + dy, r, Path.Direction.CW);
-            Paint shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
-            shadow.setShader(ellipse(Color.BLACK, DockGlassRendering.BEAD_SHADOW_ALPHA, cx,
-                bottom - rise, r * DockGlassRendering.BEAD_SHADOW_HALF_WIDTH_SHARE,
-                DockGlassRendering.BEAD_SHADOW_DEPTH_DP * density + rise));
-            mBeadShadows[i] = shadow;
-            Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
-            glow.setShader(ellipse(Color.WHITE, DockGlassRendering.BEAD_GLOW_ALPHA, cx, bottom,
-                r * DockGlassRendering.BEAD_GLOW_HALF_WIDTH_SHARE,
-                DockGlassRendering.BEAD_GLOW_DEPTH_DP * density));
-            mBeadGlows[i] = glow;
+        for (int i = 0; i < beads.count(); i++) {
+            mBeadPath.addCircle(beads.centerX(i) + dx, beads.centerY + dy, r, Path.Direction.CW);
         }
+        if (r == mBeadPaintRadius && bottom == mBeadPaintBottom) return;
+        mBeadPaintRadius = r;
+        mBeadPaintBottom = bottom;
+        float rise = DockGlassRendering.BEAD_SHADOW_RISE_DP * density;
+        mBeadShadow.setShader(ellipse(Color.BLACK, DockGlassRendering.BEAD_SHADOW_ALPHA, 0f,
+            bottom - rise, r * DockGlassRendering.BEAD_SHADOW_HALF_WIDTH_SHARE,
+            DockGlassRendering.BEAD_SHADOW_DEPTH_DP * density + rise));
+        mBeadGlow.setShader(ellipse(Color.WHITE, DockGlassRendering.BEAD_GLOW_ALPHA, 0f, bottom,
+            r * DockGlassRendering.BEAD_GLOW_HALF_WIDTH_SHARE,
+            DockGlassRendering.BEAD_GLOW_DEPTH_DP * density));
     }
 
     /** The host's laid-out bounds in this view's coordinates, and its outline's corner radius. */
@@ -239,14 +239,16 @@ public final class DockShelfView extends View {
             float rise = DockGlassRendering.BEAD_SHADOW_RISE_DP * density;
             float shadowReach = DockGlassRendering.BEAD_SHADOW_DEPTH_DP * density;
             float glowReach = DockGlassRendering.BEAD_GLOW_DEPTH_DP * density;
-            for (int i = 0; i < mBeadShadows.length && i < beads.count(); i++) {
+            float hs = r * DockGlassRendering.BEAD_SHADOW_HALF_WIDTH_SHARE;
+            float hg = r * DockGlassRendering.BEAD_GLOW_HALF_WIDTH_SHARE;
+            for (int i = 0; i < beads.count(); i++) {
                 float cx = beads.centerX(i) + mSlab.left;
-                float hs = r * DockGlassRendering.BEAD_SHADOW_HALF_WIDTH_SHARE;
-                canvas.drawRect(cx - hs, bottom - rise - shadowReach, cx + hs,
-                    bottom + shadowReach, mBeadShadows[i]);
-                float hg = r * DockGlassRendering.BEAD_GLOW_HALF_WIDTH_SHARE;
-                canvas.drawRect(cx - hg, bottom - glowReach, cx + hg, bottom + glowReach,
-                    mBeadGlows[i]);
+                // The paints are drawn about x = 0: the canvas carries them to this bead.
+                canvas.translate(cx, 0f);
+                canvas.drawRect(-hs, bottom - rise - shadowReach, hs, bottom + shadowReach,
+                    mBeadShadow);
+                canvas.drawRect(-hg, bottom - glowReach, hg, bottom + glowReach, mBeadGlow);
+                canvas.translate(-cx, 0f);
             }
             canvas.restoreToCount(save);
             return;

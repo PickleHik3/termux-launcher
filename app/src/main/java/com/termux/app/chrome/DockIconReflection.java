@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Picture;
 import android.graphics.Shader;
 import android.os.Build;
+import android.os.SystemClock;
 import android.view.View;
 import android.view.ViewParent;
 
@@ -29,9 +30,11 @@ import com.termux.shared.logger.Logger;
  * row, so it cannot ask for itself.</p>
  *
  * <p>While a page swipe carries the icons sideways the picture would stay behind, so the
- * reflection is put away for the swipe ({@link #onPagePosition}) and captured again once the
- * page settles: two rebuilds a swipe. A drag that reorders the icons is reflected where they
- * land.</p>
+ * reflection fades out as the swipe sets off ({@link #onPagePosition}) and, once the page
+ * settles and is captured again, fades back in: each fade is {@link #FADE_MS} of frames, a
+ * rebuild each, and nothing runs once it is done, so the glass at rest still costs nothing.
+ * The host aims the picture with the row's swipe while it fades out, so it leaves with its
+ * icons. A drag that reorders the icons is reflected where they land.</p>
  *
  * <p>Memory: one bitmap of a quarter of the row each way, about 40 KB on a 1080 px phone.</p>
  */
@@ -44,6 +47,8 @@ public final class DockIconReflection {
     @VisibleForTesting static final long SETTLE_MS = 160L;
     /** How far off a whole page the row may be and still count as settled. */
     @VisibleForTesting static final float PAGE_SETTLED_EPSILON = 0.01f;
+    /** How long the reflection takes to fade out for a swipe, and back in after it. */
+    @VisibleForTesting static final long FADE_MS = 150L;
 
     /** Told when the picture changed or went away, so the glass can be rebuilt once. */
     public interface Listener {
@@ -53,6 +58,7 @@ public final class DockIconReflection {
     @NonNull private final View mRow;
     @NonNull private final Listener mListener;
     @NonNull private final Runnable mCapture = this::capture;
+    @NonNull private final Runnable mFadeStep = this::fadeStep;
     @NonNull private final View.OnLayoutChangeListener mLayoutListener =
         (v, l, t, r, b, ol, ot, or, ob) -> requestCapture();
 
@@ -62,6 +68,12 @@ public final class DockIconReflection {
     @Nullable private Bitmap mBitmap;
     @Nullable private BitmapShader mShader;
     private float mScaleX = SCALE, mScaleY = SCALE;
+    /** How strongly the reflection shows now, 0..1; 0 once it faded out for a swipe. */
+    private float mStrength = 1f;
+    /** A fade under way: from, to, and when it started (uptime). */
+    private boolean mFading;
+    private float mFadeFrom = 1f, mFadeTo = 1f;
+    private long mFadeStartMs;
 
     public DockIconReflection(@NonNull View row, @NonNull Listener listener) {
         mRow = row;
@@ -80,10 +92,18 @@ public final class DockIconReflection {
             requestCapture();
         } else {
             mRow.removeCallbacks(mCapture);
+            mRow.removeCallbacks(mFadeStep);
+            mFading = false;
+            mStrength = 1f;
             mBitmap = null;
             mShader = null;
             mSuspended = false;
         }
+    }
+
+    /** How strongly the reflection shows now, 0..1: 1 at rest, between while it fades. */
+    public float strength() {
+        return mStrength;
     }
 
     public boolean isEnabled() {
@@ -103,8 +123,8 @@ public final class DockIconReflection {
     }
 
     /**
-     * The row's page position as it moves: off a whole page, the reflection is put away (one
-     * rebuild); back on one, it is captured again.
+     * The row's page position as it moves: off a whole page, the reflection fades out and is
+     * then let go; back on one, it is captured again and fades back in.
      */
     public void onPagePosition(float pagePosition) {
         if (!mEnabled) return;
@@ -113,14 +133,50 @@ public final class DockIconReflection {
             mSuspended = true;
             mRow.removeCallbacks(mCapture);
             if (mShader != null) {
-                mBitmap = null;
-                mShader = null;
-                mListener.onReflectionChanged();
+                startFade(0f);
+            } else {
+                mStrength = 0f;
             }
         } else if (settled && mSuspended) {
             mSuspended = false;
             requestCapture();
         }
+    }
+
+    /** Fades from the strength shown now to {@code to}, one frame at a time. */
+    private void startFade(float to) {
+        mFadeFrom = mStrength;
+        mFadeTo = to;
+        mFadeStartMs = SystemClock.uptimeMillis();
+        mFading = true;
+        mRow.removeCallbacks(mFadeStep);
+        mRow.postOnAnimation(mFadeStep);
+    }
+
+    /** One frame of the fade, before the frame draws: one rebuild of the glass. */
+    private void fadeStep() {
+        if (!mFading || !mEnabled) return;
+        long elapsed = SystemClock.uptimeMillis() - mFadeStartMs;
+        boolean done = elapsed >= FADE_MS;
+        mStrength = done ? mFadeTo : fadeStrength(mFadeFrom, mFadeTo, elapsed);
+        if (done) {
+            mFading = false;
+            // Faded out for a swipe: the picture is let go, and the settle captures a new one.
+            if (mFadeTo <= 0f && mSuspended) {
+                mBitmap = null;
+                mShader = null;
+            }
+        }
+        mListener.onReflectionChanged();
+        if (!done) mRow.postOnAnimation(mFadeStep);
+    }
+
+    /** The fade's strength {@code elapsedMs} into it, from {@code from} to {@code to}, eased. */
+    @VisibleForTesting
+    static float fadeStrength(float from, float to, long elapsedMs) {
+        float t = Math.max(0f, Math.min(1f, elapsedMs / (float) FADE_MS));
+        float eased = t * t * (3f - 2f * t);
+        return from + (to - from) * eased;
     }
 
     /** Whether a page position is a whole page. */
@@ -164,6 +220,11 @@ public final class DockIconReflection {
             mBitmap = null;
             mShader = null;
         }
+        // Back from a swipe (or caught mid-fade): the new picture fades in rather than pops.
+        if (mShader != null && (mStrength < 1f || mFading)) {
+            startFade(1f);
+            return;
+        }
         mListener.onReflectionChanged();
     }
 
@@ -177,7 +238,9 @@ public final class DockIconReflection {
     public boolean bind(@NonNull GlassRefraction.Program program, @NonNull View glassHost,
                         @NonNull View commonAncestor, float originX, float originY) {
         BitmapShader shader = mShader;
-        if (!mEnabled || mSuspended || shader == null || mRow.getVisibility() != View.VISIBLE) {
+        // While a swipe fades it out the picture is still bound, at the fade's strength.
+        if (!mEnabled || shader == null || mStrength <= 0f
+            || mRow.getVisibility() != View.VISIBLE) {
             program.clearReflection();
             return false;
         }
@@ -189,6 +252,7 @@ public final class DockIconReflection {
         }
         float left = row[0] - host[0] + originX;
         float top = row[1] - host[1] + originY;
+        program.setReflectionStrength(mStrength);
         program.setReflection(shader, left, top, top + mRow.getHeight(), mScaleX, mScaleY);
         return true;
     }

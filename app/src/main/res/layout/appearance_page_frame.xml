@@ -127,7 +127,8 @@
             </com.google.android.material.button.MaterialButtonToggleGroup>
         </FrameLayout>
 
-        <!-- 48dp tall, as every icon button in the bar: it appears and goes with the dirty state. -->
+        <!-- 48dp tall, as every icon button in the bar: it shows with the dirty state and keeps
+             its place (invisible) without it, so the pill never shifts when it appears. -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_page_undo"
             style="?attr/materialIconButtonStyle"
@@ -135,7 +136,7 @@
             android:layout_height="48dp"
             android:contentDescription="@string/appearance_editor_undo"
             android:tooltipText="@string/appearance_editor_undo"
-            android:visibility="gone"
+            android:visibility="invisible"
             app:icon="@drawable/ic_symbol_undo"
             app:iconSize="24dp"
             app:iconTint="?attr/colorOnSurface" />

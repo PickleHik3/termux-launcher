@@ -609,9 +609,10 @@ public final class GlassRefraction {
         "uniform float uLiveClarity;\n" +
         // The dock surface's own glass (DockSurfaceSpec), 0 on every other surface, which then
         // draws exactly as before: the soft rim band's width in px, how much of the lower shelf
-        // the slab wears (0..1), and the icon row's reflection: on (1) or off (0), the row's top
-        // and bottom in the surface's px, and the row's picture, aimed by its own local matrix.
-        // SOFT_RIM_DP, setDockSurface and setReflection in Java.
+        // the slab wears (0..1), and the icon row's reflection: its strength (1 whole, 0 off,
+        // between while it fades), the row's top and bottom in the surface's px, and the row's
+        // picture, aimed by its own local matrix. SOFT_RIM_DP, setDockSurface, setReflection and
+        // setReflectionStrength in Java.
         "uniform float uSoftRim;\n" +
         "uniform float uShelf;\n" +
         "uniform float uReflect;\n" +
@@ -619,12 +620,14 @@ public final class GlassRefraction {
         "uniform shader reflection;\n" +
         // Lens beads (DockSurfaceSpec.LENS_BEADS): no slab, one round bead under each icon of the
         // row. uBead holds the row's centre line y, every bead's radius (0: no beads, the slab
-        // as always) and half the icon's size, all in the surface's px; uBeadXA and uBeadXB the
-        // beads' centre x, eight at most, an unused one far off the surface so it is never the
-        // nearest. setBeads and nearestBeadX in Java.
+        // as always) and half the icon's size, all in the surface's px; uBeadXA, uBeadXB and
+        // uBeadXC the beads' centre x, twelve at most (a row at rest holds eight; a page swipe
+        // carries the neighbouring page's in beside them), an unused one far off the surface so
+        // it is never the nearest. setBeads and nearestBeadX in Java.
         "uniform float4 uBead;\n" +
         "uniform float4 uBeadXA;\n" +
         "uniform float4 uBeadXB;\n" +
+        "uniform float4 uBeadXC;\n" +
         // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
         // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
         // refracting the wallpaper that shows through the transparent key cell. uLensActive carries
@@ -767,7 +770,7 @@ public final class GlassRefraction {
         // less smootherstep, whole at the rim and gone at the inner edge with no step in its
         // slope or its curvature at either end, so the band fades into the face with no inner
         // ring (a kink in a gradient's slope is where a Mach band shows). softProfile in Java.
-        // The centre x of the bead nearest x: eight compares, no loop and no array, so the
+        // The centre x of the bead nearest x: twelve compares, no loop and no array, so the
         // program compiles everywhere AGSL does. nearestBeadX in Java.
         "float nearestBead(float x) {\n" +
         "    float bx = uBeadXA.x;\n" +
@@ -786,6 +789,14 @@ public final class GlassRefraction {
         "    if (d < bd) { bd = d; bx = uBeadXB.z; }\n" +
         "    d = abs(x - uBeadXB.w);\n" +
         "    if (d < bd) { bd = d; bx = uBeadXB.w; }\n" +
+        "    d = abs(x - uBeadXC.x);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXC.x; }\n" +
+        "    d = abs(x - uBeadXC.y);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXC.y; }\n" +
+        "    d = abs(x - uBeadXC.z);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXC.z; }\n" +
+        "    d = abs(x - uBeadXC.w);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXC.w; }\n" +
         "    return bx;\n" +
         "}\n" +
         "float softProfile(float t) {\n" +
@@ -1162,6 +1173,7 @@ public final class GlassRefraction {
         "                ra = kReflFace;\n" +
         "            }\n" +
         "        }\n" +
+        "        ra = ra * clamp(uReflect, 0.0, 1.0);\n" +
         "        if (ra > 0.0) {\n" +
         "            half4 rc = reflection.eval(float2(q.x, ry));\n" +
         "            col.rgb = col.rgb * half(1.0 - ra * float(rc.a)) + rc.rgb * half(ra * float(col.a));\n" +
@@ -1931,15 +1943,20 @@ public final class GlassRefraction {
         return bx;
     }
 
+    /** How many bead centres the program reads ({@code uBeadXA}, {@code uBeadXB}, {@code uBeadXC}). */
+    public static final int BEAD_SLOTS = 12;
+
     /**
-     * The eight bead slots the program reads ({@code uBeadXA} then {@code uBeadXB}) for
-     * {@code count} centres: each centre in order, the rest parked at {@link #BEAD_UNUSED_X}.
+     * The twelve bead slots the program reads ({@code uBeadXA}, {@code uBeadXB}, then
+     * {@code uBeadXC}) for {@code count} centres: each centre in order, the rest parked at
+     * {@link #BEAD_UNUSED_X}.
      */
     @NonNull
     static float[] beadSlots(@NonNull float[] centers, int count) {
-        float[] slots = new float[8];
+        float[] slots = new float[BEAD_SLOTS];
         Arrays.fill(slots, BEAD_UNUSED_X);
-        for (int i = 0; i < Math.min(8, Math.min(count, centers.length)); i++) slots[i] = centers[i];
+        for (int i = 0; i < Math.min(BEAD_SLOTS, Math.min(count, centers.length)); i++)
+            slots[i] = centers[i];
         return slots;
     }
 
@@ -2047,11 +2064,13 @@ public final class GlassRefraction {
         private float mSoftRimWritten = Float.NaN, mShelfWritten = Float.NaN;
         /** Whether a reflection is bound and on, and the row it was last aimed at. */
         private boolean mReflectOn;
+        /** The reflection's strength while on, 0..1: 1 but while it fades in or out. */
+        private float mReflectStrength = 1f;
         private float mReflTop = Float.NaN, mReflBottom = Float.NaN;
-        /** The beads as last written: {@code uBead} and the eight slots; radius 0 is none. */
-        private final float[] mBeadWritten = new float[11];
+        /** The beads as last written: {@code uBead} and the twelve slots; radius 0 is none. */
+        private final float[] mBeadWritten = new float[3 + BEAD_SLOTS];
         private boolean mBeadWrittenValid;
-        private final float[] mBeadNext = new float[11];
+        private final float[] mBeadNext = new float[3 + BEAD_SLOTS];
 
         private Program(float density) {
             mShader = new RuntimeShader(AGSL);
@@ -2076,7 +2095,8 @@ public final class GlassRefraction {
 
         /**
          * Lens beads: no slab, one round bead under each icon. {@code centersX} holds
-         * {@code count} bead centres (eight at most; more is not drawn as beads by the caller),
+         * {@code count} bead centres ({@link #BEAD_SLOTS} at most; more is not drawn as beads by
+         * the caller),
          * all on the line {@code centerY}, each of {@code radiusPx}, around icons
          * {@code 2 * iconHalfPx} tall, in the surface's own coordinates. The rect set by
          * {@link #setRect} is then not read. Written only on a change.
@@ -2091,14 +2111,14 @@ public final class GlassRefraction {
             mBeadNext[0] = centerY;
             mBeadNext[1] = radiusPx;
             mBeadNext[2] = Math.max(0f, iconHalfPx);
-            System.arraycopy(slots, 0, mBeadNext, 3, 8);
+            System.arraycopy(slots, 0, mBeadNext, 3, BEAD_SLOTS);
             writeBeads();
         }
 
         /** No beads: the slab, as every surface always drew. */
         public void clearBeads() {
             Arrays.fill(mBeadNext, 0f);
-            System.arraycopy(beadSlots(new float[0], 0), 0, mBeadNext, 3, 8);
+            System.arraycopy(beadSlots(new float[0], 0), 0, mBeadNext, 3, BEAD_SLOTS);
             writeBeads();
         }
 
@@ -2115,6 +2135,7 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uBead", n[0], n[1], n[2], 0f);
             mShader.setFloatUniform("uBeadXA", n[3], n[4], n[5], n[6]);
             mShader.setFloatUniform("uBeadXB", n[7], n[8], n[9], n[10]);
+            mShader.setFloatUniform("uBeadXC", n[11], n[12], n[13], n[14]);
         }
 
         /**
@@ -2156,13 +2177,25 @@ public final class GlassRefraction {
             mShader.setInputShader("reflection", row);
             if (!mReflectOn) {
                 mReflectOn = true;
-                mShader.setFloatUniform("uReflect", 1f);
+                mShader.setFloatUniform("uReflect", mReflectStrength);
             }
             if (mReflTop != top || mReflBottom != bottom) {
                 mReflTop = top;
                 mReflBottom = bottom;
                 mShader.setFloatUniform("uReflRow", top, bottom);
             }
+        }
+
+        /**
+         * How strongly the bound reflection shows, 0..1: 1 at rest, between while it fades out
+         * for a page swipe and back in at the settle. Kept across {@link #clearReflection}, and
+         * written only on a change while a reflection is on.
+         */
+        public void setReflectionStrength(float strength) {
+            float v = Float.isNaN(strength) ? 1f : Math.max(0f, Math.min(1f, strength));
+            if (v == mReflectStrength) return;
+            mReflectStrength = v;
+            if (mReflectOn) mShader.setFloatUniform("uReflect", v);
         }
 
         /** No reflection: every surface but a Home dock that asks for one. The child is never read then. */

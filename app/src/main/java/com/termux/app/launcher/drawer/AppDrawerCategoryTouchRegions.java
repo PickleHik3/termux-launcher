@@ -35,7 +35,9 @@ public final class AppDrawerCategoryTouchRegions {
         }
         if (contains(detailHeader, x, y)) return Part.COLLAPSE_ACTION;
         if (contains(detailList, x, y)) return Part.DETAIL_LIST;
-        return Part.EMPTY_CHROME;
+        // The rest of an open folder's pane is the folder's, as the view resolves it
+        // (AppDrawerCategoryView#touchPart): a pull there collapses the folder.
+        return Part.DETAIL_EMPTY;
     }
 
     public static boolean isContentOwned(@NonNull Part part) {

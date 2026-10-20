@@ -1048,6 +1048,95 @@ public final class SuggestionBarView extends GridLayout
         contentInvalidatedListener = listener;
     }
 
+    /**
+     * Told on every frame a page swipe or a page switch moves where the row draws its icons, and
+     * once more when they are back where they were laid out. Run from the touch or the
+     * animation callback that moved them, before the frame is drawn, so whatever follows the
+     * icons (the dock's Lens beads) is right on the same frame. Never at rest.
+     */
+    @Nullable private Runnable iconMotionListener;
+
+    /** Who hears that the row's icons moved off or back onto their laid-out places, or null. */
+    public void setIconMotionListener(@Nullable Runnable listener) {
+        iconMotionListener = listener;
+    }
+
+    private void notifyIconsMoved() {
+        Runnable listener = iconMotionListener;
+        if (listener != null) listener.run();
+    }
+
+    /** Re-reads the row as drawn on every frame of the unified page switch. */
+    private final ValueAnimator.AnimatorUpdateListener unifiedSwitchMotion =
+        animation -> notifyIconsMoved();
+
+    /** Whether a page swipe stages the neighbouring page: the row draws its icons off their places. */
+    private boolean swipeOffsetDrawn() {
+        return swipePageDragging && Math.abs(swipeVisualOffsetPx) > 0.5f;
+    }
+
+    /**
+     * Whether the row draws its laid-out icons somewhere other than where they were laid out
+     * right now: a page swipe's offset, or a page switch's slide and fade.
+     */
+    public boolean iconsOffTheirPlaces() {
+        if (vertical) return false;
+        return swipeOffsetDrawn()
+            || (pageSwitchAnimating && (getTranslationX() != 0f || getAlpha() != 1f));
+    }
+
+    /**
+     * How far sideways the row draws its laid-out icons from where they were laid out: the
+     * swipe's offset while it stages a page, plus a page switch's slide. 0 at rest and on a rail.
+     */
+    public float drawnPageOffsetPx() {
+        if (vertical) return 0f;
+        float offset = swipeOffsetDrawn() ? swipeVisualOffsetPx : 0f;
+        if (pageSwitchAnimating) offset += getTranslationX();
+        return offset;
+    }
+
+    /** How much of the row a page switch's fade leaves: 1 but while it fades the page out and in. */
+    public float drawnPageFade() {
+        return pageSwitchAnimating ? Math.max(0f, Math.min(1f, getAlpha())) : 1f;
+    }
+
+    /**
+     * The centres x of the neighbouring page's icons a page swipe stages, as drawn now, in this
+     * view's coordinates, into {@code out}; how many. 0 while no swipe stages a page, and on a
+     * rail. The same places {@link #drawSwipePreviewPage} draws them at.
+     */
+    public int drawnNeighbourIconCentersX(@NonNull float[] out) {
+        if (vertical || !swipeOffsetDrawn() || swipePreviewEntries.isEmpty()
+            || swipePreviewDirection == 0 || getWidth() <= 0 || getHeight() <= 0) return 0;
+        int slotCount = swipePreviewSlotCount();
+        int[] azColumns = swipePreviewColumns(slotCount);
+        float pageOffset = swipeVisualOffsetPx + (swipePreviewDirection * pageAxisLengthPx());
+        int count = 0;
+        for (int i = 0; i < swipePreviewEntries.size() && i < slotCount && count < out.length; i++) {
+            int col = azColumns != null ? azColumns[i] : i;
+            float left = pageOffset + ((getWidth() * col) / (float) slotCount);
+            float right = pageOffset + ((getWidth() * (col + 1)) / (float) slotCount);
+            out[count++] = (left + right) * 0.5f;
+        }
+        return count;
+    }
+
+    /** How many slots the staged page lays its icons in. */
+    private int swipePreviewSlotCount() {
+        return activeAzLetter != null ? Math.max(1, maxButtonCount)
+            : Math.max(1, computePinnedItemsPerPage());
+    }
+
+    /** The A–Z page's columns about its letter's anchor, or null for the pinned row's own order. */
+    @Nullable
+    private int[] swipePreviewColumns(int slotCount) {
+        if (activeAzLetter == null) return null;
+        int center = clamp(Math.round(computeAzAnchorPosition(activeAzLetter, slotCount)), 0,
+            slotCount - 1);
+        return buildAzPriorityColumnsAround(center, slotCount);
+    }
+
     @Override
     public void onDescendantInvalidated(@NonNull View child, @NonNull View target) {
         super.onDescendantInvalidated(child, target);
@@ -7444,6 +7533,7 @@ public final class SuggestionBarView extends GridLayout
         int pageCount = activeAzLetter != null ? getAzPagesCount() : getPinnedPagesCount();
         swipePagePosition = DockPagingModel.dragPagePosition(base, dx, easedProgress, pageCount);
         notifyOverflowPagePositionChanged();
+        notifyIconsMoved();
         invalidate();
     }
 
@@ -7578,12 +7668,8 @@ public final class SuggestionBarView extends GridLayout
             return;
         }
         int previewAlpha = clamp(Math.round(255f * (0.72f + (0.24f * swipeDragProgress))), 0, 255);
-        int slotCount = activeAzLetter != null ? Math.max(1, maxButtonCount) : Math.max(1, computePinnedItemsPerPage());
-        int[] azColumns = null;
-        if (activeAzLetter != null) {
-            int center = clamp(Math.round(computeAzAnchorPosition(activeAzLetter, slotCount)), 0, slotCount - 1);
-            azColumns = buildAzPriorityColumnsAround(center, slotCount);
-        }
+        int slotCount = swipePreviewSlotCount();
+        int[] azColumns = swipePreviewColumns(slotCount);
         float pageOffset = swipeVisualOffsetPx + (swipePreviewDirection * pageAxisLengthPx());
         int iconSize = iconSizePx();
         for (int i = 0; i < swipePreviewEntries.size() && i < slotCount; i++) {
@@ -7739,6 +7825,7 @@ public final class SuggestionBarView extends GridLayout
         swipePreviewEntries = Collections.emptyList();
         swipePreviewPinnedItems = Collections.emptyList();
         swipePreviewFolderEntries = Collections.emptyList();
+        notifyIconsMoved();
     }
 
     /** Whether the dock's page-gesture trace is on, so a call site can skip building its string. */
@@ -7810,6 +7897,7 @@ public final class SuggestionBarView extends GridLayout
             swipeVisualOffsetPx = (Float) animation.getAnimatedValue();
             swipeDragProgress =
                 clamp01(Math.abs(swipeVisualOffsetPx) / Math.max(1f, pageAxisLengthPx() * 0.42f));
+            notifyIconsMoved();
             invalidate();
         });
         settle.addListener(new AnimatorListenerAdapter() {
@@ -7898,6 +7986,7 @@ public final class SuggestionBarView extends GridLayout
         swipePreviewReboundAnimator.addUpdateListener(animation -> {
             swipeVisualOffsetPx = (Float) animation.getAnimatedValue();
             swipeDragProgress = startOffset == 0f ? 0f : Math.abs(swipeVisualOffsetPx / startOffset);
+            notifyIconsMoved();
             invalidate();
         });
         swipePreviewReboundAnimator.addListener(new AnimatorListenerAdapter() {
@@ -8063,6 +8152,8 @@ public final class SuggestionBarView extends GridLayout
         setScaleY(1f);
 
         final Interpolator settleInterpolator = pageSettleInterpolator();
+        // Whatever follows the icons (the dock's Lens beads) follows the slide and the fade.
+        animate().setUpdateListener(unifiedSwitchMotion);
         final long outgoingDuration = Math.max(92L, Math.round(duration * 0.44f));
         final long incomingDuration = Math.max(118L, duration - outgoingDuration);
         final PageCommitOnce commit = new PageCommitOnce(updateContent, "unified bar");
@@ -8118,6 +8209,7 @@ public final class SuggestionBarView extends GridLayout
 
                             private void finish(boolean callCompleted) {
                                 setListenerSafe(null);
+                                animate().setUpdateListener(null);
                                 pageSwitchAnimating = false;
                                 swipePageDragging = false;
                                 swipePagePosition = resolveCurrentSwipePagePosition();
@@ -8136,6 +8228,7 @@ public final class SuggestionBarView extends GridLayout
 
                 private void finish(boolean callCompleted) {
                     setListenerSafe(null);
+                    animate().setUpdateListener(null);
                     pageSwitchAnimating = false;
                     swipePageDragging = false;
                     swipePagePosition = resolveCurrentSwipePagePosition();
