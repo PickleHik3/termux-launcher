@@ -107,6 +107,20 @@ public final class DockLayout {
      */
     public final int appsRowTickSideAirPx;
 
+    /**
+     * What the dock's style asked of its slab ({@link DockSurfaceSpec}), so the glass and the
+     * shelf read the same answer the geometry was laid out for.
+     */
+    public final DockSurfaceSpec surface;
+
+    /**
+     * How far below the top of the dock's stack its glass starts, for a style whose page dashes
+     * float above the slab: the dashes' band, which is then the strip standing on the wallpaper
+     * with a small gap over the glass ({@link DockLayoutPolicy#dashesAboveSlab}). Zero on the plain
+     * dock.
+     */
+    public final int slabTopInsetPx;
+
     /** The top pane's compact height in the active style, read by the drawer's top-band clip. */
     public final int compactStatusBarHeightPx;
 
@@ -155,6 +169,8 @@ public final class DockLayout {
         this.appsRowIconPx = Math.max(0, b.appsRowIconPx);
         this.appsRowStripBandPx = Math.max(0, b.appsRowStripBandPx);
         this.appsRowTickSideAirPx = Math.max(0, b.appsRowTickSideAirPx);
+        this.surface = b.surface != null ? b.surface : DockSurfaceSpec.PLAIN;
+        this.slabTopInsetPx = Math.max(0, b.slabTopInsetPx);
         this.compactStatusBarHeightPx = b.compactStatusBarHeightPx;
         this.mConfiguredCornerRadiusDp = b.configuredCornerRadiusDp;
     }
@@ -239,6 +255,8 @@ public final class DockLayout {
         int appsRowIconPx;
         int appsRowStripBandPx;
         int appsRowTickSideAirPx;
+        DockSurfaceSpec surface = DockSurfaceSpec.PLAIN;
+        int slabTopInsetPx;
         int compactStatusBarHeightPx;
         int configuredCornerRadiusDp;
 

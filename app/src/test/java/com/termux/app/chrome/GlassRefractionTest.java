@@ -133,7 +133,7 @@ public class GlassRefractionTest {
             "uRadius", "uBand", "uStrength", "uDisp", "uDensity",
             "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
             "uClarity", "uTouchActive", "uTouch", "uTouchRadius", "uTouchLens", "uEdgeGain",
-            "uKeyLight", "uLiveClarity",
+            "uKeyLight", "uLiveClarity", "uSoftRim", "uShelf", "uReflect", "uReflRow",
         };
         for (String name : written) {
             assertTrue(name + " is declared",
@@ -141,6 +141,7 @@ public class GlassRefractionTest {
         }
         assertTrue(GlassRefraction.AGSL.contains("uniform shader content;"));
         assertTrue("the clearer picture is a second input", GlassRefraction.AGSL.contains("uniform shader sharp;"));
+        assertTrue("the icon row's picture is a third", GlassRefraction.AGSL.contains("uniform shader reflection;"));
         // The knobs the hairline no longer takes, and the slab lens and thickness shading neither
         // reference draws, are gone from the program.
         // The white hairline the gathered light replaced, and the switch that chose between them,
@@ -1321,5 +1322,148 @@ public class GlassRefractionTest {
                 f[3] >= previousFringe - 1e-5f);
             previousFringe = f[3];
         }
+    }
+
+    // ------------------------------------------------------------ the dock surface's glass
+
+    @Test
+    public void theDockSurfaceTermsAreGatedSoEveryOtherSurfaceIsUnchanged() {
+        String agsl = GlassRefraction.AGSL;
+        assertTrue(agsl.contains("    if (uSoftRim > 0.0) {\n"));
+        assertTrue(agsl.contains("        if (uShelf > 0.0 && n.y > 0.0) {\n"));
+        assertTrue(agsl.contains("    if (uReflect > 0.0 && inside > 0.0) {\n"));
+        // The resting narrow ring is still the first word on the pull; the soft band overrides it
+        // only behind its gate.
+        int ring = agsl.indexOf("float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;");
+        int soft = agsl.indexOf("if (uSoftRim > 0.0) {");
+        assertTrue(ring > 0 && soft > ring);
+        assertEquals("one read of the row's picture", 1, count(agsl, "reflection.eval("));
+        assertEquals(GlassRefraction.SOFT_RIM_MAX_PULL_SHARE + "",
+            agsl.split("const float kSoftPull = ")[1].split(";")[0]);
+    }
+
+    @Test
+    public void theSoftProfileIsWholeAtTheRimAndFlatAtBothEnds() {
+        assertEquals(1f, GlassRefraction.softProfile(0f), 0f);
+        assertEquals(0f, GlassRefraction.softProfile(1f), 1e-6f);
+        assertEquals(0.5f, GlassRefraction.softProfile(0.5f), 1e-6f);
+        // No step in slope at either end: the inner edge has no ring.
+        float h = 1e-3f;
+        assertEquals(0f, (GlassRefraction.softProfile(h) - GlassRefraction.softProfile(0f)) / h, 1e-3f);
+        assertEquals(0f, (GlassRefraction.softProfile(1f) - GlassRefraction.softProfile(1f - h)) / h, 1e-3f);
+        float previous = 2f;
+        for (int i = 0; i <= 100; i++) {
+            float v = GlassRefraction.softProfile(i / 100f);
+            assertTrue(v <= previous);
+            previous = v;
+        }
+    }
+
+    @Test
+    public void theSoftBandNeverFoldsThePicture() {
+        // The sample's depth is inside + pull: walking in by a px never walks the sample back,
+        // for the strongest bend the knob reaches and the whole shelf, past the outermost dp.
+        float softPx = GlassRefraction.SOFT_RIM_DP * DENSITY;
+        float rimW = GlassRefraction.Look.rimWidthPx(DENSITY);
+        for (float lower : new float[] {0f, 0.5f, 1f}) {
+            for (int bendDp : new int[] {0, 9, 27, 60}) {
+                float previous = -1f;
+                for (float in = 2f * rimW; in < 2f * softPx; in += 0.5f) {
+                    float depth = in + GlassRefraction.softPullPx(in, 20f * DENSITY, softPx,
+                        bendDp * DENSITY, 200f * DENSITY, rimW, lower);
+                    assertTrue(bendDp + "dp lower " + lower + " at " + in, depth > previous);
+                    previous = depth;
+                }
+            }
+        }
+    }
+
+    @Test
+    public void theSoftBandReachesItsWidthAndAWiderLookKeepsItsOwn() {
+        float softPx = GlassRefraction.SOFT_RIM_DP * DENSITY;
+        float rimW = GlassRefraction.Look.rimWidthPx(DENSITY);
+        float bend = 9f * DENSITY;
+        float half = 200f * DENSITY;
+        assertTrue(GlassRefraction.softPullPx(softPx * 0.5f, 10f * DENSITY, softPx, bend, half,
+            rimW, 0f) > 0f);
+        assertEquals(0f, GlassRefraction.softPullPx(softPx, 10f * DENSITY, softPx, bend, half,
+            rimW, 0f), 1e-4f);
+        assertTrue(GlassRefraction.softPullPx(softPx * 1.2f, 40f * DENSITY, softPx, bend, half,
+            rimW, 0f) > 0f);
+        // The lower edge is the thicker one under the shelf.
+        assertTrue(GlassRefraction.softPullPx(softPx * 0.6f, 20f * DENSITY, softPx, bend, half,
+            rimW, 1f)
+            > GlassRefraction.softPullPx(softPx * 0.6f, 20f * DENSITY, softPx, bend, half, rimW, 0f));
+    }
+
+    @Test
+    public void theLipLightsOnlyTheLowerEdge() {
+        assertEquals(0f, GlassRefraction.shelfLipK(-1f, 0f, DENSITY, 0.3f, 1f), 0f);
+        assertEquals(0f, GlassRefraction.shelfLipK(0f, 0f, DENSITY, 0.3f, 1f), 0f);
+        assertEquals(0f, GlassRefraction.shelfLipK(1f, 0f, DENSITY, 0.3f, 0f), 0f);
+        float lip = GlassRefraction.shelfLipK(1f, 0f, DENSITY, 0f, 1f);
+        assertEquals(GlassRefraction.SHELF_LIP, lip, 1e-6f);
+        assertTrue(GlassRefraction.shelfLipK(1f, 3f * DENSITY, DENSITY, 0f, 1f) < lip * 0.5f);
+        assertTrue("less over a pale backdrop",
+            GlassRefraction.shelfLipK(1f, 0f, DENSITY, 1f, 1f) < lip);
+    }
+
+    @Test
+    public void theReflectionIsFaintOnTheFaceAndClearerAtTheLowerBevel() {
+        // A 58 dp icon row in a slab with 14 dp of air above and below it.
+        float top = 0f;
+        float rowTop = 14f * DENSITY;
+        float rowBottom = rowTop + 58f * DENSITY;
+        float bottom = rowBottom + 14f * DENSITY;
+        float[] out = new float[2];
+        GlassRefraction.reflectionAt(rowTop + 20f * DENSITY, top, bottom, rowTop, rowBottom,
+            DENSITY, out);
+        assertEquals("nothing over the icons themselves", 0f, out[1], 0f);
+        GlassRefraction.reflectionAt(rowBottom + 1f, top, bottom, rowTop, rowBottom, DENSITY, out);
+        assertEquals(GlassRefraction.REFLECT_FACE, out[1], 1e-3f);
+        assertTrue(out[1] >= 0.04f && out[1] <= 0.05f);
+        assertEquals("a mirror about the icons' lower edge", rowBottom - 1f, out[0], 1e-3f);
+        GlassRefraction.reflectionAt(bottom, top, bottom, rowTop, rowBottom, DENSITY, out);
+        assertEquals(GlassRefraction.REFLECT_BEVEL, out[1], 1e-4f);
+        assertTrue(out[1] >= 0.25f && out[1] <= 0.40f);
+        // A low slab takes less of it.
+        float lowBottom = rowBottom + 4f * DENSITY;
+        GlassRefraction.reflectionAt(lowBottom, top, lowBottom, rowTop, rowBottom, DENSITY, out);
+        assertTrue(out[1] < GlassRefraction.REFLECT_BEVEL * 0.5f);
+    }
+
+    @Test
+    public void theTopBevelSqueezesTheWholeIconAndJoinsTheFaceMirror() {
+        float top = 0f;
+        float rowTop = 14f * DENSITY;
+        float rowBottom = rowTop + 58f * DENSITY;
+        float bottom = rowBottom + 14f * DENSITY;
+        float w = GlassRefraction.REFLECT_TOP_BEVEL_DP * DENSITY;
+        float[] out = new float[2];
+        GlassRefraction.reflectionAt(top, top, bottom, rowTop, rowBottom, DENSITY, out);
+        assertEquals("the whole icon at the rim", rowBottom, out[0], 1e-3f);
+        assertEquals(GlassRefraction.REFLECT_TOP, out[1], 1e-6f);
+        float[] inner = new float[2];
+        float[] face = new float[2];
+        GlassRefraction.reflectionAt(top + w - 1e-3f, top, bottom, rowTop, rowBottom, DENSITY, inner);
+        GlassRefraction.reflectionAt(top + w + 1e-3f, top, bottom, rowTop, rowBottom, DENSITY, face);
+        assertEquals("continuous at the bevel's inner edge", face[0], inner[0], 0.05f);
+        assertEquals(face[1], inner[1], 1e-3f);
+        float previous = Float.MAX_VALUE;
+        for (float y = top; y < rowTop; y += 0.5f) {
+            GlassRefraction.reflectionAt(y, top, bottom, rowTop, rowBottom, DENSITY, out);
+            assertTrue("one row of the picture per row of the bevel, no fold", out[0] <= previous);
+            previous = out[0];
+        }
+    }
+
+    @Test
+    public void aTiltShiftsTheReflectionByTwiceIt() {
+        float sine = (float) Math.sin(Math.toRadians(3));
+        assertEquals(2f * sine * GlassRefraction.REFLECT_DEPTH_DP * DENSITY,
+            GlassRefraction.reflectionShiftPx(sine, DENSITY), 1e-4f);
+        assertEquals(0f, GlassRefraction.reflectionShiftPx(0f, DENSITY), 0f);
+        assertTrue(GlassRefraction.AGSL.contains(
+            "float2 q = fragCoord + uTilt * (2.0 * kReflDepthDp * uDensity);"));
     }
 }

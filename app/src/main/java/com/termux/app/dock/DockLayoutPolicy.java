@@ -166,6 +166,11 @@ public final class DockLayoutPolicy {
          * their own beside it, and its own air is unchanged.
          */
         public final boolean appsRowPageStripShown;
+        /**
+         * What the dock's style asks of its slab ({@link DockSurfaceSpec}): {@link
+         * DockSurfaceSpec#PLAIN}, the dock as it always was, unless the caller says otherwise.
+         */
+        public final DockSurfaceSpec surface;
         public final float density;
         /** The dock size preset, as stored (a raw scale, not a progress). */
         public final float barHeightScale;
@@ -202,6 +207,7 @@ public final class DockLayoutPolicy {
             this.appsRowAlone = b.appsRowAlone;
             this.appsRowNextToCanvas = b.appsRowNextToCanvas;
             this.appsRowPageStripShown = b.appsRowPageStripShown;
+            this.surface = b.surface != null ? b.surface : DockSurfaceSpec.PLAIN;
             this.density = b.density;
             this.barHeightScale = b.barHeightScale;
             this.dockHorizontalInsetDp = b.dockHorizontalInsetDp;
@@ -231,6 +237,7 @@ public final class DockLayoutPolicy {
             // Every row that lies down carries the ticks' band, whether or not it has a second
             // page to show — the band is its air, so a row that gained a page cannot grow by it.
             private boolean appsRowPageStripShown = true;
+            private DockSurfaceSpec surface = DockSurfaceSpec.PLAIN;
             private float density = 1f;
             private float barHeightScale = SIZE_PRESETS[2];
             private int dockHorizontalInsetDp =
@@ -257,6 +264,7 @@ public final class DockLayoutPolicy {
             public Builder appsRowAlone(boolean v) { this.appsRowAlone = v; return this; }
             public Builder appsRowNextToCanvas(boolean v) { this.appsRowNextToCanvas = v; return this; }
             public Builder appsRowPageStripShown(boolean v) { this.appsRowPageStripShown = v; return this; }
+            public Builder surface(DockSurfaceSpec v) { this.surface = v; return this; }
             public Builder density(float v) { this.density = v; return this; }
             public Builder barHeightScale(float v) { this.barHeightScale = v; return this; }
             public Builder dockHorizontalInsetDp(int v) { this.dockHorizontalInsetDp = v; return this; }
@@ -337,6 +345,16 @@ public final class DockLayoutPolicy {
         int airPx = rowAirPx(in.appsRowAlone, in.appsRowPageStripShown,
             in.appsRowNextToCanvas, density);
         int tickSideAirPx = rowTickSideAirPx(in.appsRowAlone, in.appsRowPageStripShown, density);
+        // A style whose dashes float above the slab (the Glass tray) takes the strip out of the
+        // icons' air: the air on the ticks' side is the other side's, and the strip's band stands
+        // beyond it, outside the glass, so the icons sit in the middle of the slab with the ticks
+        // a small gap over its top edge. The band is still the row's, so the stack, the pager and
+        // the strip are sized exactly as before; only the glass starts lower (slabTopInsetPx).
+        boolean dashesAboveSlab = dashesAboveSlab(in);
+        if (dashesAboveSlab) tickSideAirPx = airPx + stripBandPx;
+        out.surface = in.surface;
+        out.slabTopInsetPx = dashesAboveSlab && in.preferencesAvailable && in.appsRowEnabledPref
+            ? stripBandPx : 0;
         out.appsRowStripBandPx = stripBandPx;
         out.appsTopPaddingPx = airPx;
         out.appsBottomPaddingPx = airPx;
@@ -427,6 +445,18 @@ public final class DockLayoutPolicy {
             PlaceLayout.Edge.TOP, capsule, true, density);
 
         return out.build();
+    }
+
+    /**
+     * Whether the page dashes stand above the slab rather than in the icons' top air: the style
+     * asks for it ({@link DockSurfaceSpec#dashesAboveSlab}) and the dashes stand over the icons
+     * anyway, which is the apps row lying on the dock as the band next to the canvas with its
+     * ticks shown ({@link PageTickStrip#ticksLeadRow}). Anywhere else the arrangement puts the
+     * ticks under the icons or beside another band, and the row keeps the plain layout.
+     */
+    public static boolean dashesAboveSlab(DockInputs in) {
+        return in.surface.dashesAboveSlab && in.appsRowPageStripShown && in.appsRowNextToCanvas
+            && !in.appsRowOnEdge;
     }
 
     /**

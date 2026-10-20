@@ -993,6 +993,25 @@ public final class SuggestionBarView extends GridLayout
 
     private final int[] iconHitLocation = new int[2];
 
+    /** Told when one of the row's icons redrew: the dock's reflection of the row re-captures. */
+    @Nullable private Runnable contentInvalidatedListener;
+
+    /**
+     * Who hears that an icon on the row redrew (an icon arrived, a badge changed, a press
+     * faded), or null for nobody. The dock's glass reflects the row and captures it again a
+     * short settle later ({@link com.termux.app.chrome.DockIconReflection}).
+     */
+    public void setContentInvalidatedListener(@Nullable Runnable listener) {
+        contentInvalidatedListener = listener;
+    }
+
+    @Override
+    public void onDescendantInvalidated(@NonNull View child, @NonNull View target) {
+        super.onDescendantInvalidated(child, target);
+        Runnable listener = contentInvalidatedListener;
+        if (listener != null) listener.run();
+    }
+
     public void setTextSize(float textSize) {
         this.textSize = textSize;
     }

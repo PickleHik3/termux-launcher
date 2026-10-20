@@ -4706,6 +4706,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // preference.
             program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook)
                 .withCover(Math.max(0f, navStrip ? mNavStripGlassCover : mDockGlassCover)));
+            // The dock style's own glass (the Glass tray's soft rim, shelf and icon reflection);
+            // the strip under the pill wears none of it.
+            if (navStrip) {
+                program.setDockSurface(0f, 0f);
+                program.clearReflection();
+            } else {
+                applyDockSurfaceGlass(program);
+            }
             // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
             if (!navStrip && mKeyLensActive && mKeyLensIntensity > 0f) {
                 program.setLens(mKeyLensCx, mKeyLensCy, mKeyLensHx, mKeyLensHy, mKeyLensRadius,
@@ -4726,6 +4734,70 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Logger.logStackTraceWithMessage(LOG_TAG, "Glass refraction shader failed; falling back to blur", t);
             return null;
         }
+    }
+
+    /** The dock icon row's picture for its glass to reflect; built with the first effect that asks. */
+    @Nullable private com.termux.app.chrome.DockIconReflection mDockIconReflection;
+
+    /**
+     * The dock's style's own glass on its program ({@link com.termux.app.dock.DockSurfaceSpec}):
+     * the soft rim band, the lower shelf where the slab floats (Docked, its lower edge is a seam
+     * at the screen's edge and has no shelf), and the icon row's reflection once its picture has
+     * been captured. The plain dock writes all of it off, which is the program as it always was.
+     */
+    @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    private void applyDockSurfaceGlass(@NonNull com.termux.app.chrome.GlassRefraction.Program program) {
+        com.termux.app.dock.DockSurfaceSpec spec = dockSurfaceSpec();
+        program.setDockSurface(spec.softRimDp, isRoundedDockStyle() ? spec.shelf : 0f);
+        com.termux.app.chrome.DockIconReflection reflection = dockIconReflection();
+        View host = findViewById(R.id.accessory_surface_host);
+        View container = findViewById(R.id.accessory_stack_container);
+        if (reflection == null || host == null || container == null) {
+            program.clearReflection();
+            return;
+        }
+        reflection.setEnabled(spec.iconReflections);
+        reflection.bind(program, host, container, mGlassOriginLeft, mGlassOriginTop);
+    }
+
+    /**
+     * The reflection of the dock's icon row, following the row this activity holds: a capture
+     * rebuilds the dock's effect once ({@link #rebuildBackdropGlassEffectForLens}).
+     */
+    @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    @Nullable
+    private com.termux.app.chrome.DockIconReflection dockIconReflection() {
+        SuggestionBarView bar = mSuggestionBarView;
+        if (bar == null) return null;
+        if (mDockIconReflection == null || !mDockIconReflection.follows(bar)) {
+            if (mDockIconReflection != null) mDockIconReflection.setEnabled(false);
+            com.termux.app.chrome.DockIconReflection reflection =
+                new com.termux.app.chrome.DockIconReflection(bar, this::rebuildBackdropGlassEffectForLens);
+            bar.setContentInvalidatedListener(reflection::requestCapture);
+            mDockIconReflection = reflection;
+        }
+        return mDockIconReflection;
+    }
+
+    /**
+     * The shelf under a floating Glass tray, a contact shadow and a glow on the wallpaper below
+     * its slab: shown while the dock's glass refracts (so never below Android 13), the slab
+     * floats, and the keyboard is not standing under it. It follows the glass host by itself.
+     */
+    private void syncDockShelf(@Nullable ChromeSpec state) {
+        DockShelfView shelf = findViewById(R.id.accessory_shelf_fx);
+        if (shelf == null) return;
+        View host = findViewById(R.id.accessory_surface_host);
+        boolean show = state != null && mGlassParamsValid && host != null
+            && host.getVisibility() == View.VISIBLE && !state.keyboardShown
+            && isRoundedDockStyle() && dockSurfaceSpec().contactShadow;
+        if (!show) {
+            shelf.follow(null);
+            if (shelf.getVisibility() != View.INVISIBLE) shelf.setVisibility(View.INVISIBLE);
+            return;
+        }
+        shelf.follow(host);
+        if (shelf.getVisibility() != View.VISIBLE) shelf.setVisibility(View.VISIBLE);
     }
 
     /**
@@ -6456,6 +6528,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mGlassParamsValid = false; // no live backdrop shader -> key lens falls back to the bubble border
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.ACCESSORY);
         setDockProgramEdge(false);
+        syncDockShelf(null);
     }
 
     /**
@@ -8326,6 +8399,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(
                     mPreferences != null ? mPreferences.getAppBarOpacity() : 100));
             backdrop.setVisibility(View.VISIBLE);
+            syncDockShelf(state);
             return;
         }
         Bitmap frame = mChrome.blurCache().obtain(state.blurRadiusDp, wallpaperFrame);
@@ -8373,12 +8447,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook),
                     getResources().getDisplayMetrics().density, radiusPx),
                 dockSeams);
+            // Where the host's origin sits in the backdrop, before the build: the icon reflection
+            // is aimed by it.
+            mGlassOriginLeft = capLeft;
+            mGlassOriginTop = 0f;
             RenderEffect glass = buildGlassRefractionEffect(0f, capRect[0], capRect[1], capRect[2],
                 capRect[3], radiusPx);
             // Remember the dock params so a key-press lens can rebuild this effect cheaply (no recapture).
             mGlassBlurPx = 0f;
-            mGlassOriginLeft = capLeft;
-            mGlassOriginTop = 0f;
             mGlassCapLeft = capRect[0];
             mGlassCapTop = capRect[1];
             mGlassCapRight = capRect[2];
@@ -8392,6 +8468,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.setVisibility(View.VISIBLE);
         // Below Android 13 there is no effect to install, and the dock keeps its rim.
         setDockProgramEdge(mGlassParamsValid);
+        syncDockShelf(state);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, state.blurRadiusDp,
             usingManagedWallpaperSource, backdropTargetRect);
         // The keyboard-local cover is deliberately retained until this expanded surface is ready.
@@ -11348,6 +11425,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override
             public void onOverflowPagePositionChanged(float pagePosition) {
                 updateAzOverflowAffordance();
+                // The icons' reflection is put away while a swipe carries them, and comes back
+                // with the page they settle on.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                    && mDockIconReflection != null) {
+                    mDockIconReflection.onPagePosition(pagePosition);
+                }
             }
         });
         if (mLauncherTransitionController != null) {
@@ -15250,11 +15333,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * How far the dock's own sheet of glass starts below the top of the accessory stack: the band
-     * of a bottom status bar that kept a sheet of its own. Zero everywhere else, which is every
-     * arrangement that shipped.
+     * of a bottom status bar that kept a sheet of its own, and the band of page dashes a style
+     * floats above its slab (the Glass tray, {@link DockLayout#slabTopInsetPx}). Zero everywhere
+     * else, which is every arrangement that shipped.
      */
     private int dockGlassTopInsetPx() {
-        return mStatusBarOnDockPlank ? 0 : bottomStatusBandPx();
+        return (mStatusBarOnDockPlank ? 0 : bottomStatusBandPx()) + getDockLayout().slabTopInsetPx;
     }
 
     /**
@@ -15827,6 +15911,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A row that lies down carries the ticks in its own air; a rail's stand in a column
             // beside it, so its cross-axis keeps the plain air of a lone row.
             .appsRowPageStripShown(!PlaceChromePolicy.appsRailShown(layout))
+            // Home's dock is the Glass tray, the Workspace's the plain dock.
+            .surface(dockSurfaceSpec())
             .density(getResources().getDisplayMetrics().density)
             .barHeightScale(preferencesAvailable
                 ? mPreferences.getAppLauncherBarHeightScale() : DockLayoutPolicy.sizePreset(2))
@@ -15850,6 +15936,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .displayCutoutInsetLeftPx(mLastDisplayCutoutInsetLeft)
             .displayCutoutInsetRightPx(mLastDisplayCutoutInsetRight)
             .build();
+    }
+
+    /**
+     * What the dock's style asks of its slab: Home's dock is the Glass tray, every other page's
+     * the plain dock. Read off the committed page rather than the stack's dress, so a slide
+     * across the seam keeps the geometry it was committed with and the tray's comes and goes at
+     * settle ({@link #restyleDockSurfaceForPageIfChanged}).
+     */
+    @NonNull
+    private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec() {
+        return com.termux.app.dock.DockSurfaceSpec.forDock(
+            com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage));
+    }
+
+    /**
+     * A settle that changes the dock's surface spec — onto Home or off it — lays the dock out and
+     * dresses its glass again: the tray's dashes stand above its slab and its glass wears the
+     * dock-surface features, the Workspace's do not. Nothing happens while the spec is the same.
+     */
+    private void restyleDockSurfaceForPageIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
+                                                    @NonNull com.termux.app.wall.PaneWallPage to) {
+        if (mPreferences == null || mChrome == null) return;
+        if (com.termux.app.place.HomeChromePolicy.wearsHomeShape(from)
+            == com.termux.app.place.HomeChromePolicy.wearsHomeShape(to)) return;
+        // The glass is re-cut even where the geometry did not move: its features are the spec's.
+        mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
+        updateAppLauncherBarHeight();
+        setTerminalToolbarHeight(true);
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+            | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
     /**
@@ -20456,6 +20572,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Home wears its own Style, Corners and Margin: a crossing between halves that differ
         // dresses the chrome for the arriving one, as the variant above re-arranged it.
         restyleChromeForHalfIfChanged(left, page);
+        // Home's dock is the Glass tray: its geometry and its glass follow the arriving page.
+        restyleDockSurfaceForPageIfChanged(left, page);
         // The readings live in a focused Home float's titlebar on Home, in the bar elsewhere.
         syncHomeFloatReadings();
         // The chips' glass is built on arrival at Home and let go of on leaving it, whatever the
