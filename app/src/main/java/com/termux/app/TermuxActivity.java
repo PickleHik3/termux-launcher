@@ -13177,7 +13177,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void hideInAppKeyboardForEditor() {
             // At the session's end, Home with always on keeps it: it is the keyboard Home wants.
             PlaceLayoutStore store = placeLayoutStore();
-            if (!mSurfaceEditor.isActive() && store != null
+            if ((!mSurfaceEditor.isActive() || mSurfaceEditor.isEndingSession()) && store != null
                 && com.termux.app.place.HomeChromePolicy.editorEndKeepsKeyboard(mLastWallPage,
                     store.isHomeKeyboardAlwaysOn()))
                 return;
