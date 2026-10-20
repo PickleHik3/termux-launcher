@@ -14,7 +14,7 @@ first within each section. Delete this file with the spec when the work is deliv
 | 4a Taskbar + run strip | built on a worker branch, unmerged, unchecked on device | 0e19815bc | In `DockStyle.BUILT`. Home tile (drawer glyph, apps' size) takes one of the row's slots, start/middle/end by long-press drag (`layout.home.taskbar_home_tile`, absent = start), still during finger page swipes. Run strip on its own frost card above the dock and its dashes, where the float chips stood (they are off under this style); built on Home from the window chips; eases in and out. Reflection at 0.6 of the tray's. Prompt line's field hides under the open palette in bf8032e46. |
 | 4b Prompt line | built on a worker branch, unmerged, unchecked on device | ba9a96bf4 | In `DockStyle.BUILT`. One taller slab: apps row, then the 48 dp field on its well (14 dp side inset, air over the icons = air under the well, well radius = dock radius − that air); tap opens the palette with keyboard and caret; Enter runs the top result (read, unchanged); a style switch eases the slab 240 ms. Lens beads row inset 9 dp a side in a054ad056. |
 | 4c Wall strip | built on a worker branch, unmerged, unchecked on device | 2b9a5d86a | In `DockStyle.BUILT` (all five now). One taller slab: the 84 dp `WallStripRowView` over the apps row in the row's own host (dashes still above the slab), the air over it = the air under the icons, tiles nest by it; side inset read off the first laid-out icon (14 dp inside the slab without one). Fed from the same chips as the run strip (row windows and the display window, split shapes from `paneCellGeometry`); tiles slide/resize ~420 ms on open/close; tile tap = Workspace in on it, `+` = new row window, long-press = a small menu (no chip menu exists). Reflection lower bevel only at 0.8. The clock ticks alone (tiles in their own RenderNode on API 29+). Style switches ease both bands at once (240 ms). |
-| Emulator pass 2 | done; fix round 2 in progress | d168d98ed | Pass: picker live switch + persist, Prompt line tap/caret/Enter/hidden under palette, Wall strip geometry 0–2 tiles, taps + menu + Close from Home, Taskbar Home tile drag and tap, run strip taps, drawer folder pull, no shader errors. Fix: Lens beads not rendering (regression), ~100 dp seam jump (Prompt line, Wall strip), tray padding unequal on screen, run strip square corners, empty glass under the palette, missing glyph in tile/strip names, run strip names all "ho…", light Prompt well pale, Wall strip ignores floats, partial page left-heavy, blurred-text flash at Workspace landing (cause unknown). |
+| Emulator pass 2 | done; fix round 2 merged, unchecked on device | 36700127f | Fixed: Lens beads fell back to the slab (row icons wider than a bead's slot, 4ec3b24b1); seam step of the Prompt line / Wall strip bands (36700127f); run strip square glass corners (2c699bc42); empty strip under the palette (b7bfbd122); Wall strip lists floats (622951639). Not changed: equal padding measures equal on pass 2's frames (21/21 px Floating); partial-page centring (see decisions); the landing's frosted frame is the terminal's reflow frost (predates). |
 | 5 Pong install | not started | | |
 
 ## Side fixes
@@ -130,7 +130,40 @@ its reason so it can be reversed.
 - 2026-10-21 · Wall strip: the clock's minute redraws the row view only; its tiles stand in a
   RenderNode of their own (API 29+) recorded again only when they change, so the tick re-records
   the clock alone. The dock's glass and reflection are not touched by it.
-- 2026-10-21 · Wall strip lists Home floats as tiles too, with a float mark: they are terminal
-  windows of the same session, and the Taskbar's run strip already lists them.
-- 2026-10-21 · A dock page with fewer apps than slots is centred (unless the slot/drag mapping
-  makes that unclean; then left as is and noted).
+- 2026-10-21 · Pass 2, Lens beads: the cause was the row's icon size, not the A–Z row. Since
+  the 9 dp inset the dock's own icons (about 51 dp at 411 dp, held only to the slot less 4 dp)
+  were wider than a 56 dp slot leaves a bead with its 6 dp gap, so `LensBeadGeometry.compute`
+  answered null on every default install. Under Lens beads the row now holds its icons to
+  `LensBeadGeometry.fitIconPx` (a bead of 1.1x with its gap): the icons are about 45 dp, a little
+  smaller than the tray's. The other way, keeping the icons and dropping the inset, puts the end
+  beads on the screen's edge again (pass 1's finding).
+- 2026-10-21 · Pass 2, seam: Home's own bands (the Prompt line's field, the Wall strip's row)
+  follow the page across the seam rather than landing at the settle: their reveal is Home's share
+  of the slide, so the slab eases with the page. This reverses the 10-20 note that a settle lands
+  the field at once (ADR 0003): the band is Home's furniture leaving with Home, not the arriving
+  place's geometry. One dock pass and one glass re-cut a frame while the share moves, the content
+  held as the travel holds it; to be judged for jank on pong. The Taskbar's run strip already
+  rides in Home's float layer, so it leaves and returns with the page; nothing changed there.
+- 2026-10-21 · Pass 2, Prompt line under the palette: the slab eases to the tray's height (the
+  field fading with its band) and back when the palette closes, rather than keeping an empty
+  well. That is also what the Glass tray does under the palette (it stays the tray), so both
+  readings of the finding give the same dock. Supersedes the 10-21 "keeps its band" note.
+- 2026-10-21 · Pass 2, Wall strip floats: Home's floats are tiles after the row's windows, fed
+  through the existing `RunStripModel` entries (the Home-float kind) and `WallStripRowView.tilesOf`,
+  which takes every entry but `+`. A float tile's tap is `showHomeFloat`; its long press has no
+  menu. Both halves merged on 10-21; the feed calls `tilesOf(RunStripModel.wallEntries(entries), shapes, keys)`.
+- 2026-10-21 · Pass 2, not done: centring a partial dock page (six apps in seven slots). The
+  row's slot is its grid column everywhere: the drag's hover and drop (x over the slot width),
+  the swipe's staged page and the beads' neighbours (`drawnNeighbourIconCentersX`), the Taskbar
+  tile's slots and the Wall strip's inset (read off the first icon's column). A centred page puts
+  icons half a slot off their columns, so each of those needs the page's lead offset threaded
+  through; not clean in this pass. The developer's call whether it is worth that change.
+- 2026-10-21 · Pass 2, equal padding: pass 2's own frames measure equal, Floating tray 21 px
+  above and below the icon (slab 2159–2321, disc 2180–2300 on the 2400 px screen), Docked 22 px
+  above and 22 px to where a 24 dp gesture inset would start; the crop the finding was read from
+  ends 3 px under the slab. No change; re-measured from `uiautomator` bounds as a device check.
+- 2026-10-21 · Pass 2, the frosted frame at the landing: `TerminalView.frostReflow` (110 ms of
+  blur over the grid when the settle's resize reflows it, 356e6ca81, 2026-09-27) predates the dock
+  work and runs under every dock style. The dock's settle restyle (`restyleDockSurface`, from the
+  page commit inside the settle) runs before the travel's displacement settles, so by code it
+  joins the same reflow rather than adding one; not confirmed on a device. Not changed.

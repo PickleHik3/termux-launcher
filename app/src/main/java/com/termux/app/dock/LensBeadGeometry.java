@@ -54,11 +54,53 @@ public final class LensBeadGeometry {
     /** The least room between an end bead and the screen's edge the inset buys, dp. */
     public static final float MIN_SCREEN_EDGE_DP = ROW_SIDE_INSET_DP + MIN_GAP_DP / 2f;
 
+    /**
+     * The least a bead is of its icon where the row's slots are what hold it: the icon is held
+     * so a bead this much larger fits its slot with {@link #MIN_GAP_DP} to its neighbour.
+     */
+    public static final float MIN_FIT_SCALE = 1.1f;
+
     private LensBeadGeometry() {}
 
     /** {@link #ROW_SIDE_INSET_DP} in px. */
     public static int rowSideInsetPx(float density) {
         return Math.round(Math.max(0f, density) * ROW_SIDE_INSET_DP);
+    }
+
+    /**
+     * The icon a row lying down draws under Lens beads, for the size it would draw
+     * ({@code iconPx}) in slots {@code slotPx} wide: no larger than leaves a bead of
+     * {@link #MIN_FIT_SCALE} of it {@link #MIN_GAP_DP} from its neighbour's. Without it the row's
+     * own fit (the slot less 4 dp of air) hands icons the beads cannot cover once the slots are
+     * narrow, and {@link #compute} gives the slab: seven 51 dp icons in the 56 dp slots the
+     * {@link #ROW_SIDE_INSET_DP} inset leaves on a 411 dp phone. A pixel is kept back for the
+     * row's slots, which are whole pixels and not all the same.
+     */
+    public static int fitIconPx(int iconPx, float slotPx, float density) {
+        if (iconPx <= 0 || !(slotPx > 0f)) return iconPx;
+        float room = slotPx - 1f - MIN_GAP_DP * Math.max(0f, density);
+        int fit = (int) Math.floor(room / MIN_FIT_SCALE);
+        return Math.max(1, Math.min(iconPx, fit));
+    }
+
+    /**
+     * Whether the dock's apps row stands where Lens beads can be drawn, before its icons are
+     * measured: the row shown, lying along the bottom (no rail), alone on the dock's glass (the
+     * A–Z row or another band on the same plank would lose its glass to the beads), the Docked
+     * frame not standing in for the dock's sheet, and the keyboard not sharing that glass. A
+     * hidden A–Z row is no band, whatever edge it was last put on.
+     */
+    public static boolean rowWearsBeads(@NonNull com.termux.app.place.PlaceLayout layout,
+                                        boolean sheetStandsDownOnFrame,
+                                        boolean keyboardSharesGlass) {
+        if (!com.termux.app.place.PlaceChromePolicy.appsShown(layout)
+            || com.termux.app.place.PlaceChromePolicy.appsRailShown(layout)
+            || com.termux.app.place.PlaceChromePolicy.appsEdge(layout)
+                != com.termux.app.place.PlaceLayout.Edge.BOTTOM) return false;
+        if (sheetStandsDownOnFrame || keyboardSharesGlass) return false;
+        return com.termux.app.terminal.AccessoryStackLayoutPolicy.plankBands(
+            com.termux.app.place.EdgeStackPolicy.stack(layout,
+                com.termux.app.place.PlaceLayout.Edge.BOTTOM)).size() <= 1;
     }
 
     /** One row of beads, in the coordinates of the surface they were computed for. */

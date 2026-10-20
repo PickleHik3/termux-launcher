@@ -1745,19 +1745,17 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   Android 13 (API 31 emulator): plain frost slab, the well and prompt drawn, no crash; logcat has
   no "Glass refraction shader failed" · emulator.
 - 2026-10-20 · feat(dock) Prompt line · Seams and the editor: swipe Home → Workspace and back:
-  the field goes and comes at the settle (no ease there), the Workspace's dock is the build
+  the field eases out with the page and back in as Home returns (superseded by "Home's own dock
+  bands follow the page across the seam", pass-2 fixes below), the Workspace's dock is the build
   before, no slab jump during the slide; the drawer still opens from Home (palette route, see
   "How to open the drawer" above); in the Layout editor the dock's size grip still sizes the
   icons as before (the field is not counted as row height) · emulator.
 - 2026-10-20 · feat(dock) Prompt line · Frame time of the style switch ease (a dock pass and a
   glass re-cut per frame for about 15 frames) against a tray⇄beads switch: report jank beyond the
   noise (judge jank on pong, never the emulator) · pong when asked.
-- 2026-10-21 · fix(dock) "the Prompt line's field hides under the open command palette" · Tap the
-  field, and separately swipe up from the dock's top edge: as the palette opens the field fades
-  out (about 0.12 s) and only the palette's own query line reads as a search box; the dock does
-  not change height; a tap where the field stood does nothing; close the palette (Back, Enter
-  on an empty query, a tap outside): the field fades back in (about 0.18 s). Reduced motion: it
-  goes and comes at once · emulator.
+- 2026-10-21 · fix(dock) "the Prompt line's field hides under the open command palette" ·
+  superseded by "the Prompt line's slab eases to the tray's under the open palette" (pass-2
+  fixes below): the dock no longer keeps the field's band under the palette.
 
 ### Home dock: Taskbar (10-20)
 - 2026-10-21 · commit "feat(dock): Taskbar, a Home tile among the apps and the run strip above"
@@ -1836,9 +1834,58 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   `dumpsys gfxinfo <pkg> framestats` shows no new frames over 10 s except one at the minute's turn,
   and that frame redraws only the clock. Home's own clock widget is unchanged. Below Android 13
   (API 31 emulator): plain frost slab, no crash. Swipe Home → Workspace: the Workspace's dock is
-  the build before (no row); back on Home the row returns at the settle with the current windows.
+  the build before (no row) once landed; the row eases out with the page and back in as Home
+  returns (pass-2 fixes below), with the current windows.
   Open the drawer from the dock and the command palette by the dashes: report how the row reads
   under them · emulator.
+
+### Home dock: pass-2 fixes (10-21)
+- 2026-10-21 · fix(dock) "Lens beads draw again, the row's icons held to what a bead covers" ·
+  Lens beads, `layout.home.portrait.az_row=false` (the A–Z row hidden; `az_bar` may still read
+  bottom), six and seven apps on a page, Docked then Floating, 411 dp (tl16): every icon on its
+  own round bead about 1.1x the icon (crop: about 50 dp beads under about 45 dp icons, a clear gap
+  between beads, at least 12 dp from the screen's edges), no slab; the icons are a little smaller
+  than under the Glass tray (switch to it: they grow back to the tray's size). A–Z row back on the
+  dock: the slab (the fallback). Swipe the dock's pages: beads ride their icons as before ·
+  emulator (AGSL needs API 33+).
+- 2026-10-21 · fix(dock) "Home's own dock bands follow the page across the seam" · Prompt line,
+  then Wall strip, a Workspace window open: swipe Home → Workspace slowly (`ad swipe 900 1200 200
+  1200 900`) and record at 60 fps: the field (the row) shrinks out of the slab as Home slides
+  away, the slab's top coming down with it, and the settle shows no step (no ~100 dp drop); swipe
+  back: it grows back in as Home returns; a swipe that springs back leaves the slab as it was.
+  Glass tray, Lens beads and Taskbar: the slide is the build before. At rest `dumpsys gfxinfo
+  <pkg> framestats` shows no new frames over 10 s. Taskbar: the run strip slides away and back
+  with Home's page (it lives in Home's float layer), with no vertical step at the settle. Judge
+  the per-frame dock pass for jank on pong · emulator, then pong when asked.
+- 2026-10-21 · fix(dock) "the run strip's glass is cut to its rounded outline" · Taskbar with two
+  windows: crop the strip's four corners at 4x: no square frost past the rounded ring, the ring
+  intact, the entries unclipped; light and dark · emulator.
+- 2026-10-21 · fix(dock) "the Prompt line's slab eases to the tray's under the open palette" ·
+  Prompt line: tap the field, and separately swipe up from the dock's top edge: as the palette
+  opens the slab eases (about 0.24 s) to the Glass tray's height, the field fading with its band,
+  and no empty strip of glass is left under the icons (pass 2's 44z); close the palette (Back,
+  Enter on an empty query, a tap outside): the slab eases back and the field fades in. Reduced
+  motion: it lands at once. Report jank of the ease running with the keyboard's rise on pong ·
+  emulator, then pong when asked.
+- 2026-10-21 · feat(dock) "the Wall strip lists Home's floats as tiles too" · Wall strip, two
+  Workspace windows and two Home floats (one minimised): the row shows the windows' tiles, then
+  one tile per float, the clock's share counting the floats as terminals; the focused float's
+  tile wears the accent ring, else the Workspace's window in front. Tap a float's tile: the float
+  comes back on Home, focused (Home stays in view); tap a window's tile: the Workspace slides in
+  on it. Long-press a float's tile: nothing (no menu yet). Close a float: its tile goes ·
+  emulator.
+- 2026-10-21 · pass-2 equal padding, re-measure · Glass tray, Floating and Docked, with and
+  without the A–Z row, and each other style's slab: read the slab's bounds and an icon's box
+  from `uiautomator dump` (not the screenshot, whose crops ended 3 px under the slab in pass 2):
+  air above the icon box = air under it (Docked: to the top of the gesture inset) within 1 px.
+  Pass 2's own frames already measure equal: Floating tray slab 2159–2321 with the icon disc
+  2180–2300 (21/21 px), Docked slab top 2169, disc 2191–2315, and 22 px under it to 2337, the
+  gesture inset's top if it is 24 dp (unconfirmed: read it from the dump) ·
+  emulator.
+- 2026-10-21 · pass-2 seam frost, by eye · Home → Workspace landing with the keyboard up, Glass
+  tray then Prompt line: one frame of frosted terminal text at the landing is the terminal's own
+  reflow frost (TerminalView.frostReflow, 110 ms, since 356e6ca81 on 2026-09-27), there with
+  every dock style; report only if it reads worse under one style · emulator.
 
 ## Developer
 

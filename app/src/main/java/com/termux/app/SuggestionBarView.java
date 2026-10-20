@@ -9206,9 +9206,36 @@ public final class SuggestionBarView extends GridLayout
             return railIconSizePx();
         // Lying down the slots share the row's width, so the icon is held to one slot's share of
         // it, less a little air: a large size with many apps would otherwise cover its neighbours.
-        return com.termux.app.dock.DockLayoutPolicy.slotFitIconPx(rowIconSizePx(),
-            getWidth() - getPaddingLeft() - getPaddingRight(), Math.max(1, maxButtonCount),
-            screenDensity());
+        int rowWidth = getWidth() - getPaddingLeft() - getPaddingRight();
+        int slots = Math.max(1, maxButtonCount);
+        int fit = com.termux.app.dock.DockLayoutPolicy.slotFitIconPx(rowIconSizePx(), rowWidth,
+            slots, screenDensity());
+        // Under Lens beads each icon stands on a bead a little larger than it, so the icon is
+        // held to what leaves its bead a gap to the next one.
+        if (lensBeadFit && rowWidth > 0)
+            fit = com.termux.app.dock.LensBeadGeometry.fitIconPx(fit, rowWidth / (float) slots,
+                screenDensity());
+        return fit;
+    }
+
+    /** Whether the row's icons are held to the Lens beads' fit ({@link #setLensBeadFit}). */
+    private boolean lensBeadFit;
+
+    /**
+     * Holds the icons lying down to the size a Lens bead covers in its slot
+     * ({@link com.termux.app.dock.LensBeadGeometry#fitIconPx}), or lets go: on while Home's dock
+     * wears Lens beads, off for every other dock.
+     */
+    public void setLensBeadFit(boolean fit) {
+        if (lensBeadFit == fit) return;
+        lensBeadFit = fit;
+        if (vertical) return;
+        invalidateRenderedIconCaches();
+        childLayoutPending = true;
+        requestLayout();
+        invalidate();
+        scheduleStableDrawReleaseIfPossible();
+        scheduleSlotIconResize();
     }
 
     /** The row's icon before it is held to its slot: the height the row gives it. */

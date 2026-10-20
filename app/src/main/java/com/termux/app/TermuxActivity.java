@@ -5015,11 +5015,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || host.getWidth() <= 0 || host.getHeight() <= 0 || row.getWidth() <= 0
             || row.getVisibility() != View.VISIBLE) return null;
         PlaceLayout layout = currentPlaceLayout();
-        if (!PlaceChromePolicy.appsShown(layout) || PlaceChromePolicy.appsRailShown(layout)
-            || PlaceChromePolicy.appsEdge(layout) != PlaceLayout.Edge.BOTTOM
-            || !isAppsRowAlone(layout) || stackStandsDownOnFrame()) return null;
-        if (isInAppKeyboardShown()
-            && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec())) return null;
+        if (!com.termux.app.dock.LensBeadGeometry.rowWearsBeads(layout, stackStandsDownOnFrame(),
+            isInAppKeyboardShown()
+                && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec()))) return null;
         int count = row.layoutIconBoxes(mDockBeadBoxes);
         if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return null;
         float[] rowAt = layoutOffsetIn(row, container);
@@ -16151,6 +16149,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Lens beads narrow the row's slots a little more, so the end beads stand clear of the
         // screen's edges (LensBeadGeometry.ROW_SIDE_INSET_DP); every other dock adds nothing.
         int appsContentInset = Math.round(contentInset * 0.82f) + layout.appsRowExtraSideInsetPx();
+        // And hold the icons to what a bead covers in those narrower slots: held only to the
+        // slot less its 4 dp of air, a bead could not keep its gap and the dock fell back to
+        // the slab on every default install.
+        if (mSuggestionBarView != null) mSuggestionBarView.setLensBeadFit(layout.surface.beads);
 
         // The find strip is dock furniture: it spans exactly the dock's own width, whichever style
         // is set, so it reads as the bar's top edge rather than as a floating panel.
@@ -16591,6 +16593,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withTintStrength(tint);
         strip.setBackground(com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
             backdrop));
+        // The frost under the ring is a rectangle: the strip is cut to its own rounded outline,
+        // so no square corner of glass shows past the ring.
+        clipRunStripToOutline(strip, radius);
+    }
+
+    /** The radius the run strip's outline was last cut to; NaN before. */
+    private float mRunStripOutlineRadiusPx = Float.NaN;
+
+    /** Cuts the strip, its glass and its entries, to its rounded outline; set only on a change. */
+    private void clipRunStripToOutline(@NonNull View strip, float radiusPx) {
+        if (Float.compare(mRunStripOutlineRadiusPx, radiusPx) == 0 && strip.getClipToOutline())
+            return;
+        mRunStripOutlineRadiusPx = radiusPx;
+        strip.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radiusPx);
+            }
+        });
+        strip.setClipToOutline(true);
     }
 
     // ------------------------------------------------------------------ Prompt line
@@ -16627,7 +16648,56 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float promptFieldReveal() {
         if (mPromptFieldEase != null) return mPromptFieldEaseValue;
-        return mPreferences != null && dockSurfaceSpec().promptField ? 1f : 0f;
+        return mPreferences != null && !mPromptFieldUnderPalette
+            && homeDockStyle() == com.termux.app.dock.DockStyle.PROMPT_LINE ? homeBandShare() : 0f;
+    }
+
+    /**
+     * How much of Home's own bands (the Prompt line's field, the Wall strip's row) the dock
+     * carries: all of them resting on Home, none on the Workspace, and between, the share of the
+     * way back to Home while a slide crosses the seam ({@link #syncSeamBandShare}), so the slab
+     * eases with the page rather than stepping at the settle.
+     */
+    private float homeBandShare() {
+        if (!Float.isNaN(mTravelHomeBandShare)) return mTravelHomeBandShare;
+        return com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage) ? 1f : 0f;
+    }
+
+    /** {@link #homeBandShare} while a slide crosses the seam; NaN otherwise. */
+    private float mTravelHomeBandShare = Float.NaN;
+
+    /**
+     * One frame of a slide across the seam between Home and the Workspace, where Home's dock
+     * carries a band of its own (the Prompt line's field, the Wall strip's row): the band follows
+     * the page, out as Home slides away and back in as it returns, one dock pass and one glass
+     * re-cut a frame while the share moves. Nothing for any other dock style, and nothing at rest.
+     */
+    private void syncSeamBandShare(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
+        if (mTravelSeamOther == null || mPreferences == null || mChrome == null) return;
+        com.termux.app.dock.DockStyle style = homeDockStyle();
+        boolean carriesBand = style == com.termux.app.dock.DockStyle.WALL_STRIP
+            || (style == com.termux.app.dock.DockStyle.PROMPT_LINE && !mPromptFieldUnderPalette);
+        if (!carriesBand || mPromptFieldEase != null) return;
+        boolean committedHome = com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage);
+        if (committedHome == com.termux.app.place.HomeChromePolicy.wearsHomeShape(mTravelSeamOther))
+            return;
+        float progress = Math.max(0f, Math.min(1f,
+            com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage)));
+        float share = committedHome ? 1f - progress : progress;
+        if (Float.compare(share, mTravelHomeBandShare) == 0) return;
+        mTravelHomeBandShare = share;
+        if (setTerminalToolbarHeight(false))
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    /**
+     * Whether the slab carries the field at rest: where Home's dock wears the Prompt line, and
+     * not while the command palette it opens is up (the palette's own field is the one search
+     * box then, and the slab is the tray's until the palette goes).
+     */
+    private boolean promptFieldWanted() {
+        return mPreferences != null && dockSurfaceSpec().promptField && !mPromptFieldUnderPalette;
     }
 
     /**
@@ -16636,21 +16706,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * lays the new style out. Anywhere else (off Home, the dock not laid out yet, reduced motion)
      * the passes land it at once.
      */
-    private void beginDockBandEase() {
+    private boolean beginDockBandEase() {
         cancelDockBandEase();
-        if (mPreferences == null || mChrome == null) return;
+        if (mPreferences == null || mChrome == null) return false;
         com.termux.app.dock.DockSurfaceSpec spec = dockSurfaceSpec();
-        float target = spec.promptField ? 1f : 0f;
+        float target = promptFieldWanted() ? 1f : 0f;
         float from = mAppliedPromptFieldReveal;
         float wallTarget = spec.wallStrip ? 1f : 0f;
         float wallFrom = mAppliedWallStripReveal;
         if ((from == target && wallFrom == wallTarget) || isReducedMotionEnabled()
-            || !com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage)) return;
+            || !com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage)) return false;
         View stack = findViewById(R.id.accessory_stack_container);
         View rowHost = findViewById(R.id.apps_bar_row_host);
         if (stack == null || rowHost == null || stack.getVisibility() != View.VISIBLE
             || rowHost.getVisibility() != View.VISIBLE || stack.getHeight() <= 0
-            || rowHost.getParent() != findViewById(R.id.accessory_row_stack)) return;
+            || rowHost.getParent() != findViewById(R.id.accessory_row_stack)) return false;
         android.animation.ValueAnimator ease = android.animation.ValueAnimator.ofFloat(0f, 1f);
         ease.setDuration(Math.round(PROMPT_FIELD_EASE_MS
             * Math.max(Math.abs(target - from), Math.abs(wallTarget - wallFrom))));
@@ -16683,6 +16753,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWallStripEaseValue = wallFrom;
         mPromptFieldEase = ease;
         ease.start();
+        return true;
     }
 
     /** Stops an ease under way where it stands; the caller's pass lands the style. */
@@ -16735,22 +16806,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             field.setLayoutParams(params);
             moved = true;
         }
-        if (mPromptFieldUnderPalette) {
-            // Under the open palette the field keeps its band but shows nothing: the palette's
-            // own field is the one search box (its fade is setPromptFieldUnderPalette's).
-            if (field.getVisibility() == View.GONE) {
-                field.setAlpha(0f);
-                field.setVisibility(View.INVISIBLE);
-                moved = true;
-            }
-        } else {
-            if (field.getVisibility() != View.VISIBLE) {
-                field.setVisibility(View.VISIBLE);
-                moved = true;
-            }
-            float alpha = promptFieldAlpha(mAppliedPromptFieldReveal);
-            if (field.getAlpha() != alpha && !mPromptFieldFading) field.setAlpha(alpha);
+        if (field.getVisibility() != View.VISIBLE) {
+            field.setVisibility(View.VISIBLE);
+            moved = true;
         }
+        // The field fades with its band, whichever ease carries it (a style switch, the palette).
+        float alpha = promptFieldAlpha(mAppliedPromptFieldReveal);
+        if (field.getAlpha() != alpha) field.setAlpha(alpha);
         // The well nests in the slab: the dock's radius less the air between them.
         float dockRadius = isRoundedDockStyle() ? resolveDockCapsuleCornerRadiusPx(
             layout.appsBarHeightPx + layout.promptFieldFullBandPx) : 0f;
@@ -16768,42 +16830,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return t * t * (3f - 2f * t);
     }
 
-    /** Whether the command palette is open over the Prompt line's field, which then hides. */
+    /** Whether the command palette is open over the Prompt line's field, which then goes. */
     private boolean mPromptFieldUnderPalette;
-    /** Whether the field is fading back in from under the palette; a dock pass leaves it be. */
-    private boolean mPromptFieldFading;
 
     /**
      * The palette opened or closed ({@link #setCommandPaletteInterceptorActive}): while it is open
-     * the Prompt line's field fades out under it, so the palette's field is the only search box
-     * on screen, and it fades back in when the palette goes. Nothing on any other dock.
+     * the Prompt line's slab eases to the tray's height, the field fading out with its band, so
+     * the palette's field is the only search box on screen and no empty glass is left where the
+     * field stood; it eases back when the palette goes. The same 240 ms ease a style switch
+     * runs (one dock pass and one glass re-cut a frame, nothing at rest). Nothing on any other
+     * dock.
      */
     private void setPromptFieldUnderPalette(boolean under) {
         if (mPromptFieldUnderPalette == under) return;
         mPromptFieldUnderPalette = under;
-        com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
-        if (field == null) return;
-        field.animate().cancel();
-        mPromptFieldFading = false;
-        if (field.getVisibility() == View.GONE) return;
-        float target = under ? 0f : promptFieldAlpha(mAppliedPromptFieldReveal);
-        if (isReducedMotionEnabled()) {
-            field.setAlpha(target);
-            field.setVisibility(under ? View.INVISIBLE : View.VISIBLE);
-            return;
-        }
-        if (!under) {
-            field.setVisibility(View.VISIBLE);
-            mPromptFieldFading = true;
-        }
-        field.animate().alpha(target).setDuration(under ? 120L : 180L)
-            .setInterpolator(new android.view.animation.DecelerateInterpolator())
-            .withEndAction(() -> {
-                mPromptFieldFading = false;
-                if (mPromptFieldUnderPalette && field.getVisibility() == View.VISIBLE)
-                    field.setVisibility(View.INVISIBLE);
-            })
-            .start();
+        if (mPreferences == null || mChrome == null || !dockSurfaceSpec().promptField) return;
+        if (beginDockBandEase()) return;
+        // No ease (off Home, reduced motion, the dock not laid out): the pass lands it at once.
+        if (setTerminalToolbarHeight(false))
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
     // ------------------------------------------------------------------ Wall strip
@@ -16839,7 +16885,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float wallStripReveal() {
         if (mPromptFieldEase != null) return mWallStripEaseValue;
-        return mPreferences != null && dockSurfaceSpec().wallStrip ? 1f : 0f;
+        return mPreferences != null && homeDockStyle() == com.termux.app.dock.DockStyle.WALL_STRIP
+            ? homeBandShare() : 0f;
     }
 
     /** Whether Home's dock wears the Wall strip, so its row wants the Workspace's windows. */
@@ -16984,9 +17031,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Feeds the row on Home from the windows the Workspace's bar shows: the row's terminal
-     * windows and the display window's at its place, each with its split shape. Nobody is looking
-     * at a row window from Home, so none is acknowledged here; the ringed tile is the window the
-     * Workspace has in front.
+     * windows and the display window's at its place, then Home's floats (as the Taskbar's run
+     * strip lists them), each with its split shape. Nobody is looking at a row window from Home,
+     * so none is acknowledged here; the ringed tile is the Home float in focus, else the window
+     * the Workspace has in front.
      */
     private void syncWallStrip(@NonNull java.util.List<Integer> foregroundPids) {
         com.termux.app.dock.WallStripRowView row = mWallStripRow;
@@ -17031,12 +17079,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 keys.add(WALL_STRIP_DISPLAY_KEY);
             }
         }
+        // Then Home's floats, as the Taskbar's run strip lists them: each a tile of its own after
+        // the row's, a minimised one marked, the float in focus ringed.
+        int firstFloat = items.size();
+        addHomeFloatChips(items, foregroundPids);
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
+        boolean[] minimised = new boolean[floats.size()];
+        com.termux.app.terminal.TerminalPaneController.Window focused =
+            mPaneController.focusedHomeFloat();
+        for (int i = 0; i < floats.size(); i++) {
+            com.termux.app.terminal.TerminalPaneController.Window window = floats.get(i);
+            minimised[i] = window.isMinimised();
+            if (window == focused && !window.isMinimised()) selected = firstFloat + i;
+            java.util.List<int[]> cells = new java.util.ArrayList<>();
+            for (TerminalSession shell : mPaneController.shellsOf(window))
+                cells.add(mPaneController.paneCellGeometry(shell));
+            shapes.add(com.termux.app.dock.WallStripRowPolicy.splitShape(cells));
+            keys.add((long) System.identityHashCode(window));
+        }
+        mWallStripRowCount = rowCount;
         java.util.List<com.termux.app.dock.RunStripModel.Entry> entries =
-            com.termux.app.dock.RunStripModel.build(items, selected, rowCount, displayChip, null,
-                getString(R.string.launcher_entry_new_window));
+            com.termux.app.dock.RunStripModel.build(items, selected, rowCount, displayChip,
+                minimised, getString(R.string.launcher_entry_new_window));
+        // Every entry but + is a tile (tilesOf leaves + out): the row's windows, then the floats,
+        // in the order the shapes and keys were laid down above.
         row.setTiles(com.termux.app.dock.WallStripRowView.tilesOf(
-            com.termux.app.dock.RunStripModel.rowEntries(entries), shapes, keys));
+            com.termux.app.dock.RunStripModel.wallEntries(entries), shapes, keys));
     }
+
+    /** How many of the Wall strip's tiles were the row's windows, the display's included. */
+    private int mWallStripRowCount;
 
     /**
      * The row takes the windows as they are now, on Home where it shows; elsewhere it keeps what
@@ -17060,6 +17132,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void onWallStripTileTapped(int chipIndex) {
         if (mPaneController == null || mPaneWallController == null || chipIndex < 0) return;
+        // A Home float's tile brings it back on its page; Home stays in view.
+        if (chipIndex >= mWallStripRowCount) {
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats =
+                chipFloats();
+            int at = chipIndex - mWallStripRowCount;
+            if (at < floats.size()) showHomeFloat(floats.get(at));
+            return;
+        }
         mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
         showRowWindow(chipIndex);
     }
@@ -21874,6 +21954,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Across the seam, how the stack crosses and which half's dress it wears are read before
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
         readSeamTravel(frame);
+        // Home's own bands on its dock follow the page across the seam.
+        syncSeamBandShare(frame);
         // The dock rows are always laid out by the layout on screen, the minimal one included
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
         if (!mTravelKeyboardPreRolled
@@ -22515,6 +22597,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDockTravelTranslationPx = 0f;
             mKeyboardTravelSharePx = 0f;
             mTravelHeldOverlapPx = 0;
+            // Home's bands land as the page did: the commit below lays them out for the page it
+            // lands on, and a slide that came back lays them out whole again just after it.
+            boolean bandShareMoved = !Float.isNaN(mTravelHomeBandShare);
+            mTravelHomeBandShare = Float.NaN;
             // The material blend, if one ran, has landed on the arriving place's material; the
             // pass below paints that material plainly, and the blend's layers go with it.
             mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
@@ -22567,6 +22653,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mX11Display.onUserKeyboardIntent(true);
             }
             syncPlaceState(page, leavingKeyboardUp);
+            if (bandShareMoved && page == left && setTerminalToolbarHeight(false))
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                    | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
             mTravelSeamOther = null;
             mTravelStackDressPage = null;
             mTravelSeamDressDiffers = false;

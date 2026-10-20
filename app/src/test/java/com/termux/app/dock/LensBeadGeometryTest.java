@@ -262,4 +262,73 @@ public class LensBeadGeometryTest {
             LensBeadGeometry.MAX_DRAWN_BEADS);
         assertTrue(LensBeadGeometry.MAX_BEADS + 2 <= LensBeadGeometry.MAX_DRAWN_BEADS);
     }
+
+    /** Seven icons of {@code iconPx} in even slots of a row inset {@code insetPx} a side, 411 dp at 2.625. */
+    private static LensBeadGeometry.Beads sevenOfSize(float insetPx, float iconPx) {
+        float density = 2.625f;
+        float width = 411f * density;
+        float air = 8f * density;
+        float slot = (width - 2f * insetPx) / 7f;
+        float[] boxes = new float[7 * 4];
+        for (int i = 0; i < 7; i++) {
+            float cx = insetPx + slot * (i + 0.5f);
+            boxes[i * 4] = cx - iconPx / 2f;
+            boxes[i * 4 + 1] = air;
+            boxes[i * 4 + 2] = cx + iconPx / 2f;
+            boxes[i * 4 + 3] = air + iconPx;
+        }
+        return LensBeadGeometry.compute(boxes, 7, 0f, 0f, width, air + iconPx + air, density);
+    }
+
+    @Test
+    public void theDocksOwnIconsInTheInsetRowAreHeldSoTheyKeepTheirBeads() {
+        // Emulator pass 2: the dock hands the row 51.5 dp icons (135 px at 2.625), held only to
+        // the slot less 4 dp. With the 9 dp inset seven slots are 56.2 dp, so a bead with its
+        // 6 dp gap is under 51 dp and every bead fell back to the slab.
+        float density = 2.625f;
+        float inset = LensBeadGeometry.rowSideInsetPx(density);
+        int rowWidth = Math.round(411f * density - 2f * inset);
+        int rowFit = DockLayoutPolicy.slotFitIconPx(135, rowWidth, 7, density);
+        assertNull("the row's own fit loses the beads", sevenOfSize(inset, rowFit));
+        // Held to the beads' fit, the same row wears beads about 1.1 of the icon.
+        int beadFit = LensBeadGeometry.fitIconPx(rowFit, rowWidth / 7f, density);
+        assertTrue(beadFit < rowFit);
+        LensBeadGeometry.Beads beads = sevenOfSize(inset, beadFit);
+        assertNotNull(beads);
+        assertEquals(7, beads.count());
+        assertTrue("ratio " + 2f * beads.radiusPx / beadFit,
+            2f * beads.radiusPx >= LensBeadGeometry.MIN_FIT_SCALE * beadFit - 1e-3f);
+        // An icon that already fits is left as it is.
+        assertEquals(100, LensBeadGeometry.fitIconPx(100, rowWidth / 7f, density));
+    }
+
+    private static com.termux.app.place.PlaceLayout homeLayout(
+            com.termux.app.place.PlaceLayout.RowPlacement apps, boolean azShown,
+            com.termux.app.place.PlaceLayout.Edge azEdge) {
+        return new com.termux.app.place.PlaceLayout(com.termux.app.place.PlaceLayout.Edge.TOP,
+            apps, azShown, azEdge, com.termux.app.place.PlaceLayout.RowPlacement.HIDDEN,
+            com.termux.app.place.PlaceLayout.KeyboardMode.RESIZE,
+            com.termux.app.place.PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+    }
+
+    @Test
+    public void theRowWearsBeadsOnlyAloneOnTheDocksGlass() {
+        com.termux.app.place.PlaceLayout.Edge bottom = com.termux.app.place.PlaceLayout.Edge.BOTTOM;
+        com.termux.app.place.PlaceLayout.RowPlacement row =
+            com.termux.app.place.PlaceLayout.RowPlacement.BOTTOM;
+        // The A–Z row hidden, its edge still reading the bottom (pass 2's prefs): beads.
+        assertTrue(LensBeadGeometry.rowWearsBeads(homeLayout(row, false, bottom), false, false));
+        // The A–Z row on the dock: the slab.
+        assertTrue(!LensBeadGeometry.rowWearsBeads(homeLayout(row, true, bottom), false, false));
+        // The A–Z row on another edge leaves the row alone: beads.
+        assertTrue(LensBeadGeometry.rowWearsBeads(
+            homeLayout(row, true, com.termux.app.place.PlaceLayout.Edge.TOP), false, false));
+        // A rail, no row, the frame's glass or the keyboard's: the slab.
+        assertTrue(!LensBeadGeometry.rowWearsBeads(homeLayout(
+            com.termux.app.place.PlaceLayout.RowPlacement.LEFT, false, bottom), false, false));
+        assertTrue(!LensBeadGeometry.rowWearsBeads(homeLayout(
+            com.termux.app.place.PlaceLayout.RowPlacement.HIDDEN, false, bottom), false, false));
+        assertTrue(!LensBeadGeometry.rowWearsBeads(homeLayout(row, false, bottom), true, false));
+        assertTrue(!LensBeadGeometry.rowWearsBeads(homeLayout(row, false, bottom), false, true));
+    }
 }
