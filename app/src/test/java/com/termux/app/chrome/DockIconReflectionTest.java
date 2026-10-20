@@ -31,6 +31,20 @@ public class DockIconReflectionTest {
     }
 
     @Test
+    public void theReflectionFadesOverAShortEasedStretchRatherThanPopping() {
+        assertTrue(DockIconReflection.FADE_MS >= 100L && DockIconReflection.FADE_MS <= 200L);
+        assertEquals(1f, DockIconReflection.fadeStrength(1f, 0f, 0L), 0f);
+        assertEquals(0f, DockIconReflection.fadeStrength(1f, 0f, DockIconReflection.FADE_MS), 0f);
+        assertEquals(0.5f, DockIconReflection.fadeStrength(0f, 1f, DockIconReflection.FADE_MS / 2), 1e-3f);
+        // Eased: slow at both ends, so its first and last frames are small steps.
+        float early = DockIconReflection.fadeStrength(0f, 1f, 16L);
+        assertTrue(early > 0f && early < 16f / DockIconReflection.FADE_MS);
+        // Caught mid-fade it carries on from where it was; past the end it stays there.
+        assertEquals(0.4f, DockIconReflection.fadeStrength(0.4f, 1f, 0L), 1e-6f);
+        assertEquals(1f, DockIconReflection.fadeStrength(0.4f, 1f, 10_000L), 0f);
+    }
+
+    @Test
     public void aBurstOfChangesSettlesBeforeACapture() {
         // Longer than a frame or two, shorter than anyone waits to look.
         assertTrue(DockIconReflection.SETTLE_MS >= 100L && DockIconReflection.SETTLE_MS <= 300L);

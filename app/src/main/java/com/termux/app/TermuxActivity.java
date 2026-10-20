@@ -4774,7 +4774,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         reflection.setEnabled(spec.iconReflections);
-        reflection.bind(program, host, container, mGlassOriginLeft, mGlassOriginTop);
+        // While a swipe fades the reflection out, it is aimed where the swipe draws the icons,
+        // so it leaves with them rather than staying behind.
+        float rowOffset = mSuggestionBarView != null ? mSuggestionBarView.drawnPageOffsetPx() : 0f;
+        reflection.bind(program, host, container, mGlassOriginLeft + rowOffset, mGlassOriginTop);
     }
 
     /**

@@ -178,10 +178,12 @@ public class GlassRefractionTest {
     }
 
     @Test
-    public void theProgramReadsTwelveBeads() {
+    public void theProgramReadsTwelveBeadsAndScalesItsReflection() {
         String agsl = GlassRefraction.AGSL;
         // Twelve slots: a swipe carries the neighbouring page's beads in beside a full row.
         assertTrue(agsl.contains("if (d < bd) { bd = d; bx = uBeadXC.w; }"));
+        // The reflection's strength scales it, so it can fade rather than pop.
+        assertTrue(agsl.contains("ra = ra * clamp(uReflect, 0.0, 1.0);"));
         // Every slot beyond the beads given is parked, never nearer than a real bead.
         float[] twelve = new float[12];
         for (int i = 0; i < twelve.length; i++) twelve[i] = 50f + i * 100f;

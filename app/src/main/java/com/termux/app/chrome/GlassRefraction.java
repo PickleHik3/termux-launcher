@@ -609,9 +609,10 @@ public final class GlassRefraction {
         "uniform float uLiveClarity;\n" +
         // The dock surface's own glass (DockSurfaceSpec), 0 on every other surface, which then
         // draws exactly as before: the soft rim band's width in px, how much of the lower shelf
-        // the slab wears (0..1), and the icon row's reflection: on (1) or off (0), the row's top
-        // and bottom in the surface's px, and the row's picture, aimed by its own local matrix.
-        // SOFT_RIM_DP, setDockSurface and setReflection in Java.
+        // the slab wears (0..1), and the icon row's reflection: its strength (1 whole, 0 off,
+        // between while it fades), the row's top and bottom in the surface's px, and the row's
+        // picture, aimed by its own local matrix. SOFT_RIM_DP, setDockSurface, setReflection and
+        // setReflectionStrength in Java.
         "uniform float uSoftRim;\n" +
         "uniform float uShelf;\n" +
         "uniform float uReflect;\n" +
@@ -1172,6 +1173,7 @@ public final class GlassRefraction {
         "                ra = kReflFace;\n" +
         "            }\n" +
         "        }\n" +
+        "        ra = ra * clamp(uReflect, 0.0, 1.0);\n" +
         "        if (ra > 0.0) {\n" +
         "            half4 rc = reflection.eval(float2(q.x, ry));\n" +
         "            col.rgb = col.rgb * half(1.0 - ra * float(rc.a)) + rc.rgb * half(ra * float(col.a));\n" +
@@ -2062,6 +2064,8 @@ public final class GlassRefraction {
         private float mSoftRimWritten = Float.NaN, mShelfWritten = Float.NaN;
         /** Whether a reflection is bound and on, and the row it was last aimed at. */
         private boolean mReflectOn;
+        /** The reflection's strength while on, 0..1: 1 but while it fades in or out. */
+        private float mReflectStrength = 1f;
         private float mReflTop = Float.NaN, mReflBottom = Float.NaN;
         /** The beads as last written: {@code uBead} and the twelve slots; radius 0 is none. */
         private final float[] mBeadWritten = new float[3 + BEAD_SLOTS];
@@ -2173,13 +2177,25 @@ public final class GlassRefraction {
             mShader.setInputShader("reflection", row);
             if (!mReflectOn) {
                 mReflectOn = true;
-                mShader.setFloatUniform("uReflect", 1f);
+                mShader.setFloatUniform("uReflect", mReflectStrength);
             }
             if (mReflTop != top || mReflBottom != bottom) {
                 mReflTop = top;
                 mReflBottom = bottom;
                 mShader.setFloatUniform("uReflRow", top, bottom);
             }
+        }
+
+        /**
+         * How strongly the bound reflection shows, 0..1: 1 at rest, between while it fades out
+         * for a page swipe and back in at the settle. Kept across {@link #clearReflection}, and
+         * written only on a change while a reflection is on.
+         */
+        public void setReflectionStrength(float strength) {
+            float v = Float.isNaN(strength) ? 1f : Math.max(0f, Math.min(1f, strength));
+            if (v == mReflectStrength) return;
+            mReflectStrength = v;
+            if (mReflectOn) mShader.setFloatUniform("uReflect", v);
         }
 
         /** No reflection: every surface but a Home dock that asks for one. The child is never read then. */
