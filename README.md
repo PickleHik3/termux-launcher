@@ -25,22 +25,56 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 
 ## Features
 
-- Termux as the actual Android home launcher
-- Kitty graphics support (use timg package `timg -pk foo.jpg/gif`)
-- Sixel image drawing in terminal
-- Native sessions, windows, recursive split and floating panes, layouts, workspace restore, and session browser, **Ctrl + Alt** is the default keybind.
-- Kitty keyboard protocol, safe hyperlinks and advanced font shaping
-- TUI-tuned touch, unlike stock Termux: drags scroll mouse-aware apps, taps click, and a brief press-and-hold turns the finger into a held mouse button — drag vim selections or resize tmux/TUI panes by touch
-- Searchable terminal command palette, tmux-style leader key, modal keymaps, and on-screen key hints
-- Scrollback search with vim-style copy mode over the transcript
-- App dock, full app drawer (vertical, horizontal, and category layouts) with folders and AI-assisted app categorization
-- Android widget pages and an expandable status bar with live CPU, RAM, and weather
-- Android Material theme integration for launcher surfaces and Termux shell theming
-- Built-in terminal keyboard by default on fresh installs, with Android keyboard and no-keyboard options
-- Launch Android apps from the shell with `launcherctl launch`
-- `tai` shell command and OpenAI/Ollama-compatible localhost API for on-device LLM inference and model management
-- On-device LLM backends using Google's LiteRT and Alibaba's MNN
-- Optional Shizuku integration for screen lock and showing CPU usage in status bar
+Where a feature was ported from or inspired by another project, that project is named next to it. The [notices](THIRD_PARTY_NOTICES.md) list exactly what is included and adapted.
+
+**The home screen**
+
+- Termux as the actual Android home launcher, the idea borrowed from [TEL](https://github.com/t-e-l/tel): the terminal is the home screen, with an app dock, a full app drawer (vertical, horizontal and category layouts, folders), Android widget pages and a Linux display beside it
+- An expandable status bar with sessions and window chips, live CPU, RAM and weather (animated [Meteocons](https://github.com/basmilius/meteocons))
+- Notification dots, pinned notification cards and a notification history for the shell
+- Looks and themes: Material You colours from your wallpaper (from [termux-monet](https://github.com/Termux-Monet/termux-monet)), glass surfaces with blur, edge light and corner radius you can tune per surface, icon packs, cursor trails, and theme templates (after [Noctalia](https://github.com/noctalia-dev/noctalia-shell)) so shell tools follow the wallpaper too
+- Backup and restore of your settings, config files and downloaded AI models
+
+**The terminal**
+
+- Kitty graphics (`timg -pk foo.jpg`, animations included) and Sixel images in the terminal
+- The [kitty](https://github.com/kovidgoyal/kitty) protocols, adapted from kitty's code: the kitty keyboard protocol, text sizing (OSC 66), hyperlinks (OSC 8), notifications and progress (OSC 99, OSC 9;4), clipboard read and write from programs (OSC 52 and the extended OSC 5522, pictures included), colour queries and multiple cursors; `kitten icat` and `kitten clipboard` work (kitty's remote control does not, there is no kitty to talk to)
+- Fonts the kitty way: an in-app font picker installs Nerd Fonts and writes a kitty-style `fonts.conf`, with fallback fonts, ligatures, variable axes and clean box drawing
+- Native sessions, windows, recursive split and floating panes, layouts and workspace restore (**Ctrl + Alt** is the default keybind); tiling after [Hyprland](https://github.com/hyprwm/Hyprland), the focused pane after [focus.nvim](https://github.com/nvim-focus/focus.nvim), terminal padding after [Ghostty](https://github.com/ghostty-org/ghostty)
+- Touch that reaches desktop TUIs. Drags scroll mouse-aware programs and taps click, as in Termux; the difference is a short press-and-hold that hands the finger to the program as a held mouse button, so programs written for a desktop mouse work by touch: select in vim, click around lazygit, drag a pane edge. Mouse mode turns the whole screen into a mouse for programs that take one
+- A searchable command palette for actions, apps and contacts, a tmux-style leader key, modal keymaps and on-screen key hints
+- Quick select of URLs, paths and hashes on screen; scrollback search and vim-style copy mode (work in progress)
+- `launcherctl`: launch apps, open and arrange panes and windows, notify, set the wallpaper and more from the shell, for you or for an agent running in a pane
+- Touch reports for programs that draw their own page (private mode 5523), which is how terminal-browser gets fling, pinch and long press
+- An in-app X11 display, built on [Termux:X11](https://github.com/termux/termux-x11): install graphical apps from Termux's `x11-repo` (`pkg install firefox`) and they appear in the app drawer with their own icons; a tap starts the display and opens the app full size. Apps installed in a proot distro are listed the same way, but that path has had less testing
+
+**Typing**
+
+- A built-in terminal keyboard on fresh installs: a trimmed [Unexpected Keyboard](https://github.com/Julow/Unexpected-Keyboard) by Jules Aguillon embedded in the app, docked, floating or split, with an extra-keys row and a Fn layer; the Android keyboard and no keyboard are a switch away
+- Edit, reset and create keyboard layouts in Settings and cycle through them from the space bar
+- The keyboard's paste key can paste the screenshot you just took on Android: only the latest fresh screenshot is offered, it lands as a file path under the terminal's tmp folder, and a plain paste still gives you the clipboard text
+
+**On-device AI**
+
+The models run in the launcher's own runtime, on Google's [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) and Alibaba's [MNN](https://github.com/alibaba/MNN), and a Model centre picks a size for your phone. Nothing in the launcher needs a model; these are the features that use one:
+
+- Voice dictation and cleanup: a [Whisper](https://github.com/futo-org/whisper-acft) or [Parakeet](https://huggingface.co/litert-community/parakeet-tdt-0.6b-v3) model turns speech into text on the phone, with [Silero VAD](https://github.com/snakers4/silero-vad) listening for pauses; a Gemma model cleans up fillers and misheard words while you pause, and the dictation card lets you fix a word before inserting it. The audio never leaves the phone
+- Read aloud: text to speech from the terminal and `tai speak`, with the [KittenTTS](https://huggingface.co/litert-community/kitten-tts-nano-0.8) voice
+- Local OpenAI- and Ollama-compatible endpoints on localhost, plus the `tai` command, so aichat and other clients can talk to the phone's own models
+- The app drawer sorts itself into categories
+- Dawn notes integration: automatic titles, an assistant that can edit the note, read aloud and dictation, and note search by meaning indexed with EmbeddingGemma 2 (dawn is work in progress)
+
+**Extras**
+
+- `tlstore`, a small package store made for Termux Launcher. It ships companion apps that only work here, and a few things that are just easier from it:
+  - **dawn** (a fork of [andrewmd5/dawn](https://github.com/andrewmd5/dawn)): a writing pad for the terminal, wired to the launcher's AI, voice and wallpaper colours
+  - **fastfetch** with **animated GIF logos** drawn through kitty graphics
+  - **btop** that sees the whole phone, run as the shell user through Shizuku
+  - **terminal-browser** (a fork of [zenbu-labs/terminal-browser](https://github.com/zenbu-labs/terminal-browser)): a real browser in a pane beside your shell, with touch, and an agent CLI (`terminal-browser action`) that lets a coding agent open pages, read them and click through them
+  - The **termux-launcher agent skill**: Claude Code, Codex, OpenCode or pi learn to run their work in a pane or window beside you, split and arrange panes, notify you and show progress, show images, open terminal-browser, answer questions about the launcher, and read their answers aloud with the on-device voice
+  - **Claude Code**, **opencode v2** and **Codex** made to run on Android (the first two through a patched musl loader, Codex as the [codex-termux](https://github.com/DioNanos/codex-termux) port by DioNanos), and [herdr](https://github.com/herdrdev/herdr), a workspace that keeps agents running after you close the terminal
+  - A fish shell setup with the store's own prompt (Pure's layout, Nerd Font icons, your wallpaper's colours), eza and zoxide; [sigye](https://github.com/am2rican5/sigye), kitten, and the Termux:API commands without the Termux:API app
+- Optional Shizuku integration: screen lock, CPU usage in the status bar, and a privileged lane for tools such as btop
 
 ## Editions
 
@@ -114,6 +148,8 @@ See the [tlstore guide](docs/en/Tlstore.md) for the full command list.
 
 In-repo references:
 
+- [Get started](docs/en/Get_Started.md) and [Learn the launcher](docs/en/Learn_The_Launcher.md): install, the first launch, and the three places on screen.
+- [Voice input](docs/en/Voice_Input.md) and [Text to speech](docs/en/Text_To_Speech.md): on-device dictation, cleanup, read aloud, `tai speak`.
 - [Programs and agents inside the terminal](docs/en/Programs_Inside_The_Terminal.md): **read this before assuming stock Termux behaviour** from a script or an AI agent running in a pane: the extra environment variables, the escape sequences the terminal accepts, `launcherctl`, and the one `am start` that must never be run.
 - [Local AI API](docs/en/LauncherCtl_API.md): OpenAI/Ollama-compatible localhost endpoint, app launch, model management, auth, and route tables.
 - [On-device AI](docs/en/On_Device_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.

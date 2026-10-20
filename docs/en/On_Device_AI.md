@@ -145,8 +145,8 @@ The first request loads the model if it is installed and not yet loaded.
 ## Remote model
 
 **Settings → On-device AI → Remote model** connects a model on another server, with your own key.
-Functions can then pick it ("Remote · model name"), and **Polished** dictation cleanup uses it
-whenever it is set up.
+Functions can then pick it ("Remote · model name"), dictation cleanup included
+([Voice input](Voice_Input.md#cleanup) says when cleanup uses it).
 
 - **Server address**: presets for **OpenAI**, **OpenRouter** and **Server on this phone or LAN**.
   Plain `http://` is allowed only for this phone and your own network.

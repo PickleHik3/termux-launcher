@@ -1,0 +1,17 @@
+# Pong's terminal place, keyboard down, Floating style (1080x2412). Coordinates are thousandths
+# of the screen; re-measure from a screenshot when the layout changes. The transcript spans
+# about 10% to 55% of the height here: every touch below stays inside it, clear of the dock
+# (a drag that started at 60% landed on a dock icon and opened the app).
+# Only the terminal's scrollback: drag down and up through the transcript, then fling both ways,
+# so the frames are the grid's own render and nothing else.
+repeat 4
+swipe 500 500 500 200 300
+swipe 500 200 500 500 300
+end
+sleep 1
+repeat 2
+swipe 500 520 500 220 80
+sleep 1
+swipe 500 220 500 520 80
+sleep 1
+end

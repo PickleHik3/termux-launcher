@@ -120,7 +120,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 || scrollToKey.equals("pass_ctrl_space_to_android"))
                 page = "KeyboardHardwarePreferencesFragment";
             else if (scrollToKey.equals("keyboard_layout") || scrollToKey.equals("in_app_keyboard_extra_keys")
-                || scrollToKey.equals("in_app_keyboard_custom_layout") || scrollToKey.equals("in_app_keyboard_layouts")
+                || scrollToKey.equals("in_app_keyboard_layouts")
                 || scrollToKey.startsWith("keyboard_docs_") || scrollToKey.startsWith("keyboard_credits"))
                 page = "KeyboardLayoutPreferencesFragment";
             else if (scrollToKey.equals("keyboard_shapes") || scrollToKey.startsWith("in_app_keyboard_floating_")
@@ -620,6 +620,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 R.xml.app_drawer_preferences});
             CHILD_XML_RESOURCES.put("app_behavior", new int[]{
                 R.xml.app_behavior_preferences});
+            CHILD_XML_RESOURCES.put("backup_restore", new int[]{
+                R.xml.backup_restore_preferences});
             CHILD_XML_RESOURCES.put("services_permissions", new int[]{
                 R.xml.services_permissions_preferences,
                 R.xml.termux_privileged_access_preferences, R.xml.termux_api_preferences});
@@ -958,6 +960,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                                                        @Nullable String page) {
             for (int i = 0; i < group.getPreferenceCount(); i++) {
                 Preference child = group.getPreference(i);
+                // A preference hidden in the XML is not offered, so search must not find it either.
+                if (!child.isVisible()) continue;
                 CharSequence title = child.getTitle();
                 CharSequence summary = child.getSummary();
                 String titleText = title == null ? "" : title.toString();

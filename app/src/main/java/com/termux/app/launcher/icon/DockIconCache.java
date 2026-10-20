@@ -75,6 +75,12 @@ public final class DockIconCache {
      */
     public interface ArtworkSource {
         @Nullable Drawable artwork(@NonNull LauncherAppEntry entry);
+
+        /** {@link #artwork}, saying whether it is a stand-in not to be kept. By default never. */
+        @NonNull
+        default LauncherIconStore.Artwork artworkDetailed(@NonNull LauncherAppEntry entry) {
+            return LauncherIconStore.Artwork.kept(artwork(entry));
+        }
     }
 
     @NonNull private final Resources resources;
@@ -220,9 +226,12 @@ public final class DockIconCache {
         if (cached != null) {
             return cached;
         }
-        Drawable raw = rawArtwork(entry);
+        LauncherIconStore.Artwork artwork = rawArtworkDetailed(entry);
+        Drawable raw = artwork.drawable;
         Drawable built = normalize(raw, sizePx, !entry.iconPackArtwork, badge);
-        if (built != null && startEpoch == epoch && identity.equals(iconPackIdentity)) {
+        // A stand-in is rendered for now and never kept: the pack it waits for redraws it.
+        if (built != null && !artwork.provisional
+            && startEpoch == epoch && identity.equals(iconPackIdentity)) {
             cache.put(key, built);
         }
         return built != null ? built : raw;
@@ -245,9 +254,18 @@ public final class DockIconCache {
      */
     @Nullable
     public Drawable rawArtwork(@NonNull LauncherAppEntry entry) {
-        if (entry.icon != null) return entry.icon;
-        Drawable stored = artworkSource == null ? null : artworkSource.artwork(entry);
-        return stored != null ? stored : defaultIconSource.defaultIcon();
+        return rawArtworkDetailed(entry).drawable;
+    }
+
+    @NonNull
+    private LauncherIconStore.Artwork rawArtworkDetailed(@NonNull LauncherAppEntry entry) {
+        if (entry.icon != null) return LauncherIconStore.Artwork.kept(entry.icon);
+        LauncherIconStore.Artwork stored = artworkSource == null
+            ? LauncherIconStore.Artwork.kept(null) : artworkSource.artworkDetailed(entry);
+        if (stored.drawable != null) return stored;
+        Drawable fallback = defaultIconSource.defaultIcon();
+        return stored.provisional ? LauncherIconStore.Artwork.standIn(fallback)
+            : LauncherIconStore.Artwork.kept(fallback);
     }
 
     /** Drops every rendered icon; the next bind re-renders at the current treatment. */

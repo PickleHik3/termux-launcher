@@ -43,7 +43,7 @@ public class TaiRuntimeHistoryLookupTest {
     /** The director asks for 2048; the 11 E4B GPU samples on file were chat loads at 4096. */
     @Test
     public void aLargerWindowsSampleIsAnUpperBoundForASmallerRequest() {
-        assertEquals(3_200_000_000L, lookup(2048, sample(4096, 3_000_000_000L), sample(4096, 3_200_000_000L),
+        assertEquals(3_000_000_000L, lookup(2048, sample(4096, 3_000_000_000L), sample(4096, 3_200_000_000L),
             sample(4096, 2_400_000_000L)));
         assertEquals(3_200_000_000L, lookup(4096, sample(4096, 3_200_000_000L)));
     }
@@ -59,11 +59,40 @@ public class TaiRuntimeHistoryLookupTest {
         assertEquals(3_900_000_000L, lookup(8192, small, mid, large));
     }
 
-    /** Within the chosen window the largest sample counts: identical loads spread over ±0.9 GB. */
+    /**
+     * Within the chosen window the typical sample counts, not the largest: identical loads spread
+     * over ±0.9 GB, and the runtime's watch stops the one that runs over.
+     */
     @Test
-    public void theLargestSampleAtTheChosenWindowCounts() {
-        assertEquals(4_200_000_000L, lookup(4096, sample(4096, 3_000_000_000L), sample(4096, 4_200_000_000L),
+    public void theTypicalSampleAtTheChosenWindowCounts() {
+        assertEquals(3_000_000_000L, lookup(4096, sample(4096, 3_000_000_000L), sample(4096, 4_200_000_000L),
             sample(4096, 2_400_000_000L)));
+    }
+
+    /** The median, the upper one of an even count: two samples plan on the larger, one on itself. */
+    @Test
+    public void theTypicalSampleIsTheUpperMedian() {
+        assertEquals(2_000_000_000L, TaiRuntimeHistory.typical(Collections.singletonList(2_000_000_000L)));
+        assertEquals(3_000_000_000L, TaiRuntimeHistory.typical(Arrays.asList(3_000_000_000L, 2_000_000_000L)));
+        assertEquals(2_500_000_000L, TaiRuntimeHistory.typical(Arrays.asList(4_000_000_000L, 2_000_000_000L,
+            2_500_000_000L)));
+        assertEquals(3_000_000_000L, TaiRuntimeHistory.typical(Arrays.asList(1_000_000_000L, 4_000_000_000L,
+            2_000_000_000L, 3_000_000_000L)));
+    }
+
+    /**
+     * Pong, 2026-10-13: E4B on the GPU at the 2048 cleanup window, three loads of 2119, 2588 and
+     * 3188 MB. The plan is 2588 MB, not 3188, so with the 10% headroom and the 768 MB hold floor
+     * the load needs 3614 MB free rather than 4274, and goes ahead at the 3804 MB that refused it.
+     */
+    @Test
+    public void pongsE4bCleanupLoadsPlanOnTheMiddleOne() {
+        long mib = 1024L * 1024L;
+        long measured = lookup(2048, sample(2048, 2588L * mib), sample(2048, 2119L * mib), sample(2048, 3188L * mib));
+        assertEquals(2588L * mib, measured);
+        long needed = TaiLoadBudget.Estimate.measured(measured).nonReclaimableBytes + TaiLoadBudget.HOLD_FLOOR_BYTES;
+        assertEquals(3614L, needed / mib);
+        assertTrue(needed <= 3804L * mib);
     }
 
     // --- (b) a line through the per-window maxima ---
@@ -72,7 +101,7 @@ public class TaiRuntimeHistoryLookupTest {
     public void twoWindowsBelowTheRequestGiveAFittedLine() {
         // 2048 -> 2.6 GB and 4096 -> 3.0 GB is 195,312.5 bytes a token, 2.2 GB fixed.
         assertEquals(3_800_000_000L, lookup(8192, sample(2048, 2_600_000_000L), sample(4096, 3_000_000_000L)));
-        // Per-window maxima, not every sample: a lower one at 4096 does not bend the line.
+        // One typical figure per window, not every sample: of two at 4096, the upper median.
         assertEquals(3_800_000_000L, lookup(8192, sample(2048, 2_600_000_000L), sample(4096, 2_000_000_000L),
             sample(4096, 3_000_000_000L)));
     }

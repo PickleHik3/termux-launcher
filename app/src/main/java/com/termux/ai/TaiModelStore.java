@@ -709,17 +709,21 @@ public final class TaiModelStore {
     }
 
     /**
-     * Bytes a model occupies. A package whose files sit in {@code tai/models/<id>/} (the main
-     * artifact plus sidecars, as KittenTTS has) counts the whole folder, not just the main file
-     * the spec's path names, so a fresh download and a restore read the same figure.
+     * Bytes a model occupies: the file the spec names plus only the sidecars its catalog entry
+     * declares (KittenTTS's voices and graphs), so a fresh download and a restore read the same
+     * figure. Runtime caches the engines write beside a model are not counted, and a model
+     * without declared sidecars counts its own file alone.
      */
     long installedSize(@NonNull String modelId, @NonNull File path) {
+        long total = localModelSize(path);
+        TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(modelId);
         File parent = path.getParentFile();
-        if (path.isFile() && parent != null && parent.isDirectory() && modelId.equals(parent.getName())
-            && getModelsDirectory().equals(parent.getParentFile())) {
-            return localModelSize(parent);
+        if (entry == null || entry.sidecars.isEmpty() || !path.isFile() || parent == null) return total;
+        for (TaiModelCatalog.CatalogEntry.Sidecar sidecar : entry.sidecars) {
+            File file = new File(parent, sidecar.localName);
+            if (file.isFile() && !file.equals(path)) total += file.length();
         }
-        return localModelSize(path);
+        return total;
     }
 
     private long localModelSize(@NonNull File file) {

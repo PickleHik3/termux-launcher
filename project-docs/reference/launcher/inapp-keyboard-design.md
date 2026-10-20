@@ -5,7 +5,7 @@ launcher-side host — the decisions and their reasons, not a proposal. Local de
 vendored upstream snapshot are tracked in
 [`inapp-keyboard/UPSTREAM.md`](../../../inapp-keyboard/UPSTREAM.md), which is authoritative for what
 the module's code actually differs on. A study of what could still be added is
-[`keyboard-mis-input-correction.md`](../../active/keyboard-mis-input-correction.md).
+[`keyboard-mis-input-correction.md`](keyboard-mis-input-correction.md).
 
 Source baseline reviewed:
 

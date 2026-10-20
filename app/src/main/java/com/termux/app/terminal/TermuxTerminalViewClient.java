@@ -10,6 +10,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.view.InputDevice;
+import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -395,6 +396,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             inspector.recordEvent(e, true);
         if (mHardwareModifiers.track(e))
             refreshKeybindHints();
+        // A key from a real keyboard breaks any take-back the in-app keys' touch engine is
+        // reading; the in-app keys' own events are virtual.
+        if (mInAppKeyboardController != null && e != null
+            && e.getDeviceId() != KeyCharacterMap.VIRTUAL_KEYBOARD)
+            mInAppKeyboardController.onOtherInput();
         // Every modal surface gets first refusal, in the order their claims outrank each other:
         // while one is up the stroke belongs to it and not to the shell behind it.
         if (mHost.overlaysConsumeKeyDown(keyCode, e))

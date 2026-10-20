@@ -33,10 +33,11 @@ public class LocalTaiVoiceTextPolisherPlanTest {
     private final Map<String, TaiFunctionModels.ModelInfo> installed = new LinkedHashMap<>();
     private boolean remoteConfigured;
     private boolean remotePrefers;
+    private TaiPlatformCaps.GpuPath gpuPath = TaiPlatformCaps.GpuPath.YES;
 
     private LocalTaiVoiceTextPolisher.Plan plan(int gb) {
         TaiTierPolicy.Env env = new TaiTierPolicy.Env(TaiDeviceTier.from(gb * GIB), gb * GIB, 34, true, true,
-            TaiPlatformCaps.GpuPath.YES, false);
+            gpuPath, false);
         TaiFunctionModels.Store store = new TaiFunctionModels.Store() {
             @Override public String get(String key) {
                 String value = prefs.get(key);
@@ -83,6 +84,33 @@ public class LocalTaiVoiceTextPolisherPlanTest {
         assertEquals("remote/tidy-1", plan.model);
         assertTrue(plan.remote);
         assertNull(plan.skipReason);
+    }
+
+    @Test
+    public void partsAreCleanedWhileListeningOnlyOnTheGpuOrRemotely() {
+        installE2b();
+        assertTrue(plan(12).onGpu);
+        assertTrue(plan(12).cleansWhileListening());
+        gpuPath = TaiPlatformCaps.GpuPath.NO;
+        assertFalse(plan(12).onGpu);
+        assertFalse(plan(12).cleansWhileListening());
+        remoteConfigured = true;
+        prefs.put(TaiFunction.TIDY_DICTATION.modelKey, "remote/tidy-1");
+        assertTrue(plan(12).cleansWhileListening());
+        installed.clear();
+        prefs.clear();
+        remoteConfigured = false;
+        assertFalse(plan(12).cleansWhileListening());
+    }
+
+    @Test
+    public void aPartAfterContextIsSentWithItInTheUserTurn() throws Exception {
+        JSONObject request = LocalTaiVoiceTextPolisher.request(E2B, VoicePolishRules.LEVEL_LIGHT,
+            "and then it opens", "The drawer is closed.");
+        String user = request.getJSONArray("messages").getJSONObject(1).getString("content");
+        assertEquals("<earlier>\nThe drawer is closed.\n</earlier>\n<transcript>\nand then it opens\n</transcript>", user);
+        assertEquals(LocalTaiVoiceTextPolisher.request(E2B, null, "please fix the build").toString(),
+            LocalTaiVoiceTextPolisher.request(E2B, null, "please fix the build", "").toString());
     }
 
     @Test

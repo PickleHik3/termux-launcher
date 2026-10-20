@@ -75,7 +75,9 @@ public class WallpaperModePreferencesTest {
         preferences.setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR, 25);
         preferences.setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 60);
 
-        ChromePolicy.applyWallpaperModePreferences(preferences, true);
+        // Not a switch of the mode, so no recreate: the picker's Apply and `launcherctl wallpaper
+        // set` land here, and a recreate closed the Look editor and dropped an X11 display pane.
+        assertFalse(ChromePolicy.applyWallpaperModePreferences(preferences, true));
 
         assertTrue(preferences.isUseSystemWallpaperEnabled());
         assertEquals(25, preferences.getSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR));
@@ -83,5 +85,26 @@ public class WallpaperModePreferencesTest {
         assertEquals(25, preferences.getExtraKeysBlurRadius());
         assertEquals(60, preferences.getAppBarOpacity());
         assertEquals(60, preferences.getTerminalBackgroundOpacity());
+    }
+
+    @Test
+    public void onlyASwitchOfTheModeAsksForARecreate() {
+        // The window theme follows the mode, so a switch either way still recreates.
+        preferences.setUseSystemWallpaperEnabled(false);
+        assertTrue(ChromePolicy.applyWallpaperModePreferences(preferences, true));
+        assertTrue(ChromePolicy.applyWallpaperModePreferences(preferences, false));
+        // Off and asked off again: nothing in the theme moves.
+        assertFalse(ChromePolicy.applyWallpaperModePreferences(preferences, false));
+    }
+
+    @Test
+    public void aRecreateAlreadyOwedIsNotCancelledByAnInPlaceRequest() {
+        // A theme change from Settings is owed on resume; a wallpaper set before that resume
+        // asks for an in-place restyle and must not take the theme's recreate away.
+        assertTrue(com.termux.app.TermuxActivity.pendingRecreateAfterRequest(true, true, false));
+        // Nothing owed (or the owed reload is in place): the request decides.
+        assertFalse(com.termux.app.TermuxActivity.pendingRecreateAfterRequest(false, true, false));
+        assertFalse(com.termux.app.TermuxActivity.pendingRecreateAfterRequest(true, false, false));
+        assertTrue(com.termux.app.TermuxActivity.pendingRecreateAfterRequest(false, false, true));
     }
 }

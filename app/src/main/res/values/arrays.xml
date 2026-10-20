@@ -355,6 +355,34 @@
         <item>pixiedust</item>
         <item>comet</item>
     </string-array>
+    <string-array name="appearance_editor_cursor_trail_entries">
+        <item>Off</item>
+        <item>Default</item>
+        <item>Motion blur</item>
+        <item>Railgun</item>
+        <item>Torpedo</item>
+        <item>Pixie dust</item>
+        <item>Comet</item>
+    </string-array>
+    <string-array name="appearance_editor_cursor_trail_values">
+        <item>off</item>
+        <item>default</item>
+        <item>motion_blur</item>
+        <item>railgun</item>
+        <item>torpedo</item>
+        <item>pixiedust</item>
+        <item>comet</item>
+    </string-array>
+    <string-array name="appearance_editor_tint_hue_entries">
+        <item>Primary</item>
+        <item>Secondary</item>
+        <item>Tertiary</item>
+    </string-array>
+    <string-array name="appearance_editor_tint_hue_values">
+        <item>primary</item>
+        <item>secondary</item>
+        <item>tertiary</item>
+    </string-array>
     <string-array name="settings_terminal_retro_effect_entries">
         <item>None</item>
         <item>CRT</item>

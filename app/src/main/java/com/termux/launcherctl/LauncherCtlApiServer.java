@@ -1076,7 +1076,9 @@ public class LauncherCtlApiServer {
             response.put("segments", result.optJSONArray("segments") == null ? new JSONArray() : result.optJSONArray("segments"));
         }
         JSONObject tai = new JSONObject();
-        for (String key : new String[] {"model", "language", "duration", "windowSeconds", "biased", "timings", "_runtime"}) {
+        for (String key : new String[] {"model", "language", com.termux.ai.WhisperLanguageDetection.RESPONSE_SOURCE,
+                com.termux.ai.WhisperLanguageDetection.RESPONSE_DETECTED, com.termux.ai.WhisperLanguageDetection.RESPONSE_PROBABILITY,
+                "duration", "windowSeconds", "biased", "timings", "_runtime"}) {
             if (result.has(key)) tai.put(key, result.get(key));
         }
         response.put("tai", tai);

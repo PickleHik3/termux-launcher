@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-01
-amends: the Layout canvas artwork of `project-docs/active/appearance-layout-editor/SPEC.md` §5 (the `termux-layout-assets` pack supersedes `termux-layout-elements-v2`)
+amends: the Layout canvas artwork of `project-docs/reference/launcher/appearance-layout-editor/SPEC.md` §5 (the `termux-layout-assets` pack supersedes `termux-layout-elements-v2`)
 ---
 
 # One shape model decides the chrome's shapes, for the live launcher and the layout canvas alike

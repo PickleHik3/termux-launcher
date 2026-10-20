@@ -1250,10 +1250,6 @@ public final class TermuxPreferenceConstants {
         /** What the preset overwrote, as JSON, so turning it off brings the previous look back. */
         public static final String KEY_LOW_MEMORY_PRESET_SNAPSHOT = "low_memory_preset_snapshot";
 
-        /** The Look page's last Surface/Edge group, by enum name; Surface until the user picks. */
-        public static final String KEY_APPEARANCE_EDITOR_LAST_GROUP = "appearance_editor_last_group";
-        public static final String DEFAULT_VALUE_APPEARANCE_EDITOR_LAST_GROUP = "SURFACE";
-
         /**
          * Fancier Glass: every glass surface bends the wallpaper at its rim and catches a light
          * along its edge, on top of the frost it already wears. On by default wherever it can run (every Look sets its depth). Needs Android 13
@@ -1305,6 +1301,28 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_VALUE_FANCIER_GLASS_DISPERSION = 0;
         public static final int MIN_FANCIER_GLASS_DISPERSION = 0;
         public static final int MAX_FANCIER_GLASS_DISPERSION = 100;
+
+        /**
+         * Edge clarity: how clearly the wallpaper shows through the bent edge, as a percentage.
+         * A thick glass edge shows what is behind it sharper than the frosted face does; at 100
+         * the rim shows the wallpaper itself, at 0 (the default, and the dock's own refraction,
+         * which has no clearer picture to show) the edge keeps the surface's frost.
+         */
+        public static final String KEY_FANCIER_GLASS_CLARITY = "fancier_glass_clarity";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_CLARITY = 0;
+        public static final int MIN_FANCIER_GLASS_CLARITY = 0;
+        public static final int MAX_FANCIER_GLASS_CLARITY = 100;
+
+        /**
+         * Living glass (the key keeps its first name, Motion light): a glass pane's bend lags it
+         * on a spring as it moves, thicker on the edge that leads and thinner behind, rocks back
+         * once as it lands, and a press dents the glass under the finger until it lifts; all of
+         * it settles to exactly the resting look. Fancier Glass only (Android 13+); the phone's
+         * animations being off, Animation speed's Off, lazy mode and battery saver all keep it
+         * still.
+         */
+        public static final String KEY_FANCIER_GLASS_MOTION_LIGHT = "fancier_glass_motion_light";
+        public static final boolean DEFAULT_VALUE_FANCIER_GLASS_MOTION_LIGHT = true;
 
         /**
          * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.
@@ -1469,7 +1487,13 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_SURFACE_BASE_BLUR = "surface_base_blur";
         public static final String KEY_SURFACE_BASE_OPACITY = "surface_base_opacity";
         public static final String KEY_SURFACE_BASE_GRAIN = "surface_base_grain";
-        /** How much of the Material colour tint the glass wears, percent; 100 is the shipped tint. */
+        /**
+         * How much accent colour is mixed into the glass, percent: 0 is the Look's own colour
+         * untouched, 35 the Material blend (the Tint Look), 100 the accent's container. Until the
+         * glass controls' format 1 it was how much of the Look's own tint family the glass wore,
+         * 100 the shipped tint; until format 2 100 was the Material blend. The app's
+         * {@code GlassControlsMigration} maps every stored value once per format.
+         */
         public static final String KEY_SURFACE_BASE_TINT = "surface_base_tint";
         public static final String KEY_SURFACE_BASE_CORNER_RADIUS = "surface_base_corner_radius";
         public static final String KEY_SURFACE_BASE_SIDE_GAP = "surface_base_side_gap";
@@ -1482,8 +1506,8 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_SURFACE_BASE_BLUR = 8;
         public static final int DEFAULT_SURFACE_BASE_OPACITY = 34;
         public static final int DEFAULT_SURFACE_BASE_GRAIN = 18;
-        public static final int DEFAULT_SURFACE_BASE_TINT = 100;
-        /** Each surface's own tint strength, consulted once it has detached from Base. */
+        public static final int DEFAULT_SURFACE_BASE_TINT = 0;
+        /** Each surface's own tint amount, consulted once it has detached from Base. */
         public static final String KEY_DOCK_TINT_STRENGTH = "dock_tint_strength";
         public static final String KEY_STATUS_BAR_TINT_STRENGTH = "status_bar_tint_strength";
         public static final String KEY_TERMINAL_TINT_STRENGTH = "terminal_tint_strength";
@@ -1518,9 +1542,43 @@ public final class TermuxPreferenceConstants {
         public static final String GLASS_TINT_SCHEME = "scheme";
         /** Obsidian-Music's ink-blue glass, a white wash over it; white in a light theme. */
         public static final String GLASS_TINT_OBSIDIAN = "obsidian";
-        /** Glass in Material colours: the scheme tint toward primary container, a surface-tint wash. */
+        /**
+         * Glass in Material colours. Legacy: since the glass controls' format 1 the Material blend
+         * is the tint amount ({@link #KEY_SURFACE_BASE_TINT}) on the scheme tint, so a stored
+         * {@code material} is read as {@code scheme} and migrated to it once.
+         */
         public static final String GLASS_TINT_MATERIAL = "material";
         public static final String DEFAULT_SURFACE_GLASS_TINT = GLASS_TINT_SCHEME;
+
+        /** Which accent the tint amount mixes in: the primary, secondary or tertiary pair. */
+        public static final String KEY_SURFACE_GLASS_TINT_HUE = "surface_glass_tint_hue";
+        public static final String GLASS_TINT_HUE_PRIMARY = "primary";
+        public static final String GLASS_TINT_HUE_SECONDARY = "secondary";
+        public static final String GLASS_TINT_HUE_TERTIARY = "tertiary";
+        public static final String DEFAULT_SURFACE_GLASS_TINT_HUE = GLASS_TINT_HUE_PRIMARY;
+
+        /**
+         * Vibrancy: the saturation of the blurred frame the glass samples, percent of today's
+         * (100). Baked once into each frame as it is blurred; the bare wallpaper never takes it.
+         */
+        public static final String KEY_SURFACE_GLASS_VIBRANCY = "surface_glass_vibrancy";
+        public static final int DEFAULT_SURFACE_GLASS_VIBRANCY = 100;
+        public static final int MIN_SURFACE_GLASS_VIBRANCY = 70;
+        public static final int MAX_SURFACE_GLASS_VIBRANCY = 150;
+
+        /**
+         * Where the Look editor's Glass slider was left, 0 to 100: Base's under this key, each
+         * surface's under the key plus {@code _} and the surface's name. Blur and grain stay the
+         * stored glass; this only says which of the positions that write the same pair the slider
+         * stood at, and is read only while the pair is still the one it writes. Absent reads as
+         * the nearest position.
+         */
+        public static final String KEY_SURFACE_GLASS_POSITION = "surface_glass_position";
+        public static final int MIN_SURFACE_GLASS_POSITION = 0;
+        public static final int MAX_SURFACE_GLASS_POSITION = 100;
+
+        /** The glass controls' storage format an install was last brought up to; absent is 0. */
+        public static final String KEY_SURFACE_GLASS_CONTROLS_FORMAT = "surface_glass_controls_format";
 
         public static final String KEY_SURFACE_GLASS_RIM = "surface_glass_rim";
         /** The 1dp containing stroke in the outline colour: what every install has always drawn. */

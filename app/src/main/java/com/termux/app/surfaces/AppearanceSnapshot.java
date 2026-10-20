@@ -43,11 +43,16 @@ final class AppearanceSnapshot {
     private final String mTint;
     private final String mRim;
     private final String mMotion;
+    private final String mTintHue;
+    private final int mVibrancy;
+    /** Where Base's Glass slider and each surface's were left; -1 for none stored. */
+    private final int[] mGlassPositions;
     private final int mBend;
     private final int mEdgeWidth;
     private final int mEdgeLight;
     private final int mSpecular;
     private final int mDispersion;
+    private final int mClarity;
     private final int mKeyboardBlurRaw;
     private final int mKeyOpacity;
     /** The stored radius, or NaN when the key is absent and the style's default applies. */
@@ -60,6 +65,7 @@ final class AppearanceSnapshot {
     private final boolean mSoft;
     private final String mContrast;
     private final String mTrailStyle;
+    private final boolean mTrailEnabled;
     private final String mRetroEffect;
     private final String mClockStyle;
     private final String mClockAlignment;
@@ -89,11 +95,19 @@ final class AppearanceSnapshot {
         mTint = prefs.getSurfaceGlassTint();
         mRim = prefs.getSurfaceGlassRim();
         mMotion = prefs.getSurfaceGlassMotion();
+        mTintHue = prefs.getSurfaceGlassTintHue();
+        mVibrancy = prefs.getSurfaceGlassVibrancy();
+        SurfaceSlot[] slots = SurfaceSlot.values();
+        mGlassPositions = new int[slots.length + 1];
+        mGlassPositions[0] = prefs.getSurfaceGlassPosition(null);
+        for (SurfaceSlot slot : slots)
+            mGlassPositions[slot.ordinal() + 1] = prefs.getSurfaceGlassPosition(slot);
         mBend = prefs.getFancierGlassBendDp();
         mEdgeWidth = prefs.getFancierGlassEdgeWidthDp();
         mEdgeLight = prefs.getFancierGlassEdgeLightPercent();
         mSpecular = prefs.getFancierGlassSpecularPercent();
         mDispersion = prefs.getFancierGlassDispersionPercent();
+        mClarity = prefs.getFancierGlassClarityPercent();
         mKeyboardBlurRaw = prefs.getInAppKeyboardBlurRadiusRaw();
         mKeyOpacity = prefs.getInAppKeyboardKeyOpacity();
         mKeyRadiusRaw = rawKeyRadius(prefs);
@@ -103,6 +117,7 @@ final class AppearanceSnapshot {
         mSoft = SoftWallpaper.isOn(prefs);
         mContrast = prefs.getTerminalContrastLevel().value;
         mTrailStyle = prefs.getTerminalCursorTrailStyle();
+        mTrailEnabled = prefs.isTerminalCursorTrailEnabled();
         mRetroEffect = prefs.getTerminalRetroEffect();
         mClockStyle = prefs.getTopPaneClockStyle();
         mClockAlignment = prefs.getTopPaneClockAlignment();
@@ -137,11 +152,17 @@ final class AppearanceSnapshot {
         prefs.setSurfaceGlassTint(mTint);
         prefs.setSurfaceGlassRim(mRim);
         prefs.setSurfaceGlassMotion(mMotion);
+        prefs.setSurfaceGlassTintHue(mTintHue);
+        prefs.setSurfaceGlassVibrancy(mVibrancy);
+        prefs.setSurfaceGlassPosition(null, mGlassPositions[0]);
+        for (SurfaceSlot slot : SurfaceSlot.values())
+            prefs.setSurfaceGlassPosition(slot, mGlassPositions[slot.ordinal() + 1]);
         prefs.setFancierGlassBendDp(mBend);
         prefs.setFancierGlassEdgeWidthDp(mEdgeWidth);
         prefs.setFancierGlassEdgeLightPercent(mEdgeLight);
         prefs.setFancierGlassSpecularPercent(mSpecular);
         prefs.setFancierGlassDispersionPercent(mDispersion);
+        prefs.setFancierGlassClarityPercent(mClarity);
         prefs.setInAppKeyboardBlurRadiusRaw(mKeyboardBlurRaw);
         prefs.setInAppKeyboardKeyOpacity(mKeyOpacity);
         restoreKeyRadius(prefs, mKeyRadiusRaw);
@@ -151,6 +172,7 @@ final class AppearanceSnapshot {
         SoftWallpaper.set(prefs, mSoft);
         prefs.setTerminalContrastLevel(mContrast);
         prefs.setTerminalCursorTrailStyle(mTrailStyle);
+        prefs.setTerminalCursorTrailEnabled(mTrailEnabled);
         prefs.setTerminalRetroEffect(mRetroEffect);
         prefs.setTopPaneClockStyle(mClockStyle);
         prefs.setTopPaneClockAlignment(mClockAlignment);
@@ -168,12 +190,15 @@ final class AppearanceSnapshot {
             .append('|').append(mTerminalRadius).append('|').append(mPaneGap)
             .append('|').append(mWallpaperTerminalOpacity)
             .append('|').append(mTint).append('|').append(mRim).append('|').append(mMotion)
+            .append('|').append(mTintHue).append('|').append(mVibrancy)
+            .append('|').append(java.util.Arrays.toString(mGlassPositions))
             .append('|').append(mBend).append('|').append(mEdgeWidth).append('|').append(mEdgeLight)
             .append('|').append(mSpecular).append('|').append(mDispersion)
+            .append('|').append(mClarity)
             .append('|').append(mKeyboardBlurRaw).append('|').append(mKeyOpacity)
             .append('|').append(mKeyRadiusRaw).append('|').append(mKeySpacingRaw)
             .append('|').append(mDockButtonCount).append('|').append(mDim).append('|').append(mSoft)
-            .append('|').append(mContrast).append('|').append(mTrailStyle)
+            .append('|').append(mContrast).append('|').append(mTrailStyle).append('|').append(mTrailEnabled)
             .append('|').append(mRetroEffect).append('|').append(mClockStyle)
             .append('|').append(mClockAlignment)
             .toString();

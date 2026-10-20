@@ -7,6 +7,9 @@ import android.os.Looper;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.inappkeyboard.touch.GridMemory;
+import com.termux.app.terminal.inappkeyboard.touch.Tap;
+import com.termux.app.terminal.inappkeyboard.touch.TouchEngine;
 import com.termux.shared.logger.Logger;
 
 import juloo.keyboard2.Keyboard2View;
@@ -20,13 +23,14 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Host side of the keyboard's tap correction: owns the {@link TapModelStore}, knows which layout
+ * Host side of the keyboard's touch engine: owns the {@link TapModelStore}, knows which layout
  * is on screen and whether the feature is on, and is the {@link Keyboard2View.TapResolver} the
- * view consults. Everything here runs on the main thread except the file read and write.
+ * view consults. Everything here runs on the main thread except the file read and write. The
+ * engine itself ({@link TouchEngine}) is pure; this class only feeds it.
  *
  * <p>The file is read on the I/O executor and swapped in on the main thread. Until it arrives the
  * controller passes presses through and learns nothing, exactly as if the feature were off, so a
- * tap in those few milliseconds is never corrected by, or recorded into, a model about to be
+ * tap in those few milliseconds is never corrected by, or recorded into, a store about to be
  * replaced.
  *
  * <p>Off means off: with the feature disabled the view's presses pass through untouched and
@@ -35,14 +39,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class TapCorrectionController implements Keyboard2View.TapResolver {
 
     static final String FILE_NAME = "keyboard-tap-model.json";
-    /** How long after the last tap the model is written out. */
+    /** How long after the first unsaved tap the store is written out. */
     static final long SAVE_DELAY_MS = 5_000L;
     private static final String LOG_TAG = "TapCorrection";
 
     private final File mFile;
     private final Executor mIoExecutor;
     private final Handler mMainHandler;
-    private final Runnable mSaveRunnable = this::flush;
+    private final Runnable mSaveRunnable = this::save;
 
     private TapModelStore mStore = new TapModelStore();
     private boolean mEnabled;
@@ -73,23 +77,49 @@ public final class TapCorrectionController implements Keyboard2View.TapResolver 
         return mEnabled;
     }
 
-    /** Turns the feature on or off; turning it off writes out whatever was learned. */
+    /**
+     * Turns the feature on or off. Turning it on starts a warm-up; turning it off writes out
+     * whatever was learned.
+     */
     public void setEnabled(boolean enabled) {
         if (mEnabled == enabled)
             return;
         mEnabled = enabled;
+        syncSwitch();
         if (!enabled)
             flush();
     }
 
-    /** The layout the view is showing; part of the key each model is stored under. */
+    /** The layout the view is showing; part of the key each grid is stored under. */
     public void setLayoutId(@Nullable String layoutId) {
         mLayoutId = layoutId == null ? "" : layoutId;
     }
 
     /**
-     * Re-reads the file so a reset made in Settings, or a store written by another instance,
-     * takes effect. Anything unsaved here is written first so it is not lost.
+     * Something other than a plain tap on these keys reached the terminal — a paste, a hardware
+     * key, the keyboard going away — so no take-back can span it.
+     */
+    public void interrupt() {
+        if (settleHeldTap())
+            scheduleSave();
+    }
+
+    /** Makes the taps the engine holds final; returns whether that learned anything. */
+    private boolean settleHeldTap() {
+        if (mLoading)
+            return false;
+        TouchEngine engine = mStore.engine();
+        long before = engine.tapsLearned();
+        engine.interrupt();
+        if (engine.tapsLearned() == before)
+            return false;
+        mStore.markDirty();
+        return true;
+    }
+
+    /**
+     * Re-reads the file so a reset or resume made in Settings, or a store written by another
+     * instance, takes effect. Anything unsaved here is written first so it is not lost.
      *
      * <p>While a save of ours is still on its way to the file, the file is about to hold exactly
      * what is in memory, so memory is kept rather than reading a file that has not caught up:
@@ -110,30 +140,48 @@ public final class TapCorrectionController implements Keyboard2View.TapResolver 
         mLoadGeneration++;
         mLoading = false;
         mStore.clear();
-        mStore.toJson();
+        // Nothing is left to save; the snapshot only clears the dirty flag.
+        mStore.snapshot();
+        syncSwitch();
         File file = mFile;
         mIoExecutor.execute(() -> TapModelStore.delete(file));
     }
 
-    /** Total taps learned across every stored geometry. */
+    /** Total weight learned across every stored geometry. */
     public float totalTaps() {
         return mStore.totalTaps();
     }
 
-    /** Writes the store out now if anything changed. */
+    /** Visible for tests: the store the controller is running on. */
+    @NonNull
+    TapModelStore store() {
+        return mStore;
+    }
+
+    /**
+     * Makes the taps still held final and writes the store out now if anything
+     * changed. For the keyboard going away, not for the periodic save, which must not end a
+     * take-back in progress.
+     */
     public void flush() {
+        settleHeldTap();
+        save();
+    }
+
+    private void save() {
         mMainHandler.removeCallbacks(mSaveRunnable);
         mSaveScheduled = false;
         if (!mStore.isDirty())
             return;
-        String json = mStore.toJson();
+        // Copy here, serialise and write there: building the file text is the slow part.
+        TapModelStore.Snapshot snapshot = mStore.snapshot();
         File file = mFile;
         mSavesInFlight.incrementAndGet();
         try {
             mIoExecutor.execute(() -> {
                 try {
-                    TapModelStore.write(file, json);
-                } catch (IOException e) {
+                    TapModelStore.write(file, snapshot.toJson());
+                } catch (IOException | RuntimeException e) {
                     Logger.logStackTraceWithMessage(LOG_TAG, "Failed to save the tap model", e);
                 } finally {
                     mSavesInFlight.decrementAndGet();
@@ -157,6 +205,7 @@ public final class TapCorrectionController implements Keyboard2View.TapResolver 
                     return;
                 mStore = loaded;
                 mLoading = false;
+                syncSwitch();
             };
             // An executor that ran this on the main thread (a direct one) swaps at once.
             if (Looper.myLooper() == mMainHandler.getLooper()) swap.run();
@@ -164,28 +213,39 @@ public final class TapCorrectionController implements Keyboard2View.TapResolver 
         });
     }
 
-    @Override
-    public int resolveTap(TapGeometry geometry, int rawIndex, float x, float y) {
-        if (!mEnabled || mLoading)
-            return rawIndex;
-        return model(geometry).resolve(geometry, rawIndex, x, y);
+    /** Tells the engine where the switch stands; a switch turned on starts a warm-up. */
+    private void syncSwitch() {
+        if (mLoading)
+            return;
+        if (mStore.engine().onSwitch(mEnabled)) {
+            mStore.markDirty();
+            if (mEnabled)
+                scheduleSave();
+        }
     }
 
     @Override
-    public void observeTap(TapGeometry geometry, int rawIndex, float x, float y,
-                           boolean swiped) {
-        if (!mEnabled || swiped || mLoading)
+    public int resolveTap(TapGeometry geometry, int rawIndex, float x, float y) {
+        if (!mEnabled || mLoading || geometry == null)
+            return rawIndex;
+        return mStore.engine().resolve(grid(geometry), geometry, rawIndex, x, y);
+    }
+
+    @Override
+    public void observeTap(TapGeometry geometry, Keyboard2View.TapRelease release) {
+        if (!mEnabled || mLoading || geometry == null || release == null)
             return;
-        TapModel model = model(geometry);
-        model.observe(geometry, rawIndex, x, y, false);
+        mStore.engine().onRelease(grid(geometry), geometry, new Tap(release.rawIndex,
+            release.committedIndex, release.x, release.y, release.plain, release.modified,
+            release.downAtMs, release.upAtMs, release.contactSize));
         mStore.markDirty();
         scheduleSave();
     }
 
-    /** Visible for tests: the model the current layout and geometry resolve against. */
+    /** Visible for tests: what is learned for the current layout and geometry. */
     @NonNull
-    TapModel model(@NonNull TapGeometry geometry) {
-        return mStore.modelFor(mLayoutId + "|" + geometry.signature, geometry.keyCount,
+    GridMemory grid(@NonNull TapGeometry geometry) {
+        return mStore.gridFor(mLayoutId + "|" + geometry.signature, geometry.keyCount,
             System.currentTimeMillis());
     }
 

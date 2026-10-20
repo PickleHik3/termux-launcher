@@ -89,6 +89,13 @@
             app:fragment="com.termux.app.fragments.settings.termux.AppBehaviorPreferencesFragment" />
 
         <Preference
+            app:key="backup_restore"
+            app:icon="@drawable/ic_symbol_settings_backup_restore"
+            app:title="@string/settings_destination_backup_restore"
+            app:summary="@string/settings_destination_backup_restore_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.BackupRestorePreferencesFragment" />
+
+        <Preference
             app:key="services_permissions"
             app:icon="@drawable/ic_symbol_admin_panel_settings"
             app:title="@string/settings_destination_services_permissions"

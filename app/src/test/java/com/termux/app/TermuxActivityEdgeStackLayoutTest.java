@@ -12,7 +12,6 @@ import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedItem;
-import com.termux.app.launcher.paging.PageTickStrip;
 import com.termux.app.place.EdgeStackView;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.app.place.Element;
@@ -477,7 +476,7 @@ public class TermuxActivityEdgeStackLayoutTest {
         // Updated with a reason: a lone row that carries ticks matches their band on the other
         // side too. The 4dp sliver there set the icons against the rim and read bottom-heavy.
         int airPx = DockLayoutPolicy.rowAirPx(true, true, density);
-        int stripPx = PageTickStrip.bandPx(density);
+        int stripPx = DockLayoutPolicy.stripBandPx(true, density);
         assertEquals(stripPx, airPx);
         assertEquals(stripPx, DockLayoutPolicy.rowTickSideAirPx(true, true, density));
         assertTrue(airPx > DockLayoutPolicy.loneRowAirPx(density));
