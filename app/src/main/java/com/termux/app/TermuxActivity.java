@@ -16648,7 +16648,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float promptFieldReveal() {
         if (mPromptFieldEase != null) return mPromptFieldEaseValue;
-        return mPreferences != null && dockSurfaceSpec().promptField ? 1f : 0f;
+        return promptFieldWanted() ? 1f : 0f;
+    }
+
+    /**
+     * Whether the slab carries the field at rest: where Home's dock wears the Prompt line, and
+     * not while the command palette it opens is up (the palette's own field is the one search
+     * box then, and the slab is the tray's until the palette goes).
+     */
+    private boolean promptFieldWanted() {
+        return mPreferences != null && dockSurfaceSpec().promptField && !mPromptFieldUnderPalette;
     }
 
     /**
@@ -16657,21 +16666,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * lays the new style out. Anywhere else (off Home, the dock not laid out yet, reduced motion)
      * the passes land it at once.
      */
-    private void beginDockBandEase() {
+    private boolean beginDockBandEase() {
         cancelDockBandEase();
-        if (mPreferences == null || mChrome == null) return;
+        if (mPreferences == null || mChrome == null) return false;
         com.termux.app.dock.DockSurfaceSpec spec = dockSurfaceSpec();
-        float target = spec.promptField ? 1f : 0f;
+        float target = promptFieldWanted() ? 1f : 0f;
         float from = mAppliedPromptFieldReveal;
         float wallTarget = spec.wallStrip ? 1f : 0f;
         float wallFrom = mAppliedWallStripReveal;
         if ((from == target && wallFrom == wallTarget) || isReducedMotionEnabled()
-            || !com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage)) return;
+            || !com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage)) return false;
         View stack = findViewById(R.id.accessory_stack_container);
         View rowHost = findViewById(R.id.apps_bar_row_host);
         if (stack == null || rowHost == null || stack.getVisibility() != View.VISIBLE
             || rowHost.getVisibility() != View.VISIBLE || stack.getHeight() <= 0
-            || rowHost.getParent() != findViewById(R.id.accessory_row_stack)) return;
+            || rowHost.getParent() != findViewById(R.id.accessory_row_stack)) return false;
         android.animation.ValueAnimator ease = android.animation.ValueAnimator.ofFloat(0f, 1f);
         ease.setDuration(Math.round(PROMPT_FIELD_EASE_MS
             * Math.max(Math.abs(target - from), Math.abs(wallTarget - wallFrom))));
@@ -16704,6 +16713,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWallStripEaseValue = wallFrom;
         mPromptFieldEase = ease;
         ease.start();
+        return true;
     }
 
     /** Stops an ease under way where it stands; the caller's pass lands the style. */
@@ -16756,22 +16766,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             field.setLayoutParams(params);
             moved = true;
         }
-        if (mPromptFieldUnderPalette) {
-            // Under the open palette the field keeps its band but shows nothing: the palette's
-            // own field is the one search box (its fade is setPromptFieldUnderPalette's).
-            if (field.getVisibility() == View.GONE) {
-                field.setAlpha(0f);
-                field.setVisibility(View.INVISIBLE);
-                moved = true;
-            }
-        } else {
-            if (field.getVisibility() != View.VISIBLE) {
-                field.setVisibility(View.VISIBLE);
-                moved = true;
-            }
-            float alpha = promptFieldAlpha(mAppliedPromptFieldReveal);
-            if (field.getAlpha() != alpha && !mPromptFieldFading) field.setAlpha(alpha);
+        if (field.getVisibility() != View.VISIBLE) {
+            field.setVisibility(View.VISIBLE);
+            moved = true;
         }
+        // The field fades with its band, whichever ease carries it (a style switch, the palette).
+        float alpha = promptFieldAlpha(mAppliedPromptFieldReveal);
+        if (field.getAlpha() != alpha) field.setAlpha(alpha);
         // The well nests in the slab: the dock's radius less the air between them.
         float dockRadius = isRoundedDockStyle() ? resolveDockCapsuleCornerRadiusPx(
             layout.appsBarHeightPx + layout.promptFieldFullBandPx) : 0f;
@@ -16789,42 +16790,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return t * t * (3f - 2f * t);
     }
 
-    /** Whether the command palette is open over the Prompt line's field, which then hides. */
+    /** Whether the command palette is open over the Prompt line's field, which then goes. */
     private boolean mPromptFieldUnderPalette;
-    /** Whether the field is fading back in from under the palette; a dock pass leaves it be. */
-    private boolean mPromptFieldFading;
 
     /**
      * The palette opened or closed ({@link #setCommandPaletteInterceptorActive}): while it is open
-     * the Prompt line's field fades out under it, so the palette's field is the only search box
-     * on screen, and it fades back in when the palette goes. Nothing on any other dock.
+     * the Prompt line's slab eases to the tray's height, the field fading out with its band, so
+     * the palette's field is the only search box on screen and no empty glass is left where the
+     * field stood; it eases back when the palette goes. The same 240 ms ease a style switch
+     * runs (one dock pass and one glass re-cut a frame, nothing at rest). Nothing on any other
+     * dock.
      */
     private void setPromptFieldUnderPalette(boolean under) {
         if (mPromptFieldUnderPalette == under) return;
         mPromptFieldUnderPalette = under;
-        com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
-        if (field == null) return;
-        field.animate().cancel();
-        mPromptFieldFading = false;
-        if (field.getVisibility() == View.GONE) return;
-        float target = under ? 0f : promptFieldAlpha(mAppliedPromptFieldReveal);
-        if (isReducedMotionEnabled()) {
-            field.setAlpha(target);
-            field.setVisibility(under ? View.INVISIBLE : View.VISIBLE);
-            return;
-        }
-        if (!under) {
-            field.setVisibility(View.VISIBLE);
-            mPromptFieldFading = true;
-        }
-        field.animate().alpha(target).setDuration(under ? 120L : 180L)
-            .setInterpolator(new android.view.animation.DecelerateInterpolator())
-            .withEndAction(() -> {
-                mPromptFieldFading = false;
-                if (mPromptFieldUnderPalette && field.getVisibility() == View.VISIBLE)
-                    field.setVisibility(View.INVISIBLE);
-            })
-            .start();
+        if (mPreferences == null || mChrome == null || !dockSurfaceSpec().promptField) return;
+        if (beginDockBandEase()) return;
+        // No ease (off Home, reduced motion, the dock not laid out): the pass lands it at once.
+        if (setTerminalToolbarHeight(false))
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
     // ------------------------------------------------------------------ Wall strip
