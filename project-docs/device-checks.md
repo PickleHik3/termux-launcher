@@ -1538,10 +1538,11 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   then rocking back once (perhaps a faint second time) as it lands, flat again within about 400 ms;
   a slow divider or float drag barely changes the rim. No band of light runs anywhere.
   Screenrecord, frames at the quarters and 400 ms after landing · emulator (AGSL needs API 33+).
-- 2026-10-19 · feat(glass) living glass · Holding a finger on a terminal pane dents the glass under
-  it (the picture there spreads a little outward, colour parting at its steepest), and it stays
-  while held; lifting springs it back through a small bump to flat. Starting a scroll, a body
-  swipe or a border drag lets the dent go at once; terminal scrolling still works · emulator.
+- 2026-10-20 · feat(glass) no dent under a press · Holding a finger on a terminal pane no longer
+  dents the glass: no dip or spread under the finger while held and no bump on release (the
+  "ripple" the user disliked). The pane still tips on its press rig and the slab follows it (the
+  rim away from the finger thickens a little, the face swims about 1.5 dp) and lies flat again
+  after the lift; starting a scroll, a body swipe or a border drag still works · emulator.
 - 2026-10-19 · feat(glass) living glass · The shader compiles on the device: the glass still
   refracts after the update (no fall back to the plain frost, no "Glass refraction shader failed"
   in logcat) · emulator, then pong.
@@ -1570,7 +1571,7 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   (6° press tip): the same displacement and rim lean, toward the held side, while held; lifting
   brings it back to flat. A finger on a terminal pane (the 1.1° press rig): the rim on the edge
   away from the finger thickens a little and the face swims about 2 dp as the pane tips and
-  untips, on top of the dent · emulator.
+  untips · emulator.
 - 2026-10-20 · feat(glass) tilted glass · Living glass off, animator scale off, reduced motion,
   lazy mode and battery saver each keep tipped slabs drawing exactly as flat ones (the plank
   still tips; the glass in it does not swim). After a held press on a tipped pane is let go and
@@ -1581,19 +1582,21 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
 - 2026-10-20 · feat(glass) glass perception · The shader still compiles on the device (no
   "Glass refraction shader failed" in logcat; panes, dock, bars and the keyboard host still
   refract) · emulator, then pong.
-- 2026-10-20 · feat(glass) glass perception · Rest look, Fancier Glass on, Clear and Mist: every
-  glass outline now has a sharp glint at its top-left corner (brighter and narrower than before),
-  the top edge noticeably less lit than before, a faint glint at the bottom-right corner, and a
-  slightly darker outline elsewhere. Nothing else at rest differs from the build before
-  (screenshot both, compare away from the outline); the dock and the bars change the same way ·
-  emulator.
-- 2026-10-20 · feat(glass) glass perception · Living glass on, a wall page dragged and held at the
-  planks' 18°: the top-left glint slides round its corner toward the edge rising toward you and
-  onto it, and back as the page lies flat; the bottom-right one moves with it. A finger on a
-  terminal pane (1.1°) moves the glint by a hair. A chip-tap window switch moves it a little
-  toward the edge that leads. The glint never moves while the pane is still, and the settled glass
-  matches the pre-drag screenshot pixel for pixel. Screenrecord, frames at a quarter, half and
-  landing · emulator (AGSL needs API 33+).
+- 2026-10-20 · fix(glass) the glint is motion only · Rest look, Fancier Glass on, Clear and Mist,
+  the same wallpaper: a still pane's top-left corner and the dock's top-left corner pixel-match
+  the build before 894dd56c1 (the travelling glint), crop both at 48 dp round the corner and
+  diff; the bars and the keyboard host likewise. No bright wallpaper-coloured spot at any
+  top-left corner at rest · emulator.
+- 2026-10-20 · fix(glass) the glint is motion only · Living glass on, a wall page dragged and held
+  at the planks' 18°: the top-left light narrows into a brighter glint as the page tips, slides
+  round its corner toward the edge rising toward you, with a faint one bottom-right; released, it
+  fades back to the wide rest light as the page lies flat, with no snap at the end, and the
+  settled glass matches the pre-drag screenshot pixel for pixel. A finger held on a terminal pane
+  (1.1°) shows only a faint hint of it. Screenrecord, frames at a quarter, half, landing and
+  500 ms after · emulator (AGSL needs API 33+).
+- 2026-10-20 · feat(glass) glass perception · A chip-tap window switch and a seam fling: the glint
+  appears while the pane moves, leans a little toward the edge that leads and fades out as it
+  lands; it never moves or shows while the pane is still · emulator (AGSL needs API 33+).
 - 2026-10-20 · feat(glass) glass perception · The same 18° hold: the face's picture now swims
   less as a whole (about 7 dp, was 10) and is visibly larger toward the near edge and smaller
   toward the far one; no fold, mirror strip or tear anywhere, small panes and corners included.
@@ -1605,9 +1608,9 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
 ### Living glass (10-19)
 - 2026-10-19 · feat(glass) living glass · Taste on pong, on a dark and on a pale wallpaper, under
   Clear and Mist: does a moving pane read as glass with weight (the rim thickening ahead, thinning
-  behind, rocking back once on landing) and a press as glass giving under the finger, rather than
-  as an effect laid on top; and is the glass at rest exactly as before (screenshot before and after
-  a slide, pixel-compare the rim) · pong, by hand (ask first).
+  behind, rocking back once on landing) and a press as a rigid pane tipping, with nothing rippling
+  under the finger, rather than as an effect laid on top; and is the glass at rest exactly as
+  before (screenshot before and after a slide, pixel-compare the rim) · pong, by hand (ask first).
 - 2026-10-19 · feat(glass) living glass · Frame time of a seam fling and a chip-tap window switch,
   glass on, two panes, Living glass on against off (`scripts/perf-frametime.sh`): it adds two
   uniform writes per moved frame, three samples instead of one on a pixel whose bend changed, and
@@ -1630,16 +1633,18 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
 - 2026-10-20 · feat(glass) glass perception · Taste on pong, dark and pale wallpaper, Clear and
   Mist: does a page drag (18°), a held border (6°), a press on a terminal pane (about 1°) and a
   window switch now read as glass without looking for it: the glint travelling round the corner
-  with the tip, the picture bending rather than sliding? And at rest: is the narrower, brighter
-  top-left glint, the dimmer top edge, the faint bottom-right glint and the darker outline still
-  the glass you want (dock and bars included)? Knobs in GlassRefraction: `Look.KEY_EXPONENT`/
-  `KEY_PEAK` (glint), `Look.COUNTER`, `Look.EDGE_SHADE`, `KEY_LIGHT_RISE` (how far the glint
+  with the tip and fading as it settles, the picture bending rather than sliding? And at rest: is
+  every surface back to the old light, with no bright smear in the top-left corner (dock and bars
+  included)? Is the glint at a press on a pane (about 1°, an eighth of it) enough, or too little?
+  Knobs in GlassRefraction: `glintWeight` (how much glint a pose gives), `Look.LIVE_KEY_EXPONENT`/
+  `KEY_PEAK` (glint), `Look.COUNTER`, `Look.LIVE_EDGE_SHADE`, `KEY_LIGHT_RISE` (how far the glint
   travels), `TILT_MAG`/`TILT_MAG_MAX_DP` (gradient), `TILT_SHIFT_DP`/`TILT_SOFT` (shift),
   `LIVE_CLARITY`/`LIVE_CLARITY_REACH` (live rim) · pong, by hand (ask first).
 - 2026-10-20 · feat(glass) glass perception · Frame time of a page drag held and released and of
-  a seam fling, Living glass on against off (`scripts/perf-frametime.sh`): two more `pow` per
-  pixel within 10 dp of an outline at rest, no new samples anywhere; report any p90 worse than
-  the build before by more than the noise · pong, by hand (ask first).
+  a seam fling, Living glass on against off (`scripts/perf-frametime.sh`): at rest the program
+  runs the old light, nothing more; while live, four more `pow` per pixel within 10 dp of an
+  outline, no new samples anywhere; report any p90 worse than the build before by more than the
+  noise · pong, by hand (ask first).
 
 ### Page transition across the wall (10-19), by hand
 - 2026-10-19 · feat(wall) page transition across the wall · Glass on (pane glass, a glass widget
