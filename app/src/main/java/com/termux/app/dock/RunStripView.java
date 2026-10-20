@@ -73,10 +73,11 @@ public final class RunStripView extends View {
     /** The attention dot on a badge's corner. */
     static final float DOT_DP = 7f;
     /**
-     * A minimised float's mark after its label: a small downward triangle, drawn as a shape so it
-     * never depends on a face having the character.
+     * A minimised float's mark: a small downward triangle after its label, or after its badge
+     * where the entry shows its number alone, drawn as a shape so it never depends on a face
+     * having the character. Always the opaque ink, so it reads on the strip's glass.
      */
-    static final float MINIMISED_MARK_DP = 6f;
+    static final float MINIMISED_MARK_DP = 8f;
     /** Room between the process glyph and the label, and between the label and the mark. */
     static final float INNER_GAP_DP = 4f;
 
@@ -225,19 +226,23 @@ public final class RunStripView extends View {
         float withLabel = (ENTRY_START_PAD_DP + BADGE_DP + LABEL_GAP_DP + ENTRY_END_PAD_DP)
             * mDensity;
         // What each label wants: its text, its glyph and its minimised mark.
+        // A minimised float's mark is drawn with or without its label, so its room is fixed.
         float[] demands = new float[count];
         float[] glyphWidths = new float[count];
         int labelled = 0;
+        int marked = 0;
         for (int i = 0; i < count; i++) {
             RunStripModel.Entry entry = mEntries.get(i);
-            if (entry.kind == RunStripModel.Kind.NEW_WINDOW || entry.shortLabel.isEmpty()) continue;
+            if (entry.kind == RunStripModel.Kind.NEW_WINDOW) continue;
+            mMarks[i] = entry.minimised;
+            if (mMarks[i]) marked++;
+            if (entry.shortLabel.isEmpty()) continue;
             glyphWidths[i] = glyphWidth(entry);
-            demands[i] = glyphWidths[i] + mLabelPaint.measureText(entry.shortLabel)
-                + (entry.minimised ? markWidth : 0f);
+            demands[i] = glyphWidths[i] + mLabelPaint.measureText(entry.shortLabel);
             labelled++;
         }
         float fixed = 2f * side + count * bare + Math.max(0, count - 1) * gap
-            + labelled * (withLabel - bare);
+            + labelled * (withLabel - bare) + marked * markWidth;
         float[] rooms = RunStripModel.labelRooms(demands, width - fixed,
             LABEL_MAX_DP * mDensity, LABEL_MIN_DP * mDensity);
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
@@ -247,24 +252,23 @@ public final class RunStripView extends View {
             CharSequence label = "";
             float labelWidth = 0f;
             if (rooms[i] > 0f) {
-                float room = rooms[i] - (entry.minimised ? markWidth : 0f);
+                float room = rooms[i];
                 float text = mLabelPaint.measureText(entry.shortLabel);
                 // The glyph goes before a character of the label does.
                 mGlyphs[i] = glyphWidths[i] > 0f && glyphWidths[i] + text <= room;
                 if (mGlyphs[i]) room -= glyphWidths[i];
                 label = TextUtils.ellipsize(entry.shortLabel, mLabelPaint, Math.max(0f, room),
                     TextUtils.TruncateAt.END);
-                mMarks[i] = entry.minimised;
                 if (label.length() == 0) {
                     mGlyphs[i] = false;
-                    mMarks[i] = false;
                 } else {
                     labelWidth = (mGlyphs[i] ? glyphWidths[i] : 0f)
-                        + mLabelPaint.measureText(label, 0, label.length())
-                        + (mMarks[i] ? markWidth : 0f);
+                        + mLabelPaint.measureText(label, 0, label.length());
                 }
             }
-            float entryWidth = labelWidth <= 0f ? bare : withLabel + labelWidth;
+            // Numbers alone: [pad][badge][gap][mark][pad]; with a label the mark follows it.
+            float entryWidth = (labelWidth <= 0f ? bare : withLabel + labelWidth)
+                + (mMarks[i] ? markWidth : 0f);
             float left = entry.kind == RunStripModel.Kind.NEW_WINDOW
                 ? Math.max(x, width - side - entryWidth) : x;
             mLabels[i] = label;
@@ -352,21 +356,27 @@ public final class RunStripView extends View {
                 canvas.drawText(label, 0, label.length(), rtl ? x - width : x,
                     baseline(mLabelPaint, centerY), mLabelPaint);
                 x = rtl ? x - width - inner : x + width + inner;
-                if (mMarks[i]) drawMinimisedMark(canvas, rtl ? x - mark : x, centerY, mark, ink);
+                if (mMarks[i]) drawMinimisedMark(canvas, rtl ? x - mark : x, centerY, mark);
+            } else if (mMarks[i]) {
+                float x = rtl ? mRect.left - inner : mRect.right + inner;
+                drawMinimisedMark(canvas, rtl ? x - mark : x, centerY, mark);
             }
         }
     }
 
-    /** A minimised float's mark: a small triangle pointing down, {@code size} wide at {@code left}. */
-    private void drawMinimisedMark(@NonNull Canvas canvas, float left, float centerY, float size,
-                                   @ColorInt int ink) {
+    /**
+     * A minimised float's mark: a small triangle pointing down, {@code size} wide at {@code left},
+     * in the opaque ink the badges' numbers wear (a resting label's dimmer ink lost it on the
+     * glass, pass 3).
+     */
+    private void drawMinimisedMark(@NonNull Canvas canvas, float left, float centerY, float size) {
         float half = size / 2f;
         mMark.rewind();
-        mMark.moveTo(left, centerY - half * 0.6f);
-        mMark.lineTo(left + size, centerY - half * 0.6f);
-        mMark.lineTo(left + half, centerY + half * 0.6f);
+        mMark.moveTo(left, centerY - half * 0.7f);
+        mMark.lineTo(left + size, centerY - half * 0.7f);
+        mMark.lineTo(left + half, centerY + half * 0.7f);
         mMark.close();
-        mFill.setColor(ink);
+        mFill.setColor(mOnSurface);
         canvas.drawPath(mMark, mFill);
     }
 
