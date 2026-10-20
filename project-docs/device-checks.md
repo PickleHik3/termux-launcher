@@ -1910,6 +1910,15 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   on a faint badge the size of the number badges, as dark as the numbers, and larger at 1.5 than
   at 1.0 (still inside its badge); tap it: a new window as before. Nothing at rest redraws ·
   emulator.
+- 2026-10-21 · fix(dock) "the run strip stands on the dock wherever the launcher was scaled when
+  it was placed" · Taskbar, split panes on, two windows running, Home's keyboard always on
+  (`layout.home.keyboard_shown=true`): open the Layout editor on Home, pick Taskbar (from another
+  style), Done: the strip stands just above the dock, which rides on the keyboard, never
+  mid-screen over the clock (pass 4's 09-taskbar); compare with the keyboard down (11-taskbar-cold).
+  Then each of: relaunch (`am force-stop` then launch), open and close the command palette (its
+  keyboard), put the always-on keyboard away and back, rotate to landscape and back: the strip
+  follows the dock's top each time. Same Done with Glass tray and a minimised Home float: its chip
+  stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
 
