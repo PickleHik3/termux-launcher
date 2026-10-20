@@ -1,5 +1,6 @@
 package com.termux.app.launcher.drawer;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Rect;
@@ -15,10 +16,12 @@ import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.ViewParent;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -92,6 +95,10 @@ public final class AppDrawerCategoryView extends ViewGroup
     private float headerDownX;
     private float headerDownY;
     private boolean headerMoved;
+    /** Raw-stream state for a pull that starts on the open folder's empty pane. */
+    private boolean emptyPaneTracking;
+    private float emptyPaneDownRawX;
+    @Nullable private VelocityTracker emptyPaneVelocity;
 
     public AppDrawerCategoryView(@NonNull Context context,
                                  @Nullable SuggestionBarView dock) {
@@ -596,6 +603,11 @@ public final class AppDrawerCategoryView extends ViewGroup
     /** One-way detail decision. Overview is deliberately handled by the shipped close policy. */
     public boolean claimDetailPreScroll(@NonNull View target, int dy, float rawY) {
         if (streamPart != Part.DETAIL_LIST || target != detailList) return false;
+        return claimDetailDrag(dy, rawY);
+    }
+
+    /** Shared by the grid's nested pre-scroll and the empty pane's raw stream. */
+    private boolean claimDetailDrag(int dy, float rawY) {
         AppDrawerCategoryGesturePolicy.Claim before = gesturePolicy.claim();
         AppDrawerCategoryGesturePolicy.Claim claim = gesturePolicy.claimOnPreScroll(dy);
         if (claim == AppDrawerCategoryGesturePolicy.Claim.SCROLL) {
@@ -669,7 +681,10 @@ public final class AppDrawerCategoryView extends ViewGroup
             if (contains(detailHeader, x, y) || contains(collapseChevron, x, y)
                 || contains(detailCount, x, y)) return Part.COLLAPSE_ACTION;
             if (contains(detailList, x, y)) return Part.DETAIL_LIST;
-            return Part.EMPTY_CHROME;
+            // The rest of the open pane is still the folder. A short folder (Suggestions caps at
+            // eight) sits at the bottom, so most of the screen is this band; handing it to the
+            // plane made a pull there close the whole drawer instead of the folder.
+            return Part.DETAIL_EMPTY;
         }
         if (buckets.isEmpty()) return Part.EMPTY_CHROME;
         for (int i = 0; i < overview.getChildCount(); i++) {
@@ -680,6 +695,72 @@ public final class AppDrawerCategoryView extends ViewGroup
                 || containsDescendant(tile.heading, x, y)) return Part.EXPAND_ACTION;
         }
         return contains(overview, x, y) ? Part.OVERVIEW_LIST : Part.EMPTY_CHROME;
+    }
+
+    /**
+     * Drives a pull that starts on the open folder's empty pane. No scrolling child sits under
+     * that band, so there is no nested pre-scroll to claim from; the raw stream feeds the same
+     * one-way policy and the same collapse drag the grid's pull uses. The content view has
+     * already begun the stream by the first MOVE, which is what {@link #streamPart} checks.
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    @Override public boolean onTouchEvent(MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            endEmptyPaneTracking();
+            if (touchPart(event.getX(), event.getY()) != Part.DETAIL_EMPTY)
+                return super.onTouchEvent(event);
+            emptyPaneTracking = true;
+            emptyPaneDownRawX = event.getRawX();
+            emptyPaneVelocity = VelocityTracker.obtain();
+            emptyPaneVelocity.addMovement(event);
+            return true;
+        }
+        if (!emptyPaneTracking) return super.onTouchEvent(event);
+        VelocityTracker tracker = emptyPaneVelocity;
+        if (tracker != null) tracker.addMovement(event);
+        switch (action) {
+            case MotionEvent.ACTION_MOVE:
+                if (streamPart == Part.DETAIL_EMPTY) claimEmptyPaneMove(event);
+                return true;
+            case MotionEvent.ACTION_UP:
+                float velocity = 0f;
+                if (tracker != null) {
+                    tracker.computeCurrentVelocity(1000);
+                    velocity = tracker.getYVelocity();
+                }
+                if (streamPart == Part.DETAIL_EMPTY) finishDetailGesture(velocity, false);
+                endEmptyPaneTracking();
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                if (streamPart == Part.DETAIL_EMPTY) finishDetailGesture(0f, true);
+                endEmptyPaneTracking();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private void claimEmptyPaneMove(@NonNull MotionEvent event) {
+        float travel = event.getRawY() - downRawY;
+        if (gesturePolicy.claim() == AppDrawerCategoryGesturePolicy.Claim.PENDING) {
+            // The grid only reports a pre-scroll past touch slop; the raw stream holds the same
+            // line, and a sideways drift is not a pull.
+            float across = Math.abs(event.getRawX() - emptyPaneDownRawX);
+            if (Math.abs(travel) <= touchSlop || Math.abs(travel) <= across) return;
+        }
+        // Nested-scroll sign: a finger moving down is a negative dy.
+        if (claimDetailDrag(-Math.round(travel), event.getRawY())) {
+            ViewParent parent = getParent();
+            if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+        }
+    }
+
+    private void endEmptyPaneTracking() {
+        emptyPaneTracking = false;
+        VelocityTracker tracker = emptyPaneVelocity;
+        emptyPaneVelocity = null;
+        if (tracker != null) tracker.recycle();
     }
 
     private boolean containsDescendant(@NonNull View child, float x, float y) {

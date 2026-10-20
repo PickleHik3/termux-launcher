@@ -2161,7 +2161,8 @@ public final class AppDrawerContentView extends FrameLayout
 
     private boolean isCategoryDetailGesture() {
         return mGestureViewType == AppDrawerViewType.CATEGORIES && !mGestureCategorySearch
-            && mGestureCategoryPart == AppDrawerCategoryTouchRegions.Part.DETAIL_LIST;
+            && (mGestureCategoryPart == AppDrawerCategoryTouchRegions.Part.DETAIL_LIST
+            || mGestureCategoryPart == AppDrawerCategoryTouchRegions.Part.DETAIL_EMPTY);
     }
 
     // ------------------------------------------------------------------ overpull
