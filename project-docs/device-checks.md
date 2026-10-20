@@ -1639,6 +1639,14 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   shows no new frames over 10 s with the dock idle; logcat has no "Dock reflection capture
   failed" or "Glass refraction shader failed" · emulator.
 
+### Drawer folder pull (10-20)
+- 2026-10-20 · commit "fix(drawer): a pull on an open folder's empty pane collapses the folder" ·
+  Drawer in Categories view: open Suggested, put the finger in the empty band above its header
+  and swipe down: the folder shrinks back to its card with the finger and the drawer stays open
+  at its root; a light flick there does the same. The same on a big folder (from the band and
+  from the grid at its top). A tap in Suggested's band and an upward drag there leave it open;
+  a swipe down at the root still closes the drawer to Home · emulator, then pong when asked.
+
 ## Developer
 
 ### Living glass (10-19)
