@@ -204,6 +204,67 @@ public class CommandPaletteViewTest {
         bitmap.recycle();
     }
 
+    /**
+     * The strip hangs over the terminal, not over the glass, so its caps have to be solid: the same
+     * cap drawn over black and over white comes out the same colour.
+     */
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w360dp-h640dp-xxhdpi")
+    public void keycaps_areOpaqueSoTheTerminalNeverShowsThrough() {
+        assertCapsOpaque();
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w360dp-h640dp-night-xxhdpi")
+    public void keycaps_areOpaqueInTheDarkThemeToo() {
+        assertCapsOpaque();
+    }
+
+    private static void assertCapsOpaque() {
+        CommandPaletteView view = stripOnly();
+        view.setKeycaps(Collections.singletonList(new CommandPaletteView.Keycap("⌨", "kbd")));
+        assertEquals(255, Color.alpha(view.keycapFill()));
+
+        RectF cap = view.keycapRect(0);
+        float density = view.getResources().getDisplayMetrics().density;
+        // Inside the cap's leading padding, clear of the glyph, the label and the hairline.
+        int x = Math.round(cap.left + CommandPaletteView.CAP_PAD_H * density / 2f);
+        int y = Math.round(cap.centerY());
+        assertEquals(capPixel(view, Color.BLACK, x, y), capPixel(view, Color.WHITE, x, y));
+    }
+
+    private static int capPixel(CommandPaletteView view, int behind, int x, int y) {
+        Bitmap bitmap = Bitmap.createBitmap(view.getWidth(), view.getHeight(),
+            Bitmap.Config.ARGB_8888);
+        bitmap.eraseColor(behind);
+        view.draw(new Canvas(bitmap));
+        int pixel = bitmap.getPixel(x, y);
+        bitmap.recycle();
+        return pixel;
+    }
+
+    /**
+     * Scrolled to the end, the last row sits clear of the frame's rounded bottom — by the depth of
+     * its corner arc — rather than flush in the corners.
+     */
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void list_scrolledToTheEndLeavesTheLastRowClearOfTheRoundedBottom() {
+        CommandPaletteView view = palette();
+        List<CommandPaletteView.Row> rows = overflowingList();
+        view.setRows(rows, rows.size() - 1);
+        Bitmap bitmap = Bitmap.createBitmap(420, 920, Bitmap.Config.ARGB_8888);
+        view.draw(new Canvas(bitmap));
+        bitmap.recycle();
+
+        float listTop = FRAME.top + view.chromeHeight();
+        float content = view.measuredContentHeight() - view.chromeHeight();
+        float lastRowBottom = listTop - view.scrollOffset() + content;
+        assertEquals(FRAME.bottom - PaneShape.contentInsetPx(26f), lastRowBottom, 0.01f);
+    }
+
     /** A palette open on a 360 dp screen, inset as the controller insets it, with no rows. */
     private static CommandPaletteView stripOnly() {
         CommandPaletteView view = new CommandPaletteView(

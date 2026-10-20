@@ -23,7 +23,7 @@ import java.util.Set;
 
 /**
  * The last {@link #MAX} photos applied as a wallpaper, kept as copies in one private directory
- * (lock-live-wallpaper.md, "Photos"): {@code files/wallpaper/recent/<timestamp>.png}, the cropped
+ * in the wallpaper picker: {@code files/wallpaper/recent/<timestamp>.png}, the cropped
  * wide picture. Newest first, deduplicated by content (SHA-256), trimmed to {@link #MAX}.
  *
  * <p>Plain Java over {@link File}, no Android, so it is a unit test. The order lives in a small

@@ -59,6 +59,8 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     int terminalGlassFrostUpdates;
     int captureCount;
     int cacheClearedCallbacks;
+    /** What the last top-pane frost pass told the window bar; null before any. */
+    @Nullable Boolean windowBarEdge;
     @NonNull final List<Bitmap> inUse = new ArrayList<>();
 
     @NonNull
@@ -185,6 +187,11 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     @Override
     public GlassRefraction.Look fancierGlassLook() {
         return look;
+    }
+
+    @Override
+    public void onWindowBarFrostEdge(boolean drawsEdge) {
+        windowBarEdge = drawsEdge;
     }
 
     @Override

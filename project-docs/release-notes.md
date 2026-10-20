@@ -4,7 +4,7 @@ Every shipped release, newest first. This is the whole changelog — the notes f
 currently being written live in their own `release-notes-v<version>.md` until it is published, then
 they move in here and that file goes. Pre-release channel drops (`vX.Y.Z-pre.N`) are not listed
 here: their rolling notes are `prerelease-notes.md`, and what they carried appears under the stable
-it shipped in. AGENTS.md has the convention and the voice.
+it shipped in. `docs/agents/releasing.md` has the convention and the voice.
 
 Entries are kept as they shipped and are not revised afterwards. Where an old entry describes the
 state of an edition, read it as of that release, not as of today.

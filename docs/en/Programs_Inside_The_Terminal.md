@@ -53,6 +53,7 @@ Send these and they work. Details and limits are in
 | Private mode 2026 | Synchronized output: hold redraws, paint once |
 | Private mode 2048 | In-band resize reports with cell and pixel sizes |
 | Private mode 2031 | Dark/light theme change notifications |
+| Private mode 5523 | Touch reports: every finger goes to the program as raw down, move, up and cancel events with pixel positions, and the terminal does nothing else with it |
 | `CSI # P` / `# Q` / `# R` | Push, pop, report the colour palette |
 | OSC 66 | Kitty text sizing: text drawn 2 to 7 times larger across as many rows, a forced cell width, and fractions for sub- and superscripts |
 | DECSCUSR, SGR 4:3 curly and coloured underlines, focus events, bracketed paste, XTWINOPS 14/16 | As in kitty |

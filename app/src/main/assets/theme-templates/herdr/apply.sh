@@ -1,17 +1,22 @@
 #!/bin/sh
-# Splices the rendered launcher-material palettes into herdr's config.toml and
+# Splices the rendered launcher-material tables into herdr's config.toml and
 # turns theme auto-switching on, so herdr follows the host terminal's light/dark
 # report instead of a pinned theme.
 #
-# Three marker blocks, all self-healing: `auto_switch = true` inside [theme],
-# and the rendered [theme.custom.dark] and [theme.custom.light] tables. A table
-# that already exists gets our block spliced in right after its header, so no
-# table is ever declared twice; one that does not is created, header and all,
-# inside the block. Any pre-existing key of the same name in the same table -
-# including an `auto_switch` of the user's own - is commented out with a
-# "# launcher-material: " prefix rather than dropped, so undo.sh restores it
-# exactly and TOML never sees a duplicate key. [theme] name is left alone, and
-# so is the shared [theme.custom] table: our two subtables layer over it.
+# Marker blocks, all self-healing: `auto_switch = true` inside [theme], the
+# rendered [theme.custom.dark] and [theme.custom.light] palettes, and the
+# sidebar's rows in [ui.sidebar.spaces], [ui.sidebar.agents] and
+# [ui.sidebar.agents.rows_by_agent]. A table that already exists gets our block
+# spliced in right after its header, so no table is ever declared twice; one
+# that does not is created, header and all, inside the block. Any pre-existing
+# key of the same name in the same table - including an `auto_switch` of the
+# user's own, and every line of a value that runs over several lines - is
+# commented out with a "# launcher-material: " prefix rather than dropped, so
+# undo.sh restores it exactly and TOML never sees a duplicate key. [theme] name
+# is left alone, and so is the shared [theme.custom] table: our two palette
+# subtables layer over it.
+#
+# The rendered file keeps every value on one line, so a key is read whole.
 #
 # Pure POSIX sh/awk: herdr ships no Python, and this hook must not assume one.
 set -eu
@@ -34,28 +39,57 @@ cat "$config_file" 2>/dev/null | awk -v begin="$marker_begin" -v end="$marker_en
         gsub(/[ \t]+$/, "", key)
         return key
     }
-    function emit_dark(   i) { for (i = 0; i < n_dark; i++) print dark[i] }
-    function emit_light(   i) { for (i = 0; i < n_light; i++) print light[i] }
+    # Which spliced table a header line opens, or "" for any other table.
+    function table_of(line) {
+        if (line ~ /^\[[ \t]*theme[ \t]*\]/) return "theme"
+        if (line ~ /^\[[ \t]*theme\.custom\.dark[ \t]*\]/) return "dark"
+        if (line ~ /^\[[ \t]*theme\.custom\.light[ \t]*\]/) return "light"
+        if (line ~ /^\[[ \t]*ui\.sidebar\.spaces[ \t]*\]/) return "spaces"
+        if (line ~ /^\[[ \t]*ui\.sidebar\.agents[ \t]*\]/) return "agents"
+        if (line ~ /^\[[ \t]*ui\.sidebar\.agents\.rows_by_agent[ \t]*\]/) return "byagent"
+        return ""
+    }
+    # How many brackets a line leaves open, strings skipped: a value that ends
+    # above zero carries on over the next lines.
+    function depth_of(line,   i, c, d, q) {
+        d = 0; q = ""
+        for (i = 1; i <= length(line); i++) {
+            c = substr(line, i, 1)
+            if (q != "") { if (c == "\\") i++; else if (c == q) q = ""; continue }
+            if (c == "\"" || c == "\047") q = c
+            else if (c == "#") break
+            else if (c == "[" || c == "{") d++
+            else if (c == "]" || c == "}") d--
+        }
+        return d
+    }
+    function emit(t,   i) {
+        if (t == "theme") { print "auto_switch = true"; return }
+        for (i = 0; i < count[t]; i++) print body[t, i]
+    }
     BEGIN {
+        n_tables = split("theme dark light spaces agents byagent", tables, " ")
+        keys["theme", "auto_switch"] = 1
+        header["theme"] = "[theme]"
+        header["dark"] = "[theme.custom.dark]"
+        header["light"] = "[theme.custom.light]"
+        header["spaces"] = "[ui.sidebar.spaces]"
+        header["agents"] = "[ui.sidebar.agents]"
+        header["byagent"] = "[ui.sidebar.agents.rows_by_agent]"
         section = ""
-        n_dark = 0
-        n_light = 0
         while ((getline kline < keysfile) > 0) {
-            if (kline ~ /^\[/) {
-                if (kline ~ /^\[[ \t]*theme\.custom\.dark[ \t]*\]/) section = "dark"
-                else if (kline ~ /^\[[ \t]*theme\.custom\.light[ \t]*\]/) section = "light"
-                else section = ""
-                continue
-            }
+            if (kline ~ /^\[/) { section = table_of(kline); continue }
+            if (section == "" || section == "theme") continue
             if (kline ~ /^[ \t]*#/ || kline ~ /^[ \t]*$/) continue
             key = trimmed_key(kline)
             if (key == "") continue
-            if (section == "dark") { dark[n_dark++] = kline; dark_keys[key] = 1 }
-            else if (section == "light") { light[n_light++] = kline; light_keys[key] = 1 }
+            body[section, count[section]++] = kline
+            keys[section, key] = 1
         }
         close(keysfile)
         table = ""
         in_marker = 0
+        open_depth = 0
     }
     {
         line = $0
@@ -64,30 +98,25 @@ cat "$config_file" 2>/dev/null | awk -v begin="$marker_begin" -v end="$marker_en
             if (line == end) in_marker = 0
             next
         }
+        # The rest of a value already being commented out.
+        if (open_depth > 0) {
+            open_depth += depth_of(line)
+            print "# launcher-material: " line
+            next
+        }
         if (line ~ /^\[/) {
-            table = ""
-            if (line ~ /^\[[ \t]*theme[ \t]*\]/) table = "theme"
-            else if (line ~ /^\[[ \t]*theme\.custom\.dark[ \t]*\]/) table = "dark"
-            else if (line ~ /^\[[ \t]*theme\.custom\.light[ \t]*\]/) table = "light"
+            table = table_of(line)
             print line
-            if (table == "theme") {
-                theme_seen = 1
-                print begin; print "auto_switch = true"; print end
-            } else if (table == "dark") {
-                dark_seen = 1
-                print begin; emit_dark(); print end
-            } else if (table == "light") {
-                light_seen = 1
-                print begin; emit_light(); print end
+            if (table != "") {
+                seen[table] = 1
+                print begin; emit(table); print end
             }
             next
         }
         if (table != "") {
             key = trimmed_key(line)
-            if (key != "" \
-                && ((table == "theme" && key == "auto_switch") \
-                    || (table == "dark" && (key in dark_keys)) \
-                    || (table == "light" && (key in light_keys)))) {
+            if (key != "" && line !~ /^[ \t]*#/ && ((table, key) in keys)) {
+                open_depth = depth_of(line)
                 print "# launcher-material: " line
                 next
             }
@@ -95,14 +124,10 @@ cat "$config_file" 2>/dev/null | awk -v begin="$marker_begin" -v end="$marker_en
         print line
     }
     END {
-        if (!theme_seen) {
-            print begin; print "[theme]"; print "auto_switch = true"; print end
-        }
-        if (!dark_seen) {
-            print begin; print "[theme.custom.dark]"; emit_dark(); print end
-        }
-        if (!light_seen) {
-            print begin; print "[theme.custom.light]"; emit_light(); print end
+        for (i = 1; i <= n_tables; i++) {
+            t = tables[i]
+            if (seen[t] || (t != "theme" && !count[t])) continue
+            print begin; print header[t]; emit(t); print end
         }
     }
 ' >"$tmp_file"

@@ -43,8 +43,14 @@ on screen, so you tune what you see; **Undo** puts back what you opened with.
 
 At **Custom**, vertical sliders appear:
 
-- With nothing tapped: **Blur**, **Grain**, **Opacity**, **Tint**, **Margin** and **Corners**, for
-  every surface.
+- With nothing tapped (**All surfaces**), the sliders apply to every surface: **Blur**, **Grain**,
+  **Opacity**, **Tint**, **Margin** and **Corner radius**, the glass and the shape, then
+  **Depth**, how thick the glass edge looks. Picking a Look puts Depth where that Look has it. The
+  rest of the edge comes with the Look: Clear shows the wallpaper sharply through its edge with a
+  touch of colour at the corners, Mist and Tint bend it through their frost, and every glass edge
+  carries the same faint line of light along its top. Depth shows only while the glass edge is
+  drawn: Android 13 or newer, **Fancier Glass** on, Lazy mode off, and a wallpaper set from the
+  Wallpaper tab (see [Glass](#glass)).
 - Tap an element in the frame to tune it on its own:
   - **Status bar**: the four glass sliders, plus a **Clock** button for the face and alignment
     (see [Status bar](Status_Bar.md#clock)).
@@ -69,7 +75,7 @@ Permissions & services**; until then they render flat.
 
 Both are on the Terminal element at Custom, and under **Settings → Terminal → Terminal display**:
 
-- **Cursor trail**: **Default**, **Motion blur**, **Railgun**, **Torpedo**, **Pixie dust**,
+- **Cursor trail**: **Off**, **Default**, **Motion blur**, **Railgun**, **Torpedo**, **Pixie dust**,
   **Comet**.
 - **Terminal effect**: **None**, **CRT**, **CRT (green)**, **CRT (amber)**, **TFT grid**. It covers
   the status bar, dock and keyboard too, with scanlines fixed to the screen.

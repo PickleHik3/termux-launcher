@@ -12,7 +12,9 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.os.Bundle;
 import android.text.Layout;
+import android.text.Selection;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -24,8 +26,11 @@ import android.text.style.StrikethroughSpan;
 import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -74,6 +79,14 @@ import java.util.List;
  * finger; it follows its tail only while the reader is at the bottom. Both Copy and Insert may
  * be pressed early; the host stops listening and carries the press out once the text settles.
  * Discarding is the header's ×, or a swipe of the card.
+ *
+ * <p>A tap on the text (not a scroll, not the card's sideways swipe) is reported as the place in
+ * {@link #shownText()} under the finger ({@link Actions#onTextTapped}); the host may then open
+ * the text for editing ({@link VoiceCardEdit}). While it is open the panel only draws what it is
+ * handed ({@link #showDraft}): the draft, its changed and added words still in the accent but the
+ * removed ones gone (they are not in the text being edited), and a blinking caret kept in view.
+ * An edit that changed the text shows plain afterwards, with undo back to the text before it
+ * ({@link #showEditPair}).
  */
 final class VoiceTranscriptPanel extends LinearLayout {
 
@@ -89,6 +102,9 @@ final class VoiceTranscriptPanel extends LinearLayout {
 
         /** Resume: listen again, carrying on the text. */
         void onResume();
+
+        /** A tap on the text, at this UTF-16 offset in {@link #shownText()} (or the draft while editing); -1 for its end. */
+        void onTextTapped(int shownOffset);
     }
 
     static final int VISIBLE_LINES = 7;
@@ -99,6 +115,8 @@ final class VoiceTranscriptPanel extends LinearLayout {
     private static final int LINE_DP = 21;
     /** Above the text, under the header strip. */
     private static final int TEXT_TOP_DP = 2;
+    /** The caret's width, the rename chip's caret ({@code TerminalRenameChipView}). */
+    private static final float CARET_WIDTH_DP = 1.5f;
     /** Each control's height, and the pill radius that follows from it. */
     private static final int CONTROL_DP = 44;
     private static final int CONTROLS_TOP_DP = 12;
@@ -107,7 +125,7 @@ final class VoiceTranscriptPanel extends LinearLayout {
     /** Under the text once the controls have gone. */
     private static final int DONE_SPACER_DP = 14;
 
-    private final TextView text;
+    private final CaretTextView text;
     private final LinearLayout controls;
     private final View doneSpacer;
     private final LinearLayout pause;
@@ -137,6 +155,18 @@ final class VoiceTranscriptPanel extends LinearLayout {
     @Nullable private List<VoiceWordDiff.Op> ops;
     /** Undo is showing {@link #raw} in place of {@link #cleaned}. */
     private boolean undone;
+    /**
+     * {@link #cleaned} is the user's edit and {@link #raw} the text before it, rather than a
+     * cleanup and what went into it: both show plain, and undo speaks of the edit.
+     */
+    private boolean editPair;
+    /** The text is open in the editor: the panel draws only the draft it is handed. */
+    private boolean editing;
+    /** How far a finger may move on the text and still be a tap. */
+    private final int touchSlop;
+    private float tapX;
+    private float tapY;
+    private boolean tapping;
     /** A phrase is transcribing: the ghost bar stands in after the text. */
     private boolean ghost;
     /** The newest line stays in view as text arrives; off once the reader has scrolled up. */
@@ -161,7 +191,8 @@ final class VoiceTranscriptPanel extends LinearLayout {
         int ripple = (onSurface & 0x00FFFFFF) | 0x33000000;
         int onAccentRipple = (onAccent & 0x00FFFFFF) | 0x33000000;
 
-        text = new TextView(context);
+        touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        text = new CaretTextView(context, accent, dp(CARET_WIDTH_DP));
         text.setTextColor(onSurface);
         text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         TextViewCompat.setLineHeight(text, dp(LINE_DP));
@@ -176,6 +207,22 @@ final class VoiceTranscriptPanel extends LinearLayout {
         text.setVisibility(GONE);
         text.setVerticalFadingEdgeEnabled(true);
         text.setFadingEdgeLength(dp(14));
+        // Observed, never consumed: the finger scroll and the card's swipe keep working, and a
+        // touch that stayed put is a tap.
+        text.setOnTouchListener((v, event) -> {
+            onTextTouch(event, callbacks);
+            return false;
+        });
+        text.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override
+            public boolean performAccessibilityAction(View host, int action, Bundle arguments) {
+                if (action == AccessibilityNodeInfo.ACTION_CLICK) {
+                    callbacks.onTextTapped(-1);
+                    return true;
+                }
+                return super.performAccessibilityAction(host, action, arguments);
+            }
+        });
         addView(text, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // Pause, or Resume and undo, then Copy and Insert at the end. Every child is 44 tall and
@@ -379,6 +426,7 @@ final class VoiceTranscriptPanel extends LinearLayout {
      * the earlier cleanup's marks gone, and the next phrase joins onto it.
      */
     void resetTo(@NonNull String base) {
+        stopEditing();
         finishTyping();
         clearCleanup();
         raw.setLength(0);
@@ -423,9 +471,17 @@ final class VoiceTranscriptPanel extends LinearLayout {
         if (cleaned == null || undone == undoneNow) return;
         undone = undoneNow;
         rerender();
+        applyUndoLabel();
+    }
+
+    /** Undo's glyph, label and description for what it would do now: undo or redo, a cleanup or an edit. */
+    private void applyUndoLabel() {
         undoIcon.setImageResource(undone ? R.drawable.ic_symbol_redo : R.drawable.ic_symbol_undo);
         undoLabel.setText(undone ? R.string.voice_input_redo_label : R.string.voice_input_undo_label);
-        undo.setContentDescription(getContext().getString(undone ? R.string.voice_input_redo : R.string.voice_input_undo));
+        int description = editPair
+            ? (undone ? R.string.voice_input_redo_edit : R.string.voice_input_undo_edit)
+            : (undone ? R.string.voice_input_redo : R.string.voice_input_undo);
+        undo.setContentDescription(getContext().getString(description));
     }
 
     /** The text as it stands on screen: the cleaned text, or what went into it when undone or not yet cleaned. */
@@ -447,8 +503,148 @@ final class VoiceTranscriptPanel extends LinearLayout {
 
     /** Stops every animation; the panel is going away. */
     void release() {
+        stopEditing();
         finishTyping();
         wave.setResting(true);
+    }
+
+    // ------------------------------------------------------------------ editing
+
+    /**
+     * The editor is open on {@code draft}, the caret at UTF-16 {@code caret}: the draft with the
+     * cleanup's {@code marks} painted as {@link #renderCleaned} paints them, no ghost, the caret
+     * blinking and its line kept in view. Text is set only when it changed, so a caret move does
+     * not lay the text out again; the marks only move when the text does.
+     */
+    void showDraft(@NonNull String draft, int caret, @NonNull List<VoiceEditModel.Mark> marks) {
+        boolean opening = !editing;
+        if (opening) {
+            finishTyping();
+            editing = true;
+            // The cleanup that would have restyled the text is gone; it is the user's now.
+            dimRaw = false;
+            following = false;
+            if (text.getVisibility() != VISIBLE) text.setVisibility(VISIBLE);
+        }
+        // Opening always sets the text, to drop the removed words, the ghost and the typing span.
+        if (opening || !TextUtils.equals(text.getText(), draft)) {
+            SpannableStringBuilder builder = new SpannableStringBuilder(draft);
+            for (VoiceEditModel.Mark mark : marks) {
+                int end = Math.min(mark.end, builder.length());
+                if (mark.start < end) markWord(builder, mark.start, end, mark.kind);
+            }
+            text.setText(builder, TextView.BufferType.SPANNABLE);
+        }
+        int at = Math.max(0, Math.min(caret, text.length()));
+        // A selection at the caret makes the text view's own bring-into-view follow the caret
+        // rather than its bottom gravity's end of text.
+        CharSequence shown = text.getText();
+        if (shown instanceof Spannable) Selection.setSelection((Spannable) shown, at);
+        text.setCaret(at);
+        text.post(() -> {
+            if (editing) text.bringPointIntoView(Math.min(at, text.length()));
+        });
+    }
+
+    /**
+     * The editor has closed on {@code shown}: with {@code editedFrom}, an edit that changed the
+     * text (plain, undo back to {@code editedFrom}); without it, the text as it was drawn before,
+     * marks and all, or plain where phrases joined it meanwhile.
+     */
+    void endEdit(@Nullable String editedFrom, @NonNull String shown) {
+        boolean was = editing;
+        stopEditing();
+        following = true;
+        if (editedFrom != null) {
+            showEditPair(editedFrom, shown);
+            return;
+        }
+        if (was && shownText().equals(shown)) {
+            rerender();
+            return;
+        }
+        clearCleanup();
+        raw.setLength(0);
+        raw.append(shown);
+        revealed = raw.length();
+        renderRaw();
+    }
+
+    /** The editor has gone with the card: no caret, nothing redrawn. */
+    void abandonEdit() {
+        stopEditing();
+    }
+
+    /** {@code edited} shows plain as the text, and undo goes back to {@code before} (also plain). */
+    void showEditPair(@NonNull String before, @NonNull String edited) {
+        stopEditing();
+        finishTyping();
+        clearCleanup();
+        dimRaw = false;
+        raw.setLength(0);
+        raw.append(before);
+        revealed = raw.length();
+        cleaned = edited;
+        ops = null;
+        editPair = true;
+        applyUndoLabel();
+        applyControls();
+        rerender();
+    }
+
+    private void stopEditing() {
+        editing = false;
+        text.setCaret(-1);
+    }
+
+    /** Whether a raw screen point is on the text, while it shows. */
+    boolean isOnText(float rawX, float rawY) {
+        if (!text.isShown()) return false;
+        int[] at = new int[2];
+        text.getLocationOnScreen(at);
+        return rawX >= at[0] && rawX < at[0] + text.getWidth() && rawY >= at[1] && rawY < at[1] + text.getHeight();
+    }
+
+    /** The UTF-16 offset one laid-out line above ({@code -1}) or below ({@code +1}) {@code caret}, or -1. */
+    int offsetOnAdjacentLine(int caret, int direction) {
+        Layout layout = text.getLayout();
+        if (layout == null) return -1;
+        int at = Math.max(0, Math.min(caret, text.length()));
+        int line = layout.getLineForOffset(at) + direction;
+        if (line < 0 || line >= layout.getLineCount()) return -1;
+        return layout.getOffsetForHorizontal(line, layout.getPrimaryHorizontal(at));
+    }
+
+    /** A touch on the text that came down and went up without travelling is a tap, reported where it landed. */
+    private void onTextTouch(@NonNull MotionEvent event, @NonNull Actions callbacks) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                tapX = event.getX();
+                tapY = event.getY();
+                tapping = true;
+                break;
+            case MotionEvent.ACTION_MOVE:
+                if (Math.abs(event.getX() - tapX) > touchSlop || Math.abs(event.getY() - tapY) > touchSlop)
+                    tapping = false;
+                break;
+            case MotionEvent.ACTION_UP:
+                if (tapping) callbacks.onTextTapped(tappedOffset(event.getX(), event.getY()));
+                tapping = false;
+                break;
+            default:
+                // A cancel (the card took the gesture for its swipe) or a second finger.
+                tapping = false;
+                break;
+        }
+    }
+
+    /** The place in {@link #shownText()} (the draft while editing) under a tap at view {@code x, y}. */
+    private int tappedOffset(float x, float y) {
+        int offset = text.getOffsetForPosition(x, y);
+        if (offset < 0) return -1;
+        if (editing) return Math.min(offset, text.length());
+        List<VoiceWordDiff.Op> marked = cleaned != null && !undone && !editPair ? ops : null;
+        return VoiceEditModel.shownOffset(marked, shownText(), offset);
     }
 
     // ------------------------------------------------------------------ raw text
@@ -475,12 +671,21 @@ final class VoiceTranscriptPanel extends LinearLayout {
     /** Draws whichever version of the text is current again (the ghost came or went, or undo was pressed). */
     private void rerender() {
         if (cleaned != null && !undone) {
-            renderCleaned();
+            if (editPair) renderPlain(cleaned);
+            else renderCleaned();
         } else if (cleaned != null) {
-            renderUndone();
+            if (editPair) renderPlain(raw.toString());
+            else renderUndone();
         } else {
             renderRaw();
         }
+    }
+
+    /** {@code value} upright in the primary colour: an edit, or the text before it. */
+    private void renderPlain(@NonNull String value) {
+        SpannableStringBuilder builder = new SpannableStringBuilder(value);
+        styleAsHeard(builder, false);
+        show(builder);
     }
 
     private void renderRaw() {
@@ -500,6 +705,8 @@ final class VoiceTranscriptPanel extends LinearLayout {
 
     /** Puts {@code builder} on screen, the ghost bar after it while a phrase is transcribing. */
     private void show(@NonNull SpannableStringBuilder builder) {
+        // The editor's draft is on screen; what is drawn after it closes is decided then.
+        if (editing) return;
         if (ghost) {
             if (builder.length() > 0) builder.append(' ');
             int start = builder.length();
@@ -530,9 +737,8 @@ final class VoiceTranscriptPanel extends LinearLayout {
         cleaned = null;
         ops = null;
         undone = false;
-        undoIcon.setImageResource(R.drawable.ic_symbol_undo);
-        undoLabel.setText(R.string.voice_input_undo_label);
-        undo.setContentDescription(getContext().getString(R.string.voice_input_undo));
+        editPair = false;
+        applyUndoLabel();
         applyControls();
     }
 
@@ -543,7 +749,6 @@ final class VoiceTranscriptPanel extends LinearLayout {
     private void renderCleaned() {
         List<VoiceWordDiff.Op> current = ops;
         if (current == null) return;
-        int removedColor = (onSurface & 0x00FFFFFF) | (0x73 << 24);
         SpannableStringBuilder builder = new SpannableStringBuilder();
         for (VoiceWordDiff.Op op : current) {
             if (builder.length() > 0) {
@@ -555,24 +760,32 @@ final class VoiceTranscriptPanel extends LinearLayout {
             }
             int start = builder.length();
             builder.append(op.word);
-            int end = builder.length();
-            int color;
-            switch (op.kind) {
-                case CHANGED:
-                case ADDED:
-                    color = accent;
-                    break;
-                case REMOVED:
-                    color = removedColor;
-                    builder.setSpan(new StrikethroughSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                    break;
-                default:
-                    color = onSurface;
-                    break;
-            }
-            builder.setSpan(new ForegroundColorSpan(color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            markWord(builder, start, builder.length(), op.kind);
         }
         show(builder);
+    }
+
+    /**
+     * Paints the word at {@code [start, end)} of {@code builder} for what the cleanup did to it:
+     * changed and added in the accent, removed struck through and dimmed, kept in the primary
+     * colour. The marked cleanup and the editor's draft both paint with this.
+     */
+    private void markWord(@NonNull SpannableStringBuilder builder, int start, int end, @NonNull VoiceWordDiff.Kind kind) {
+        int color;
+        switch (kind) {
+            case CHANGED:
+            case ADDED:
+                color = accent;
+                break;
+            case REMOVED:
+                color = (onSurface & 0x00FFFFFF) | (0x73 << 24);
+                builder.setSpan(new StrikethroughSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                break;
+            default:
+                color = onSurface;
+                break;
+        }
+        builder.setSpan(new ForegroundColorSpan(color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     }
 
     // ------------------------------------------------------------------ layout
@@ -591,6 +804,12 @@ final class VoiceTranscriptPanel extends LinearLayout {
      */
     private void scrollToEnd() {
         text.post(() -> {
+            // While editing it is the caret's line that stays in view, not the newest one.
+            if (editing) {
+                int caret = Selection.getSelectionEnd(text.getText());
+                if (caret >= 0) text.bringPointIntoView(Math.min(caret, text.length()));
+                return;
+            }
             if (!following) return;
             Layout layout = text.getLayout();
             if (layout == null) return;
@@ -642,8 +861,84 @@ final class VoiceTranscriptPanel extends LinearLayout {
     }
 
     private int dp(int value) {
-        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
-            getResources().getDisplayMetrics()));
+        return Math.round(dp((float) value));
+    }
+
+    private float dp(float value) {
+        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
+    }
+
+    /**
+     * The text view, with the editor's caret drawn over it: the rename chip's caret, a bar from
+     * the line's ascent to its descent in the accent, blinking while the editor is open. The
+     * blink is a redraw every {@link #BLINK_MS} only while there is a caret, never a layout.
+     */
+    static final class CaretTextView extends TextView {
+        /** Android's own cursor blink. */
+        private static final long BLINK_MS = 500L;
+
+        private final Paint caretPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final float caretWidth;
+        /** The caret's UTF-16 offset, or -1 for none. */
+        private int caret = -1;
+        private boolean caretOn;
+        private final Runnable blink = new Runnable() {
+            @Override
+            public void run() {
+                if (caret < 0) return;
+                caretOn = !caretOn;
+                invalidate();
+                postDelayed(this, BLINK_MS);
+            }
+        };
+
+        CaretTextView(@NonNull Context context, int caretColor, float caretWidth) {
+            super(context);
+            caretPaint.setColor(caretColor);
+            this.caretWidth = Math.max(1f, caretWidth);
+        }
+
+        /** Shows the caret at {@code offset}, lit, the blink starting over; -1 takes it away. */
+        void setCaret(int offset) {
+            if (offset < 0 && caret < 0) return;
+            caret = offset;
+            caretOn = offset >= 0;
+            removeCallbacks(blink);
+            if (offset >= 0 && isAttachedToWindow()) postDelayed(blink, BLINK_MS);
+            invalidate();
+        }
+
+        @Override
+        protected void onAttachedToWindow() {
+            super.onAttachedToWindow();
+            if (caret >= 0) postDelayed(blink, BLINK_MS);
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            removeCallbacks(blink);
+            super.onDetachedFromWindow();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            Layout layout = getLayout();
+            if (caret < 0 || !caretOn || layout == null) return;
+            int offset = Math.min(caret, length());
+            int line = layout.getLineForOffset(offset);
+            float x = getTotalPaddingLeft() + layout.getPrimaryHorizontal(offset);
+            float baseline = getTotalPaddingTop() + layout.getLineBaseline(line);
+            Paint paint = getPaint();
+            canvas.save();
+            // Inside the text's box, as the text itself is drawn: a caret on a line scrolled
+            // under the fading edge is not drawn over the padding.
+            canvas.clipRect(getScrollX() + getCompoundPaddingLeft(), getScrollY() + getExtendedPaddingTop(),
+                getScrollX() + getWidth() - getCompoundPaddingRight(),
+                getScrollY() + getHeight() - getExtendedPaddingBottom());
+            canvas.drawRect(x, baseline + paint.ascent(), x + caretWidth, baseline + paint.descent(), caretPaint);
+            canvas.restore();
+        }
     }
 
     /**

@@ -46,6 +46,8 @@ final class WhisperTokenizer {
     private static final Pattern PRE_TOKENIZER = Pattern.compile(
         "'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p{N}]+|\\s+(?!\\S)|\\s+");
 
+    private static final Pattern LANGUAGE_TOKEN = Pattern.compile("<\\|([a-z]{2,3})\\|>");
+
     private final String[] idToToken;
     private final Map<String, Integer> tokenToId;
     private final Map<String, Integer> mergeRank;
@@ -53,6 +55,18 @@ final class WhisperTokenizer {
     private final boolean[] isSpecial;
     private final char[] byteToUnicode = new char[256];
     private final int[] unicodeToByte = new int[512];
+    @NonNull private final Languages languages;
+
+    /** The {@code <|xx|>} language tokens, ascending by id: {@code ids[i]} is the token for {@code codes[i]}. */
+    static final class Languages {
+        @NonNull final String[] codes;
+        @NonNull final int[] ids;
+
+        Languages(@NonNull String[] codes, @NonNull int[] ids) {
+            this.codes = codes;
+            this.ids = ids;
+        }
+    }
 
     private WhisperTokenizer(@NonNull JSONObject json) throws JSONException {
         JSONObject model = json.getJSONObject("model");
@@ -93,6 +107,25 @@ final class WhisperTokenizer {
             if (!mergeRank.containsKey(key)) mergeRank.put(key, i);
         }
         buildByteTables();
+        languages = collectLanguages(special);
+    }
+
+    /** Every special spelled {@code <|xx|>} or {@code <|xxx|>} in lower-case letters is a language; nothing else Whisper has is. */
+    @NonNull
+    private static Languages collectLanguages(@NonNull Map<String, Integer> special) {
+        java.util.TreeMap<Integer, String> byId = new java.util.TreeMap<>();
+        for (Map.Entry<String, Integer> entry : special.entrySet()) {
+            Matcher matcher = LANGUAGE_TOKEN.matcher(entry.getKey());
+            if (matcher.matches()) byId.put(entry.getValue(), matcher.group(1));
+        }
+        String[] codes = new String[byId.size()];
+        int[] ids = new int[byId.size()];
+        int i = 0;
+        for (Map.Entry<Integer, String> entry : byId.entrySet()) {
+            ids[i] = entry.getKey();
+            codes[i++] = entry.getValue();
+        }
+        return new Languages(codes, ids);
     }
 
     @NonNull
@@ -138,6 +171,12 @@ final class WhisperTokenizer {
     /** Whether this vocabulary carries language tokens at all (every openai/whisper-* tokenizer.json does, the .en ones included). */
     boolean hasLanguageTokens() {
         return specialId("<|en|>") >= 0;
+    }
+
+    /** The language tokens this vocabulary carries, for language identification; empty when it has none. */
+    @NonNull
+    Languages languages() {
+        return languages;
     }
 
     boolean isSpecial(int id) {

@@ -1,10 +1,10 @@
-# Apps and a browser on the display
+# Apps on the display
 
-Depth: `docs/en/X11_Display.md`.
+Depth: `docs/X11_Display.md`.
 
-There is **no built-in browser and no screenshot route**. If the user wants a page opened, you
-can open a browser for them, but you cannot see what it renders — say so plainly rather than
-implying you'll check the page yourself.
+There is **no screenshot route**: you cannot see what the display renders, so say so plainly
+rather than implying you will check it. For a web page, use terminal-browser (SKILL.md), never a
+browser on the display.
 
 ## Opening an Android app
 
@@ -12,12 +12,12 @@ implying you'll check the page yourself.
 launcherctl launch <name>       # see launcherctl.md
 ```
 
-## Opening a Linux (X11) app, e.g. a browser
+## Opening a Linux (X11) app
 
 The launcher has an embedded X11 display (no separate Termux:X11 app needed). Two ways in:
 
 ```sh
-launcherctl launch firefox                  # starts the display if it was off, switches to it
+launcherctl launch gimp                     # starts the display if it was off, switches to it
 ```
 
 or by hand:
@@ -25,11 +25,8 @@ or by hand:
 ```sh
 termux-x11 :0 &
 export DISPLAY=:0
-firefox https://example.com &
+gimp &
 ```
-
-`firefox` isn't preinstalled on every edition (not in the `io.vaj.tl` demo edition's repo) —
-`pkg install firefox` first if `command -v firefox` fails.
 
 `launcherctl launch <query>` matches a Linux app on the display the same way it matches an
 Android one, and starts the display first if needed; this is the route to prefer since it also
@@ -55,6 +52,6 @@ launcherctl keyboard hide --hold     # keep it down while a full-screen program 
 
 ## What you cannot do
 
-- No screenshot of the display or of anything else — you cannot verify what a page looks like.
+- No screenshot of the display or of anything else; you cannot verify what it looks like.
 - No clipboard read from an X11 app beyond the same OSC 52 rules as the terminal.
 - No layout/theme control routes — those are user settings, not something `launcherctl` exposes.

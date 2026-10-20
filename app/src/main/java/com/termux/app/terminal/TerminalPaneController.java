@@ -3374,6 +3374,13 @@ public class TerminalPaneController {
     private float mPlankTop;
     private float mPlankWidth;
     private float mPlankHeight;
+    /**
+     * The slab under the finger (living glass), held from down to up, cancel, or the finger
+     * setting off on a drag, so it follows its press rig's tilt both ways; null when none is.
+     */
+    @Nullable private PaneGlassBackdropView mPressedGlass;
+    /** Where the finger came down on {@link #mPressedGlass}, raw px, and how far it may wander. */
+    private float mPressGlassDownX, mPressGlassDownY, mPressGlassSlop;
 
     /**
      * Feed one touch to whichever pane it landed on. Observes only — the event is never consumed,
@@ -3403,12 +3410,30 @@ public class TerminalPaneController {
                 mPressedPlank = plank;
                 plank.onPointerDown((ev.getRawX() - mPlankLeft) / mPlankWidth,
                     (ev.getRawY() - mPlankTop) / mPlankHeight);
+                // Living glass: the slab follows the rig's tilt until the finger lifts. It does
+                // not dent: a rigid slab does not deform under a finger.
+                View glass = frame.findViewById(R.id.terminal_pane_glass);
+                if (glass instanceof PaneGlassBackdropView && glass.getVisibility() == View.VISIBLE) {
+                    PaneGlassBackdropView slab = (PaneGlassBackdropView) glass;
+                    slab.pressGlass();
+                    mPressedGlass = slab;
+                    mPressGlassDownX = ev.getRawX();
+                    mPressGlassDownY = ev.getRawY();
+                    mPressGlassSlop = ViewConfiguration.get(slab.getContext()).getScaledTouchSlop();
+                }
                 break;
             }
             case MotionEvent.ACTION_MOVE:
                 if (mPressedPlank != null && mPlankWidth > 0f && mPlankHeight > 0f) {
                     mPressedPlank.onPointerMove((ev.getRawX() - mPlankLeft) / mPlankWidth,
                         (ev.getRawY() - mPlankTop) / mPlankHeight);
+                }
+                // A finger that sets off is a scroll, a swipe or a border drag, not a press: the
+                // slab lets go. Those gestures are claimed below the window, where no cancel
+                // reaches this feed.
+                if (mPressedGlass != null && Math.hypot(ev.getRawX() - mPressGlassDownX,
+                        ev.getRawY() - mPressGlassDownY) > mPressGlassSlop) {
+                    releasePressedGlass();
                 }
                 break;
             case MotionEvent.ACTION_UP:
@@ -3426,9 +3451,18 @@ public class TerminalPaneController {
     }
 
     private void releasePressedPlank() {
+        releasePressedGlass();
         if (mPressedPlank == null) return;
         mPressedPlank.onPointerUp();
         mPressedPlank = null;
+    }
+
+    /** Let the pressed slab go, if one is pressed. */
+    private void releasePressedGlass() {
+        PaneGlassBackdropView glass = mPressedGlass;
+        if (glass == null) return;
+        mPressedGlass = null;
+        glass.releaseGlass();
     }
 
     /**
@@ -3457,6 +3491,8 @@ public class TerminalPaneController {
     /** Drop the rig of a pane that is going away, and neutralise a slab left mid-tilt. */
     private void releasePanePlank(@Nullable FrameLayout frame) {
         if (frame == null) return;
+        if (mPressedGlass != null && frame.findViewById(R.id.terminal_pane_glass) == mPressedGlass)
+            releasePressedGlass();
         DockPlankController plank = mPanePlanks.remove(frame);
         if (plank == null) return;
         if (mPressedPlank == plank) mPressedPlank = null;

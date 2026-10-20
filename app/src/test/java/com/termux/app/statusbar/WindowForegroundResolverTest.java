@@ -174,6 +174,15 @@ public class WindowForegroundResolverTest {
             new String[]{"node", "/usr/lib/node_modules/some-tool/bin/index.js"}));
     }
 
+    /** tlstore's terminal-browser runs on Termux's shared Electron; its script names it. */
+    @Test
+    public void anAppOnASharedElectronResolvesToTheApp() {
+        assertEquals("terminal-browser", WindowForegroundResolver.unwrapInterpreter("electron",
+            new String[]{"/data/data/com.termux/files/usr/lib/electron42/electron",
+                "/data/data/com.termux/files/home/.local/lib/terminal-browser/cli/dist/main.js",
+                "open", "en.wikipedia.org"}));
+    }
+
     /**
      * Python's {@code -m} is the one flag confidently known to carry the identity itself: the
      * module name, not a file. {@code 8000} is {@code http.server}'s own argument, not a further

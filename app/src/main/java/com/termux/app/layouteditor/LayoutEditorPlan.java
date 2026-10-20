@@ -68,7 +68,8 @@ public final class LayoutEditorPlan {
     @NonNull private PlaceOrientation mShownOrientation;
 
     private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull LayoutVariant variant,
-                             @NonNull PaneWallPage place, @NonNull PlaceOrientation deviceOrientation) {
+                             @NonNull PaneWallPage place, @NonNull PlaceOrientation deviceOrientation,
+                             @Nullable PlaceArrangeSnapshot carriedEntry) {
         mVariant = variant;
         mPlaces = places.forVariant(variant);
         mPlace = place;
@@ -76,7 +77,10 @@ public final class LayoutEditorPlan {
         // The editor opens on what the user is looking at; the toggle is how the other one is asked
         // for.
         mShownOrientation = deviceOrientation;
-        mEntry = PlaceArrangeSnapshot.capture(mPlaces, variant);
+        // A session carried over an activity relaunch keeps the arrangement it opened on, as
+        // long as it was taken of the layout being edited now.
+        mEntry = carriedEntry != null && carriedEntry.variant() == variant ? carriedEntry
+            : PlaceArrangeSnapshot.capture(mPlaces, variant);
         mEntrySignature = mEntry.signature();
     }
 
@@ -97,7 +101,27 @@ public final class LayoutEditorPlan {
                                          @NonNull LayoutVariant variant,
                                          @NonNull PaneWallPage place,
                                          @NonNull PlaceOrientation deviceOrientation) {
-        return new LayoutEditorPlan(places, variant, place, deviceOrientation);
+        return new LayoutEditorPlan(places, variant, place, deviceOrientation, null);
+    }
+
+    /**
+     * {@link #enter(PlaceLayoutStore, PaneWallPage, PlaceOrientation)} continuing a session whose
+     * arrangement at open was {@code carriedEntry} (an activity relaunch), so its Undo and its
+     * unsaved state are the same; a snapshot of another layout variant is ignored.
+     */
+    @NonNull
+    public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
+                                         @NonNull PaneWallPage place,
+                                         @NonNull PlaceOrientation deviceOrientation,
+                                         @Nullable PlaceArrangeSnapshot carriedEntry) {
+        return new LayoutEditorPlan(places, places.activeVariant(), place, deviceOrientation,
+            carriedEntry);
+    }
+
+    /** The arrangement as the editor found it, to carry the session over a relaunch. */
+    @NonNull
+    public PlaceArrangeSnapshot entry() {
+        return mEntry;
     }
 
     /** Which layout the session is editing, which the card says so it is never a surprise. */

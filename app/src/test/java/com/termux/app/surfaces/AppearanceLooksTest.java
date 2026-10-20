@@ -83,29 +83,68 @@ public class AppearanceLooksTest {
     /** The Custom row's sets, legend order, per selection (appearance final pass, section 5). */
     @Test
     public void eachSelectionHasItsSliderSet() {
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
-            Control.MARGIN, Control.CORNER_RADIUS), AppearanceLooks.controls(null));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
-            Control.KEY_RADIUS, Control.KEY_SPACING), AppearanceLooks.controls(Target.KEYBOARD));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
+            Control.VIBRANCY), AppearanceLooks.controls(null));
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
+            Control.KEY_OPACITY, Control.KEY_RADIUS, Control.KEY_SPACING),
+            AppearanceLooks.controls(Target.KEYBOARD));
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
             Control.ICON_SIZE, Control.APP_ICONS), AppearanceLooks.controls(Target.DOCK));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
             Control.CONTRAST), AppearanceLooks.controls(Target.TERMINAL));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT),
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT),
             AppearanceLooks.controls(Target.STATUS));
         for (Target target : Target.values()) {
             assertTrue(target.name(), AppearanceLooks.controls(target).size()
                 <= AppearanceLooks.MAX_CONTROLS);
-            assertEquals("glass first, so the same columns stay under the thumb", Control.BLUR,
+            assertEquals("glass first, so the same columns stay under the thumb", Control.GLASS,
                 AppearanceLooks.controls(target).get(0));
         }
-        assertEquals(AppearanceLooks.MAX_CONTROLS, AppearanceLooks.controls(null).size());
+        assertEquals(AppearanceLooks.MAX_CONTROLS, AppearanceLooks.controls(null, true).size());
     }
 
-    /** The buttons above the sliders: Keyboard theme, Trail and Effect, Clock; none elsewhere. */
+    /**
+     * Edge (in the column Shade left, after Tint) and Depth (last) are the global set's while the
+     * glass edge is drawn, and absent otherwise; the one-argument form is the set without them.
+     * Six columns, the most any set has.
+     */
+    @Test
+    public void depthEndsTheGlobalSetOnlyWithTheGlassEdge() {
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT, Control.EDGE,
+            Control.VIBRANCY, Control.DEPTH), AppearanceLooks.controls(null, true));
+        assertEquals(AppearanceLooks.MAX_CONTROLS, AppearanceLooks.controls(null, true).size());
+        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
+            Control.VIBRANCY), AppearanceLooks.controls(null, false));
+        assertEquals(AppearanceLooks.controls(null, false), AppearanceLooks.controls(null));
+    }
+
+    /** Depth is global: no element's set holds it, with the glass edge drawn or not. */
+    @Test
+    public void noElementHoldsDepth() {
+        for (Target target : Target.values()) {
+            assertEquals(target + " ignores the glass edge", AppearanceLooks.controls(target),
+                AppearanceLooks.controls(target, true));
+            assertEquals(AppearanceLooks.controls(target), AppearanceLooks.controls(target, false));
+            assertFalse(target + " never holds Depth",
+                AppearanceLooks.controls(target, true).contains(Control.DEPTH));
+        }
+    }
+
+    /** Depth runs 0 to 100 over its own keys (GlassEdgeControls). */
+    @Test
+    public void depthRunsZeroToAHundred() {
+        assertEquals(0, Control.DEPTH.min);
+        assertEquals(100, Control.DEPTH.max);
+        assertEquals(1, Control.DEPTH.step);
+    }
+
+    /**
+     * The buttons above the sliders: Keyboard theme, Trail and Effect, Clock; the global set's
+     * Tint colour; none on the dock.
+     */
     @Test
     public void eachSelectionHasItsButtons() {
-        assertTrue(AppearanceLooks.doors(null).isEmpty());
+        assertEquals(Collections.singletonList(Door.TINT_HUE), AppearanceLooks.doors(null));
         assertTrue(AppearanceLooks.doors(Target.DOCK).isEmpty());
         assertEquals(Collections.singletonList(Door.KEYBOARD_THEME),
             AppearanceLooks.doors(Target.KEYBOARD));
@@ -117,9 +156,12 @@ public class AppearanceLooksTest {
     /** Each control's range is the stored value's own, and its value round-trips. */
     @Test
     public void controlRangesAreTheStoredRanges() {
-        assertEquals(AppearanceLooks.BLUR_MAX_DP, Control.BLUR.max);
-        assertEquals(AppearanceLooks.CORNERS_MAX_DP, Control.CORNER_RADIUS.max);
-        assertEquals(AppearanceLooks.MARGIN_MAX_DP, Control.MARGIN.max);
+        assertEquals(0, Control.GLASS.min);
+        assertEquals(100, Control.GLASS.max);
+        assertEquals("0.7x", 70, Control.VIBRANCY.min);
+        assertEquals("1.5x", 150, Control.VIBRANCY.max);
+        assertEquals("Edge: no fringe", 0, Control.EDGE.min);
+        assertEquals("Edge: the bold edge", 100, Control.EDGE.max);
         assertEquals(AppearanceLooks.KEY_CORNERS_MAX_DP, Control.KEY_RADIUS.max);
         assertEquals(3, Control.APP_ICONS.min);
         assertEquals(10, Control.APP_ICONS.max);
@@ -149,40 +191,53 @@ public class AppearanceLooksTest {
 
     /**
      * Icon size is the pinned icon in dp, stored as the dock height scale that draws it. Its ends
-     * are the smallest and largest icon the dock gives under each Style, so no stretch of the
-     * slider is dead, and every value comes back as itself.
+     * are the smallest and largest icon the dock gives under each Style, for a row standing alone
+     * and for one sharing its container, so no stretch of the slider is dead, and every value
+     * comes back as itself (a lone row's within a dp).
      */
     @Test
     public void iconSizeIsTheIconTheDockDrawsUnderEachStyle() {
         for (boolean floating : new boolean[] {false, true}) {
-            for (float density : new float[] {2f, 2.625f, 2.75f, 3f, 3.5f}) {
-                String at = (floating ? "Floating" : "Docked") + " at " + density;
-                int[] range = AppearanceLooks.iconSizeRangeDp(floating, density);
-                assertTrue(at, range[0] < range[1]);
-                assertTrue(at, range[0] >= Control.ICON_SIZE.min
-                    && range[1] <= Control.ICON_SIZE.max);
-                // The ends are the stretch's ends, and anything stored past them reads as them.
-                assertEquals(at, range[0], AppearanceLooks.iconSizeValueFor(floating,
-                    DockLayoutPolicy.minUsefulScale(), density));
-                assertEquals(at, range[1], AppearanceLooks.iconSizeValueFor(floating,
-                    DockLayoutPolicy.maxUsefulScale(floating), density));
-                assertEquals(at, range[0], AppearanceLooks.iconSizeValueFor(floating,
-                    TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT, density));
-                assertEquals(at, range[1], AppearanceLooks.iconSizeValueFor(floating,
-                    TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT, density));
-                for (int dp = range[0]; dp <= range[1]; dp++) {
-                    float scale = AppearanceLooks.dockScaleForIconSize(floating, dp, density);
-                    assertTrue(at + " " + dp + " dp writes inside the stretch",
-                        scale >= DockLayoutPolicy.minUsefulScale()
-                            && scale <= DockLayoutPolicy.maxUsefulScale(floating));
-                    assertEquals(at + " " + dp + " dp", dp,
-                        AppearanceLooks.iconSizeValueFor(floating, scale, density));
+            for (boolean alone : new boolean[] {false, true}) {
+                for (float density : new float[] {2f, 2.625f, 2.75f, 3f, 3.5f}) {
+                    assertIconSizeRoundTrips(floating, alone, density);
                 }
-                // Out of range values are held to the ends.
-                assertEquals(at, range[0], AppearanceLooks.iconSizeValueFor(floating,
-                    AppearanceLooks.dockScaleForIconSize(floating, 1, density), density));
             }
         }
+    }
+
+    private static void assertIconSizeRoundTrips(boolean floating, boolean alone, float density) {
+        String at = (floating ? "Floating" : "Docked") + (alone ? " alone" : " shared")
+            + " at " + density;
+        int[] range = AppearanceLooks.iconSizeRangeDp(floating, alone, density);
+        assertTrue(at, range[0] < range[1]);
+        assertTrue(at, range[0] >= Control.ICON_SIZE.min && range[1] <= Control.ICON_SIZE.max);
+        // The ends are the stretch's ends, and anything stored past them reads as them.
+        assertEquals(at, range[0], AppearanceLooks.iconSizeValueFor(floating, alone,
+            DockLayoutPolicy.minUsefulScale(), density));
+        assertEquals(at, range[1], AppearanceLooks.iconSizeValueFor(floating, alone,
+            DockLayoutPolicy.maxUsefulScale(floating), density));
+        assertEquals(at, range[0], AppearanceLooks.iconSizeValueFor(floating, alone,
+            TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT, density));
+        assertEquals(at, range[1], AppearanceLooks.iconSizeValueFor(floating, alone,
+            TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT, density));
+        for (int dp = range[0]; dp <= range[1]; dp++) {
+            float scale = AppearanceLooks.dockScaleForIconSize(floating, alone, dp, density);
+            assertTrue(at + " " + dp + " dp writes inside the stretch",
+                scale >= DockLayoutPolicy.minUsefulScale()
+                    && scale <= DockLayoutPolicy.maxUsefulScale(floating));
+            int back = AppearanceLooks.iconSizeValueFor(floating, alone, scale, density);
+            // A lone icon is the whole baseline, a figure divided out of a rounded icon, so it
+            // can step more than a pixel at once and skip a dp at a low density (Docked at 2.0
+            // has no 63dp icon); the slider then lands on the neighbour. A shared icon does not.
+            if (alone)
+                assertTrue(at + " " + dp + " dp came back as " + back, Math.abs(back - dp) <= 1);
+            else
+                assertEquals(at + " " + dp + " dp", dp, back);
+        }
+        // Out of range values are held to the ends.
+        assertEquals(at, range[0], AppearanceLooks.iconSizeValueFor(floating, alone,
+            AppearanceLooks.dockScaleForIconSize(floating, alone, 1, density), density));
     }
 
     /** The shipped default stays the shipped default: its icon writes 2.18 back, both Styles. */
@@ -190,8 +245,11 @@ public class AppearanceLooksTest {
     public void theDefaultsIconWritesTheDefault() {
         float preset = TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
         for (boolean floating : new boolean[] {false, true}) {
-            int dp = AppearanceLooks.iconSizeValueFor(floating, preset, 2.75f);
-            assertEquals(preset, AppearanceLooks.dockScaleForIconSize(floating, dp, 2.75f), 0f);
+            for (boolean alone : new boolean[] {false, true}) {
+                int dp = AppearanceLooks.iconSizeValueFor(floating, alone, preset, 2.75f);
+                assertEquals(preset,
+                    AppearanceLooks.dockScaleForIconSize(floating, alone, dp, 2.75f), 0f);
+            }
         }
     }
 

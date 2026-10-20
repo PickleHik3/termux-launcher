@@ -153,6 +153,7 @@ import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.terminal.inappkeyboard.voice.DictationMarks;
 import com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher;
 import com.termux.app.terminal.inappkeyboard.voice.ReadAloudCard;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceCardEdit;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceCommandFormatter;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceDictation;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceInputSession;
@@ -558,6 +559,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Trailing CPU/RAM/weather widgets, their data controllers, and the shared detail card host. */
     @Nullable private com.termux.app.statusbar.SystemStatsController mStatsController;
     @Nullable private com.termux.app.statusbar.AiIndicatorController mAiIndicatorController;
+    /**
+     * The CPU reading needs privileged access, so it shows or hides as access comes and goes.
+     * Registered from onStart to onStop, the same span the stats sampler runs: a stopped activity
+     * re-reads availability on its next onStart anyway.
+     */
+    private final com.termux.privileged.PrivilegedAvailabilitySignal.Listener
+        mPrivilegedAvailabilityListener = available -> updateStatusWidgets();
     @Nullable private com.termux.app.statusbar.SystemStatsCardView mStatsCardView;
     /**
      * Presentation smoothing for the two bar readings only. One controller feeds both surfaces, and
@@ -611,8 +619,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private String mPendingWallPage;
     @Nullable private com.termux.app.x11.X11DisplayHostController mX11Display;
     @Nullable private com.termux.app.x11.X11KeyboardBridge mX11KeyboardBridge;
-    /** Runs a Linux app from the drawer on the display, starting the display when needed. */
+    /**
+     * Runs a Linux app from the drawer on the display, starting the display when needed. The
+     * process's one runner, lent {@link #mLinuxAppsHost} while this instance lives: what it runs
+     * belongs to TermuxService and outlives this activity, a configuration relaunch included.
+     */
     @Nullable private com.termux.app.x11.X11LinuxAppRunner mLinuxApps;
+    /** What this instance lent {@link #mLinuxApps}; handed back on destroy. */
+    @Nullable private com.termux.app.x11.X11LinuxAppRunner.Host mLinuxAppsHost;
     /** What this instance installed in {@code LauncherAppLauncher}; taken out again on destroy. */
     @Nullable private com.termux.app.launcher.LauncherAppLauncher.LinuxAppRunner mLinuxAppRunnerHook;
     /** Same, for {@code Terminal=true} Linux apps (D5) — taken out again on destroy. */
@@ -740,6 +754,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private ReadAloudCard mReadAloudCard;
     /** The dictation in the panel: what has been heard, and the ✓ or Copy waiting for it to settle. */
     private final VoiceDictation mVoiceDictation = new VoiceDictation();
+    /** Editing the dictation card's text by hand; built on the first tap of the text. */
+    @Nullable private VoiceCardEdit mVoiceCardEdit;
+    /** That editor raised the phone's keyboard (the in-app one is off), so it puts it down again. */
+    private boolean mVoiceEditRaisedIme;
     /**
      * Tells a program that asked for them (mode 7727 with bracketed paste) when the microphone
      * opens and closes and which paste is dictated; every other program gets today's bytes.
@@ -822,6 +840,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The one-time language notices, once per process. */
     private boolean mVoiceLanguageFallbackNoticed;
     private boolean mVoiceEnglishOnlyNoticed;
+    /**
+     * The running dictation's spoken language (ISO 639), from {@link VoiceInputSession.Host#onSpeechLanguage}:
+     * forced by the setting, or heard and locked. Null while unknown, for Parakeet and .en models,
+     * and once the session has ended.
+     */
+    @Nullable private String mVoiceSpokenLanguage;
     private boolean mVoiceMicrophonePromptShowing;
     /** Whether the microphone was asked for from the voice key rather than the Dictate key. */
     private boolean mVoiceMicrophoneAskedFromKeyboard;
@@ -926,6 +950,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * and both pending choices, the cropped photo among them. Read once, by the next Overview.
      */
     @Nullable private com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState mOverviewRestore;
+
+    /**
+     * The Appearance surface as it stood when an activity went down for a configuration relaunch
+     * (new wallpaper colours, the theme, the font scale), which Android does whether or not the
+     * surface is open. The process outlives the relaunch, so it is handed to the next activity in
+     * memory; the saved state names which handover is its own ({@link #ARG_APPEARANCE_RELAUNCH}).
+     * Small: a few snapshots of preference values.
+     */
+    @Nullable private static com.termux.app.surfaces.AppearanceSurfaceController.Relaunch sAppearanceRelaunch;
+    private static int sAppearanceRelaunchId;
+    private static int sAppearanceRelaunchSeq;
+    /** The handover this activity last made, so its own later save may withdraw only that one. */
+    private int mAppearanceRelaunchId;
+    /** A handover this activity took on creation, opened once it is resumed. */
+    @Nullable private com.termux.app.surfaces.AppearanceSurfaceController.Relaunch mPendingAppearanceRelaunch;
+    private boolean mPendingAppearanceFromSettings;
 
     /**
      * Layout mode of the one editor: where a place's elements sit rather than how its surfaces
@@ -1221,6 +1261,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mTerminalGlassActive = false;
     /** The blur frame the panes are painting from; kept out of the cache's recycler. */
     @Nullable private Bitmap mPaneGlassFrame;
+    /** The clear frame the panes' bent edges show (edge clarity); kept out of the recycler too. */
+    @Nullable private Bitmap mPaneGlassClearFrame;
     /** The unblurred wallpaper frame the Display page's corner mask paints; held so no eviction recycles it under a draw. */
     @Nullable private Bitmap mWallBehindFrame;
     /** The self-drawn wallpaper behind everything; see {@link WallpaperBackdropPolicy}. */
@@ -1391,6 +1433,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final String ARG_ACTIVITY_RECREATED = "activity_recreated";
     private static final String ARG_PANE_LAYOUT = "pane_layout";
+    private static final String ARG_APPEARANCE_RELAUNCH = "appearance_relaunch";
+    private static final String ARG_APPEARANCE_FROM_SETTINGS = "appearance_from_settings";
     private static final String PANE_STATE_SESSIONS = "sessions";
     private static final String PANE_STATE_WINDOWS = "windows";
     private static final String PANE_STATE_CURRENT_WINDOW = "current_window";
@@ -1522,6 +1566,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return isRoundedDockStyle();
         }
 
+        @Override public void onWindowBarFrostEdge(boolean drawsEdge) {
+            if (drawsEdge == mWindowBarFrostDrawsEdge) return;
+            mWindowBarFrostDrawsEdge = drawsEdge;
+            // The bar's glass is dressed from this, so it is re-dressed now, not on the next pass.
+            refreshTerminalWindowBar();
+        }
+
         @Override public boolean statusBarOnDockPlank() {
             // Under a joined Docked frame the bar is on the frame's glass, which is as good as
             // the plank's: it wears no frost of its own.
@@ -1601,6 +1652,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onCacheCleared() {
             mPaneGlassFrame = null;
+            mPaneGlassClearFrame = null;
             mWallBehindFrame = null;
         }
 
@@ -1634,6 +1686,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void updateTerminalGlassFrost() {
             TermuxActivity.this.updateTerminalGlassFrost();
+        }
+
+        @Override public void rejudgeBandInks(
+                @NonNull java.util.Set<com.termux.app.chrome.GlassBackdropCache.Band> bands) {
+            if (bands.contains(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD))
+                rejudgeKeyboardGlassFaces();
         }
 
         @Override public boolean isBlurHealthy(@NonNull ChromeSpec spec) {
@@ -1676,6 +1734,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
             mPendingWallPage = savedInstanceState.getString(
                 com.termux.app.wall.PaneWallController.ARG_PAGE);
+            takeAppearanceRelaunch(savedInstanceState);
         }
         // Delete ReportInfo serialized object files from cache older than 14 days
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
@@ -1689,6 +1748,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Apply wallpaper or normal theme based on preference
         setActivityThemeAndWindow();
         super.onCreate(savedInstanceState);
+        sLiveActivity = new java.lang.ref.WeakReference<>(this);
         setContentView(R.layout.activity_termux);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
@@ -2081,6 +2141,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // updateStatusWidgets(), reached solely from refreshTerminalWindowBar()'s tail — which
         // neither onStart nor onResume calls. Without this the CPU and memory readings never
         // resumed after leaving the app and coming back.
+        PrivilegedBackendManager.getInstance().addAvailabilityListener(mPrivilegedAvailabilityListener);
         updateStatusWidgets();
         // onStop let go of the display's surface; nothing else re-attaches it when the wall
         // already rests on the Display place, and a display whose surface is not attached takes
@@ -2124,7 +2185,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mAzTabTouch = mAzTabLayer != null
                     && mAzTabLayer.isOnTab(ev.getRawX(), ev.getRawY());
             }
+            // Seen before any view acts on it: a tap off the dictation card's text ends its edit.
+            if (mVoiceCardEdit != null)
+                mVoiceCardEdit.onWindowTouch(ev.getActionMasked(), ev.getRawX(), ev.getRawY());
             feedDockPlank(ev);
+            feedDockTouchLight(ev);
             if (!mAzTabTouch) feedTerminalPlank(ev);
             if (!mAzTabTouch && touchBeganOverTerminal(ev))
                 mKeybindHintPresenter.onTerminalTouch(ev);
@@ -2150,11 +2215,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private static boolean viewContainsScreenPoint(@Nullable View view, @NonNull MotionEvent ev) {
+        return viewContainsScreenPoint(view, ev.getRawX(), ev.getRawY());
+    }
+
+    private static boolean viewContainsScreenPoint(@Nullable View view, float x, float y) {
         if (view == null || !view.isShown()) return false;
         int[] location = new int[2];
         view.getLocationOnScreen(location);
-        float x = ev.getRawX();
-        float y = ev.getRawY();
         return x >= location[0] && x < location[0] + view.getWidth()
             && y >= location[1] && y < location[1] + view.getHeight();
     }
@@ -2260,6 +2327,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         holdVoiceScreen();
         if (mIsInvalidState)
             return;
+        reopenAppearanceAfterRelaunch();
         // A return hold opened by the stop starts watching for the layout to settle; it is let
         // go once focus has come too (onWindowFocusChanged) and the size has stopped moving.
         if (mReturnHold.isActive()) {
@@ -2798,6 +2866,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onPause() {
         mReturnHold.onPaused();
         dismissHelpOverlay();
+        // An edit of the dictation card's text is kept and its typing handed back, before the
+        // microphone closes below and the text settles with it.
+        endVoiceEdit();
         // The microphone is only ever open while this activity is the one on screen; what was
         // said stays in the panel, waiting for the user to come back to it.
         endVoiceInput(VoiceInputSession.EndReason.PAUSED);
@@ -2843,6 +2914,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean mFirstLayoutRedressed;
+
+    /**
+     * Mist's opacity depends on whether its glass is light (SurfacePresets.followGlassTheme): on
+     * the pass a theme, scheme or wallpaper-mode change runs through, a store on the shipped Mist
+     * takes this glass's value. A write is re-dressed whole after this pass, as a Look is.
+     */
+    private void followLooksGlassTheme() {
+        if (mPreferences == null) return;
+        boolean light = com.termux.app.chrome.GlassLook.isLightGlass(resolveAccessoryGlassBaseColor());
+        if (com.termux.app.surfaces.SurfacePresets.followGlassTheme(mPreferences, light))
+            getWindow().getDecorView().post(this::redressChromeFromState);
+    }
 
     private void redressChromeFromState() {
         if (mPreferences == null || mChrome == null) return;
@@ -3395,7 +3478,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
             blurRadiusDp, mPreferences.getAppBarOpacity() / 100f,
             mPreferences.getDockGlassGrain(), 0f, mFancierGlassLook).withRim(false)
-            .withTintStrength(mPreferences.getDockTintStrength());
+            .withTintStrength(mPreferences.getDockTintStrength())
+            // Every edge of this sheet is the screen's own. The gathered light, which every side
+            // takes a share of, would run a glow round the screen, so all four are seams.
+            .withSeams(com.termux.app.chrome.ChromeEdgeRule.ALL);
         mFrameGutterDrawable =
             com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop);
         body.setBackground(mFrameGutterDrawable);
@@ -3541,6 +3627,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mFancierGlassLook;
             }
 
+            @Override @Nullable public Bitmap paneGlassClearFrame() {
+                // Asked of the look the slabs actually draw: the joined frame's insert keeps no
+                // bend and so no clarity, and holds no clear frame for it.
+                return obtainTerminalPaneGlassClearFrame(paneGlassRefraction());
+            }
+
             @Override @Nullable public ColorFilter paneGlassFrostFilter() {
                 return com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getTerminalBackgroundOpacity() : 100);
             }
@@ -3566,18 +3658,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public int paneGlassTintColor() {
                 // Under both Styles the pane is the frame's glass until Darkness is raised: the
                 // Docked insert reads as a window by the hairline round its opening, not by tone.
-                return shouldShowTerminalOverlaySurface()
-                    ? mChrome.glass().look(mPreferences != null
+                if (!shouldShowTerminalOverlaySurface()) return Color.TRANSPARENT;
+                return mChrome.glass().look(mPreferences != null
                         ? mPreferences.getTerminalTintStrength()
                         : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
-                        .flatTint(resolveTerminalSurfaceColor())
-                    : Color.TRANSPARENT;
+                    .flatTint(resolveTerminalSurfaceColor());
             }
 
             @Override public int paneGlassVeil(@NonNull Rect rootRect) {
                 // The terminal pane band (appearance-layout-editor SPEC §2): the scheme's default
-                // foreground and its dim, veiled toward the terminal's own background.
-                if (mChrome == null) return Color.TRANSPARENT;
+                // foreground and its dim, veiled toward the terminal's own background. Off the
+                // wallpaper the text stands on the palette's own background (terminalTextGround)
+                // and nothing is measured; a pane with no slab is asked too (PaneGlass), so the
+                // ground follows its tint under every Look.
+                if (mChrome == null || !shouldUseWallpaperPassthroughMode()) return Color.TRANSPARENT;
                 int foreground = com.termux.terminal.TerminalColors.COLOR_SCHEME
                     .mDefaultColors[com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND];
                 return mChrome.ink().terminalPane(rootRect, paneGlassTintColor(),
@@ -3587,7 +3681,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public boolean paneGlassRimWanted() {
-                return true; // every look wears the dock's gradient rim
+                // Every look wears the dock's gradient rim; over a slab whose program draws its
+                // own edge, the pane's border yields to that edge (PaneRim.SlabEdge).
+                return true;
             }
 
             @Override public boolean paneOpeningLine() {
@@ -3661,6 +3757,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Bitmap frame = mChrome.blurCache().obtain(radiusDp, wallpaperFrame);
         mPaneGlassFrame = frame != null && !frame.isRecycled() ? frame : null;
         return mPaneGlassFrame;
+    }
+
+    /**
+     * The clearer frame the panes' bent edges show (Fancier Glass's edge clarity), at
+     * {@link com.termux.app.chrome.GlassRefraction#CLARITY_RADIUS_DP} from the same cache and the
+     * same wallpaper frame as {@link #obtainTerminalPaneGlassFrame}, under the same gate, or null
+     * when the look asks for none or that blur is still in flight. Remembered for the cache's
+     * in-use scan as the frame is; its landing changes the panes' style key, so the pass the
+     * cache's ready callback runs re-dresses them.
+     */
+    @Nullable
+    private Bitmap obtainTerminalPaneGlassClearFrame(
+            @Nullable com.termux.app.chrome.GlassRefraction.Look look) {
+        int radiusDp = mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (wallpaperFrame == null || !isTerminalPaneGlassActive() || !wallpaperPicture().blurs()
+                || !com.termux.app.chrome.WallpaperFrostPainter.wantsClearFrame(look, radiusDp)) {
+            mPaneGlassClearFrame = null;
+            return null;
+        }
+        Bitmap clear = mChrome.blurCache().obtain(
+            com.termux.app.chrome.GlassRefraction.CLARITY_RADIUS_DP, wallpaperFrame);
+        mPaneGlassClearFrame = clear != null && !clear.isRecycled() ? clear : null;
+        return mPaneGlassClearFrame;
     }
 
     /**
@@ -4068,6 +4188,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void showTerminalActionHint(@NonNull String toolName) {
         LauncherToolRegistry.ToolMetadata tool = LauncherToolRegistry.getInstance().getTool(toolName);
         if (tool == null || tool.titleRes == 0 || tool.selfEvident) return;
+        // A toggle's name says nothing about where it left things; the hint runs after the
+        // action, so the state it reads is the one the tap produced.
+        if (LauncherToolRegistry.TOOL_MOUSE_TOGGLE.equals(toolName)) {
+            com.termux.app.notice.AppNotice.readout(this, getString(isMouseMode()
+                ? R.string.extra_key_readout_mouse_mode_on : R.string.extra_key_readout_mouse_mode_off));
+            return;
+        }
         // A place change names its destination for as long as the page is on its way there: the
         // read-out comes up as the wall commits and is taken down by the settle
         // (onWallPageSettled), so it reads as one motion with the page rather than a clock of its
@@ -4144,6 +4271,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private com.termux.app.chrome.GlassRefraction.Program mNavStripRefraction;
 
+    /**
+     * Whether the dock's backdrop is on screen with a refraction effect installed right now, so
+     * its program's gathered light is the dock's edge; see {@link #setDockProgramEdge}.
+     */
+    private boolean mDockProgramEdge;
+
     /** Where the dock host's origin sits in its backdrop's pixels, for mapping a pressed key into it. */
     private float mGlassOriginLeft, mGlassOriginTop;
 
@@ -4161,6 +4294,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mKeyLensCx, mKeyLensCy;            // centre in backdrop fragCoord space
     private float mKeyLensHx, mKeyLensHy;            // half extents
     private float mKeyLensRadius;                    // corner radius
+    /**
+     * What the dock's and the strip's tint cover of their backdrops, as their last dress passes
+     * worked it out ({@link #dockGlassCover}); -1 before the first. A change re-dresses the
+     * backdrop, so its edge follows an opacity change.
+     */
+    private float mDockGlassCover = -1f;
+    private float mNavStripGlassCover = -1f;
+
+    /** What the dock material's tint covers of the frost under it, 0..1. */
+    private float dockGlassCover() {
+        if (mPreferences == null) return 0f;
+        return mPreferences.getAppBarOpacity() / 100f;
+    }
+
     // Last dock-glass params, so the lens can rebuild the backdrop effect without recapturing.
     private boolean mGlassParamsValid = false;
     private float mGlassBlurPx, mGlassCapLeft, mGlassCapTop, mGlassCapRight, mGlassCapBottom, mGlassRadiusPx;
@@ -4204,13 +4351,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The view's own pixels are the content here, so the aim is identity.
             program.setAim(1f, 1f, 0f, 0f);
             program.setRect(capLeft, capTop, capRight, capBottom, radiusPx);
-            // The user's knobs while Fancier Glass is on; the numbers this dock always ran with
-            // otherwise, so the default mode's dock and strip are pixel for pixel what they were.
-            program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook));
+            // The user's knobs while Fancier Glass is on, the numbers this dock always ran with
+            // otherwise; either way its gathered edge is raised by what the dock's tint covers
+            // of it, the one rule every glass surface's edge follows. The cover is the one
+            // the last dress pass worked out, so a key's lens rebuilding this per frame reads no
+            // preference.
+            program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook)
+                .withCover(Math.max(0f, navStrip ? mNavStripGlassCover : mDockGlassCover)));
             // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
             if (!navStrip && mKeyLensActive && mKeyLensIntensity > 0f) {
                 program.setLens(mKeyLensCx, mKeyLensCy, mKeyLensHx, mKeyLensHy, mKeyLensRadius,
                     mKeyLensIntensity);
+                // A held key's lens owns the dock's glass: an icon's touch light yields to it.
+                program.clearTouch();
             } else {
                 program.clearLens();
             }
@@ -4285,6 +4438,107 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (glass != null) {
             backdrop.setRenderEffect(glass);
         }
+    }
+
+    /** The dock icons' touch light; built on the first press that may light, see {@link #dockTouchFade}. */
+    @Nullable private com.termux.app.chrome.DockTouchFade mDockTouchFade;
+    /** The finger now down landed on a dock icon and lit it. */
+    private boolean mDockTouchLightDown;
+
+    /**
+     * Observes (never consumes) a press on a dock icon to light the glass under it
+     * ({@link com.termux.app.chrome.DockTouchFade}): on at once on the down, nothing on a move,
+     * a stepped fall on the lift. The click, the long-press and the drag are the icon's as before.
+     */
+    private void feedDockTouchLight(@NonNull MotionEvent ev) {
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN: {
+                mDockTouchLightDown = false;
+                float[] at = dockTouchLightPoint(ev.getRawX(), ev.getRawY());
+                if (at == null) return;
+                mDockTouchLightDown = true;
+                dockTouchFade().down(at[0], at[1]);
+                return;
+            }
+            case MotionEvent.ACTION_MOVE:
+                // The drawer's open drag starts on the dock and takes the gesture: let go as on a lift.
+                if (mDockTouchLightDown && isAppDrawerEngaged()) {
+                    mDockTouchLightDown = false;
+                    dockTouchFade().up();
+                }
+                return;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (!mDockTouchLightDown) return;
+                mDockTouchLightDown = false;
+                dockTouchFade().up();
+                return;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Where a press at this screen point lights the dock's glass, in the dock backdrop's effect
+     * coordinates (the key lens's mapping), or null when it is not on a dock icon over that
+     * backdrop: below API 33, with no refracting backdrop up, while a key's lens holds the glass,
+     * on the keys, or with the row off the dock (a rail or an off-dock plank has glass of its own).
+     */
+    @Nullable
+    private float[] dockTouchLightPoint(float rawX, float rawY) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !mGlassParamsValid
+            || mDockRefraction == null || mKeyLensActive || isAppDrawerEngaged()) return null;
+        SuggestionBarView bar = mSuggestionBarView;
+        View container = hotView(R.id.accessory_stack_container);
+        View surfaceHost = hotView(R.id.accessory_surface_host);
+        View backdrop = hotView(R.id.accessory_blur_backdrop);
+        if (bar == null || container == null || surfaceHost == null || backdrop == null
+            || backdrop.getVisibility() != View.VISIBLE
+            || !viewContainsScreenPoint(surfaceHost, rawX, rawY)
+            || isOnDockPlankKeySurface(rawX, rawY)) return null;
+        boolean onDock = false;
+        for (android.view.ViewParent p = bar.getParent(); p != null; p = p.getParent()) {
+            if (p == container) {
+                onDock = true;
+                break;
+            }
+        }
+        if (!onDock || !bar.isIconAt(rawX, rawY)) return null;
+        int[] hostLoc = new int[2];
+        surfaceHost.getLocationOnScreen(hostLoc);
+        return new float[] {rawX - hostLoc[0] + mGlassOriginLeft, rawY - hostLoc[1] + mGlassOriginTop};
+    }
+
+    /**
+     * The fade, writing the light into the dock's program and rebuilding its effect once per step,
+     * as the key lens does; gated as every glass touch light is ({@link #isGlassTouchLightAllowed}).
+     */
+    @NonNull
+    private com.termux.app.chrome.DockTouchFade dockTouchFade() {
+        if (mDockTouchFade != null) return mDockTouchFade;
+        mDockTouchFade = new com.termux.app.chrome.DockTouchFade(this, getWindow().getDecorView(),
+            new com.termux.app.chrome.DockTouchFade.Sink() {
+                @Override public void light(float x, float y, float intensity) {
+                    com.termux.app.chrome.GlassRefraction.Program program = mDockRefraction;
+                    if (program == null) return;
+                    // A key's lens took the glass meanwhile: no light, and no rebuild of its effect.
+                    if (mKeyLensActive) {
+                        program.clearTouch();
+                        return;
+                    }
+                    program.setTouch(x, y, com.termux.app.chrome.GlassTouchLight.RADIUS_DP
+                        * getResources().getDisplayMetrics().density, intensity);
+                    rebuildBackdropGlassEffectForLens();
+                }
+
+                @Override public void clear() {
+                    com.termux.app.chrome.GlassRefraction.Program program = mDockRefraction;
+                    if (program == null) return;
+                    program.clearTouch();
+                    if (!mKeyLensActive) rebuildBackdropGlassEffectForLens();
+                }
+            }, this::isGlassTouchLightAllowed);
+        return mDockTouchFade;
     }
 
     /** Lazily wires the reactive glass-plank controller to the inflated dock views. */
@@ -4746,6 +5000,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
                     com.termux.app.chrome.GlassAnchor.layout(under,
                         () -> mAccessoryStackLift.px() + under.getTranslationY()));
+                backdrop.setClearFrame(glassClearFrame(state.blurRadiusDp));
             }
         }
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
@@ -4767,6 +5022,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The shared frame the under-keyboard card is drawing, for the blur cache's in-use scan. */
     @Nullable private Bitmap mUnderKeyboardBackdropBitmap;
+
+    /**
+     * Fancier Glass's edge clarity for a surface frosted at {@code blurRadiusDp}: the blur cache's
+     * clear frame ({@link com.termux.app.chrome.GlassRefraction#CLARITY_RADIUS_DP}, the same rect
+     * as the frost's), or null while the look asks for none or that blur is still in flight. The
+     * frame lands through the cache's ready pass, which rebuilds these surfaces. Read on every
+     * build, so a radius, look or wallpaper change and a cache clear restate it with the frame.
+     * The in-use scan finds it through the drawable ({@code SharedFrameDrawable.shows}).
+     */
+    @Nullable
+    private Bitmap glassClearFrame(int blurRadiusDp) {
+        if (!com.termux.app.chrome.WallpaperFrostPainter.wantsClearFrame(mFancierGlassLook,
+                blurRadiusDp)) return null;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (wallpaperFrame == null) return null;
+        Bitmap clear = mChrome.blurCache().obtain(
+            com.termux.app.chrome.GlassRefraction.CLARITY_RADIUS_DP, wallpaperFrame);
+        return clear != null && !clear.isRecycled() ? clear : null;
+    }
 
     /**
      * The dock's glass, started below a bottom status bar that kept a sheet of its own. Without
@@ -5376,13 +5650,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx,
                                        boolean ownsInnerEdge, boolean innerRim) {
+        if (surface.getId() == R.id.accessory_surface_host) {
+            mDockShapeCut = true;
+            mDockShapeCapsule = capsule;
+            mDockShapeHeightPx = surfaceHeightPx;
+        }
         if (!capsule) {
             // Docked, the dock is a slice of the one frame. The model says which of its edges
             // face the opening (the only ones that wear the rim) and what its clip is; its
             // corners are square except a screen corner it stands on.
             List<com.termux.app.place.ChromeShape.PieceId> ids = dockPieceIds(
                 ownsInnerEdge && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec()));
-            int strokeEdges = innerRim ? chromeRimEdges(
+            // The program's gathered light is the dock's edge wherever it runs; the rim under the
+            // glass would be a second one.
+            int strokeEdges = innerRim && !dockGlassDrawsEdge() ? chromeRimEdges(
                 ids.toArray(new com.termux.app.place.ChromeShape.PieceId[0]))
                 : com.termux.app.chrome.ChromeEdgeRule.NONE;
             surface.setBackground(mChrome.glass().rimUnderGlass(0f, strokeEdges));
@@ -5406,9 +5687,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        // Barely-there containing stroke; the AGSL shader draws the dark glass contour + bevel at the
-        // edge, so a visible outline here would read as a drawn border ("inside rim") over the glass.
-        Drawable outline = mChrome.glass().rimUnderGlass(resolveDockCapsuleCornerRadiusPx(surfaceHeightPx));
+        // Barely-there containing stroke; where the program runs, its gathered light is the edge
+        // and the capsule keeps only the outline it clips to, or the two would read as a double
+        // line ("inside rim") over the glass.
+        float capsuleRadiusPx = resolveDockCapsuleCornerRadiusPx(surfaceHeightPx);
+        Drawable outline = dockGlassDrawsEdge()
+            ? mChrome.glass().outlineOnly(capsuleRadiusPx)
+            : mChrome.glass().rimUnderGlass(capsuleRadiusPx);
         surface.setBackground(outline);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             surface.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
@@ -5645,6 +5930,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && !frameStandsDown();
     }
 
+    /**
+     * Whether the dock's own glass draws its outline: its backdrop is up with a refraction effect
+     * installed ({@link #buildGlassRefractionEffect}), whose gathered light is then the dock's
+     * edge, so the host lays no {@code rimUnderGlass} under it. What is installed, not the rule
+     * that would install it: a backdrop gone while a blur is in flight, an effect that threw or a
+     * driver that refused the program all leave the rim.
+     */
+    private boolean dockGlassDrawsEdge() {
+        return mDockProgramEdge;
+    }
+
+    /**
+     * Records whether the dock's backdrop now draws its edge, and re-cuts the host's shape when
+     * that moved: the shape is set early in a pass, before the effect is built, so the pass that
+     * installs or drops the effect re-dresses it at once rather than one pass late.
+     */
+    private void setDockProgramEdge(boolean drawsEdge) {
+        if (mDockProgramEdge == drawsEdge) return;
+        mDockProgramEdge = drawsEdge;
+        View host = findViewById(R.id.accessory_surface_host);
+        if (host != null && mDockShapeCut)
+            applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
+    }
+
+    /** The dock host's shape as last cut, so {@link #setDockProgramEdge} can re-cut it alone. */
+    private boolean mDockShapeCut;
+    private boolean mDockShapeCapsule;
+    private int mDockShapeHeightPx;
+
     private void clearAccessoryRenderEffectBackdrop() {
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         if (backdrop == null) {
@@ -5657,6 +5971,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.setVisibility(View.GONE);
         mGlassParamsValid = false; // no live backdrop shader -> key lens falls back to the bubble border
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.ACCESSORY);
+        setDockProgramEdge(false);
     }
 
     /**
@@ -6334,7 +6649,62 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * tint, built by {@link com.termux.app.chrome.GlassStack}) so the wrap-content keyboard
      * measurement is never affected by extra sibling views.
      */
+    /** Whether this surface pass asked the keyboard band about its glass. */
+    private boolean mKeyboardBandAskedThisPass;
+
+    /**
+     * True while the Look editor's Frost, Opacity or Tint thumb is down and its ticks are in
+     * flight ({@code SurfaceEditorController.Host#setGlassDragPreview}). Each tick then dresses
+     * the layers already up (their tint, opacity and grain) and nothing a tick cannot afford: no
+     * backdrop re-cut or refraction rebuild, no keyboard face sampling or palette, no full window
+     * bar refresh. The release clears it and asks for the full pass, which settles all of that once.
+     */
+    private boolean mGlassDragPreview;
+
+    /**
+     * The keyboard host's material for {@code state}, then the keys' legends re-chosen against the
+     * faces that material draws, row by row (ChromeInk#bandFaces): measured where the host wears
+     * the keyboard band's glass this pass, the theme's glass base where it does not (Solid, the
+     * joined frame, a floating card, the keyboard down).
+     */
     private void applyInAppKeyboardSurfaceState(@NonNull ChromeSpec state) {
+        mKeyboardBandAskedThisPass = false;
+        applyInAppKeyboardHostMaterial(state);
+        TermuxInAppKeyboard keyboard = mInAppKeyboard;
+        if (keyboard == null || mChrome == null) return;
+        // Mid-drag the legends keep the inks they have: re-chosen per tick, every one re-sampled
+        // the band's rows and rebuilt the palette. The release's full pass chooses them once.
+        if (mGlassDragPreview) return;
+        if (!mKeyboardBandAskedThisPass) {
+            keyboard.setGlassFaces(new int[0]);
+            return;
+        }
+        pushKeyboardGlassFaces(keyboard);
+    }
+
+    /** The keyboard band's faces and the legend tone chosen on its bare face, to the keyboard. */
+    private void pushKeyboardGlassFaces(@NonNull TermuxInAppKeyboard keyboard) {
+        com.termux.app.chrome.ChromeInk ink = mChrome.ink();
+        int[] faces = ink.bandFaces(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD);
+        keyboard.setGlassFaces(faces,
+            ink.bandTone(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD));
+    }
+
+    /**
+     * The keyboard's own blurred frame has landed after its rows were read off a stand-in (a Glass
+     * edit, a held drag's release): the faces are measured again on it and the legends re-chosen,
+     * the keyboard repainting only if an ink moved ({@link TermuxInAppKeyboard#setGlassFaces}).
+     * Only where the last pass measured the keyboard's band; the editor's live preview is this
+     * same keyboard. The veil, if it moves with them, asks for its own apply.
+     */
+    private void rejudgeKeyboardGlassFaces() {
+        TermuxInAppKeyboard keyboard = mInAppKeyboard;
+        if (keyboard == null || mChrome == null || !mKeyboardBandAskedThisPass) return;
+        if (mGlassDragPreview) return;
+        pushKeyboardGlassFaces(keyboard);
+    }
+
+    private void applyInAppKeyboardHostMaterial(@NonNull ChromeSpec state) {
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
         if (surfaceHost == null) {
             return;
@@ -6559,6 +6929,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
                     mInAppKeyboardBackdropFrameRect, mWallpaperParallax,
                     com.termux.app.chrome.GlassAnchor.layout(surfaceHost, mAccessoryStackLift));
+                backdrop.setClearFrame(glassClearFrame(blurRadiusDp));
             }
         }
         // The drawable reports no intrinsic size. This background is installed on a wrap-content
@@ -6583,10 +6954,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Asks the keyboard band (appearance-layout-editor SPEC §2) what the host's glass has to become
-     * for a letter key's label to read on its cap, and names the band for the surface to draw
-     * that veil. Measured at the host's laid-out rect, which ignores the stack's travel and the
-     * editor's scale alike; null, and no veil, before the host is laid out or the keyboard view
-     * exists. The veil lands on the next build when this one changes it.
+     * for a letter key's and a function key's label to read on their caps, and names the band for
+     * the surface to draw that veil. Measured at the host's laid-out rect, which ignores the
+     * stack's travel and the editor's scale alike; null, and no veil, before the host is laid out
+     * or the keyboard view exists. The veil lands on the next build when this one changes it.
      */
     @Nullable
     private com.termux.app.chrome.GlassBackdropCache.Band noteInAppKeyboardBand(
@@ -6598,8 +6969,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(surfaceHost, origin, new int[2]);
         Rect host = new Rect(origin[0], origin[1],
             origin[0] + surfaceHost.getWidth(), origin[1] + surfaceHost.getHeight());
-        mChrome.ink().onFixedInk(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD, host,
-            inks[0], inks[0], inks[1], com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        // The letter legend on its cap and the function legend (Ctrl, Alt, Fn) on its thinner
+        // chip, each over the row of the host where it reads worst. Asked as either tone (each
+        // side's extreme, the function legend as drawn secondary), never as the legends drawn
+        // now: the tone is chosen on the bare face and a veil bought only for that tone, so a
+        // dark legend left from a brighter face cannot buy a milky veil that keeps it dark.
+        int pale = android.graphics.Color.WHITE;
+        int dark = android.graphics.Color.BLACK;
+        mChrome.ink().onFixedInkEitherTone(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
+            host, dark, pale, inks[1],
+            com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory.secondaryOf(dark),
+            com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory.secondaryOf(pale),
+            inks[3], com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        mKeyboardBandAskedThisPass = true;
         return com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD;
     }
 
@@ -6803,11 +7185,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
+        float stripCover = dockGlassCover();
+        // Mid-drag the strip keeps the frame it shows at a moved radius, as the dock does.
         if (!mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) &&
-            mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) == stripRadiusDp &&
+            stripCover == mNavStripGlassCover &&
+            (mGlassDragPreview
+                || mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) == stripRadiusDp) &&
             mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) == usingManagedWallpaperSource &&
             mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, targetRect) &&
             backdrop.getDrawable() != null) {
+            if (mGlassDragPreview)
+                backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(
+                    mPreferences != null ? mPreferences.getAppBarOpacity() : 100));
             backdrop.setVisibility(View.VISIBLE);
             return;
         }
@@ -6836,6 +7225,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mWallpaperParallax, com.termux.app.chrome.GlassAnchor.screen(backdrop)));
         }
         backdrop.invalidate();
+        mNavStripGlassCover = stripCover;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Use the SAME AGSL glass refraction the content dock/keyboard backdrop uses (API 33+),
@@ -7010,8 +7400,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Set by the managed path when its read is in flight: draw nothing, a sync follows. */
     private boolean mManagedWallpaperPending;
 
+    /**
+     * The managed wallpaper's capture for {@code targetRect}: the geometry and the decoded file
+     * are read here, on the main thread, and the full-size draw is handed to the blur worker. It
+     * used to allocate and draw the full-size frame right here on every miss, a software draw of
+     * the whole frame per radius on the main thread.
+     */
     @Nullable
-    private Bitmap createManagedWallpaperBackdropBitmapForRect(@NonNull Rect targetRect, @NonNull View wallpaperFrame) {
+    private com.termux.app.chrome.WallpaperBlurCache.FrameCapture beginManagedWallpaperCapture(
+            @NonNull Rect targetRect) {
         File sourceFile = getManagedWallpaperExactFile();
         // The capture rect, not the decor's: with parallax the frame is as wide as the picture,
         // so the cover draw below is the whole picture at 1:1; without it, the picture's centre.
@@ -7033,42 +7430,60 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (sourceBitmap == null) {
             return null;
         }
+        final Rect target = new Rect(targetRect);
+        final Rect frame = new Rect(frameRect);
+        final float zoom = systemWallpaperRenderZoom();
+        // Lent to the worker: a new file landing (or onDestroy) clears the source on this thread,
+        // and must not recycle the picture while the worker is still drawing from it. The cache
+        // gives the loan back exactly once: after the draw, or when no job will ever draw it (the
+        // capture dropped first, its job rejected, or the worker shut down with it queued).
+        mManagedWallpaperSource.lend(sourceBitmap);
+        return com.termux.app.chrome.WallpaperBlurCache.FrameCapture.deferred(
+            () -> drawManagedWallpaperBackdrop(sourceBitmap, target, frame, zoom),
+            () -> runOnUiThread(() -> mManagedWallpaperSource.release(sourceBitmap)));
+    }
 
-        {
-            int targetWidth = Math.max(1, targetRect.width());
-            int targetHeight = Math.max(1, targetRect.height());
+    /**
+     * Any thread: the managed picture drawn into {@code targetRect} at full size, from geometry
+     * the caller read on the main thread. Null when the picture was recycled before the draw.
+     */
+    @Nullable
+    private static Bitmap drawManagedWallpaperBackdrop(@NonNull Bitmap sourceBitmap,
+                                                       @NonNull Rect targetRect,
+                                                       @NonNull Rect frameRect, float zoom) {
+        if (sourceBitmap.isRecycled()) return null;
+        int targetWidth = Math.max(1, targetRect.width());
+        int targetHeight = Math.max(1, targetRect.height());
 
-            Bitmap bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            int frameWidth = Math.max(1, frameRect.width());
-            int frameHeight = Math.max(1, frameRect.height());
-            int sourceWidth = Math.max(1, sourceBitmap.getWidth());
-            int sourceHeight = Math.max(1, sourceBitmap.getHeight());
-            float scale = Math.max((float) frameWidth / sourceWidth, (float) frameHeight / sourceHeight);
-            float drawWidth = sourceWidth * scale;
-            float drawHeight = sourceHeight * scale;
-            float translateX = frameRect.left + ((frameWidth - drawWidth) / 2f) - targetRect.left;
-            float translateY = frameRect.top + ((frameHeight - drawHeight) / 2f) - targetRect.top;
+        Bitmap bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        int frameWidth = Math.max(1, frameRect.width());
+        int frameHeight = Math.max(1, frameRect.height());
+        int sourceWidth = Math.max(1, sourceBitmap.getWidth());
+        int sourceHeight = Math.max(1, sourceBitmap.getHeight());
+        float scale = Math.max((float) frameWidth / sourceWidth, (float) frameHeight / sourceHeight);
+        float drawWidth = sourceWidth * scale;
+        float drawHeight = sourceHeight * scale;
+        float translateX = frameRect.left + ((frameWidth - drawWidth) / 2f) - targetRect.left;
+        float translateY = frameRect.top + ((frameHeight - drawHeight) / 2f) - targetRect.top;
 
-            Matrix shaderMatrix = new Matrix();
-            shaderMatrix.setScale(scale, scale);
-            shaderMatrix.postTranslate(translateX, translateY);
-            float zoom = systemWallpaperRenderZoom();
-            if (zoom != 1f) {
-                // Same render-zoom compensation as the system-drawable path, in this bitmap's
-                // local coordinates (the target rect's origin is already subtracted above).
-                shaderMatrix.postScale(zoom, zoom,
-                    frameRect.exactCenterX() - targetRect.left,
-                    frameRect.exactCenterY() - targetRect.top);
-            }
-
-            BitmapShader shader = new BitmapShader(sourceBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-            shader.setLocalMatrix(shaderMatrix);
-            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-            paint.setShader(shader);
-            canvas.drawRect(0f, 0f, targetWidth, targetHeight, paint);
-            return bitmap;
+        Matrix shaderMatrix = new Matrix();
+        shaderMatrix.setScale(scale, scale);
+        shaderMatrix.postTranslate(translateX, translateY);
+        if (zoom != 1f) {
+            // Same render-zoom compensation as the system-drawable path, in this bitmap's
+            // local coordinates (the target rect's origin is already subtracted above).
+            shaderMatrix.postScale(zoom, zoom,
+                frameRect.exactCenterX() - targetRect.left,
+                frameRect.exactCenterY() - targetRect.top);
         }
+
+        BitmapShader shader = new BitmapShader(sourceBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        shader.setLocalMatrix(shaderMatrix);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        paint.setShader(shader);
+        canvas.drawRect(0f, 0f, targetWidth, targetHeight, paint);
+        return bitmap;
     }
 
     /**
@@ -7200,18 +7615,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The blur cache's capture, split across threads: the managed source answers from its own
-     * decode (or says it is reading), and for the system wallpaper only the geometry is read here,
-     * on the main thread — the decode itself is handed back as a job for the blur worker. Reading
-     * the system wallpaper was a ~46 ms decode per miss on the main thread (Pong, 2026-09-09).
+     * The blur cache's capture, split across threads: for both sources only the geometry is read
+     * here, on the main thread — the managed source answers from its own decode (or says it is
+     * reading), and the full-size draw from it, like the system wallpaper's decode, is handed back
+     * as a job for the blur worker. Reading the system wallpaper was a ~46 ms decode per miss on
+     * the main thread (Pong, 2026-09-09).
      */
     @Nullable
     private com.termux.app.chrome.WallpaperBlurCache.FrameCapture beginWallpaperFrameCapture(
             @NonNull Rect targetRect, @NonNull View wallpaperFrame) {
         if (shouldUseManagedWallpaperBlurSource()) {
-            Bitmap managedBackdrop = createManagedWallpaperBackdropBitmapForRect(targetRect, wallpaperFrame);
-            if (managedBackdrop != null) {
-                return com.termux.app.chrome.WallpaperBlurCache.FrameCapture.ready(managedBackdrop);
+            com.termux.app.chrome.WallpaperBlurCache.FrameCapture managed =
+                beginManagedWallpaperCapture(targetRect);
+            if (managed != null) {
+                return managed;
             }
             // While the file is being read there is nothing to draw yet; the system drawable
             // would be the same picture decoded again, on this thread, for a frame about to be
@@ -7312,7 +7729,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (frame == null) {
             return false;
         }
-        if (frame == mPaneGlassFrame || frame == mWallBehindFrame) {
+        if (frame == mPaneGlassFrame || frame == mPaneGlassClearFrame || frame == mWallBehindFrame) {
             return true;   // a pane is drawing it right now; recycling it would crash its next draw
         }
         if (mWallpaperBackdropView != null && (mWallpaperBackdropView.heldFrame() == frame
@@ -7394,11 +7811,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             seamOverscanPx);
         com.termux.app.chrome.SharedFrameDrawable installed =
             com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable());
+        float dockCover = dockGlassCover();
+        // A Frost drag moves the radius every tick; the bakes are held, so a re-install would put
+        // up a stand-in and rebuild the refraction effect for nothing the eye gains. The frame
+        // up stays until the release's pass, which re-cuts at the radius the drag settled on.
         if (!mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY) &&
-            mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.ACCESSORY) == state.blurRadiusDp &&
+            dockCover == mDockGlassCover &&
+            (mGlassDragPreview
+                || mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.ACCESSORY) == state.blurRadiusDp) &&
             mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.ACCESSORY) == usingManagedWallpaperSource &&
             mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.ACCESSORY, backdropTargetRect) &&
             installed != null) {
+            // The frost filter follows Opacity live; outside a drag it is what the install set.
+            if (mGlassDragPreview)
+                backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(
+                    mPreferences != null ? mPreferences.getAppBarOpacity() : 100));
             backdrop.setVisibility(View.VISIBLE);
             return;
         }
@@ -7416,11 +7843,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 backdrop.setImageDrawable(null);
                 backdrop.setVisibility(View.GONE);
                 mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
+                setDockProgramEdge(false);
             }
             return;
         }
 
         installAccessoryBackdropFrame(backdrop, installed, frame, frameRect, state.blurRadiusDp);
+        mDockGlassCover = dockCover;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // The capsule sits inside the (horizontally overscanned) backdrop bitmap: left/right are
             // inset by the overscan, top/bottom span the full height. Hand that rect to the shader so
@@ -7462,6 +7891,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Content-aware light scatter — the frost that makes the blur read as glass, not plastic.
         backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity() : 100));
         backdrop.setVisibility(View.VISIBLE);
+        // Below Android 13 there is no effect to install, and the dock keeps its rim.
+        setDockProgramEdge(mGlassParamsValid);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, state.blurRadiusDp,
             usingManagedWallpaperSource, backdropTargetRect);
         // The keyboard-local cover is deliberately retained until this expanded surface is ready.
@@ -7526,6 +7957,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyChromeSpec(@NonNull ChromeSpec state) {
         Trace.beginSection("Chrome.applyChromeSpec");
         try {
+            followLooksGlassTheme();
             syncFancierGlassLook();
             syncFrameStandDown();
             doApplyChromeSpec(state);
@@ -7683,6 +8115,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncAzBarHosts();
         syncOffDockPlank(currentPlaceLayout());
         refreshOffDockGlass();
+        syncDockGlassInks(state.barAlpha);
 
         configureAccessoryTopEdgeFx(true, state.barAlpha);
         applyDecorNavBarSurfaceState(state);
@@ -8511,6 +8944,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mKeybindHintPresenter.hideNow(false);
         if (mStatsController != null) mStatsController.stop();
         if (mAiIndicatorController != null) mAiIndicatorController.stop();
+        PrivilegedBackendManager.getInstance().removeAvailabilityListener(mPrivilegedAvailabilityListener);
         // Sampling stops here, so the smoothed history stops meaning anything. Dropped now rather
         // than aged out on resume: the first reading the user sees again has to be the true one.
         mBarCpuSmoother.reset();
@@ -8621,6 +9055,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
+        if (sLiveActivity != null && sLiveActivity.get() == this) sLiveActivity = null;
         // First: what follows (the keyboard's teardown among it) must not book passes or holds
         // on the main looper for a window that is going away.
         mGeometry.dispose();
@@ -8664,6 +9099,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // here hands the server's announcement on to the next activity's controller, and stops
         // this activity's view chain being pinned by the Binder for as long as the server runs.
         if (mX11Display != null) {
+            // Letting go of the server reads as "not running" to the listener, whose answer is
+            // for a display that stopped: DISPLAY cleared for new sessions, the window list
+            // emptied, the page shown empty, a pending stop's teardown run. None of that is true
+            // when only this activity is going (a configuration relaunch, or any destroy): the
+            // server and its clients keep running, and the next activity's controller takes the
+            // kept announcement and attaches its page to them.
+            mX11Display.setListener(null);
             mX11Display.destroy();
             mX11Display = null;
         }
@@ -8680,8 +9122,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDisplayStop = null;
         }
         if (mLinuxApps != null) {
-            mLinuxApps.destroy();
+            // Only this activity's loan ends. The runner keeps the desktop on the display, the
+            // launches still settling and the window manager it owes, for the next activity: a
+            // relaunch (new wallpaper colours) must not stop, restart or forget any of them.
+            if (mLinuxAppsHost != null) mLinuxApps.detach(mLinuxAppsHost);
             mLinuxApps = null;
+            mLinuxAppsHost = null;
         }
         // Only this instance's hook: a second instance may already have installed its own.
         if (mLinuxAppRunnerHook != null) {
@@ -8720,6 +9166,83 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Bundle paneLayout = savePaneLayoutState();
         if (paneLayout != null) savedInstanceState.putBundle(ARG_PANE_LAYOUT, paneLayout);
         if (mPaneWallController != null) mPaneWallController.onSaveInstanceState(savedInstanceState);
+        saveAppearanceRelaunch(savedInstanceState);
+    }
+
+    /**
+     * Hands the Appearance surface over to the activity a configuration relaunch builds next, if
+     * it is open; else withdraws this activity's earlier handover. Every save does this, the one
+     * at a stop included: a relaunch of a stopped activity (new wallpaper colours applied at
+     * screen off) reuses the state saved at the stop.
+     */
+    private void saveAppearanceRelaunch(@NonNull Bundle out) {
+        com.termux.app.surfaces.AppearanceSurfaceController.Relaunch carried = mAppearance.carry();
+        if (carried == null) {
+            if (mAppearanceRelaunchId != 0 && mAppearanceRelaunchId == sAppearanceRelaunchId) {
+                sAppearanceRelaunch = null;
+                sAppearanceRelaunchId = 0;
+            }
+            mAppearanceRelaunchId = 0;
+            return;
+        }
+        int id = ++sAppearanceRelaunchSeq;
+        sAppearanceRelaunch = carried;
+        sAppearanceRelaunchId = id;
+        mAppearanceRelaunchId = id;
+        out.putInt(ARG_APPEARANCE_RELAUNCH, id);
+        out.putBoolean(ARG_APPEARANCE_FROM_SETTINGS, mAppearanceFromSettings);
+    }
+
+    /** Takes the handover the saved state names, when this process still holds it. */
+    private void takeAppearanceRelaunch(@NonNull Bundle saved) {
+        int id = saved.getInt(ARG_APPEARANCE_RELAUNCH, 0);
+        if (id == 0 || id != sAppearanceRelaunchId)
+            return;
+        mPendingAppearanceRelaunch = sAppearanceRelaunch;
+        mPendingAppearanceFromSettings = saved.getBoolean(ARG_APPEARANCE_FROM_SETTINGS, false);
+        sAppearanceRelaunch = null;
+        sAppearanceRelaunchId = 0;
+    }
+
+    /**
+     * The surface a relaunch interrupted opens again where it stood, its editor session
+     * continued, once the wall is built: on the first resume, since a stopped window is never
+     * laid out for the editor's frame.
+     */
+    private void reopenAppearanceAfterRelaunch() {
+        final com.termux.app.surfaces.AppearanceSurfaceController.Relaunch carried =
+            mPendingAppearanceRelaunch;
+        if (carried == null)
+            return;
+        mPendingAppearanceRelaunch = null;
+        final boolean fromSettings = mPendingAppearanceFromSettings;
+        View root = findViewById(R.id.activity_termux_root_view);
+        Runnable open = () -> {
+            if (isFinishing() || isDestroyed() || mAppearance.isOpen())
+                return;
+            if (mAppearance.reopen(carried))
+                mAppearanceFromSettings = fromSettings;
+        };
+        if (root != null) root.post(open);
+        else open.run();
+    }
+
+    /**
+     * Restores the window's view states, but skips them rather than crash when one does not fit
+     * the view now holding its id (#83: a Bundle handed to a plain view after a relaunch).
+     *
+     * <p>Activity's own implementation restores only the view hierarchy; this activity's saved
+     * values are read in onCreate and are unaffected. A skip loses the views' saved state from the
+     * failing view on, which is far cheaper than the crash it replaces.
+     */
+    @Override
+    protected void onRestoreInstanceState(@NonNull Bundle savedInstanceState) {
+        try {
+            super.onRestoreInstanceState(savedInstanceState);
+        } catch (IllegalArgumentException | ClassCastException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG,
+                "Skipped restoring the view hierarchy state: a saved state did not fit its view", e);
+        }
     }
 
     @Override
@@ -8826,6 +9349,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onServiceConnected(ComponentName componentName, IBinder service) {
         Logger.logDebug(LOG_TAG, "onServiceConnected");
         mTermuxService = ((TermuxService.LocalBinder) service).service;
+        // Anything the Linux app runner owed while no activity could run scripts (a desktop that
+        // ended mid-relaunch wants its window manager back) runs now that this one can.
+        if (mLinuxApps != null) mLinuxApps.onHostReady();
         restorePaneLayoutState();
         ensureWindowsForServiceSessions();
         rebuildDrawerSessions();
@@ -9987,6 +10513,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * paying that once per frame was most of the editor's drag jank. The apps-per-page slider is
      * the one control whose preview really needs the row rebuilt, so a changed count still does.
      */
+    /**
+     * The Look editor's glass pass for one tick of a Frost, Opacity or Tint drag
+     * ({@link #mGlassDragPreview}): the dock's styling and one chrome apply, run now, in the
+     * frame's animation phase the editor's pass runs in, so the frame's own layout takes it.
+     * Left to the full pass the release asks for: marking the backdrops for a re-cut (the bakes
+     * are held, so a re-cut is a stand-in and a new refraction effect per tick) and the
+     * post-layout accessory render, a second whole apply for crops no tick moves.
+     */
+    private void applyGlassDragPreview() {
+        if (mChrome == null) return;
+        Trace.beginSection("Editor.glassDragTick");
+        try {
+            applySuggestionBarSurfaceStyling();
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+            mChrome.commitNow();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
     private void applySuggestionBarSurfaceStyling() {
         if (mSuggestionBarView == null || mPreferences == null) {
             return;
@@ -10936,6 +11482,54 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
+    /** The extra keys' label ink as last chosen on the dock's face; transparent before. */
+    @androidx.annotation.ColorInt private int mExtraKeysInk = Color.TRANSPARENT;
+    @NonNull private final Rect mExtraKeysInkRect = new Rect();
+    @NonNull private final int[] mExtraKeysInkLocation = new int[2];
+
+    /**
+     * On the pass that re-glazes the dock: the A&ndash;Z strip and the extra keys are told the
+     * glass they stand on (the dock's material at {@code dockOpacity}, its Tint and hue), so
+     * their ink is chosen on that face rather than on the wallpaper or the theme. The letters are
+     * re-synced only when their face moved; the extra keys re-chosen only when their ink changed.
+     */
+    private void syncDockGlassInks(float dockOpacity) {
+        if (mChrome == null) return;
+        // The pull tab keeps a floor under the dock's opacity (refreshAzTabGlass); every other
+        // home of the letters (the dock, the plank, their own capsule) wears the dock's own.
+        float azOpacity = mAzScrubRowView != null && mAzScrubRowView == mAzTabRowView
+            ? Math.max(dockOpacity, AzTabPolicy.MIN_GLASS_OPACITY) : dockOpacity;
+        if (mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.AZ_STRIP, azOpacity))
+            syncAzScrubLettersAndTint();
+        syncExtraKeysInk(dockOpacity);
+    }
+
+    /**
+     * The extra keys' labels on the dock's face: the theme's on-surface colour where it reads
+     * there, else the nearest tone of it that does on the other side (GlassInk#faceInk). A key
+     * repaints only when its ink changed.
+     */
+    private void syncExtraKeysInk(float dockOpacity) {
+        ExtraKeysView keys = mExtraKeysView;
+        if (keys == null || keys.getWidth() <= 0 || keys.getHeight() <= 0) return;
+        mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
+        keys.getLocationOnScreen(mExtraKeysInkLocation);
+        mExtraKeysInkRect.set(mExtraKeysInkLocation[0], mExtraKeysInkLocation[1],
+            mExtraKeysInkLocation[0] + keys.getWidth(), mExtraKeysInkLocation[1] + keys.getHeight());
+        int face = mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mExtraKeysInkRect);
+        int theme = ThemeUtils.getSystemAttrColor(keys.getContext(),
+            ExtraKeysView.ATTR_BUTTON_TEXT_COLOR, ExtraKeysView.DEFAULT_BUTTON_TEXT_COLOR);
+        int ink = GlassInk.faceInk(face, theme,
+            mChrome.ink().target(OnGlass.TARGET_BODY_TEXT));
+        mExtraKeysInk = ink;
+        // Each page compared on its own: a page rebuilt since (its theme colour back) is caught.
+        for (ExtraKeysView view : mExtraKeysViews) {
+            if (view == null || view.getButtonTextColor() == ink) continue;
+            view.setButtonTextColor(ink);
+            view.refreshKeyStyles();
+        }
+    }
+
     /**
      * What the launcher's own painted things are standing on, measured: the A&ndash;Z letters, the
      * gesture orb, the edge bloom, the page ticks, the drawer's A&ndash;Z rope and the app-launch
@@ -11460,6 +12054,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.isRoundedDockStyle();
         }
 
+        @Override public boolean isAppsRowAlone() {
+            return TermuxActivity.this.isAppsRowAlone(currentPlaceLayout());
+        }
+
         @Override public void setTopStatusBarExpandedForEditor(boolean expanded, boolean animate) {
             TermuxActivity.this.setTopStatusBarExpandedForEditor(expanded, animate);
         }
@@ -11543,11 +12141,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void refreshTerminalWindowBar() {
-            TermuxActivity.this.refreshTerminalWindowBar();
+            if (mGlassDragPreview) refreshTerminalWindowBarGlass();
+            else TermuxActivity.this.refreshTerminalWindowBar();
         }
 
         @Override public void applyTerminalMotionLook() {
             TermuxActivity.this.applyTrailStyleAndRetroEffect();
+            TermuxActivity.this.applyCursorTrailEnabledToPanes();
         }
 
         @Override public void refreshTerminalPalette() {
@@ -11564,6 +12164,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void applyGlassPreview() {
+            if (mGlassDragPreview) {
+                applyGlassDragPreview();
+                return;
+            }
             // A radius the editor settled on is simply a new key in the blur cache: obtain() fills
             // it in the background without touching the radii already resident, so releasing a
             // blur slider re-blurs only the one radius that moved rather than every surface's.
@@ -11572,6 +12176,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // rebuilds the dock's whole app row.
             applySuggestionBarSurfaceStyling();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        }
+
+        @Override public void setGlassDragPreview(boolean light) {
+            mGlassDragPreview = light;
+        }
+
+        @Override public void holdGlassFrameBakes(boolean held) {
+            if (mChrome != null) mChrome.blurCache().holdFrameBakes(held);
+        }
+
+        @Override public void retainGlassCapture(boolean retain) {
+            if (mChrome != null) mChrome.blurCache().retainCapture(retain);
+        }
+
+        @Override public boolean isGlassRefractionActive() {
+            return currentFancierGlassLook() != null;
         }
 
         @Override @Nullable public int[] terminalFrameRectInRoot() {
@@ -14485,8 +15105,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        ChromePolicy.applyWallpaperModePreferences(preferences, enabled);
-        requestTermuxActivityStylingOnNextResume(context, true);
+        // Recreate only when the mode switched: the window theme changes with it. A wallpaper
+        // applied while the mode is already on (the picker's Apply, `launcherctl wallpaper set`)
+        // re-styles in place; a recreate there closed an open Look editor and dropped a running
+        // X11 display pane.
+        boolean modeSwitched = ChromePolicy.applyWallpaperModePreferences(preferences, enabled);
+        requestTermuxActivityStylingOnNextResume(context, modeSwitched);
     }
 
 
@@ -14759,6 +15383,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return com.termux.app.chrome.GlassMotion.of(mPreferences);
         }
 
+        @Override public boolean glassTouchLightAllowed() {
+            return isGlassTouchLightAllowed();
+        }
+
         @NonNull @Override public Context context() {
             return TermuxActivity.this;
         }
@@ -14812,6 +15440,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isReducedMotionEnabled() {
             return TermuxActivity.this.isReducedMotionEnabled();
         }
+    }
+
+    /**
+     * Whether a finger on glass may light it ({@link com.termux.app.chrome.GlassTouchLight}): a
+     * Fancier Glass motion, so only while the look is on, and stopped by lazy mode and battery
+     * saver as every other one is (SPEC §3). Reduced motion and the system's animator setting are
+     * the light's own to ask.
+     */
+    private boolean isGlassTouchLightAllowed() {
+        if (mFancierGlassLook == null || isLazyModeEnabled()) return false;
+        android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
+        return power == null || !power.isPowerSaveMode();
     }
 
     /** Guarded on the field, not the lazy accessor: asking must not build a plane. */
@@ -15222,6 +15862,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
         registry.register(this::onHelpBackPressed);
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            // The dictation card floats over every other surface, so its editor is innermost.
+            @Override public boolean onBack() {
+                // Back keeps the edit, as Enter does; only the card's × and swipe discard.
+                if (mVoiceCardEdit == null || !mVoiceCardEdit.isActive()) return false;
+                mVoiceCardEdit.end();
+                return true;
+            }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return mVoiceCardEdit != null && mVoiceCardEdit.handleKeyDown(keyCode, event);
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                return mVoiceCardEdit != null && mVoiceCardEdit.handleCodePoint(codePoint, ctrlDown);
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                endVoiceEdit();
+            }
+        });
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
                 // Closing the chip discards the draft, unlike a tap outside.
@@ -16059,8 +16717,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             requestVoiceInputMicrophone();
             return;
         }
-        String language = resolveVoiceLanguage(model);
-        VoiceInputSession.Config config = new VoiceInputSession.Config(modelId, language,
+        VoiceLanguage.Choice language = resolveVoiceLanguage(model);
+        VoiceInputSession.Config config = new VoiceInputSession.Config(modelId, language.forced, language.hint,
             mPreferences.getInAppKeyboardVoicePauseMs(), windowSeconds,
             mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs(),
             mPreferences.isInAppKeyboardVoiceSoundsEnabled(),
@@ -16075,14 +16733,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             launchVoiceTyping(false);
             return;
         }
-        // Text still waiting in the panel is carried on from rather than lost, a cleanup still
-        // running on it included (the new dictation's pass covers the whole text); a pill that is
-        // only saying what became of used text gives way.
+        // Text still waiting in the panel is carried on from rather than lost; a pill that is
+        // only saying what became of used text gives way. Waiting text that is a cleanup or an
+        // edit is final and is not cleaned again; text as heard is, and a cleanup still running on
+        // it hands over what it had cleaned. An edit still open is kept first, so the new
+        // dictation carries on from it.
+        endVoiceEdit();
         String base = mVoiceDictation.carryOver();
+        boolean baseFinal = !base.trim().equals(mVoiceDictation.raw().trim());
+        VoiceSessionCleanup previous = null;
         if (base.isEmpty()) {
             closeVoicePill();
         } else {
-            VoiceSessionCleanup previous = mVoiceCleanup;
+            previous = mVoiceCleanup;
             mVoiceCleanup = null;
             if (previous != null) previous.cancel();
             getWindow().getDecorView().removeCallbacks(mVoicePillAutoClose);
@@ -16090,15 +16753,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mVoiceInput = session;
         mVoiceTiedToKeyboard = fromKeyboard;
         mVoiceDictation.start(base);
-        // Phrases collect as heard; with cleanup on, the chat model resolves and loads on its own
-        // thread while the user speaks, and one pass cleans the whole dictation at the end. With
-        // no Gemma installed that pass hands the raw text back and nothing changes.
+        // Phrases collect as heard; with cleanup on, the chat model resolves on its own thread. A
+        // model already resident is warmed now and cleans what was said so far at phrase pauses
+        // when it is quick enough; a cold one loads only once the session ends (a cold GPU load
+        // while the user spoke froze the screen). Either way the rest is cleaned at the end. With
+        // no Gemma installed the passes hand the raw text back and nothing changes.
         if (mPreferences.isInAppKeyboardVoicePolishEnabled()) {
-            VoiceTextPolisher polisher = new LocalTaiVoiceTextPolisher(this,
-                mPreferences.getInAppKeyboardVoicePolishLevel());
-            VoiceSessionCleanup cleanup = new VoiceSessionCleanup(polisher);
+            String level = mPreferences.getInAppKeyboardVoicePolishLevel();
+            VoiceSessionCleanup cleanup = new VoiceSessionCleanup(new LocalTaiVoiceTextPolisher(this, level), level);
+            cleanup.carryOn(base, baseFinal, previous);
+            // A language the setting forces (or an English-only model) is certain; otherwise the
+            // speech model's own guess arrives later (onSpeechLanguage), and the keyboard's or the
+            // phone's language is assumed only for text that reads as no language in particular.
+            cleanup.setLanguageHint(language.forced != null ? language.forced
+                : com.termux.ai.TaiSpeechModels.isEnglishOnly(model) ? "en" : null);
+            cleanup.setLanguageFallback(VoiceLanguage.resolve(mPreferences.getInAppKeyboardVoiceLanguage(),
+                mInAppKeyboard == null ? null : mInAppKeyboard.getActiveTextLayoutId(), userLocale()).code);
             mVoiceCleanup = cleanup;
-            cleanup.warm(this::refreshVoiceWarmUp);
+            cleanup.warmIfResident(this::refreshVoiceWarmUp);
         }
     }
 
@@ -16127,13 +16799,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The language token for a multilingual graph, or null for an English-only one. Both one-time
-     * notices live here: a layout and locale Whisper does not know (English is used), and a
-     * non-English choice against an {@code .en} model (the choice is ignored).
+     * What a dictation sends the speech model: the setting's language forced on a multilingual
+     * Whisper graph, or with Auto no language and the layout's (then the locale's) as the hint
+     * the graph falls back to while it is not sure what it hears; nothing for an English-only
+     * graph or Parakeet, which decide alone. Both one-time notices live here: a setting Whisper
+     * does not know (English is used), and a non-English choice against an {@code .en} model (the
+     * choice is ignored).
      */
-    @Nullable
-    private String resolveVoiceLanguage(@NonNull com.termux.ai.TaiModelSpec model) {
+    @NonNull
+    private VoiceLanguage.Choice resolveVoiceLanguage(@NonNull com.termux.ai.TaiModelSpec model) {
+        mVoiceSpokenLanguage = null;
         String setting = mPreferences.getInAppKeyboardVoiceLanguage();
+        if (com.termux.ai.TaiSpeechModels.isParakeet(model.id, model.localPath)) return VoiceLanguage.Choice.NONE;
         boolean englishOnly = com.termux.ai.TaiSpeechModels.isEnglishOnly(model);
         if (englishOnly) {
             if (!VoiceLanguage.AUTO.equals(setting) && !VoiceLanguage.FALLBACK.equals(setting)
@@ -16142,17 +16819,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 AppNotice.show(this, getString(R.string.voice_input_english_only_model,
                     new java.util.Locale(setting).getDisplayLanguage()), true);
             }
-            return null;
+            return VoiceLanguage.Choice.NONE;
         }
         String layoutId = mInAppKeyboard == null ? null : mInAppKeyboard.getActiveTextLayoutId();
-        java.util.Locale system = getResources().getConfiguration().getLocales().isEmpty()
-            ? java.util.Locale.getDefault() : getResources().getConfiguration().getLocales().get(0);
-        VoiceLanguage.Resolution resolution = VoiceLanguage.resolve(setting, layoutId, system);
-        if (resolution.fallback && !mVoiceLanguageFallbackNoticed) {
+        VoiceLanguage.Resolution resolution = VoiceLanguage.resolve(setting, layoutId, userLocale());
+        // Auto listens, so an unknown layout only means an English hint, not English forced.
+        if (resolution.fallback && resolution.explicit && !mVoiceLanguageFallbackNoticed) {
             mVoiceLanguageFallbackNoticed = true;
             AppNotice.show(this, R.string.voice_input_language_fallback, false);
         }
-        return resolution.code;
+        return VoiceLanguage.Choice.forWhisper(resolution);
+    }
+
+    @NonNull
+    private java.util.Locale userLocale() {
+        return getResources().getConfiguration().getLocales().isEmpty()
+            ? java.util.Locale.getDefault() : getResources().getConfiguration().getLocales().get(0);
     }
 
     private void requestVoiceInputMicrophone() {
@@ -16207,7 +16889,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // right, under the status bar and the top bars, the same on Home, Terminal and Display.
         View panes = findViewById(R.id.terminal_surface_host);
         if (panes == null) return;
-        if (mVoiceIndicator == null) mVoiceIndicator = new VoiceListeningIndicator(this, panes, mVoicePillPlace);
+        if (mVoiceIndicator == null) {
+            mVoiceIndicator = new VoiceListeningIndicator(this, panes, mVoicePillPlace);
+            mVoiceIndicator.setTypingKeyboardBounds(out ->
+                mInAppKeyboard != null && mInAppKeyboard.getKeyboardRectOnScreen(out));
+        }
         mVoiceIndicator.show(mVoicePillCallbacks, mVoiceCleanup != null, mVoiceDictation.raw());
         refreshVoiceWarmUp();
         // Talking is not touching, so the phone's screen timeout would dim and then lock mid-sentence.
@@ -16251,6 +16937,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * changes. No-op when it is down.
      */
     private void closeVoicePill() {
+        // The editor goes with the text, and gives the keyboard's typing back first.
+        if (mVoiceCardEdit != null) mVoiceCardEdit.abandon();
         VoiceSessionCleanup cleanup = mVoiceCleanup;
         mVoiceCleanup = null;
         if (cleanup != null) cleanup.cancel();
@@ -16282,23 +16970,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * pressed while listening. None of them ever erases or retypes anything in the terminal.
      */
     private final VoiceListeningIndicator.Callbacks mVoicePillCallbacks = new VoiceListeningIndicator.Callbacks() {
+        // Every button ends an edit of the text first, kept, and with it the editor's claim on
+        // the keyboard's typing; the × and the swipe end it unkept with the text.
+
         @Override
         public void onPause() {
+            endVoiceEdit();
             endVoiceInput(VoiceInputSession.EndReason.USER);
         }
 
         @Override
         public void onResume() {
+            endVoiceEdit();
             resumeVoiceDictation();
         }
 
         @Override
         public void onClose() {
+            if (mVoiceCardEdit != null) mVoiceCardEdit.abandon();
             discardVoiceDictation();
         }
 
         @Override
+        public void onTextTapped(int shownOffset) {
+            voiceCardEdit().onTextTapped(shownOffset);
+        }
+
+        @Override
         public void onUndo() {
+            endVoiceEdit();
             if (!mVoiceDictation.toggleUndo()) return;
             if (mVoiceIndicator != null) mVoiceIndicator.setUndone(mVoiceDictation.isUndone());
         }
@@ -16345,6 +17045,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * can.
      */
     private void useVoiceDictation(@NonNull VoiceDictation.Use use) {
+        // Kept, and the keyboard's slot handed back, before anything is typed: ✓ must never type
+        // into the card's own editor.
+        endVoiceEdit();
         if (mVoiceDictation.press(use)) {
             carryOutVoiceUse(use, mVoiceDictation.result(), false);
             return;
@@ -16389,16 +17092,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Types {@code text} once where the keyboard would type right now on the place on screen, and
-     * never with an Enter (the text has no line breaks, {@link VoiceDictation}): first whatever
-     * has claimed the launcher keyboard's typing — the palette, the drawer's search, a rename, a
-     * sheet, or on the Display place the display itself; then, on the Display place without a
-     * launcher keyboard, the display through the same bridge; then a focused text field of the
-     * launcher's own (a widget's editor, typed into by the phone's keyboard); and on the Terminal
-     * place the shell in front. Home has no shell in front of it and a display with no server has
+     * never with an Enter. The text may hold line breaks, a Polished cleanup's paragraphs and list
+     * items ({@link VoiceTextSanitizer#cleanLines}): the shell in front gets them in one bracketed
+     * paste when its program takes that and on one line otherwise ({@link DictationMarks#type}), a
+     * multi-line text field gets them as they are, and everywhere else a line break could run
+     * something, so the text goes in on one line ({@link VoiceTextSanitizer#oneLine}). In order:
+     * first whatever has claimed the launcher keyboard's typing — the palette, the drawer's
+     * search, a rename, a sheet, or on the Display place the display itself; then, on the Display
+     * place without a launcher keyboard, the display through the same bridge; then a focused text
+     * field of the launcher's own (a widget's editor, typed into by the phone's keyboard); and on
+     * the Terminal place the shell in front. Home has no shell in front of it and a display with no server has
      * nobody listening, so false there, and the caller copies instead.
      */
     private boolean typeVoiceText(@NonNull String text) {
-        juloo.keyboard2.KeyValue value = juloo.keyboard2.KeyValue.makeStringKey(text);
+        String oneLine = VoiceTextSanitizer.oneLine(text);
+        juloo.keyboard2.KeyValue value = juloo.keyboard2.KeyValue.makeStringKey(oneLine);
         if (offerToInAppKeyboardInterceptor(value, false, false, false)) return true;
         com.termux.app.wall.PaneWallPage page = currentWallPage();
         if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
@@ -16413,7 +17121,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (editable != null) {
                 int start = Math.max(0, Math.min(field.getSelectionStart(), field.getSelectionEnd()));
                 int end = Math.max(start, Math.max(field.getSelectionStart(), field.getSelectionEnd()));
-                editable.replace(start, end, text);
+                boolean multiLine = (field.getInputType() & android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0;
+                editable.replace(start, end, multiLine ? text : oneLine);
                 return true;
             }
         }
@@ -16424,17 +17133,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
-    /** One transcribed phrase into the panel, as heard; nothing reaches the terminal. */
+    /**
+     * One transcribed phrase into the panel, as heard; nothing reaches the terminal. The cleanup
+     * may clean what was said so far in the background, shown only once the dictation ends.
+     */
     private void appendVoicePhrase(@NonNull String transcript) {
         String piece = mVoiceDictation.append(transcript);
-        if (!piece.isEmpty() && mVoiceIndicator != null) mVoiceIndicator.appendTranscript(piece);
+        if (piece.isEmpty()) return;
+        VoiceSessionCleanup cleanup = mVoiceCleanup;
+        VoiceInputSession session = mVoiceInput;
+        if (cleanup != null) {
+            cleanup.onPhrase(mVoiceDictation.raw(), session != null && session.isTranscribing(),
+                mVoiceDictation.isByHand());
+        }
+        // While the text is open in the editor the phrase joins the draft's end instead.
+        if (mVoiceCardEdit != null && mVoiceCardEdit.onPhrase(piece)) return;
+        if (mVoiceIndicator != null) mVoiceIndicator.appendTranscript(piece);
     }
 
     /**
      * The microphone is released and every phrase delivered. Nothing heard closes the pill; a
      * dictated command is written as one ({@link VoiceCommandFormatter}, no model, cleanup on or
-     * off); with cleanup on and something worth cleaning, the one pass runs; otherwise the text
-     * waits as heard.
+     * off); with cleanup on and something worth cleaning, what the passes during the dictation
+     * have not cleaned is cleaned now; otherwise the text waits as heard.
      */
     private void finishVoiceSession(@NonNull VoiceInputSession.EndReason reason) {
         mVoiceDictation.onStopped();
@@ -16446,6 +17167,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         VoiceSessionCleanup cleanup = mVoiceCleanup;
+        if (mVoiceDictation.isByHand()) {
+            // The user has edited the text: neither the formatter nor the model may rewrite it.
+            mVoiceCleanup = null;
+            if (cleanup != null) cleanup.cancel();
+            indicator.showAsHeard(R.string.voice_input_ready);
+            settleVoiceDictation(raw, false);
+            if (mVoiceCardEdit != null) mVoiceCardEdit.onSettled();
+            return;
+        }
         String command = VoiceCommandFormatter.format(raw);
         if (command != null) {
             // The formatter's alone: the model is never sent a command (skipReason "command").
@@ -16466,7 +17196,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (cleanup != null && cleanable) {
             indicator.setCleaningUp();
             cleanup.run(raw, (cleanedRaw, result) -> onVoiceCleaned(cleanup, cleanedRaw, result));
-            cleanup.close();
             return;
         }
         mVoiceCleanup = null;
@@ -16476,8 +17205,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The one pass has landed. Anything but a real change keeps the text as heard; a change shows
-     * with its words marked. Either way the text now waits for the panel's buttons. A pass that
+     * The cleanup has landed, the whole text at once. Anything but a real change keeps the text
+     * as heard; a change shows with its words marked. Either way the text now waits for the panel's buttons. A pass that
      * is no longer the dictation's own — a resume or a discard replaced it, or the text moved on
      * from what it cleaned — is dropped, so an older version never comes back over the panel.
      */
@@ -16489,7 +17218,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (indicator == null || !indicator.isShowing()) return;
         if (mVoiceDictation.phase() != VoiceDictation.Phase.FINISHING
             || !raw.trim().equals(mVoiceDictation.raw().trim())) return;
-        String cleaned = result.isPolished() ? VoiceTextSanitizer.clean(result.text) : "";
+        // A Polished pass's paragraphs and list items keep their line breaks.
+        String cleaned = result.isPolished() ? VoiceTextSanitizer.cleanLines(result.text) : "";
         if (cleaned.isEmpty() || cleaned.equals(raw.trim())) {
             indicator.showAsHeard(R.string.voice_input_kept_as_heard);
             settleVoiceDictation(raw.trim(), false);
@@ -16504,7 +17234,113 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The screen stays on while the text waits, until the idle release lets it sleep.
         holdVoiceScreen();
         VoiceDictation.Use early = cleaned ? mVoiceDictation.onCleaned(text) : mVoiceDictation.onSettled(text);
-        if (early != null) carryOutVoiceUse(early, text, cleaned);
+        // The dictation's result, not text: an edit kept before the text settled is what is used.
+        if (early != null) carryOutVoiceUse(early, mVoiceDictation.result(), cleaned);
+    }
+
+    /** Ends an edit of the dictation card's text, keeping it. No-op when none is open. */
+    private void endVoiceEdit() {
+        if (mVoiceCardEdit != null) mVoiceCardEdit.end();
+    }
+
+    @NonNull
+    private VoiceCardEdit voiceCardEdit() {
+        if (mVoiceCardEdit == null) {
+            mVoiceCardEdit = new VoiceCardEdit(mVoiceDictation, new VoiceCardEditHost(),
+                ClipboardText.forContext(this), android.view.ViewConfiguration.get(this).getScaledTouchSlop());
+        }
+        return mVoiceCardEdit;
+    }
+
+    /** The activity's half of editing the dictation card's text: the microphone, the cleanup, the keyboards. */
+    private final class VoiceCardEditHost implements VoiceCardEdit.Host {
+        @Nullable
+        @Override
+        public VoiceCardEdit.Card card() {
+            VoiceListeningIndicator indicator = mVoiceIndicator;
+            return indicator != null && indicator.isShowing() ? indicator : null;
+        }
+
+        @Override
+        public void stopListening() {
+            VoiceInputSession session = mVoiceInput;
+            if (session != null && !session.isStopRequested()) session.stop(VoiceInputSession.EndReason.USER);
+        }
+
+        @Override
+        public void dropCleanup() {
+            VoiceSessionCleanup cleanup = mVoiceCleanup;
+            mVoiceCleanup = null;
+            if (cleanup != null) cleanup.cancel();
+            refreshVoiceWarmUp();
+            VoiceListeningIndicator indicator = mVoiceIndicator;
+            // The session had ended and only the cleanup was left: nothing else settles the text.
+            if (mVoiceInput == null && mVoiceDictation.phase() == VoiceDictation.Phase.FINISHING
+                && indicator != null && indicator.isShowing()) {
+                indicator.showAsHeard(R.string.voice_input_ready);
+                settleVoiceDictation(mVoiceDictation.raw().trim(), false);
+            }
+        }
+
+        @Override
+        public boolean ensureTypingKeyboard() {
+            return ensureInAppTypingKeyboard();
+        }
+
+        @Override
+        public void showSystemKeyboard() {
+            if (!isImeVisible()) mVoiceEditRaisedIme = true;
+            // Focus stays on the terminal view, which owns the input connection; committed text
+            // reaches the editor through the overlay channel.
+            onSystemImeRequested();
+            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, mTerminalView);
+        }
+
+        @Override
+        public void releaseSystemKeyboard() {
+            if (!mVoiceEditRaisedIme) return;
+            mVoiceEditRaisedIme = false;
+            if (getWindow() == null) return;
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView()).hide(Type.ime());
+        }
+
+        @Override
+        public void claimTyping(@Nullable com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler
+                                    .KeyValueInterceptor interceptor) {
+            if (mInAppKeyboard == null) return;
+            if (interceptor != null) {
+                mInAppKeyboard.setKeyValueInterceptor(interceptor);
+            } else {
+                restoreInAppKeyboardTypingClaim();
+            }
+        }
+
+        @Override
+        public boolean isOnTypingKeyboard(float rawX, float rawY) {
+            // The keys, and the extra-keys row beside them: both type into the edit.
+            return isPointOnInAppKeyboard(rawX, rawY)
+                || viewContainsScreenPoint(findViewById(R.id.inapp_keyboard_container), rawX, rawY)
+                || viewContainsScreenPoint(findViewById(R.id.terminal_toolbar_host), rawX, rawY);
+        }
+    }
+
+    /**
+     * Hands the in-app keyboard's interceptor slot back to whoever owns it now, after a surface
+     * that borrowed it: the palette, a sheet, the display on the Display place, or the drawer's
+     * search (which also keeps a rename's claim, {@link #setAppDrawerInterceptorActive}).
+     */
+    private void restoreInAppKeyboardTypingClaim() {
+        if (mInAppKeyboard == null) return;
+        if (isCommandPaletteOpen()) {
+            mInAppKeyboard.setKeyValueInterceptor(getCommandPaletteController());
+        } else if (isTerminalSheetOpen()) {
+            mInAppKeyboard.setKeyValueInterceptor(getTerminalSheetController());
+        } else if (currentWallPage() == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
+            && mPaneWallController != null && mPaneWallController.displayPage() != null) {
+            mInAppKeyboard.setKeyValueInterceptor(x11KeyboardBridge());
+        } else {
+            setAppDrawerInterceptorActive(isAppDrawerOpen());
+        }
     }
 
     private final VoiceInputSession.Host mVoiceInputHost = new VoiceInputSession.Host() {
@@ -16547,6 +17383,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
+        public void onSpeechLanguage(@NonNull String iso, boolean differsFromHint) {
+            mVoiceSpokenLanguage = iso;
+            if (mVoiceCleanup != null) mVoiceCleanup.setLanguageHint(iso);
+            // Named only when it was heard and is not the keyboard's or the phone's language, so
+            // someone dictating in their own language sees nothing new.
+            if (mVoiceIndicator != null) {
+                mVoiceIndicator.setSpokenLanguage(differsFromHint ? VoiceLanguage.displayName(iso, userLocale()) : null);
+            }
+        }
+
+        @Override
         public void onTranscript(@NonNull String text) {
             appendVoicePhrase(text);
         }
@@ -16582,6 +17429,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mInAppKeyboard != null) mInAppKeyboard.setVoiceTypingActive(false);
             refreshVoiceWarmUp();
             finishVoiceSession(reason);
+            // After the finish, which still reads the session's language; the card's strip moves
+            // on to the outcome, which never names it.
+            mVoiceSpokenLanguage = null;
+            if (mVoiceIndicator != null) mVoiceIndicator.setSpokenLanguage(null);
         }
     };
 
@@ -16728,6 +17579,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         while (mExtraKeysViews.size() <= page) mExtraKeysViews.add(null);
         mExtraKeysViews.set(page, extraKeysView);
         if (page == 0) mExtraKeysView = extraKeysView;
+        if (extraKeysView != null && mExtraKeysInk != Color.TRANSPARENT
+                && extraKeysView.getButtonTextColor() != mExtraKeysInk) {
+            extraKeysView.setButtonTextColor(mExtraKeysInk);
+            extraKeysView.refreshKeyStyles();
+        }
         applyExtraKeysFeedbackAccent(extraKeysView);
         applyExtraKeysPlaceEligibility(extraKeysView);
     }
@@ -17738,15 +18594,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The applier's changed listener has already told the live host; the glass
                 // still has to pick up the new still as its managed picture.
                 if (slot != com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME) return;
-                if (isFinishing() || isDestroyed()) return;
-                refreshWallpaperPicture();
-                setWallpaperModeEnabled(TermuxActivity.this, true);
-                updateWindowBackgroundForCurrentSession();
-                if (choice.photo) {
-                    View rootView = findViewById(R.id.activity_termux_root_view);
-                    if (rootView != null) rootView.post(TermuxActivity.this::applyWallpaperOffsetFixIfNeeded);
-                }
-                mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+                applyHomeWallpaperInPlace(choice.photo);
             }
 
             @Override public void onOpenLook() {
@@ -17761,6 +18609,54 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mAppearance.open(com.termux.app.surfaces.AppearanceSurfaceController.PageId.ICONS);
             }
         };
+    }
+
+    /**
+     * A new Home wallpaper has landed: wallpaper mode on and the launcher re-dressed in place (a
+     * recreate only when the mode itself switched on), the glass moved to the new picture. The
+     * picker's Apply runs it directly; {@code launcherctl wallpaper set} reaches it through
+     * {@link #onHomeWallpaperApplied}. Main thread.
+     */
+    private void applyHomeWallpaperInPlace(boolean photo) {
+        if (isFinishing() || isDestroyed()) return;
+        refreshWallpaperPicture();
+        setWallpaperModeEnabled(TermuxActivity.this, true);
+        updateWindowBackgroundForCurrentSession();
+        if (photo) {
+            View rootView = findViewById(R.id.activity_termux_root_view);
+            if (rootView != null) rootView.post(TermuxActivity.this::applyWallpaperOffsetFixIfNeeded);
+        }
+        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    /** The created launcher activity, for a wallpaper applied from outside it; null when none. */
+    @Nullable private static volatile java.lang.ref.WeakReference<TermuxActivity> sLiveActivity;
+
+    /** What {@link #onHomeWallpaperApplied} runs on the launcher on screen: the picker's apply. */
+    @VisibleForTesting
+    public static java.util.function.BiConsumer<TermuxActivity, Boolean> sHomeWallpaperInPlace =
+        TermuxActivity::applyHomeWallpaperInPlace;
+
+    /**
+     * A Home wallpaper set from outside the activity ({@code POST /v1/wallpaper}). Any thread. On
+     * screen, the launcher runs exactly what the picker's Apply runs
+     * ({@link #applyHomeWallpaperInPlace}); off screen, only the mode and the owed restyle are
+     * recorded, and the arrival re-reads the picture on its own.
+     */
+    public static void onHomeWallpaperApplied(@NonNull Context context, boolean photo) {
+        java.lang.ref.WeakReference<TermuxActivity> ref = sLiveActivity;
+        TermuxActivity live = ref == null ? null : ref.get();
+        if (live == null) {
+            setWallpaperModeEnabled(context, true);
+            return;
+        }
+        Context app = context.getApplicationContext();
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (live.mIsVisible && !live.isFinishing() && !live.isDestroyed())
+                sHomeWallpaperInPlace.accept(live, photo);
+            else
+                setWallpaperModeEnabled(app, true);
+        });
     }
 
     /** Flips wallpaper passthrough mode and reports the value it moved to. */
@@ -17782,6 +18678,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     boolean toggleCursorTrail() {
         boolean enabled = !mPreferences.isTerminalCursorTrailEnabled();
         mPreferences.setTerminalCursorTrailEnabled(enabled);
+        applyCursorTrailEnabledToPanes();
+        return enabled;
+    }
+
+    /** Re-reads the cursor trail on/off preference into every live pane view. */
+    private void applyCursorTrailEnabledToPanes() {
         if (mTermuxTerminalViewClient != null) {
             if (mPaneController != null) {
                 for (TerminalView view : mPaneController.getVisiblePaneViews()) {
@@ -17792,7 +18694,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.applyCursorTrailPolicy(getTerminalView());
             mTermuxTerminalViewClient.applyUrlUnderlinePolicy(getTerminalView());
         }
-        return enabled;
     }
 
     /** Whether the cursor trail preference is on, regardless of power save state. */
@@ -19949,16 +20850,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * {@code DISPLAY} for shells started from now on: set while a display runs and the user asked
-     * for it, cleared otherwise. Nothing already running is touched, and nothing is written to
-     * disk — Termux:X11 never set it, so it stays an opt-in.
+     * {@code DISPLAY} for shells started from now on: set while a display server runs and the
+     * user asked for it, cleared otherwise. Nothing already running is touched, and nothing is
+     * written to disk — Termux:X11 never set it, so it stays an opt-in. Whether a server runs is
+     * the process's ({@link com.termux.app.x11.X11DisplayServerState}), not this activity's
+     * controller's: a relaunched activity, before or without its controller on the server, must
+     * not read as the display having stopped. Only the opt-in is this activity's to say.
      */
     private void syncDisplayEnvironment() {
-        boolean wanted = mPreferences != null && mPreferences.isX11SetDisplayEnvEnabled()
-            && isEmbeddedDisplayRunning();
-        com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
-            .setDisplayForNewSessions(wanted
-                ? com.termux.app.x11.X11DisplayHostController.displayName() : null);
+        com.termux.app.x11.X11DisplayServerState.setDisplayEnvWanted(
+            mPreferences != null && mPreferences.isX11SetDisplayEnvEnabled());
     }
 
     /**
@@ -20015,8 +20916,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Linux apps tapped in the drawer run on the display; this is what runs them. */
     private void installLinuxAppRunner() {
         if (!com.termux.BuildConfig.X11_SERVER) return;
-        mLinuxApps = new com.termux.app.x11.X11LinuxAppRunner(this,
-            new com.termux.app.x11.X11LinuxAppRunner.Host() {
+        mLinuxAppsHost = new com.termux.app.x11.X11LinuxAppRunner.Host() {
                 @Override public boolean isDisplayEnabled() { return isX11DisplayEnabled(); }
                 @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
                 @Override public boolean isDisplayRunning() { return isEmbeddedDisplayRunning(); }
@@ -20061,7 +20961,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             (dialog, which) -> onYes.run())
                         .show();
                 }
-            });
+            };
+        // The process's runner, not a new one: one this activity's predecessor started things
+        // with keeps them, and this activity only takes over lending it a shell and a screen.
+        mLinuxApps = com.termux.app.x11.X11LinuxAppRunner.shared(this);
+        mLinuxApps.attach(mLinuxAppsHost);
         mLinuxAppRunnerHook = entry -> {
             if (mLinuxApps == null) return false;
             com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxAppForLaunch(entry);
@@ -21600,6 +22504,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         doRefreshTerminalWindowBar();
     }
 
+    /**
+     * Whether the window bar's frost is on screen drawn through the program, as the last top-pane
+     * frost pass reported it ({@code onWindowBarFrostEdge}); the bar's stroke stands down while
+     * it is.
+     */
+    private boolean mWindowBarFrostDrawsEdge;
+
     /** Depth of {@link #batchWindowBarRefresh}; while above zero a refresh is only noted. */
     private int mWindowBarRefreshBatchDepth;
     private boolean mWindowBarRefreshPending;
@@ -21669,6 +22580,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         refreshPlaceBar();
 
+        applyTerminalWindowBarGlass(host);
+
+        bindPlaceBadge(findViewById(R.id.terminal_sessions_indicator));
+
+        java.util.List<Integer> foregroundPids = syncWindowBarItems(bar);
+        scheduleWindowLabelPoll(foregroundPids);
+        updateStatusWidgets();
+        // The tab a chip hangs from can move when the row re-lays out (a window opened, a label
+        // widened), so a live chip follows it instead of drifting off its anchor.
+        if (mRenameCoordinator != null && mRenameCoordinator.isActive())
+            mRenameCoordinator.reposition();
+    }
+
+    /**
+     * The window bar's glass, blur and style: the part of {@link #doRefreshTerminalWindowBar} a
+     * glass value moves, and all a Look editor drag's tick refreshes
+     * ({@link #refreshTerminalWindowBarGlass}).
+     */
+    private void applyTerminalWindowBarGlass(@NonNull View host) {
         // The merge rule: a bar standing on the bottom edge lands on the dock, so it wears the
         // dock's glass rather than its own. Same wash, same blur, no seam between them.
         boolean joinsDock = mStatusBarEdge == PlaceLayout.Edge.BOTTOM;
@@ -21713,20 +22643,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : mChrome.glass().statusBarSurface(opacity,
                         capsuleStatusBar || isStatusBarVertical() || !stripContinues
                             ? 0f : terminalWindowGlassStatusFraction(host), 1f, barStroke,
-                        com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR));
+                        com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR,
+                        // While the bar's frost draws the gathered light along the same outline,
+                        // as the last frost pass found it, the bar lays no stroke beside it.
+                        mWindowBarFrostDrawsEdge));
         }
         applyStatusBarStyle(host);
         applyTerminalWindowBarBackdropInsets();
+    }
 
-        bindPlaceBadge(findViewById(R.id.terminal_sessions_indicator));
-
-        java.util.List<Integer> foregroundPids = syncWindowBarItems(bar);
-        scheduleWindowLabelPoll(foregroundPids);
-        updateStatusWidgets();
-        // The tab a chip hangs from can move when the row re-lays out (a window opened, a label
-        // widened), so a live chip follows it instead of drifting off its anchor.
-        if (mRenameCoordinator != null && mRenameCoordinator.isActive())
-            mRenameCoordinator.reposition();
+    /**
+     * {@link #refreshTerminalWindowBar} for a Frost, Opacity or Tint drag's tick: the bar's glass
+     * only. The rest of the refresh (the window chips, the clock, the place bar, the label poll)
+     * reads nothing a glass value moves; the release's full pass runs it once.
+     */
+    private void refreshTerminalWindowBarGlass() {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        if (host == null || host.getVisibility() != View.VISIBLE) return;
+        applyTerminalWindowBarGlass(host);
     }
 
     /**
@@ -22390,7 +23324,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.terminal_status_dot_cpu_ram);
         com.termux.app.statusbar.MaterialDotSeparatorView ramWeatherDot =
             findViewById(R.id.terminal_status_dot_ram_weather);
-        boolean cpuOn = mPreferences != null && mPreferences.isStatusWidgetCpuEnabled();
+        // The CPU reading needs privileged access; without it the widget hides rather than show a
+        // dash, and comes back through mPrivilegedAvailabilityListener. The backend itself is
+        // brought up (and retried) by refreshPrivilegedBackendIfNeeded() on every resume.
+        boolean cpuOn = com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
+            mPreferences != null && mPreferences.isStatusWidgetCpuEnabled(),
+            PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
         boolean ramOn = mPreferences != null && mPreferences.isStatusWidgetRamEnabled();
         boolean weatherOn = mPreferences != null && mPreferences.isStatusWidgetWeatherEnabled();
         View widgetSlot = findViewById(R.id.terminal_top_widget_area);
@@ -24625,9 +25564,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public static void requestTermuxActivityStylingOnNextResume(Context context, boolean recreateActivity) {
+        // A recreate already owed stays owed: a later in-place request must not cancel it.
+        recreateActivity = pendingRecreateAfterRequest(sPendingStyleReloadOnNextResume,
+            sPendingStyleReloadRecreateActivity, recreateActivity);
         sPendingStyleReloadRecreateActivity = recreateActivity;
         sPendingStyleReloadOnNextResume = true;
         updateTermuxActivityStyling(context, recreateActivity);
+    }
+
+    /** Whether the owed next-resume reload recreates after one more request is added to it. */
+    @VisibleForTesting
+    public static boolean pendingRecreateAfterRequest(boolean reloadPending, boolean recreatePending,
+                                                      boolean recreateRequested) {
+        return recreateRequested || (reloadPending && recreatePending);
     }
 
     public static void requestAppDrawerReloadOnNextResume(Context context) {

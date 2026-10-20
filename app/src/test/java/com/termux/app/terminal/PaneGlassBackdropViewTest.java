@@ -179,6 +179,36 @@ public class PaneGlassBackdropViewTest {
      * A miss while a fresh blur is in flight — a radius the editor just settled on, a source the
      * cache is still re-capturing — is not a reason for the pane to go tint-only.
      */
+    /**
+     * The edge's clearer frame is held as handed, restated for free, dropped by null, and never
+     * kept once recycled — and it rides through a re-dress of the frost untouched.
+     */
+    @Test
+    public void theClearFrameIsHeldUntilItIsTakenAway() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        Bitmap frame = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Bitmap clear = Bitmap.createBitmap(160, 240, Bitmap.Config.ARGB_8888);
+        Rect frameRect = new Rect(0, 0, 160, 240);
+        backdrop.setGlass(frame, frameRect, 0x40FF0000, null, 0, 12f, null);
+        assertNull("none until one is handed in", backdrop.heldClearFrame());
+
+        backdrop.setClearFrame(clear);
+        assertSame(clear, backdrop.heldClearFrame());
+        backdrop.setClearFrame(clear);
+        assertSame(clear, backdrop.heldClearFrame());
+        backdrop.setGlass(Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888), frameRect,
+            0x40FF0000, null, 0, 12f, null);
+        assertSame("a new frost keeps the clear frame", clear, backdrop.heldClearFrame());
+
+        backdrop.setClearFrame(null);
+        assertNull(backdrop.heldClearFrame());
+        Bitmap recycled = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888);
+        recycled.recycle();
+        backdrop.setClearFrame(recycled);
+        assertNull("a recycled frame is no frame", backdrop.heldClearFrame());
+    }
+
     @Test
     public void aNullFrameKeepsWhateverThePaneWasAlreadyDrawing() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
