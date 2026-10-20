@@ -420,16 +420,16 @@ public class GlassTiltTest {
             float tx = (float) Math.cos(n + turn), ty = (float) Math.sin(n + turn);
             // To half a percent: the resting light is a unit vector to 1e-4, the turned one
             // exactly, and the lobe's 16th power makes that a few parts in a thousand.
-            float rest = GlassRefraction.gatherShare(nx, ny);
-            assertEquals(rest, GlassRefraction.gatherShare(tx, ty, key[0], key[1]), 5e-3f * rest);
-            assertEquals(GlassRefraction.shadeShare(nx, ny, KX, KY),
-                GlassRefraction.shadeShare(tx, ty, key[0], key[1]), 5e-3f);
+            float still = GlassRefraction.liveGatherShare(nx, ny, KX, KY);
+            assertEquals(still, GlassRefraction.liveGatherShare(tx, ty, key[0], key[1]), 5e-3f * still);
+            assertEquals(GlassRefraction.liveShadeShare(nx, ny, KX, KY),
+                GlassRefraction.liveShadeShare(tx, ty, key[0], key[1]), 5e-3f);
         }
-        // In the program, every term reads uKeyLight, and nothing reads a time.
+        // In the program, every live term reads uKeyLight, and nothing reads a time.
         String agsl = GlassRefraction.AGSL;
         assertTrue(agsl.contains("float c = dot(n, uKeyLight);"));
-        assertTrue(agsl.contains("return 1.0 - keyLobe(dot(n, uKeyLight));"));
-        assertTrue(agsl.contains("keyLobe(c) + kCounter * keyLobe(-c)"));
+        assertTrue(agsl.contains("return 1.0 - liveKeyLobe(dot(n, uKeyLight));"));
+        assertTrue(agsl.contains("liveKeyLobe(c) + kCounter * liveKeyLobe(-c)"));
         for (String time : new String[] {"uTime", "uSweep", "uPhase", "uClock"}) {
             assertTrue(time, !agsl.contains(time));
         }
@@ -477,6 +477,7 @@ public class GlassTiltTest {
         assertConst(agsl, "kTiltLean", GlassRefraction.TILT_LEAN_GAIN);
         assertConst(agsl, "kTiltLight", GlassRefraction.TILT_LIGHT);
         assertConst(agsl, "kKeyExp", GlassRefraction.Look.KEY_EXPONENT);
+        assertConst(agsl, "kLiveKeyExp", GlassRefraction.Look.LIVE_KEY_EXPONENT);
         assertConst(agsl, "kKeyPeak", GlassRefraction.Look.KEY_PEAK);
         assertConst(agsl, "kCounter", GlassRefraction.Look.COUNTER);
     }

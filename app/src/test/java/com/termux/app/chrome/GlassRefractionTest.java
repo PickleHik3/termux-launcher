@@ -289,15 +289,35 @@ public class GlassRefractionTest {
     @Test
     public void theLightRunsRoundTheWholeOutlineAndPeaksTowardTheKeyLight() {
         // The one directional light left is the gathered light's key light: every side keeps the
-        // ambient share, so the outline is never dark down a side as the hairline's was. The glint
-        // falls off to the side of it; facing straight away the counter-lobe rises again, a fifth
-        // of the glint.
-        float last = Float.MAX_VALUE;
-        double toLight = Math.atan2(GlassRefraction.KEY_LIGHT_Y, GlassRefraction.KEY_LIGHT_X);
+        // ambient share, so the outline is never dark down a side as the hairline's was.
+        float last = 2f;
         for (int deg = 0; deg <= 180; deg += 5) {
             // From facing the key light squarely round to facing away from it.
-            double a = toLight + Math.toRadians(deg);
+            double a = Math.atan2(GlassRefraction.KEY_LIGHT_Y, GlassRefraction.KEY_LIGHT_X)
+                + Math.toRadians(deg);
             float share = GlassRefraction.gatherShare((float) Math.cos(a), (float) Math.sin(a));
+            assertTrue("falls off at " + deg, share <= last + 1e-6f);
+            assertTrue("never under the ambient share at " + deg,
+                share >= GlassRefraction.Look.AMBIENT - 1e-6f);
+            last = share;
+        }
+        assertEquals(1f, GlassRefraction.gatherShare(GlassRefraction.KEY_LIGHT_X,
+            GlassRefraction.KEY_LIGHT_Y), 1e-3f);
+        assertTrue("the program has one light at rest", GlassRefraction.AGSL.contains(
+            "float c = max(dot(n, kKeyLight), 0.0);"));
+        assertFalse(GlassRefraction.AGSL.contains("dot(n, kLight)"));
+    }
+
+    @Test
+    public void theLiveGlintRunsRoundTheOutlineWithAFaintCounterLobe() {
+        // While live the light gathers into a glint that falls off to the side of the key light;
+        // facing straight away the counter-lobe rises again, a fifth of the glint.
+        float kx = GlassRefraction.KEY_LIGHT_X, ky = GlassRefraction.KEY_LIGHT_Y;
+        float last = Float.MAX_VALUE;
+        double toLight = Math.atan2(ky, kx);
+        for (int deg = 0; deg <= 180; deg += 5) {
+            double a = toLight + Math.toRadians(deg);
+            float share = GlassRefraction.liveGatherShare((float) Math.cos(a), (float) Math.sin(a), kx, ky);
             if (deg <= 90) assertTrue("falls off at " + deg, share <= last + 1e-6f);
             else assertTrue("the counter-lobe rises at " + deg, share >= last - 1e-6f);
             assertTrue("never under the ambient share at " + deg,
@@ -306,21 +326,18 @@ public class GlassRefractionTest {
         }
         float peak = GlassRefraction.Look.AMBIENT
             + (1f - GlassRefraction.Look.AMBIENT) * GlassRefraction.Look.KEY_PEAK;
-        assertEquals(peak, GlassRefraction.gatherShare(GlassRefraction.KEY_LIGHT_X,
-            GlassRefraction.KEY_LIGHT_Y), 1e-3f);
+        assertEquals(peak, GlassRefraction.liveGatherShare(kx, ky, kx, ky), 1e-3f);
         assertEquals("the counter-lobe is a fifth of the glint",
             GlassRefraction.Look.AMBIENT + (peak - GlassRefraction.Look.AMBIENT) * GlassRefraction.Look.COUNTER,
-            GlassRefraction.gatherShare(-GlassRefraction.KEY_LIGHT_X, -GlassRefraction.KEY_LIGHT_Y), 1e-3f);
-        assertTrue("the program has one light, the pose's", GlassRefraction.AGSL.contains(
+            GlassRefraction.liveGatherShare(-kx, -ky, kx, ky), 1e-3f);
+        assertTrue("the live glint has one light, the pose's", GlassRefraction.AGSL.contains(
             "float c = dot(n, uKeyLight);"));
-        assertFalse(GlassRefraction.AGSL.contains("dot(n, kLight)"));
-        assertFalse("no fixed light left in the program", GlassRefraction.AGSL.contains("kKeyLight"));
     }
 
     /**
-     * Narrowed from the wide lobe (exponent 2) to a glint, the key light gathers what it always
-     * did round the whole outline: the narrow lobe's peak is raised by exactly what its width
-     * lost. The counter-lobe is new light on top.
+     * Narrowed from the rest look's wide lobe (exponent 2) to the live glint, the key light
+     * gathers what it does at rest round the whole outline: the narrow lobe's peak is raised by
+     * exactly what its width lost. The counter-lobe is new light on top.
      */
     @Test
     public void theNarrowGlintGathersWhatTheWideLobeDid() {
@@ -330,12 +347,13 @@ public class GlassRefractionTest {
             double a = 2.0 * Math.PI * i / n;
             double c = Math.max(Math.cos(a), 0.0);
             wide += c * c;
-            narrow += GlassRefraction.Look.KEY_PEAK * GlassRefraction.keyLobe((float) Math.cos(a));
+            narrow += GlassRefraction.Look.KEY_PEAK * GlassRefraction.liveKeyLobe((float) Math.cos(a));
         }
         assertEquals("the same light round the outline", wide / n, narrow / n, 0.001);
-        assertEquals(16f, GlassRefraction.Look.KEY_EXPONENT, 0f);
+        assertEquals("the rest look's wide lobe", 2f, GlassRefraction.Look.KEY_EXPONENT, 0f);
+        assertEquals(16f, GlassRefraction.Look.LIVE_KEY_EXPONENT, 0f);
         // Half its peak about 17 degrees either side: a 3-degree tilt (6 of turn) is a third of it.
-        double half = Math.toDegrees(Math.acos(Math.pow(0.5, 1.0 / GlassRefraction.Look.KEY_EXPONENT)));
+        double half = Math.toDegrees(Math.acos(Math.pow(0.5, 1.0 / GlassRefraction.Look.LIVE_KEY_EXPONENT)));
         assertEquals(16.8, half, 0.2);
     }
 
@@ -486,12 +504,16 @@ public class GlassRefractionTest {
         assertConst("kGlowReachDp", GlassRefraction.Look.GLOW_REACH_DP);
         assertConst("kAmbient", GlassRefraction.Look.AMBIENT);
         assertConst("kKeyExp", GlassRefraction.Look.KEY_EXPONENT);
+        assertConst("kLiveKeyExp", GlassRefraction.Look.LIVE_KEY_EXPONENT);
         assertConst("kKeyPeak", GlassRefraction.Look.KEY_PEAK);
         assertConst("kCounter", GlassRefraction.Look.COUNTER);
         assertConst("kPaleCut", GlassRefraction.Look.PALE_CUT);
         assertConst("kGain", GlassRefraction.Look.GAIN);
         assertConst("kLift", GlassRefraction.Look.LIFT);
         assertConst("kEdgeShade", GlassRefraction.Look.EDGE_SHADE);
+        assertConst("kLiveEdgeShade", GlassRefraction.Look.LIVE_EDGE_SHADE);
+        assertTrue(GlassRefraction.AGSL.contains("const float2 kKeyLight = float2("
+            + GlassRefraction.KEY_LIGHT_X + ", " + GlassRefraction.KEY_LIGHT_Y + ");"));
         assertTrue(GlassRefraction.AGSL.contains("uniform float2 uKeyLight;"));
         assertTrue(GlassRefraction.AGSL.contains("const float3 kLumaW = float3("
             + GlassRefraction.LUMA_R + ", " + GlassRefraction.LUMA_G + ", " + GlassRefraction.LUMA_B + ");"));
@@ -499,14 +521,16 @@ public class GlassRefractionTest {
         assertEquals("the key light is a unit vector", 1f, length, 1e-3f);
         assertTrue("up and to the left", GlassRefraction.KEY_LIGHT_X < 0f && GlassRefraction.KEY_LIGHT_Y < 0f);
         // The program runs the twin's expressions.
-        assertTrue(GlassRefraction.AGSL.contains("return c > 0.0 ? pow(min(c, 1.0), kKeyExp) : 0.0;"));
         assertTrue(GlassRefraction.AGSL.contains(
-            "return kAmbient + (1.0 - kAmbient) * kKeyPeak * (keyLobe(c) + kCounter * keyLobe(-c));"));
-        assertTrue(GlassRefraction.AGSL.contains("return 1.0 - keyLobe(dot(n, uKeyLight));"));
+            "return kAmbient + (1.0 - kAmbient) * (c > 0.0 ? pow(c, kKeyExp) : 0.0);"));
+        assertTrue(GlassRefraction.AGSL.contains("return c > 0.0 ? pow(min(c, 1.0), kLiveKeyExp) : 0.0;"));
+        assertTrue(GlassRefraction.AGSL.contains(
+            "return kAmbient + (1.0 - kAmbient) * kKeyPeak * (liveKeyLobe(c) + kCounter * liveKeyLobe(-c));"));
+        assertTrue(GlassRefraction.AGSL.contains("return 1.0 - liveKeyLobe(dot(n, uKeyLight));"));
         assertTrue(GlassRefraction.AGSL.contains(
             "float k = glow * (gatherShare(n) + 1.5 * touchG) * (1.0 - kPaleCut * pale) * uEdgeGain;"));
         assertTrue(GlassRefraction.AGSL.contains("float pale = dot(float3(col.rgb), kLumaW);"));
-        String shadeLine = "col.rgb = col.rgb * half(1.0 - glow * kEdgeShade * shadeShare(n));";
+        String shadeLine = "col.rgb = col.rgb * half(1.0 - glow * kEdgeShade);";
         assertTrue(GlassRefraction.AGSL.contains(shadeLine));
         assertTrue(GlassRefraction.AGSL.contains(
             "col.rgb = min(half3(col.a), col.rgb * half(1.0 + kGain * k) + half3(kLift * k));"));
@@ -571,10 +595,32 @@ public class GlassRefractionTest {
         float bottomRight = GlassRefraction.gatherShare(d, d);
         assertTrue(topLeft > top);
         assertTrue(top > left);
+        assertTrue(left > right);
+        assertEquals(GlassRefraction.Look.AMBIENT, right, 0f);
+        assertEquals(GlassRefraction.Look.AMBIENT, bottom, 0f);
+        assertEquals(GlassRefraction.Look.AMBIENT, bottomRight, 0f);
+        // The shares the plan quotes: the rest look, the wide lobe (exponent 2).
+        assertEquals(0.97f, topLeft, 0.01f);
+        assertEquals(0.77f, top, 0.01f);
+        assertEquals(0.48f, left, 0.01f);
+    }
+
+    @Test
+    public void theLiveGlintIsSharpTopLeftWithAFaintOneBottomRight() {
+        float d = (float) Math.sqrt(0.5);
+        float kx = GlassRefraction.KEY_LIGHT_X, ky = GlassRefraction.KEY_LIGHT_Y;
+        float topLeft = GlassRefraction.liveGatherShare(-d, -d, kx, ky);
+        float top = GlassRefraction.liveGatherShare(0f, -1f, kx, ky);
+        float left = GlassRefraction.liveGatherShare(-1f, 0f, kx, ky);
+        float right = GlassRefraction.liveGatherShare(1f, 0f, kx, ky);
+        float bottom = GlassRefraction.liveGatherShare(0f, 1f, kx, ky);
+        float bottomRight = GlassRefraction.liveGatherShare(d, d, kx, ky);
+        assertTrue(topLeft > top);
+        assertTrue(top > left);
         assertTrue(left >= right);
         // The narrow glint (exponent 16) is on the top-left corner; the straight sides keep the
         // ambient share and a little; the counter-lobe lights the bottom-right corner faintly.
-        // It was 0.97, 0.77, 0.48 and 0.25 under the wide lobe (exponent 2).
+        // The rest look gives 0.97, 0.77, 0.48 and 0.25 there.
         assertEquals(1.63f, topLeft, 0.01f);
         assertEquals(0.355f, top, 0.01f);
         assertEquals(0.25f, left, 0.005f);
@@ -582,13 +628,10 @@ public class GlassRefractionTest {
         assertEquals(0.27f, bottom, 0.01f);
         assertEquals(0.53f, bottomRight, 0.01f);
         assertTrue("the counter-lobe is the fainter", bottomRight < topLeft / 3f);
-        // The dark edge gives way under the glint and is whole elsewhere.
-        assertTrue(GlassRefraction.shadeShare(-d, -d, GlassRefraction.KEY_LIGHT_X,
-            GlassRefraction.KEY_LIGHT_Y) < 0.3f);
-        assertEquals(0f, GlassRefraction.shadeShare(GlassRefraction.KEY_LIGHT_X,
-            GlassRefraction.KEY_LIGHT_Y, GlassRefraction.KEY_LIGHT_X, GlassRefraction.KEY_LIGHT_Y), 1e-5f);
-        assertEquals(1f, GlassRefraction.shadeShare(1f, 0f, GlassRefraction.KEY_LIGHT_X,
-            GlassRefraction.KEY_LIGHT_Y), 1e-3f);
+        // The live dark edge gives way under the glint and is whole elsewhere.
+        assertTrue(GlassRefraction.liveShadeShare(-d, -d, kx, ky) < 0.3f);
+        assertEquals(0f, GlassRefraction.liveShadeShare(kx, ky, kx, ky), 1e-5f);
+        assertEquals(1f, GlassRefraction.liveShadeShare(1f, 0f, kx, ky), 1e-3f);
     }
 
     @Test

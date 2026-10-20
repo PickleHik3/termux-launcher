@@ -33,10 +33,12 @@ import java.util.Arrays;
  * back to nothing, as Haze's edge softness does, so the outline's own pixel shows the picture just
  * outside it and the glass is continuous with the wallpaper there.</p>
  * <p>The outline gathers the wallpaper's own light: the sample is brightened in proportion to
- * itself, a quarter share all round and a sharp glint where the outline faces one key light up
- * and to the left, a faint one where it faces straight away, over a slightly darkened edge,
- * fading inward over about a dp and a half, and less over a pale backdrop, so the edge reads as the
- * wallpaper's colour caught at the outline rather than a white line drawn on it. The brightening
+ * itself, most toward one key light up and to the left with a quarter share all round, over a
+ * faintly darkened edge, fading inward over about a dp and a half, and less over a pale backdrop,
+ * so the edge reads as the wallpaper's colour caught at the outline rather than a white line drawn
+ * on it. That is the glass at rest, on every surface. Only while a slab is live does the light
+ * gather into a sharp glint that travels with its pose, with a faint one facing away and a darker
+ * edge ({@link #glintWeight}); it fades back to the rest look as the springs settle. The brightening
  * is held under the headroom the sample's brightest channel has left, so no channel clips and a
  * pale sky's edge stays blue rather than turning white or cyan. The light is fixed material, not
  * a knob, and every surface that runs the program wears it. Where a clearer picture of the wallpaper is handed in
@@ -70,11 +72,12 @@ import java.util.Arrays;
  * under a dragging finger, a held border's press, a pane's own press rig — writes {@code uTilt}
  * ({@link Program#setTilt}): the picture through the face is carried toward the edge going away,
  * as a tilted slab displaces what is behind it, and the rim's lean takes the tilt on top of the
- * lag's. Flat, it is 0 and draws nothing new. The tilt and the lag's lean also turn the key
- * light ({@code uKeyLight}, {@link #keyLight}) as a light fixed in the world turns in the tipping
- * plate's frame, so the glint travels round the corners with the pose, and while the slab moves
- * its rim clears toward the clearer frame where it has one, so the bend has detail to move
- * (glass-perception-research-2026-10-20).</p>
+ * lag's. Flat, it is 0 and draws nothing new. While the slab is live the gathered light
+ * narrows into a glint under a key light the tilt and the lag's lean turn ({@code uKeyLight},
+ * {@link #keyLight}) as a light fixed in the world turns in the tipping plate's frame, so the
+ * glint travels round the corners with the pose, and its rim clears toward the clearer frame
+ * where it has one, so the bend has detail to move (glass-perception-research-2026-10-20). Both
+ * fade with the springs, and a slab at rest wears the rest look exactly.</p>
  */
 public final class GlassRefraction {
 
@@ -241,33 +244,45 @@ public final class GlassRefraction {
         /** The share every side gets, so the light follows the whole shape. {@code kAmbient}. */
         static final float AMBIENT = 0.25f;
         /**
-         * The key light's falloff round the outline ({@code kKeyExp}): a narrow lobe, the low end
-         * of Haze's 16 to 24, half its peak about 17 degrees either side of the light. It was 2,
-         * a lobe so wide that a tilt only reweighted the edges and the light never travelled; at
-         * 16 a 3-degree tilt, which turns the light by 6 ({@link GlassRefraction#keyLight}),
-         * moves it a third of its width (glass-perception-research-2026-10-20, recommendation 1:
-         * Motoyoshi 2010, a sharp highlight over a blurred body reads as transparent, a soft one
-         * as more frost).
+         * The key light's falloff round the outline at rest, a wide lobe ({@code kKeyExp}): the
+         * top-left corner gathers 0.97, the top edge 0.77, the left 0.48 and the bottom-right the
+         * ambient 0.25. The rest look every surface wears, the dock's included, exactly as it was
+         * before the travelling glint: that glint at rest, the narrow lobe below, read on pong as a
+         * bright smear of wallpaper colour in the top-left corner of every glass surface ("it does
+         * not look good when the glass slabs are static, should it not appear only when in
+         * motion?", the user, 2026-10-20). So the narrow lobe is the live light only
+         * ({@link GlassRefraction#glintWeight}).
          */
-        static final float KEY_EXPONENT = 16f;
+        static final float KEY_EXPONENT = 2f;
         /**
-         * The narrow lobe's peak, as a share of the old wide lobe's ({@code kKeyPeak}): the light
-         * the outline gathers round its whole length is the wide lobe's, gathered into a sharper
-         * and brighter glint. The mean of {@code max(cos, 0)^n} round the circle is
+         * The key light's falloff round the outline while the slab is live
+         * ({@code kLiveKeyExp}): a narrow lobe, the low end of Haze's 16 to 24, half its peak about
+         * 17 degrees either side of the light. The wide lobe ({@link #KEY_EXPONENT}) is so wide
+         * that a tilt only reweights the edges and the light never travels; at 16 a 3-degree tilt,
+         * which turns the light by 6 ({@link GlassRefraction#keyLight}), moves it a third of its
+         * width (glass-perception-research-2026-10-20, recommendation 1: Motoyoshi 2010, a sharp
+         * highlight over a blurred body reads as transparent, a soft one as more frost). Mixed in
+         * by {@link GlassRefraction#glintWeight}, so it is gone at rest.
+         */
+        static final float LIVE_KEY_EXPONENT = 16f;
+        /**
+         * The narrow lobe's peak, as a share of the wide lobe's ({@code kKeyPeak}): the light the
+         * outline gathers round its whole length is the wide lobe's, gathered into a sharper and
+         * brighter glint. The mean of {@code max(cos, 0)^n} round the circle is
          * {@code (n-1)!! / (2 n!!)} for even n: a quarter at 2, 0.0982 at 16, so 0.25 / 0.0982.
          * The ambient share is untouched. Strength "clearly noticeable", Schlüter & Faul 2014's
          * point where specular takes over from distortion; the headroom hold
-         * ({@link GlassRefraction#heldK}) still keeps every channel under its alpha.
+         * ({@link GlassRefraction#heldK}) still keeps every channel under its alpha. Live only.
          */
         static final float KEY_PEAK = 2.546f;
         /**
-         * The counter-lobe ({@code kCounter}): the same lobe, this much of it, on the rim facing
+         * The counter-lobe ({@code kCounter}): the narrow lobe, this much of it, on the rim facing
          * straight away from the key light, the light that entered at the lit rim caught again on
          * the inside of the far one. It turns with the key light, as everything the light draws
-         * does. A faint fifth: at rest the bottom-right corner gathers 0.63 where it had the
-         * ambient 0.25, and the slab reads as having an inside (research recommendation 4;
-         * Ohara 2022, specular raises perceived thickness; Schlüter & Faul 2019, mirror images
-         * from inside surfaces are a shape cue).
+         * does. A faint fifth: at a whole glint the bottom-right corner gathers 0.53 where the rest
+         * look gives it the ambient 0.25, and the slab reads as having an inside (research
+         * recommendation 4; Ohara 2022, specular raises perceived thickness; Schlüter & Faul 2019,
+         * mirror images from inside surfaces are a shape cue). Live only.
          */
         static final float COUNTER = 0.2f;
         /** How much of the glint a white backdrop takes away: over white a quarter is left. {@code kPaleCut}. */
@@ -295,14 +310,18 @@ public final class GlassRefraction {
         static final float MAX_EDGE_GAIN = 2.25f;
         /** A little grey light, so a black wallpaper still shows an edge. {@code kLift}. */
         static final float LIFT = 0.07f;
+        /** The faint dark under the light at rest, all round alike. {@code kEdgeShade}. */
+        static final float EDGE_SHADE = 0.05f;
         /**
-         * The dark edge under the light ({@code kEdgeShade}), all round but for under the key
-         * light's lobe, where it gives way ({@link GlassRefraction#shadeShare}) and so turns with
-         * the light. Was 0.05; 0.10 is the low end of the 10 to 20 percent the research takes
-         * from Haze's 10 to 32 and Apple's 2027 "darkened edge" (recommendation 4): the slab's
-         * edge reads as glass with a thickness, not a line drawn on the frost.
+         * The dark edge under the light while the slab is live ({@code kLiveEdgeShade}), all
+         * round but for under the narrow lobe, where it gives way
+         * ({@link GlassRefraction#liveShadeShare}) and so turns with the light. 0.10 is the low
+         * end of the 10 to 20 percent the research takes from Haze's 10 to 32 and Apple's 2027
+         * "darkened edge" (recommendation 4): the slab's edge reads as glass with a thickness, not
+         * a line drawn on the frost. Mixed in with the glint ({@link GlassRefraction#glintWeight});
+         * at rest the edge keeps {@link #EDGE_SHADE}.
          */
-        static final float EDGE_SHADE = 0.10f;
+        static final float LIVE_EDGE_SHADE = 0.10f;
         /**
          * Where the brightening starts to give way to the headroom the sample's brightest channel
          * has left: below half of it the light is exactly as asked, above it the light eases
@@ -580,9 +599,10 @@ public final class GlassRefraction {
         // axis, as a vector in its own px axes pointing at the edge going away from the viewer.
         // (0, 0) flat, which is every surface but a tipping pane. tiltVector in Java.
         "uniform float2 uTilt;\n" +
-        // The gathered light's key light, a unit vector in the slab's own px axes: up and to the
-        // left at rest, turned by the slab's pose (its tilt and its lag's lean) as a light fixed in
-        // the world turns in a tipping plate's frame. keyLight in Java; never written by time.
+        // The live glint's key light, a unit vector in the slab's own px axes: kKeyLight while
+        // still, turned by the slab's pose (its tilt and its lag's lean) as a light fixed in the
+        // world turns in a tipping plate's frame. keyLight in Java; never written by time, and
+        // read only while the slab is live (glintW > 0).
         "uniform float2 uKeyLight;\n" +
         // How far toward the clearer picture the rim goes while the slab moves, at a whole lean:
         // LIVE_CLARITY while a clearer frame of its own is bound, 0 while sharp is the frost
@@ -606,23 +626,28 @@ public final class GlassRefraction {
         "const float kDecay = 0.225;\n" +
         // The pressed key's added glow at its centre; KEY_GLOW in Java.
         "const float kKeyGlow = 0.15;\n" +
-        // The gathered light (its key light is uKeyLight): how fast the light fades inward and how
-        // far it reaches, the share every side gets, the key lobe's narrowness, its peak and the
-        // counter-lobe's share of it, how much a pale backdrop takes off the glint, how much it
-        // brightens the backdrop's own colour, a little grey lift, and the dark edge under it.
-        // LUMA_R/G/B and Look.GLOW_DP, GLOW_REACH_DP, AMBIENT, KEY_EXPONENT, KEY_PEAK, COUNTER,
-        // PALE_CUT, GAIN, LIFT and EDGE_SHADE in Java.
+        // The gathered light at rest: one key light up and to the left, how fast the light fades
+        // inward and how far it reaches, the share every side gets, the key light's wide lobe,
+        // how much a pale backdrop takes off the glint, how much it brightens the backdrop's own
+        // colour, a little grey lift, and the faint dark under it. KEY_LIGHT_X, KEY_LIGHT_Y,
+        // LUMA_R/G/B and Look.GLOW_DP, GLOW_REACH_DP, AMBIENT, KEY_EXPONENT, PALE_CUT, GAIN, LIFT
+        // and EDGE_SHADE in Java. Then the live glint's (its key light is uKeyLight): the narrow
+        // lobe, its peak, the counter-lobe's share of it and the darker edge under it.
+        // Look.LIVE_KEY_EXPONENT, KEY_PEAK, COUNTER and LIVE_EDGE_SHADE in Java.
+        "const float2 kKeyLight = float2(" + GlassRefraction.KEY_LIGHT_X + ", " + GlassRefraction.KEY_LIGHT_Y + ");\n" +
         "const float3 kLumaW = float3(0.2126, 0.7152, 0.0722);\n" +
         "const float kGlowDp = 1.4;\n" +
         "const float kGlowReachDp = 10.0;\n" +
         "const float kAmbient = 0.25;\n" +
         "const float kKeyExp = " + Look.KEY_EXPONENT + ";\n" +
-        "const float kKeyPeak = " + Look.KEY_PEAK + ";\n" +
-        "const float kCounter = " + Look.COUNTER + ";\n" +
         "const float kPaleCut = 0.75;\n" +
         "const float kGain = 1.6;\n" +
         "const float kLift = 0.07;\n" +
         "const float kEdgeShade = " + Look.EDGE_SHADE + ";\n" +
+        "const float kLiveKeyExp = " + Look.LIVE_KEY_EXPONENT + ";\n" +
+        "const float kKeyPeak = " + Look.KEY_PEAK + ";\n" +
+        "const float kCounter = " + Look.COUNTER + ";\n" +
+        "const float kLiveEdgeShade = " + Look.LIVE_EDGE_SHADE + ";\n" +
         // Dispersion on the gathered light: uDisp's full share, how far red's and blue's light
         // part at a corner per unit of Glint's part in dp, the clarity at which the sharp picture
         // carries that fringe by itself, and Glint's share, the part that clarity fades.
@@ -711,23 +736,31 @@ public final class GlassRefraction {
         "float cornerWeight(float2 p, float2 b) {\n" +
         "    return min(abs(p.x * p.y) / max(b.x * b.y, 1.0), 1.0);\n" +
         "}\n" +
-        // The key light's narrow lobe on an outline facing it by c, the cosine: nothing facing
-        // away, and never past 1 (the resting light is a unit vector only to 1e-4, which the
-        // 16th power would make 0.4%). keyLobe in Java.
-        "float keyLobe(float c) {\n" +
-        "    return c > 0.0 ? pow(min(c, 1.0), kKeyExp) : 0.0;\n" +
-        "}\n" +
-        // How much of the gathered light the outline with outward normal n takes: the ambient share
-        // all round, the rest on the key light's lobe at its peak and the counter-lobe's fifth of
-        // it facing straight away, both under the one light the pose turns. gatherShare in Java.
+        // How much of the gathered light the outline with outward normal n takes at rest: the
+        // ambient share all round, the rest on the fixed key light's wide lobe. The rest look,
+        // exactly as before the travelling glint. gatherShare in Java.
         "float gatherShare(float2 n) {\n" +
-        "    float c = dot(n, uKeyLight);\n" +
-        "    return kAmbient + (1.0 - kAmbient) * kKeyPeak * (keyLobe(c) + kCounter * keyLobe(-c));\n" +
+        "    float c = max(dot(n, kKeyLight), 0.0);\n" +
+        "    return kAmbient + (1.0 - kAmbient) * (c > 0.0 ? pow(c, kKeyExp) : 0.0);\n" +
         "}\n" +
-        // How much of the dark edge the outline with outward normal n takes: all of it but under
-        // the key light's lobe, so it turns with the light. shadeShare in Java.
-        "float shadeShare(float2 n) {\n" +
-        "    return 1.0 - keyLobe(dot(n, uKeyLight));\n" +
+        // The live glint's narrow lobe on an outline facing uKeyLight by c, the cosine: nothing
+        // facing away, and never past 1 (the resting light is a unit vector only to 1e-4, which
+        // the 16th power would make 0.4%). liveKeyLobe in Java.
+        "float liveKeyLobe(float c) {\n" +
+        "    return c > 0.0 ? pow(min(c, 1.0), kLiveKeyExp) : 0.0;\n" +
+        "}\n" +
+        // How much of the gathered light the outline with outward normal n takes under the live
+        // glint: the ambient share all round, the rest on the narrow lobe at its peak and the
+        // counter-lobe's fifth of it facing straight away, both under the one light the pose
+        // turns. liveGatherShare in Java.
+        "float liveGatherShare(float2 n) {\n" +
+        "    float c = dot(n, uKeyLight);\n" +
+        "    return kAmbient + (1.0 - kAmbient) * kKeyPeak * (liveKeyLobe(c) + kCounter * liveKeyLobe(-c));\n" +
+        "}\n" +
+        // How much of the live dark edge the outline with outward normal n takes: all of it but
+        // under the narrow lobe, so it turns with the light. liveShadeShare in Java.
+        "float liveShadeShare(float2 n) {\n" +
+        "    return 1.0 - liveKeyLobe(dot(n, uKeyLight));\n" +
         "}\n" +
         // The light's strength k held under kMax, the most the sample's brightest channel can take
         // before it clips: exactly k below half of kMax, then easing toward kMax on 1 - 1/(4r),
@@ -795,11 +828,17 @@ public final class GlassRefraction {
         "    float2 bendV = float2(0.0, 0.0);\n" +
         "    float tiltLean = 0.0;\n" +
         "    float liveK = 0.0;\n" +
+        "    float glintW = 0.0;\n" +
         "    if (live) {\n" +
         // How live the slab is, 0..1: the most of a whole lean its lag, its tilt or its dent
         // asks, so it eases back with the springs as they settle. liveness in Java.
         "        liveK = clamp(max(max(kLagLean * length(uLag) / (kLagMaxDp * uDensity),\n" +
         "            kTiltLean * length(uTilt)), abs(uDent.z) / (kDentDepthDp * uDensity)), 0.0, 1.0);\n" +
+        // How much of the live glint the gathered light takes, 0..1: liveK eased, so the glint
+        // leaves as gently as the springs settle and the springs' last snap to rest (a dp or so of
+        // lag, a twentieth of a degree of tilt) moves it by a few thousandths at most. At 0 the light below
+        // is the rest look's, expression for expression. glintWeight in Java.
+        "        glintW = smoothstep(0.0, 1.0, liveK);\n" +
         "        float lean = kLagLean * dot(n, uLag) / (kLagMaxDp * uDensity);\n" +
         "        if (tilted) {\n" +
         "            tiltLean = clamp(-kTiltLean * dot(n, uTilt), -1.0, 1.0);\n" +
@@ -918,12 +957,15 @@ public final class GlassRefraction {
         "        }\n" +
         "    }\n" +
         // The gathered light: the backdrop's own colour brightened at the outline and fading
-        // inward over kGlowDp, a sharp glint where the outline faces the key light and a faint one
-        // where it faces straight away, the ambient share all round, a finger's light added to it,
-        // and less of it over a pale backdrop; first the dark edge, which gives way under the
-        // glint. All of it under uKeyLight, so a tipping slab's glint travels round its corners
-        // as a fixed light's reflection does, and nothing in it moves by itself. It multiplies the
-        // colour, so a blue wallpaper gives a brighter blue edge; only kLift is grey. Its strength
+        // inward over kGlowDp, brightest toward the key light with the ambient share all round, a
+        // finger's light added to it, and less of it over a pale backdrop; first the faint dark
+        // edge. That is the rest look, and every surface at rest takes exactly it. While the slab
+        // is live (glintW > 0) the share mixes toward the live glint, a sharp lobe where the
+        // outline faces uKeyLight and a faint one where it faces straight away, and the dark edge
+        // toward the darker one that gives way under the glint; all of it under uKeyLight, so a
+        // tipping slab's glint travels round its corners as a fixed light's reflection does, and
+        // nothing in it moves by itself. It multiplies the colour, so a blue wallpaper gives a
+        // brighter blue edge; only kLift is grey. Its strength
         // is held under the headroom the brightest channel has left (heldK), so no channel clips
         // and the hue is kept: a pale sky's edge stays blue rather than going cyan or white. The
         // min under the alpha is only a guard. Pixels past kGlowReachDp skip it. gatheredLit in
@@ -932,13 +974,21 @@ public final class GlassRefraction {
         "        float glow = exp(-max(inside, 0.0) / (kGlowDp * uDensity));\n" +
         "        float pale = dot(float3(col.rgb), kLumaW);\n" +
         "        float k = glow * (gatherShare(n) + 1.5 * touchG) * (1.0 - kPaleCut * pale) * uEdgeGain;\n" +
+        "        if (glintW > 0.0) {\n" +
+        "            k = glow * (mix(gatherShare(n), liveGatherShare(n), glintW) + 1.5 * touchG)\n" +
+        "                * (1.0 - kPaleCut * pale) * uEdgeGain;\n" +
+        "        }\n" +
         // A tilted slab's edge rising toward the viewer catches more of the light, the edge going
         // away less, by kTiltLight per whole tilt lean; still held under the headroom below.
         // tiltLight in Java.
         "        if (tilted) {\n" +
         "            k = k * (1.0 + kTiltLight * tiltLean);\n" +
         "        }\n" +
-        "        col.rgb = col.rgb * half(1.0 - glow * kEdgeShade * shadeShare(n));\n" +
+        "        if (glintW > 0.0) {\n" +
+        "            col.rgb = col.rgb * half(1.0 - glow * mix(kEdgeShade, kLiveEdgeShade * liveShadeShare(n), glintW));\n" +
+        "        } else {\n" +
+        "            col.rgb = col.rgb * half(1.0 - glow * kEdgeShade);\n" +
+        "        }\n" +
         "        float peak = float(max(col.r, max(col.g, col.b)));\n" +
         "        float kRaw = k;\n" +
         "        k = heldK(k, max(float(col.a) - peak, 0.0) / (kGain * peak + kLift));\n" +
@@ -1001,9 +1051,9 @@ public final class GlassRefraction {
     }
 
     /**
-     * The gathered light's key light at rest: up and to the left, a unit vector in the slab's own
-     * px axes (y down). What {@code uKeyLight} holds on a flat, still slab, and on every surface
-     * that never moves (the dock, the strip, the bars); {@link #keyLight} turns it with a pose.
+     * The gathered light's key light, {@code kKeyLight}: up and to the left, a unit vector in the
+     * slab's own px axes (y down). The rest look's fixed light, and what {@code uKeyLight} holds
+     * on a flat, still slab; {@link #keyLight} turns it with a pose for the live glint.
      */
     static final float KEY_LIGHT_X = -0.552f;
     static final float KEY_LIGHT_Y = -0.834f;
@@ -1113,39 +1163,70 @@ public final class GlassRefraction {
     }
 
     /**
-     * The program's {@code keyLobe}: the key light's lobe on an outline facing it by the cosine
-     * {@code c}, 0..1.
-     */
-    static float keyLobe(float c) {
-        return c > 0f ? (float) Math.pow(Math.min(c, 1f), Look.KEY_EXPONENT) : 0f;
-    }
-
-    /**
-     * The program's {@code gatherShare} at rest: how much of the gathered light the outline with
-     * outward normal {@code (nx, ny)} takes under the resting key light.
+     * The program's {@code gatherShare}, the rest look: how much of the gathered light the outline
+     * with outward normal {@code (nx, ny)} takes, {@link Look#AMBIENT} all round and the rest on
+     * the fixed key light's wide lobe. Exactly the arithmetic from before the travelling glint.
      */
     static float gatherShare(float nx, float ny) {
-        return gatherShare(nx, ny, KEY_LIGHT_X, KEY_LIGHT_Y);
+        float c = Math.max(nx * KEY_LIGHT_X + ny * KEY_LIGHT_Y, 0f);
+        float key = c > 0f ? (float) Math.pow(c, Look.KEY_EXPONENT) : 0f;
+        return Look.AMBIENT + (1f - Look.AMBIENT) * key;
     }
 
     /**
-     * The program's {@code gatherShare} under the key light {@code (lx, ly)} ({@link #keyLight}):
-     * {@link Look#AMBIENT} all round and the rest on the key light's lobe at
+     * The program's {@code liveKeyLobe}: the live glint's narrow lobe on an outline facing its
+     * key light by the cosine {@code c}, 0..1.
+     */
+    static float liveKeyLobe(float c) {
+        return c > 0f ? (float) Math.pow(Math.min(c, 1f), Look.LIVE_KEY_EXPONENT) : 0f;
+    }
+
+    /**
+     * The program's {@code liveGatherShare}, the live glint under the key light {@code (lx, ly)}
+     * ({@link #keyLight}): {@link Look#AMBIENT} all round and the rest on the narrow lobe at
      * {@link Look#KEY_PEAK}, plus {@link Look#COUNTER} of it facing straight away.
      */
-    static float gatherShare(float nx, float ny, float lx, float ly) {
+    static float liveGatherShare(float nx, float ny, float lx, float ly) {
         float c = nx * lx + ny * ly;
         return Look.AMBIENT + (1f - Look.AMBIENT) * Look.KEY_PEAK
-            * (keyLobe(c) + Look.COUNTER * keyLobe(-c));
+            * (liveKeyLobe(c) + Look.COUNTER * liveKeyLobe(-c));
     }
 
     /**
-     * The program's {@code shadeShare}: how much of the dark edge ({@link Look#EDGE_SHADE}) the
-     * outline with outward normal {@code (nx, ny)} takes under the key light {@code (lx, ly)}:
-     * all of it but under the key lobe, where it gives way to the glint.
+     * The program's {@code liveShadeShare}: how much of the live dark edge
+     * ({@link Look#LIVE_EDGE_SHADE}) the outline with outward normal {@code (nx, ny)} takes under
+     * the key light {@code (lx, ly)}: all of it but under the narrow lobe, where it gives way to
+     * the glint.
      */
-    static float shadeShare(float nx, float ny, float lx, float ly) {
-        return 1f - keyLobe(nx * lx + ny * ly);
+    static float liveShadeShare(float nx, float ny, float lx, float ly) {
+        return 1f - liveKeyLobe(nx * lx + ny * ly);
+    }
+
+    /** AGSL's {@code mix}: {@code x (1 - a) + y a}. */
+    static float mix(float x, float y, float a) {
+        return x * (1f - a) + y * a;
+    }
+
+    /**
+     * The share the program's gathered light takes for a slab at glint weight {@code glintW}
+     * ({@link #glintWeight}) under the key light {@code (lx, ly)}: the rest look's
+     * {@link #gatherShare} at 0, by the same expression the program runs there, and mixed toward
+     * {@link #liveGatherShare} as the slab is live.
+     */
+    static float gatherShare(float nx, float ny, float lx, float ly, float glintW) {
+        float rest = gatherShare(nx, ny);
+        if (!(glintW > 0f)) return rest;
+        return mix(rest, liveGatherShare(nx, ny, lx, ly), glintW);
+    }
+
+    /**
+     * The dark edge's strength the program lays under the light at glint weight {@code glintW}:
+     * exactly {@link Look#EDGE_SHADE} at 0, mixed toward {@link Look#LIVE_EDGE_SHADE} times
+     * {@link #liveShadeShare} as the slab is live.
+     */
+    static float edgeShade(float nx, float ny, float lx, float ly, float glintW) {
+        if (!(glintW > 0f)) return Look.EDGE_SHADE;
+        return mix(Look.EDGE_SHADE, Look.LIVE_EDGE_SHADE * liveShadeShare(nx, ny, lx, ly), glintW);
     }
 
     /**
@@ -1188,18 +1269,9 @@ public final class GlassRefraction {
     }
 
     /**
-     * What the dark edge leaves of a sample {@code insidePx} in from an outline with outward
-     * normal {@code (nx, ny)}, under the resting key light: {@code 1 - glow kEdgeShade shadeShare}.
-     */
-    static float shade(float insidePx, float density, float nx, float ny) {
-        return 1f - glow(insidePx, density) * Look.EDGE_SHADE
-            * shadeShare(nx, ny, KEY_LIGHT_X, KEY_LIGHT_Y);
-    }
-
-    /**
      * The program's gathered light on a premultiplied sample {@code (r, g, b, a)}, with no finger
-     * on the glass and the key light at rest, into {@code out}: darkened by
-     * {@link Look#EDGE_SHADE} on the glow where the outline takes the shade ({@link #shadeShare}), brightened
+     * on the glass and the slab at rest, into {@code out}: darkened by {@link Look#EDGE_SHADE} on
+     * the glow, brightened
      * in proportion to itself by {@link Look#GAIN} plus {@link Look#LIFT} of grey, both times
      * {@code k} held under the brightest channel's headroom ({@link #heldK}), and held under the
      * alpha as a guard.
@@ -1214,7 +1286,7 @@ public final class GlassRefraction {
                             float nx, float ny, float edgeGain, @NonNull float[] out) {
         float luma = r * LUMA_R + g * LUMA_G + b * LUMA_B;
         float k = gatherK(insidePx, density, gatherShare(nx, ny), luma) * edgeGain;
-        float shade = shade(insidePx, density, nx, ny);
+        float shade = 1f - glow(insidePx, density) * Look.EDGE_SHADE;
         float sr = r * shade, sg = g * shade, sb = b * shade;
         if (k > 0f) k = heldK(k, headroomK(Math.max(sr, Math.max(sg, sb)), a));
         float gain = 1f + Look.GAIN * k;
@@ -1263,7 +1335,7 @@ public final class GlassRefraction {
         if (splitPx <= 0f || insidePx >= Look.GLOW_REACH_DP * density) return;
         float luma = r * LUMA_R + g * LUMA_G + b * LUMA_B;
         float kRaw = gatherK(insidePx, density, gatherShare(nx, ny), luma) * edgeGain;
-        float shade = shade(insidePx, density, nx, ny);
+        float shade = 1f - glow(insidePx, density) * Look.EDGE_SHADE;
         float sr = r * shade, sb = b * shade;
         float kMax = headroomK(Math.max(sr, Math.max(g * shade, sb)), a);
         float gs = Look.GLOW_DP * density;
@@ -1402,6 +1474,27 @@ public final class GlassRefraction {
         float tilt = TILT_LEAN_GAIN * (float) Math.hypot(tiltX, tiltY);
         float dent = Math.abs(dentDepthPx) / (GlassMotionLight.DENT_DEPTH_DP * density);
         return Math.max(0f, Math.min(1f, Math.max(Math.max(lag, tilt), dent)));
+    }
+
+    /**
+     * The program's {@code glintW}: how much of the live glint (the narrow lobe, its counter-lobe
+     * and the darker edge, {@link Look#LIVE_KEY_EXPONENT}, {@link Look#LIVE_EDGE_SHADE}) the
+     * gathered light takes for a slab {@code liveK} live ({@link #liveness}): {@code liveK} eased
+     * by a smoothstep. The glint is a sign of motion, not of glass at rest: at rest it read as a
+     * bright smear in every surface's top-left corner (the user, 2026-10-20), so a still slab
+     * takes the rest look exactly. It rides the same pose the live rim does, so the glint and the
+     * clearer rim arrive and leave together (Kim et al. 2011: a highlight out of step with its
+     * shape costs gloss), and it is pose, never time: the lag and the tilt, each 0 exactly at rest
+     * ({@link GlassMotionLight}'s rest snap, {@link #TILT_REST_DEG}). The ease makes those snaps
+     * invisible: the last dp or so of lag (a fortieth of a lean) and the last twentieth of a degree
+     * of tilt (a hundredth of one) step the weight by under a two-hundredth where a straight line
+     * would step it by the lean itself, and the glint fades out as the springs settle instead of
+     * leaving on a slope. Its scale is the lean's: about 0.13 at the press rig's 1.1 degrees, 0.7
+     * at 3, whole from about 5 (a held border, a wall page's plank) and at a quarter of the lag's
+     * clamp (a flick).
+     */
+    static float glintWeight(float liveK) {
+        return smoothstep(0f, 1f, liveK);
     }
 
     /**
@@ -1921,7 +2014,8 @@ public final class GlassRefraction {
         /**
          * {@code uKeyLight} for the pose written so far ({@link GlassRefraction#keyLight}): the
          * resting light until a tilt or a lag turns it, and written only when it moved, so a
-         * still slab and every surface that never moves pay nothing.
+         * still slab and every surface that never moves pay nothing. The program reads it only
+         * while the slab is live; at rest the light is the fixed {@code kKeyLight}.
          */
         private void syncKeyLight() {
             float tiltX = Float.isNaN(mTiltX) ? 0f : mTiltX;
