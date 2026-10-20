@@ -3,6 +3,7 @@ package com.termux.app.layouteditor;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.place.Element;
@@ -277,6 +278,34 @@ public final class LayoutEditorPlan {
         if (mPlaces.isKeyboardShown() == shown)
             return Drop.NONE;
         mPlaces.setKeyboardShown(shown);
+        return Drop.LIVE;
+    }
+
+    // -------------------------------------------------------------------------- the dock style
+
+    /**
+     * Whether the dock style picker is offered: on the Home layout only, the Workspace's dock has
+     * no style (home-dock-styles spec, "The choice").
+     */
+    public boolean offersDockStyle() {
+        return mVariant == LayoutVariant.HOME;
+    }
+
+    /** Home's dock style as picked, whether or not it is drawn yet: what the picker marks. */
+    @NonNull
+    public DockStyle dockStyle() {
+        return mPlaces.dockStyle();
+    }
+
+    /**
+     * A dock style picked. One value for both orientations, so the live dock follows it whichever
+     * orientation the toggle shows; nothing is written off the Home layout.
+     */
+    @NonNull
+    public Drop setDockStyle(@NonNull DockStyle style) {
+        if (!offersDockStyle() || style == dockStyle())
+            return Drop.NONE;
+        mPlaces.setDockStyle(style);
         return Drop.LIVE;
     }
 

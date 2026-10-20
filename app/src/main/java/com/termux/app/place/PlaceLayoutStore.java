@@ -6,6 +6,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.dock.DockStyle;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -44,7 +45,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * the normal layout the first time it is used, with those two put away, and its keyboard element
  * is its own ({@code layout.home.keyboard_shown}, absent is put away): shown, it is always on
  * ({@link #isHomeKeyboardAlwaysOn}). The widget grid is Home's alone, so its columns and rows
- * live in the Home layout whichever variant asks for them.
+ * live in the Home layout whichever variant asks for them. So is the dock's style
+ * ({@code layout.home.dock_style}, {@link #dockStyle}): absent or unknown reads as the glass tray,
+ * which is all the migration it needs.
  *
  * <p>The arrangement used to be kept per place as well as per orientation. Version 6 of the
  * migration folds that into the shared keys, seeding each orientation from the place the value
@@ -140,6 +143,12 @@ public final class PlaceLayoutStore {
      * applied at the same height on every later pass: {@code layout.home.keyboard_rows}.
      */
     private static final String KEY_HOME_KEYBOARD_ROWS = "keyboard_rows";
+    /**
+     * Home's dock style, one value for both orientations: {@code layout.home.dock_style}, a
+     * {@link DockStyle} id. Absent is the glass tray, so nothing is written for an install that
+     * predates it.
+     */
+    private static final String KEY_HOME_DOCK_STYLE = "dock_style";
     /**
      * Minimal mode, one flag for the whole launcher: {@code place.minimal}. Before version 7 each
      * place kept its own under {@code place.<p>.minimal}, which is the same unscoped key.
@@ -339,7 +348,10 @@ public final class PlaceLayoutStore {
             keyboardForm(orientation),
             isKeyboardShown(),
             widgetColumns(orientation),
-            widgetRows(orientation));
+            widgetRows(orientation),
+            // The Workspace's dock has no style of its own: it stays the dock it has always been.
+            variant == LayoutVariant.HOME ? DockStyle.effectiveStyle(dockStyle())
+                : DockStyle.GLASS_TRAY);
     }
 
     /**
@@ -388,6 +400,23 @@ public final class PlaceLayoutStore {
 
     public void setHomeKeyboardRows(int rows) {
         writeInt(homeKey(KEY_HOME_KEYBOARD_ROWS), Math.max(0, rows));
+    }
+
+    /**
+     * The dock style the user picked for Home, whether or not it is drawn yet; what the Layout
+     * editor's picker shows. What the dock draws is the resolved layout's {@link
+     * PlaceLayout#dockStyle}. The same answer from every variant's view: it is Home's alone.
+     */
+    @NonNull
+    public DockStyle dockStyle() {
+        if (mStore == null) return DockStyle.GLASS_TRAY;
+        return DockStyle.parse(mStore.getString(homeKey(KEY_HOME_DOCK_STYLE), null));
+    }
+
+    public void setDockStyle(@NonNull DockStyle style) {
+        if (mStore == null || style == dockStyle()) return;
+        mStore.edit().putString(homeKey(KEY_HOME_DOCK_STYLE), style.storageValue()).apply();
+        mRevision.incrementAndGet();
     }
 
     /** {@code layout.home.<key>}: the Home layout's own, for both orientations. */
