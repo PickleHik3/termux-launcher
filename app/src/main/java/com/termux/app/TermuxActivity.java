@@ -16593,6 +16593,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withTintStrength(tint);
         strip.setBackground(com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
             backdrop));
+        // The frost under the ring is a rectangle: the strip is cut to its own rounded outline,
+        // so no square corner of glass shows past the ring.
+        clipRunStripToOutline(strip, radius);
+    }
+
+    /** The radius the run strip's outline was last cut to; NaN before. */
+    private float mRunStripOutlineRadiusPx = Float.NaN;
+
+    /** Cuts the strip, its glass and its entries, to its rounded outline; set only on a change. */
+    private void clipRunStripToOutline(@NonNull View strip, float radiusPx) {
+        if (Float.compare(mRunStripOutlineRadiusPx, radiusPx) == 0 && strip.getClipToOutline())
+            return;
+        mRunStripOutlineRadiusPx = radiusPx;
+        strip.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radiusPx);
+            }
+        });
+        strip.setClipToOutline(true);
     }
 
     // ------------------------------------------------------------------ Prompt line
