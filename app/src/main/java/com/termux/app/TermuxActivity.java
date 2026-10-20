@@ -16703,12 +16703,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             field.setLayoutParams(params);
             moved = true;
         }
-        if (field.getVisibility() != View.VISIBLE) {
-            field.setVisibility(View.VISIBLE);
-            moved = true;
+        if (mPromptFieldUnderPalette) {
+            // Under the open palette the field keeps its band but shows nothing: the palette's
+            // own field is the one search box (its fade is setPromptFieldUnderPalette's).
+            if (field.getVisibility() == View.GONE) {
+                field.setAlpha(0f);
+                field.setVisibility(View.INVISIBLE);
+                moved = true;
+            }
+        } else {
+            if (field.getVisibility() != View.VISIBLE) {
+                field.setVisibility(View.VISIBLE);
+                moved = true;
+            }
+            float alpha = promptFieldAlpha(mAppliedPromptFieldReveal);
+            if (field.getAlpha() != alpha && !mPromptFieldFading) field.setAlpha(alpha);
         }
-        float alpha = promptFieldAlpha(mAppliedPromptFieldReveal);
-        if (field.getAlpha() != alpha) field.setAlpha(alpha);
         // The well nests in the slab: the dock's radius less the air between them.
         float dockRadius = isRoundedDockStyle() ? resolveDockCapsuleCornerRadiusPx(
             layout.appsBarHeightPx + layout.promptFieldFullBandPx) : 0f;
@@ -16724,6 +16734,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static float promptFieldAlpha(float reveal) {
         float t = Math.max(0f, Math.min(1f, (reveal - 0.35f) / 0.65f));
         return t * t * (3f - 2f * t);
+    }
+
+    /** Whether the command palette is open over the Prompt line's field, which then hides. */
+    private boolean mPromptFieldUnderPalette;
+    /** Whether the field is fading back in from under the palette; a dock pass leaves it be. */
+    private boolean mPromptFieldFading;
+
+    /**
+     * The palette opened or closed ({@link #setCommandPaletteInterceptorActive}): while it is open
+     * the Prompt line's field fades out under it, so the palette's field is the only search box
+     * on screen, and it fades back in when the palette goes. Nothing on any other dock.
+     */
+    private void setPromptFieldUnderPalette(boolean under) {
+        if (mPromptFieldUnderPalette == under) return;
+        mPromptFieldUnderPalette = under;
+        com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
+        if (field == null) return;
+        field.animate().cancel();
+        mPromptFieldFading = false;
+        if (field.getVisibility() == View.GONE) return;
+        float target = under ? 0f : promptFieldAlpha(mAppliedPromptFieldReveal);
+        if (isReducedMotionEnabled()) {
+            field.setAlpha(target);
+            field.setVisibility(under ? View.INVISIBLE : View.VISIBLE);
+            return;
+        }
+        if (!under) {
+            field.setVisibility(View.VISIBLE);
+            mPromptFieldFading = true;
+        }
+        field.animate().alpha(target).setDuration(under ? 120L : 180L)
+            .setInterpolator(new android.view.animation.DecelerateInterpolator())
+            .withEndAction(() -> {
+                mPromptFieldFading = false;
+                if (mPromptFieldUnderPalette && field.getVisibility() == View.VISIBLE)
+                    field.setVisibility(View.INVISIBLE);
+            })
+            .start();
     }
 
     /**
@@ -17629,6 +17677,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             else mFirstBootTour.onPaletteClosed();
             mFirstBootTour.onChromeChanged();
         }
+        // The Prompt line's field is not a second search box under the open palette.
+        setPromptFieldUnderPalette(active);
         if (mInAppKeyboard == null)
             return;
         mInAppKeyboard.setKeyValueInterceptor(active ? getCommandPaletteController() : null);
