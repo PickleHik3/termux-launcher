@@ -1752,6 +1752,56 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
 - 2026-10-20 · feat(dock) Prompt line · Frame time of the style switch ease (a dock pass and a
   glass re-cut per frame for about 15 frames) against a tray⇄beads switch: report jank beyond the
   noise (judge jank on pong, never the emulator) · pong when asked.
+- 2026-10-21 · fix(dock) "the Prompt line's field hides under the open command palette" · Tap the
+  field, and separately swipe up from the dock's top edge: as the palette opens the field fades
+  out (about 0.12 s) and only the palette's own query line reads as a search box; the dock does
+  not change height; a tap where the field stood does nothing; close the palette (Back, Enter
+  on an empty query, a tap outside): the field fades back in (about 0.18 s). Reduced motion: it
+  goes and comes at once · emulator.
+
+### Home dock: Taskbar (10-20)
+- 2026-10-21 · commit "feat(dock): Taskbar, a Home tile among the apps and the run strip above"
+  · Layout editor on Home, dock selected, Dock style → Taskbar, no restart: the dock is the
+  tray's slab holding a round Home tile (the drawer's grid glyph) at the row's start and the
+  apps, all one size (the tray's tiles), one app fewer per page than the tray (with 7 slots, 6
+  apps); no clock, no readings, no "Ask" anywhere. Screen-record the pick: no frame shows a bare
+  dock or an empty row; back to Glass tray, Lens beads and Prompt line live the same way, and
+  the tile goes · emulator (AGSL needs API 33+).
+- 2026-10-21 · feat(dock) Taskbar · Home tile: a tap opens the app drawer as Home's own drawer
+  entry does. Long-press it (no travel) and it lifts (1.12x, a haptic); drag it along the row:
+  only it moves; let go in the right third: it lands in the last slot, in the middle third the
+  centre slot, in the left third the first; the apps keep their order around it. Force-stop and
+  relaunch: it is where it was left. TalkBack names it "All apps". Long-press an app: its menu
+  as before; drag an app onto another place and onto the tile itself (it lands beside it, never
+  replaces it); the tile has no Unpin anywhere · emulator.
+- 2026-10-21 · feat(dock) Taskbar · Paging with the tile: with more apps than a page holds, swipe
+  the dock's pages by finger: the Home tile stays put while the apps slide past it, the staged
+  page's icons arrive in the slots around the tile, never under it; a committed page switch
+  (fling) leaves the tile in place (it may fade with the row: report if it reads badly). The
+  icons' reflection shows the tile where it stands after a move, and is faint (clearly fainter
+  than the tray's: about 0.6 of it) · emulator.
+- 2026-10-21 · feat(dock) Taskbar · Run strip: with no terminal, no float and no display, nothing
+  stands above the dock. Open a Home float (+ in the palette, or the Terminal entry): a thin glass
+  strip eases in above the dock and above its page dashes (the dashes stay hugging the slab, the
+  strip never covers them or the grabber pill), inset like the slab, entries `1 <label>` and `+`
+  at its end. Open Workspace windows: they come first, numbered, the display window's at its
+  place, then the floats; minimise a float: its entry wears `▾`; the focused float, else the
+  Workspace's window in front, is lit. Ring a bell (`printf '\a'` in a window you are not
+  looking at): its entry wears the red dot. Close everything: the strip eases away. The
+  minimised floats' chips never show under the Taskbar · emulator.
+- 2026-10-21 · feat(dock) Taskbar · Run strip taps: a Workspace window's entry slides the
+  Workspace in with that window in front (a display entry: the display window); a float's entry
+  brings the float back on its page, focused, keyboard up; `+` opens a new float on Home.
+  Minimise a float under the Taskbar: watch where its flight lands (the chips are off; it may
+  land on no target: report what it does) · emulator.
+- 2026-10-21 · feat(dock) Taskbar · Glass and rest: the strip's glass is frost with a narrow ring,
+  no shelf, no lip, no icon reflection on it; light, dark and a Material You scheme read; with
+  the keyboard up the strip stands above the keyboard. At rest with the strip showing,
+  `dumpsys gfxinfo <pkg> framestats` shows no new frames over 10 s. Below Android 13 (API 31
+  emulator): plain frost strip and slab, no crash, no "Glass refraction shader failed". Swipe
+  Home → Workspace: the Workspace's dock is the build before (no tile, its usual app count),
+  the strip slides away with Home; back on Home the tile and the strip return at the settle ·
+  emulator.
 
 ## Developer
 

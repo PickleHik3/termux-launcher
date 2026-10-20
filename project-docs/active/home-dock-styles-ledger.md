@@ -11,7 +11,7 @@ first within each section. Delete this file with the spec when the work is deliv
 | 2 Glass tray + shared glass | merged, unchecked on device | e2da84a2e | Shelf, soft rim, quarter-size icon reflection captured on change. Open: 9 dp slab jump at the Home/Workspace settle; reflection pops off/on during page swipes; no dash (cue) with one dock page. |
 | 3 Lens beads | merged, unchecked on device | eae04e066 | One glass program draws every bead (nearest-bead SDF from uniforms, no per-bead RenderNode); the host clips its children to the beads, so below Android 13 they are plain frost. Minimised Home float stays today's chip (not a bead yet). |
 | Emulator pass 1 | done; polish round merged (beads ride their icons, reflection fades, one cue, editor Undo fixed, drawer regions), unchecked on device | 8c9ea69f9 | Pass: picker (Row B, font 1.3 tight), Undo/persist, tray padding, no slab jump at the seam, live tray⇄beads, smooth bead edges, no shader/capture errors. Fix: beads stay put while icons slide on a page swipe; dashes stacked on the pull handle; end beads touch the screen edge; drawer could not be opened under injection (cause unknown); editor pill shifts when Undo appears. | | |
-| 4a Taskbar + run strip | not started | | |
+| 4a Taskbar + run strip | built on a worker branch, unmerged, unchecked on device | 0e19815bc | In `DockStyle.BUILT`. Home tile (drawer glyph, apps' size) takes one of the row's slots, start/middle/end by long-press drag (`layout.home.taskbar_home_tile`, absent = start), still during finger page swipes. Run strip on its own frost card above the dock and its dashes, where the float chips stood (they are off under this style); built on Home from the window chips; eases in and out. Reflection at 0.6 of the tray's. Prompt line's field hides under the open palette in bf8032e46. |
 | 4b Prompt line | built on a worker branch, unmerged, unchecked on device | ba9a96bf4 | In `DockStyle.BUILT`. One taller slab: apps row, then the 48 dp field on its well (14 dp side inset, air over the icons = air under the well, well radius = dock radius − that air); tap opens the palette with keyboard and caret; Enter runs the top result (read, unchanged); a style switch eases the slab 240 ms. Lens beads row inset 9 dp a side in a054ad056. |
 | 4c Wall strip | not started | | |
 | Emulator pass 2 | not started | | |
@@ -88,3 +88,25 @@ its reason so it can be reversed.
 - 2026-10-20 · Lens beads rebuild the dock's effect once per frame during a dock page swipe so the
   beads ride their icons (one shader pass over the already-blurred frost, nothing at rest). To be
   judged for jank on pong.
+- 2026-10-21 · Taskbar: the run strip floats above the dock's page dashes, not between them and
+  the slab, and the dashes stay the cue. The dashes keep hugging the slab as every style's do (the
+  shared rule), so the swipe-up cue sits where it sits on every other dock; the strip takes the
+  minimised floats' chips' place and gives the floats' room the same way. Taking the dashes'
+  place would hide the page count while anything runs, which is most of the time.
+- 2026-10-21 · Taskbar: the Home tile takes one of the row's slots rather than adding one, so the
+  tiles stay the tray's size (with 7 slots a page holds 6 apps). It stands at the same slot on
+  every page and holds still while a finger swipes the pages; a committed page switch's slide is
+  countered, its fade is not.
+- 2026-10-21 · Taskbar: the lit entry on Home is the focused Home float, else the window the
+  Workspace has in front; nothing on Home acknowledges a row window's attention, since nobody is
+  looking at it from there.
+- 2026-10-21 · Taskbar: the strip's glass is the minimised chips' recipe (the dock's material at
+  the dock's values, a card all round) with its own ring and no foot, radius 16 dp (an entry's
+  9 dp and the 7 dp around it); the "dim bevel" is the absence of the shelf, the lip and the soft
+  rim band. The dock's icon reflection is scaled by 0.6 (face under 3 %, lower bevel rim ~18 %).
+- 2026-10-21 · Taskbar: with no pins the row shows the "pin your apps" hint and no Home tile; a
+  minimised float's flight under the Taskbar has no chip to land on (the chips are off), so it
+  takes whatever the flight does without a target. Both left for the emulator pass.
+- 2026-10-21 · Prompt line: the field fades out under the open palette (it was a second search
+  box over the keyboard) and back when the palette closes; it keeps its band, so the slab does
+  not move.
