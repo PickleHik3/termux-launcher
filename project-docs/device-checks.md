@@ -1803,6 +1803,43 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   the strip slides away with Home; back on Home the tile and the strip return at the settle ·
   emulator.
 
+### Home dock: Wall strip (10-20)
+- 2026-10-21 · commit "feat(dock): Wall strip, the expanded dock with the Workspace's row over
+  the apps" · Layout editor on Home, dock selected, Dock style → Wall strip, no restart: the slab
+  grows upward (about a quarter second, the icons stay put) into one tall slab: a first row (84 dp)
+  with a large clock and the date on the left and a dashed `+` tile, then the apps row. Page
+  dashes still float above the slab, never inside it; the air over the row equals the air under
+  the icons. The clock's left edge lines up with the first icon, the `+` tile's right edge with
+  the last icon's; tiles' corners nest inside the slab's. Screen-record the pick and back to Glass
+  tray, Lens beads, Taskbar and Prompt line (Prompt line ⇄ Wall strip in one step): no frame shows
+  a bare dock or a blank slab; no "Ask" anywhere · emulator (AGSL needs API 33+).
+- 2026-10-21 · feat(dock) Wall strip · Row by count: 0 terminals: clock about 56 %, `+` the rest;
+  open one Workspace window: clock, then the terminal tile and `+`, equal; two: clock and the
+  terminal area half and half; three: the clock slides out to the left and four equal tiles fill
+  the row; four: five equal; six: tiles at the four-terminal width, the row scrolls by finger,
+  `+` at its end. Each change slides and resizes the tiles (about 0.4 s, no jump, a new tile grows
+  in from its centre, a closed one shrinks away); rename a window (its tile's title changes in
+  place); the window in front wears the accent ring; ring a bell in a window you are not looking at
+  (`printf '\a'`): its tile wears the amber ring and dot. Each tile shows its window's split shape
+  (split a window into two and three panes and check the blocks) · emulator.
+- 2026-10-21 · feat(dock) Wall strip · Taps: a tile slides the Workspace in with that window in
+  front (the display window's tile: the display). `+` slides the Workspace in on a new terminal
+  window (never a Home float). Long-press a tile: a small menu at the tile with Switch to window,
+  Move window left/right (absent at the row's ends) and Close window; check each, Close on a
+  window running something asks first. With six windows, drag the row sideways: it scrolls and
+  neither the dock's pages swipe nor the drawer opens; a vertical swipe on a tile does nothing
+  odd · emulator.
+- 2026-10-21 · feat(dock) Wall strip · Glass and rest: the icons are reflected only in the lower
+  bevel under them, faint; no icon ghost over the tiles or the clock. Tiles are dark wells,
+  `+` a lighter dashed well. The clock reads on light, dark and Material You schemes (its ink is
+  the dock's glass ink); the date follows the locale (switch to a non-English locale). At rest,
+  `dumpsys gfxinfo <pkg> framestats` shows no new frames over 10 s except one at the minute's turn,
+  and that frame redraws only the clock. Home's own clock widget is unchanged. Below Android 13
+  (API 31 emulator): plain frost slab, no crash. Swipe Home → Workspace: the Workspace's dock is
+  the build before (no row); back on Home the row returns at the settle with the current windows.
+  Open the drawer from the dock and the command palette by the dashes: report how the row reads
+  under them · emulator.
+
 ## Developer
 
 ### Living glass (10-19)
