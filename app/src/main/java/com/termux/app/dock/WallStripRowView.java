@@ -8,8 +8,11 @@ import android.graphics.Color;
 import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.RecordingCanvas;
 import android.graphics.RectF;
+import android.graphics.RenderNode;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.TextPaint;
 import android.text.TextUtils;
@@ -22,6 +25,7 @@ import android.view.animation.PathInterpolator;
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.view.ViewCompat;
@@ -40,6 +44,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 
@@ -73,6 +78,12 @@ public final class WallStripRowView extends View {
 
     /** One terminal tile: a row window, its title and split shape. */
     public static final class Tile {
+        /**
+         * Who the tile is across bindings (its window, whatever its place in the row), so a tile
+         * that stays slides to its new place and one that is new grows in. The chip's index where
+         * the host names no window.
+         */
+        public final long key;
         /** The window's chip, as the window bar counts chips. */
         public final int chipIndex;
         @NonNull public final String title;
@@ -84,6 +95,12 @@ public final class WallStripRowView extends View {
 
         public Tile(int chipIndex, @NonNull String title, @NonNull String spokenLabel,
                     boolean current, boolean attention, @NonNull float[] shape) {
+            this(chipIndex, chipIndex, title, spokenLabel, current, attention, shape);
+        }
+
+        public Tile(long key, int chipIndex, @NonNull String title, @NonNull String spokenLabel,
+                    boolean current, boolean attention, @NonNull float[] shape) {
+            this.key = key;
             this.chipIndex = chipIndex;
             this.title = title;
             this.spokenLabel = spokenLabel;
@@ -97,7 +114,7 @@ public final class WallStripRowView extends View {
             if (this == o) return true;
             if (!(o instanceof Tile)) return false;
             Tile that = (Tile) o;
-            return chipIndex == that.chipIndex && current == that.current
+            return key == that.key && chipIndex == that.chipIndex && current == that.current
                 && attention == that.attention && title.equals(that.title)
                 && spokenLabel.equals(that.spokenLabel) && Arrays.equals(shape, that.shape);
         }
@@ -105,9 +122,12 @@ public final class WallStripRowView extends View {
         @Override
         public int hashCode() {
             return 31 * (31 * chipIndex + title.hashCode()) + Arrays.hashCode(shape)
-                + (current ? 1 : 0) + (attention ? 2 : 0);
+                + (current ? 1 : 0) + (attention ? 2 : 0) + Long.hashCode(key);
         }
     }
+
+    /** The {@code +} tile's key: no window's. */
+    static final long ADD_TILE_KEY = Long.MIN_VALUE;
 
     /**
      * The tiles for the row's own entries ({@link RunStripModel#rowEntries}), each titled with its
@@ -117,14 +137,27 @@ public final class WallStripRowView extends View {
     @NonNull
     public static List<Tile> tilesOf(@NonNull List<RunStripModel.Entry> rowEntries,
                                      @Nullable List<float[]> shapes) {
+        return tilesOf(rowEntries, shapes, null);
+    }
+
+    /**
+     * As {@link #tilesOf(List, List)}, each tile keyed by {@code keys} alongside the entries (its
+     * window's, so the row can tell a tile that moved from one that is new); a missing or null
+     * key is the chip's index.
+     */
+    @NonNull
+    public static List<Tile> tilesOf(@NonNull List<RunStripModel.Entry> rowEntries,
+                                     @Nullable List<float[]> shapes, @Nullable List<Long> keys) {
         List<Tile> tiles = new ArrayList<>(rowEntries.size());
         for (int i = 0; i < rowEntries.size(); i++) {
             RunStripModel.Entry entry = rowEntries.get(i);
             if (entry.kind == RunStripModel.Kind.NEW_WINDOW) continue;
             float[] shape = shapes != null && i < shapes.size() ? shapes.get(i) : null;
+            Long key = keys != null && i < keys.size() ? keys.get(i) : null;
             String title = entry.label.isEmpty() ? entry.number : entry.number + " " + entry.label;
-            tiles.add(new Tile(entry.chipIndex, title, entry.spokenLabel, entry.current,
-                entry.attention, shape == null ? WallStripRowPolicy.splitShape(null) : shape));
+            tiles.add(new Tile(key != null ? key : entry.chipIndex, entry.chipIndex, title,
+                entry.spokenLabel, entry.current, entry.attention,
+                shape == null ? WallStripRowPolicy.splitShape(null) : shape));
         }
         return tiles;
     }
@@ -207,6 +240,46 @@ public final class WallStripRowView extends View {
     @ColorInt private int mAmber;
     @ColorInt private int mOnSurface;
 
+    /**
+     * A change in which windows the row holds: each tile that stays slides and resizes from where
+     * it was drawn to its new place, a new one grows in from its own centre and a closed one
+     * shrinks away where it stood, over {@link WallStripRowPolicy#CLOCK_SLIDE_MS}. Null at rest.
+     */
+    @Nullable private ValueAnimator mMorph;
+    /** Where the morph stands, 0..1, eased. */
+    private float mMorphT = 1f;
+    /** Each staying tile's drawn place when the morph began: left (in view), width, opacity. */
+    @NonNull private final HashMap<Long, float[]> mMorphFrom = new HashMap<>();
+    /** The tiles that left, drawn shrinking away during the morph. */
+    @NonNull private final List<Leaving> mLeaving = new ArrayList<>();
+    private final float[] mDrawn = new float[3];
+
+    /**
+     * The tiles drawn into a display list of their own (Android 10 on), re-recorded only when
+     * they change: the clock's minute redraws the clock and nothing else. Typed as Object so the
+     * class still loads where RenderNode is not.
+     */
+    @Nullable private Object mTilesNode;
+    private boolean mTilesDirty = true;
+
+    /** A tile that has just left the row, drawn where it stood while it shrinks away. */
+    private static final class Leaving {
+        @NonNull final Tile tile;
+        @NonNull final CharSequence title;
+        final float left;
+        final float width;
+        final float alpha;
+
+        Leaving(@NonNull Tile tile, @NonNull CharSequence title, float left, float width,
+                float alpha) {
+            this.tile = tile;
+            this.title = title;
+            this.left = left;
+            this.width = width;
+            this.alpha = alpha;
+        }
+    }
+
     private int mDownTile = -1;
     private float mDownX;
     private float mDownY;
@@ -255,23 +328,59 @@ public final class WallStripRowView extends View {
         mDockRadiusPx = dockRadiusPx;
         mDockPaddingPx = dockPaddingPx;
         relayout();
-        invalidate();
+        invalidateTiles();
     }
 
-    /** The clock's ink on the dock's glass; the theme's on-surface until the dock hands one. */
+    /**
+     * The clock's ink on the dock's glass; the theme's on-surface until the dock hands one. Only
+     * the clock redraws.
+     */
     public void setClockInk(@ColorInt int ink) {
+        mClockInkHanded = true;
         if (ink == mClockInk) return;
         mClockInk = ink;
         invalidate();
     }
 
+    /** Whether the dock has handed the clock its ink; until then it follows the theme. */
+    private boolean mClockInkHanded;
+
     /**
      * The row's terminal tiles, in row order. Crossing two and three terminals slides the clock;
-     * a list equal to the last one changes nothing.
+     * a window opening or closing slides the tiles to their new places; a list equal to the last
+     * one changes nothing.
      */
     public void setTiles(@NonNull List<Tile> tiles) {
         if (tiles.equals(mTiles)) return;
         int before = mTiles.size();
+        // Which windows the row holds changed: the tiles move from where they are drawn now.
+        boolean keysChanged = !sameKeys(mTiles, tiles);
+        boolean morphs = mBound && isAttachedToWindow() && isShown() && getWidth() > 0 && keysChanged
+            && morphDurationMs() > 0L;
+        HashMap<Long, float[]> from = null;
+        List<Leaving> leaving = null;
+        if (morphs) {
+            from = new HashMap<>();
+            leaving = new ArrayList<>();
+            java.util.HashSet<Long> staying = new java.util.HashSet<>();
+            for (Tile tile : tiles) staying.add(tile.key);
+            for (int i = 0; i < mRow.tileCount(); i++) {
+                drawnRect(i, mDrawn);
+                long key = keyAt(i);
+                if (key == ADD_TILE_KEY || staying.contains(key)) {
+                    from.put(key, mDrawn.clone());
+                } else if (i < mTiles.size()) {
+                    leaving.add(new Leaving(mTiles.get(i), i < mTitles.length ? mTitles[i] : "",
+                        mDrawn[0], mDrawn[1], mDrawn[2]));
+                }
+            }
+            // A tile still shrinking away from the last change keeps going from where it is.
+            for (Leaving gone : mLeaving) {
+                leavingRect(gone, mDrawn);
+                if (mDrawn[2] > 0f && !staying.contains(gone.tile.key))
+                    leaving.add(new Leaving(gone.tile, gone.title, mDrawn[0], mDrawn[1], mDrawn[2]));
+            }
+        }
         mTiles = new ArrayList<>(tiles);
         float target = WallStripRowPolicy.clockShare(mTiles.size());
         // The row's first tiles land where they belong; only a change the user sees slides. A
@@ -288,9 +397,104 @@ public final class WallStripRowView extends View {
         }
         relayout();
         showCurrentTile();
-        invalidate();
+        if (morphs) startMorph(from, leaving);
+        else if (keysChanged) cancelMorph();
+        invalidateTiles();
         mAccessibility.invalidateRoot();
         scheduleTick();
+    }
+
+    private static boolean sameKeys(@NonNull List<Tile> a, @NonNull List<Tile> b) {
+        if (a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) if (a.get(i).key != b.get(i).key) return false;
+        return true;
+    }
+
+    private long keyAt(int index) {
+        return index < mTiles.size() ? mTiles.get(index).key : ADD_TILE_KEY;
+    }
+
+    private long morphDurationMs() {
+        if (ReducedMotion.isEnabled(getContext())) return 0L;
+        return AnimationSpeed.scale(getContext(), WallStripRowPolicy.CLOCK_SLIDE_MS);
+    }
+
+    // ---------------------------------------------------------------- the tiles' morph
+
+    private void startMorph(@NonNull HashMap<Long, float[]> from, @NonNull List<Leaving> leaving) {
+        cancelMorph();
+        mMorphFrom.putAll(from);
+        mLeaving.addAll(leaving);
+        mMorphT = 0f;
+        ValueAnimator morph = ValueAnimator.ofFloat(0f, 1f);
+        morph.setDuration(morphDurationMs());
+        morph.setInterpolator(SLIDE_EASE);
+        morph.addUpdateListener(animator -> {
+            if (mMorph != animator) return;
+            mMorphT = (float) animator.getAnimatedValue();
+            invalidateTiles();
+        });
+        morph.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (mMorph != animation) return;
+                mMorph = null;
+                mMorphT = 1f;
+                mMorphFrom.clear();
+                mLeaving.clear();
+                invalidateTiles();
+            }
+        });
+        mMorph = morph;
+        morph.start();
+    }
+
+    /** Lands the tiles where they belong, now. */
+    private void cancelMorph() {
+        ValueAnimator morph = mMorph;
+        mMorph = null;
+        mMorphT = 1f;
+        mMorphFrom.clear();
+        mLeaving.clear();
+        if (morph != null) morph.cancel();
+    }
+
+    /**
+     * Where tile {@code index} (the {@code +} tile last) is drawn now, in this view's pixels with
+     * the row's scroll taken off: {@code out} = left, width, opacity.
+     */
+    private void drawnRect(int index, @NonNull float[] out) {
+        float left = mRow.tileLeft(index) - mScrollPx;
+        float width = mRow.tileWidthPx;
+        out[0] = left;
+        out[1] = width;
+        out[2] = 1f;
+        if (mMorph == null) return;
+        float t = mMorphT;
+        float[] from = mMorphFrom.get(keyAt(index));
+        if (from != null) {
+            out[0] = from[0] + (left - from[0]) * t;
+            out[1] = from[1] + (width - from[1]) * t;
+            out[2] = from[2] + (1f - from[2]) * t;
+        } else {
+            // New: it grows in from its own centre while its neighbours make room.
+            out[1] = width * t;
+            out[0] = left + (width - out[1]) / 2f;
+            out[2] = t;
+        }
+    }
+
+    /** Where a tile that left is drawn now: shrinking to its centre as it fades. */
+    private void leavingRect(@NonNull Leaving gone, @NonNull float[] out) {
+        float keep = mMorph == null ? 0f : 1f - mMorphT;
+        out[1] = gone.width * keep;
+        out[0] = gone.left + (gone.width - out[1]) / 2f;
+        out[2] = gone.alpha * keep;
+    }
+
+    /** The tiles changed: their display list is recorded again on the next frame. */
+    private void invalidateTiles() {
+        mTilesDirty = true;
+        invalidate();
     }
 
     /** The tiles shown now, for tests. */
@@ -303,10 +507,12 @@ public final class WallStripRowView extends View {
         return mRow;
     }
 
-    /** The theme's and the terminal scheme's colours read again after a scheme change. */
+    /**
+     * The theme's and the terminal scheme's colours read again after a scheme change; the row
+     * redraws only when one moved, so a caller may ask on every scheme pass.
+     */
     public void refreshTheme() {
-        readThemeColors();
-        invalidate();
+        if (readThemeColors()) invalidateTiles();
     }
 
     // ---------------------------------------------------------------- the clock's slide
@@ -327,7 +533,7 @@ public final class WallStripRowView extends View {
         slide.addUpdateListener(animator -> {
             mClockShare = (float) animator.getAnimatedValue();
             relayout();
-            invalidate();
+            invalidateTiles();
         });
         slide.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(android.animation.Animator animation) {
@@ -364,7 +570,7 @@ public final class WallStripRowView extends View {
         readThemeColors();
         updateClockText();
         relayout();
-        invalidate();
+        invalidateTiles();
     }
 
     /** The row, its titles fitted to their tiles and the clock's text to its room; never in a draw. */
@@ -425,6 +631,8 @@ public final class WallStripRowView extends View {
             slide.cancel();
             mClockShare = WallStripRowPolicy.clockShare(mTiles.size());
         }
+        cancelMorph();
+        mTilesDirty = true;
         removeCallbacks(mTick);
         removeCallbacks(mLongPress);
         super.onDetachedFromWindow();
@@ -435,6 +643,7 @@ public final class WallStripRowView extends View {
         scheduleTick();
     }
 
+    /** The minute turned: the clock's text, and only the clock, is drawn again. */
     private void tick() {
         updateClockText();
         fitClockText();
@@ -469,18 +678,77 @@ public final class WallStripRowView extends View {
 
     @Override protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
-        if (getWidth() <= 0) return;
+        if (getWidth() <= 0 || getHeight() <= 0) return;
         drawClock(canvas);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && canvas.isHardwareAccelerated()) {
+            drawTilesRecorded(canvas);
+        } else {
+            drawTiles(canvas);
+        }
+    }
+
+    /**
+     * The tiles from their own display list, recorded again only when they changed, so the
+     * clock's minute costs the clock alone.
+     */
+    @RequiresApi(api = Build.VERSION_CODES.Q)
+    private void drawTilesRecorded(@NonNull Canvas canvas) {
+        RenderNode node = mTilesNode instanceof RenderNode ? (RenderNode) mTilesNode : null;
+        if (node == null) {
+            node = new RenderNode("WallStripTiles");
+            mTilesNode = node;
+            mTilesDirty = true;
+        }
+        if (node.getWidth() != getWidth() || node.getHeight() != getHeight()) {
+            node.setPosition(0, 0, getWidth(), getHeight());
+            mTilesDirty = true;
+        }
+        if (mTilesDirty || !node.hasDisplayList()) {
+            RecordingCanvas recording = node.beginRecording(getWidth(), getHeight());
+            try {
+                drawTiles(recording);
+            } finally {
+                node.endRecording();
+            }
+            mTilesDirty = false;
+        }
+        canvas.drawRenderNode(node);
+    }
+
+    /** Every tile where it is drawn now, the ones leaving included. */
+    private void drawTiles(@NonNull Canvas canvas) {
         int saved = canvas.save();
         // Scrolled tiles pass under the row's inset, never over the slab's edge.
         canvas.clipRect(mRow.tilesLeftPx, 0f, getWidth() - mInsetPx, getHeight());
-        canvas.translate(-mScrollPx, 0f);
-        for (int i = 0; i < mRow.tileCount(); i++) {
-            float left = mRow.tileLeft(i);
-            if (left - mScrollPx > getWidth() || left + mRow.tileWidthPx - mScrollPx < 0f) continue;
-            if (i == mRow.addTileIndex()) drawPlusTile(canvas, left);
-            else drawTerminalTile(canvas, i, left);
+        for (Leaving gone : mLeaving) {
+            leavingRect(gone, mDrawn);
+            drawTile(canvas, gone.tile, gone.title, mDrawn[0], mDrawn[1], mDrawn[2]);
         }
+        for (int i = 0; i < mRow.tileCount(); i++) {
+            drawnRect(i, mDrawn);
+            if (i == mRow.addTileIndex()) {
+                drawTile(canvas, null, "", mDrawn[0], mDrawn[1], mDrawn[2]);
+            } else {
+                drawTile(canvas, mTiles.get(i), i < mTitles.length ? mTitles[i] : "", mDrawn[0],
+                    mDrawn[1], mDrawn[2]);
+            }
+        }
+        canvas.restoreToCount(saved);
+    }
+
+    /**
+     * One tile at {@code left}, {@code width} wide, at {@code alpha}: a terminal's, or the
+     * {@code +} tile for a null {@code tile}. Its text stays inside it while it resizes.
+     */
+    private void drawTile(@NonNull Canvas canvas, @Nullable Tile tile, @NonNull CharSequence title,
+                          float left, float width, float alpha) {
+        if (width <= 0.5f || alpha <= 0f || left > getWidth() || left + width < 0f) return;
+        int saved = alpha < 1f
+            ? canvas.saveLayerAlpha(left, 0f, left + width, getHeight(), Math.round(alpha * 255f))
+            : canvas.save();
+        canvas.clipRect(left, 0f, left + width, getHeight());
+        if (tile == null) drawPlusTile(canvas, left, width);
+        else drawTerminalTile(canvas, tile, title, left, width);
         canvas.restoreToCount(saved);
     }
 
@@ -511,11 +779,11 @@ public final class WallStripRowView extends View {
         canvas.restoreToCount(saved);
     }
 
-    private void drawTerminalTile(@NonNull Canvas canvas, int index, float left) {
-        Tile tile = mTiles.get(index);
-        float radius = mRow.tileRadiusPx;
+    private void drawTerminalTile(@NonNull Canvas canvas, @NonNull Tile tile,
+                                  @NonNull CharSequence text, float left, float tileWidth) {
+        float radius = Math.min(mRow.tileRadiusPx, tileWidth / 2f);
         float half = mRim.getStrokeWidth() / 2f;
-        mRect.set(left, 0f, left + mRow.tileWidthPx, getHeight());
+        mRect.set(left, 0f, left + tileWidth, getHeight());
         mFill.setColor(SchemeTone.withAlpha(mWell, WELL_ALPHA));
         canvas.drawRoundRect(mRect, radius, radius, mFill);
 
@@ -526,7 +794,7 @@ public final class WallStripRowView extends View {
         float shapeTop = pad;
         float shapeBottom = getHeight() - pad - titleHeight - TITLE_GAP_DP * mDensity;
         float shapeLeft = left + pad;
-        float shapeRight = left + mRow.tileWidthPx - pad;
+        float shapeRight = left + tileWidth - pad;
         if (shapeBottom > shapeTop && shapeRight > shapeLeft) {
             float w = shapeRight - shapeLeft;
             float h = shapeBottom - shapeTop;
@@ -545,7 +813,6 @@ public final class WallStripRowView extends View {
                 canvas.drawRoundRect(mRect, paneRadius, paneRadius, mFill);
             }
         }
-        CharSequence text = index < mTitles.length ? mTitles[index] : "";
         if (text.length() > 0) {
             mTitlePaint.setColor(mTitleInk);
             canvas.drawText(text, 0, text.length(), left + pad,
@@ -553,7 +820,7 @@ public final class WallStripRowView extends View {
         }
 
         // The ring: amber for a window asking, the accent for the one in front, a faint rim else.
-        mRect.set(left + half, half, left + mRow.tileWidthPx - half, getHeight() - half);
+        mRect.set(left + half, half, left + tileWidth - half, getHeight() - half);
         int ring = tile.attention ? mAmber : tile.current ? mAccent
             : ColorUtils.setAlphaComponent(mAccent, REST_RIM_ALPHA);
         mRim.setColor(ring);
@@ -562,14 +829,14 @@ public final class WallStripRowView extends View {
         if (tile.attention) {
             float dot = DOT_DP * mDensity;
             mFill.setColor(mAmber);
-            canvas.drawCircle(left + mRow.tileWidthPx - pad, pad, dot / 2f, mFill);
+            canvas.drawCircle(left + tileWidth - pad, pad, dot / 2f, mFill);
         }
     }
 
-    private void drawPlusTile(@NonNull Canvas canvas, float left) {
-        float radius = mRow.tileRadiusPx;
+    private void drawPlusTile(@NonNull Canvas canvas, float left, float tileWidth) {
+        float radius = Math.min(mRow.tileRadiusPx, tileWidth / 2f);
         float half = mDashed.getStrokeWidth() / 2f;
-        mRect.set(left, 0f, left + mRow.tileWidthPx, getHeight());
+        mRect.set(left, 0f, left + tileWidth, getHeight());
         mFill.setColor(ColorUtils.setAlphaComponent(mOnSurface, PLUS_FILL_ALPHA));
         canvas.drawRoundRect(mRect, radius, radius, mFill);
         mRect.inset(half, half);
@@ -577,19 +844,27 @@ public final class WallStripRowView extends View {
         canvas.drawRoundRect(mRect, Math.max(0f, radius - half), Math.max(0f, radius - half),
             mDashed);
         mPlusPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface, PLUS_INK_ALPHA));
-        float cx = left + mRow.tileWidthPx / 2f;
+        float cx = left + tileWidth / 2f;
         float cy = getHeight() / 2f;
         canvas.drawText("+", cx, cy - (mPlusPaint.ascent() + mPlusPaint.descent()) / 2f,
             mPlusPaint);
     }
 
-    private void readThemeColors() {
+    /** Reads the colours again; whether any of them moved. */
+    private boolean readThemeColors() {
+        int accent = mAccent;
+        int onSurface = mOnSurface;
+        int well = mWell;
+        int titleInk = mTitleInk;
+        int amber = mAmber;
+        int clockInk = mClockInk;
         Context context = getContext();
         mAccent = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
         mOnSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));
-        if (mClockInk == 0) mClockInk = mOnSurface;
+        // The theme's ink until the dock hands the glass's.
+        if (!mClockInkHanded) mClockInk = mOnSurface;
         // The tiles are terminals: their wells and titles come from the terminal's own scheme,
         // the well a little below its background as the Prompt line's is.
         int[] colors = TerminalColors.COLOR_SCHEME.mDefaultColors;
@@ -600,6 +875,8 @@ public final class WallStripRowView extends View {
         mTitleInk = SchemeTone.contrastTone(colors[TextStyle.COLOR_INDEX_FOREGROUND] | 0xFF000000,
             mWell, PromptLineInk.TEXT_CONTRAST);
         mAmber = SchemeTone.contrastTone(colors[ANSI_YELLOW] | 0xFF000000, mWell, MARK_CONTRAST);
+        return accent != mAccent || onSurface != mOnSurface || well != mWell
+            || titleInk != mTitleInk || amber != mAmber || clockInk != mClockInk;
     }
 
     private void applyTextSizes() {
@@ -629,6 +906,10 @@ public final class WallStripRowView extends View {
                 mDragging = false;
                 mLongPressed = false;
                 if (mDownTile < 0) return false;
+                // A row that scrolls keeps its drag from the start: no parent takes it for the
+                // dock's page swipe or the drawer's pull. Handed back once it reads as vertical.
+                if (mRow.scrolls() && getParent() != null)
+                    getParent().requestDisallowInterceptTouchEvent(true);
                 if (mDownTile != mRow.addTileIndex())
                     postDelayed(mLongPress, ViewConfiguration.getLongPressTimeout());
                 return true;
@@ -638,15 +919,15 @@ public final class WallStripRowView extends View {
                 if (!mDragging && Math.hypot(dx, event.getY() - mDownY) > mTouchSlop) {
                     removeCallbacks(mLongPress);
                     mDragging = mRow.scrolls() && Math.abs(dx) > Math.abs(event.getY() - mDownY);
-                    if (mDragging && getParent() != null)
-                        getParent().requestDisallowInterceptTouchEvent(true);
+                    if (getParent() != null)
+                        getParent().requestDisallowInterceptTouchEvent(mDragging);
                     if (!mDragging) mDownTile = -1;
                 }
                 if (mDragging) {
                     float scroll = Math.max(0f, Math.min(mRow.maxScrollPx, mDownScroll - dx));
                     if (scroll != mScrollPx) {
                         mScrollPx = scroll;
-                        invalidate();
+                        invalidateTiles();
                     }
                 }
                 return true;

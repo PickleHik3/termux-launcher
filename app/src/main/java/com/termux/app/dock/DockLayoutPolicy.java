@@ -142,6 +142,11 @@ public final class DockLayoutPolicy {
     /** The field's side inset inside the slab: the dock's content inset, the row's 14 dp. */
     public static final float PROMPT_FIELD_SIDE_INSET_DP = 14f;
 
+    /** The Wall strip's first row as it stands over the apps row ({@link WallStripRowView#HEIGHT_DP}). */
+    public static final float WALL_STRIP_HEIGHT_DP = WallStripRowView.HEIGHT_DP;
+    /** The row's side inset inside the slab: the apps row's 14 dp, as the Prompt line's field. */
+    public static final float WALL_STRIP_SIDE_INSET_DP = PROMPT_FIELD_SIDE_INSET_DP;
+
     /** Everything the dock's numbers are a function of, snapshotted by the caller. */
     public static final class DockInputs {
         /** False before the preference store is attached; the rows collapse to zero then. */
@@ -215,9 +220,17 @@ public final class DockLayoutPolicy {
          * than the spec, so the slab can ease out after the spec has already moved on.
          */
         public final float promptFieldReveal;
+        /**
+         * How much of the Wall strip's first row the slab carries over the apps row, 0..1: 1 while
+         * Home's dock wears {@link DockSurfaceSpec#WALL_STRIP}, 0 for every other dock, between
+         * while a style switch eases the slab's height. Read off its own value, as
+         * {@link #promptFieldReveal} is.
+         */
+        public final float wallStripReveal;
 
         private DockInputs(Builder b) {
             this.promptFieldReveal = b.promptFieldReveal;
+            this.wallStripReveal = b.wallStripReveal;
             this.preferencesAvailable = b.preferencesAvailable;
             this.capsule = b.capsule;
             this.appsRowOnEdge = b.appsRowOnEdge;
@@ -275,9 +288,11 @@ public final class DockLayoutPolicy {
             private int displayCutoutInsetLeftPx;
             private int displayCutoutInsetRightPx;
             private float promptFieldReveal;
+            private float wallStripReveal;
 
             public Builder preferencesAvailable(boolean v) { this.preferencesAvailable = v; return this; }
             public Builder promptFieldReveal(float v) { this.promptFieldReveal = v; return this; }
+            public Builder wallStripReveal(float v) { this.wallStripReveal = v; return this; }
             public Builder capsule(boolean v) { this.capsule = v; return this; }
             public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
             public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
@@ -451,6 +466,23 @@ public final class DockLayoutPolicy {
             out.promptFieldSideInsetPx = out.horizontalInsetPx + promptFieldSideInsetPx(density);
         }
 
+        // The Wall strip's first row, over the apps row on the same slab. The slab's padding over
+        // it is the air under the icons, so the outer padding is equal top and bottom; the row's
+        // own air over the icons is the gap between the tiles and the icons. The page dashes keep
+        // standing above the slab (their band leads the host). Only on the dock's own row.
+        float wallReveal = Float.isNaN(in.wallStripReveal)
+            ? 0f : Math.max(0f, Math.min(1f, in.wallStripReveal));
+        if (appsRowEnabled && wallReveal > 0f && out.appsBarHeightPx > 0) {
+            int rowPx = wallStripHeightPx(density);
+            int fullPx = rowPx + airPx;
+            out.wallStripFullBandPx = fullPx;
+            out.wallStripBandPx = Math.round(fullPx * wallReveal);
+            out.wallStripHeightPx = Math.min(out.wallStripBandPx, Math.round(rowPx * wallReveal));
+            out.wallStripTopPadPx = out.wallStripBandPx - out.wallStripHeightPx;
+            out.wallStripSideInsetPx = out.horizontalInsetPx + wallStripSideInsetPx(density);
+            out.wallStripWellGapPx = airPx;
+        }
+
         // The apps rail.
         boolean railActive = in.appsOnRail && in.preferencesAvailable && in.appsRowEnabledPref;
         out.railActive = railActive;
@@ -503,6 +535,16 @@ public final class DockLayoutPolicy {
      */
     public static int loneRowAirPx(float density) {
         return Math.round(Math.max(0f, density) * LONE_ROW_AIR_DP);
+    }
+
+    /** The Wall strip's first row view, px. */
+    public static int wallStripHeightPx(float density) {
+        return Math.round(Math.max(0f, density) * WALL_STRIP_HEIGHT_DP);
+    }
+
+    /** {@link #WALL_STRIP_SIDE_INSET_DP} in px. */
+    public static int wallStripSideInsetPx(float density) {
+        return Math.round(Math.max(0f, density) * WALL_STRIP_SIDE_INSET_DP);
     }
 
     /** The Prompt line's field view, px: its whole tap target. */

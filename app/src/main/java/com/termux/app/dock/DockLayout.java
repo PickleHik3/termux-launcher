@@ -148,7 +148,40 @@ public final class DockLayout {
     /** The field's side inset from the screen edge: the slab's margin and the row's 14 dp. */
     public final int promptFieldSideInsetPx;
 
+    // --- The Wall strip's first row (DockSurfaceSpec.WALL_STRIP); all zero on every other dock ---
+    /**
+     * The band the Wall strip's first row takes over the apps row on the same slab, as laid out
+     * now: the slab's padding over the row and the row view. It eases between 0 and
+     * {@link #wallStripFullBandPx} while a style switch grows or shrinks the slab.
+     */
+    public final int wallStripBandPx;
+    /** The band once the row is wholly in, whatever the ease has reached. */
+    public final int wallStripFullBandPx;
+    /** The row view's own height, its share of {@link #wallStripBandPx}. */
+    public final int wallStripHeightPx;
+    /**
+     * The slab's padding over the row view, the rest of the band: the air under the icons, so
+     * the slab's outer padding is equal top and bottom. The tiles' radius nests by it.
+     */
+    public final int wallStripTopPadPx;
+    /**
+     * The row's side inset from the screen edge where the icons cannot be measured: the slab's
+     * margin and the row's 14 dp.
+     */
+    public final int wallStripSideInsetPx;
+    /**
+     * The visible air between the slab's upper edge and the tiles once the row is wholly in: the
+     * air under the icons. The tiles' radius nests by it, whatever the ease has reached.
+     */
+    public final int wallStripWellGapPx;
+
     DockLayout(Builder b) {
+        this.wallStripWellGapPx = Math.max(0, b.wallStripWellGapPx);
+        this.wallStripBandPx = Math.max(0, b.wallStripBandPx);
+        this.wallStripFullBandPx = Math.max(0, b.wallStripFullBandPx);
+        this.wallStripHeightPx = Math.max(0, b.wallStripHeightPx);
+        this.wallStripTopPadPx = Math.max(0, b.wallStripTopPadPx);
+        this.wallStripSideInsetPx = Math.max(0, b.wallStripSideInsetPx);
         this.promptFieldBandPx = Math.max(0, b.promptFieldBandPx);
         this.promptFieldFullBandPx = Math.max(0, b.promptFieldFullBandPx);
         this.promptFieldHeightPx = Math.max(0, b.promptFieldHeightPx);
@@ -238,21 +271,27 @@ public final class DockLayout {
     }
 
     /**
-     * The dock's stacked height for the given extra-keys toolbar height: its rows, and the
-     * Prompt line's field band under the apps row.
+     * The dock's stacked height for the given extra-keys toolbar height: its rows, the Prompt
+     * line's field band under the apps row and the Wall strip's row over it.
      */
     public int combinedHeight(int toolbarHeightPx, boolean extraKeysRowEnabled) {
         return AccessoryStackLayoutPolicy.computeCombinedHeight(
             appsBarHeightPx > 0,
             azRowHeightPx > 0,
             extraKeysRowEnabled,
-            appsBarHeightPx + promptFieldBandPx,
+            appsBarHeightPx + promptFieldBandPx + wallStripBandPx,
             azRowHeightPx,
             toolbarHeightPx,
             indicatorBandHeightPx);
     }
 
     static final class Builder {
+        int wallStripBandPx;
+        int wallStripFullBandPx;
+        int wallStripHeightPx;
+        int wallStripTopPadPx;
+        int wallStripSideInsetPx;
+        int wallStripWellGapPx;
         int promptFieldBandPx;
         int promptFieldFullBandPx;
         int promptFieldHeightPx;

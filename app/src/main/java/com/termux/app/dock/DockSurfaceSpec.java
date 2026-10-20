@@ -20,14 +20,15 @@ import com.termux.app.chrome.GlassRefraction;
  * a round bead of glass ({@link LensBeadGeometry}). {@link #PROMPT_LINE} is the tray made one
  * taller slab: the apps row, then the command palette's field ({@link PromptLineFieldView}) on
  * a darker well, both on the same glass. {@link #TASKBAR} is the tray holding a Home tile among
- * the apps, with the run strip of running windows above it. A later style is one more constant here, and
- * {@link #forStyle} picks it.</p>
+ * the apps, with the run strip of running windows above it. {@link #WALL_STRIP} is the tray made
+ * the expanded dock: a first row for the Workspace over the apps row, both on one tall slab. A
+ * later style is one more constant here, and {@link #forStyle} picks it.</p>
  */
 public final class DockSurfaceSpec {
 
     /** The dock as it always was: dashes in the row's own air, the narrow rim, no shelf, no reflection. */
     @NonNull public static final DockSurfaceSpec PLAIN =
-        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false, false, false, 1f);
+        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false, false, false, 1f, false);
 
     /**
      * Home's Glass tray. Its glass numbers are the program's own constants, so the spec says only
@@ -35,7 +36,7 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec GLASS_TRAY =
         new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
-            false, false, 1f);
+            false, false, 1f, false);
 
     /**
      * Home's Lens beads: the tray's row geometry (dashes above, equal air) with no slab; each icon
@@ -46,7 +47,7 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec LENS_BEADS =
         new DockSurfaceSpec("lens_beads", true, GlassRefraction.BEAD_SOFT_RIM_DP, 1f, true, true, true,
-            false, false, 1f);
+            false, false, 1f, false);
 
     /**
      * Home's Prompt line: the tray's glass (dashes above, equal air, soft rim, shelf, shadow) on
@@ -56,7 +57,7 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec PROMPT_LINE =
         new DockSurfaceSpec("prompt_line", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
-            true, false, 1f);
+            true, false, 1f, false);
 
     /**
      * How strongly the Taskbar's slab shows its icons' reflection, of the tray's: a low slab's
@@ -74,7 +75,24 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec TASKBAR =
         new DockSurfaceSpec("taskbar", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
-            false, true, TASKBAR_REFLECTION_SCALE);
+            false, true, TASKBAR_REFLECTION_SCALE, false);
+
+    /**
+     * How strongly the Wall strip's lower bevel shows the icons, of the tray's: the Prompt line's
+     * share, since there too only the lower bevel carries them.
+     */
+    public static final float WALL_STRIP_REFLECTION_SCALE = 0.8f;
+
+    /**
+     * Home's Wall strip, the expanded dock: the tray's glass (dashes above, equal air, soft rim,
+     * shelf, shadow) on one tall slab, a first row for the Workspace ({@link WallStripRowView}: a
+     * clock and the terminals as tiles, {@link DockLayout#wallStripBandPx}) over the apps row. The
+     * icons are reflected only in the lower bevel under them ({@link #reflectsLowerBevelOnly}),
+     * never over the tiles, at {@link #WALL_STRIP_REFLECTION_SCALE} of the tray's strength.
+     */
+    @NonNull public static final DockSurfaceSpec WALL_STRIP =
+        new DockSurfaceSpec("wall_strip", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
+            false, false, WALL_STRIP_REFLECTION_SCALE, true);
 
     /** A name for logs and tests. */
     @NonNull public final String name;
@@ -110,11 +128,16 @@ public final class DockSurfaceSpec {
     public final boolean taskbar;
     /** How strongly the icons are reflected in the glass, of the tray's own strength, 0..1. */
     public final float reflectionScale;
+    /**
+     * The slab carries the Wall strip's first row over the apps row, on the same glass; how much
+     * of it is laid out is {@link DockLayoutPolicy.DockInputs#wallStripReveal}.
+     */
+    public final boolean wallStrip;
 
     private DockSurfaceSpec(@NonNull String name, boolean dashesAboveSlab, float softRimDp,
                             float shelf, boolean iconReflections, boolean contactShadow,
                             boolean beads, boolean promptField, boolean taskbar,
-                            float reflectionScale) {
+                            float reflectionScale, boolean wallStrip) {
         this.name = name;
         this.dashesAboveSlab = dashesAboveSlab;
         this.softRimDp = softRimDp;
@@ -125,6 +148,7 @@ public final class DockSurfaceSpec {
         this.promptField = promptField;
         this.taskbar = taskbar;
         this.reflectionScale = reflectionScale;
+        this.wallStrip = wallStrip;
     }
 
     /**
@@ -155,10 +179,21 @@ public final class DockSurfaceSpec {
                 return PROMPT_LINE;
             case TASKBAR:
                 return TASKBAR;
+            case WALL_STRIP:
+                return WALL_STRIP;
             case GLASS_TRAY:
             default:
                 return GLASS_TRAY;
         }
+    }
+
+    /**
+     * Whether the icons' reflection shows only in the lower bevel, under them: a slab with another
+     * row over the icons (the Wall strip's tiles) would show the face's mirror and the top
+     * bevel's copy of the icons over that row.
+     */
+    public boolean reflectsLowerBevelOnly() {
+        return wallStrip;
     }
 
     /** Whether the glass program has anything of this spec's to draw. */
