@@ -32,7 +32,8 @@ import com.termux.terminal.TextStyle;
  * ({@code TerminalCommandPaletteController.openFromField}), and the palette does the rest, Enter
  * running its top result. The prompt's colours come from the terminal's scheme
  * ({@link PromptLineInk}); call {@link #refreshTheme} when the scheme changes. The well is the
- * field's only fill: the glass behind it is the dock's.</p>
+ * field's only fill, a darker recess in either theme (a dark tint over the glass on a light
+ * scheme): the glass behind it is the dock's.</p>
  */
 public final class PromptLineFieldView extends View {
 
@@ -153,8 +154,7 @@ public final class PromptLineFieldView extends View {
 
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
-        int well = isPressed() ? mPressedWell : mInk.well;
-        mWell.setColor(SchemeTone.withAlpha(well, PromptLineInk.WELL_ALPHA));
+        mWell.setColor(wellColor(mInk, mPressedWell, isPressed()));
         float radius = Math.min(mRadiusPx, mWellRect.height() / 2f);
         canvas.drawRoundRect(mWellRect, radius, radius, mWell);
 
@@ -168,6 +168,17 @@ public final class PromptLineFieldView extends View {
         x = drawSegment(canvas, DIRECTORY, mInk.directory, x, baseline, gap, rtl);
         x = drawSegment(canvas, GLYPH, mInk.glyph, x, baseline, gap, rtl);
         drawSegment(canvas, mFittedHint, mInk.hint, x, baseline, 0f, rtl);
+    }
+
+    /**
+     * The well's paint colour: on a light scheme its dark tint, a little deeper under a finger;
+     * on a dark scheme its solid well, a little lighter under a finger.
+     */
+    static int wellColor(@NonNull PromptLineInk ink, int pressedWell, boolean pressed) {
+        if (ink.tinted) {
+            return SchemeTone.withAlpha(ink.well, pressed ? ink.pressedWellAlpha : ink.wellAlpha);
+        }
+        return SchemeTone.withAlpha(pressed ? pressedWell : ink.well, ink.wellAlpha);
     }
 
     /** Draws one segment at {@code x} toward the end edge; answers where the next one starts. */
