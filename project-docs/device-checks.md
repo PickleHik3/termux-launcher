@@ -1705,6 +1705,53 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   frame count stays where the Glass tray's is for the same swipe (judge jank on pong, never the
   emulator). Below Android 13: the round frost beads move with their icons the same way ·
   emulator, then pong when asked.
+- 2026-10-20 · commit "feat(dock): Lens beads inset the apps row 9 dp a side" · Lens beads,
+  seven apps on a page, 411 dp wide (tl16 portrait): crop the dock, each bead about 1.1x its
+  icon (about 50 dp across for a 46 dp icon), at least 12 dp from the bead's edge to the screen's
+  edge on both ends, a clear gap between beads, none falling back to the slab; five apps: beads
+  at about 1.2x as before. Switch to Glass tray and Prompt line: their row spans as it did before
+  this change (icons 9 dp further out each side than under beads); the Workspace's dock is the
+  build before · emulator.
+
+### Home dock: Prompt line (10-20)
+- 2026-10-20 · commit "feat(dock): Prompt line, the palette's field under the apps row on one
+  slab" · Layout editor on Home, dock selected, Dock style → Prompt line: the dock becomes one
+  taller slab, the apps row on top and under it a darker well reading `~ ❯ Search apps, commands,
+  settings` (no "Ask" anywhere). Screen-record the pick at 60 fps and step it: the slab's top
+  rises over about 0.24 s with the icons and the dashes riding it, the field fades in only once
+  the icons have cleared its place, no frame shows a bare dock, a black slab, an empty strip of
+  glass or an icon outside the glass; back to Glass tray and to Lens beads the same in reverse;
+  pick a third style while the ease runs: it carries on from where it stood. Reduced motion on:
+  it lands at once · emulator (AGSL needs API 33+).
+- 2026-10-20 · feat(dock) Prompt line · Geometry, Floating then Docked, crop the dock: the field
+  is 48 dp tall with its well 42 dp, its sides 14 dp inside the slab (in line with the A–Z row's
+  and the dashes' inset); the air from the slab's top to the icons equals the air from the well's
+  bottom to the slab's lower edge (within 1 px); the well's corners are concentric with the
+  slab's (its radius the slab's less that air), square under Docked; the dashes still stand on
+  the wallpaper just above the slab. Home's widgets and a minimised float's chip stand above the
+  taller dock, nothing covered · emulator.
+- 2026-10-20 · feat(dock) Prompt line · Use: tap the field: the palette opens with the in-app
+  keyboard and the caret in its query line; type `sett` and Enter: the top result runs (Settings
+  or the first row shown), never a shell command; Enter on an empty query just closes. With the
+  keyboard already up the palette opens at once. A swipe up from the dock's top edge still opens
+  the palette with the keyboard. TalkBack reads the field as a button named "Search apps,
+  commands, settings" · emulator.
+- 2026-10-20 · feat(dock) Prompt line · Colours and glass: `~` in the terminal theme's blue, `❯`
+  in its green, the hint legible (4.5:1) on the well in light, dark, black and a Material You
+  scheme; change the theme or flip light/dark: the prompt follows without a restart. The icons
+  are reflected only in the lower bevel under the field, faint (fainter than the tray's), nothing
+  mirrored over the field or above the icons; reorder an app and it follows; a page swipe fades it
+  as on the tray. At rest `dumpsys gfxinfo <pkg> framestats` shows no new frames over 10 s; below
+  Android 13 (API 31 emulator): plain frost slab, the well and prompt drawn, no crash; logcat has
+  no "Glass refraction shader failed" · emulator.
+- 2026-10-20 · feat(dock) Prompt line · Seams and the editor: swipe Home → Workspace and back:
+  the field goes and comes at the settle (no ease there), the Workspace's dock is the build
+  before, no slab jump during the slide; the drawer still opens from Home (palette route, see
+  "How to open the drawer" above); in the Layout editor the dock's size grip still sizes the
+  icons as before (the field is not counted as row height) · emulator.
+- 2026-10-20 · feat(dock) Prompt line · Frame time of the style switch ease (a dock pass and a
+  glass re-cut per frame for about 15 frames) against a tray⇄beads switch: report jank beyond the
+  noise (judge jank on pong, never the emulator) · pong when asked.
 
 ## Developer
 

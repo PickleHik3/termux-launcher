@@ -12,7 +12,7 @@ first within each section. Delete this file with the spec when the work is deliv
 | 3 Lens beads | merged, unchecked on device | eae04e066 | One glass program draws every bead (nearest-bead SDF from uniforms, no per-bead RenderNode); the host clips its children to the beads, so below Android 13 they are plain frost. Minimised Home float stays today's chip (not a bead yet). |
 | Emulator pass 1 | done; polish round merged (beads ride their icons, reflection fades, one cue, editor Undo fixed, drawer regions), unchecked on device | 8c9ea69f9 | Pass: picker (Row B, font 1.3 tight), Undo/persist, tray padding, no slab jump at the seam, live tray⇄beads, smooth bead edges, no shader/capture errors. Fix: beads stay put while icons slide on a page swipe; dashes stacked on the pull handle; end beads touch the screen edge; drawer could not be opened under injection (cause unknown); editor pill shifts when Undo appears. | | |
 | 4a Taskbar + run strip | not started | | |
-| 4b Prompt line | not started | | |
+| 4b Prompt line | built on a worker branch, unmerged, unchecked on device | ba9a96bf4 | In `DockStyle.BUILT`. One taller slab: apps row, then the 48 dp field on its well (14 dp side inset, air over the icons = air under the well, well radius = dock radius − that air); tap opens the palette with keyboard and caret; Enter runs the top result (read, unchanged); a style switch eases the slab 240 ms. Lens beads row inset 9 dp a side in a054ad056. |
 | 4c Wall strip | not started | | |
 | Emulator pass 2 | not started | | |
 | 5 Pong install | not started | | |
@@ -62,7 +62,26 @@ its reason so it can be reversed.
   pages): the dashes are the cue then, as the spec says. Its swipe zone is unchanged.
 - 2026-10-20 · Lens beads: the apps row gets about 9 dp more side inset so seven beads fit at
   ~1.1x with 12 dp from the screen edges; without it every default install (7 icons on 411 dp)
-  would fall back to the slab.
+  would fall back to the slab. Done in a054ad056 (`LensBeadGeometry.ROW_SIDE_INSET_DP`, applied
+  only under Lens beads, also where they fall back to the slab): the row's slots are even from
+  its own edges, so an end bead's margin is the inset plus half the 6 dp gap, 12 dp at least on
+  every row; seven 46 dp icons on 411 dp get 50 dp beads (1.1x). No 12 dp clamp was added to
+  `LensBeadGeometry.compute` itself, so a narrower phone keeps drawing beads rather than
+  falling back. The "Not done" entry above is superseded.
+- 2026-10-20 · Prompt line: the field stands in the apps row's own host, under the row, so the
+  dock's one glass, shelf, rim and outline are the taller slab's with no second surface. It is
+  carried only by the dock's own bottom row; a row moved to another edge or a rail has no field.
+  It is not hidden while the palette it opened is up; whether the palette covers it or it reads
+  as a second search field over the keyboard is for the emulator pass to judge.
+- 2026-10-20 · Prompt line: the slab eases only for a style picked in the Layout editor (240 ms,
+  one dock pass and one glass re-cut per frame, nothing at rest); a Home ⇄ Workspace settle
+  lands the field at once, as every other piece of the arriving place's geometry (ADR 0003).
+  The content's insets follow the eased height each frame. To be judged for jank on pong.
+- 2026-10-20 · Prompt line: the icon reflection shows only in the lower bevel under the field,
+  aimed as the tray's lower bevel would show it (the picture moved down by the field's band) at
+  0.8 of the tray's strength; the faint face mirror and the squeezed top-bevel copy are not drawn,
+  since over the field and the icons they would read as a ghost row. Under Docked the dock's
+  corners are square, so the well's are too (the nesting rule gives 0).
 - 2026-10-20 · The drawer opening from the dock needs half its travel or a fast fling; a slow
   real-finger pull on Home cannot commit because Home's dock leaves too little screen below it.
   Pre-existing, not from the dock work; left for the developer to judge (noted, not changed).
