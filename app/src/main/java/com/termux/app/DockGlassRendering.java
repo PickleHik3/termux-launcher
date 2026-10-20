@@ -288,6 +288,24 @@ public final class DockGlassRendering {
         return colors;
     }
 
+    // The shelf in miniature under each Lens bead: the same contact shadow and glow, scaled to a
+    // bead, so each reads as a small lens resting just above the wallpaper.
+
+    /** A bead's contact shadow at its core: a little lighter than the tray's, as a bead is small. */
+    public static final float BEAD_SHADOW_ALPHA = 0.18f;
+    /** How far below a bead the shadow reaches, dp. */
+    public static final float BEAD_SHADOW_DEPTH_DP = 4.5f;
+    /** How far above the bead's lowest point the shadow's core sits, dp, hidden under the bead. */
+    public static final float BEAD_SHADOW_RISE_DP = 1.5f;
+    /** The shadow's half width as a share of the bead's radius: the part of a round bead that is low. */
+    public static final float BEAD_SHADOW_HALF_WIDTH_SHARE = 0.62f;
+    /** A bead's glow at its core. */
+    public static final float BEAD_GLOW_ALPHA = 0.08f;
+    /** How far below a bead the glow reaches, dp. */
+    public static final float BEAD_GLOW_DEPTH_DP = 1.6f;
+    /** The glow's half width as a share of the bead's radius. */
+    public static final float BEAD_GLOW_HALF_WIDTH_SHARE = 0.4f;
+
     /** Literal opacity endpoint: 100% is an opaque material and 0% is fully transparent. */
     private static final int BASE_MAX_ALPHA = 255;
 

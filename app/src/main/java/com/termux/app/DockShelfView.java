@@ -43,6 +43,14 @@ public final class DockShelfView extends View {
     private final Outline mOutline = new Outline();
     private float mRadiusPx;
     private boolean mHasSlab;
+    /**
+     * Lens beads in the host's coordinates, or null for the slab: each bead then wears a small
+     * shadow and glow of its own, and the slab none.
+     */
+    @Nullable private com.termux.app.dock.LensBeadGeometry.Beads mBeads;
+    @NonNull private Paint[] mBeadShadows = new Paint[0];
+    @NonNull private Paint[] mBeadGlows = new Paint[0];
+    private final Path mBeadPath = new Path();
     @Nullable private View mHost;
 
     private final View.OnLayoutChangeListener mHostLayout =
@@ -95,6 +103,51 @@ public final class DockShelfView extends View {
         super.onDetachedFromWindow();
     }
 
+    /**
+     * The host's glass drawn as Lens beads ({@code beadsInHost}, in the host's own coordinates),
+     * each with a shadow and glow of its own, or null for the slab. Redrawn only when they moved.
+     */
+    public void setBeads(@Nullable com.termux.app.dock.LensBeadGeometry.Beads beadsInHost) {
+        if (beadsInHost == null ? mBeads == null : beadsInHost.equals(mBeads)) return;
+        mBeads = beadsInHost;
+        rebuildBeads();
+        invalidate();
+    }
+
+    /** The beads' paints and outline at the host's current offset. */
+    private void rebuildBeads() {
+        com.termux.app.dock.LensBeadGeometry.Beads beads = mBeads;
+        mBeadPath.reset();
+        if (beads == null || !mHasSlab) {
+            mBeadShadows = new Paint[0];
+            mBeadGlows = new Paint[0];
+            return;
+        }
+        float density = getResources().getDisplayMetrics().density;
+        float dx = mSlab.left;
+        float dy = mSlab.top;
+        float r = beads.radiusPx;
+        float bottom = beads.centerY + dy + r;
+        float rise = DockGlassRendering.BEAD_SHADOW_RISE_DP * density;
+        int count = beads.count();
+        mBeadShadows = new Paint[count];
+        mBeadGlows = new Paint[count];
+        for (int i = 0; i < count; i++) {
+            float cx = beads.centerX(i) + dx;
+            mBeadPath.addCircle(cx, beads.centerY + dy, r, Path.Direction.CW);
+            Paint shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+            shadow.setShader(ellipse(Color.BLACK, DockGlassRendering.BEAD_SHADOW_ALPHA, cx,
+                bottom - rise, r * DockGlassRendering.BEAD_SHADOW_HALF_WIDTH_SHARE,
+                DockGlassRendering.BEAD_SHADOW_DEPTH_DP * density + rise));
+            mBeadShadows[i] = shadow;
+            Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
+            glow.setShader(ellipse(Color.WHITE, DockGlassRendering.BEAD_GLOW_ALPHA, cx, bottom,
+                r * DockGlassRendering.BEAD_GLOW_HALF_WIDTH_SHARE,
+                DockGlassRendering.BEAD_GLOW_DEPTH_DP * density));
+            mBeadGlows[i] = glow;
+        }
+    }
+
     /** The host's laid-out bounds in this view's coordinates, and its outline's corner radius. */
     private void readHostBounds() {
         View host = mHost;
@@ -142,6 +195,7 @@ public final class DockShelfView extends View {
         mHasSlab = true;
         mSlab.set(slab);
         mRadiusPx = radiusPx;
+        if (mBeads != null) rebuildBeads();
         mSlabPath.reset();
         mSlabPath.addRoundRect(mSlab, radiusPx, radiusPx, Path.Direction.CW);
         float density = getResources().getDisplayMetrics().density;
@@ -175,6 +229,28 @@ public final class DockShelfView extends View {
         super.onDraw(canvas);
         if (!mHasSlab || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         float density = getResources().getDisplayMetrics().density;
+        com.termux.app.dock.LensBeadGeometry.Beads beads = mBeads;
+        if (beads != null) {
+            // Each bead's own shelf, clipped out of every bead's glass.
+            int save = canvas.save();
+            canvas.clipOutPath(mBeadPath);
+            float r = beads.radiusPx;
+            float bottom = beads.centerY + mSlab.top + r;
+            float rise = DockGlassRendering.BEAD_SHADOW_RISE_DP * density;
+            float shadowReach = DockGlassRendering.BEAD_SHADOW_DEPTH_DP * density;
+            float glowReach = DockGlassRendering.BEAD_GLOW_DEPTH_DP * density;
+            for (int i = 0; i < mBeadShadows.length && i < beads.count(); i++) {
+                float cx = beads.centerX(i) + mSlab.left;
+                float hs = r * DockGlassRendering.BEAD_SHADOW_HALF_WIDTH_SHARE;
+                canvas.drawRect(cx - hs, bottom - rise - shadowReach, cx + hs,
+                    bottom + shadowReach, mBeadShadows[i]);
+                float hg = r * DockGlassRendering.BEAD_GLOW_HALF_WIDTH_SHARE;
+                canvas.drawRect(cx - hg, bottom - glowReach, cx + hg, bottom + glowReach,
+                    mBeadGlows[i]);
+            }
+            canvas.restoreToCount(save);
+            return;
+        }
         float reach = DockGlassRendering.SHELF_SHADOW_DEPTH_DP * density;
         int save = canvas.save();
         // The slab's own glass is not the wallpaper: nothing of the shelf is drawn under it.
