@@ -25,13 +25,14 @@ public class AppDrawerCategoryTouchRegionsTest {
         assertEquals(Part.OUTSIDE, resolve(0, 200, Presentation.OVERVIEW));
     }
 
-    @Test public void expandedHeaderAndListAreOwnedButEmptyTopIsChrome() {
-        assertEquals(Part.EMPTY_CHROME, resolve(50, 50, Presentation.EXPANDED));
+    @Test public void expandedHeaderListAndEmptyPaneAreAllTheFolders() {
+        assertEquals(Part.DETAIL_EMPTY, resolve(50, 50, Presentation.EXPANDED));
         assertEquals(Part.COLLAPSE_ACTION, resolve(50, 100, Presentation.EXPANDED));
-        assertEquals(Part.EMPTY_CHROME, resolve(50, 120, Presentation.EXPANDED));
+        assertEquals(Part.DETAIL_EMPTY, resolve(50, 120, Presentation.EXPANDED));
         assertEquals(Part.DETAIL_LIST, resolve(50, 130, Presentation.EXPANDED));
         assertTrue(AppDrawerCategoryTouchRegions.isContentOwned(Part.COLLAPSE_ACTION));
         assertTrue(AppDrawerCategoryTouchRegions.isContentOwned(Part.DETAIL_LIST));
+        assertTrue(AppDrawerCategoryTouchRegions.isContentOwned(Part.DETAIL_EMPTY));
         assertFalse(AppDrawerCategoryTouchRegions.isContentOwned(Part.EMPTY_CHROME));
     }
 
