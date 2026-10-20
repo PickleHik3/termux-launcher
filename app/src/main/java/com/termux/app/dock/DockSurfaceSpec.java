@@ -19,14 +19,15 @@ import com.termux.app.chrome.GlassRefraction;
  * builds on. {@link #LENS_BEADS} keeps the tray's geometry but draws no slab: each icon sits on
  * a round bead of glass ({@link LensBeadGeometry}). {@link #PROMPT_LINE} is the tray made one
  * taller slab: the apps row, then the command palette's field ({@link PromptLineFieldView}) on
- * a darker well, both on the same glass. A later style is one more constant here, and
+ * a darker well, both on the same glass. {@link #TASKBAR} is the tray holding a Home tile among
+ * the apps, with the run strip of running windows above it. A later style is one more constant here, and
  * {@link #forStyle} picks it.</p>
  */
 public final class DockSurfaceSpec {
 
     /** The dock as it always was: dashes in the row's own air, the narrow rim, no shelf, no reflection. */
     @NonNull public static final DockSurfaceSpec PLAIN =
-        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false, false);
+        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false, false, false, 1f);
 
     /**
      * Home's Glass tray. Its glass numbers are the program's own constants, so the spec says only
@@ -34,7 +35,7 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec GLASS_TRAY =
         new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
-            false);
+            false, false, 1f);
 
     /**
      * Home's Lens beads: the tray's row geometry (dashes above, equal air) with no slab; each icon
@@ -45,7 +46,7 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec LENS_BEADS =
         new DockSurfaceSpec("lens_beads", true, GlassRefraction.BEAD_SOFT_RIM_DP, 1f, true, true, true,
-            false);
+            false, false, 1f);
 
     /**
      * Home's Prompt line: the tray's glass (dashes above, equal air, soft rim, shelf, shadow) on
@@ -55,7 +56,25 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec PROMPT_LINE =
         new DockSurfaceSpec("prompt_line", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
-            true);
+            true, false, 1f);
+
+    /**
+     * How strongly the Taskbar's slab shows its icons' reflection, of the tray's: a low slab's
+     * strength (the lower bevel's rim about a fifth of the icons, the face's mirror under 3 %),
+     * since the developer flagged the tray's as too strong on this style.
+     */
+    public static final float TASKBAR_REFLECTION_SCALE = 0.6f;
+
+    /**
+     * Home's Taskbar: the tray's slab (dashes above, equal air, soft rim, shelf, shadow) holding
+     * only tiles, a Home tile that opens the drawer among the apps
+     * ({@link TaskbarHomeTilePolicy}), with the run strip floating above it on its own thin glass
+     * ({@link RunStripView}). The icons' reflection is held to a low slab's strength
+     * ({@link #TASKBAR_REFLECTION_SCALE}).
+     */
+    @NonNull public static final DockSurfaceSpec TASKBAR =
+        new DockSurfaceSpec("taskbar", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
+            false, true, TASKBAR_REFLECTION_SCALE);
 
     /** A name for logs and tests. */
     @NonNull public final String name;
@@ -84,10 +103,18 @@ public final class DockSurfaceSpec {
      * much of it is laid out is {@link DockLayoutPolicy.DockInputs#promptFieldReveal}.
      */
     public final boolean promptField;
+    /**
+     * The row holds the Taskbar's Home tile among the apps, and the run strip floats above the
+     * dock while anything runs.
+     */
+    public final boolean taskbar;
+    /** How strongly the icons are reflected in the glass, of the tray's own strength, 0..1. */
+    public final float reflectionScale;
 
     private DockSurfaceSpec(@NonNull String name, boolean dashesAboveSlab, float softRimDp,
                             float shelf, boolean iconReflections, boolean contactShadow,
-                            boolean beads, boolean promptField) {
+                            boolean beads, boolean promptField, boolean taskbar,
+                            float reflectionScale) {
         this.name = name;
         this.dashesAboveSlab = dashesAboveSlab;
         this.softRimDp = softRimDp;
@@ -96,6 +123,8 @@ public final class DockSurfaceSpec {
         this.contactShadow = contactShadow;
         this.beads = beads;
         this.promptField = promptField;
+        this.taskbar = taskbar;
+        this.reflectionScale = reflectionScale;
     }
 
     /**
@@ -124,6 +153,8 @@ public final class DockSurfaceSpec {
                 return LENS_BEADS;
             case PROMPT_LINE:
                 return PROMPT_LINE;
+            case TASKBAR:
+                return TASKBAR;
             case GLASS_TRAY:
             default:
                 return GLASS_TRAY;

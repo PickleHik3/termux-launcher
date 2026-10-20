@@ -84,7 +84,9 @@ public class DockSurfaceSpecLayoutTest {
     public void eachHomeStyleHasItsSpecAndTheWorkspaceStaysPlain() {
         assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(DockStyle.GLASS_TRAY));
         assertSame(DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.forStyle(DockStyle.LENS_BEADS));
-        assertSame("not built yet", DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(DockStyle.TASKBAR));
+        assertSame(DockSurfaceSpec.TASKBAR, DockSurfaceSpec.forStyle(DockStyle.TASKBAR));
+        assertSame("not built yet", DockSurfaceSpec.GLASS_TRAY,
+            DockSurfaceSpec.forStyle(DockStyle.WALL_STRIP));
         assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(null));
         assertSame(DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.forDock(true, DockStyle.LENS_BEADS));
         for (DockStyle style : DockStyle.values())
@@ -117,6 +119,30 @@ public class DockSurfaceSpecLayoutTest {
         assertEquals(tray.shelf, line.shelf, 0f);
         assertEquals(tray.iconReflections, line.iconReflections);
         assertEquals(tray.contactShadow, line.contactShadow);
+    }
+
+    @Test
+    public void theTaskbarIsTheTraysGlassWithTheHomeTileAndALowReflection() {
+        assertSame(DockSurfaceSpec.TASKBAR, DockSurfaceSpec.forDock(true, DockStyle.TASKBAR));
+        assertSame("the Workspace's dock stays plain", DockSurfaceSpec.PLAIN,
+            DockSurfaceSpec.forDock(false, DockStyle.TASKBAR));
+        DockSurfaceSpec bar = DockSurfaceSpec.TASKBAR;
+        DockSurfaceSpec tray = DockSurfaceSpec.GLASS_TRAY;
+        assertTrue(bar.taskbar);
+        for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN, tray,
+                DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.PROMPT_LINE}) {
+            assertFalse(other.name, other.taskbar);
+            assertEquals(other.name, 1f, other.reflectionScale, 0f);
+        }
+        assertFalse("tiles only, no field", bar.promptField);
+        assertFalse("one slab, never beads", bar.beads);
+        assertEquals(tray.dashesAboveSlab, bar.dashesAboveSlab);
+        assertEquals(tray.softRimDp, bar.softRimDp, 0f);
+        assertEquals(tray.shelf, bar.shelf, 0f);
+        assertTrue(bar.iconReflections);
+        assertTrue(bar.contactShadow);
+        assertTrue("the reflection is held under the tray's",
+            bar.reflectionScale > 0f && bar.reflectionScale < 1f);
     }
 
     @Test

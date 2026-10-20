@@ -2168,6 +2168,8 @@
     <string name="dock_run_strip_minimised">%1$s, minimised</string>
     <string name="dock_run_strip_attention">%1$s, needs attention</string>
     <string name="dock_wall_strip_new_terminal">New terminal</string>
+    <!-- The Taskbar's Home tile, spoken: it opens the app drawer; hold to move it. -->
+    <string name="dock_taskbar_home_tile">All apps</string>
     <string name="palette_home_minimise_floats">Minimise all floats</string>
     <string name="palette_home_minimise_floats_hint">Tuck every floating terminal into its chip</string>
     <string name="palette_home_restore_floats">Restore floats</string>

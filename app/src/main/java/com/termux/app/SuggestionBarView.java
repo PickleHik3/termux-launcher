@@ -824,6 +824,7 @@ public final class SuggestionBarView extends GridLayout
             super.dispatchDraw(canvas);
             canvas.restore();
             drawSwipePreviewPage(canvas);
+            drawHomeTileUnshifted(canvas);
             canvas.restoreToCount(clipSave);
             return;
         }
@@ -901,6 +902,232 @@ public final class SuggestionBarView extends GridLayout
 
     public void setMaxButtonCount(int maxButtonCount) {
         this.maxButtonCount = maxButtonCount;
+    }
+
+    // ------------------------------------------------------------------ the Taskbar's Home tile
+    //
+    // Home's Taskbar dock (DockSurfaceSpec.TASKBAR) holds a Home tile among the apps: a tile like
+    // theirs that opens the drawer, in one of the row's slots (TaskbarHomeTilePolicy), so a page
+    // holds one app fewer and the apps keep their own order around it. It is no pin: it has no
+    // menu, it cannot be unpinned, and a long press picks it up to be dragged to the row's start,
+    // middle or end. It stands still while a finger swipes the row's pages.
+
+    /** Who hears the Home tile. */
+    public interface HomeTileListener {
+        /** A tap: the drawer, as Home's own drawer entry opens it. */
+        void onHomeTileTapped();
+
+        /** The tile was dragged and let go nearest {@code position}, which is not where it was. */
+        void onHomeTileMoved(@NonNull com.termux.app.dock.TaskbarHomeTilePolicy.Position position);
+    }
+
+    /** Where the Home tile stands, or null for a row with none (every dock but the Taskbar). */
+    @Nullable private com.termux.app.dock.TaskbarHomeTilePolicy.Position homeTilePosition;
+    @Nullable private HomeTileListener homeTileListener;
+    /** The Home tile's slot as the last render built it, or null when it built none. */
+    @Nullable private View homeTileSlot;
+    /** Its column in that render, and the app slots its page had; -1 and 0 with none. */
+    private int homeTileColumn = -1;
+    private int homeTileAppSlots;
+    /** Whether a long press has picked the tile up and a drag is moving it. */
+    private boolean homeTileDragging;
+    /** Whether {@link #drawChild} is drawing the tile outside a swipe's offset just now. */
+    private boolean drawingHomeTileUnshifted;
+
+    /**
+     * The Home tile at {@code position}, or none for null. A change re-lays the row's slots: on a
+     * row at rest (no A-Z, no typed line) it renders now, otherwise with the next render.
+     */
+    public void setHomeTile(@Nullable com.termux.app.dock.TaskbarHomeTilePolicy.Position position,
+                            @Nullable HomeTileListener listener) {
+        homeTileListener = listener;
+        if (homeTilePosition == position) return;
+        homeTilePosition = position;
+        // A page holds a different number of apps now.
+        invalidateMostUsedCache();
+        pinnedPageIndex = DockPagingModel.clampPage(pinnedPageIndex, getPinnedPagesCount());
+        lastSurfaceRenderSignature = 0;
+        if (configRepository != null && activeAzLetter == null
+            && TextUtils.isEmpty(lastInput.trim()) && !homeTileDragging) {
+            reload();
+            publishPageIndicator();
+        }
+        // The dock's reflection is a picture of the row: it is taken again with the tile in its
+        // new slot (DockIconReflection settles the request itself).
+        post(() -> {
+            Runnable invalidated = contentInvalidatedListener;
+            if (invalidated != null) invalidated.run();
+        });
+    }
+
+    /** Whether the row lays a Home tile out: the Taskbar's, lying down. */
+    private boolean homeTileActive() {
+        return homeTilePosition != null && !vertical;
+    }
+
+    /** How many apps a page of the row lying down holds: its slots, less the Home tile's. */
+    private int pinnedRowAppSlots() {
+        int slots = Math.max(1, maxButtonCount);
+        return homeTileActive()
+            ? Math.max(1, com.termux.app.dock.TaskbarHomeTilePolicy.appSlots(slots)) : slots;
+    }
+
+    /** Whether the row on screen holds the Home tile (a pinned page lying down). */
+    private boolean homeTileShown() {
+        return homeTileColumn >= 0 && homeTileSlot != null && homeTileSlot.getParent() == this
+            && homeTilePosition != null;
+    }
+
+    /**
+     * The column app {@code app} of a pinned page of {@code appSlots} apps stands in, and how many
+     * columns the page has, around the Home tile where the row shows one.
+     */
+    private int pinnedColumnOf(int app, int appSlots) {
+        if (!homeTileShown()) return app;
+        return com.termux.app.dock.TaskbarHomeTilePolicy.slotOf(app, homeTilePosition, appSlots);
+    }
+
+    private int pinnedColumnCount(int appSlots) {
+        return homeTileShown() ? appSlots + 1 : appSlots;
+    }
+
+    /** The Home tile's slot: a round shell like a folder's, holding the drawer's glyph. */
+    @NonNull
+    private View createHomeTileButton() {
+        FrameLayout shell = new FrameLayout(getContext());
+        shell.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        shell.setClipChildren(false);
+        shell.setClipToPadding(false);
+        ImageButton tile = new ImageButton(getContext());
+        int size = iconSizePx();
+        tile.setLayoutParams(new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
+        tile.setMinimumWidth(size);
+        tile.setMinimumHeight(size);
+        tile.setPadding(0, 0, 0, 0);
+        tile.setBackground(createPinnedFolderShellBackground());
+        tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
+        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_symbol_apps);
+        if (glyph != null) {
+            glyph = DrawableCompat.wrap(glyph.mutate());
+            DrawableCompat.setTint(glyph, getLauncherTextColor());
+            // A share of the box rather than pixels, so a new icon size keeps the glyph's air.
+            tile.setImageDrawable(new android.graphics.drawable.InsetDrawable(glyph, 0.27f));
+        }
+        tile.setContentDescription(getContext().getString(R.string.dock_taskbar_home_tile));
+        tile.setOnClickListener(v -> {
+            if (homeTileListener != null) homeTileListener.onHomeTileTapped();
+        });
+        tile.setOnTouchListener(new HomeTileTouch(shell));
+        shell.addView(tile);
+        slotIcons.add(new SlotIcon(shell, tile, null, null, null, null, null));
+        return shell;
+    }
+
+    /**
+     * The tile's touch: a tap is the button's own click; a long press without travel picks the
+     * tile up, and from then the drag is the tile's (the row reads the gesture as a child's) until
+     * it lets go, nearest {@link com.termux.app.dock.TaskbarHomeTilePolicy#dropAt} of where its
+     * centre is across the row.
+     */
+    private final class HomeTileTouch implements View.OnTouchListener {
+        @NonNull private final View shell;
+        private float downRawX;
+        private float downRawY;
+        private boolean pickedUp;
+        @Nullable private View pressed;
+        private final Runnable pickUp = this::pickUp;
+
+        HomeTileTouch(@NonNull View shell) {
+            this.shell = shell;
+        }
+
+        private void pickUp() {
+            if (pressed == null || homeTileListener == null) return;
+            pickedUp = true;
+            homeTileDragging = true;
+            pressed.setPressed(false);
+            pressed.cancelLongPress();
+            ViewParent parent = getParent();
+            if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+            Haptics.tick(SuggestionBarView.this, android.view.HapticFeedbackConstants.LONG_PRESS);
+            shell.animate().cancel();
+            shell.animate().scaleX(1.12f).scaleY(1.12f).setDuration(120L)
+                .setInterpolator(new DecelerateInterpolator()).start();
+        }
+
+        @SuppressLint("ClickableViewAccessibility")
+        @Override public boolean onTouch(View v, MotionEvent event) {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    pressed = v;
+                    pickedUp = false;
+                    downRawX = event.getRawX();
+                    downRawY = event.getRawY();
+                    v.removeCallbacks(pickUp);
+                    v.postDelayed(pickUp, ViewConfiguration.getLongPressTimeout());
+                    return false;
+                case MotionEvent.ACTION_MOVE: {
+                    if (!pickedUp) {
+                        int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                        if (Math.hypot(event.getRawX() - downRawX, event.getRawY() - downRawY) > slop)
+                            v.removeCallbacks(pickUp);
+                        return false;
+                    }
+                    // Along the row only, its centre held inside the row.
+                    float dx = event.getRawX() - downRawX;
+                    float centre = shell.getLeft() + shell.getWidth() / 2f;
+                    dx = Math.max(-centre, Math.min(getWidth() - centre, dx));
+                    shell.setTranslationX(dx);
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL: {
+                    v.removeCallbacks(pickUp);
+                    pressed = null;
+                    if (!pickedUp) return false;
+                    pickedUp = false;
+                    homeTileDragging = false;
+                    boolean up = event.getActionMasked() == MotionEvent.ACTION_UP;
+                    float centre = shell.getLeft() + shell.getWidth() / 2f + shell.getTranslationX();
+                    float fraction = getWidth() <= 0 ? 0.5f : centre / getWidth();
+                    if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) fraction = 1f - fraction;
+                    com.termux.app.dock.TaskbarHomeTilePolicy.Position drop =
+                        com.termux.app.dock.TaskbarHomeTilePolicy.dropAt(fraction);
+                    shell.animate().cancel();
+                    shell.animate().scaleX(1f).scaleY(1f).translationX(0f).setDuration(140L)
+                        .setInterpolator(new DecelerateInterpolator()).start();
+                    if (up && drop != homeTilePosition && homeTileListener != null)
+                        homeTileListener.onHomeTileMoved(drop);
+                    return true;
+                }
+                default:
+                    return pickedUp;
+            }
+        }
+    }
+
+    /**
+     * A finger's page swipe draws the row's icons off their places, and the Home tile is no
+     * page's: it is drawn where it stands, after the pages ({@link #dispatchDraw}).
+     */
+    @Override
+    protected boolean drawChild(@NonNull Canvas canvas, @NonNull View child, long drawingTime) {
+        if (child == homeTileSlot && !drawingHomeTileUnshifted && swipeOffsetDrawn()
+            && homeTileShown()) return false;
+        return super.drawChild(canvas, child, drawingTime);
+    }
+
+    /** The Home tile, drawn where it stands while a swipe offsets the pages. */
+    private void drawHomeTileUnshifted(@NonNull Canvas canvas) {
+        View tile = homeTileSlot;
+        if (tile == null || !homeTileShown() || tile.getVisibility() != VISIBLE) return;
+        drawingHomeTileUnshifted = true;
+        try {
+            drawChild(canvas, tile, getDrawingTime());
+        } finally {
+            drawingHomeTileUnshifted = false;
+        }
     }
 
     /**
@@ -1062,6 +1289,12 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void notifyIconsMoved() {
+        // A page switch slides the whole row; the Home tile is no page's, so it holds its place.
+        View tile = homeTileSlot;
+        if (tile != null && homeTileShown() && !homeTileDragging) {
+            float hold = pageSwitchAnimating ? -getTranslationX() : 0f;
+            if (tile.getTranslationX() != hold) tile.setTranslationX(hold);
+        }
         Runnable listener = iconMotionListener;
         if (listener != null) listener.run();
     }
@@ -1112,11 +1345,13 @@ public final class SuggestionBarView extends GridLayout
         int slotCount = swipePreviewSlotCount();
         int[] azColumns = swipePreviewColumns(slotCount);
         float pageOffset = swipeVisualOffsetPx + (swipePreviewDirection * pageAxisLengthPx());
+        // The staged page's apps stand around the Home tile's slot, as they will once it lands.
+        int columns = azColumns != null ? slotCount : pinnedColumnCount(slotCount);
         int count = 0;
         for (int i = 0; i < swipePreviewEntries.size() && i < slotCount && count < out.length; i++) {
-            int col = azColumns != null ? azColumns[i] : i;
-            float left = pageOffset + ((getWidth() * col) / (float) slotCount);
-            float right = pageOffset + ((getWidth() * (col + 1)) / (float) slotCount);
+            int col = azColumns != null ? azColumns[i] : pinnedColumnOf(i, slotCount);
+            float left = pageOffset + ((getWidth() * col) / (float) columns);
+            float right = pageOffset + ((getWidth() * (col + 1)) / (float) columns);
             out[count++] = (left + right) * 0.5f;
         }
         return count;
@@ -2709,6 +2944,8 @@ public final class SuggestionBarView extends GridLayout
             setAlpha(1f);
             suppressContextLongPressForSwipe = false;
             swipePageDragging = false;
+            // A Home tile drag that never heard its end (its row rebuilt under it) is over.
+            homeTileDragging = false;
             swipePagePosition = resolveCurrentSwipePagePosition();
             clearSwipePagePreview();
             setRowInteractionActive(true);
@@ -2959,6 +3196,8 @@ public final class SuggestionBarView extends GridLayout
 
     /** The child-owned cases, read live: all three begin <em>during</em> the stream, not before it. */
     private boolean isGestureOwnedByChild() {
+        // The Taskbar's Home tile picked up: its drag is the tile's, not a page swipe or a pull.
+        if (homeTileDragging) return true;
         LongPressPickupState state = activeLongPressPickupState;
         return state != null
             && (state.menuShown || state.notificationSwipeStarted || state.dragStarted);
@@ -3278,6 +3517,8 @@ public final class SuggestionBarView extends GridLayout
             pinnedPageIndex = DockPagingModel.clampPage(pinnedPageIndex, totalPages);
             pinnedPageOffset = pinnedPageIndex * pinnedItemsPerPage;
             buttonCount = Math.max(1, pinnedItemsPerPage);
+            // The Taskbar's Home tile takes a slot of its own beside the page's apps.
+            if (homeTileActive()) buttonCount = Math.max(1, pinnedItemsPerPage) + 1;
             if (isMostUsedDynamicPage(pinnedPageIndex)) {
                 // Dynamic most-used page: render ranked apps as launch-only buttons. pinnedForSlots
                 // stays empty so the render loop binds them with pinnedIndex -1 (no drag/reorder),
@@ -3335,6 +3576,15 @@ public final class SuggestionBarView extends GridLayout
         setAlpha(1f);
         removeAllViews();
         slotIcons.clear();
+        homeTileSlot = null;
+        homeTileColumn = -1;
+        homeTileAppSlots = 0;
+        // The Taskbar's Home tile, on a pinned page lying down: where it stands among the page's
+        // app slots, which keep their order around it.
+        boolean homeTileRow = pinnedSurface && homeTileActive() && homeTilePosition != null;
+        int homeAppSlots = homeTileRow ? Math.max(1, pinnedItemsPerPage) : 0;
+        int homeColumn = homeTileRow
+            ? com.termux.app.dock.TaskbarHomeTilePolicy.homeSlot(homeTilePosition, homeAppSlots) : -1;
         clearAzFocusedEntry();
         clearTerminalSearchFocus();
         lastAzResolvedSlot = -1;
@@ -3368,7 +3618,10 @@ public final class SuggestionBarView extends GridLayout
             View view = createEntryButton(entry);
             int renderCol = azPreview && azPriorityColumns != null
                 ? azPriorityColumns[col]
-                : (renderStartCol + col);
+                : homeTileRow
+                    ? com.termux.app.dock.TaskbarHomeTilePolicy.slotOf(col, homeTilePosition,
+                        homeAppSlots)
+                    : (renderStartCol + col);
             LayoutParams param = createSlotParams(renderCol);
             view.setLayoutParams(param);
             if (azPreview && activeAzPageIndex > 0 && !azFreshPageEntryKeys.isEmpty()
@@ -3414,6 +3667,16 @@ public final class SuggestionBarView extends GridLayout
             if (renderCol >= 0 && renderCol < usedColumns.length) {
                 usedColumns[renderCol] = true;
             }
+        }
+
+        if (homeTileRow && homeColumn >= 0 && homeColumn < buttonCount) {
+            View tile = createHomeTileButton();
+            tile.setLayoutParams(createSlotParams(homeColumn));
+            addView(tile);
+            usedColumns[homeColumn] = true;
+            homeTileSlot = tile;
+            homeTileColumn = homeColumn;
+            homeTileAppSlots = homeAppSlots;
         }
 
         if (pendingPinnedMutationFeedback && !azPreview) {
@@ -3691,6 +3954,8 @@ public final class SuggestionBarView extends GridLayout
         // The icon the dock handed over, which outranks the hint whenever it is set.
         signature = (31 * signature) + (vertical ? 0 : dockIconSizePx);
         signature = (31 * signature) + Math.max(1, buttonCount);
+        // Where the Taskbar's Home tile stands moves every slot after it.
+        signature = (31 * signature) + (homeTileActive() ? homeTilePosition.ordinal() + 1 : 0);
         signature = (31 * signature) + pinnedPageIndex;
         signature = (31 * signature) + activeAzPageIndex;
         signature = (31 * signature) + lastInput.trim().hashCode();
@@ -6675,6 +6940,9 @@ public final class SuggestionBarView extends GridLayout
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             if (child == null) continue;
+            // The Home tile is not an app the drop shifts; the apps before it are its children
+            // in their own order.
+            if (child == homeTileSlot) continue;
             float tx = 0f;
             if (folderDragHoverIndex >= 0 && i >= folderDragHoverIndex) {
                 tx += insertShift;
@@ -7016,7 +7284,8 @@ public final class SuggestionBarView extends GridLayout
         boolean folderEntryDrag = folderEntry != null;
         if (!pinnedDrag && !folderEntryDrag) return false;
 
-        int slotCount = Math.max(1, maxButtonCount);
+        boolean homeTile = homeTileShown();
+        int slotCount = homeTile ? homeTileAppSlots + 1 : Math.max(1, maxButtonCount);
         float width = Math.max(1f, targetView.getWidth());
         float x = Math.max(0f, Math.min(width, event.getX()));
         float slotWidth = width / slotCount;
@@ -7024,6 +7293,22 @@ public final class SuggestionBarView extends GridLayout
         int hoveredSlot = clamp((int) (contentX / Math.max(1f, slotWidth)), 0, slotCount - 1);
         float slotStartX = hoveredSlot * slotWidth;
         float dropXRatio = slotWidth <= 0f ? 0.5f : Math.max(0f, Math.min(1f, (contentX - slotStartX) / slotWidth));
+        if (homeTile) {
+            // Columns around the Home tile hold the page's apps in order; a drop on the tile
+            // itself lands beside it, on the side the finger is, or the other where none is.
+            int app = com.termux.app.dock.TaskbarHomeTilePolicy.appAt(hoveredSlot,
+                homeTilePosition, homeTileAppSlots);
+            if (app < 0) {
+                int after = com.termux.app.dock.TaskbarHomeTilePolicy.appAt(hoveredSlot + 1,
+                    homeTilePosition, homeTileAppSlots);
+                int before = com.termux.app.dock.TaskbarHomeTilePolicy.appAt(hoveredSlot - 1,
+                    homeTilePosition, homeTileAppSlots);
+                boolean right = (dropXRatio >= 0.5f && after >= 0) || before < 0;
+                app = Math.max(0, right ? after : before);
+                dropXRatio = right ? 0f : 1f;
+            }
+            hoveredSlot = app;
+        }
 
         int pageOffset = Math.max(0, pinnedPageIndex) * Math.max(1, pinnedItemsPerPage);
         int targetIndex = clamp(pinnedIndexAtDrawnSlot(drawnPinnedIndices, hoveredSlot, pageOffset),
@@ -7672,8 +7957,10 @@ public final class SuggestionBarView extends GridLayout
         int[] azColumns = swipePreviewColumns(slotCount);
         float pageOffset = swipeVisualOffsetPx + (swipePreviewDirection * pageAxisLengthPx());
         int iconSize = iconSizePx();
+        // The staged page's apps stand around the Home tile's slot, as they will once it lands.
+        int columns = azColumns != null ? slotCount : pinnedColumnCount(slotCount);
         for (int i = 0; i < swipePreviewEntries.size() && i < slotCount; i++) {
-            int col = azColumns != null ? azColumns[i] : i;
+            int col = azColumns != null ? azColumns[i] : pinnedColumnOf(i, slotCount);
             float cx;
             float cy;
             if (vertical) {
@@ -7682,8 +7969,8 @@ public final class SuggestionBarView extends GridLayout
                 cx = getWidth() * 0.5f;
                 cy = pageOffset + (railSlotLengthPx() * (col + 0.5f));
             } else {
-                float left = pageOffset + ((getWidth() * col) / (float) slotCount);
-                float right = pageOffset + ((getWidth() * (col + 1)) / (float) slotCount);
+                float left = pageOffset + ((getWidth() * col) / (float) columns);
+                float right = pageOffset + ((getWidth() * (col + 1)) / (float) columns);
                 cx = (left + right) * 0.5f;
                 cy = getHeight() * 0.5f;
             }
@@ -8776,7 +9063,7 @@ public final class SuggestionBarView extends GridLayout
     int computePinnedItemsPerPage() {
         if (vertical)
             return DockPagingModel.railItemsPerPage(railUsableLengthPx(), railSlotLengthPx());
-        return DockPagingModel.pinnedItemsPerPage(maxButtonCount);
+        return DockPagingModel.pinnedItemsPerPage(pinnedRowAppSlots());
     }
 
     /**
@@ -8805,7 +9092,7 @@ public final class SuggestionBarView extends GridLayout
         // report one page per pinned item (the "dozens of empty page ticks" failure), while
         // standing up maxButtonCount is the wrong number entirely — the column decides.
         return DockPagingModel.realPinnedPageCount(pinnedItemCount(),
-            vertical ? computePinnedItemsPerPage() : maxButtonCount);
+            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots());
     }
 
     private int pinnedItemCount() {
@@ -8814,7 +9101,7 @@ public final class SuggestionBarView extends GridLayout
 
     private int getPinnedPagesCount() {
         return DockPagingModel.pinnedPageCount(pinnedItemCount(),
-            vertical ? computePinnedItemsPerPage() : maxButtonCount, hasMostUsedDynamicPage());
+            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedDynamicPage());
     }
 
     /**
@@ -8830,13 +9117,13 @@ public final class SuggestionBarView extends GridLayout
     /** The dynamic page is always the trailing page, right after the real pinned pages. */
     private boolean isMostUsedDynamicPage(int pageIndex) {
         return DockPagingModel.isMostUsedDynamicPage(pageIndex, pinnedItemCount(),
-            vertical ? computePinnedItemsPerPage() : maxButtonCount, hasMostUsedDynamicPage());
+            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedDynamicPage());
     }
 
     /** Page index of the dynamic most-used page, or -1 when it isn't shown. */
     public int getPinnedDynamicPageIndex() {
         return DockPagingModel.dynamicPageIndex(pinnedItemCount(),
-            vertical ? computePinnedItemsPerPage() : maxButtonCount, hasMostUsedDynamicPage());
+            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedDynamicPage());
     }
 
     /** Top most-used apps (excluding currently pinned), filling one dock page. Cached until dirty. */

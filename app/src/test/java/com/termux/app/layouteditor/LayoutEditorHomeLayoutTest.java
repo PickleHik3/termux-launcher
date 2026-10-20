@@ -186,6 +186,21 @@ public class LayoutEditorHomeLayoutTest {
         assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.TASKBAR));
     }
 
+    /** The Taskbar's Home tile starts at the row's start and is stored next to the dock style. */
+    @Test
+    public void theTaskbarHomeTileIsHomesOneStoredPosition() {
+        assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.START,
+            places.taskbarHomeTile());
+        places.forVariant(LayoutVariant.NORMAL).setTaskbarHomeTile(
+            com.termux.app.dock.TaskbarHomeTilePolicy.Position.END);
+        assertEquals("end", prefs().getString("layout.home.taskbar_home_tile", null));
+        assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.END,
+            places.taskbarHomeTile());
+        prefs().edit().putString("layout.home.taskbar_home_tile", "sideways").commit();
+        assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.START,
+            places.taskbarHomeTile());
+    }
+
     /**
      * The Home layout carries the style the dock draws: one picked before it is built resolves to
      * the glass tray, so the dock it reads never goes blank.

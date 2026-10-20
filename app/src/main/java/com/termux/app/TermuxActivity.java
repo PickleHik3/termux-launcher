@@ -1829,6 +1829,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return frame != null
                 && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
                     || frame == mFrameGutterBackdropBitmap || frame == mHomeFloatChipsBackdropBitmap
+                    || frame == mRunStripBackdropBitmap
                     || (mLookGlass != null && mLookGlass.holds(frame))
                     || isSharedWallpaperBlurFrameInUse(frame));
         }
@@ -3180,6 +3181,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * chrome restyle) or rebuilds when the theme's glass base moved.
      */
     private void refreshHomeFloatChipsLook(boolean force) {
+        if (mRunStrip != null) mRunStrip.refreshTheme();
         if (mHomeFloatChips == null) return;
         mHomeFloatChips.refreshTheme();
         applyHomeFloatChipsGlass(force);
@@ -4780,8 +4782,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Under the Prompt line's field the lower bevel shows the icons as the tray's would,
         // aimed that much lower, and nowhere over the field or the icons themselves.
         int belowPx = mAppliedPromptFieldBandPx;
+        // The Taskbar holds its reflection to a low slab's strength (spec.reflectionScale).
         reflection.bind(program, host, container, mGlassOriginLeft + rowOffset, mGlassOriginTop,
-            belowPx, belowPx > 0 ? PROMPT_LINE_REFLECTION_SCALE : 1f);
+            belowPx, belowPx > 0 ? PROMPT_LINE_REFLECTION_SCALE : spec.reflectionScale);
     }
 
     /**
@@ -11673,6 +11676,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setMostUsedPageEnabled(mPreferences.isAppLauncherMostUsedPageEnabled());
         mSuggestionBarView.setAppDataProvider(mLauncherAppDataProvider);
         mSuggestionBarView.setConfigRepository(mLauncherConfigRepository);
+        // The Taskbar's Home tile, once the row has its pins to lay it out among.
+        syncTaskbarHomeTile();
         mSuggestionBarView.setAppCatalogChangedListener(() -> {
             syncAzScrubLettersAndTint();
             syncPinnedAppsHost();
@@ -16275,12 +16280,299 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void restyleDockSurface() {
         if (mPreferences == null || mChrome == null) return;
         syncDockBeadsListeners();
+        // The Taskbar's Home tile and run strip come and go with the spec.
+        syncTaskbar();
         // The glass is re-cut even where the geometry did not move: its features are the spec's.
         mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
         updateAppLauncherBarHeight();
         setTerminalToolbarHeight(true);
         mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
             | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    // ------------------------------------------------------------------ Taskbar
+    //
+    // Home's Taskbar (DockSurfaceSpec.TASKBAR): the dock row holds a Home tile among the apps
+    // (SuggestionBarView.setHomeTile, where it stands persisted in PlaceLayoutStore), and the run
+    // strip (RunStripView) floats above the dock on its own thin glass, where the minimised
+    // floats' chips would stand, while anything runs. The strip rides in Home's float layer, so it
+    // slides with Home and is never on the Workspace; it is fed from the same window chips as the
+    // Workspace's bar (syncWindowBarItems), built on Home too. Nothing here runs at rest.
+
+    /** The run strip, built with Home's float layer; null before. */
+    @Nullable private com.termux.app.dock.RunStripView mRunStrip;
+    /** How many of the strip's chips were the row's windows, the display's included, as last fed. */
+    private int mRunStripRowCount;
+    /** Whether the floats' room last gave up the strip's band ({@link #syncHomeFloatObstructions}). */
+    private boolean mRunStripBandTaken;
+    /** Whether the strip is fading out because nothing runs any more. */
+    private boolean mRunStripLeaving;
+    /** The shared frame the strip's glass draws, for the blur cache's in-use scan. */
+    @Nullable private Bitmap mRunStripBackdropBitmap;
+    /** What the strip's glass was last built from; null while it has none. */
+    @Nullable private List<Object> mRunStripGlassKey;
+
+    /** The air between the strip and the edge under it (the dock's dashes, or the keyboard). */
+    private static final float RUN_STRIP_AIR_DP = 6f;
+    /**
+     * The strip's corner radius: an entry's own (RunStripView.ENTRY_RADIUS_DP, 9 dp) and the
+     * 7 dp between an entry and the strip's edge, so the lit entry nests in the slab.
+     */
+    private static final float RUN_STRIP_RADIUS_DP = 16f;
+    /** The least air the strip keeps from the screen's sides, where the dock's slab has none. */
+    private static final float RUN_STRIP_SIDE_DP = 8f;
+
+    /** Whether Home's dock wears the Taskbar, so its strip and its Home tile are wanted. */
+    private boolean runStripWanted() {
+        return mPreferences != null && isSplitPanesEnabled()
+            && homeDockStyle() == com.termux.app.dock.DockStyle.TASKBAR;
+    }
+
+    /** The Home tile and the run strip follow the dock's spec: both on the Taskbar, neither elsewhere. */
+    private void syncTaskbar() {
+        syncTaskbarHomeTile();
+        // The chips and the strip trade places with the style.
+        syncHomeFloatChips();
+        if (!runStripWanted()) {
+            setRunStripEntries(java.util.Collections.emptyList());
+        } else {
+            com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+            if (bar != null && isWidgetsPageShowing()) syncWindowBarItems(bar);
+        }
+    }
+
+    /** The dock row holds the Home tile where Home's dock wears the Taskbar, and none elsewhere. */
+    private void syncTaskbarHomeTile() {
+        SuggestionBarView bar = mSuggestionBarView;
+        if (bar == null) return;
+        boolean on = mPreferences != null && dockSurfaceSpec().taskbar;
+        PlaceLayoutStore store = placeLayoutStore();
+        bar.setHomeTile(on ? (store != null ? store.taskbarHomeTile()
+                : com.termux.app.dock.TaskbarHomeTilePolicy.DEFAULT) : null,
+            on ? mTaskbarHomeTileListener : null);
+    }
+
+    /** The Home tile opens the drawer as Home's own drawer entry does, and remembers its place. */
+    private final SuggestionBarView.HomeTileListener mTaskbarHomeTileListener =
+        new SuggestionBarView.HomeTileListener() {
+            @Override public void onHomeTileTapped() {
+                openAppDrawerFromHome();
+            }
+
+            @Override public void onHomeTileMoved(
+                    @NonNull com.termux.app.dock.TaskbarHomeTilePolicy.Position position) {
+                PlaceLayoutStore store = placeLayoutStore();
+                if (store != null) store.setTaskbarHomeTile(position);
+                syncTaskbarHomeTile();
+            }
+        };
+
+    /**
+     * Feeds the run strip on Home from the windows the Workspace's bar shows: the row's windows,
+     * the display window's at its place, then the Home floats, a minimised one marked. Nobody is
+     * looking at a row window from Home, so none is acknowledged here; the lit entry is the Home
+     * float in focus, else the window the Workspace has in front.
+     */
+    private void syncRunStrip(@NonNull java.util.List<Integer> foregroundPids) {
+        if (mRunStrip == null) return;
+        if (!runStripWanted() || mPaneController == null) {
+            setRunStripEntries(java.util.Collections.emptyList());
+            return;
+        }
+        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
+            new java.util.ArrayList<>();
+        int rowCount = 0;
+        int selected = -1;
+        int displayChip = -1;
+        if (mCurrentWSession != null || isDisplayOnRow()) {
+            long now = android.os.SystemClock.uptimeMillis();
+            int slot = displayRowSlot();
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
+                rowWindows();
+            rowCount = com.termux.app.wall.DisplaySlot.rowCount(windows.size(), slot);
+            selected = com.termux.app.statusbar.WindowChipTarget.selectedChip(rowCurrentIndex(),
+                rowCount);
+            displayChip = slot >= 0 ? slot : -1;
+            for (int i = 0; i < windows.size(); i++) {
+                if (i == slot) items.add(displayWindowItem());
+                items.add(rowWindowItem(windows.get(i), i, foregroundPids, false, now));
+            }
+            if (slot == windows.size()) items.add(displayWindowItem());
+        }
+        int firstFloat = items.size();
+        addHomeFloatChips(items, foregroundPids);
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
+        boolean[] minimised = new boolean[floats.size()];
+        com.termux.app.terminal.TerminalPaneController.Window focused =
+            mPaneController.focusedHomeFloat();
+        for (int i = 0; i < minimised.length; i++) {
+            com.termux.app.terminal.TerminalPaneController.Window window = floats.get(i);
+            minimised[i] = window.isMinimised();
+            if (window == focused && !window.isMinimised()) selected = firstFloat + i;
+        }
+        mRunStripRowCount = rowCount;
+        setRunStripEntries(com.termux.app.dock.RunStripModel.build(items, selected, rowCount,
+            displayChip, minimised, getString(R.string.launcher_entry_new_window)));
+    }
+
+    /**
+     * The strip shows {@code entries}: it eases in as the first window starts, and eases away
+     * when nothing runs any more; between, the entries change in place.
+     */
+    private void setRunStripEntries(
+            @NonNull java.util.List<com.termux.app.dock.RunStripModel.Entry> entries) {
+        com.termux.app.dock.RunStripView strip = mRunStrip;
+        if (strip == null) return;
+        boolean show = com.termux.app.dock.RunStripModel.isShown(entries);
+        boolean reduced = isReducedMotionEnabled();
+        if (show) {
+            boolean arriving = strip.getVisibility() != View.VISIBLE || mRunStripLeaving;
+            if (mRunStripLeaving) {
+                mRunStripLeaving = false;
+                strip.animate().cancel();
+            }
+            strip.setEntries(entries);
+            if (!arriving) return;
+            if (!reduced) {
+                if (strip.getAlpha() >= 1f) strip.setAlpha(0f);
+                strip.animate().alpha(1f).setDuration(180L)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+            } else {
+                strip.setAlpha(1f);
+            }
+            onRunStripShownChanged();
+            return;
+        }
+        if (strip.getVisibility() != View.VISIBLE || mRunStripLeaving) return;
+        if (reduced) {
+            strip.setEntries(entries);
+            onRunStripShownChanged();
+            return;
+        }
+        mRunStripLeaving = true;
+        strip.animate().cancel();
+        strip.animate().alpha(0f).setDuration(160L)
+            .setInterpolator(new android.view.animation.AccelerateInterpolator())
+            .withEndAction(() -> {
+                if (!mRunStripLeaving) return;
+                mRunStripLeaving = false;
+                strip.setEntries(java.util.Collections.emptyList());
+                strip.setAlpha(1f);
+                onRunStripShownChanged();
+            })
+            .start();
+    }
+
+    /** The strip came or went: its glass is dressed or let go of, and the floats' room re-measured. */
+    private void onRunStripShownChanged() {
+        applyRunStripGlass(false);
+        boolean shown = mRunStrip != null && mRunStrip.getVisibility() == View.VISIBLE;
+        if (shown != mRunStripBandTaken) syncHomeFloatObstructions();
+    }
+
+    /**
+     * An entry of the strip was tapped: a Home float comes back on its page; a row window (the
+     * display window's included) is brought in front and the Workspace slides in on it.
+     */
+    private void onRunStripWindowTapped(int chipIndex) {
+        if (mPaneController == null || chipIndex < 0) return;
+        if (chipIndex >= mRunStripRowCount) {
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats =
+                chipFloats();
+            int at = chipIndex - mRunStripRowCount;
+            if (at < floats.size()) showHomeFloat(floats.get(at));
+            return;
+        }
+        if (mPaneWallController == null) return;
+        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+        showRowWindow(chipIndex);
+    }
+
+    /** The band the floats' room gives up to the strip while it shows, px. */
+    private int runStripBandPx(boolean shown) {
+        if (!shown) return 0;
+        return Math.round(dpToPx(com.termux.app.dock.RunStripView.HEIGHT_DP + RUN_STRIP_AIR_DP));
+    }
+
+    /**
+     * Stands the strip {@link #RUN_STRIP_AIR_DP} above the edge that covers Home from below (the
+     * keyboard's top while one is up, else the dock's top, its dashes included, so the strip never
+     * covers the dashes), and as far in from the screen's sides as the dock's slab; set only on a
+     * change. Whether the strip shows.
+     */
+    private boolean placeRunStrip(int dockTopPx, int keyboardTopPx) {
+        com.termux.app.dock.RunStripView strip = mRunStrip;
+        com.termux.app.terminal.HomeFloatLayer layer = mPaneController == null ? null
+            : mPaneController.homeFloatLayer();
+        if (strip == null || layer == null || strip.getVisibility() != View.VISIBLE) return false;
+        int[] at = new int[2];
+        layer.getLocationOnScreen(at);
+        int edge = keyboardTopPx >= 0 ? keyboardTopPx : dockTopPx;
+        float y = edge - runStripBandPx(true) - at[1] - strip.getTop();
+        if (strip.getTranslationY() != y) strip.setTranslationY(y);
+        int side = Math.max(Math.round(dpToPx(RUN_STRIP_SIDE_DP)),
+            getDockLayout().horizontalInsetPx);
+        if (strip.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams params =
+                (ViewGroup.MarginLayoutParams) strip.getLayoutParams();
+            if (params.leftMargin != side || params.rightMargin != side) {
+                params.leftMargin = side;
+                params.rightMargin = side;
+                strip.setLayoutParams(params);
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The strip stands on a thin glass slab of its own, the dock's material at the dock's values:
+     * the frost sampled at its place, the narrow ring of its outline, no shelf, no foot and no
+     * reflection of anything (a low slab). Below Android 13 it is the plain frost. Rebuilt when a
+     * value, the frame or the theme's glass base moves, or on {@code force}; let go of while the
+     * strip is off screen.
+     */
+    private void applyRunStripGlass(boolean force) {
+        com.termux.app.dock.RunStripView strip = mRunStrip;
+        if (strip == null) return;
+        if (!strip.isShown() || mPreferences == null || mChrome == null) {
+            if (mRunStripGlassKey != null) strip.setBackground(null);
+            mRunStripGlassKey = null;
+            mRunStripBackdropBitmap = null;
+            return;
+        }
+        float opacity = mPreferences.getAppBarOpacity() / 100f;
+        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        int grain = mPreferences.getDockGlassGrain();
+        int tint = mPreferences.getDockTintStrength();
+        Bitmap frame = null;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (shouldUseWallpaperPassthroughMode() && ChromePolicy.dockBlurEnabled(blurRadiusDp)
+                && wallpaperFrame != null) {
+            frame = mChrome.blurCache().obtain(blurRadiusDp, wallpaperFrame);
+            if (frame != null && frame.isRecycled()) frame = null;
+        }
+        Rect frameRect = new Rect(mChrome.blurCache().frameRectRef());
+        float density = getResources().getDisplayMetrics().density;
+        float radius = RUN_STRIP_RADIUS_DP * density;
+        List<Object> key = Arrays.asList(frame, frameRect, blurRadiusDp, opacity, grain, tint,
+            mFancierGlassLook, resolveAccessoryGlassBaseColor(), radius);
+        if (!force && key.equals(mRunStripGlassKey)) return;
+        mRunStripGlassKey = key;
+        mRunStripBackdropBitmap = frame;
+        com.termux.app.chrome.SharedFrameDrawable backdrop = null;
+        if (frame != null) {
+            backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame, frameRect,
+                mWallpaperParallax, com.termux.app.chrome.GlassAnchor.screen(strip));
+            backdrop.setClearFrame(glassClearFrame(blurRadiusDp));
+        }
+        // A card all round with its own ring, and no foot: the low slab's dim lower edge.
+        com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec
+            .of(blurRadiusDp, opacity, grain, radius, mFancierGlassLook)
+            .withRim(true)
+            .withSlice(1f, false)
+            .withTintStrength(tint);
+        strip.setBackground(com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
+            backdrop));
     }
 
     // ------------------------------------------------------------------ Prompt line
@@ -16411,12 +16703,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             field.setLayoutParams(params);
             moved = true;
         }
-        if (field.getVisibility() != View.VISIBLE) {
-            field.setVisibility(View.VISIBLE);
-            moved = true;
+        if (mPromptFieldUnderPalette) {
+            // Under the open palette the field keeps its band but shows nothing: the palette's
+            // own field is the one search box (its fade is setPromptFieldUnderPalette's).
+            if (field.getVisibility() == View.GONE) {
+                field.setAlpha(0f);
+                field.setVisibility(View.INVISIBLE);
+                moved = true;
+            }
+        } else {
+            if (field.getVisibility() != View.VISIBLE) {
+                field.setVisibility(View.VISIBLE);
+                moved = true;
+            }
+            float alpha = promptFieldAlpha(mAppliedPromptFieldReveal);
+            if (field.getAlpha() != alpha && !mPromptFieldFading) field.setAlpha(alpha);
         }
-        float alpha = promptFieldAlpha(mAppliedPromptFieldReveal);
-        if (field.getAlpha() != alpha) field.setAlpha(alpha);
         // The well nests in the slab: the dock's radius less the air between them.
         float dockRadius = isRoundedDockStyle() ? resolveDockCapsuleCornerRadiusPx(
             layout.appsBarHeightPx + layout.promptFieldFullBandPx) : 0f;
@@ -16432,6 +16734,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static float promptFieldAlpha(float reveal) {
         float t = Math.max(0f, Math.min(1f, (reveal - 0.35f) / 0.65f));
         return t * t * (3f - 2f * t);
+    }
+
+    /** Whether the command palette is open over the Prompt line's field, which then hides. */
+    private boolean mPromptFieldUnderPalette;
+    /** Whether the field is fading back in from under the palette; a dock pass leaves it be. */
+    private boolean mPromptFieldFading;
+
+    /**
+     * The palette opened or closed ({@link #setCommandPaletteInterceptorActive}): while it is open
+     * the Prompt line's field fades out under it, so the palette's field is the only search box
+     * on screen, and it fades back in when the palette goes. Nothing on any other dock.
+     */
+    private void setPromptFieldUnderPalette(boolean under) {
+        if (mPromptFieldUnderPalette == under) return;
+        mPromptFieldUnderPalette = under;
+        com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
+        if (field == null) return;
+        field.animate().cancel();
+        mPromptFieldFading = false;
+        if (field.getVisibility() == View.GONE) return;
+        float target = under ? 0f : promptFieldAlpha(mAppliedPromptFieldReveal);
+        if (isReducedMotionEnabled()) {
+            field.setAlpha(target);
+            field.setVisibility(under ? View.INVISIBLE : View.VISIBLE);
+            return;
+        }
+        if (!under) {
+            field.setVisibility(View.VISIBLE);
+            mPromptFieldFading = true;
+        }
+        field.animate().alpha(target).setDuration(under ? 120L : 180L)
+            .setInterpolator(new android.view.animation.DecelerateInterpolator())
+            .withEndAction(() -> {
+                mPromptFieldFading = false;
+                if (mPromptFieldUnderPalette && field.getVisibility() == View.VISIBLE)
+                    field.setVisibility(View.INVISIBLE);
+            })
+            .start();
     }
 
     /**
@@ -17337,6 +17677,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             else mFirstBootTour.onPaletteClosed();
             mFirstBootTour.onChromeChanged();
         }
+        // The Prompt line's field is not a second search box under the open palette.
+        setPromptFieldUnderPalette(active);
         if (mInAppKeyboard == null)
             return;
         mInAppKeyboard.setKeyValueInterceptor(active ? getCommandPaletteController() : null);
@@ -24134,6 +24476,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL));
         mHomeFloatChips = chips;
+        // The Taskbar's run strip rides there too, where the chips stand: Home's alone.
+        com.termux.app.dock.RunStripView strip = new com.termux.app.dock.RunStripView(this);
+        strip.setListener(new com.termux.app.dock.RunStripView.Listener() {
+            @Override public void onWindowTapped(int chipIndex) { onRunStripWindowTapped(chipIndex); }
+            @Override public void onNewWindowTapped() { createNewWindow(); }
+        });
+        android.widget.FrameLayout.LayoutParams stripParams =
+            new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                Math.round(dpToPx(com.termux.app.dock.RunStripView.HEIGHT_DP)),
+                android.view.Gravity.TOP);
+        layer.addView(strip, stripParams);
+        mRunStrip = strip;
         ((com.termux.app.launcher.widget.WidgetPaneView) view).setPagePinnedLayer(layer);
         mPaneController.setHomeFloatLayer(layer);
         syncHomeFloatChips();
@@ -24181,6 +24535,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.terminal.HomeFloatChipsPolicy.Chip> list =
             new java.util.ArrayList<>();
         java.util.List<Integer> pids = new java.util.ArrayList<>();
+        // Under the Taskbar the run strip carries the floats, a minimised one marked: no chips.
+        if (runStripWanted()) {
+            chips.setChips(list);
+            return true;
+        }
         for (com.termux.app.terminal.TerminalPaneController.Window window : minimisedHomeFloats()) {
             com.termux.app.terminal.TerminalWindowBar.WindowItem item = buildWindowItem(
                 mPaneController.windowActiveSession(window), list.size(), pids,
@@ -24206,6 +24565,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * whose factory may read a new scheme); let go of while the row is off screen.
      */
     private void applyHomeFloatChipsGlass(boolean force) {
+        // The run strip stands where the chips do and is dressed on the same passes.
+        applyRunStripGlass(force);
         com.termux.app.terminal.HomeFloatChipsView chips = mHomeFloatChips;
         if (chips == null) return;
         if (!chips.isShown() || mPreferences == null) {
@@ -24565,6 +24926,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeFloatChipsBandTaken = chipsShown;
         int chipsBand = com.termux.app.terminal.HomeFloatChipsPolicy.bandPx(
             getResources().getDisplayMetrics().density, chipsShown);
+        // The Taskbar's run strip stands there instead of the chips, and gives the same way.
+        boolean stripShown = placeRunStrip(dockTop, keyboardTop);
+        mRunStripBandTaken = stripShown;
+        chipsBand += runStripBandPx(stripShown);
         dockTop -= chipsBand;
         if (keyboardTop >= 0) keyboardTop -= chipsBand;
         // The floats breathe Home's Margin inside all that, the same air as the widget grid's
@@ -26314,6 +26679,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         syncBorderStatusSwipe(visible);
         if (!visible) {
+            // Home wears no status bar, but the Taskbar's run strip reads the same windows.
+            if (isWidgetsPageShowing() && runStripWanted()) syncWindowBarItems(bar);
             applyTerminalSurfaceAppearance();
             // Idempotence: the widgets live inside the GONE host here, so nothing is shown either
             // way — but updateStatusWidgets also owns starting and stopping the sampler, and
@@ -26454,8 +26821,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // stands at its place among the terminal windows' chips, selected while it is in front.
         if (isWidgetsPageShowing()) {
             // Home wears no status bar: the row is empty there, and the minimised Home floats
-            // come back from the chips above the dock instead.
+            // come back from the chips above the dock instead, or the Taskbar's run strip.
             selected = -1;
+            syncRunStrip(foregroundPids);
         } else if (mPaneController != null && (mCurrentWSession != null || isDisplayOnRow())) {
             rowWindows = true;
             long now = android.os.SystemClock.uptimeMillis();
@@ -26471,28 +26839,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The display window's chip, where it stands among the windows'.
                 if (i == slot) items.add(displayWindowItem());
                 com.termux.app.terminal.TerminalPaneController.Window window = windows.get(i);
-                TerminalSession session = mPaneController.windowActiveSession(window);
                 // Looking at the window is the acknowledgement: whatever it wanted, the user is here.
                 if (i == current && !onDisplay) clearWindowAttention(window);
-                com.termux.terminal.TerminalEmulator progress = windowProgressReporter(window, now);
-                // Agents first: observeWindowPhases reads back what this refresh's agent pass wrote,
-                // so a title that has just turned the ring on must not be a refresh behind.
-                com.termux.app.terminal.AgentStatus.State agentState = observeWindowAgents(window, now);
-                for (TerminalSession shell : mPaneController.shellsOf(window)) syncPaneAttention(shell);
-                int phases = observeWindowPhases(window, i == current && !onDisplay, now);
-                items.add(buildWindowItem(session, i, foregroundPids,
-                    mPaneController.windowName(window))
-                    .withBusy(progress != null || (phases & PHASE_WORKING) != 0)
-                    .withAttention(isWindowAwaitingUser(window) || (phases & PHASE_ATTENTION) != 0)
-                    .withDone((phases & PHASE_DONE) != 0,
-                        (phases & PHASE_DONE) != 0 && windowCommandFailed(window))
-                    .withProgress(progress == null || progress.getProgressState()
-                            == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_INDETERMINATE
-                            ? com.termux.app.terminal.TerminalWindowBar.WindowItem.NO_PERCENTAGE
-                            : progress.getProgressValue(),
-                        progress != null && progress.getProgressState()
-                            == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR)
-                    .withAgentState(agentState));
+                items.add(rowWindowItem(window, i, foregroundPids, i == current && !onDisplay, now));
             }
             if (slot == windows.size()) items.add(displayWindowItem());
             // Home floats are windows of the session too: chips after the row's, marked as floats.
@@ -26520,6 +26869,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAgentStatuses.retain(live);
         if (mPaneController != null) mPaneController.retainPaneAttention(live);
         return pids;
+    }
+
+    /**
+     * The chip for the row's terminal window {@code window} at {@code index}, its marks read from
+     * this refresh's observation of its shells; {@code seen} when the user is looking at it.
+     */
+    @NonNull
+    private com.termux.app.terminal.TerminalWindowBar.WindowItem rowWindowItem(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window, int index,
+            @NonNull java.util.List<Integer> foregroundPids, boolean seen, long now) {
+        TerminalSession session = mPaneController.windowActiveSession(window);
+        com.termux.terminal.TerminalEmulator progress = windowProgressReporter(window, now);
+        // Agents first: observeWindowPhases reads back what this refresh's agent pass wrote,
+        // so a title that has just turned the ring on must not be a refresh behind.
+        com.termux.app.terminal.AgentStatus.State agentState = observeWindowAgents(window, now);
+        for (TerminalSession shell : mPaneController.shellsOf(window)) syncPaneAttention(shell);
+        int phases = observeWindowPhases(window, seen, now);
+        return buildWindowItem(session, index, foregroundPids, mPaneController.windowName(window))
+            .withBusy(progress != null || (phases & PHASE_WORKING) != 0)
+            .withAttention(isWindowAwaitingUser(window) || (phases & PHASE_ATTENTION) != 0)
+            .withDone((phases & PHASE_DONE) != 0,
+                (phases & PHASE_DONE) != 0 && windowCommandFailed(window))
+            .withProgress(progress == null || progress.getProgressState()
+                    == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_INDETERMINATE
+                    ? com.termux.app.terminal.TerminalWindowBar.WindowItem.NO_PERCENTAGE
+                    : progress.getProgressValue(),
+                progress != null && progress.getProgressState()
+                    == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR)
+            .withAgentState(agentState);
     }
 
     private static final int PHASE_WORKING = 1;
