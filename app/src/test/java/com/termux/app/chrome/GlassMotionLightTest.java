@@ -433,6 +433,99 @@ public class GlassMotionLightTest {
         assertConst(agsl, "kLiveDisp", GlassRefraction.LIVE_DISPERSION);
     }
 
+    // ------------------------------------------------------------- the live rim's clearer picture
+
+    @Test
+    public void livenessIsTheMostOfAWholeLeanAndNothingAtRest() {
+        float d = 2.625f;
+        float wholeLag = GlassMotionLight.LAG_MAX_DP * d / GlassRefraction.LAG_LEAN_GAIN;
+        assertEquals(0f, GlassRefraction.liveness(0f, 0f, 0f, 0f, 0f, d), 0f);
+        assertEquals(0.5f, GlassRefraction.liveness(wholeLag * 0.3f, wholeLag * 0.4f, 0f, 0f, 0f, d), 1e-5f);
+        assertEquals(1f, GlassRefraction.liveness(wholeLag * 3f, 0f, 0f, 0f, 0f, d), 0f);
+        // The press rig's 1.1 degrees is a quarter of a lean, as the rim's own lean is.
+        float tilt = (float) Math.sin(Math.toRadians(1.1));
+        assertEquals(0.23f, GlassRefraction.liveness(0f, 0f, tilt, 0f, 0f, d), 0.005f);
+        // A whole press's dent is a whole one; a rebound counts as much.
+        float dent = GlassMotionLight.DENT_DEPTH_DP * d;
+        assertEquals(1f, GlassRefraction.liveness(0f, 0f, 0f, 0f, dent, d), 1e-6f);
+        assertEquals(0.5f, GlassRefraction.liveness(0f, 0f, 0f, 0f, -dent / 2f, d), 1e-6f);
+        // The most, not the sum.
+        assertEquals(0.5f, GlassRefraction.liveness(wholeLag * 0.5f, 0f, 0f, 0f, dent * 0.2f, d), 1e-5f);
+    }
+
+    @Test
+    public void aLiveRimClearsTowardTheClearerFrameAndTheFaceNever() {
+        float clear = 0.76f; // Clear's clarity
+        for (float t = 0f; t <= 1f; t += 0.05f) {
+            float rest = GlassRefraction.liveClarityK(t, clear, GlassRefraction.LIVE_CLARITY, 0f);
+            // At liveness 0 it is the resting term exactly.
+            float x = 1f - t;
+            float old = x > 0f ? x * x * (3f - 2f * x) * clear : 0f;
+            assertEquals("rest at " + t, old, rest, 1e-6f);
+            float live = GlassRefraction.liveClarityK(t, clear, GlassRefraction.LIVE_CLARITY, 1f);
+            assertTrue("clearer while live at " + t, live >= rest - 1e-6f);
+            assertTrue("never past the clearer frame", live <= 1f + 1e-6f);
+        }
+        // The rim is wholly the clearer frame at a whole lean; the outer third of the band too.
+        assertEquals(1f, GlassRefraction.liveClarityK(0f, clear, GlassRefraction.LIVE_CLARITY, 1f), 1e-6f);
+        assertEquals(1f, GlassRefraction.liveClarityK(1f / 3f, clear, GlassRefraction.LIVE_CLARITY, 1f), 1e-5f);
+        // The face (t 1) never, at any liveness; the guardrail under the pane's text.
+        for (float live : new float[] {0f, 0.3f, 1f}) {
+            assertEquals(0f, GlassRefraction.liveClarityK(1f, clear, GlassRefraction.LIVE_CLARITY, live), 0f);
+            assertEquals(0f, GlassRefraction.liveClarityK(1f, 0f, GlassRefraction.LIVE_CLARITY, live), 0f);
+        }
+        // A frosted look clears its rim only while it moves, and only with a clearer frame bound.
+        assertEquals(0f, GlassRefraction.liveClarityK(0f, 0f, GlassRefraction.LIVE_CLARITY, 0f), 0f);
+        assertEquals(0.5f, GlassRefraction.liveClarityK(0f, 0f, GlassRefraction.LIVE_CLARITY, 0.5f), 1e-6f);
+        assertEquals(0f, GlassRefraction.liveClarityK(0f, 0f, 0f, 1f), 0f);
+        // It eases with liveness: no step anywhere.
+        float last = 0f;
+        for (int i = 0; i <= 100; i++) {
+            float k = GlassRefraction.liveClarityK(0.2f, clear, GlassRefraction.LIVE_CLARITY, i / 100f);
+            assertTrue(k >= last - 1e-6f);
+            if (i > 0) assertTrue("eases at " + i, k - last < 0.02f);
+            last = k;
+        }
+    }
+
+    @Test
+    public void aLiveBendMovesFurtherThanTheClearerFramesBlur() {
+        // Research recommendation 2: the bend's change while moving should pass the blur of the
+        // frame the rim samples. At the press rig's 1.1 degrees on Clear (27 dp over 18), a couple
+        // of dp in, the leaned bend moves the picture further than CLARITY_RADIUS_DP.
+        float d = 2.625f;
+        GlassRefraction.Look clear = new GlassRefraction.Look(27, 18, 10, 0, 40, 76);
+        float rimW = GlassRefraction.Look.rimWidthPx(d);
+        float lean = GlassRefraction.tiltLean(-1f, 0f, (float) Math.sin(Math.toRadians(1.1)), 0f);
+        float inside = 2f * d;
+        float rest = GlassRefraction.pullPx(inside, clear.bandPx(d), clear.strengthPx(d), 1000f, rimW);
+        float live = GlassRefraction.livePullPx(inside, clear.bandPx(d), clear.strengthPx(d), 1000f,
+            rimW, lean);
+        assertTrue((live - rest) / d + " dp", live - rest > GlassRefraction.CLARITY_RADIUS_DP * d);
+    }
+
+    @Test
+    public void theProgramClearsTheRimOnlyWhenLiveAndOnlyFromItsOwnClearerFrame() {
+        String agsl = GlassRefraction.AGSL;
+        assertTrue(agsl.contains("uniform float uLiveClarity;"));
+        String rest = "float clarityK = uClarity > 0.0 && x > 0.0 ? x * x * (3.0 - 2.0 * x) * uClarity : 0.0;";
+        String gate = "if (live && uLiveClarity > 0.0 && x > 0.0) {";
+        assertTrue("the resting term is untouched", agsl.contains(rest));
+        assertTrue(agsl.indexOf(gate) > agsl.indexOf(rest));
+        assertTrue(agsl.contains("float xl = min(x * (1.0 + kLiveReach * liveK), 1.0);"));
+        assertTrue(agsl.contains(
+            "clarityK = xl * xl * (3.0 - 2.0 * xl) * mix(uClarity, 1.0, uLiveClarity * liveK);"));
+        // liveK is set only inside the live gate, and is 0 otherwise.
+        assertTrue(agsl.contains("float liveK = 0.0;"));
+        assertTrue(agsl.indexOf("liveK = clamp(") > agsl.indexOf("if (live) {"));
+        // Before the samples, so it reuses them: no new eval of either picture.
+        assertTrue(agsl.indexOf(gate) < agsl.indexOf("content.eval("));
+        assertEquals(4, agsl.split("sharp\\.eval\\(", -1).length - 1);
+        assertEquals(4, agsl.split("content\\.eval\\(", -1).length - 1);
+        assertConst(agsl, "kDentDepthDp", GlassMotionLight.DENT_DEPTH_DP);
+        assertConst(agsl, "kLiveReach", GlassRefraction.LIVE_CLARITY_REACH);
+    }
+
     private static void assertConst(String agsl, String name, float java) {
         Matcher m = Pattern.compile("const float " + name + " = ([0-9.]+);").matcher(agsl);
         assertTrue(name + " is a plain decimal constant", m.find());

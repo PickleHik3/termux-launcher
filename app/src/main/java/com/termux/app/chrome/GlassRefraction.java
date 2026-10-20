@@ -33,8 +33,9 @@ import java.util.Arrays;
  * back to nothing, as Haze's edge softness does, so the outline's own pixel shows the picture just
  * outside it and the glass is continuous with the wallpaper there.</p>
  * <p>The outline gathers the wallpaper's own light: the sample is brightened in proportion to
- * itself, most toward one key light up and to the left with a quarter share all round, fading
- * inward over about a dp and a half, and less over a pale backdrop, so the edge reads as the
+ * itself, a quarter share all round and a sharp glint where the outline faces one key light up
+ * and to the left, a faint one where it faces straight away, over a slightly darkened edge,
+ * fading inward over about a dp and a half, and less over a pale backdrop, so the edge reads as the
  * wallpaper's colour caught at the outline rather than a white line drawn on it. The brightening
  * is held under the headroom the sample's brightest channel has left, so no channel clips and a
  * pale sky's edge stays blue rather than turning white or cyan. The light is fixed material, not
@@ -69,7 +70,11 @@ import java.util.Arrays;
  * under a dragging finger, a held border's press, a pane's own press rig — writes {@code uTilt}
  * ({@link Program#setTilt}): the picture through the face is carried toward the edge going away,
  * as a tilted slab displaces what is behind it, and the rim's lean takes the tilt on top of the
- * lag's. Flat, it is 0 and draws nothing new.</p>
+ * lag's. Flat, it is 0 and draws nothing new. The tilt and the lag's lean also turn the key
+ * light ({@code uKeyLight}, {@link #keyLight}) as a light fixed in the world turns in the tipping
+ * plate's frame, so the glint travels round the corners with the pose, and while the slab moves
+ * its rim clears toward the clearer frame where it has one, so the bend has detail to move
+ * (glass-perception-research-2026-10-20).</p>
  */
 public final class GlassRefraction {
 
@@ -235,8 +240,36 @@ public final class GlassRefraction {
         static final float GLOW_DP = 1.4f;
         /** The share every side gets, so the light follows the whole shape. {@code kAmbient}. */
         static final float AMBIENT = 0.25f;
-        /** The key light's falloff round the outline, a wide lobe. {@code kKeyExp}. */
-        static final float KEY_EXPONENT = 2f;
+        /**
+         * The key light's falloff round the outline ({@code kKeyExp}): a narrow lobe, the low end
+         * of Haze's 16 to 24, half its peak about 17 degrees either side of the light. It was 2,
+         * a lobe so wide that a tilt only reweighted the edges and the light never travelled; at
+         * 16 a 3-degree tilt, which turns the light by 6 ({@link GlassRefraction#keyLight}),
+         * moves it a third of its width (glass-perception-research-2026-10-20, recommendation 1:
+         * Motoyoshi 2010, a sharp highlight over a blurred body reads as transparent, a soft one
+         * as more frost).
+         */
+        static final float KEY_EXPONENT = 16f;
+        /**
+         * The narrow lobe's peak, as a share of the old wide lobe's ({@code kKeyPeak}): the light
+         * the outline gathers round its whole length is the wide lobe's, gathered into a sharper
+         * and brighter glint. The mean of {@code max(cos, 0)^n} round the circle is
+         * {@code (n-1)!! / (2 n!!)} for even n: a quarter at 2, 0.0982 at 16, so 0.25 / 0.0982.
+         * The ambient share is untouched. Strength "clearly noticeable", Schlüter & Faul 2014's
+         * point where specular takes over from distortion; the headroom hold
+         * ({@link GlassRefraction#heldK}) still keeps every channel under its alpha.
+         */
+        static final float KEY_PEAK = 2.546f;
+        /**
+         * The counter-lobe ({@code kCounter}): the same lobe, this much of it, on the rim facing
+         * straight away from the key light, the light that entered at the lit rim caught again on
+         * the inside of the far one. It turns with the key light, as everything the light draws
+         * does. A faint fifth: at rest the bottom-right corner gathers 0.63 where it had the
+         * ambient 0.25, and the slab reads as having an inside (research recommendation 4;
+         * Ohara 2022, specular raises perceived thickness; Schlüter & Faul 2019, mirror images
+         * from inside surfaces are a shape cue).
+         */
+        static final float COUNTER = 0.2f;
         /** How much of the glint a white backdrop takes away: over white a quarter is left. {@code kPaleCut}. */
         static final float PALE_CUT = 0.75f;
         /** How much the light brightens the backdrop's own colour. {@code kGain}. */
@@ -262,8 +295,14 @@ public final class GlassRefraction {
         static final float MAX_EDGE_GAIN = 2.25f;
         /** A little grey light, so a black wallpaper still shows an edge. {@code kLift}. */
         static final float LIFT = 0.07f;
-        /** The faint dark under the light. {@code kEdgeShade}. */
-        static final float EDGE_SHADE = 0.05f;
+        /**
+         * The dark edge under the light ({@code kEdgeShade}), all round but for under the key
+         * light's lobe, where it gives way ({@link GlassRefraction#shadeShare}) and so turns with
+         * the light. Was 0.05; 0.10 is the low end of the 10 to 20 percent the research takes
+         * from Haze's 10 to 32 and Apple's 2027 "darkened edge" (recommendation 4): the slab's
+         * edge reads as glass with a thickness, not a line drawn on the frost.
+         */
+        static final float EDGE_SHADE = 0.10f;
         /**
          * Where the brightening starts to give way to the headroom the sample's brightest channel
          * has left: below half of it the light is exactly as asked, above it the light eases
@@ -541,6 +580,14 @@ public final class GlassRefraction {
         // axis, as a vector in its own px axes pointing at the edge going away from the viewer.
         // (0, 0) flat, which is every surface but a tipping pane. tiltVector in Java.
         "uniform float2 uTilt;\n" +
+        // The gathered light's key light, a unit vector in the slab's own px axes: up and to the
+        // left at rest, turned by the slab's pose (its tilt and its lag's lean) as a light fixed in
+        // the world turns in a tipping plate's frame. keyLight in Java; never written by time.
+        "uniform float2 uKeyLight;\n" +
+        // How far toward the clearer picture the rim goes while the slab moves, at a whole lean:
+        // LIVE_CLARITY while a clearer frame of its own is bound, 0 while sharp is the frost
+        // itself (or nothing), so a live rim then reads no extra sample.
+        "uniform float uLiveClarity;\n" +
         // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
         // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
         // refracting the wallpaper that shows through the transparent key cell. uLensActive carries
@@ -559,21 +606,23 @@ public final class GlassRefraction {
         "const float kDecay = 0.225;\n" +
         // The pressed key's added glow at its centre; KEY_GLOW in Java.
         "const float kKeyGlow = 0.15;\n" +
-        // The gathered light: one key light up and to the left, how fast the light fades inward
-        // and how far it reaches, the share every side gets, how much a pale backdrop takes off the
-        // glint, how much it brightens the backdrop's own colour, a little grey lift, and the faint
-        // dark under it. KEY_LIGHT_X, KEY_LIGHT_Y, LUMA_R/G/B and Look.GLOW_DP, GLOW_REACH_DP,
-        // AMBIENT, KEY_EXPONENT, PALE_CUT, GAIN, LIFT and EDGE_SHADE in Java.
-        "const float2 kKeyLight = float2(-0.552, -0.834);\n" +
+        // The gathered light (its key light is uKeyLight): how fast the light fades inward and how
+        // far it reaches, the share every side gets, the key lobe's narrowness, its peak and the
+        // counter-lobe's share of it, how much a pale backdrop takes off the glint, how much it
+        // brightens the backdrop's own colour, a little grey lift, and the dark edge under it.
+        // LUMA_R/G/B and Look.GLOW_DP, GLOW_REACH_DP, AMBIENT, KEY_EXPONENT, KEY_PEAK, COUNTER,
+        // PALE_CUT, GAIN, LIFT and EDGE_SHADE in Java.
         "const float3 kLumaW = float3(0.2126, 0.7152, 0.0722);\n" +
         "const float kGlowDp = 1.4;\n" +
         "const float kGlowReachDp = 10.0;\n" +
         "const float kAmbient = 0.25;\n" +
-        "const float kKeyExp = 2.0;\n" +
+        "const float kKeyExp = " + Look.KEY_EXPONENT + ";\n" +
+        "const float kKeyPeak = " + Look.KEY_PEAK + ";\n" +
+        "const float kCounter = " + Look.COUNTER + ";\n" +
         "const float kPaleCut = 0.75;\n" +
         "const float kGain = 1.6;\n" +
         "const float kLift = 0.07;\n" +
-        "const float kEdgeShade = 0.05;\n" +
+        "const float kEdgeShade = " + Look.EDGE_SHADE + ";\n" +
         // Dispersion on the gathered light: uDisp's full share, how far red's and blue's light
         // part at a corner per unit of Glint's part in dp, the clarity at which the sharp picture
         // carries that fringe by itself, and Glint's share, the part that clarity fades.
@@ -608,6 +657,11 @@ public final class GlassRefraction {
         "const float kDentRadiusDp = " + GlassRefraction.DENT_RADIUS_DP + ";\n" +
         "const float kDentPeak = " + GlassRefraction.DENT_PEAK + ";\n" +
         "const float kLiveDisp = " + GlassRefraction.LIVE_DISPERSION + ";\n" +
+        // The live rim's clearer picture: the dent's whole depth, dp, at which a press is a whole
+        // lean of liveness, and how much further in the clear part of the band reaches at a whole
+        // one. GlassMotionLight.DENT_DEPTH_DP and LIVE_CLARITY_REACH in Java.
+        "const float kDentDepthDp = " + GlassMotionLight.DENT_DEPTH_DP + ";\n" +
+        "const float kLiveReach = " + GlassRefraction.LIVE_CLARITY_REACH + ";\n" +
         // The tilted slab: how far its face carries the picture at the tilt's asymptote, dp, and
         // the sine at which half of that is reached; how much it magnifies across the face per
         // unit of that share and the most that moves the picture, dp; how many times its sine an
@@ -657,11 +711,23 @@ public final class GlassRefraction {
         "float cornerWeight(float2 p, float2 b) {\n" +
         "    return min(abs(p.x * p.y) / max(b.x * b.y, 1.0), 1.0);\n" +
         "}\n" +
+        // The key light's narrow lobe on an outline facing it by c, the cosine: nothing facing
+        // away, and never past 1 (the resting light is a unit vector only to 1e-4, which the
+        // 16th power would make 0.4%). keyLobe in Java.
+        "float keyLobe(float c) {\n" +
+        "    return c > 0.0 ? pow(min(c, 1.0), kKeyExp) : 0.0;\n" +
+        "}\n" +
         // How much of the gathered light the outline with outward normal n takes: the ambient share
-        // all round, the rest on the key light's wide lobe. gatherShare in Java.
+        // all round, the rest on the key light's lobe at its peak and the counter-lobe's fifth of
+        // it facing straight away, both under the one light the pose turns. gatherShare in Java.
         "float gatherShare(float2 n) {\n" +
-        "    float c = max(dot(n, kKeyLight), 0.0);\n" +
-        "    return kAmbient + (1.0 - kAmbient) * (c > 0.0 ? pow(c, kKeyExp) : 0.0);\n" +
+        "    float c = dot(n, uKeyLight);\n" +
+        "    return kAmbient + (1.0 - kAmbient) * kKeyPeak * (keyLobe(c) + kCounter * keyLobe(-c));\n" +
+        "}\n" +
+        // How much of the dark edge the outline with outward normal n takes: all of it but under
+        // the key light's lobe, so it turns with the light. shadeShare in Java.
+        "float shadeShare(float2 n) {\n" +
+        "    return 1.0 - keyLobe(dot(n, uKeyLight));\n" +
         "}\n" +
         // The light's strength k held under kMax, the most the sample's brightest channel can take
         // before it clips: exactly k below half of kMax, then easing toward kMax on 1 - 1/(4r),
@@ -728,7 +794,12 @@ public final class GlassRefraction {
         "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || uDent.z != 0.0 || tilted;\n" +
         "    float2 bendV = float2(0.0, 0.0);\n" +
         "    float tiltLean = 0.0;\n" +
+        "    float liveK = 0.0;\n" +
         "    if (live) {\n" +
+        // How live the slab is, 0..1: the most of a whole lean its lag, its tilt or its dent
+        // asks, so it eases back with the springs as they settle. liveness in Java.
+        "        liveK = clamp(max(max(kLagLean * length(uLag) / (kLagMaxDp * uDensity),\n" +
+        "            kTiltLean * length(uTilt)), abs(uDent.z) / (kDentDepthDp * uDensity)), 0.0, 1.0);\n" +
         "        float lean = kLagLean * dot(n, uLag) / (kLagMaxDp * uDensity);\n" +
         "        if (tilted) {\n" +
         "            tiltLean = clamp(-kTiltLean * dot(n, uTilt), -1.0, 1.0);\n" +
@@ -792,6 +863,15 @@ public final class GlassRefraction {
         // edge, half way at the band's middle, uClarity under the rim. Zero on the face.
         "    float x = 1.0 - t;\n" +
         "    float clarityK = uClarity > 0.0 && x > 0.0 ? x * x * (3.0 - 2.0 * x) * uClarity : 0.0;\n" +
+        // While the slab moves, the rim's picture clears toward the clearer frame, so the bend
+        // has detail to move (a bevel is thin glass, so less frosted than the face: de Rousiers
+        // et al. 2011), and the clear part reaches a little further in; it eases back as liveK
+        // does. Inside the band only: the face under the pane's text keeps its frost (Baudisch &
+        // Gutwin 2004). At liveK 0 it is the resting term exactly. liveClarityK in Java.
+        "    if (live && uLiveClarity > 0.0 && x > 0.0) {\n" +
+        "        float xl = min(x * (1.0 + kLiveReach * liveK), 1.0);\n" +
+        "        clarityK = xl * xl * (3.0 - 2.0 * xl) * mix(uClarity, 1.0, uLiveClarity * liveK);\n" +
+        "    }\n" +
         // The colour split, at the corners only and in step with the pull there: red reads the
         // picture bent a little less, blue a little more, green as bent (three taps, Haze's
         // Simple). Where a clearer picture shows through, it is split the same way, so the fringe
@@ -838,8 +918,11 @@ public final class GlassRefraction {
         "        }\n" +
         "    }\n" +
         // The gathered light: the backdrop's own colour brightened at the outline and fading
-        // inward over kGlowDp, brightest toward the key light with the ambient share all round, a
-        // finger's light added to it, and less of it over a pale backdrop. It multiplies the
+        // inward over kGlowDp, a sharp glint where the outline faces the key light and a faint one
+        // where it faces straight away, the ambient share all round, a finger's light added to it,
+        // and less of it over a pale backdrop; first the dark edge, which gives way under the
+        // glint. All of it under uKeyLight, so a tipping slab's glint travels round its corners
+        // as a fixed light's reflection does, and nothing in it moves by itself. It multiplies the
         // colour, so a blue wallpaper gives a brighter blue edge; only kLift is grey. Its strength
         // is held under the headroom the brightest channel has left (heldK), so no channel clips
         // and the hue is kept: a pale sky's edge stays blue rather than going cyan or white. The
@@ -855,7 +938,7 @@ public final class GlassRefraction {
         "        if (tilted) {\n" +
         "            k = k * (1.0 + kTiltLight * tiltLean);\n" +
         "        }\n" +
-        "        col.rgb = col.rgb * half(1.0 - glow * kEdgeShade);\n" +
+        "        col.rgb = col.rgb * half(1.0 - glow * kEdgeShade * shadeShare(n));\n" +
         "        float peak = float(max(col.r, max(col.g, col.b)));\n" +
         "        float kRaw = k;\n" +
         "        k = heldK(k, max(float(col.a) - peak, 0.0) / (kGain * peak + kLift));\n" +
@@ -917,9 +1000,76 @@ public final class GlassRefraction {
         out[1] = (hy / hw - offsetY) / Math.max(1e-4f, scaleY);
     }
 
-    /** The gathered light's key light, {@code kKeyLight}: up and to the left, a unit vector. */
+    /**
+     * The gathered light's key light at rest: up and to the left, a unit vector in the slab's own
+     * px axes (y down). What {@code uKeyLight} holds on a flat, still slab, and on every surface
+     * that never moves (the dock, the strip, the bars); {@link #keyLight} turns it with a pose.
+     */
     static final float KEY_LIGHT_X = -0.552f;
     static final float KEY_LIGHT_Y = -0.834f;
+
+    /**
+     * How high the key light stands over the glass, as the tangent of its elevation: 1, 45
+     * degrees. The program's light is a direction round the outline; turning it about a tilt axis
+     * needs it in three dimensions, and this is the one number that lifts it there. It changes
+     * nothing at rest. At 45 degrees a tilt across the light turns the glint round the outline by
+     * {@code atan(sin 2θ)}: 6 degrees at 3 of tilt, 30 at 18.
+     */
+    static final float KEY_LIGHT_RISE = 1f;
+    /**
+     * The most of a tilt the light is turned by, as a sine: 20 degrees, so 40 of turn. The
+     * plank's 18 plus a lag's whole lean (about 5) would pass it. Held there, a light standing
+     * at {@link #KEY_LIGHT_RISE} never crosses the slab's normal, where its direction round the
+     * outline would flip to the far side in one frame.
+     */
+    static final float KEY_LIGHT_MAX_SINE = 0.342f;
+
+    /**
+     * {@code uKeyLight}: the key light as the slab's pose turns it, into {@code out}, a unit
+     * vector in the slab's own px axes. A light fixed in the world, seen in the frame of a plate
+     * tipped by θ, turns about the tilt axis; its reflection turns twice that (the law of
+     * reflection), so the light is turned by 2θ about that axis, toward the edge rising toward
+     * the viewer: 6 degrees at 3 degrees of tilt and 36 at 18 (glass-perception research,
+     * recommendation 1; Doerschner et al. 2011 rocked their stimuli ±15 degrees, the same scale).
+     * The pose is the tilt ({@link #tiltVector}) and the lag's lean, which the bend already takes
+     * as a tilt would ({@link #liveLean}): its whole lean, held to one, counts as the tilt that
+     * leans an edge a whole one ({@link #TILT_LEAN_GAIN}), toward the edge the lag faces, so the
+     * glint, the counter-lobe and the dark edge stay with the bend and the slab's shape (Kim et
+     * al. 2011: any misalignment between a highlight and its shape costs gloss). Nothing else
+     * moves it, and nothing on a timer. Exactly {@link #KEY_LIGHT_X}, {@link #KEY_LIGHT_Y} flat
+     * and still.
+     */
+    static void keyLight(float tiltX, float tiltY, float lagXPx, float lagYPx, float density,
+                         @NonNull float[] out) {
+        out[0] = KEY_LIGHT_X;
+        out[1] = KEY_LIGHT_Y;
+        float gain = LAG_LEAN_GAIN / (GlassMotionLight.LAG_MAX_DP * Math.max(density, 1e-3f));
+        float leanX = lagXPx * gain, leanY = lagYPx * gain;
+        float lean = (float) Math.hypot(leanX, leanY);
+        if (lean > 1f) {
+            leanX /= lean;
+            leanY /= lean;
+        }
+        float px = tiltX - leanX / TILT_LEAN_GAIN;
+        float py = tiltY - leanY / TILT_LEAN_GAIN;
+        float s = (float) Math.hypot(px, py);
+        if (!(s > 0f)) return;
+        float dx = px / s, dy = py / s;
+        s = Math.min(s, KEY_LIGHT_MAX_SINE);
+        // 2θ from sin θ: no trigonometry.
+        float cos2 = 1f - 2f * s * s;
+        float sin2 = 2f * s * (float) Math.sqrt(1f - s * s);
+        // The light (KEY_LIGHT, KEY_LIGHT_RISE) over its in-plane length: along the tilt it turns
+        // with the rise toward -d; across it, it is unmoved.
+        float along = KEY_LIGHT_X * dx + KEY_LIGHT_Y * dy;
+        float turned = along * cos2 - KEY_LIGHT_RISE * sin2;
+        float lx = KEY_LIGHT_X + dx * (turned - along);
+        float ly = KEY_LIGHT_Y + dy * (turned - along);
+        float length = (float) Math.hypot(lx, ly);
+        if (!(length > 1e-4f)) return;
+        out[0] = lx / length;
+        out[1] = ly / length;
+    }
 
     /** Rec. 709's luma weights, {@code kLumaW}: how pale a sample is. */
     static final float LUMA_R = 0.2126f;
@@ -963,14 +1113,39 @@ public final class GlassRefraction {
     }
 
     /**
-     * The program's {@code gatherShare}: how much of the gathered light the outline with outward
-     * normal {@code (nx, ny)} takes, {@link Look#AMBIENT} all round and the rest on the key
-     * light's lobe.
+     * The program's {@code keyLobe}: the key light's lobe on an outline facing it by the cosine
+     * {@code c}, 0..1.
+     */
+    static float keyLobe(float c) {
+        return c > 0f ? (float) Math.pow(Math.min(c, 1f), Look.KEY_EXPONENT) : 0f;
+    }
+
+    /**
+     * The program's {@code gatherShare} at rest: how much of the gathered light the outline with
+     * outward normal {@code (nx, ny)} takes under the resting key light.
      */
     static float gatherShare(float nx, float ny) {
-        float c = Math.max(nx * KEY_LIGHT_X + ny * KEY_LIGHT_Y, 0f);
-        float key = c > 0f ? (float) Math.pow(c, Look.KEY_EXPONENT) : 0f;
-        return Look.AMBIENT + (1f - Look.AMBIENT) * key;
+        return gatherShare(nx, ny, KEY_LIGHT_X, KEY_LIGHT_Y);
+    }
+
+    /**
+     * The program's {@code gatherShare} under the key light {@code (lx, ly)} ({@link #keyLight}):
+     * {@link Look#AMBIENT} all round and the rest on the key light's lobe at
+     * {@link Look#KEY_PEAK}, plus {@link Look#COUNTER} of it facing straight away.
+     */
+    static float gatherShare(float nx, float ny, float lx, float ly) {
+        float c = nx * lx + ny * ly;
+        return Look.AMBIENT + (1f - Look.AMBIENT) * Look.KEY_PEAK
+            * (keyLobe(c) + Look.COUNTER * keyLobe(-c));
+    }
+
+    /**
+     * The program's {@code shadeShare}: how much of the dark edge ({@link Look#EDGE_SHADE}) the
+     * outline with outward normal {@code (nx, ny)} takes under the key light {@code (lx, ly)}:
+     * all of it but under the key lobe, where it gives way to the glint.
+     */
+    static float shadeShare(float nx, float ny, float lx, float ly) {
+        return 1f - keyLobe(nx * lx + ny * ly);
     }
 
     /**
@@ -1013,8 +1188,18 @@ public final class GlassRefraction {
     }
 
     /**
+     * What the dark edge leaves of a sample {@code insidePx} in from an outline with outward
+     * normal {@code (nx, ny)}, under the resting key light: {@code 1 - glow kEdgeShade shadeShare}.
+     */
+    static float shade(float insidePx, float density, float nx, float ny) {
+        return 1f - glow(insidePx, density) * Look.EDGE_SHADE
+            * shadeShare(nx, ny, KEY_LIGHT_X, KEY_LIGHT_Y);
+    }
+
+    /**
      * The program's gathered light on a premultiplied sample {@code (r, g, b, a)}, with no finger
-     * on the glass, into {@code out}: darkened by {@link Look#EDGE_SHADE} on the glow, brightened
+     * on the glass and the key light at rest, into {@code out}: darkened by
+     * {@link Look#EDGE_SHADE} on the glow where the outline takes the shade ({@link #shadeShare}), brightened
      * in proportion to itself by {@link Look#GAIN} plus {@link Look#LIFT} of grey, both times
      * {@code k} held under the brightest channel's headroom ({@link #heldK}), and held under the
      * alpha as a guard.
@@ -1029,7 +1214,7 @@ public final class GlassRefraction {
                             float nx, float ny, float edgeGain, @NonNull float[] out) {
         float luma = r * LUMA_R + g * LUMA_G + b * LUMA_B;
         float k = gatherK(insidePx, density, gatherShare(nx, ny), luma) * edgeGain;
-        float shade = 1f - glow(insidePx, density) * Look.EDGE_SHADE;
+        float shade = shade(insidePx, density, nx, ny);
         float sr = r * shade, sg = g * shade, sb = b * shade;
         if (k > 0f) k = heldK(k, headroomK(Math.max(sr, Math.max(sg, sb)), a));
         float gain = 1f + Look.GAIN * k;
@@ -1078,7 +1263,7 @@ public final class GlassRefraction {
         if (splitPx <= 0f || insidePx >= Look.GLOW_REACH_DP * density) return;
         float luma = r * LUMA_R + g * LUMA_G + b * LUMA_B;
         float kRaw = gatherK(insidePx, density, gatherShare(nx, ny), luma) * edgeGain;
-        float shade = 1f - glow(insidePx, density) * Look.EDGE_SHADE;
+        float shade = shade(insidePx, density, nx, ny);
         float sr = r * shade, sb = b * shade;
         float kMax = headroomK(Math.max(sr, Math.max(g * shade, sb)), a);
         float gs = Look.GLOW_DP * density;
@@ -1184,6 +1369,60 @@ public final class GlassRefraction {
     static final float LIVE_DISPERSION = 0.15f;
 
     /**
+     * How far toward the clearer frame the rim's picture goes at a whole lean of liveness
+     * ({@link #liveness}), from the look's own clarity: all the way ({@code uLiveClarity} when a
+     * clearer frame is bound). A bend seen through frost is a blur moving over a blur. Through
+     * the clearer frame ({@link #CLARITY_RADIUS_DP}) it has detail to move: research
+     * recommendation 2 asks the bend's change to pass the blur of the frame it samples (Levi &
+     * Klein 1990, spatial thresholds about σ above the eye's own blur), and the lag's or tilt's
+     * lean moves a Clear rim's picture by about 5 dp at the press rig's 1.1 degrees and by its
+     * whole bend at a whole lean, against the clearer frame's 2 dp. A look with no clarity
+     * clears its rim only while it moves; the face never does.
+     */
+    static final float LIVE_CLARITY = 1f;
+    /**
+     * How much further in the clear part of the band reaches at a whole lean of liveness, as a
+     * share of how far it reaches at rest ({@code kLiveReach}): half again, so the outer third of
+     * the band, where the bend lives (Haze's profile puts a third of it a quarter of the way
+     * in), is wholly clear, and the band's inner part keeps the rest look's frost. Never the face:
+     * the share is held at the band.
+     */
+    static final float LIVE_CLARITY_REACH = 0.5f;
+
+    /**
+     * The program's {@code liveK}: how live the slab is, 0..1, the most of a whole lean its lag
+     * ({@link #lagLean}'s gain over the lag's length), its tilt ({@link #TILT_LEAN_GAIN} over the
+     * tilt's sine) or its dent (its depth over {@link GlassMotionLight#DENT_DEPTH_DP}) asks. It
+     * is pose, not time: it falls back with the springs as they settle and is 0 at rest.
+     */
+    static float liveness(float lagXPx, float lagYPx, float tiltX, float tiltY, float dentDepthPx,
+                          float density) {
+        float lag = LAG_LEAN_GAIN * (float) Math.hypot(lagXPx, lagYPx)
+            / (GlassMotionLight.LAG_MAX_DP * density);
+        float tilt = TILT_LEAN_GAIN * (float) Math.hypot(tiltX, tiltY);
+        float dent = Math.abs(dentDepthPx) / (GlassMotionLight.DENT_DEPTH_DP * density);
+        return Math.max(0f, Math.min(1f, Math.max(Math.max(lag, tilt), dent)));
+    }
+
+    /**
+     * The program's {@code clarityK}: how much of the clearer picture a pixel at {@code t} across
+     * the band (0 at the rim, 1 at its inner edge and on the face) shows, for the look's
+     * {@code clarity} ({@code uClarity}), how far a live rim may clear ({@code uLiveClarity}, 0
+     * with no clearer frame of its own) and how live the slab is ({@link #liveness}). At liveness
+     * 0 it is the resting term; on the face it is 0 always.
+     */
+    static float liveClarityK(float t, float clarity, float liveClarity, float liveK) {
+        float x = 1f - Math.max(0f, Math.min(1f, t));
+        if (x <= 0f) return 0f;
+        if (liveK > 0f && liveClarity > 0f) {
+            float xl = Math.min(x * (1f + LIVE_CLARITY_REACH * liveK), 1f);
+            float c = clarity + (1f - clarity) * liveClarity * liveK;
+            return xl * xl * (3f - 2f * xl) * c;
+        }
+        return clarity > 0f ? x * x * (3f - 2f * x) * clarity : 0f;
+    }
+
+    /**
      * The program's {@code lean}: how much of a whole lag an edge with outward normal
      * {@code (nx, ny)} takes for a lag of {@code (lagX, lagY)} px, -1 (behind) to 1 (facing it).
      */
@@ -1227,31 +1466,43 @@ public final class GlassRefraction {
      * of {@link #tiltShare} ({@code kTiltShiftDp}). A slab of thickness {@code h} and index
      * {@code n} tipped by {@code θ} displaces what is behind it by about
      * {@code h sin θ (1 - 1/n)}: in proportion to the sine at a press's degree or two, giving way
-     * as the tip deepens. Held here under {@code shift(s) = 14 s / (s + 0.12)} dp of sine
-     * {@code s}: about 1.9 dp (5 px on pong) at the pane rig's 1.1 degrees, 4.2 at 3, 6.5 at the
-     * held border's 6, and 10.1 at the plank's 18 — the brief's ceiling of 10 to 14 with room
-     * for the magnification on top, and never past 12.5 at any tilt. A straight line through the
-     * same 10 dp at 18 would leave 0.6 dp at the press rig, a pixel and a half, which nobody
-     * sees through a blurred wallpaper.
+     * as the tip deepens. Held here under {@code shift(s) = 9 s / (s + 0.10)} dp of sine
+     * {@code s}: about 1.45 dp (4 px on pong) at the pane rig's 1.1 degrees, 3.1 at 3, 4.6 at the
+     * held border's 6, and 6.8 at the plank's 18, never past 8.2 at any tilt. It was
+     * {@code 14 s / (s + 0.12)}, 10.1 dp at 18. A whole face moving alike carries no
+     * distortion (Fleming et al. 2011: the cue is the displacement's divergence), and a picture
+     * moving further than the pane itself reads as the picture moving, a snapshot hovering
+     * (Tamura & Nakauchi 2018). So the shift is kept, a picture moving against the pane is
+     * glass's signature, but held at the outline's own motion under the tilt, about 7 dp for a
+     * 150 dp half-height at 18 (research recommendation 3), and the gradient below carries the
+     * rest. A straight line through the same 7 dp at 18 would leave 0.4 dp at the press rig, a
+     * pixel, which nobody sees through a blurred wallpaper.
      */
-    static final float TILT_SHIFT_DP = 14f;
+    static final float TILT_SHIFT_DP = 9f;
     /** The sine at which the face shift is half its asymptote ({@code kTiltSoft}); see {@link #TILT_SHIFT_DP}. */
-    static final float TILT_SOFT = 0.12f;
+    static final float TILT_SOFT = 0.10f;
     /**
      * How much the face magnifies across itself per unit of {@link #tiltShare} ({@code kTiltMag}):
      * the picture's scale runs from {@code 1 - 2m} on the edge rising toward the viewer to
      * {@code 1 + 2m} on the edge going away, the perspective of a lens plate, with
-     * {@code m = TILT_MAG * share}: ±0.8% at 1.1 degrees, ±1.7% at 3, ±2.6% at 6 and ±4% at 18.
-     * It eases the face's swim from a slide into a tip.
+     * {@code m = TILT_MAG * share}: ±2.1% at 1.1 degrees, ±4.4% at 3, ±6.5% at 6 and ±9.7% at 18,
+     * until {@link #TILT_MAG_MAX_DP} holds it. Was 0.028 (±4% at 18): the gradient is the only
+     * thing on the face with divergence, pooled over the whole face, so it is Fleming's cue
+     * where the uniform shift is none, and magnification reads as curvature (Schlüter & Faul
+     * 2019). At 0.064 a pane from about 250 dp across the tilt's half extent reaches the cap at
+     * 18. The picture never folds while {@code m} stays under an eighth ({@link #tiltOffsetPx}),
+     * and it peaks at {@code TILT_MAG / (1 + TILT_SOFT)}, 0.058.
      */
-    static final float TILT_MAG = 0.028f;
+    static final float TILT_MAG = 0.064f;
     /**
-     * The most the magnification moves the picture at the face's ends, in dp
+     * The most the magnification moves the picture across the face, in dp
      * ({@code kTiltMagMaxDp}): {@code m} is held under this over the half extent along the tilt,
-     * so a whole-screen pane, whose ends are far from its middle, tips no further than a small
-     * one. Two thirds of it shows at the ends, the quadratic averaging to nothing.
+     * so a whole-screen pane, whose ends are far from its middle, tips no further than a mid-sized
+     * one. Two thirds of it shows at the ends against the face's mean, the quadratic averaging to
+     * nothing: 8 dp at the plank's 18, the research's starting size (about 0.24 degrees at 30 cm,
+     * the scale of Kawabe et al. 2015's deformations; recommendation 3). Was 4.
      */
-    static final float TILT_MAG_MAX_DP = 4f;
+    static final float TILT_MAG_MAX_DP = 12f;
     /**
      * How many times the tilt's sine along an edge's normal leans that edge's bend
      * ({@code kTiltLean}), on the same lean the lag drives ({@link #LAG_BEND}, {@link #LAG_BAND}):
@@ -1312,6 +1563,14 @@ public final class GlassRefraction {
      * moves for a tilt {@code (tiltX, tiltY)} ({@link #tiltVector}), into {@code out}. Toward the
      * edge rising toward the viewer, so the picture shows carried toward the edge going away.
      * Nothing flat.
+     *
+     * <p>It never folds the picture (Schlüter & Faul 2019: once rays cross, the distortion stops
+     * reading as shape). Along the tilt the offset is {@code D(u) e}, {@code D} the quadratic less
+     * the shift and {@code e} the ease, a smoothstep over {@code L = 2 (shift + m h)}. Walking in
+     * by one px moves the sample by at least {@code 1 - 2m - |D| e'}: {@code |D|} is at most
+     * {@code shift + 2mh/3 < L/2} and {@code e'} at most {@code 1.5 / L}, so the step is over
+     * {@code 1/4 - 2m}, positive while {@code m} stays under an eighth. {@link #TILT_MAG} peaks
+     * at 0.058.</p>
      */
     static void tiltOffsetPx(float px, float py, float bx, float by, float insidePx,
                              float rimWidthPx, float tiltX, float tiltY, float density,
@@ -1386,6 +1645,12 @@ public final class GlassRefraction {
         private float mLagX = Float.NaN, mLagY;
         private float mDentX = Float.NaN, mDentY, mDentDepth;
         private float mTiltX = Float.NaN, mTiltY;
+        /** {@code uKeyLight} as last written, and scratch for the next. */
+        private float mKeyX = Float.NaN, mKeyY;
+        private final float[] mKeyNext = new float[2];
+        /** Whether {@code sharp} is a clearer frame of its own, not the frost bound in its place. */
+        private boolean mSharpDistinct;
+        private float mLiveClarityWritten = Float.NaN;
 
         private Program(float density) {
             mShader = new RuntimeShader(AGSL);
@@ -1453,6 +1718,7 @@ public final class GlassRefraction {
             // reads back what it was given; the clarity term is then free to be written.
             mShader.setInputShader("sharp", content);
             mSharpBound = true;
+            mSharpDistinct = false;
             syncClarity();
         }
 
@@ -1468,6 +1734,7 @@ public final class GlassRefraction {
         public void setClarityInput(@Nullable Shader sharp, float pxScaleX, float pxScaleY) {
             if (sharp == null) {
                 mSharpBound = false;
+                mSharpDistinct = false;
                 syncClarity();
                 return;
             }
@@ -1479,6 +1746,7 @@ public final class GlassRefraction {
             }
             mShader.setInputShader("sharp", sharp);
             mSharpBound = true;
+            mSharpDistinct = true;
             syncClarity();
         }
 
@@ -1487,13 +1755,24 @@ public final class GlassRefraction {
             return mSharpBound;
         }
 
-        /** {@code uClarity}: the look's clarity while a sharp shader is bound, zero otherwise. */
+        /**
+         * {@code uClarity}: the look's clarity while a sharp shader is bound, zero otherwise; and
+         * {@code uLiveClarity}: {@link #LIVE_CLARITY} while that shader is a clearer frame of its
+         * own, zero while it is the frost bound in its place, where clearing toward it would read
+         * a second sample of the same picture.
+         */
         private void syncClarity() {
             Look look = mLook;
             float clarity = look != null && mSharpBound ? look.clarity() : 0f;
-            if (clarity == mClarityWritten) return;
-            mClarityWritten = clarity;
-            mShader.setFloatUniform("uClarity", clarity);
+            if (clarity != mClarityWritten) {
+                mClarityWritten = clarity;
+                mShader.setFloatUniform("uClarity", clarity);
+            }
+            float live = mSharpBound && mSharpDistinct ? LIVE_CLARITY : 0f;
+            if (live != mLiveClarityWritten) {
+                mLiveClarityWritten = live;
+                mShader.setFloatUniform("uLiveClarity", live);
+            }
         }
 
         /**
@@ -1594,6 +1873,7 @@ public final class GlassRefraction {
             mLagX = xPx;
             mLagY = yPx;
             mShader.setFloatUniform("uLag", xPx, yPx);
+            syncKeyLight();
         }
 
         /**
@@ -1635,6 +1915,25 @@ public final class GlassRefraction {
             mTiltX = x;
             mTiltY = y;
             mShader.setFloatUniform("uTilt", x, y);
+            syncKeyLight();
+        }
+
+        /**
+         * {@code uKeyLight} for the pose written so far ({@link GlassRefraction#keyLight}): the
+         * resting light until a tilt or a lag turns it, and written only when it moved, so a
+         * still slab and every surface that never moves pay nothing.
+         */
+        private void syncKeyLight() {
+            float tiltX = Float.isNaN(mTiltX) ? 0f : mTiltX;
+            float tiltY = Float.isNaN(mTiltX) ? 0f : mTiltY;
+            float lagX = Float.isNaN(mLagX) ? 0f : mLagX;
+            float lagY = Float.isNaN(mLagX) ? 0f : mLagY;
+            float[] key = mKeyNext;
+            keyLight(tiltX, tiltY, lagX, lagY, mDensity, key);
+            if (mKeyX == key[0] && mKeyY == key[1]) return;
+            mKeyX = key[0];
+            mKeyY = key[1];
+            mShader.setFloatUniform("uKeyLight", key[0], key[1]);
         }
 
         /** No lag, no dent and no tilt: the resting look, which is every surface at rest. */
