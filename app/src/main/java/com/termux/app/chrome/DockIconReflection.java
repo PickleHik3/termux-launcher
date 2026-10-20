@@ -251,6 +251,19 @@ public final class DockIconReflection {
     public boolean bind(@NonNull GlassRefraction.Program program, @NonNull View glassHost,
                         @NonNull View commonAncestor, float originX, float originY,
                         float belowPx, float strengthScale) {
+        return bind(program, glassHost, commonAncestor, originX, originY, belowPx, strengthScale,
+            false);
+    }
+
+    /**
+     * As {@link #bind(GlassRefraction.Program, View, View, float, float, float, float)}; with
+     * {@code lowerBevelOnly} the picture shows only in the lower bevel even with no band under
+     * the icons ({@code belowPx} zero): the Wall strip's slab carries its row of tiles over the
+     * icons, where the face's mirror and the top bevel's copy would stand over the tiles.
+     */
+    public boolean bind(@NonNull GlassRefraction.Program program, @NonNull View glassHost,
+                        @NonNull View commonAncestor, float originX, float originY,
+                        float belowPx, float strengthScale, boolean lowerBevelOnly) {
         BitmapShader shader = mShader;
         // While a swipe fades it out the picture is still bound, at the fade's strength.
         if (!mEnabled || shader == null || mStrength <= 0f
@@ -270,7 +283,8 @@ public final class DockIconReflection {
         if (below) top += belowPx;
         float scale = Float.isNaN(strengthScale) ? 1f : Math.max(0f, Math.min(1f, strengthScale));
         program.setReflectionStrength(mStrength * scale);
-        program.setReflection(shader, left, top, top + mRow.getHeight(), mScaleX, mScaleY, below);
+        program.setReflection(shader, left, top, top + mRow.getHeight(), mScaleX, mScaleY,
+            below || lowerBevelOnly);
         return true;
     }
 

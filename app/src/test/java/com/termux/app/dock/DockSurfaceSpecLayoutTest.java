@@ -85,8 +85,7 @@ public class DockSurfaceSpecLayoutTest {
         assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(DockStyle.GLASS_TRAY));
         assertSame(DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.forStyle(DockStyle.LENS_BEADS));
         assertSame(DockSurfaceSpec.TASKBAR, DockSurfaceSpec.forStyle(DockStyle.TASKBAR));
-        assertSame("not built yet", DockSurfaceSpec.GLASS_TRAY,
-            DockSurfaceSpec.forStyle(DockStyle.WALL_STRIP));
+        assertSame(DockSurfaceSpec.WALL_STRIP, DockSurfaceSpec.forStyle(DockStyle.WALL_STRIP));
         assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(null));
         assertSame(DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.forDock(true, DockStyle.LENS_BEADS));
         for (DockStyle style : DockStyle.values())
@@ -143,6 +142,32 @@ public class DockSurfaceSpecLayoutTest {
         assertTrue(bar.contactShadow);
         assertTrue("the reflection is held under the tray's",
             bar.reflectionScale > 0f && bar.reflectionScale < 1f);
+    }
+
+    @Test
+    public void theWallStripIsTheTraysGlassWithTheRowAndALowerBevelReflection() {
+        assertSame(DockSurfaceSpec.WALL_STRIP, DockSurfaceSpec.forDock(true, DockStyle.WALL_STRIP));
+        assertSame("the Workspace's dock stays plain", DockSurfaceSpec.PLAIN,
+            DockSurfaceSpec.forDock(false, DockStyle.WALL_STRIP));
+        DockSurfaceSpec wall = DockSurfaceSpec.WALL_STRIP;
+        DockSurfaceSpec tray = DockSurfaceSpec.GLASS_TRAY;
+        assertTrue(wall.wallStrip);
+        assertTrue("the tiles are never reflected: the lower bevel alone",
+            wall.reflectsLowerBevelOnly());
+        for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN, tray,
+                DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.PROMPT_LINE, DockSurfaceSpec.TASKBAR}) {
+            assertFalse(other.name, other.wallStrip);
+            assertFalse(other.name, other.reflectsLowerBevelOnly());
+        }
+        assertFalse("one slab, never beads", wall.beads);
+        assertFalse(wall.promptField);
+        assertFalse(wall.taskbar);
+        assertEquals(tray.dashesAboveSlab, wall.dashesAboveSlab);
+        assertEquals(tray.softRimDp, wall.softRimDp, 0f);
+        assertEquals(tray.shelf, wall.shelf, 0f);
+        assertTrue(wall.iconReflections);
+        assertTrue(wall.contactShadow);
+        assertTrue(wall.reflectionScale > 0f && wall.reflectionScale <= 1f);
     }
 
     @Test

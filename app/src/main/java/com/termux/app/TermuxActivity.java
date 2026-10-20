@@ -4782,9 +4782,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Under the Prompt line's field the lower bevel shows the icons as the tray's would,
         // aimed that much lower, and nowhere over the field or the icons themselves.
         int belowPx = mAppliedPromptFieldBandPx;
-        // The Taskbar holds its reflection to a low slab's strength (spec.reflectionScale).
+        // The Taskbar holds its reflection to a low slab's strength (spec.reflectionScale). The
+        // Wall strip's tiles stand over the icons: its reflection is the lower bevel's alone.
         reflection.bind(program, host, container, mGlassOriginLeft + rowOffset, mGlassOriginTop,
-            belowPx, belowPx > 0 ? PROMPT_LINE_REFLECTION_SCALE : spec.reflectionScale);
+            belowPx, belowPx > 0 ? PROMPT_LINE_REFLECTION_SCALE : spec.reflectionScale,
+            spec.reflectsLowerBevelOnly());
     }
 
     /**
@@ -12586,6 +12588,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.AZ_STRIP, azOpacity))
             syncAzScrubLettersAndTint();
         syncExtraKeysInk(dockOpacity);
+        mWallStripInkOpacity = dockOpacity;
+        syncWallStripInk(dockOpacity);
     }
 
     /**
@@ -13105,6 +13109,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && mPromptLineField.getVisibility() == View.VISIBLE
                 && mPromptLineField.getParent() == findViewById(R.id.apps_bar_row_host))
                 px = Math.max(0, px - mAppliedPromptFieldBandPx);
+            // So does the Wall strip's first row.
+            if (px > 0 && mWallStripRow != null
+                && mWallStripRow.getVisibility() == View.VISIBLE
+                && mWallStripRow.getParent() == findViewById(R.id.apps_bar_row_host))
+                px = Math.max(0, px - mAppliedWallStripBandPx);
             if (px <= 0) px = shownThicknessPx(R.id.place_apps_bar_host);
             float density = getResources().getDisplayMetrics().density;
             return px <= 0 || density <= 0f ? -1 : Math.round(px / density);
@@ -14559,10 +14568,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static void orderAppsBarBands(@Nullable LinearLayout host, @Nullable View row,
                                           @Nullable View indicator, boolean rowFirst) {
         if (host == null || row == null || indicator == null) return;
-        int wanted = rowFirst ? 1 : 0;
+        // Right after the row, or first: the Wall strip's row may stand before the pager in the
+        // dock's host, so "after the row" is read off the row's own place.
+        int wanted = rowFirst ? host.indexOfChild(row) + 1 : 0;
         if (host.indexOfChild(indicator) == wanted) return;
         host.removeView(indicator);
-        host.addView(indicator, Math.min(wanted, host.getChildCount()));
+        int rowAt = host.indexOfChild(row);
+        host.addView(indicator, Math.min(rowFirst ? rowAt + 1 : 0, host.getChildCount()));
     }
 
     /** Whether the place on screen stands the extra keys in a column on a screen edge. */
@@ -15324,8 +15336,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // it and the index riding the plank claims only the letters themselves. The ticks stand in
         // the row's own air wherever it lies down, so a lying-down row claims its band and nothing
         // more; only a rail's strip is a column beside it.
-        // On the dock the Prompt line's field stands under the row, on the same slab.
+        // On the dock the Prompt line's field stands under the row, and the Wall strip's first
+        // row over it, on the same slab.
         int appsRowPx = dockLayout.appsRowBandPx + dockLayout.promptFieldBandPx
+            + dockLayout.wallStripBandPx
             + (onPlank.isEmpty() ? 0 : 2 * offDockPlankAirPx(onPlank));
         int azRowPx = onPlank.contains(Element.AZ)
             ? azBarThicknessPx()
@@ -15368,7 +15382,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean dockStyleChanged = previous != null && previous.dockStyle != layout.dockStyle;
         // Where the new style brings the Prompt line's field or takes it away, the slab eases to
         // its new height from what it shows now: started before any pass below lays it out.
-        if (dockStyleChanged) beginPromptFieldEase();
+        if (dockStyleChanged) beginDockBandEase();
         com.termux.app.place.LayoutVariant variant = chromeVariant();
         boolean sameVariant = variant == mAppliedPlaceVariant;
         mAppliedPlaceVariant = variant;
@@ -16211,6 +16225,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The Prompt line's field under the apps row: all of it while Home wears the style,
             // between while a style switch eases the slab.
             .promptFieldReveal(promptFieldReveal())
+            // The Wall strip's first row over it, the same way.
+            .wallStripReveal(wallStripReveal())
             .density(getResources().getDisplayMetrics().density)
             .barHeightScale(preferencesAvailable
                 ? mPreferences.getAppLauncherBarHeightScale() : DockLayoutPolicy.sizePreset(2))
@@ -16267,7 +16283,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (com.termux.app.place.HomeChromePolicy.wearsHomeShape(from)
             == com.termux.app.place.HomeChromePolicy.wearsHomeShape(to)) return;
         // A settle lands the place's geometry at once (ADR 0003): an ease under way gives way.
-        cancelPromptFieldEase();
+        cancelDockBandEase();
         restyleDockSurface();
     }
 
@@ -16286,6 +16302,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
         updateAppLauncherBarHeight();
         setTerminalToolbarHeight(true);
+        // The Wall strip's row, laid out by the pass above, takes the Workspace's windows.
+        syncWallStripFeed();
         mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
             | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
@@ -16589,10 +16607,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final float PROMPT_LINE_REFLECTION_SCALE = 0.8f;
     /** The field, made the first time the slab carries it; null before. */
     @Nullable private com.termux.app.dock.PromptLineFieldView mPromptLineField;
-    /** A style switch easing the field in or out; null at rest. */
+    /**
+     * A style switch easing the slab's bands in or out (the Prompt line's field under the row,
+     * the Wall strip's row over it, both at once where one style trades for the other); null at
+     * rest.
+     */
     @Nullable private android.animation.ValueAnimator mPromptFieldEase;
     /** Where that ease stands now, 0..1 of the field. */
     private float mPromptFieldEaseValue;
+    /** Where it stands for the Wall strip's row, 0..1 of the row. */
+    private float mWallStripEaseValue;
     /** The field's band and its share of the whole, as last laid out. */
     private int mAppliedPromptFieldBandPx;
     private float mAppliedPromptFieldReveal;
@@ -16607,28 +16631,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * A Dock style was picked: where the field comes or goes on a dock in view, the slab eases
-     * from what it shows now to its new height, before any pass lays the new style out. Anywhere
-     * else (off Home, the dock not laid out yet, reduced motion) the passes land it at once.
+     * A Dock style was picked: where the Prompt line's field or the Wall strip's row comes or goes
+     * on a dock in view, the slab eases from what it shows now to its new height, before any pass
+     * lays the new style out. Anywhere else (off Home, the dock not laid out yet, reduced motion)
+     * the passes land it at once.
      */
-    private void beginPromptFieldEase() {
-        cancelPromptFieldEase();
+    private void beginDockBandEase() {
+        cancelDockBandEase();
         if (mPreferences == null || mChrome == null) return;
-        float target = dockSurfaceSpec().promptField ? 1f : 0f;
+        com.termux.app.dock.DockSurfaceSpec spec = dockSurfaceSpec();
+        float target = spec.promptField ? 1f : 0f;
         float from = mAppliedPromptFieldReveal;
-        if (from == target || isReducedMotionEnabled()
+        float wallTarget = spec.wallStrip ? 1f : 0f;
+        float wallFrom = mAppliedWallStripReveal;
+        if ((from == target && wallFrom == wallTarget) || isReducedMotionEnabled()
             || !com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage)) return;
         View stack = findViewById(R.id.accessory_stack_container);
         View rowHost = findViewById(R.id.apps_bar_row_host);
         if (stack == null || rowHost == null || stack.getVisibility() != View.VISIBLE
             || rowHost.getVisibility() != View.VISIBLE || stack.getHeight() <= 0
             || rowHost.getParent() != findViewById(R.id.accessory_row_stack)) return;
-        android.animation.ValueAnimator ease = android.animation.ValueAnimator.ofFloat(from, target);
-        ease.setDuration(Math.round(PROMPT_FIELD_EASE_MS * Math.abs(target - from)));
+        android.animation.ValueAnimator ease = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        ease.setDuration(Math.round(PROMPT_FIELD_EASE_MS
+            * Math.max(Math.abs(target - from), Math.abs(wallTarget - wallFrom))));
         ease.setInterpolator(new android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f));
         ease.addUpdateListener(animator -> {
             if (mPromptFieldEase != animator) return;
-            mPromptFieldEaseValue = (float) animator.getAnimatedValue();
+            float t = (float) animator.getAnimatedValue();
+            mPromptFieldEaseValue = from + (target - from) * t;
+            mWallStripEaseValue = wallFrom + (wallTarget - wallFrom) * t;
             // One dock pass, and the glass re-cut on the same frame when the slab moved.
             if (setTerminalToolbarHeight(false))
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
@@ -16649,12 +16680,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         mPromptFieldEaseValue = from;
+        mWallStripEaseValue = wallFrom;
         mPromptFieldEase = ease;
         ease.start();
     }
 
     /** Stops an ease under way where it stands; the caller's pass lands the style. */
-    private void cancelPromptFieldEase() {
+    private void cancelDockBandEase() {
         android.animation.ValueAnimator ease = mPromptFieldEase;
         if (ease == null) return;
         mPromptFieldEase = null;
@@ -16774,6 +16806,344 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .start();
     }
 
+    // ------------------------------------------------------------------ Wall strip
+    //
+    // Home's Wall strip (DockSurfaceSpec.WALL_STRIP), the expanded dock: a first row for the
+    // Workspace (WallStripRowView: a large clock with the date, the Workspace's terminal windows
+    // as tiles and a + tile) stands over the apps row in the row's own host, on the same slab
+    // (DockLayout.wallStripBandPx), so the dock's one glass, shelf and outline are the taller
+    // slab's. Its tiles are fed from the same window chips as the Taskbar's run strip
+    // (syncWindowBarItems, built on Home too); a tile's tap brings the Workspace in on its window.
+    // A style switch eases the slab with the Prompt line's ease; nothing here runs at rest but the
+    // clock's minute, which redraws the clock alone.
+
+    /** The row, made the first time the slab carries it; null before. */
+    @Nullable private com.termux.app.dock.WallStripRowView mWallStripRow;
+    /** The row's band and its share of the whole, as last laid out. */
+    private int mAppliedWallStripBandPx;
+    private float mAppliedWallStripReveal;
+    /** The dock's opacity its glass inks were last chosen at, for a row made since. */
+    private float mWallStripInkOpacity = -1f;
+    /** The apps row's icon boxes, read to line the row up with the first icon. */
+    private final float[] mWallStripIconBoxes = new float[4 * 32];
+    private final int[] mWallStripInkLocation = new int[2];
+    private final Rect mWallStripInkRect = new Rect();
+    /** The gap between the row's tiles, the apps row's rhythm (spec "Shared rules"). */
+    private static final float WALL_STRIP_GAP_DP = 10f;
+    /** The display window's tile key: no terminal window's. */
+    private static final long WALL_STRIP_DISPLAY_KEY = Long.MIN_VALUE + 1L;
+
+    /**
+     * How much of the row the dock is laid out with: the ease's value while one runs, otherwise
+     * all of it where Home's dock wears the Wall strip and none anywhere else.
+     */
+    private float wallStripReveal() {
+        if (mPromptFieldEase != null) return mWallStripEaseValue;
+        return mPreferences != null && dockSurfaceSpec().wallStrip ? 1f : 0f;
+    }
+
+    /** Whether Home's dock wears the Wall strip, so its row wants the Workspace's windows. */
+    private boolean wallStripWanted() {
+        return mPreferences != null && homeDockStyle() == com.termux.app.dock.DockStyle.WALL_STRIP;
+    }
+
+    /**
+     * Lays the row out as {@code layout} has it: in the apps row's host just before the row's
+     * pager (so the page dashes, leading the host, stay above the slab), its padding over it,
+     * fading in only once the slab has room for it. Gone where the layout carries none. Whether
+     * anything moved.
+     */
+    private boolean syncWallStripRow(@NonNull DockLayout layout) {
+        int band = layout.wallStripBandPx;
+        mAppliedWallStripBandPx = band;
+        mAppliedWallStripReveal = layout.wallStripFullBandPx > 0
+            ? Math.min(1f, band / (float) layout.wallStripFullBandPx) : 0f;
+        com.termux.app.dock.WallStripRowView row = mWallStripRow;
+        if (band <= 0) {
+            if (row == null || row.getVisibility() == View.GONE) return false;
+            row.setVisibility(View.GONE);
+            return true;
+        }
+        View hostView = findViewById(R.id.apps_bar_row_host);
+        View pager = findViewById(R.id.apps_bar_viewpager);
+        if (!(hostView instanceof LinearLayout) || pager == null || pager.getParent() != hostView)
+            return false;
+        LinearLayout host = (LinearLayout) hostView;
+        boolean moved = false;
+        boolean made = false;
+        if (row == null) {
+            row = makeWallStripRow();
+            mWallStripRow = row;
+            made = true;
+        }
+        if (row.getParent() != host || host.indexOfChild(row) != host.indexOfChild(pager) - 1) {
+            if (row.getParent() instanceof ViewGroup) ((ViewGroup) row.getParent()).removeView(row);
+            host.addView(row, host.indexOfChild(pager), new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, layout.wallStripHeightPx));
+            moved = true;
+        }
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) row.getLayoutParams();
+        if (params.height != layout.wallStripHeightPx || params.leftMargin != 0
+            || params.rightMargin != 0 || params.topMargin != layout.wallStripTopPadPx
+            || params.bottomMargin != 0) {
+            params.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            params.height = layout.wallStripHeightPx;
+            params.setMargins(0, layout.wallStripTopPadPx, 0, 0);
+            row.setLayoutParams(params);
+            moved = true;
+        }
+        if (row.getVisibility() != View.VISIBLE) {
+            row.setVisibility(View.VISIBLE);
+            moved = true;
+        }
+        float alpha = promptFieldAlpha(mAppliedWallStripReveal);
+        if (row.getAlpha() != alpha) row.setAlpha(alpha);
+        applyWallStripGeometry(layout);
+        if (made) {
+            // A row just made has neither windows nor ink yet: both on the next frame, off the
+            // layout pass.
+            com.termux.app.dock.WallStripRowView fresh = row;
+            fresh.post(() -> {
+                if (mWallStripRow != fresh) return;
+                syncWallStripFeed();
+                if (mWallStripInkOpacity >= 0f) syncWallStripInk(mWallStripInkOpacity);
+            });
+        }
+        return moved;
+    }
+
+    /** The row, its taps routed the Home-safe way. */
+    @NonNull
+    private com.termux.app.dock.WallStripRowView makeWallStripRow() {
+        com.termux.app.dock.WallStripRowView row = new com.termux.app.dock.WallStripRowView(this);
+        row.setListener(new com.termux.app.dock.WallStripRowView.Listener() {
+            @Override public void onTileTapped(int chipIndex) { onWallStripTileTapped(chipIndex); }
+
+            @Override public void onTileLongPressed(int chipIndex, @NonNull Rect anchor) {
+                showWallStripTileMenu(chipIndex, anchor);
+            }
+
+            @Override public void onNewTerminalTapped() { onWallStripNewTerminal(); }
+        });
+        // The row lines up with the icons wherever the apps row is laid out again.
+        if (mSuggestionBarView != null) {
+            mSuggestionBarView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, orr, ob) -> {
+                com.termux.app.dock.WallStripRowView shown = mWallStripRow;
+                if (shown != null && shown.getVisibility() == View.VISIBLE)
+                    applyWallStripGeometry(getDockLayout());
+            });
+        }
+        return row;
+    }
+
+    /**
+     * The row's geometry from the dock's: the first icon's edge as its side inset, the apps row's
+     * 10 dp rhythm, and the slab's radius and the air over the tiles, from which the tiles nest.
+     */
+    private void applyWallStripGeometry(@NonNull DockLayout layout) {
+        com.termux.app.dock.WallStripRowView row = mWallStripRow;
+        if (row == null || layout.wallStripFullBandPx <= 0) return;
+        float dockRadius = isRoundedDockStyle() ? resolveDockCapsuleCornerRadiusPx(
+            layout.appsBarHeightPx + layout.wallStripFullBandPx) : 0f;
+        row.setGeometry(wallStripInsetPx(layout), dpToPx(WALL_STRIP_GAP_DP), dockRadius,
+            layout.wallStripWellGapPx);
+    }
+
+    /**
+     * The row's side inset in its own pixels: where the apps row's first slot draws its icon (the
+     * row's icons are space-between, so the last slot's ends as far from the other side), read off
+     * any laid-out icon and its column; the 14 dp inside the slab while no icon is laid out.
+     */
+    private float wallStripInsetPx(@NonNull DockLayout layout) {
+        float fallback = layout.wallStripSideInsetPx;
+        SuggestionBarView bar = mSuggestionBarView;
+        View host = findViewById(R.id.apps_bar_row_host);
+        if (bar == null || host == null || bar.getWidth() <= 0) return fallback;
+        int count = bar.layoutIconBoxes(mWallStripIconBoxes);
+        int columns = bar.getColumnCount();
+        if (count <= 0 || count > mWallStripIconBoxes.length / 4 || columns <= 0) return fallback;
+        float barLeft = 0f;
+        View v = bar;
+        while (v != host) {
+            barLeft += v.getLeft();
+            if (!(v.getParent() instanceof View)) return fallback;
+            View parent = (View) v.getParent();
+            if (parent != host) barLeft -= parent.getScrollX();
+            v = parent;
+        }
+        float content = bar.getWidth() - bar.getPaddingLeft() - bar.getPaddingRight();
+        if (content <= 0f) return fallback;
+        float slot = content / columns;
+        float boxLeft = mWallStripIconBoxes[0] - bar.getPaddingLeft();
+        float boxRight = mWallStripIconBoxes[2] - bar.getPaddingLeft();
+        int column = Math.max(0, Math.min(columns - 1,
+            (int) Math.floor((boxLeft + boxRight) / 2f / slot)));
+        float first = barLeft + bar.getPaddingLeft() + boxLeft - column * slot;
+        return first > 0f && first < host.getWidth() / 3f ? first : fallback;
+    }
+
+    /**
+     * Feeds the row on Home from the windows the Workspace's bar shows: the row's terminal
+     * windows and the display window's at its place, each with its split shape. Nobody is looking
+     * at a row window from Home, so none is acknowledged here; the ringed tile is the window the
+     * Workspace has in front.
+     */
+    private void syncWallStrip(@NonNull java.util.List<Integer> foregroundPids) {
+        com.termux.app.dock.WallStripRowView row = mWallStripRow;
+        if (row == null) return;
+        if (!wallStripWanted() || mPaneController == null || !isSplitPanesEnabled()) {
+            row.setTiles(java.util.Collections.emptyList());
+            return;
+        }
+        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
+            new java.util.ArrayList<>();
+        java.util.List<float[]> shapes = new java.util.ArrayList<>();
+        java.util.List<Long> keys = new java.util.ArrayList<>();
+        int rowCount = 0;
+        int selected = -1;
+        int displayChip = -1;
+        if (mCurrentWSession != null || isDisplayOnRow()) {
+            long now = android.os.SystemClock.uptimeMillis();
+            int slot = displayRowSlot();
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
+                rowWindows();
+            rowCount = com.termux.app.wall.DisplaySlot.rowCount(windows.size(), slot);
+            selected = com.termux.app.statusbar.WindowChipTarget.selectedChip(rowCurrentIndex(),
+                rowCount);
+            displayChip = slot >= 0 ? slot : -1;
+            for (int i = 0; i < windows.size(); i++) {
+                if (i == slot) {
+                    items.add(displayWindowItem());
+                    shapes.add(null);
+                    keys.add(WALL_STRIP_DISPLAY_KEY);
+                }
+                com.termux.app.terminal.TerminalPaneController.Window window = windows.get(i);
+                items.add(rowWindowItem(window, i, foregroundPids, false, now));
+                java.util.List<int[]> cells = new java.util.ArrayList<>();
+                for (TerminalSession shell : mPaneController.shellsOf(window))
+                    cells.add(mPaneController.paneCellGeometry(shell));
+                shapes.add(com.termux.app.dock.WallStripRowPolicy.splitShape(cells));
+                keys.add((long) System.identityHashCode(window));
+            }
+            if (slot == windows.size()) {
+                items.add(displayWindowItem());
+                shapes.add(null);
+                keys.add(WALL_STRIP_DISPLAY_KEY);
+            }
+        }
+        java.util.List<com.termux.app.dock.RunStripModel.Entry> entries =
+            com.termux.app.dock.RunStripModel.build(items, selected, rowCount, displayChip, null,
+                getString(R.string.launcher_entry_new_window));
+        row.setTiles(com.termux.app.dock.WallStripRowView.tilesOf(
+            com.termux.app.dock.RunStripModel.rowEntries(entries), shapes, keys));
+    }
+
+    /**
+     * The row takes the windows as they are now, on Home where it shows; elsewhere it keeps what
+     * it had until Home comes back, and an empty row where the style is not the Wall strip.
+     */
+    private void syncWallStripFeed() {
+        com.termux.app.dock.WallStripRowView row = mWallStripRow;
+        if (row == null) return;
+        if (!wallStripWanted()) {
+            row.setTiles(java.util.Collections.emptyList());
+            return;
+        }
+        if (!isWidgetsPageShowing()) return;
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (bar != null) syncWindowBarItems(bar);
+    }
+
+    /**
+     * A tile was tapped: its window (the display window's included) is brought in front and the
+     * Workspace slides in on it, as the run strip's row entries do.
+     */
+    private void onWallStripTileTapped(int chipIndex) {
+        if (mPaneController == null || mPaneWallController == null || chipIndex < 0) return;
+        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+        showRowWindow(chipIndex);
+    }
+
+    /**
+     * The {@code +} tile: a new terminal window in the Workspace's row, after the one in front,
+     * and the Workspace slides in on it. Never a Home float: the row shows the Workspace's
+     * windows, so the new one is a tile of it.
+     */
+    private void onWallStripNewTerminal() {
+        if (mPaneWallController != null)
+            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+        createRowWindow();
+    }
+
+    /**
+     * A long press on a tile: the window chips have no menu of their own (a chip's long press
+     * lifts it to move), so the tile offers what the chips do, as a small menu at the tile:
+     * switch to the window, move it left or right in the row, close it.
+     */
+    private void showWallStripTileMenu(int chipIndex, @NonNull Rect anchor) {
+        com.termux.app.dock.WallStripRowView row = mWallStripRow;
+        View contentView = findViewById(android.R.id.content);
+        if (row == null || !(contentView instanceof FrameLayout) || mPaneController == null) return;
+        int count = rowWindowCount();
+        if (chipIndex < 0 || chipIndex >= count) return;
+        FrameLayout content = (FrameLayout) contentView;
+        int[] rowAt = new int[2];
+        int[] contentAt = new int[2];
+        row.getLocationInWindow(rowAt);
+        content.getLocationInWindow(contentAt);
+        // A pin the size of the tile, so the menu drops from the tile itself.
+        View pin = new View(this);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            Math.max(1, anchor.width()), Math.max(1, anchor.height()),
+            Gravity.TOP | Gravity.START);
+        params.leftMargin = rowAt[0] - contentAt[0] + anchor.left;
+        params.topMargin = rowAt[1] - contentAt[1] + anchor.top;
+        content.addView(pin, params);
+        pin.post(() -> {
+            if (pin.getParent() != content) return;
+            androidx.appcompat.widget.PopupMenu menu =
+                new androidx.appcompat.widget.PopupMenu(this, pin);
+            Menu items = menu.getMenu();
+            items.add(Menu.NONE, 0, 0, R.string.tool_window_select);
+            if (chipIndex > 0) items.add(Menu.NONE, 1, 1, R.string.tool_window_move_left);
+            if (chipIndex < count - 1) items.add(Menu.NONE, 2, 2, R.string.tool_window_move_right);
+            items.add(Menu.NONE, 3, 3, R.string.tool_window_close);
+            menu.setOnMenuItemClickListener(item -> {
+                switch (item.getItemId()) {
+                    case 0: onWallStripTileTapped(chipIndex); return true;
+                    case 1: moveWindow(chipIndex, chipIndex - 1); return true;
+                    case 2: moveWindow(chipIndex, chipIndex + 1); return true;
+                    case 3: closeRowWindow(chipIndex); return true;
+                    default: return false;
+                }
+            });
+            menu.setOnDismissListener(dismissed -> {
+                if (pin.getParent() == content) content.removeView(pin);
+            });
+            menu.show();
+        });
+    }
+
+    /**
+     * The clock's ink on the dock's face under the row: the theme's on-surface where it reads
+     * there, else the nearest tone of it that does (GlassInk#faceInk), as the extra keys' labels.
+     * The row redraws the clock only when the ink moved.
+     */
+    private void syncWallStripInk(float dockOpacity) {
+        com.termux.app.dock.WallStripRowView row = mWallStripRow;
+        if (row == null || mChrome == null || !row.isShown() || row.getWidth() <= 0
+            || row.getHeight() <= 0) return;
+        mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
+        row.getLocationOnScreen(mWallStripInkLocation);
+        mWallStripInkRect.set(mWallStripInkLocation[0], mWallStripInkLocation[1],
+            mWallStripInkLocation[0] + row.getWidth(), mWallStripInkLocation[1] + row.getHeight());
+        int face = mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mWallStripInkRect);
+        int theme = com.google.android.material.color.MaterialColors.getColor(row,
+            com.termux.shared.R.attr.termuxColorOnSurface);
+        row.setClockInk(GlassInk.faceInk(face, theme,
+            mChrome.ink().target(OnGlass.TARGET_BODY_TEXT)));
+    }
+
     /**
      * The dock's current geometry. Resolved fresh per call, exactly as the old per-number resolvers
      * were, and read by the app drawer's choreography through this same seam.
@@ -16832,6 +17202,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         moved |= updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
         moved |= applyDockRowHorizontalInsets(layout);
         moved |= syncPromptLineField(layout);
+        moved |= syncWallStripRow(layout);
         if (mSuggestionBarView != null) {
             moved |= layout.appsRowBandHintPx != mAppliedDockRowHeightHintPx;
             mAppliedDockRowHeightHintPx = layout.appsRowBandHintPx;
@@ -26679,8 +27050,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         syncBorderStatusSwipe(visible);
         if (!visible) {
-            // Home wears no status bar, but the Taskbar's run strip reads the same windows.
-            if (isWidgetsPageShowing() && runStripWanted()) syncWindowBarItems(bar);
+            // Home wears no status bar, but the Taskbar's run strip and the Wall strip's tiles
+            // read the same windows.
+            if (isWidgetsPageShowing() && (runStripWanted() || wallStripWanted()))
+                syncWindowBarItems(bar);
             applyTerminalSurfaceAppearance();
             // Idempotence: the widgets live inside the GONE host here, so nothing is shown either
             // way — but updateStatusWidgets also owns starting and stopping the sampler, and
@@ -26824,6 +27197,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // come back from the chips above the dock instead, or the Taskbar's run strip.
             selected = -1;
             syncRunStrip(foregroundPids);
+            syncWallStrip(foregroundPids);
         } else if (mPaneController != null && (mCurrentWSession != null || isDisplayOnRow())) {
             rowWindows = true;
             long now = android.os.SystemClock.uptimeMillis();
@@ -30418,6 +30792,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Every terminal scheme pass ends here (a theme, light or dark, Material You's palette):
         // the Prompt line's prompt takes the scheme's colours, redrawing only if they moved.
         if (mPromptLineField != null) mPromptLineField.refreshTheme();
+        // The Wall strip's tiles are terminals: their wells and titles are the scheme's.
+        if (mWallStripRow != null) mWallStripRow.refreshTheme();
         if (getWindow() == null) {
             return;
         }

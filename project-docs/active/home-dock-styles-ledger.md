@@ -13,7 +13,7 @@ first within each section. Delete this file with the spec when the work is deliv
 | Emulator pass 1 | done; polish round merged (beads ride their icons, reflection fades, one cue, editor Undo fixed, drawer regions), unchecked on device | 8c9ea69f9 | Pass: picker (Row B, font 1.3 tight), Undo/persist, tray padding, no slab jump at the seam, live tray⇄beads, smooth bead edges, no shader/capture errors. Fix: beads stay put while icons slide on a page swipe; dashes stacked on the pull handle; end beads touch the screen edge; drawer could not be opened under injection (cause unknown); editor pill shifts when Undo appears. | | |
 | 4a Taskbar + run strip | built on a worker branch, unmerged, unchecked on device | 0e19815bc | In `DockStyle.BUILT`. Home tile (drawer glyph, apps' size) takes one of the row's slots, start/middle/end by long-press drag (`layout.home.taskbar_home_tile`, absent = start), still during finger page swipes. Run strip on its own frost card above the dock and its dashes, where the float chips stood (they are off under this style); built on Home from the window chips; eases in and out. Reflection at 0.6 of the tray's. Prompt line's field hides under the open palette in bf8032e46. |
 | 4b Prompt line | built on a worker branch, unmerged, unchecked on device | ba9a96bf4 | In `DockStyle.BUILT`. One taller slab: apps row, then the 48 dp field on its well (14 dp side inset, air over the icons = air under the well, well radius = dock radius − that air); tap opens the palette with keyboard and caret; Enter runs the top result (read, unchanged); a style switch eases the slab 240 ms. Lens beads row inset 9 dp a side in a054ad056. |
-| 4c Wall strip | not started | | |
+| 4c Wall strip | built on a worker branch, unmerged, unchecked on device | 2b9a5d86a | In `DockStyle.BUILT` (all five now). One taller slab: the 84 dp `WallStripRowView` over the apps row in the row's own host (dashes still above the slab), the air over it = the air under the icons, tiles nest by it; side inset read off the first laid-out icon (14 dp inside the slab without one). Fed from the same chips as the run strip (row windows and the display window, split shapes from `paneCellGeometry`); tiles slide/resize ~420 ms on open/close; tile tap = Workspace in on it, `+` = new row window, long-press = a small menu (no chip menu exists). Reflection lower bevel only at 0.8. The clock ticks alone (tiles in their own RenderNode on API 29+). Style switches ease both bands at once (240 ms). |
 | Emulator pass 2 | not started | | |
 | 5 Pong install | not started | | |
 
@@ -110,3 +110,23 @@ its reason so it can be reversed.
 - 2026-10-21 · Prompt line: the field fades out under the open palette (it was a second search
   box over the keyboard) and back when the palette closes; it keeps its band, so the slab does
   not move.
+- 2026-10-21 · Wall strip: the window chips have no menu (a chip's long press lifts it to
+  move), so a tile's long press opens a small menu of what the chips do: Switch to window, Move
+  window left / right, Close window (existing `tool_window_*` strings). Close on Home calls the
+  row's own close (`closeRowWindow`, asking first when something runs), which the window bar
+  itself refuses on Home; to be judged on the emulator.
+- 2026-10-21 · Wall strip: `+` opens a Workspace row window and brings the Workspace in on it,
+  never a Home float (the Taskbar's `+` follows Home's float rule): the row shows the
+  Workspace's windows, so a new one belongs there. The display window gets a tile at its place,
+  as in the run strip, drawn as one whole pane.
+- 2026-10-21 · Wall strip: the row's side inset is read off the apps row's first laid-out icon
+  and its column (slots are equal shares of the row), so the clock lines up with the first icon
+  and `+` ends where the last icon ends at every icon count and Style; the spec's 14 dp inside
+  the slab is the fallback while no icon is laid out (an empty dock).
+- 2026-10-21 · Wall strip: the slab eases with the Prompt line's 240 ms ease (one animator now
+  carries both bands, so Prompt line ⇄ Wall strip changes the slab once); the row fades in once
+  the slab has room, as the field does. A Home ⇄ Workspace settle lands the row at once (ADR
+  0003), so the dock steps by the row's band (~100 dp) at the settle; to be judged on pong.
+- 2026-10-21 · Wall strip: the clock's minute redraws the row view only; its tiles stand in a
+  RenderNode of their own (API 29+) recorded again only when they change, so the tick re-records
+  the clock alone. The dock's glass and reflection are not touched by it.

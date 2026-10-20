@@ -53,8 +53,6 @@ public class DockStyleTest {
     @Test
     public void lensBeadsAreBuilt() {
         assertEquals(DockStyle.LENS_BEADS, DockStyle.effectiveStyle(DockStyle.LENS_BEADS));
-        assertEquals("the styles still to come draw as the tray", DockStyle.GLASS_TRAY,
-            DockStyle.effectiveStyle(DockStyle.WALL_STRIP));
     }
 
     @Test
@@ -65,10 +63,13 @@ public class DockStyleTest {
     @Test
     public void thePromptLineIsBuilt() {
         assertEquals(DockStyle.PROMPT_LINE, DockStyle.effectiveStyle(DockStyle.PROMPT_LINE));
-        assertEquals(EnumSet.of(DockStyle.GLASS_TRAY, DockStyle.LENS_BEADS, DockStyle.TASKBAR,
-                DockStyle.PROMPT_LINE),
-            DockStyle.BUILT);
-        assertEquals("the Wall strip is still to come", DockStyle.GLASS_TRAY,
-            DockStyle.effectiveStyle(DockStyle.WALL_STRIP));
+    }
+
+    @Test
+    public void theWallStripIsBuiltAndSoIsEveryStyle() {
+        assertEquals(DockStyle.WALL_STRIP, DockStyle.effectiveStyle(DockStyle.WALL_STRIP));
+        assertEquals("all five styles draw", EnumSet.allOf(DockStyle.class), DockStyle.BUILT);
+        for (DockStyle style : DockStyle.values())
+            assertEquals(style, DockStyle.effectiveStyle(style));
     }
 }
