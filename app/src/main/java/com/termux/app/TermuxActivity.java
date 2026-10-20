@@ -16648,7 +16648,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float promptFieldReveal() {
         if (mPromptFieldEase != null) return mPromptFieldEaseValue;
-        return promptFieldWanted() ? 1f : 0f;
+        return mPreferences != null && !mPromptFieldUnderPalette
+            && homeDockStyle() == com.termux.app.dock.DockStyle.PROMPT_LINE ? homeBandShare() : 0f;
+    }
+
+    /**
+     * How much of Home's own bands (the Prompt line's field, the Wall strip's row) the dock
+     * carries: all of them resting on Home, none on the Workspace, and between, the share of the
+     * way back to Home while a slide crosses the seam ({@link #syncSeamBandShare}), so the slab
+     * eases with the page rather than stepping at the settle.
+     */
+    private float homeBandShare() {
+        if (!Float.isNaN(mTravelHomeBandShare)) return mTravelHomeBandShare;
+        return com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage) ? 1f : 0f;
+    }
+
+    /** {@link #homeBandShare} while a slide crosses the seam; NaN otherwise. */
+    private float mTravelHomeBandShare = Float.NaN;
+
+    /**
+     * One frame of a slide across the seam between Home and the Workspace, where Home's dock
+     * carries a band of its own (the Prompt line's field, the Wall strip's row): the band follows
+     * the page, out as Home slides away and back in as it returns, one dock pass and one glass
+     * re-cut a frame while the share moves. Nothing for any other dock style, and nothing at rest.
+     */
+    private void syncSeamBandShare(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
+        if (mTravelSeamOther == null || mPreferences == null || mChrome == null) return;
+        com.termux.app.dock.DockStyle style = homeDockStyle();
+        boolean carriesBand = style == com.termux.app.dock.DockStyle.WALL_STRIP
+            || (style == com.termux.app.dock.DockStyle.PROMPT_LINE && !mPromptFieldUnderPalette);
+        if (!carriesBand || mPromptFieldEase != null) return;
+        boolean committedHome = com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage);
+        if (committedHome == com.termux.app.place.HomeChromePolicy.wearsHomeShape(mTravelSeamOther))
+            return;
+        float progress = Math.max(0f, Math.min(1f,
+            com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage)));
+        float share = committedHome ? 1f - progress : progress;
+        if (Float.compare(share, mTravelHomeBandShare) == 0) return;
+        mTravelHomeBandShare = share;
+        if (setTerminalToolbarHeight(false))
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
     /**
@@ -16845,7 +16885,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float wallStripReveal() {
         if (mPromptFieldEase != null) return mWallStripEaseValue;
-        return mPreferences != null && dockSurfaceSpec().wallStrip ? 1f : 0f;
+        return mPreferences != null && homeDockStyle() == com.termux.app.dock.DockStyle.WALL_STRIP
+            ? homeBandShare() : 0f;
     }
 
     /** Whether Home's dock wears the Wall strip, so its row wants the Workspace's windows. */
@@ -21912,6 +21953,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Across the seam, how the stack crosses and which half's dress it wears are read before
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
         readSeamTravel(frame);
+        // Home's own bands on its dock follow the page across the seam.
+        syncSeamBandShare(frame);
         // The dock rows are always laid out by the layout on screen, the minimal one included
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
         if (!mTravelKeyboardPreRolled
@@ -22553,6 +22596,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDockTravelTranslationPx = 0f;
             mKeyboardTravelSharePx = 0f;
             mTravelHeldOverlapPx = 0;
+            // Home's bands land as the page did: the commit below lays them out for the page it
+            // lands on, and a slide that came back lays them out whole again just after it.
+            boolean bandShareMoved = !Float.isNaN(mTravelHomeBandShare);
+            mTravelHomeBandShare = Float.NaN;
             // The material blend, if one ran, has landed on the arriving place's material; the
             // pass below paints that material plainly, and the blend's layers go with it.
             mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
@@ -22605,6 +22652,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mX11Display.onUserKeyboardIntent(true);
             }
             syncPlaceState(page, leavingKeyboardUp);
+            if (bandShareMoved && page == left && setTerminalToolbarHeight(false))
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                    | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
             mTravelSeamOther = null;
             mTravelStackDressPage = null;
             mTravelSeamDressDiffers = false;
