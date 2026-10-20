@@ -68,8 +68,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     private final RectF mClipRect = new RectF();
     /**
      * Living glass ({@link GlassMotionLight}): fed this slab's screen rect on every draw it already
-     * makes and the presses on it, built on the first draw through the program. Null until then,
-     * and while the slab draws plain.
+     * makes, built on the first draw through the program. Null until then, and while the slab
+     * draws plain.
      */
     @Nullable private GlassMotionLight mMotionLight;
     /** Scratch for the slab's corners on screen; a draw never allocates. */
@@ -504,24 +504,18 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     }
 
     /**
-     * A finger came down on this slab at {@code (x, y)} in its own px: the glass dents under it
-     * ({@link GlassMotionLight#press}) until {@link #releaseGlass}. Nothing on a slab drawn plain,
-     * and nothing where Living glass is off or motion is stopped.
+     * A finger came down on this slab: its pane's press rig starts to tip it, and the slab follows
+     * the tilt ({@link #followTilt}). The glass itself does not dent: a rigid slab does not deform
+     * under a finger, and the dent it once had read as a ripple (the user, 2026-10-20). Nothing on
+     * a slab drawn plain.
      */
-    public void pressGlass(float x, float y) {
+    public void pressGlass() {
         if (mProgram == null || getWidth() <= 0 || getHeight() <= 0) return;
-        if (motionLight().press(AnimationUtils.currentAnimationTimeMillis(), x, y)) {
-            postInvalidateOnAnimation();
-        }
         followTilt();
     }
 
-    /** The finger lifted or the gesture went elsewhere: the dent springs back. Safe to repeat. */
+    /** The finger lifted or the gesture went elsewhere: the rig tips back. Safe to repeat. */
     public void releaseGlass() {
-        GlassMotionLight light = mMotionLight;
-        if (light != null && light.release(AnimationUtils.currentAnimationTimeMillis())) {
-            postInvalidateOnAnimation();
-        }
         followTilt();
     }
 

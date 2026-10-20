@@ -66,9 +66,10 @@ import java.util.Arrays;
  * <p>Nothing here animates. Uniforms are written only when what they describe moved — the
  * surface, the parallax, a knob — so a surface at rest costs nothing; a slide costs one uniform
  * write per moved frame and no allocation. Living glass is the caller's animation as well: a pane
- * that moves or is pressed writes {@code uLag} and {@code uDent} from its {@link GlassMotionLight}
- * on the frames its springs move, which deform the bend the program already draws; every term
- * they add is skipped at 0, and at rest both are 0. A pane that tips as well — the wall's plank
+ * that moves writes {@code uLag} from its {@link GlassMotionLight} on the frames its spring moves,
+ * which deforms the bend the program already draws; every term it adds is skipped at 0, and at
+ * rest it is 0. A press deforms nothing: a rigid slab does not dent under a finger, and the dent
+ * that once did read as a ripple (the user, 2026-10-20). A pane that tips as well — the wall's plank
  * under a dragging finger, a held border's press, a pane's own press rig — writes {@code uTilt}
  * ({@link Program#setTilt}): the picture through the face is carried toward the edge going away,
  * as a tilted slab displaces what is behind it, and the rim's lean takes the tilt on top of the
@@ -591,10 +592,8 @@ public final class GlassRefraction {
         "uniform float uTouchRadius;\n" +
         "uniform float uTouchLens;\n" +
         // Living glass (GlassMotionLight): how far the slab is ahead of its bend, px (the lag
-        // spring's L), and a press's dent: where it is (xy, px) and how far it moves the picture
-        // at its steepest (z, px; negative as it rebounds). All 0 at rest.
+        // spring's L). 0 at rest.
         "uniform float2 uLag;\n" +
-        "uniform float3 uDent;\n" +
         // How far the slab is tipped: the sine of its tilt about its own y axis and about its x
         // axis, as a vector in its own px axes pointing at the edge going away from the viewer.
         // (0, 0) flat, which is every surface but a tipping pane. tiltVector in Java.
@@ -672,20 +671,15 @@ public final class GlassRefraction {
         "const float3 kBoldCool = float3(0.0, 0.45, 1.0);\n" +
         // Living glass: the lag that is a whole lean, dp; how much thicker the bend gets on the
         // edge the lag faces at a whole lean (and thinner behind), and how much deeper its band
-        // reaches; the dent's radius in dp and its shape's steepest share; and the least colour
-        // split a live bend takes, as a share of its extra bend. GlassMotionLight.LAG_MAX_DP and
-        // LAG_BEND, LAG_BAND, DENT_RADIUS_DP, DENT_PEAK and LIVE_DISPERSION in Java.
+        // reaches; and the least colour split a live bend takes, as a share of its extra bend.
+        // GlassMotionLight.LAG_MAX_DP and LAG_BEND, LAG_BAND and LIVE_DISPERSION in Java.
         "const float kLagMaxDp = " + GlassMotionLight.LAG_MAX_DP + ";\n" +
         "const float kLagBend = " + GlassRefraction.LAG_BEND + ";\n" +
         "const float kLagBand = " + GlassRefraction.LAG_BAND + ";\n" +
         "const float kLagLean = " + GlassRefraction.LAG_LEAN_GAIN + ";\n" +
-        "const float kDentRadiusDp = " + GlassRefraction.DENT_RADIUS_DP + ";\n" +
-        "const float kDentPeak = " + GlassRefraction.DENT_PEAK + ";\n" +
         "const float kLiveDisp = " + GlassRefraction.LIVE_DISPERSION + ";\n" +
-        // The live rim's clearer picture: the dent's whole depth, dp, at which a press is a whole
-        // lean of liveness, and how much further in the clear part of the band reaches at a whole
-        // one. GlassMotionLight.DENT_DEPTH_DP and LIVE_CLARITY_REACH in Java.
-        "const float kDentDepthDp = " + GlassMotionLight.DENT_DEPTH_DP + ";\n" +
+        // The live rim's clearer picture: how much further in the clear part of the band reaches
+        // at a whole lean of liveness. LIVE_CLARITY_REACH in Java.
         "const float kLiveReach = " + GlassRefraction.LIVE_CLARITY_REACH + ";\n" +
         // The tilted slab: how far its face carries the picture at the tilt's asymptote, dp, and
         // the sine at which half of that is reached; how much it magnifies across the face per
@@ -816,7 +810,7 @@ public final class GlassRefraction {
         // Living glass: the slab's bend lags it on a spring. The edge the lag faces is thicker,
         // bending more and reaching deeper; the edge behind it thinner; still held at half the
         // short side. bendV keeps how much further each pixel's picture moved than at rest, for
-        // the colour split below. At rest uLag and uDent are 0 and none of this runs.
+        // the colour split below. At rest uLag is 0 and none of this runs.
         // livePullPx in Java.
         // A tilted slab leans its rim the same way: the edge rising toward the viewer is the
         // thicker, the edge going away the thinner, by kTiltLean times the tilt's sine along the
@@ -824,16 +818,17 @@ public final class GlassRefraction {
         // tilt's part alone, for the gathered light below. Flat, uTilt is 0 and the lean is the
         // lag's, expression for expression. liveLean and tiltLean in Java.
         "    bool tilted = uTilt.x != 0.0 || uTilt.y != 0.0;\n" +
-        "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || uDent.z != 0.0 || tilted;\n" +
+        "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;\n" +
         "    float2 bendV = float2(0.0, 0.0);\n" +
         "    float tiltLean = 0.0;\n" +
         "    float liveK = 0.0;\n" +
         "    float glintW = 0.0;\n" +
         "    if (live) {\n" +
-        // How live the slab is, 0..1: the most of a whole lean its lag, its tilt or its dent
-        // asks, so it eases back with the springs as they settle. liveness in Java.
-        "        liveK = clamp(max(max(kLagLean * length(uLag) / (kLagMaxDp * uDensity),\n" +
-        "            kTiltLean * length(uTilt)), abs(uDent.z) / (kDentDepthDp * uDensity)), 0.0, 1.0);\n" +
+        // How live the slab is, 0..1: the most of a whole lean its lag or its tilt asks, so it
+        // eases back with the springs as they settle. Pose only: a press counts by the tilt its
+        // rig gives the pane. liveness in Java.
+        "        liveK = clamp(max(kLagLean * length(uLag) / (kLagMaxDp * uDensity),\n" +
+        "            kTiltLean * length(uTilt)), 0.0, 1.0);\n" +
         // How much of the live glint the gathered light takes, 0..1: liveK eased, so the glint
         // leaves as gently as the springs settle and the springs' last snap to rest (a dp or so of
         // lag, a twentieth of a degree of tilt) moves it by a few thousandths at most. At 0 the light below
@@ -857,20 +852,6 @@ public final class GlassRefraction {
         // above carries the colour, through bendV.
         "    if (tilted) {\n" +
         "        sampleCoord = sampleCoord + tiltOffset(p, b, inside, rimW);\n" +
-        "    }\n" +
-        // A press's dent: a shallow dip under the finger that spreads the picture outward around
-        // it, steepest part way out and flat again at its rim; a bump, gathering it in, while it
-        // rebounds. dentShiftPx in Java.
-        "    if (uDent.z != 0.0) {\n" +
-        "        float dr = kDentRadiusDp * uDensity;\n" +
-        "        float2 dq = fragCoord - uDent.xy;\n" +
-        "        float ds = length(dq) / dr;\n" +
-        "        if (ds < 1.0) {\n" +
-        "            float dw = 1.0 - ds * ds;\n" +
-        "            float2 dentOff = dq * (dw * dw * uDent.z / (dr * kDentPeak));\n" +
-        "            sampleCoord = sampleCoord + dentOff;\n" +
-        "            bendV = bendV - dentOff;\n" +
-        "        }\n" +
         "    }\n" +
         // A finger on the glass: its reach, 1 under the fingertip and 0 at uTouchRadius. The
         // picture is drawn a little toward the touch (a shallow lens, uTouchLens of the distance
@@ -918,8 +899,8 @@ public final class GlassRefraction {
         // pixel among them, takes the one sample.
         "    float split = uDisp > 0.0 ? pull * uDisp * cornerWeight(p, b) : 0.0;\n" +
         // Living glass parts the colours where it bends further than at rest, in step with that
-        // extra bend and along it (the dent's outward, the rim's inward), so the colour follows
-        // the glass. sn is the split's way: the normal at rest.
+        // extra bend and along it (the rim's inward), so the colour follows the glass. sn is the
+        // split's way: the normal at rest.
         "    float2 sn = n;\n" +
         "    if (live) {\n" +
         "        float2 sv = n * split + bendV * max(uDisp, kLiveDisp);\n" +
@@ -1426,14 +1407,6 @@ public final class GlassRefraction {
      * whole lean at a quarter of the clamp, so an ordinary slide shows. {@code kLagLean}.
      */
     static final float LAG_LEAN_GAIN = 4f;
-    /** The dent's radius: about a fingertip. {@code kDentRadiusDp}. */
-    static final float DENT_RADIUS_DP = 44f;
-    /**
-     * The dent's shape {@code s (1 - s²)²} at its steepest ({@code s = 1/√5}), so the depth is how
-     * far the picture moves there: {@code 16 / (25 √5)}. {@code kDentPeak}. A literal, so it is a
-     * compile-time constant: {@link #AGSL} is built before any computed static is.
-     */
-    static final float DENT_PEAK = 0.2862167f;
     /**
      * The least colour split a live bend takes, as a share of how much further it bends than at
      * rest: the Edge slider's own share where that is more. {@code kLiveDisp}.
@@ -1463,17 +1436,15 @@ public final class GlassRefraction {
 
     /**
      * The program's {@code liveK}: how live the slab is, 0..1, the most of a whole lean its lag
-     * ({@link #lagLean}'s gain over the lag's length), its tilt ({@link #TILT_LEAN_GAIN} over the
-     * tilt's sine) or its dent (its depth over {@link GlassMotionLight#DENT_DEPTH_DP}) asks. It
-     * is pose, not time: it falls back with the springs as they settle and is 0 at rest.
+     * ({@link #lagLean}'s gain over the lag's length) or its tilt ({@link #TILT_LEAN_GAIN} over
+     * the tilt's sine) asks. It is pose, not time: it falls back with the springs as they settle
+     * and is 0 at rest. A press counts only by the tilt its rig gives the pane; there is no dent.
      */
-    static float liveness(float lagXPx, float lagYPx, float tiltX, float tiltY, float dentDepthPx,
-                          float density) {
+    static float liveness(float lagXPx, float lagYPx, float tiltX, float tiltY, float density) {
         float lag = LAG_LEAN_GAIN * (float) Math.hypot(lagXPx, lagYPx)
             / (GlassMotionLight.LAG_MAX_DP * density);
         float tilt = TILT_LEAN_GAIN * (float) Math.hypot(tiltX, tiltY);
-        float dent = Math.abs(dentDepthPx) / (GlassMotionLight.DENT_DEPTH_DP * density);
-        return Math.max(0f, Math.min(1f, Math.max(Math.max(lag, tilt), dent)));
+        return Math.max(0f, Math.min(1f, Math.max(lag, tilt)));
     }
 
     /**
@@ -1534,18 +1505,6 @@ public final class GlassRefraction {
         if (lean == 0f) return pullPx(insidePx, bandPx, strengthPx, halfShortPx, rimWidthPx);
         return pullPx(insidePx, bandPx * (1f + LAG_BAND * lean),
             strengthPx * (1f + LAG_BEND * lean), halfShortPx, rimWidthPx);
-    }
-
-    /**
-     * The program's dent: how far outward the picture moves at {@code distancePx} from the dent's
-     * centre, for a dent of {@code radiusPx} at {@code depthPx}. 0 at the centre and from the
-     * radius out, {@code depthPx} at its steepest; inward for a negative depth.
-     */
-    static float dentShiftPx(float distancePx, float radiusPx, float depthPx) {
-        float s = distancePx / Math.max(radiusPx, 1f);
-        if (s >= 1f) return 0f;
-        float w = 1f - s * s;
-        return distancePx * w * w * depthPx / (Math.max(radiusPx, 1f) * DENT_PEAK);
     }
 
     // The tilted slab. A pane that tips — the wall's plank under a dragging finger (up to
@@ -1736,7 +1695,6 @@ public final class GlassRefraction {
         private boolean mTouchOn;
         private float mTouchX, mTouchY, mTouchRadius, mTouchIntensity;
         private float mLagX = Float.NaN, mLagY;
-        private float mDentX = Float.NaN, mDentY, mDentDepth;
         private float mTiltX = Float.NaN, mTiltY;
         /** {@code uKeyLight} as last written, and scratch for the next. */
         private float mKeyX = Float.NaN, mKeyY;
@@ -1969,23 +1927,6 @@ public final class GlassRefraction {
             syncKeyLight();
         }
 
-        /**
-         * Living glass's dent ({@link GlassMotionLight#dentDepthPx}): at {@code (x, y)} in the
-         * surface's own px, moving the picture {@code depthPx} at its steepest. Depth 0 is none.
-         */
-        public void setDent(float x, float y, float depthPx) {
-            if (depthPx == 0f || Float.isNaN(depthPx)) {
-                depthPx = 0f;
-                x = 0f;
-                y = 0f;
-            }
-            if (mDentX == x && mDentY == y && mDentDepth == depthPx) return;
-            mDentX = x;
-            mDentY = y;
-            mDentDepth = depthPx;
-            mShader.setFloatUniform("uDent", x, y, depthPx);
-        }
-
         /** What {@code light} has now, or the resting look for none; nothing written when unchanged. */
         public void setMotionLight(@Nullable GlassMotionLight light) {
             if (light == null) {
@@ -1993,7 +1934,6 @@ public final class GlassRefraction {
                 return;
             }
             setLag(light.lagXPx(), light.lagYPx());
-            setDent(light.dentXPx(), light.dentYPx(), light.dentDepthPx());
         }
 
         /**
@@ -2030,10 +1970,9 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uKeyLight", key[0], key[1]);
         }
 
-        /** No lag, no dent and no tilt: the resting look, which is every surface at rest. */
+        /** No lag and no tilt: the resting look, which is every surface at rest. */
         public void clearMotion() {
             setLag(0f, 0f);
-            setDent(0f, 0f, 0f);
             setTilt(0f, 0f);
         }
 

@@ -122,20 +122,20 @@ public class GlassRestLookTest {
         assertEquals(0f, GlassRefraction.glintWeight(0f), 0f);
         assertEquals(1f, GlassRefraction.glintWeight(1f), 0f);
         // A slab with no lag and no tilt is not live at all.
-        assertEquals(0f, GlassRefraction.glintWeight(GlassRefraction.liveness(0f, 0f, 0f, 0f, 0f, DENSITY)), 0f);
+        assertEquals(0f, GlassRefraction.glintWeight(GlassRefraction.liveness(0f, 0f, 0f, 0f, DENSITY)), 0f);
         // A tilt under the rest threshold is flat, so its weight is 0 exactly.
         float[] tilt = new float[2];
         GlassRefraction.tiltVector(GlassRefraction.TILT_REST_DEG * 0.9f, 0f, tilt);
         assertEquals(0f, GlassRefraction.glintWeight(
-            GlassRefraction.liveness(0f, 0f, tilt[0], tilt[1], 0f, DENSITY)), 0f);
+            GlassRefraction.liveness(0f, 0f, tilt[0], tilt[1], DENSITY)), 0f);
         // The springs' last snap to rest moves it by a few thousandths at most: the lag's last
         // dp on both axes, and the tilt's last twentieth of a degree.
         float lastLag = GlassMotionLight.LAG_REST_DP * DENSITY;
         assertTrue(GlassRefraction.glintWeight(
-            GlassRefraction.liveness(lastLag, lastLag, 0f, 0f, 0f, DENSITY)) < 0.005f);
+            GlassRefraction.liveness(lastLag, lastLag, 0f, 0f, DENSITY)) < 0.005f);
         GlassRefraction.tiltVector(GlassRefraction.TILT_REST_DEG, 0f, tilt);
         assertTrue(GlassRefraction.glintWeight(
-            GlassRefraction.liveness(0f, 0f, tilt[0], tilt[1], 0f, DENSITY)) < 0.001f);
+            GlassRefraction.liveness(0f, 0f, tilt[0], tilt[1], DENSITY)) < 0.001f);
         // It rises with the pose, without a step anywhere.
         float last = 0f;
         for (int i = 0; i <= 200; i++) {
@@ -145,9 +145,9 @@ public class GlassRestLookTest {
             last = w;
         }
         // Its scale: about an eighth at the press rig's 1.1 degrees, whole by 5 degrees.
-        float rig = GlassRefraction.liveness(0f, 0f, (float) Math.sin(Math.toRadians(1.1)), 0f, 0f, DENSITY);
+        float rig = GlassRefraction.liveness(0f, 0f, (float) Math.sin(Math.toRadians(1.1)), 0f, DENSITY);
         assertEquals(0.13f, GlassRefraction.glintWeight(rig), 0.01f);
-        float held = GlassRefraction.liveness(0f, 0f, (float) Math.sin(Math.toRadians(5.0)), 0f, 0f, DENSITY);
+        float held = GlassRefraction.liveness(0f, 0f, (float) Math.sin(Math.toRadians(5.0)), 0f, DENSITY);
         assertEquals(1f, GlassRefraction.glintWeight(held), 0f);
     }
 
@@ -232,7 +232,7 @@ public class GlassRestLookTest {
     public void theRestLookHoldsWhereverTheProgramIsBuiltOnceAndNeverMoved() {
         // The dock and the strip run the program as a RenderEffect built once: never a lag, never
         // a tilt. Their weight is 0 for good, so they wear the rest look, the old one.
-        float w = GlassRefraction.glintWeight(GlassRefraction.liveness(0f, 0f, 0f, 0f, 0f, DENSITY));
+        float w = GlassRefraction.glintWeight(GlassRefraction.liveness(0f, 0f, 0f, 0f, DENSITY));
         assertEquals(0f, w, 0f);
         for (int deg = 0; deg < 360; deg += 5) {
             float nx = (float) Math.cos(Math.toRadians(deg)), ny = (float) Math.sin(Math.toRadians(deg));

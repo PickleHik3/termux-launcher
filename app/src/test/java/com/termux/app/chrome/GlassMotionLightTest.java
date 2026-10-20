@@ -17,8 +17,8 @@ import static org.junit.Assume.assumeTrue;
 
 /**
  * Living glass: a pane's bend lags it on an underdamped spring, rocks back once or twice as it
- * lands and settles to exactly the resting look; a press dents the glass until it lifts; placement
- * never kicks; at rest nothing is asked for. Also the program's Java mirrors of the terms it adds,
+ * lands and settles to exactly the resting look; a press deforms nothing (there is no dent);
+ * placement never kicks; at rest nothing is asked for. Also the program's Java mirrors of the terms it adds,
  * and that the program text stays well formed.
  */
 public class GlassMotionLightTest {
@@ -79,7 +79,6 @@ public class GlassMotionLightTest {
         for (int i = 0; i < 30; i++) assertFalse(drawAt(light, 1000L + i * FRAME_MS, 50f));
         assertEquals(0f, light.lagXPx(), 0f);
         assertEquals(0f, light.lagYPx(), 0f);
-        assertEquals(0f, light.dentDepthPx(), 0f);
         assertFalse(light.isMoving());
         assertEquals(0, gate.asked);
     }
@@ -222,79 +221,6 @@ public class GlassMotionLightTest {
         }
     }
 
-    // ---------------------------------------------------------------------------------- dent
-
-    @Test
-    public void aPressDentsTheGlassHoldsStillAndSpringsBackToExactlyZero() {
-        CountingGate gate = new CountingGate(1f);
-        GlassMotionLight light = new GlassMotionLight(DENSITY, gate);
-        long now = 1000L;
-        drawAt(light, now, 0f);
-        assertTrue(light.press(now + 3L, 120f, 240f));
-        assertEquals(1, gate.asked);
-        assertEquals(120f, light.dentXPx(), 0f);
-        assertEquals(240f, light.dentYPx(), 0f);
-        float full = GlassMotionLight.DENT_DEPTH_DP * DENSITY;
-        float deepest = 0f;
-        boolean more = true;
-        long held = -1L;
-        for (int i = 1; i < 60; i++) {
-            now += FRAME_MS;
-            more = drawAt(light, now, 0f);
-            deepest = Math.max(deepest, light.dentDepthPx());
-            if (!more && held < 0L) held = now;
-        }
-        assertTrue("reaches its depth", deepest >= full);
-        assertTrue("overshoots a little, " + deepest / full, deepest <= 1.25f * full);
-        assertFalse("held still, nothing asked for", more);
-        assertTrue("settled under the finger within 400 ms", held > 0L && held - 1003L <= 400L);
-        assertEquals(full, light.dentDepthPx(), 0f);
-
-        assertTrue(light.release(now));
-        assertFalse("a second release is nothing", light.release(now));
-        float shallowest = 0f;
-        long restAt = -1L;
-        long released = now;
-        for (int i = 0; i < 60; i++) {
-            now += FRAME_MS;
-            more = drawAt(light, now, 0f);
-            shallowest = Math.min(shallowest, light.dentDepthPx());
-            if (!more && restAt < 0L) restAt = now;
-        }
-        assertTrue("rebounds past flat", shallowest < 0f);
-        assertTrue("but only a little, " + shallowest / full, shallowest > -0.25f * full);
-        assertTrue("back at rest within 450 ms, " + (restAt - released),
-            restAt > 0L && restAt - released <= 450L);
-        assertEquals(0f, light.dentDepthPx(), 0f);
-        assertFalse(light.isMoving());
-    }
-
-    @Test
-    public void aQuickTapStillDentsAndReleases() {
-        GlassMotionLight light = new GlassMotionLight(DENSITY, new CountingGate(1f));
-        drawAt(light, 1000L, 0f);
-        light.press(1000L, 50f, 50f);
-        drawAt(light, 1011L, 0f);
-        drawAt(light, 1022L, 0f);
-        assertTrue(light.dentDepthPx() > 0f);
-        assertTrue(light.release(1030L));
-        long now = 1033L;
-        for (int i = 0; i < 80; i++, now += FRAME_MS) drawAt(light, now, 0f);
-        assertEquals(0f, light.dentDepthPx(), 0f);
-        assertFalse(drawAt(light, now, 0f));
-    }
-
-    @Test
-    public void aDentPressedAfterALongRestStartsFromTheFingerNotFromTheLastDraw() {
-        GlassMotionLight light = new GlassMotionLight(DENSITY, new CountingGate(1f));
-        drawAt(light, 1000L, 0f);
-        // Seconds untouched, then a press: the first draw after it is one frame into the dent.
-        light.press(9000L, 10f, 10f);
-        drawAt(light, 9000L + FRAME_MS, 0f);
-        assertTrue(light.dentDepthPx() < GlassMotionLight.DENT_DEPTH_DP * DENSITY * 0.5f);
-        assertTrue(light.dentDepthPx() > 0f);
-    }
-
     // ---------------------------------------------------------------------------------- gate
 
     @Test
@@ -306,12 +232,9 @@ public class GlassMotionLightTest {
         assertEquals("once for the whole motion", 1, gate.asked);
         float x = endOf(0f, 3000f, 20);
         assertFalse(drawAt(light, now, x));
-        assertFalse(light.press(now, 10f, 10f));
-        assertEquals(0f, light.dentDepthPx(), 0f);
-        assertFalse(light.release(now));
-        // The next motion asks afresh.
+        // The next motion asks afresh: once more, no press between them asking.
         slide(light, now + FRAME_MS, x, 3000f, 3, null);
-        assertEquals(3, gate.asked);
+        assertEquals(2, gate.asked);
     }
 
     @Test
@@ -353,11 +276,10 @@ public class GlassMotionLightTest {
     @Test
     public void resetGoesToRestAtOnce() {
         GlassMotionLight light = new GlassMotionLight(DENSITY, new CountingGate(1f));
-        long now = slide(light, 1000L, 0f, 2500f, 10, null);
-        light.press(now, 5f, 5f);
+        slide(light, 1000L, 0f, 2500f, 10, null);
+        assertTrue(light.isMoving());
         light.reset();
         assertEquals(0f, light.lagXPx(), 0f);
-        assertEquals(0f, light.dentDepthPx(), 0f);
         assertFalse(light.isMoving());
     }
 
@@ -387,32 +309,17 @@ public class GlassMotionLightTest {
     }
 
     @Test
-    public void theDentIsFlatAtItsCentreAndRimAndMovesThePictureByItsDepthAtItsSteepest() {
-        float r = GlassRefraction.DENT_RADIUS_DP * DENSITY, depth = 6f;
-        assertEquals(0f, GlassRefraction.dentShiftPx(0f, r, depth), 0f);
-        assertEquals(0f, GlassRefraction.dentShiftPx(r, r, depth), 0f);
-        assertEquals(0f, GlassRefraction.dentShiftPx(2f * r, r, depth), 0f);
-        assertEquals(16.0 / (25.0 * Math.sqrt(5.0)), GlassRefraction.DENT_PEAK, 1e-7);
-        float steepest = (float) (r / Math.sqrt(5.0));
-        assertEquals(depth, GlassRefraction.dentShiftPx(steepest, r, depth), 1e-4f);
-        for (int i = 0; i <= 50; i++) {
-            float shift = GlassRefraction.dentShiftPx(r * i / 50f, r, depth);
-            assertTrue("never past its depth at " + i, shift <= depth + 1e-4f && shift >= 0f);
-        }
-        assertEquals("a rebound gathers inward", -depth,
-            GlassRefraction.dentShiftPx(steepest, r, -depth), 1e-4f);
-    }
-
-    @Test
     public void theProgramTakesTheLiveTermsOnlyWhenLiveAndKeepsTheRestingExpressions() {
         String agsl = GlassRefraction.AGSL;
         assertTrue(agsl.contains("uniform float2 uLag;"));
-        assertTrue(agsl.contains("uniform float3 uDent;"));
+        // The press's dent is gone with its ripple (the user, 2026-10-20): a rigid slab does
+        // not deform under a finger.
         for (String gone : new String[] {"uMotion", "uMotionDir", "uSweep", "sweepG", "kSweepGain",
-            "kMotionBend", "kMotionDisp", "kMotionRimSplitDp", "lead"}) {
+            "kMotionBend", "kMotionDisp", "kMotionRimSplitDp", "lead", "uDent", "dentOff",
+            "kDentRadiusDp", "kDentPeak", "kDentDepthDp"}) {
             assertFalse(gone + " is gone", Pattern.compile("\\b" + gone + "\\b").matcher(agsl).find());
         }
-        assertTrue(agsl.contains("bool live = uLag.x != 0.0 || uLag.y != 0.0 || uDent.z != 0.0 || tilted;"));
+        assertTrue(agsl.contains("bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;"));
         // The resting expressions are untouched, and every live term sits behind its gate.
         assertTrue(agsl.contains("float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;"));
         assertTrue(agsl.contains("float2 sampleCoord = fragCoord - n * pull;"));
@@ -421,15 +328,12 @@ public class GlassMotionLightTest {
         int liveGate = agsl.indexOf("if (live) {");
         assertTrue(liveGate > 0);
         assertTrue(agsl.indexOf("pull = bent;") > liveGate);
-        assertTrue(agsl.indexOf("sampleCoord = sampleCoord + dentOff;") > agsl.indexOf("if (uDent.z != 0.0) {"));
         assertTrue(agsl.indexOf("sn = split > 0.0 ? sv / split : n;") > agsl.lastIndexOf("if (live) {"));
         // The constants are the Java ones.
         assertConst(agsl, "kLagMaxDp", GlassMotionLight.LAG_MAX_DP);
         assertConst(agsl, "kLagLean", GlassRefraction.LAG_LEAN_GAIN);
         assertConst(agsl, "kLagBend", GlassRefraction.LAG_BEND);
         assertConst(agsl, "kLagBand", GlassRefraction.LAG_BAND);
-        assertConst(agsl, "kDentRadiusDp", GlassRefraction.DENT_RADIUS_DP);
-        assertConst(agsl, "kDentPeak", GlassRefraction.DENT_PEAK);
         assertConst(agsl, "kLiveDisp", GlassRefraction.LIVE_DISPERSION);
     }
 
@@ -439,18 +343,16 @@ public class GlassMotionLightTest {
     public void livenessIsTheMostOfAWholeLeanAndNothingAtRest() {
         float d = 2.625f;
         float wholeLag = GlassMotionLight.LAG_MAX_DP * d / GlassRefraction.LAG_LEAN_GAIN;
-        assertEquals(0f, GlassRefraction.liveness(0f, 0f, 0f, 0f, 0f, d), 0f);
-        assertEquals(0.5f, GlassRefraction.liveness(wholeLag * 0.3f, wholeLag * 0.4f, 0f, 0f, 0f, d), 1e-5f);
-        assertEquals(1f, GlassRefraction.liveness(wholeLag * 3f, 0f, 0f, 0f, 0f, d), 0f);
-        // The press rig's 1.1 degrees is a quarter of a lean, as the rim's own lean is.
+        assertEquals(0f, GlassRefraction.liveness(0f, 0f, 0f, 0f, d), 0f);
+        assertEquals(0.5f, GlassRefraction.liveness(wholeLag * 0.3f, wholeLag * 0.4f, 0f, 0f, d), 1e-5f);
+        assertEquals(1f, GlassRefraction.liveness(wholeLag * 3f, 0f, 0f, 0f, d), 0f);
+        // The press rig's 1.1 degrees is a quarter of a lean, as the rim's own lean is: a press
+        // counts by its pose alone, there being no dent.
         float tilt = (float) Math.sin(Math.toRadians(1.1));
-        assertEquals(0.23f, GlassRefraction.liveness(0f, 0f, tilt, 0f, 0f, d), 0.005f);
-        // A whole press's dent is a whole one; a rebound counts as much.
-        float dent = GlassMotionLight.DENT_DEPTH_DP * d;
-        assertEquals(1f, GlassRefraction.liveness(0f, 0f, 0f, 0f, dent, d), 1e-6f);
-        assertEquals(0.5f, GlassRefraction.liveness(0f, 0f, 0f, 0f, -dent / 2f, d), 1e-6f);
+        assertEquals(0.23f, GlassRefraction.liveness(0f, 0f, tilt, 0f, d), 0.005f);
         // The most, not the sum.
-        assertEquals(0.5f, GlassRefraction.liveness(wholeLag * 0.5f, 0f, 0f, 0f, dent * 0.2f, d), 1e-5f);
+        float fifthLeanTilt = 0.2f / GlassRefraction.TILT_LEAN_GAIN;
+        assertEquals(0.5f, GlassRefraction.liveness(wholeLag * 0.5f, 0f, fifthLeanTilt, 0f, d), 1e-5f);
     }
 
     @Test
@@ -522,7 +424,6 @@ public class GlassMotionLightTest {
         assertTrue(agsl.indexOf(gate) < agsl.indexOf("content.eval("));
         assertEquals(4, agsl.split("sharp\\.eval\\(", -1).length - 1);
         assertEquals(4, agsl.split("content\\.eval\\(", -1).length - 1);
-        assertConst(agsl, "kDentDepthDp", GlassMotionLight.DENT_DEPTH_DP);
         assertConst(agsl, "kLiveReach", GlassRefraction.LIVE_CLARITY_REACH);
     }
 

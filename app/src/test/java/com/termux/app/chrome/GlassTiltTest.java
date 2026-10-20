@@ -460,8 +460,8 @@ public class GlassTiltTest {
         assertTrue(agsl.contains("float2 sampleCoord = fragCoord - n * pull;"));
         assertTrue(agsl.contains(
             "float k = glow * (gatherShare(n) + 1.5 * touchG) * (1.0 - kPaleCut * pale) * uEdgeGain;"));
-        // The face is moved before the dent, and takes one sample: no new eval.
-        assertTrue(agsl.indexOf("tiltOffset(p, b, inside, rimW)") < agsl.indexOf("if (uDent.z != 0.0) {"));
+        // The face is moved before the finger's light, and takes one sample: no new eval.
+        assertTrue(agsl.indexOf("tiltOffset(p, b, inside, rimW)") < agsl.indexOf("if (uTouchActive > 0.001) {"));
         // The mirror's arithmetic.
         assertTrue(agsl.contains("float share = s / (s + kTiltSoft);"));
         assertTrue(agsl.contains("float shift = kTiltShiftDp * uDensity * share;"));

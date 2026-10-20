@@ -4929,11 +4929,9 @@ public class TerminalPaneController {
     private float mPlankTop;
     private float mPlankWidth;
     private float mPlankHeight;
-    /** Scratch for the pressed slab's place on screen, for its dent. */
-    private final int[] mPressGlassLocation = new int[2];
     /**
-     * The slab dented under the finger (living glass), held from down to up, cancel, or the
-     * finger setting off on a drag; null when none is.
+     * The slab under the finger (living glass), held from down to up, cancel, or the finger
+     * setting off on a drag, so it follows its press rig's tilt both ways; null when none is.
      */
     @Nullable private PaneGlassBackdropView mPressedGlass;
     /** Where the finger came down on {@link #mPressedGlass}, raw px, and how far it may wander. */
@@ -4967,13 +4965,12 @@ public class TerminalPaneController {
                 mPressedPlank = plank;
                 plank.onPointerDown((ev.getRawX() - mPlankLeft) / mPlankWidth,
                     (ev.getRawY() - mPlankTop) / mPlankHeight);
-                // Living glass: the slab dents under the finger until it lifts.
+                // Living glass: the slab follows the rig's tilt until the finger lifts. It does
+                // not dent: a rigid slab does not deform under a finger.
                 View glass = frame.findViewById(R.id.terminal_pane_glass);
                 if (glass instanceof PaneGlassBackdropView && glass.getVisibility() == View.VISIBLE) {
                     PaneGlassBackdropView slab = (PaneGlassBackdropView) glass;
-                    slab.getLocationOnScreen(mPressGlassLocation);
-                    slab.pressGlass(ev.getRawX() - mPressGlassLocation[0],
-                        ev.getRawY() - mPressGlassLocation[1]);
+                    slab.pressGlass();
                     mPressedGlass = slab;
                     mPressGlassDownX = ev.getRawX();
                     mPressGlassDownY = ev.getRawY();
@@ -4987,7 +4984,7 @@ public class TerminalPaneController {
                         (ev.getRawY() - mPlankTop) / mPlankHeight);
                 }
                 // A finger that sets off is a scroll, a swipe or a border drag, not a press: the
-                // dent lets go. Those gestures are claimed below the window, where no cancel
+                // slab lets go. Those gestures are claimed below the window, where no cancel
                 // reaches this feed.
                 if (mPressedGlass != null && Math.hypot(ev.getRawX() - mPressGlassDownX,
                         ev.getRawY() - mPressGlassDownY) > mPressGlassSlop) {
@@ -5015,7 +5012,7 @@ public class TerminalPaneController {
         mPressedPlank = null;
     }
 
-    /** Let the dented slab spring back, if one is dented. */
+    /** Let the pressed slab go, if one is pressed. */
     private void releasePressedGlass() {
         PaneGlassBackdropView glass = mPressedGlass;
         if (glass == null) return;
