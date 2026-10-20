@@ -10,7 +10,7 @@ first within each section. Delete this file with the spec when the work is deliv
 | 1 Dock style pref + picker | merged, unchecked on device | f8ed2e66b | Picker in the Layout editor's Row B while Home's dock is selected; `DockStyle.BUILT` gates unbuilt styles to Glass tray. |
 | 2 Glass tray + shared glass | merged, unchecked on device | e2da84a2e | Shelf, soft rim, quarter-size icon reflection captured on change. Open: 9 dp slab jump at the Home/Workspace settle; reflection pops off/on during page swipes; no dash (cue) with one dock page. |
 | 3 Lens beads | merged, unchecked on device | eae04e066 | One glass program draws every bead (nearest-bead SDF from uniforms, no per-bead RenderNode); the host clips its children to the beads, so below Android 13 they are plain frost. Minimised Home float stays today's chip (not a bead yet). |
-| Emulator pass 1 | in progress | | |
+| Emulator pass 1 | done; polish round in progress | 8c9ea69f9 | Pass: picker (Row B, font 1.3 tight), Undo/persist, tray padding, no slab jump at the seam, live tray⇄beads, smooth bead edges, no shader/capture errors. Fix: beads stay put while icons slide on a page swipe; dashes stacked on the pull handle; end beads touch the screen edge; drawer could not be opened under injection (cause unknown); editor pill shifts when Undo appears. | | |
 | 4a Taskbar + run strip | not started | | |
 | 4b Prompt line | not started | | |
 | 4c Wall strip | not started | | |
