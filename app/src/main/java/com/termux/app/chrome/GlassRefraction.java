@@ -1987,17 +1987,16 @@ public final class GlassRefraction {
 
         /**
          * The icon row's picture for the glass to reflect: {@code row} holds the row drawn at
-         * {@code pxScale} of its size, whose top-left lands at {@code (left, top)} in the
-         * surface's own coordinates and whose icons span {@code top..bottom} there. The child's
-         * local matrix is set to aim it, so the program reads it in surface px. Filtered, since
-         * it is held small and scaled up, which is also the gentle blur a reflection of a flat
-         * object wants.
+         * {@code pxScaleX} by {@code pxScaleY} of its size, whose top-left lands at
+         * {@code (left, top)} in the surface's own coordinates and whose icons span
+         * {@code top..bottom} there. The child's local matrix is set to aim it, so the program
+         * reads it in surface px. Filtered, since it is held small and scaled up, which is also
+         * the gentle blur a reflection of a flat object wants.
          */
         public void setReflection(@NonNull Shader row, float left, float top, float bottom,
-                                  float pxScale) {
+                                  float pxScaleX, float pxScaleY) {
             Matrix aim = new Matrix();
-            float scale = 1f / Math.max(1e-4f, pxScale);
-            aim.setScale(scale, scale);
+            aim.setScale(1f / Math.max(1e-4f, pxScaleX), 1f / Math.max(1e-4f, pxScaleY));
             aim.postTranslate(left, top);
             row.setLocalMatrix(aim);
             if (row instanceof BitmapShader) {

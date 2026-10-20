@@ -1,0 +1,221 @@
+package com.termux.app.chrome;
+
+import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
+import android.graphics.Canvas;
+import android.graphics.Picture;
+import android.graphics.Shader;
+import android.os.Build;
+import android.view.View;
+import android.view.ViewParent;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
+import androidx.annotation.VisibleForTesting;
+
+import com.termux.shared.logger.Logger;
+
+/**
+ * The dock's icon row as a small picture for its glass to reflect
+ * ({@link GlassRefraction.Program#setReflection}).
+ *
+ * <p>The row is recorded and rasterised once, at a quarter of its size, whenever what it shows
+ * may have changed: its layout ran (a page settled, an icon was pinned, moved or resized) or one
+ * of its icons redrew (an icon arrived, a badge changed). Those ask for a capture a short settle
+ * after the last of them, so a burst of changes is one capture, and a capture is one rebuild of
+ * the dock's effect. Nothing asks at rest, so the glass at rest costs nothing: the picture is a
+ * hardware bitmap the effect samples, never redrawn per frame. A capture never invalidates the
+ * row, so it cannot ask for itself.</p>
+ *
+ * <p>While a page swipe carries the icons sideways the picture would stay behind, so the
+ * reflection is put away for the swipe ({@link #onPagePosition}) and captured again once the
+ * page settles: two rebuilds a swipe. A drag that reorders the icons is reflected where they
+ * land.</p>
+ *
+ * <p>Memory: one bitmap of a quarter of the row each way, about 40 KB on a 1080 px phone.</p>
+ */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+public final class DockIconReflection {
+
+    /** What the picture holds of the row, each way. Low on purpose: a reflection is soft. */
+    @VisibleForTesting static final float SCALE = 0.25f;
+    /** How long after the last change the row is captured. */
+    @VisibleForTesting static final long SETTLE_MS = 160L;
+    /** How far off a whole page the row may be and still count as settled. */
+    @VisibleForTesting static final float PAGE_SETTLED_EPSILON = 0.01f;
+
+    /** Told when the picture changed or went away, so the glass can be rebuilt once. */
+    public interface Listener {
+        void onReflectionChanged();
+    }
+
+    @NonNull private final View mRow;
+    @NonNull private final Listener mListener;
+    @NonNull private final Runnable mCapture = this::capture;
+    @NonNull private final View.OnLayoutChangeListener mLayoutListener =
+        (v, l, t, r, b, ol, ot, or, ob) -> requestCapture();
+
+    private boolean mEnabled;
+    /** True while a page swipe carries the icons: the reflection is put away until it settles. */
+    private boolean mSuspended;
+    @Nullable private Bitmap mBitmap;
+    @Nullable private BitmapShader mShader;
+    private float mScaleX = SCALE, mScaleY = SCALE;
+
+    public DockIconReflection(@NonNull View row, @NonNull Listener listener) {
+        mRow = row;
+        mListener = listener;
+        row.addOnLayoutChangeListener(mLayoutListener);
+    }
+
+    /**
+     * On while the dock's style reflects its icons; off lets the picture go. Turning it on asks
+     * for a capture; nothing is drawn until one lands.
+     */
+    public void setEnabled(boolean enabled) {
+        if (mEnabled == enabled) return;
+        mEnabled = enabled;
+        if (enabled) {
+            requestCapture();
+        } else {
+            mRow.removeCallbacks(mCapture);
+            mBitmap = null;
+            mShader = null;
+            mSuspended = false;
+        }
+    }
+
+    public boolean isEnabled() {
+        return mEnabled;
+    }
+
+    /** Whether this is the reflection of {@code row}. */
+    public boolean follows(@NonNull View row) {
+        return mRow == row;
+    }
+
+    /** Something the row shows may have changed: capture it once things settle. */
+    public void requestCapture() {
+        if (!mEnabled || mSuspended) return;
+        mRow.removeCallbacks(mCapture);
+        mRow.postDelayed(mCapture, SETTLE_MS);
+    }
+
+    /**
+     * The row's page position as it moves: off a whole page, the reflection is put away (one
+     * rebuild); back on one, it is captured again.
+     */
+    public void onPagePosition(float pagePosition) {
+        if (!mEnabled) return;
+        boolean settled = pageSettled(pagePosition);
+        if (!settled && !mSuspended) {
+            mSuspended = true;
+            mRow.removeCallbacks(mCapture);
+            if (mShader != null) {
+                mBitmap = null;
+                mShader = null;
+                mListener.onReflectionChanged();
+            }
+        } else if (settled && mSuspended) {
+            mSuspended = false;
+            requestCapture();
+        }
+    }
+
+    /** Whether a page position is a whole page. */
+    @VisibleForTesting
+    static boolean pageSettled(float pagePosition) {
+        return Float.isFinite(pagePosition)
+            && Math.abs(pagePosition - Math.round(pagePosition)) <= PAGE_SETTLED_EPSILON;
+    }
+
+    /** The picture's size for a row {@code sizePx} long: a quarter of it, never under a pixel. */
+    @VisibleForTesting
+    static int capturedSizePx(int sizePx) {
+        return Math.max(1, (int) Math.ceil(Math.max(0, sizePx) * SCALE));
+    }
+
+    private void capture() {
+        if (!mEnabled || mSuspended) return;
+        View row = mRow;
+        int width = row.getWidth();
+        int height = row.getHeight();
+        // A row mid-swipe or mid-fade shows icons in passing: the settle asks again.
+        if (width <= 0 || height <= 0 || !row.isAttachedToWindow()
+            || row.getTranslationX() != 0f || row.getAlpha() != 1f) return;
+        int capturedWidth = capturedSizePx(width);
+        int capturedHeight = capturedSizePx(height);
+        try {
+            Picture picture = new Picture();
+            Canvas canvas = picture.beginRecording(capturedWidth, capturedHeight);
+            canvas.scale(capturedWidth / (float) width, capturedHeight / (float) height);
+            row.draw(canvas);
+            picture.endRecording();
+            // Rasterised by the renderer, which also draws the icons' hardware bitmaps.
+            Bitmap bitmap = Bitmap.createBitmap(picture, capturedWidth, capturedHeight,
+                Bitmap.Config.HARDWARE);
+            mBitmap = bitmap;
+            mShader = new BitmapShader(bitmap, Shader.TileMode.DECAL, Shader.TileMode.DECAL);
+            mScaleX = capturedWidth / (float) width;
+            mScaleY = capturedHeight / (float) height;
+        } catch (Throwable t) {
+            Logger.logStackTraceWithMessage("DockIconReflection", "Dock reflection capture failed", t);
+            mBitmap = null;
+            mShader = null;
+        }
+        mListener.onReflectionChanged();
+    }
+
+    /**
+     * Hands the picture to {@code program}, aimed at where the row stands in the glass's own
+     * coordinates: the row's laid-out offset from {@code glassHost} (both under
+     * {@code commonAncestor}) plus {@code originX}/{@code originY}, where the host's origin sits
+     * in the glass. Clears the program's reflection and answers false when there is no picture
+     * or the row does not stand under that ancestor.
+     */
+    public boolean bind(@NonNull GlassRefraction.Program program, @NonNull View glassHost,
+                        @NonNull View commonAncestor, float originX, float originY) {
+        BitmapShader shader = mShader;
+        if (!mEnabled || mSuspended || shader == null || mRow.getVisibility() != View.VISIBLE) {
+            program.clearReflection();
+            return false;
+        }
+        float[] row = offsetIn(mRow, commonAncestor);
+        float[] host = offsetIn(glassHost, commonAncestor);
+        if (row == null || host == null) {
+            program.clearReflection();
+            return false;
+        }
+        float left = row[0] - host[0] + originX;
+        float top = row[1] - host[1] + originY;
+        program.setReflection(shader, left, top, top + mRow.getHeight(), mScaleX, mScaleY);
+        return true;
+    }
+
+    /**
+     * A view's laid-out offset inside {@code ancestor}, summed from layout values only (a
+     * transform in flight would otherwise be baked into the aim), or null when it is not under
+     * it.
+     */
+    @Nullable
+    private static float[] offsetIn(@NonNull View view, @NonNull View ancestor) {
+        float left = 0f;
+        float top = 0f;
+        for (View v = view; v != null; ) {
+            if (v == ancestor) return new float[] {left, top};
+            left += v.getLeft();
+            top += v.getTop();
+            ViewParent parent = v.getParent();
+            if (parent instanceof View) {
+                View p = (View) parent;
+                left -= p.getScrollX();
+                top -= p.getScrollY();
+                v = p;
+            } else {
+                v = null;
+            }
+        }
+        return null;
+    }
+}

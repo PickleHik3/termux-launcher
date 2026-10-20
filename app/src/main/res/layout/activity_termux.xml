@@ -639,6 +639,16 @@
             android:clipToPadding="false"
             android:visibility="gone">
 
+            <!-- The shelf under a floating Glass tray: a contact shadow and a faint glow on the
+                 wallpaper below the slab. Behind the glass host, which it follows; drawn below
+                 its own bounds, which nothing above it clips. Shown only where the dock's glass
+                 refracts (Android 13 and up). -->
+            <com.termux.app.DockShelfView
+                android:id="@+id/accessory_shelf_fx"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="invisible" />
+
             <FrameLayout
                 android:id="@+id/accessory_surface_host"
                 android:layout_width="match_parent"

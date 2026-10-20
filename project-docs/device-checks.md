@@ -1603,6 +1603,28 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   On Clear, while a pane moves, its rim's picture is sharper than at rest and settles back to the
   rest look; the text area of the pane never sharpens · emulator.
 
+### Home dock: Glass tray (10-20)
+- 2026-10-20 · feat(dock) Glass tray · Home, Floating, apps row alone and with the A–Z row under
+  it, two dock pages: the page dashes stand on the wallpaper 2–3.5 dp above the slab's top edge,
+  not inside the glass; the air above the icons equals the air below them (crop the dock, measure
+  icon top to slab top and icon bottom to slab bottom, within 1 px); a swipe up from the dock's top
+  edge still opens the palette with the keyboard. Swipe to the Workspace: its dock is pixel-for-
+  pixel the build before this change (dashes inside, no shelf, no reflection), and back on Home the
+  tray returns at settle · emulator (AGSL needs API 33+).
+- 2026-10-20 · feat(dock) Glass tray · The tray's glass on Home, Floating, over a dark and a pale
+  wallpaper: the refraction runs in a soft band about 24 dp in from the rim with no ring or line
+  where it meets the frosted face; the lower edge has a slightly brighter lip; under the slab a
+  soft shadow, darkest at the contact line, with a faint light line in it, no hard edge, and it
+  follows the dock while the drawer lifts it and vanishes with it. Docked: no shelf, no shadow.
+  Below Android 13 (an API 31 emulator): today's plain frost, no crash · emulator.
+- 2026-10-20 · feat(dock) Glass tray · Icon reflections on Home: a faint mirror of each icon
+  under it in the face, clearer toward the slab's lower rim, a squeezed upside-down copy in the
+  top 6 dp; subtle (if it reads as a second row of icons it is too strong). Pin, unpin and
+  reorder an app, change the icon size: the reflection follows within about 0.2 s. During a page
+  swipe it is gone and comes back with the new page. At rest `dumpsys gfxinfo <pkg> framestats`
+  shows no new frames over 10 s with the dock idle; logcat has no "Dock reflection capture
+  failed" or "Glass refraction shader failed" · emulator.
+
 ## Developer
 
 ### Living glass (10-19)
