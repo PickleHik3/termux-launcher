@@ -151,6 +151,8 @@ public final class SettingsSearchIndex {
         for (int i = 0; i < group.getPreferenceCount(); i++) {
             Preference row = group.getPreference(i);
             if (row instanceof PreferenceGroup) {
+                // A section hidden in the XML (Living glass's) is not offered, so neither are its rows.
+                if (!row.isVisible()) continue;
                 // A section header is not a destination; its rows are.
                 collect((PreferenceGroup) row, breadcrumb, screen, out);
                 continue;

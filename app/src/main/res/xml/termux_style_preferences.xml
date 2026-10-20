@@ -51,10 +51,11 @@
             android:defaultValue="100" />
     </PreferenceCategory>
 
-    <!-- Fancier Glass needs Android 13: the fragment hides this category below it. -->
+    <!-- Living glass is always on, so its switch is hidden on every Android version. -->
     <PreferenceCategory
         app:key="look_glass"
-        app:title="@string/settings_fancier_glass_header">
+        app:title="@string/settings_fancier_glass_header"
+        app:isPreferenceVisible="false">
         <SwitchPreferenceCompat
             app:key="fancier_glass_motion_light"
             app:title="@string/settings_motion_light_title"

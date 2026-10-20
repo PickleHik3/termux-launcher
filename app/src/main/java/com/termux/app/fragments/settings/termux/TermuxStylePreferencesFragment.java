@@ -16,7 +16,6 @@ import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
-import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
@@ -87,10 +86,8 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureThemeTemplatesPreference();
         configureDynamicColorsHint();
         configureWallpaperAlignment(context);
-        // Living glass lives in Fancier Glass, which needs Android 13: hidden below it, not greyed.
-        PreferenceCategory glass = findPreference("look_glass");
-        if (glass != null)
-            glass.setVisible(com.termux.app.chrome.FancierGlassPolicy.offered(Build.VERSION.SDK_INT));
+        // Living glass is always on and its switch hidden (look_glass in the XML): at rest the glass
+        // looks the same either way, so the switch offered no visible choice.
     }
 
     @Override
