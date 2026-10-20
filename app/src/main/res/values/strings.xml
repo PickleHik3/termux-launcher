@@ -2009,6 +2009,13 @@
                 <string name="layout_editor_key_radius_description">Key radius</string>
                 <string name="layout_editor_keyboard">Keyboard</string>
                 <string name="layout_editor_keyboard_forms">Keyboard type</string>
+                <!-- Home's dock styles, in Row B while Home's dock is selected. -->
+                <string name="layout_editor_dock_styles">Dock style</string>
+                <string name="layout_editor_dock_style_glass_tray">Glass tray</string>
+                <string name="layout_editor_dock_style_lens_beads">Lens beads</string>
+                <string name="layout_editor_dock_style_taskbar">Taskbar</string>
+                <string name="layout_editor_dock_style_prompt_line">Prompt line</string>
+                <string name="layout_editor_dock_style_wall_strip">Wall strip</string>
                 <!-- What a resize handle shows while it is dragged, in the store's real units. The
                      dp forms are the live launcher measured after the write; the × forms are for
                      the orientation the phone is not in, where there is nothing live to measure. -->

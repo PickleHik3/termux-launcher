@@ -769,6 +769,24 @@
             app:tickVisibilityMode="hidden" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
+    <!-- Home's dock styles (home-dock-styles spec, "The choice"): while Home's dock is selected
+         they stand where Corner radius and Margin are, as the keyboard's tools do, pinned to the
+         same extent so the sheet keeps its height. One preview per style with its name under it,
+         the picked one filled; LayoutEditorController fills the row. -->
+    <LinearLayout
+        android:id="@+id/layout_editor_dock_styles"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipChildren="false"
+        android:contentDescription="@string/layout_editor_dock_styles"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/appearance_editor_corners"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/appearance_editor_corners_label" />
+
     <!-- Row A's members only: Row B (Corner radius and Margin, or the hidden tiles in their place)
          is shown in code, since a Group restates its members' visibility on every layout pass. -->
     <androidx.constraintlayout.widget.Group

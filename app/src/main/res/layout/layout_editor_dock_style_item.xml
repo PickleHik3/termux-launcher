@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One of Home's dock styles in the Layout editor's Row B: the style's silhouette on a filter
+     chip, checked for the picked one, with its name under it. The whole item is the target. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:gravity="center_horizontal"
+    android:importantForAccessibility="no"
+    android:orientation="vertical">
+
+    <com.google.android.material.chip.Chip
+        android:id="@+id/layout_editor_dock_style_chip"
+        style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+        app:chipIconSize="24dp" />
+
+    <TextView
+        android:id="@+id/layout_editor_dock_style_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:gravity="center_horizontal"
+        android:importantForAccessibility="no"
+        android:maxLines="1"
+        android:textAppearance="?attr/textAppearanceLabelSmall"
+        android:textColor="?attr/colorOnSurfaceVariant" />
+</LinearLayout>
