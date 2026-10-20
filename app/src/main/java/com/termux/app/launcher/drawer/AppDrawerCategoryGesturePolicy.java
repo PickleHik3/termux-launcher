@@ -49,6 +49,10 @@ public final class AppDrawerCategoryGesturePolicy {
             if (!down.atTop || dy >= 0) return latch(Claim.SCROLL);
             return latch(Claim.COLLAPSE_DRAG);
         }
+        // The open folder's empty pane has nothing to scroll, so the list's own position is no
+        // veto: a pull down there is the folder's collapse, and anything else claims nothing.
+        if (down.part == AppDrawerCategoryTouchRegions.Part.DETAIL_EMPTY)
+            return latch(dy < 0 ? Claim.COLLAPSE_DRAG : Claim.SCROLL);
         if (!isOverview(down.part)) return claim;
         AppDrawerCloseArmingPolicy.Decision decision = overviewClose.claimOnPreScroll(dy);
         if (decision == AppDrawerCloseArmingPolicy.Decision.CLOSE_DRAG)

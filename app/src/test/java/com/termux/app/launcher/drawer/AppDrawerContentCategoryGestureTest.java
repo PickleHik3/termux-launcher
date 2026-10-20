@@ -110,14 +110,72 @@ public class AppDrawerContentCategoryGestureTest {
             categories.expansionState());
     }
 
-    @Test public void detailEmptyTopIsPlaneChromeAndContentNeverIntercepts() {
+    @Test public void detailEmptyTopIsTheFolderAndContentNeverIntercepts() {
         expandFirst();
         float x = categories.getLeft() + categories.getWidth() / 2f;
-        float y = categories.getTop() + Math.max(1, categories.getDetailHeader().getTop() / 2f);
-        assertFalse(content.ownsPoint(x, y));
+        float y = emptyPaneY();
+        assertTrue(content.ownsPoint(x, y));
         MotionEvent down = event(MotionEvent.ACTION_DOWN, x, y);
         try { assertFalse(content.onInterceptTouchEvent(down)); }
         finally { down.recycle(); }
+    }
+
+    @Test public void suggestedFolderEmptyPanePullCollapsesFolderAndKeepsDrawerOpen() {
+        // Suggestions caps at eight apps: two bottom-anchored rows under a tall empty band.
+        expand(new AppDrawerCategoryBucket(AppDrawerCategory.SUGGESTIONS,
+            entries("suggested", AppDrawerCategoryClassifier.SUGGESTIONS_CAP)));
+        assertEmptyPanePullCollapsesOnly();
+    }
+
+    @Test public void normalFolderEmptyPanePullCollapsesFolderAndKeepsDrawerOpen() {
+        expand(new AppDrawerCategoryBucket(AppDrawerCategory.SOCIAL, entries("social", 60)));
+        assertEmptyPanePullCollapsesOnly();
+    }
+
+    @Test public void emptyPaneTapAndUpwardDragLeaveFolderOpen() {
+        expand(new AppDrawerCategoryBucket(AppDrawerCategory.SUGGESTIONS,
+            entries("suggested", AppDrawerCategoryClassifier.SUGGESTIONS_CAP)));
+        float x = categories.getLeft() + categories.getWidth() / 2f;
+        float y = emptyPaneY();
+        long t = SystemClock.uptimeMillis();
+        dispatch(MotionEvent.ACTION_DOWN, x, y, t, t);
+        dispatch(MotionEvent.ACTION_UP, x, y, t, t + 40);
+        dispatch(MotionEvent.ACTION_DOWN, x, y + 60f, t + 100, t + 100);
+        dispatch(MotionEvent.ACTION_MOVE, x, y, t + 100, t + 140);
+        dispatch(MotionEvent.ACTION_UP, x, y, t + 100, t + 160);
+        content.advanceDrawerFx(1, 1f / 60f, true);
+        assertEquals(AppDrawerCategoryExpansionModel.State.EXPANDED,
+            categories.expansionState());
+        assertEquals(0, callbacks.begins);
+    }
+
+    private void assertEmptyPanePullCollapsesOnly() {
+        assertEquals(AppDrawerCategoryExpansionModel.State.EXPANDED,
+            categories.expansionState());
+        float x = categories.getLeft() + categories.getWidth() / 2f;
+        float y = emptyPaneY();
+        assertTrue(content.ownsPoint(x, y));
+        long t = SystemClock.uptimeMillis();
+        dispatch(MotionEvent.ACTION_DOWN, x, y, t, t);
+        float travel = categories.getHeight() * 0.7f;
+        for (int i = 1; i <= 4; i++)
+            dispatch(MotionEvent.ACTION_MOVE, x, y + travel * i / 4f, t, t + 16L * i);
+        assertEquals(AppDrawerCategoryExpansionModel.State.COLLAPSE_DRAGGING,
+            categories.expansionState());
+        dispatch(MotionEvent.ACTION_UP, x, y + travel, t, t + 80);
+        content.advanceDrawerFx(1, 1f / 60f, true);
+        assertEquals(AppDrawerCategoryExpansionModel.State.OVERVIEW,
+            categories.expansionState());
+        assertEquals(0, callbacks.begins);
+        assertEquals(0, callbacks.ends);
+    }
+
+    /** Halfway down the band above the folder's header, in content coordinates. */
+    private float emptyPaneY() {
+        int headerTop = Math.min(categories.getDetailHeader().getTop(),
+            categories.getCollapseChevron().getTop());
+        assertTrue("the folder needs an empty band above its header", headerTop > 2);
+        return categories.getTop() + headerTop / 2f;
     }
 
     @Test public void nestedFlingSignIsConvertedExactlyOnceAndDuplicateStopFinalizesOnce() {
@@ -133,7 +191,10 @@ public class AppDrawerContentCategoryGestureTest {
     }
 
     private void expandFirst() {
-        AppDrawerCategoryBucket bucket = categories.getTileAdapter().bucketAt(0);
+        expand(categories.getTileAdapter().bucketAt(0));
+    }
+
+    private void expand(AppDrawerCategoryBucket bucket) {
         AppDrawerCategoryTileView tile = (AppDrawerCategoryTileView)
             categories.getOverview().getChildAt(0);
         categories.onExpandRequested(bucket, tile);
@@ -148,6 +209,21 @@ public class AppDrawerContentCategoryGestureTest {
         float y = categories.getTop() + categories.getOverview().getTop()
             + tile.getTop() + 4f;
         dispatch(MotionEvent.ACTION_DOWN, x, y);
+    }
+
+    private void dispatch(int action, float x, float y, long downTime, long eventTime) {
+        MotionEvent event = MotionEvent.obtain(downTime, eventTime, action, x, y, 0);
+        try { content.dispatchTouchEvent(event); }
+        finally { event.recycle(); }
+    }
+
+    private static List<com.termux.app.launcher.model.LauncherAppEntry> entries(String prefix,
+                                                                             int count) {
+        List<com.termux.app.launcher.model.LauncherAppEntry> apps = new ArrayList<>();
+        for (int i = 0; i < count; i++)
+            apps.add(AppDrawerContentCategoriesTest.app("com.example." + prefix + i,
+                prefix + i, ApplicationInfo.CATEGORY_SOCIAL));
+        return apps;
     }
 
     private void dispatch(int action, float x, float y) {
