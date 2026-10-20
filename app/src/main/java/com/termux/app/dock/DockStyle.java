@@ -36,7 +36,8 @@ public enum DockStyle {
      * until then choosing it shows the glass tray.
      */
     @NonNull
-    public static final Set<DockStyle> BUILT = Collections.unmodifiableSet(EnumSet.of(GLASS_TRAY, LENS_BEADS));
+    public static final Set<DockStyle> BUILT = Collections.unmodifiableSet(EnumSet.of(GLASS_TRAY, LENS_BEADS,
+        PROMPT_LINE));
 
     @NonNull private final String mId;
 

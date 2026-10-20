@@ -58,6 +58,12 @@ public final class PromptLineInk {
         return new PromptLineInk(well, directory, glyph, hint);
     }
 
+    /** Whether {@code other} holds the same four colours. */
+    public boolean sameAs(@androidx.annotation.Nullable PromptLineInk other) {
+        return other != null && other.well == well && other.directory == directory
+            && other.glyph == glyph && other.hint == hint;
+    }
+
     @ColorInt
     private static int opaque(@ColorInt int color) {
         return color | 0xFF000000;

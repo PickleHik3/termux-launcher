@@ -4777,7 +4777,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // While a swipe fades the reflection out, it is aimed where the swipe draws the icons,
         // so it leaves with them rather than staying behind.
         float rowOffset = mSuggestionBarView != null ? mSuggestionBarView.drawnPageOffsetPx() : 0f;
-        reflection.bind(program, host, container, mGlassOriginLeft + rowOffset, mGlassOriginTop);
+        // Under the Prompt line's field the lower bevel shows the icons as the tray's would,
+        // aimed that much lower, and nowhere over the field or the icons themselves.
+        int belowPx = mAppliedPromptFieldBandPx;
+        reflection.bind(program, host, container, mGlassOriginLeft + rowOffset, mGlassOriginTop,
+            belowPx, belowPx > 0 ? PROMPT_LINE_REFLECTION_SCALE : 1f);
     }
 
     /**
@@ -13091,6 +13095,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // dock's height scale sizes.
         @Override public int measuredDockHeightDp() {
             int px = shownThicknessPx(R.id.apps_bar_row_host);
+            // The Prompt line's field shares the row's host; the size scale is the row's own.
+            if (px > 0 && mPromptLineField != null
+                && mPromptLineField.getVisibility() == View.VISIBLE
+                && mPromptLineField.getParent() == findViewById(R.id.apps_bar_row_host))
+                px = Math.max(0, px - mAppliedPromptFieldBandPx);
             if (px <= 0) px = shownThicknessPx(R.id.place_apps_bar_host);
             float density = getResources().getDisplayMetrics().density;
             return px <= 0 || density <= 0f ? -1 : Math.round(px / density);
@@ -15310,7 +15319,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // it and the index riding the plank claims only the letters themselves. The ticks stand in
         // the row's own air wherever it lies down, so a lying-down row claims its band and nothing
         // more; only a rail's strip is a column beside it.
-        int appsRowPx = dockLayout.appsRowBandPx
+        // On the dock the Prompt line's field stands under the row, on the same slab.
+        int appsRowPx = dockLayout.appsRowBandPx + dockLayout.promptFieldBandPx
             + (onPlank.isEmpty() ? 0 : 2 * offDockPlankAirPx(onPlank));
         int azRowPx = onPlank.contains(Element.AZ)
             ? azBarThicknessPx()
@@ -15351,6 +15361,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAppliedPlaceLayout = layout;
         // A Dock style picked in the Layout editor: the dock takes its new shape on this pass.
         boolean dockStyleChanged = previous != null && previous.dockStyle != layout.dockStyle;
+        // Where the new style brings the Prompt line's field or takes it away, the slab eases to
+        // its new height from what it shows now: started before any pass below lays it out.
+        if (dockStyleChanged) beginPromptFieldEase();
         com.termux.app.place.LayoutVariant variant = chromeVariant();
         boolean sameVariant = variant == mAppliedPlaceVariant;
         mAppliedPlaceVariant = variant;
@@ -16188,6 +16201,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .appsRowPageStripShown(!PlaceChromePolicy.appsRailShown(layout))
             // Home's dock is the Glass tray, the Workspace's the plain dock.
             .surface(dockSurfaceSpec())
+            // The Prompt line's field under the apps row: all of it while Home wears the style,
+            // between while a style switch eases the slab.
+            .promptFieldReveal(promptFieldReveal())
             .density(getResources().getDisplayMetrics().density)
             .barHeightScale(preferencesAvailable
                 ? mPreferences.getAppLauncherBarHeightScale() : DockLayoutPolicy.sizePreset(2))
@@ -16243,6 +16259,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null || mChrome == null) return;
         if (com.termux.app.place.HomeChromePolicy.wearsHomeShape(from)
             == com.termux.app.place.HomeChromePolicy.wearsHomeShape(to)) return;
+        // A settle lands the place's geometry at once (ADR 0003): an ease under way gives way.
+        cancelPromptFieldEase();
         restyleDockSurface();
     }
 
@@ -16261,6 +16279,157 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setTerminalToolbarHeight(true);
         mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
             | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    // ------------------------------------------------------------------ Prompt line
+    //
+    // Home's Prompt line (DockSurfaceSpec.PROMPT_LINE): the command palette's field stands under
+    // the apps row on the same slab (DockLayout.promptFieldBandPx), in the row's own host, so the
+    // dock's one glass, its shelf and its reflection are the taller slab's. A Dock style picked
+    // in the Layout editor eases the slab's height in or out over a short run of frames, each a
+    // dock pass and one re-cut of its glass; nothing runs before or after it.
+
+    /** How long a style switch takes to grow or shrink the slab by the field. */
+    private static final long PROMPT_FIELD_EASE_MS = 240L;
+    /** How strongly the lower bevel shows the icons under the field, of the tray's. */
+    private static final float PROMPT_LINE_REFLECTION_SCALE = 0.8f;
+    /** The field, made the first time the slab carries it; null before. */
+    @Nullable private com.termux.app.dock.PromptLineFieldView mPromptLineField;
+    /** A style switch easing the field in or out; null at rest. */
+    @Nullable private android.animation.ValueAnimator mPromptFieldEase;
+    /** Where that ease stands now, 0..1 of the field. */
+    private float mPromptFieldEaseValue;
+    /** The field's band and its share of the whole, as last laid out. */
+    private int mAppliedPromptFieldBandPx;
+    private float mAppliedPromptFieldReveal;
+
+    /**
+     * How much of the field the dock is laid out with: the ease's value while one runs, otherwise
+     * all of it where Home's dock wears the Prompt line and none anywhere else.
+     */
+    private float promptFieldReveal() {
+        if (mPromptFieldEase != null) return mPromptFieldEaseValue;
+        return mPreferences != null && dockSurfaceSpec().promptField ? 1f : 0f;
+    }
+
+    /**
+     * A Dock style was picked: where the field comes or goes on a dock in view, the slab eases
+     * from what it shows now to its new height, before any pass lays the new style out. Anywhere
+     * else (off Home, the dock not laid out yet, reduced motion) the passes land it at once.
+     */
+    private void beginPromptFieldEase() {
+        cancelPromptFieldEase();
+        if (mPreferences == null || mChrome == null) return;
+        float target = dockSurfaceSpec().promptField ? 1f : 0f;
+        float from = mAppliedPromptFieldReveal;
+        if (from == target || isReducedMotionEnabled()
+            || !com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage)) return;
+        View stack = findViewById(R.id.accessory_stack_container);
+        View rowHost = findViewById(R.id.apps_bar_row_host);
+        if (stack == null || rowHost == null || stack.getVisibility() != View.VISIBLE
+            || rowHost.getVisibility() != View.VISIBLE || stack.getHeight() <= 0
+            || rowHost.getParent() != findViewById(R.id.accessory_row_stack)) return;
+        android.animation.ValueAnimator ease = android.animation.ValueAnimator.ofFloat(from, target);
+        ease.setDuration(Math.round(PROMPT_FIELD_EASE_MS * Math.abs(target - from)));
+        ease.setInterpolator(new android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f));
+        ease.addUpdateListener(animator -> {
+            if (mPromptFieldEase != animator) return;
+            mPromptFieldEaseValue = (float) animator.getAnimatedValue();
+            // One dock pass, and the glass re-cut on the same frame when the slab moved.
+            if (setTerminalToolbarHeight(false))
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                    | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        });
+        ease.addListener(new android.animation.AnimatorListenerAdapter() {
+            private boolean mCancelled;
+
+            @Override public void onAnimationCancel(android.animation.Animator animation) {
+                mCancelled = true;
+            }
+
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (mPromptFieldEase != animation) return;
+                mPromptFieldEase = null;
+                // Landed: the style's own pass, the field wholly in or gone.
+                if (!mCancelled) restyleDockSurface();
+            }
+        });
+        mPromptFieldEaseValue = from;
+        mPromptFieldEase = ease;
+        ease.start();
+    }
+
+    /** Stops an ease under way where it stands; the caller's pass lands the style. */
+    private void cancelPromptFieldEase() {
+        android.animation.ValueAnimator ease = mPromptFieldEase;
+        if (ease == null) return;
+        mPromptFieldEase = null;
+        ease.cancel();
+    }
+
+    /**
+     * Lays the field out as {@code layout} has it: last in the apps row's host, the row's 14 dp in
+     * from the slab's sides, its band's padding under it, fading in only once the slab has room
+     * for it. Gone where the layout carries none. Whether anything moved.
+     */
+    private boolean syncPromptLineField(@NonNull DockLayout layout) {
+        int band = layout.promptFieldBandPx;
+        mAppliedPromptFieldBandPx = band;
+        mAppliedPromptFieldReveal = layout.promptFieldFullBandPx > 0
+            ? Math.min(1f, band / (float) layout.promptFieldFullBandPx) : 0f;
+        com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
+        if (band <= 0) {
+            if (field == null || field.getVisibility() == View.GONE) return false;
+            field.setVisibility(View.GONE);
+            return true;
+        }
+        View hostView = findViewById(R.id.apps_bar_row_host);
+        if (!(hostView instanceof LinearLayout)) return false;
+        LinearLayout host = (LinearLayout) hostView;
+        boolean moved = false;
+        if (field == null) {
+            field = new com.termux.app.dock.PromptLineFieldView(this);
+            mPromptLineField = field;
+        }
+        if (field.getParent() != host || host.indexOfChild(field) != host.getChildCount() - 1) {
+            if (field.getParent() instanceof ViewGroup)
+                ((ViewGroup) field.getParent()).removeView(field);
+            host.addView(field, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, layout.promptFieldHeightPx));
+            moved = true;
+        }
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) field.getLayoutParams();
+        int inset = layout.promptFieldSideInsetPx;
+        if (params.height != layout.promptFieldHeightPx || params.leftMargin != inset
+            || params.rightMargin != inset || params.topMargin != 0
+            || params.bottomMargin != layout.promptFieldBottomPadPx) {
+            params.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            params.height = layout.promptFieldHeightPx;
+            params.setMargins(inset, 0, inset, layout.promptFieldBottomPadPx);
+            field.setLayoutParams(params);
+            moved = true;
+        }
+        if (field.getVisibility() != View.VISIBLE) {
+            field.setVisibility(View.VISIBLE);
+            moved = true;
+        }
+        float alpha = promptFieldAlpha(mAppliedPromptFieldReveal);
+        if (field.getAlpha() != alpha) field.setAlpha(alpha);
+        // The well nests in the slab: the dock's radius less the air between them.
+        float dockRadius = isRoundedDockStyle() ? resolveDockCapsuleCornerRadiusPx(
+            layout.appsBarHeightPx + layout.promptFieldFullBandPx) : 0f;
+        field.setWellRadiusPx(com.termux.app.dock.WallStripRowPolicy.tileRadiusPx(dockRadius,
+            layout.promptFieldWellGapPx));
+        return moved;
+    }
+
+    /**
+     * The field's opacity for how much of it the slab holds: none until the icons have moved
+     * clear of where it stands, then in by the end, so it never shows under them.
+     */
+    private static float promptFieldAlpha(float reveal) {
+        float t = Math.max(0f, Math.min(1f, (reveal - 0.35f) / 0.65f));
+        return t * t * (3f - 2f * t);
     }
 
     /**
@@ -16320,6 +16489,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         moved |= updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
         moved |= applyDockRowHorizontalInsets(layout);
+        moved |= syncPromptLineField(layout);
         if (mSuggestionBarView != null) {
             moved |= layout.appsRowBandHintPx != mAppliedDockRowHeightHintPx;
             mAppliedDockRowHeightHintPx = layout.appsRowBandHintPx;
@@ -28667,6 +28837,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isKeyboardAlwaysOn() { return isHomeKeyboardAlwaysOn(); }
 
         @Override public void lowerKeyboard() { lowerHomePaletteKeyboard(); }
+
+        // The Prompt line's field opens the palette with the keyboard: up already, or raised
+        // by hand as the swipe up raises it (openHomePalette).
+        @Override public boolean isKeyboardUp() { return committedKeyboardVisible(); }
+
+        @Override public boolean raiseKeyboard() { return terminalHost().showInAppKeyboard(false); }
     }
 
     @Nullable
@@ -29859,6 +30035,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     void updateWindowBackgroundForCurrentSession() {
+        // Every terminal scheme pass ends here (a theme, light or dark, Material You's palette):
+        // the Prompt line's prompt takes the scheme's colours, redrawing only if they moved.
+        if (mPromptLineField != null) mPromptLineField.refreshTheme();
         if (getWindow() == null) {
             return;
         }

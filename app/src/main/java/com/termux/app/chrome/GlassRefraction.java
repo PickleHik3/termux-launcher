@@ -1908,6 +1908,12 @@ public final class GlassRefraction {
      * (R10): about 3 dp at 3 degrees. Only a slab handed {@code uTilt} moves it.
      */
     static final float REFLECT_DEPTH_DP = 30f;
+    /**
+     * The icons' top edge handed to the program for a reflection shown only in the lower bevel
+     * ({@link Program#setReflection(Shader, float, float, float, float, float, boolean)}): far
+     * above every surface, so no pixel lies above it.
+     */
+    static final float REFLECT_NO_TOP = -1.0e6f;
 
     /**
      * A Lens bead's own soft rim band, dp ({@code uSoftRim} for a bead): tight, a little under a
@@ -2167,6 +2173,18 @@ public final class GlassRefraction {
          */
         public void setReflection(@NonNull Shader row, float left, float top, float bottom,
                                   float pxScaleX, float pxScaleY) {
+            setReflection(row, left, top, bottom, pxScaleX, pxScaleY, false);
+        }
+
+        /**
+         * As {@link #setReflection(Shader, float, float, float, float, float)}; with
+         * {@code lowerBevelOnly} the picture is shown only below {@code bottom}, the face over
+         * and above the icons and the top bevel showing none of it. The Prompt line aims the
+         * picture under its field this way, so the icons are reflected where its lower bevel
+         * is and nowhere over the field or themselves.
+         */
+        public void setReflection(@NonNull Shader row, float left, float top, float bottom,
+                                  float pxScaleX, float pxScaleY, boolean lowerBevelOnly) {
             Matrix aim = new Matrix();
             aim.setScale(1f / Math.max(1e-4f, pxScaleX), 1f / Math.max(1e-4f, pxScaleY));
             aim.postTranslate(left, top);
@@ -2179,10 +2197,13 @@ public final class GlassRefraction {
                 mReflectOn = true;
                 mShader.setFloatUniform("uReflect", mReflectStrength);
             }
-            if (mReflTop != top || mReflBottom != bottom) {
-                mReflTop = top;
+            // The program mirrors the icons above their top edge (uReflRow.x): a top far above
+            // every surface leaves only the mirror below their bottom edge.
+            float bandTop = lowerBevelOnly ? REFLECT_NO_TOP : top;
+            if (mReflTop != bandTop || mReflBottom != bottom) {
+                mReflTop = bandTop;
                 mReflBottom = bottom;
-                mShader.setFloatUniform("uReflRow", top, bottom);
+                mShader.setFloatUniform("uReflRow", bandTop, bottom);
             }
         }
 
