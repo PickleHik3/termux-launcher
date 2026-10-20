@@ -649,7 +649,9 @@
                 android:layout_height="match_parent"
                 android:visibility="invisible" />
 
-            <FrameLayout
+            <!-- The dock's glass host. Drawn as Lens beads, everything in it is clipped to the
+                 beads (DockSurfaceHostLayout.setBeads); otherwise a plain FrameLayout. -->
+            <com.termux.app.DockSurfaceHostLayout
                 android:id="@+id/accessory_surface_host"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -700,7 +702,7 @@
                     android:layout_height="300dp"
                     android:layout_gravity="center"
                     android:visibility="gone" />
-            </FrameLayout>
+            </com.termux.app.DockSurfaceHostLayout>
 
             <com.termux.app.LauncherAzGestureFxView
                 android:id="@+id/apps_bar_az_fx_underlay"

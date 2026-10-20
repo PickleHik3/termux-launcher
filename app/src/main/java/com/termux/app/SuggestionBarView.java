@@ -993,6 +993,49 @@ public final class SuggestionBarView extends GridLayout
 
     private final int[] iconHitLocation = new int[2];
 
+    /**
+     * The row's icons' boxes as laid out, in this view's own coordinates: left, top, right and
+     * bottom per icon into {@code out}, at most {@code out.length / 4} of them, and how many
+     * there are (one more than {@code out} holds when there are more). An app's button or a folder's shell counts; a filler slot, the empty row's hint
+     * and a slot faded out do not. Read off layout values only, so an icon in flight (a drag, a
+     * page swipe) answers where it was laid out. The dock's Lens beads stand on these.
+     */
+    public int layoutIconBoxes(@NonNull float[] out) {
+        if (vertical) return 0;
+        int max = out.length / 4;
+        int count = 0;
+        for (SlotIcon icon : slotIcons) {
+            View slot = icon.slot;
+            View box = icon.box;
+            if (slot.getParent() != this || slot.getVisibility() != View.VISIBLE
+                || slot.getAlpha() <= 0f || box.getVisibility() != View.VISIBLE
+                || box.getWidth() <= 0 || box.getHeight() <= 0) continue;
+            // More icons than the caller holds: it is told so, and draws none of them.
+            if (count >= max) return max + 1;
+            float left = 0f;
+            float top = 0f;
+            View v = box;
+            while (v != this) {
+                left += v.getLeft();
+                top += v.getTop();
+                ViewParent parent = v.getParent();
+                if (!(parent instanceof View)) return 0;
+                View p = (View) parent;
+                if (p != this) {
+                    left -= p.getScrollX();
+                    top -= p.getScrollY();
+                }
+                v = p;
+            }
+            out[count * 4] = left;
+            out[count * 4 + 1] = top;
+            out[count * 4 + 2] = left + box.getWidth();
+            out[count * 4 + 3] = top + box.getHeight();
+            count++;
+        }
+        return count;
+    }
+
     /** Told when one of the row's icons redrew: the dock's reflection of the row re-captures. */
     @Nullable private Runnable contentInvalidatedListener;
 

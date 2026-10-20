@@ -4748,7 +4748,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     private void applyDockSurfaceGlass(@NonNull com.termux.app.chrome.GlassRefraction.Program program) {
         com.termux.app.dock.DockSurfaceSpec spec = dockSurfaceSpec();
-        program.setDockSurface(spec.softRimDp, isRoundedDockStyle() ? spec.shelf : 0f);
+        com.termux.app.dock.LensBeadGeometry.Beads beads = spec.beads ? mDockBeads : null;
+        if (beads != null) {
+            // Lens beads: each bead floats, whatever the Style, so each wears the shelf's lip;
+            // the beads stand where the host's origin sits in the backdrop.
+            program.setDockSurface(spec.softRimDp, spec.shelf);
+            com.termux.app.dock.LensBeadGeometry.Beads inGlass =
+                beads.offset(mGlassOriginLeft, mGlassOriginTop);
+            float[] centers = new float[inGlass.count()];
+            for (int i = 0; i < centers.length; i++) centers[i] = inGlass.centerX(i);
+            program.setBeads(centers, centers.length, inGlass.centerY, inGlass.radiusPx,
+                inGlass.iconHalfPx);
+        } else {
+            // A row the beads cannot draw keeps the slab, and the slab the tray's own band.
+            float softRim = spec.beads
+                ? com.termux.app.dock.DockSurfaceSpec.GLASS_TRAY.softRimDp : spec.softRimDp;
+            program.setDockSurface(softRim, isRoundedDockStyle() ? spec.shelf : 0f);
+            program.clearBeads();
+        }
         com.termux.app.chrome.DockIconReflection reflection = dockIconReflection();
         View host = findViewById(R.id.accessory_surface_host);
         View container = findViewById(R.id.accessory_stack_container);
@@ -4788,9 +4805,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         DockShelfView shelf = findViewById(R.id.accessory_shelf_fx);
         if (shelf == null) return;
         View host = findViewById(R.id.accessory_surface_host);
+        // Beads always float, so each keeps its shadow under Docked too.
+        boolean beads = mDockBeads != null;
         boolean show = state != null && mGlassParamsValid && host != null
             && host.getVisibility() == View.VISIBLE && !state.keyboardShown
-            && isRoundedDockStyle() && dockSurfaceSpec().contactShadow;
+            && (isRoundedDockStyle() || beads) && dockSurfaceSpec().contactShadow;
+        shelf.setBeads(show ? mDockBeads : null);
         if (!show) {
             shelf.follow(null);
             if (shelf.getVisibility() != View.INVISIBLE) shelf.setVisibility(View.INVISIBLE);
@@ -4798,6 +4818,175 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         shelf.follow(host);
         if (shelf.getVisibility() != View.VISIBLE) shelf.setVisibility(View.VISIBLE);
+    }
+
+    // ------------------------------------------------------------------ Lens beads
+    //
+    // Home's Lens beads (DockSurfaceSpec.LENS_BEADS): the dock's one glass host draws a round
+    // bead under each icon instead of its slab. The host clips everything in it to the beads
+    // (DockSurfaceHostLayout), the dock's one glass program draws every bead's rim, shelf and
+    // reflection from the beads' centres (GlassRefraction.Program#setBeads), and the shelf view
+    // draws each bead's shadow. The beads are worked out again only when the row or the host
+    // lays out, before the frame that shows the new layout draws; at rest nothing runs.
+
+    /** The beads as last drawn, in the host's coordinates; null while the dock is a slab. */
+    @Nullable private com.termux.app.dock.LensBeadGeometry.Beads mDockBeads;
+    /** The row's icon boxes, read into this; one icon more than the beads hold says "too many". */
+    private final float[] mDockBeadBoxes =
+        new float[(com.termux.app.dock.LensBeadGeometry.MAX_BEADS + 1) * 4];
+    /** The views whose layout moves the beads, while the dock wears them. */
+    @Nullable private View mDockBeadsWatchedHost;
+    @Nullable private View mDockBeadsWatchedRow;
+    private boolean mDockBeadsRefreshPending;
+    private final View.OnLayoutChangeListener mDockBeadsLayoutListener =
+        (v, l, t, r, b, ol, ot, or, ob) -> scheduleDockBeadsRefresh();
+    private final ViewTreeObserver.OnPreDrawListener mDockBeadsPreDraw =
+        new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                View host = mDockBeadsWatchedHost;
+                if (host != null) host.getViewTreeObserver().removeOnPreDrawListener(this);
+                mDockBeadsRefreshPending = false;
+                onDockBeadsLayoutSettled();
+                return true;
+            }
+        };
+
+    /**
+     * Watches the host and the row for layout while the dock's style draws beads, and lets go
+     * of them otherwise, so the Glass tray and the Workspace's dock carry no listener of this.
+     */
+    private void syncDockBeadsListeners() {
+        boolean beads = dockSurfaceSpec().beads;
+        View host = beads ? findViewById(R.id.accessory_surface_host) : null;
+        View row = beads ? mSuggestionBarView : null;
+        if (mDockBeadsWatchedHost != host) {
+            if (mDockBeadsWatchedHost != null) {
+                mDockBeadsWatchedHost.removeOnLayoutChangeListener(mDockBeadsLayoutListener);
+                if (mDockBeadsRefreshPending)
+                    mDockBeadsWatchedHost.getViewTreeObserver().removeOnPreDrawListener(mDockBeadsPreDraw);
+                mDockBeadsRefreshPending = false;
+            }
+            mDockBeadsWatchedHost = host;
+            if (host != null) host.addOnLayoutChangeListener(mDockBeadsLayoutListener);
+        }
+        if (mDockBeadsWatchedRow != row) {
+            if (mDockBeadsWatchedRow != null)
+                mDockBeadsWatchedRow.removeOnLayoutChangeListener(mDockBeadsLayoutListener);
+            mDockBeadsWatchedRow = row;
+            if (row != null) row.addOnLayoutChangeListener(mDockBeadsLayoutListener);
+        }
+    }
+
+    /** A layout moved the host or the row: the beads are read again before the next draw. */
+    private void scheduleDockBeadsRefresh() {
+        View host = mDockBeadsWatchedHost;
+        if (mDockBeadsRefreshPending || host == null) return;
+        mDockBeadsRefreshPending = true;
+        host.getViewTreeObserver().addOnPreDrawListener(mDockBeadsPreDraw);
+    }
+
+    /**
+     * After a layout: beads that moved re-aim the glass program (one rebuild of the dock's
+     * effect) and the shadows; a row that turned to beads or back to the slab dresses the dock
+     * again.
+     */
+    private void onDockBeadsLayoutSettled() {
+        boolean wereBeads = mDockBeads != null;
+        if (!refreshDockBeads()) return;
+        rebuildBackdropGlassEffectForLens();
+        DockShelfView shelf = findViewById(R.id.accessory_shelf_fx);
+        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(mDockBeads);
+        if (wereBeads != (mDockBeads != null) && mChrome != null)
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    /**
+     * Works the beads out again from the row and the host as laid out and hands them to the
+     * host; true when they changed. A change between beads and the slab re-cuts the host's
+     * shape at once (the slab's rim and clip go, or come back).
+     */
+    private boolean refreshDockBeads() {
+        syncDockBeadsListeners();
+        com.termux.app.dock.LensBeadGeometry.Beads beads = resolveDockBeads();
+        if (beads == null ? mDockBeads == null : beads.equals(mDockBeads)) return false;
+        boolean modeChanged = (beads == null) != (mDockBeads == null);
+        mDockBeads = beads;
+        View host = findViewById(R.id.accessory_surface_host);
+        if (host instanceof DockSurfaceHostLayout) {
+            DockSurfaceHostLayout beadHost = (DockSurfaceHostLayout) host;
+            beadHost.setSlabOnlyChildren(findViewById(R.id.accessory_top_edge_fx),
+                findViewById(R.id.accessory_edge_glow_fx));
+            beadHost.setBeads(beads);
+        }
+        if (modeChanged && host != null && mDockShapeCut)
+            applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
+        return true;
+    }
+
+    /**
+     * The beads for the row as laid out now, in the host's coordinates, or null where the dock
+     * keeps its slab: a style that is not beads; the row not standing alone on the dock (another
+     * band on the same glass, the keyboard sharing it, a joined Docked frame being the glass);
+     * or a row the beads cannot draw ({@link com.termux.app.dock.LensBeadGeometry#compute}).
+     */
+    @Nullable
+    private com.termux.app.dock.LensBeadGeometry.Beads resolveDockBeads() {
+        if (mPreferences == null || !dockSurfaceSpec().beads) return null;
+        SuggestionBarView row = mSuggestionBarView;
+        View host = findViewById(R.id.accessory_surface_host);
+        View container = findViewById(R.id.accessory_stack_container);
+        if (row == null || !(host instanceof DockSurfaceHostLayout) || container == null
+            || host.getWidth() <= 0 || host.getHeight() <= 0 || row.getWidth() <= 0
+            || row.getVisibility() != View.VISIBLE) return null;
+        PlaceLayout layout = currentPlaceLayout();
+        if (!PlaceChromePolicy.appsShown(layout) || PlaceChromePolicy.appsRailShown(layout)
+            || PlaceChromePolicy.appsEdge(layout) != PlaceLayout.Edge.BOTTOM
+            || !isAppsRowAlone(layout) || stackStandsDownOnFrame()) return null;
+        if (isInAppKeyboardShown()
+            && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec())) return null;
+        int count = row.layoutIconBoxes(mDockBeadBoxes);
+        if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return null;
+        float[] rowAt = layoutOffsetIn(row, container);
+        float[] hostAt = layoutOffsetIn(host, container);
+        if (rowAt == null || hostAt == null) return null;
+        float dx = rowAt[0] - hostAt[0];
+        float dy = rowAt[1] - hostAt[1];
+        float[] boxes = new float[count * 4];
+        for (int i = 0; i < count; i++) {
+            boxes[i * 4] = mDockBeadBoxes[i * 4] + dx;
+            boxes[i * 4 + 1] = mDockBeadBoxes[i * 4 + 1] + dy;
+            boxes[i * 4 + 2] = mDockBeadBoxes[i * 4 + 2] + dx;
+            boxes[i * 4 + 3] = mDockBeadBoxes[i * 4 + 3] + dy;
+        }
+        return com.termux.app.dock.LensBeadGeometry.compute(boxes, count, 0f, 0f,
+            host.getWidth(), host.getHeight(), getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * A view's laid-out offset inside {@code ancestor}, from layout values only (a transform in
+     * flight, such as the dock's press dip, is not baked in), or null when it is not under it.
+     */
+    @Nullable
+    private static float[] layoutOffsetIn(@NonNull View view, @NonNull View ancestor) {
+        float left = 0f;
+        float top = 0f;
+        for (View v = view; v != null; ) {
+            if (v == ancestor) return new float[] {left, top};
+            left += v.getLeft();
+            top += v.getTop();
+            android.view.ViewParent parent = v.getParent();
+            if (parent instanceof View) {
+                View p = (View) parent;
+                left -= p.getScrollX();
+                top -= p.getScrollY();
+                v = p;
+            } else {
+                v = null;
+            }
+        }
+        return null;
     }
 
     /**
@@ -6210,6 +6399,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDockShapeCut = true;
             mDockShapeCapsule = capsule;
             mDockShapeHeightPx = surfaceHeightPx;
+            if (mDockBeads != null) {
+                // Lens beads: there is no slab, so no rim under it and no clip to its outline;
+                // the host clips its own drawing to the beads (DockSurfaceHostLayout).
+                surface.setBackground(null);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+                    surface.setClipToOutline(false);
+                return;
+            }
         }
         if (!capsule) {
             // Docked, the dock is a slice of the one frame. The model says which of its edges
@@ -8351,6 +8548,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             backdrop.setAlpha(1f);
         }
         applyAccessorySurfaceBounds(state);
+        // The Lens beads follow the row as it is laid out now; a pass that moved them and
+        // re-installs nothing rebuilds the effect once below.
+        boolean beadsMoved = refreshDockBeads();
         if (shouldUseDockDecorNavBarSurface(state) && !isRoundedDockStyle()) {
             clearAccessoryRenderEffectBackdrop();
             return;
@@ -8399,6 +8599,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(
                     mPreferences != null ? mPreferences.getAppBarOpacity() : 100));
             backdrop.setVisibility(View.VISIBLE);
+            if (beadsMoved) rebuildBackdropGlassEffectForLens();
             syncDockShelf(state);
             return;
         }
@@ -15077,6 +15278,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout previous = mAppliedPlaceLayout;
         boolean arrangementChanged = !layout.equals(previous);
         mAppliedPlaceLayout = layout;
+        // A Dock style picked in the Layout editor: the dock takes its new shape on this pass.
+        boolean dockStyleChanged = previous != null && previous.dockStyle != layout.dockStyle;
         com.termux.app.place.LayoutVariant variant = chromeVariant();
         boolean sameVariant = variant == mAppliedPlaceVariant;
         mAppliedPlaceVariant = variant;
@@ -15124,6 +15327,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setTerminalToolbarHeight();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
+        if (dockStyleChanged) restyleDockSurface();
         if (sizesMoved) applySizedSurfaces();
         // Always on brings the keyboard up on Home, or takes it down, once the grid has its rows.
         if (alwaysOnChanged && com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage))
@@ -15947,7 +16151,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec() {
         return com.termux.app.dock.DockSurfaceSpec.forDock(
-            com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage));
+            com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage), homeDockStyle());
+    }
+
+    /** Home's dock style as the dock draws it ({@link com.termux.app.dock.DockStyle#effectiveStyle}). */
+    @NonNull
+    private com.termux.app.dock.DockStyle homeDockStyle() {
+        PlaceLayoutStore store = placeLayoutStore();
+        return com.termux.app.dock.DockStyle.effectiveStyle(
+            store != null ? store.dockStyle() : null);
     }
 
     /**
@@ -15960,6 +16172,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null || mChrome == null) return;
         if (com.termux.app.place.HomeChromePolicy.wearsHomeShape(from)
             == com.termux.app.place.HomeChromePolicy.wearsHomeShape(to)) return;
+        restyleDockSurface();
+    }
+
+    /**
+     * Lays the dock out and dresses its glass again for the spec it wears now: a settle onto or
+     * off Home ({@link #restyleDockSurfaceForPageIfChanged}), or a Dock style picked in the
+     * Layout editor ({@link #doSyncPlaceLayout}), live, with no restart. The backdrop up stays
+     * until the re-cut one replaces it, so the switch never shows a bare frame.
+     */
+    private void restyleDockSurface() {
+        if (mPreferences == null || mChrome == null) return;
+        syncDockBeadsListeners();
         // The glass is re-cut even where the geometry did not move: its features are the spec's.
         mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
         updateAppLauncherBarHeight();

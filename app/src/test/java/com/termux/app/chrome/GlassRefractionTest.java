@@ -134,6 +134,7 @@ public class GlassRefractionTest {
             "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
             "uClarity", "uTouchActive", "uTouch", "uTouchRadius", "uTouchLens", "uEdgeGain",
             "uKeyLight", "uLiveClarity", "uSoftRim", "uShelf", "uReflect", "uReflRow",
+            "uBead", "uBeadXA", "uBeadXB",
         };
         for (String name : written) {
             assertTrue(name + " is declared",
@@ -151,6 +152,68 @@ public class GlassRefractionTest {
             "lobe"}) {
             assertFalse(gone + " is gone", Pattern.compile("\\b" + gone + "\\b").matcher(GlassRefraction.AGSL).find());
         }
+    }
+
+    @Test
+    public void lensBeadsAreEachTheirOwnSurface() {
+        String agsl = GlassRefraction.AGSL;
+        // The nearest bead is the surface: a circle about it, its rect, its rim and its normal.
+        assertTrue(agsl.contains("bool beads = uBead.y > 0.0;"));
+        assertTrue(agsl.contains("center = float2(nearestBead(fragCoord.x), uBead.x);"));
+        assertTrue(agsl.contains("float inside = -sdRoundRect(p, b, cr);"));
+        assertTrue(agsl.contains("float2 n = rectNormal(p, b, min(cr * 1.5, min(b.x, b.y)));"));
+        // A pixel clear of every bead reads nothing; a bead's outline is anti-aliased.
+        assertTrue(agsl.contains("if (beads && inside < -1.0) {"));
+        assertTrue(agsl.contains("col = col * half(clamp(inside + 0.5, 0.0, 1.0));"));
+        // The reflection mirrors about the bead's own icon and bevels at the bead's own rim.
+        assertTrue(agsl.contains("float rBot = beads ? uBead.x + uBead.z : uReflRow.y;"));
+        assertTrue(agsl.contains("max(rMax.y - q.y, 0.0)"));
+        assertFalse("the slab's rect is not read under a bead's reflection",
+            agsl.contains("uRectMax.y - q.y"));
+        // No loop and no array: eight compares.
+        assertFalse(agsl.contains("for ("));
+        assertFalse(Pattern.compile("uniform \\w+ \\w+\\[").matcher(agsl).find());
+        assertEquals(8, count(agsl, "if (d < bd)") + 1);
+        assertTrue(agsl.contains("const float kBeadBandShare = " + GlassRefraction.BEAD_BAND_SHARE + ";"));
+    }
+
+    @Test
+    public void theNearestBeadIsTheOneWhoseCentreIsClosest() {
+        float[] centers = {100f, 300f, 500f};
+        assertEquals(100f, GlassRefraction.nearestBeadX(0f, centers), 0f);
+        assertEquals(100f, GlassRefraction.nearestBeadX(199f, centers), 0f);
+        assertEquals(300f, GlassRefraction.nearestBeadX(201f, centers), 0f);
+        assertEquals(500f, GlassRefraction.nearestBeadX(10000f, centers), 0f);
+        assertEquals("a tie is the first", 100f, GlassRefraction.nearestBeadX(200f, centers), 0f);
+        // The program's eight slots: the beads in order, the rest parked where nothing is nearer.
+        float[] slots = GlassRefraction.beadSlots(centers, 3);
+        assertEquals(8, slots.length);
+        assertEquals(100f, slots[0], 0f);
+        assertEquals(500f, slots[2], 0f);
+        for (int i = 3; i < 8; i++) assertEquals(GlassRefraction.BEAD_UNUSED_X, slots[i], 0f);
+        for (float x = -50f; x < 2000f; x += 7f)
+            assertEquals(GlassRefraction.nearestBeadX(x, centers),
+                GlassRefraction.nearestBeadX(x, slots), 0f);
+    }
+
+    @Test
+    public void aBeadsBandIsTightAndItsPullStronger() {
+        float density = DENSITY;
+        float bead = 35f * density;
+        float lookBand = GlassRefraction.Look.DEFAULT.bandPx(density);
+        float band = GlassRefraction.beadSoftBandPx(GlassRefraction.BEAD_SOFT_RIM_DP * density,
+            lookBand, bead);
+        // Ten dp at the default look: under a third of a 70 dp bead's radius.
+        assertEquals(10f * density, band, 1e-3f);
+        assertTrue(band < GlassRefraction.SOFT_RIM_DP * density);
+        // Never past 0.4 of the radius, however wide the look's band.
+        assertEquals(0.4f * bead, GlassRefraction.beadSoftBandPx(10f * density, 60f * density, bead), 1e-3f);
+        // The same held pull over a narrower band: a steeper, stronger lens than the tray's.
+        float strength = GlassRefraction.Look.DEFAULT.strengthPx(density);
+        float beadPull = Math.min(strength, GlassRefraction.SOFT_RIM_MAX_PULL_SHARE * band);
+        float trayBand = Math.max(lookBand, GlassRefraction.SOFT_RIM_DP * density);
+        float trayPull = Math.min(strength, GlassRefraction.SOFT_RIM_MAX_PULL_SHARE * trayBand);
+        assertTrue(beadPull / band > trayPull / trayBand);
     }
 
     @Test

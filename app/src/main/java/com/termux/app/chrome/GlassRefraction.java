@@ -617,6 +617,14 @@ public final class GlassRefraction {
         "uniform float uReflect;\n" +
         "uniform float2 uReflRow;\n" +
         "uniform shader reflection;\n" +
+        // Lens beads (DockSurfaceSpec.LENS_BEADS): no slab, one round bead under each icon of the
+        // row. uBead holds the row's centre line y, every bead's radius (0: no beads, the slab
+        // as always) and half the icon's size, all in the surface's px; uBeadXA and uBeadXB the
+        // beads' centre x, eight at most, an unused one far off the surface so it is never the
+        // nearest. setBeads and nearestBeadX in Java.
+        "uniform float4 uBead;\n" +
+        "uniform float4 uBeadXA;\n" +
+        "uniform float4 uBeadXB;\n" +
         // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
         // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
         // refracting the wallpaper that shows through the transparent key cell. uLensActive carries
@@ -722,6 +730,8 @@ public final class GlassRefraction {
         "const float kReflTopDp = " + GlassRefraction.REFLECT_TOP_BEVEL_DP + ";\n" +
         "const float kReflFullAirDp = " + GlassRefraction.REFLECT_FULL_AIR_DP + ";\n" +
         "const float kReflDepthDp = " + GlassRefraction.REFLECT_DEPTH_DP + ";\n" +
+        // The most of a bead's radius its rim band reaches; BEAD_BAND_SHARE in Java.
+        "const float kBeadBandShare = " + GlassRefraction.BEAD_BAND_SHARE + ";\n" +
         "float sdRoundRect(float2 p, float2 b, float r) {\n" +
         "    float2 q = abs(p) - b + float2(r, r);\n" +
         "    return min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0, 0.0))) - r;\n" +
@@ -757,6 +767,27 @@ public final class GlassRefraction {
         // less smootherstep, whole at the rim and gone at the inner edge with no step in its
         // slope or its curvature at either end, so the band fades into the face with no inner
         // ring (a kink in a gradient's slope is where a Mach band shows). softProfile in Java.
+        // The centre x of the bead nearest x: eight compares, no loop and no array, so the
+        // program compiles everywhere AGSL does. nearestBeadX in Java.
+        "float nearestBead(float x) {\n" +
+        "    float bx = uBeadXA.x;\n" +
+        "    float bd = abs(x - uBeadXA.x);\n" +
+        "    float d = abs(x - uBeadXA.y);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXA.y; }\n" +
+        "    d = abs(x - uBeadXA.z);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXA.z; }\n" +
+        "    d = abs(x - uBeadXA.w);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXA.w; }\n" +
+        "    d = abs(x - uBeadXB.x);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXB.x; }\n" +
+        "    d = abs(x - uBeadXB.y);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXB.y; }\n" +
+        "    d = abs(x - uBeadXB.z);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXB.z; }\n" +
+        "    d = abs(x - uBeadXB.w);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXB.w; }\n" +
+        "    return bx;\n" +
+        "}\n" +
         "float softProfile(float t) {\n" +
         "    return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);\n" +
         "}\n" +
@@ -825,11 +856,26 @@ public final class GlassRefraction {
         "half4 main(float2 fragCoord) {\n" +
         "    float2 center = (uRectMin + uRectMax) * 0.5;\n" +
         "    float2 b = (uRectMax - uRectMin) * 0.5;\n" +
+        "    float cr = uRadius;\n" +
+        // Lens beads: the surface is the bead nearest this pixel, a circle about its icon, and
+        // everything below (the rim, its light, the shelf, the reflection) is that bead's. A
+        // pixel clear of every bead draws nothing and reads no sample.
+        "    bool beads = uBead.y > 0.0;\n" +
+        "    if (beads) {\n" +
+        "        center = float2(nearestBead(fragCoord.x), uBead.x);\n" +
+        "        b = float2(uBead.y, uBead.y);\n" +
+        "        cr = uBead.y;\n" +
+        "    }\n" +
+        "    float2 rMin = center - b;\n" +
+        "    float2 rMax = center + b;\n" +
         "    float2 p = fragCoord - center;\n" +
-        "    float inside = -sdRoundRect(p, b, uRadius);\n" +
+        "    float inside = -sdRoundRect(p, b, cr);\n" +
+        "    if (beads && inside < -1.0) {\n" +
+        "        return half4(0.0);\n" +
+        "    }\n" +
         // The normal eases round the corner on an arc wider than the drawn one (1.5x, held under the
         // half size), so the bend never snaps where two edges meet.
-        "    float2 n = rectNormal(p, b, min(uRadius * 1.5, min(b.x, b.y)));\n" +
+        "    float2 n = rectNormal(p, b, min(cr * 1.5, min(b.x, b.y)));\n" +
         // t runs 0 at the rim to 1 at the band's inner edge, and stays 1 across the face.
         "    float t = clamp(inside / uBand, 0.0, 1.0);\n" +
         // The eased pull's width, and how far in from the outline this pixel is across it: 0 at
@@ -853,6 +899,13 @@ public final class GlassRefraction {
         "    if (uSoftRim > 0.0) {\n" +
         "        float lower = uShelf > 0.0 ? max(n.y, 0.0) * uShelf : 0.0;\n" +
         "        softB = max(uBand, uSoftRim) * (1.0 + kShelfThick * lower);\n" +
+        // A bead's band is tight: its own width, or half the look's band when that is wider,
+        // never past kBeadBandShare of the bead's radius, so the face keeps its middle. Its
+        // pull is the same held share of that narrower band, which reads as the stronger lens.
+        // beadSoftBandPx in Java.
+        "        if (beads) {\n" +
+        "            softB = min(max(uSoftRim, 0.5 * uBand), kBeadBandShare * uBead.y) * (1.0 + kShelfThick * lower);\n" +
+        "        }\n" +
         "        softS = min(uStrength * (1.0 + kShelfThick * lower), kSoftPull * softB);\n" +
         "        t = clamp(inside / softB, 0.0, 1.0);\n" +
         "        pull = softProfile(t) * min(softS, min(b.x, b.y)) * edge;\n" +
@@ -1087,19 +1140,19 @@ public final class GlassRefraction {
         // reflection); flat, which is every resting slab, it is exactly where the icons are.
         "    if (uReflect > 0.0 && inside > 0.0) {\n" +
         "        float2 q = fragCoord + uTilt * (2.0 * kReflDepthDp * uDensity);\n" +
-        "        float rTop = uReflRow.x;\n" +
-        "        float rBot = uReflRow.y;\n" +
+        "        float rTop = beads ? uBead.x - uBead.z : uReflRow.x;\n" +
+        "        float rBot = beads ? uBead.x + uBead.z : uReflRow.y;\n" +
         "        float ry = q.y;\n" +
         "        float ra = 0.0;\n" +
         "        if (q.y > rBot) {\n" +
-        "            float low = clamp((uRectMax.y - rBot) / (kReflFullAirDp * uDensity), 0.0, 1.0);\n" +
-        "            float bev = 1.0 - smoothstep(0.0, kReflBevelDp * uDensity, max(uRectMax.y - q.y, 0.0));\n" +
+        "            float low = clamp((rMax.y - rBot) / (kReflFullAirDp * uDensity), 0.0, 1.0);\n" +
+        "            float bev = 1.0 - smoothstep(0.0, kReflBevelDp * uDensity, max(rMax.y - q.y, 0.0));\n" +
         "            ry = 2.0 * rBot - q.y;\n" +
         "            ra = mix(kReflFace, kReflBevel * low, bev);\n" +
         "        } else if (q.y < rTop) {\n" +
-        "            float air = max(rTop - uRectMin.y, 1.0);\n" +
+        "            float air = max(rTop - rMin.y, 1.0);\n" +
         "            float w = min(kReflTopDp * uDensity, air);\n" +
-        "            float d = max(q.y - uRectMin.y, 0.0);\n" +
+        "            float d = max(q.y - rMin.y, 0.0);\n" +
         "            if (d < w) {\n" +
         "                float reach = air - w;\n" +
         "                ry = rTop + reach + (1.0 - d / w) * max(rBot - rTop - reach, 0.0);\n" +
@@ -1116,6 +1169,10 @@ public final class GlassRefraction {
         "    }\n" +
         // The pressed key's glow and the faint scatter under a finger stay small additive light.
         "    col.rgb = col.rgb + half3(lensGlow * kKeyGlow + 0.045 * touchG * touchG);\n" +
+        // A bead's outline is its own: a pixel wide, anti-aliased, nothing outside it.
+        "    if (beads) {\n" +
+        "        col = col * half(clamp(inside + 0.5, 0.0, 1.0));\n" +
+        "    }\n" +
         "    return col;\n" +
         "}\n";
 
@@ -1840,6 +1897,52 @@ public final class GlassRefraction {
      */
     static final float REFLECT_DEPTH_DP = 30f;
 
+    /**
+     * A Lens bead's own soft rim band, dp ({@code uSoftRim} for a bead): tight, a little under a
+     * third of a 70 dp bead's radius, so the bead reads as a small lens with a stronger pull than
+     * the tray's 24 dp band. Half the look's Edge width counts when it is wider, so the knob still
+     * reaches the beads.
+     */
+    public static final float BEAD_SOFT_RIM_DP = 10f;
+    /** The most of a bead's radius its rim band reaches ({@code kBeadBandShare}). */
+    static final float BEAD_BAND_SHARE = 0.4f;
+    /** Where {@link Program#setBeads} parks a bead slot it does not use: never the nearest. */
+    static final float BEAD_UNUSED_X = -1.0e6f;
+
+    /**
+     * The program's soft band for a bead, px, before the shelf thickens it: the bead's own band
+     * or half the look's, whichever is wider, held under {@link #BEAD_BAND_SHARE} of its radius.
+     */
+    static float beadSoftBandPx(float softRimPx, float lookBandPx, float beadRadiusPx) {
+        return Math.min(Math.max(softRimPx, 0.5f * lookBandPx), BEAD_BAND_SHARE * beadRadiusPx);
+    }
+
+    /** The program's {@code nearestBead}: the centre in {@code centers} nearest {@code x}, the first on a tie. */
+    static float nearestBeadX(float x, @NonNull float[] centers) {
+        float bx = centers[0];
+        float bd = Math.abs(x - centers[0]);
+        for (int i = 1; i < centers.length; i++) {
+            float d = Math.abs(x - centers[i]);
+            if (d < bd) {
+                bd = d;
+                bx = centers[i];
+            }
+        }
+        return bx;
+    }
+
+    /**
+     * The eight bead slots the program reads ({@code uBeadXA} then {@code uBeadXB}) for
+     * {@code count} centres: each centre in order, the rest parked at {@link #BEAD_UNUSED_X}.
+     */
+    @NonNull
+    static float[] beadSlots(@NonNull float[] centers, int count) {
+        float[] slots = new float[8];
+        Arrays.fill(slots, BEAD_UNUSED_X);
+        for (int i = 0; i < Math.min(8, Math.min(count, centers.length)); i++) slots[i] = centers[i];
+        return slots;
+    }
+
     /** The program's {@code softProfile}: one less smootherstep, 1 at the rim, 0 at the band's inner edge. */
     static float softProfile(float t) {
         float c = Math.max(0f, Math.min(1f, t));
@@ -1945,6 +2048,10 @@ public final class GlassRefraction {
         /** Whether a reflection is bound and on, and the row it was last aimed at. */
         private boolean mReflectOn;
         private float mReflTop = Float.NaN, mReflBottom = Float.NaN;
+        /** The beads as last written: {@code uBead} and the eight slots; radius 0 is none. */
+        private final float[] mBeadWritten = new float[11];
+        private boolean mBeadWrittenValid;
+        private final float[] mBeadNext = new float[11];
 
         private Program(float density) {
             mShader = new RuntimeShader(AGSL);
@@ -1964,6 +2071,50 @@ public final class GlassRefraction {
             setDockSurface(0f, 0f);
             mReflectOn = true; // so the clear below is a write, not a skip
             clearReflection();
+            clearBeads();
+        }
+
+        /**
+         * Lens beads: no slab, one round bead under each icon. {@code centersX} holds
+         * {@code count} bead centres (eight at most; more is not drawn as beads by the caller),
+         * all on the line {@code centerY}, each of {@code radiusPx}, around icons
+         * {@code 2 * iconHalfPx} tall, in the surface's own coordinates. The rect set by
+         * {@link #setRect} is then not read. Written only on a change.
+         */
+        public void setBeads(@NonNull float[] centersX, int count, float centerY, float radiusPx,
+                             float iconHalfPx) {
+            if (count <= 0 || !(radiusPx > 0f)) {
+                clearBeads();
+                return;
+            }
+            float[] slots = beadSlots(centersX, count);
+            mBeadNext[0] = centerY;
+            mBeadNext[1] = radiusPx;
+            mBeadNext[2] = Math.max(0f, iconHalfPx);
+            System.arraycopy(slots, 0, mBeadNext, 3, 8);
+            writeBeads();
+        }
+
+        /** No beads: the slab, as every surface always drew. */
+        public void clearBeads() {
+            Arrays.fill(mBeadNext, 0f);
+            System.arraycopy(beadSlots(new float[0], 0), 0, mBeadNext, 3, 8);
+            writeBeads();
+        }
+
+        /** Whether beads are on: the dock draws one lens per icon rather than its slab. */
+        public boolean hasBeads() {
+            return mBeadWrittenValid && mBeadWritten[1] > 0f;
+        }
+
+        private void writeBeads() {
+            if (mBeadWrittenValid && Arrays.equals(mBeadNext, mBeadWritten)) return;
+            mBeadWrittenValid = true;
+            System.arraycopy(mBeadNext, 0, mBeadWritten, 0, mBeadNext.length);
+            float[] n = mBeadNext;
+            mShader.setFloatUniform("uBead", n[0], n[1], n[2], 0f);
+            mShader.setFloatUniform("uBeadXA", n[3], n[4], n[5], n[6]);
+            mShader.setFloatUniform("uBeadXB", n[7], n[8], n[9], n[10]);
         }
 
         /**
