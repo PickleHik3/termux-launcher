@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -26,6 +27,7 @@ import androidx.customview.widget.ExploreByTouchHelper;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -70,8 +72,13 @@ public final class RunStripView extends View {
     static final float BADGE_SP = 11f;
     /** The attention dot on a badge's corner. */
     static final float DOT_DP = 7f;
-    /** A minimised float's mark after its label. */
-    static final String MINIMISED_MARK = "▾";
+    /**
+     * A minimised float's mark after its label: a small downward triangle, drawn as a shape so it
+     * never depends on a face having the character.
+     */
+    static final float MINIMISED_MARK_DP = 6f;
+    /** Room between the process glyph and the label, and between the label and the mark. */
+    static final float INNER_GAP_DP = 4f;
 
     /** The lit entry's fill and rim, and a resting entry's ink, as alphas of their colours. */
     static final int LIT_FILL_ALPHA = 46;
@@ -84,17 +91,25 @@ public final class RunStripView extends View {
     private final int mTouchSlop;
     private final TextPaint mLabelPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint mBadgePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    /** The process glyphs, in the bundled Nerd Font symbols face; null when it is missing. */
+    @Nullable private final TextPaint mGlyphPaint;
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path mMark = new Path();
     private final RectF mRect = new RectF();
     private final StripAccessibility mAccessibility;
 
     @Nullable private Listener mListener;
     @NonNull private List<RunStripModel.Entry> mEntries = Collections.emptyList();
-    /** Each entry's left and right edge and its fitted label, from the last relayout. */
+    /**
+     * Each entry's left and right edge, its fitted label, whether its glyph and its minimised
+     * mark are drawn, from the last relayout.
+     */
     @NonNull private float[] mLefts = new float[0];
     @NonNull private float[] mRights = new float[0];
     @NonNull private CharSequence[] mLabels = new CharSequence[0];
+    @NonNull private boolean[] mGlyphs = new boolean[0];
+    @NonNull private boolean[] mMarks = new boolean[0];
     private int mLaidOutWidth = -1;
 
     @ColorInt private int mAccent;
@@ -115,6 +130,15 @@ public final class RunStripView extends View {
         mLabelPaint.setTypeface(Typeface.MONOSPACE);
         mBadgePaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         mBadgePaint.setTextAlign(Paint.Align.CENTER);
+        // The chips' process glyphs are Nerd Font symbols no system face has; only the bundled
+        // symbols face draws them, and without it the strip leaves them out.
+        Typeface symbols = NerdFontSpans.typeface(context);
+        if (symbols != null) {
+            mGlyphPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+            mGlyphPaint.setTypeface(symbols);
+        } else {
+            mGlyphPaint = null;
+        }
         mRim.setStyle(Paint.Style.STROKE);
         mRim.setStrokeWidth(Math.max(1f, Math.round(mDensity)));
         applyTextSizes();
@@ -176,9 +200,13 @@ public final class RunStripView extends View {
 
     /**
      * Places the entries for a strip {@code width} wide: windows from the start edge, {@code +} at
-     * the end. Labels share what the numbers leave, each up to {@link #LABEL_MAX_DP}; when that
-     * share falls below {@link #LABEL_MIN_DP} the entries show their numbers alone. Text is
-     * measured here, never in a draw.
+     * the end. Each label is the entry's distinguishing part ({@link RunStripModel.Entry#shortLabel}),
+     * so four shells in four directories read as their directories and not as a shared lead.
+     * Labels share what the numbers leave ({@link RunStripModel#labelRooms}), each up to
+     * {@link #LABEL_MAX_DP}: a short one keeps its whole text and a long one is cut at its end;
+     * when the long ones' share falls below {@link #LABEL_MIN_DP} the entries show their numbers
+     * alone. The badge is always drawn. The process glyph goes first when the room runs short,
+     * before a character of the label does. Text is measured here, never in a draw.
      */
     private void relayout(int width) {
         mLaidOutWidth = width;
@@ -186,31 +214,57 @@ public final class RunStripView extends View {
         mLefts = new float[count];
         mRights = new float[count];
         mLabels = new CharSequence[count];
+        mGlyphs = new boolean[count];
+        mMarks = new boolean[count];
         if (count == 0 || width <= 0) return;
         float side = SIDE_PAD_DP * mDensity;
         float gap = ENTRY_GAP_DP * mDensity;
+        float inner = INNER_GAP_DP * mDensity;
+        float markWidth = MINIMISED_MARK_DP * mDensity + inner;
         float bare = (ENTRY_START_PAD_DP + BADGE_DP + ENTRY_START_PAD_DP) * mDensity;
         float withLabel = (ENTRY_START_PAD_DP + BADGE_DP + LABEL_GAP_DP + ENTRY_END_PAD_DP)
             * mDensity;
-        int windows = 0;
-        for (RunStripModel.Entry entry : mEntries)
-            if (entry.kind != RunStripModel.Kind.NEW_WINDOW) windows++;
+        // What each label wants: its text, its glyph and its minimised mark.
+        float[] demands = new float[count];
+        float[] glyphWidths = new float[count];
+        int labelled = 0;
+        for (int i = 0; i < count; i++) {
+            RunStripModel.Entry entry = mEntries.get(i);
+            if (entry.kind == RunStripModel.Kind.NEW_WINDOW || entry.shortLabel.isEmpty()) continue;
+            glyphWidths[i] = glyphWidth(entry);
+            demands[i] = glyphWidths[i] + mLabelPaint.measureText(entry.shortLabel)
+                + (entry.minimised ? markWidth : 0f);
+            labelled++;
+        }
         float fixed = 2f * side + count * bare + Math.max(0, count - 1) * gap
-            + windows * (withLabel - bare);
-        float share = windows == 0 ? 0f : (width - fixed) / windows;
-        float labelRoom = Math.min(LABEL_MAX_DP * mDensity, share);
-        boolean labels = labelRoom >= LABEL_MIN_DP * mDensity;
+            + labelled * (withLabel - bare);
+        float[] rooms = RunStripModel.labelRooms(demands, width - fixed,
+            LABEL_MAX_DP * mDensity, LABEL_MIN_DP * mDensity);
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         float x = side;
         for (int i = 0; i < count; i++) {
             RunStripModel.Entry entry = mEntries.get(i);
             CharSequence label = "";
-            if (labels && entry.kind != RunStripModel.Kind.NEW_WINDOW) {
-                String text = entry.minimised ? entry.label + " " + MINIMISED_MARK : entry.label;
-                label = TextUtils.ellipsize(text, mLabelPaint, labelRoom, TextUtils.TruncateAt.END);
+            float labelWidth = 0f;
+            if (rooms[i] > 0f) {
+                float room = rooms[i] - (entry.minimised ? markWidth : 0f);
+                float text = mLabelPaint.measureText(entry.shortLabel);
+                // The glyph goes before a character of the label does.
+                mGlyphs[i] = glyphWidths[i] > 0f && glyphWidths[i] + text <= room;
+                if (mGlyphs[i]) room -= glyphWidths[i];
+                label = TextUtils.ellipsize(entry.shortLabel, mLabelPaint, Math.max(0f, room),
+                    TextUtils.TruncateAt.END);
+                mMarks[i] = entry.minimised;
+                if (label.length() == 0) {
+                    mGlyphs[i] = false;
+                    mMarks[i] = false;
+                } else {
+                    labelWidth = (mGlyphs[i] ? glyphWidths[i] : 0f)
+                        + mLabelPaint.measureText(label, 0, label.length())
+                        + (mMarks[i] ? markWidth : 0f);
+                }
             }
-            float entryWidth = label.length() == 0 ? bare
-                : withLabel + mLabelPaint.measureText(label, 0, label.length());
+            float entryWidth = labelWidth <= 0f ? bare : withLabel + labelWidth;
             float left = entry.kind == RunStripModel.Kind.NEW_WINDOW
                 ? Math.max(x, width - side - entryWidth) : x;
             mLabels[i] = label;
@@ -218,6 +272,12 @@ public final class RunStripView extends View {
             mRights[i] = mLefts[i] + entryWidth;
             x = left + entryWidth + gap;
         }
+    }
+
+    /** The process glyph's width with the gap after it, or zero when it is not drawn. */
+    private float glyphWidth(@NonNull RunStripModel.Entry entry) {
+        if (mGlyphPaint == null || entry.glyph.isEmpty()) return 0f;
+        return mGlyphPaint.measureText(entry.glyph) + INNER_GAP_DP * mDensity;
     }
 
     /** The entry under {@code x}, or -1 between entries. */
@@ -241,6 +301,8 @@ public final class RunStripView extends View {
         float badgeRadius = BADGE_RADIUS_DP * mDensity;
         float startPad = ENTRY_START_PAD_DP * mDensity;
         float labelGap = LABEL_GAP_DP * mDensity;
+        float inner = INNER_GAP_DP * mDensity;
+        float mark = MINIMISED_MARK_DP * mDensity;
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         float half = mRim.getStrokeWidth() / 2f;
         for (int i = 0; i < mEntries.size() && i < mLefts.length; i++) {
@@ -274,14 +336,38 @@ public final class RunStripView extends View {
             }
             CharSequence label = i < mLabels.length ? mLabels[i] : "";
             if (label.length() > 0) {
-                mLabelPaint.setColor(entry.current ? mOnSurface
-                    : ColorUtils.setAlphaComponent(mOnSurface, REST_INK_ALPHA));
+                int ink = entry.current ? mOnSurface
+                    : ColorUtils.setAlphaComponent(mOnSurface, REST_INK_ALPHA);
+                // From the badge toward the end edge: glyph, label, mark.
+                float x = rtl ? mRect.left - labelGap : mRect.right + labelGap;
+                if (mGlyphs[i] && mGlyphPaint != null) {
+                    mGlyphPaint.setColor(ink);
+                    float width = mGlyphPaint.measureText(entry.glyph);
+                    canvas.drawText(entry.glyph, rtl ? x - width : x,
+                        baseline(mGlyphPaint, centerY), mGlyphPaint);
+                    x = rtl ? x - width - inner : x + width + inner;
+                }
+                mLabelPaint.setColor(ink);
                 float width = mLabelPaint.measureText(label, 0, label.length());
-                float labelLeft = rtl ? mRect.left - labelGap - width : mRect.right + labelGap;
-                canvas.drawText(label, 0, label.length(), labelLeft,
+                canvas.drawText(label, 0, label.length(), rtl ? x - width : x,
                     baseline(mLabelPaint, centerY), mLabelPaint);
+                x = rtl ? x - width - inner : x + width + inner;
+                if (mMarks[i]) drawMinimisedMark(canvas, rtl ? x - mark : x, centerY, mark, ink);
             }
         }
+    }
+
+    /** A minimised float's mark: a small triangle pointing down, {@code size} wide at {@code left}. */
+    private void drawMinimisedMark(@NonNull Canvas canvas, float left, float centerY, float size,
+                                   @ColorInt int ink) {
+        float half = size / 2f;
+        mMark.rewind();
+        mMark.moveTo(left, centerY - half * 0.6f);
+        mMark.lineTo(left + size, centerY - half * 0.6f);
+        mMark.lineTo(left + half, centerY + half * 0.6f);
+        mMark.close();
+        mFill.setColor(ink);
+        canvas.drawPath(mMark, mFill);
     }
 
     /** The badge's fill: the accent when lit, otherwise the window kind's own tint. */
@@ -314,6 +400,7 @@ public final class RunStripView extends View {
 
     private void applyTextSizes() {
         mLabelPaint.setTextSize(sp(LABEL_SP));
+        if (mGlyphPaint != null) mGlyphPaint.setTextSize(sp(LABEL_SP));
         // The badge's number shrinks to its box rather than spilling out at a raised font scale.
         mBadgePaint.setTextSize(Math.min(sp(BADGE_SP), BADGE_DP * mDensity * 0.6f));
     }

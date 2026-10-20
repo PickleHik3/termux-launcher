@@ -128,4 +128,167 @@ public class RunStripModelTest {
         List<WindowItem> chips = Arrays.asList(chip("a"), chip("b"));
         assertEquals(build(chips, 0, 2, -1, null), build(chips, 0, 2, -1, null));
     }
+
+    // ---------------------------------------------------------------- the process glyph
+
+    /** The terminal glyph the chip factories put in front of an idle shell's label. */
+    private static final String TERMINAL = "";
+    /** An astral Material Design glyph (U+F01DA), two chars long. */
+    private static final String ASTRAL = new String(Character.toChars(0xF01DA));
+
+    @Test
+    public void theProcessGlyph_isKeptApart_andTheLabelIsPlainText() {
+        List<RunStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " home"),
+            chip(ASTRAL + " notes.md"), chip("plain")), 0, 3, -1, null);
+        assertEquals(TERMINAL, entries.get(0).glyph);
+        assertEquals("home", entries.get(0).label);
+        assertEquals(ASTRAL, entries.get(1).glyph);
+        assertEquals("notes.md", entries.get(1).label);
+        assertEquals("", entries.get(2).glyph);
+        assertEquals("plain", entries.get(2).label);
+        for (RunStripModel.Entry entry : entries) assertNoNerdSymbol(entry.label + entry.shortLabel);
+    }
+
+    @Test
+    public void aGlyphInsideANamedLabel_isTakenOut() {
+        List<RunStripModel.Entry> entries = build(
+            Arrays.asList(chip(TERMINAL + " my " + ASTRAL + " box")), 0, 1, -1, null);
+        assertEquals(TERMINAL, entries.get(0).glyph);
+        assertEquals("my box", entries.get(0).label);
+    }
+
+    @Test
+    public void aGlyphAlone_isAllGlyph_andAGlyphRunIntoAWordIsNotTheProcessGlyph() {
+        assertEquals(TERMINAL, RunStripModel.leadingGlyph(TERMINAL));
+        assertEquals("", RunStripModel.leadingGlyph(TERMINAL + "x"));
+        assertEquals("", RunStripModel.leadingGlyph("~ home"));
+    }
+
+    private static void assertNoNerdSymbol(String text) {
+        text.codePoints().forEach(cp -> assertFalse(Integer.toHexString(cp),
+            RunStripModel.isNerdSymbol(cp)));
+    }
+
+    // ---------------------------------------------------------------- what tells entries apart
+
+    @Test
+    public void programs_readAsThemselves() {
+        List<RunStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " nvim"),
+            chip(TERMINAL + " htop"), chip(TERMINAL + " home"), chip(TERMINAL + " git")), 0, 4,
+            -1, null);
+        assertEquals("nvim", entries.get(0).shortLabel);
+        assertEquals("htop", entries.get(1).shortLabel);
+        assertEquals("home", entries.get(2).shortLabel);
+        assertEquals("git", entries.get(3).shortLabel);
+    }
+
+    @Test
+    public void aUserAtHostLead_isNeverWhatIsShown() {
+        List<RunStripModel.Entry> entries = build(Arrays.asList(chip("u0_a123@localhost: ~/proj"),
+            chip("u0_a123@localhost:~/src"), chip("[me@box htop]"), chip("me@box")), 0, 4, -1,
+            null);
+        assertEquals("~/proj", entries.get(0).shortLabel);
+        assertEquals("~/src", entries.get(1).shortLabel);
+        assertEquals("htop]", entries.get(2).shortLabel);
+        // Nothing after the lead: the lead is all there is to show.
+        assertEquals("me@box", entries.get(3).shortLabel);
+    }
+
+    @Test
+    public void aLeadEveryEntryShares_isLeftOff_atAWordBoundary() {
+        List<RunStripModel.Entry> entries = build(Arrays.asList(chip("ssh prod-1"),
+            chip("ssh prod-2"), chip("ssh staging")), 0, 3, -1, null);
+        assertEquals("prod-1", entries.get(0).shortLabel);
+        assertEquals("prod-2", entries.get(1).shortLabel);
+        assertEquals("staging", entries.get(2).shortLabel);
+        // A shared lead inside a word is not cut: "project" and "projector" share "project".
+        List<RunStripModel.Entry> words = build(Arrays.asList(chip("project"),
+            chip("projector")), 0, 2, -1, null);
+        assertEquals("project", words.get(0).shortLabel);
+        assertEquals("projector", words.get(1).shortLabel);
+    }
+
+    @Test
+    public void sameLabels_keepTheirWholeText() {
+        List<RunStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " home"),
+            chip(TERMINAL + " home"), chip(TERMINAL + " home")), 0, 3, -1, null);
+        for (int i = 0; i < 3; i++) assertEquals("home", entries.get(i).shortLabel);
+    }
+
+    @Test
+    public void aFloatsPageMark_isLeftOffItsShortLabel_butNotARowWindows() {
+        List<RunStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " nvim"),
+            chip(TERMINAL + " v · 2"), chip(TERMINAL + " home · 2")), 0, 2, -1, null);
+        assertEquals("v · 2", entries.get(1).shortLabel);
+        assertEquals("home", entries.get(2).shortLabel);
+        assertEquals("home · 2", entries.get(2).label);
+        assertTrue(entries.get(2).isFloat());
+    }
+
+    @Test
+    public void plus_hasNoLabelOrGlyph() {
+        RunStripModel.Entry plus = build(Arrays.asList(chip(TERMINAL + " a")), 0, 1, -1, null)
+            .get(1);
+        assertEquals("", plus.label);
+        assertEquals("", plus.shortLabel);
+        assertEquals("", plus.glyph);
+    }
+
+    // ---------------------------------------------------------------- the Wall strip's terminals
+
+    @Test
+    public void wallEntries_keepTheRowAndTheFloats_inChipOrder_plusLeftOut() {
+        List<RunStripModel.Entry> entries = build(
+            Arrays.asList(chip("nvim"), chip("GIMP"), chip("float")), 0, 2, 1,
+            new boolean[]{true});
+        List<RunStripModel.Entry> wall = RunStripModel.wallEntries(entries);
+        assertEquals(3, wall.size());
+        assertEquals(RunStripModel.Kind.WINDOW, wall.get(0).kind);
+        assertEquals(RunStripModel.Kind.DISPLAY, wall.get(1).kind);
+        assertEquals(RunStripModel.Kind.HOME_FLOAT, wall.get(2).kind);
+        assertTrue(wall.get(2).isFloat());
+        assertFalse(wall.get(0).isFloat());
+        assertEquals(2, wall.get(2).chipIndex);
+    }
+
+    // ---------------------------------------------------------------- label room
+
+    @Test
+    public void labelRooms_allFit_eachGetsWhatItWants() {
+        float[] rooms = RunStripModel.labelRooms(new float[]{30f, 40f, 0f}, 200f, 104f, 28f);
+        assertEquals(30f, rooms[0], 0f);
+        assertEquals(40f, rooms[1], 0f);
+        assertEquals(0f, rooms[2], 0f);
+    }
+
+    @Test
+    public void labelRooms_shortOnesKeepTheirs_longOnesSplitTheRest() {
+        float[] rooms = RunStripModel.labelRooms(new float[]{30f, 100f, 100f}, 150f, 104f, 28f);
+        assertEquals(30f, rooms[0], 0f);
+        assertEquals(60f, rooms[1], 0.001f);
+        assertEquals(60f, rooms[2], 0.001f);
+    }
+
+    @Test
+    public void labelRooms_heldToTheMost() {
+        float[] rooms = RunStripModel.labelRooms(new float[]{300f}, 1000f, 104f, 28f);
+        assertEquals(104f, rooms[0], 0f);
+    }
+
+    @Test
+    public void labelRooms_tooLittleForTheLongOnes_isNumbersAlone() {
+        float[] rooms = RunStripModel.labelRooms(new float[]{30f, 100f, 100f, 100f}, 90f, 104f,
+            28f);
+        for (float room : rooms) assertEquals(0f, room, 0f);
+    }
+
+    @Test
+    public void labelRooms_fourShortLabels_onAPhoneStrip_allShowWhole() {
+        // 411 dp wide, five entries (four and +): what the badges, pads and gaps leave.
+        float fixed = 2f * 6f + 5f * 30f + 4f * 4f + 4f * (41f - 30f);
+        float word = 4f * 7.8f;
+        float[] rooms = RunStripModel.labelRooms(new float[]{word, word, word, word},
+            411f - fixed, 104f, 28f);
+        for (float room : rooms) assertEquals(word, room, 0f);
+    }
 }
