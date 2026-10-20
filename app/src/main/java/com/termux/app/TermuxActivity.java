@@ -5015,11 +5015,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || host.getWidth() <= 0 || host.getHeight() <= 0 || row.getWidth() <= 0
             || row.getVisibility() != View.VISIBLE) return null;
         PlaceLayout layout = currentPlaceLayout();
-        if (!PlaceChromePolicy.appsShown(layout) || PlaceChromePolicy.appsRailShown(layout)
-            || PlaceChromePolicy.appsEdge(layout) != PlaceLayout.Edge.BOTTOM
-            || !isAppsRowAlone(layout) || stackStandsDownOnFrame()) return null;
-        if (isInAppKeyboardShown()
-            && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec())) return null;
+        if (!com.termux.app.dock.LensBeadGeometry.rowWearsBeads(layout, stackStandsDownOnFrame(),
+            isInAppKeyboardShown()
+                && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec()))) return null;
         int count = row.layoutIconBoxes(mDockBeadBoxes);
         if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return null;
         float[] rowAt = layoutOffsetIn(row, container);
@@ -16151,6 +16149,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Lens beads narrow the row's slots a little more, so the end beads stand clear of the
         // screen's edges (LensBeadGeometry.ROW_SIDE_INSET_DP); every other dock adds nothing.
         int appsContentInset = Math.round(contentInset * 0.82f) + layout.appsRowExtraSideInsetPx();
+        // And hold the icons to what a bead covers in those narrower slots: held only to the
+        // slot less its 4 dp of air, a bead could not keep its gap and the dock fell back to
+        // the slab on every default install.
+        if (mSuggestionBarView != null) mSuggestionBarView.setLensBeadFit(layout.surface.beads);
 
         // The find strip is dock furniture: it spans exactly the dock's own width, whichever style
         // is set, so it reads as the bar's top edge rather than as a floating panel.
