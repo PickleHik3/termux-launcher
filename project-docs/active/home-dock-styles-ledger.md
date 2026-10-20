@@ -9,7 +9,7 @@ first within each section. Delete this file with the spec when the work is deliv
 |---|---|---|---|
 | 1 Dock style pref + picker | merged, unchecked on device | f8ed2e66b | Picker in the Layout editor's Row B while Home's dock is selected; `DockStyle.BUILT` gates unbuilt styles to Glass tray. |
 | 2 Glass tray + shared glass | in progress (worker, parallel) | | |
-| 3 Lens beads | not started | | |
+| 3 Lens beads | built on a worker branch, unchecked on device | | One glass program draws every bead (nearest-bead SDF from uniforms, no per-bead RenderNode); the host clips its children to the beads, so below Android 13 they are plain frost. Minimised Home float stays today's chip (not a bead yet). |
 | Emulator pass 1 | not started | | |
 | 4a Taskbar + run strip | not started | | |
 | 4b Prompt line | not started | | |
@@ -31,3 +31,10 @@ its reason so it can be reversed.
   (as the keyboard's tools are), rather than as a new settings row: it keeps the fragile settings
   pages untouched and puts the choice next to the dock it changes. Its name, "Dock style", sits
   near the older Docked/Floating "Style"; revisit if the two read as one.
+- 2026-10-20 · Lens beads fall back to the tray's slab where the apps row is not alone on the
+  dock's glass (the A–Z row on the dock, the keyboard sharing the glass, a joined Docked frame)
+  or holds more than eight icons: the beads are one glass program over the row, and another band
+  on the same glass would lose its glass.
+- 2026-10-20 · A minimised Home float stays today's chip above the dock under Lens beads rather
+  than a sixth bead at the row's end: the row's slots are the pinned apps' own, and a bead for
+  the float needs a slot the row does not have. Revisit with the Taskbar's run strip.

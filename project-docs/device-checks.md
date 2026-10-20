@@ -1647,6 +1647,31 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   from the grid at its top). A tap in Suggested's band and an upward drag there leave it open;
   a swipe down at the root still closes the drawer to Home · emulator, then pong when asked.
 
+### Home dock: Lens beads (10-20)
+- 2026-10-20 · feat(dock) Lens beads · Layout editor on Home, dock selected, Dock style → Lens
+  beads: the slab goes and each pinned app sits on its own round glass bead about 1.2x the icon
+  (crop a bead: about 70 dp across for 58 dp icons, a clear gap to its neighbour), centred on its
+  icon, in the same order as before; the page dashes still stand above the row and a swipe up
+  from the dock's top edge opens the palette. The switch is live, no restart, and no frame shows
+  a bare dock or a black slab (screen-record the pick at 60 fps and step through it); back to
+  Glass tray the same way. Swipe to the Workspace: its dock is the build before this change ·
+  emulator (AGSL needs API 33+).
+- 2026-10-20 · feat(dock) Lens beads · Each bead's glass, Floating and Docked, dark and pale
+  wallpaper: a frosted face, a tight soft refraction band at its rim (stronger than the tray's,
+  no ring where it meets the face), a slightly brighter lip along its lower edge, a small soft
+  shadow under each bead and nothing between the beads but wallpaper; each bead shows a faint
+  reflection of its own icon below it, never a neighbour's, subtle. Below Android 13 (an API 31
+  emulator): plain frosted round beads with the dock's tint, no rim effects, no crash. Logcat has
+  no "Glass refraction shader failed" on API 33+ (a compile failure would drop every glass
+  surface to plain frost) · emulator.
+- 2026-10-20 · feat(dock) Lens beads · Behaviour: long-press a bead's icon opens the app menu as
+  before; drag an icon to reorder (the beads stay on the slots while the icon moves, then the
+  order is the dropped one); pin and unpin an app (beads appear and go with their icons); page
+  to a dock page with fewer apps (beads follow at settle). A minimised Home float still shows as
+  today's chip centred above the dock (not a bead yet). At rest `dumpsys gfxinfo <pkg>
+  framestats` shows no new frames over 10 s with the dock idle. With the A–Z row on the dock, or
+  the keyboard sharing the dock's glass, the dock falls back to the tray's slab · emulator.
+
 ## Developer
 
 ### Living glass (10-19)
