@@ -1616,6 +1616,11 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   Home filter off (a window): tapping the dock shows no dock styles. The previews read in light,
   dark and black and the Material You scheme; TalkBack reads each chip's style name ·
   emulator, portrait and landscape.
+- 2026-10-20 · commit "fix(editor): Undo keeps its place, so the top pill never shifts" · In the
+  Layout editor, pick a dock style (or any change): Undo appears left of Done and the top pill
+  (palette | Layout | icon pack) does not move (crop the bar before and after: the pill's left
+  edge within 1 px). The pill also stands at the same x on the Wallpaper, Look and Icon pack
+  pages, and still fits with Undo and Done at 360 dp · emulator.
 
 ### Home dock: Glass tray (10-20)
 - 2026-10-20 · feat(dock) Glass tray · Home, Floating, apps row alone and with the A–Z row under
@@ -1625,6 +1630,13 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   edge still opens the palette with the keyboard. Swipe to the Workspace: its dock is pixel-for-
   pixel the build before this change (dashes inside, no shelf, no reflection), and back on Home the
   tray returns at settle · emulator (AGSL needs API 33+).
+- 2026-10-20 · commit "fix(dock): one cue over Home's dock, the dashes or the pill" · Home, Glass
+  tray and Lens beads: with one dock page Home's grabber pill stands just over the dock (no
+  dashes); pin apps until there are two pages: the pill goes and only the page dashes show (zoom
+  the band above the slab: one cue, nothing stacked or overlapping); unpin back to one page: the
+  pill returns. Either way a swipe up from the dock's top edge (by the pill or the dashes) still
+  opens the palette with the keyboard, and on a window the bottom border's pill is unchanged ·
+  emulator.
 - 2026-10-20 · feat(dock) Glass tray · The tray's glass on Home, Floating, over a dark and a pale
   wallpaper: the refraction runs in a soft band about 24 dp in from the rim with no ring or line
   where it meets the frosted face; the lower edge has a slightly brighter lip; under the slab a
@@ -1635,11 +1647,21 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   under it in the face, clearer toward the slab's lower rim, a squeezed upside-down copy in the
   top 6 dp; subtle (if it reads as a second row of icons it is too strong). Pin, unpin and
   reorder an app, change the icon size: the reflection follows within about 0.2 s. During a page
-  swipe it is gone and comes back with the new page. At rest `dumpsys gfxinfo <pkg> framestats`
+  swipe it fades out over about 0.15 s, moving with its icons as it goes, and fades back in about
+  0.3 s after the new page settles: screen-record a swipe at 60 fps and step it, no frame where
+  it vanishes or appears at once (commit "feat(dock): the icon reflection fades for a page
+  swipe"). At rest `dumpsys gfxinfo <pkg> framestats`
   shows no new frames over 10 s with the dock idle; logcat has no "Dock reflection capture
   failed" or "Glass refraction shader failed" · emulator.
 
 ### Drawer folder pull (10-20)
+- How to open the drawer on the emulator: the dock's pull opens it on release only past half its
+  travel (about 365 px at 2400 px, from the dock row) or on a fling, and injected swipes release
+  with no speed, so a pull from Home's bottom dock (about 250 px of screen below the row) never
+  opens it. Use either the palette (swipe up on Home's free area, `ad swipe 540 1700 540 900
+  700`, type `app drawer`, Enter: the App drawer action) or Settings › Home › Gestures › Swipe
+  down → App drawer, then `ad swipe 540 900 540 1700 600` on Home's free area. A pull on the dock
+  can only be judged by a real finger (pong).
 - 2026-10-20 · commit "fix(drawer): a pull on an open folder's empty pane collapses the folder" ·
   Drawer in Categories view: open Suggested, put the finger in the empty band above its header
   and swipe down: the folder shrinks back to its card with the finger and the drawer stays open
@@ -1671,6 +1693,18 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   today's chip centred above the dock (not a bead yet). At rest `dumpsys gfxinfo <pkg>
   framestats` shows no new frames over 10 s with the dock idle. With the A–Z row on the dock, or
   the keyboard sharing the dock's glass, the dock falls back to the tray's slab · emulator.
+- 2026-10-20 · commit "feat(dock): Lens beads ride under their icons while the dock pages
+  slide" · Lens beads, two dock pages (seven and five apps, and a page of eight on a wide
+  screen): swipe slowly half-way and hold, then release to change page, then a short swipe that
+  springs back, then a fling. Screen-record at 60 fps and step every frame: each bead travels
+  under its own icon, the next page's icons arrive on beads of their own, the beads leaving and
+  arriving are cut at the row's edge with their icons; no frame shows an empty bead, an icon off
+  its bead or the tray's slab (`ad swipe 900 2200 200 2200 700` for the slow one; injected swipes
+  release with no speed, so a fling is a short fast `ad swipe 900 2200 300 2200 120`). At rest
+  `dumpsys gfxinfo <pkg> framestats` over 10 s shows no new frames; during a swipe the janky
+  frame count stays where the Glass tray's is for the same swipe (judge jank on pong, never the
+  emulator). Below Android 13: the round frost beads move with their icons the same way ·
+  emulator, then pong when asked.
 
 ## Developer
 
