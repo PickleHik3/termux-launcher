@@ -4748,7 +4748,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     private void applyDockSurfaceGlass(@NonNull com.termux.app.chrome.GlassRefraction.Program program) {
         com.termux.app.dock.DockSurfaceSpec spec = dockSurfaceSpec();
-        com.termux.app.dock.LensBeadGeometry.Beads beads = spec.beads ? mDockBeads : null;
+        com.termux.app.dock.LensBeadGeometry.Beads beads = spec.beads ? dockBeadsDrawn() : null;
         if (beads != null) {
             // Lens beads: each bead floats, whatever the Style, so each wears the shelf's lip;
             // the beads stand where the host's origin sits in the backdrop.
@@ -4810,7 +4810,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean show = state != null && mGlassParamsValid && host != null
             && host.getVisibility() == View.VISIBLE && !state.keyboardShown
             && (isRoundedDockStyle() || beads) && dockSurfaceSpec().contactShadow;
-        shelf.setBeads(show ? mDockBeads : null);
+        shelf.setBeads(show ? dockBeadsDrawn() : null);
         if (!show) {
             shelf.follow(null);
             if (shelf.getVisibility() != View.INVISIBLE) shelf.setVisibility(View.INVISIBLE);
@@ -4831,6 +4831,68 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The beads as last drawn, in the host's coordinates; null while the dock is a slab. */
     @Nullable private com.termux.app.dock.LensBeadGeometry.Beads mDockBeads;
+    /**
+     * The beads where a page swipe draws the icons now ({@link #onDockIconsMoved}), in the
+     * host's coordinates; null at rest, when the beads are {@link #mDockBeads}.
+     */
+    @Nullable private com.termux.app.dock.LensBeadGeometry.Beads mDockBeadsMoving;
+    /** Where the row stands in the host sideways, and the span it draws its icons in there. */
+    private float mDockBeadsRowDx;
+    private float mDockBeadsSpanLeft = Float.NaN, mDockBeadsSpanRight = Float.NaN;
+    /** Scratch for the neighbouring page's icons a swipe stages. */
+    private final float[] mDockBeadNeighbours =
+        new float[com.termux.app.dock.LensBeadGeometry.MAX_DRAWN_BEADS];
+
+    /** The beads as the dock draws them now: moving with a swipe, or at rest. */
+    @Nullable
+    private com.termux.app.dock.LensBeadGeometry.Beads dockBeadsDrawn() {
+        return mDockBeads != null && mDockBeadsMoving != null ? mDockBeadsMoving : mDockBeads;
+    }
+
+    /**
+     * The row's icons moved off or back onto their places (a page swipe, a page switch): the
+     * beads ride under them, from the touch or animation callback that moved them, so a bead is
+     * under its icon on the very frame that draws it. Each frame of a swipe re-cuts the host's
+     * clip, moves the shadows (their paints are kept) and rebuilds the dock's effect once, a
+     * single pass of the glass program over the pre-blurred frost (the dock's chain has no blur
+     * of its own); at rest and under the Glass tray nothing runs past the first check.
+     */
+    private void onDockIconsMoved() {
+        SuggestionBarView row = mSuggestionBarView;
+        com.termux.app.dock.LensBeadGeometry.Beads rest = mDockBeads;
+        com.termux.app.dock.LensBeadGeometry.Beads moving = null;
+        if (row != null && rest != null && row.iconsOffTheirPlaces()) {
+            int neighbours = row.drawnNeighbourIconCentersX(mDockBeadNeighbours);
+            for (int i = 0; i < neighbours; i++) mDockBeadNeighbours[i] += mDockBeadsRowDx;
+            float left = Float.isNaN(mDockBeadsSpanLeft) ? 0f : mDockBeadsSpanLeft;
+            float right = Float.isNaN(mDockBeadsSpanRight) ? Float.MAX_VALUE : mDockBeadsSpanRight;
+            moving = com.termux.app.dock.LensBeadGeometry.follow(rest, row.drawnPageOffsetPx(),
+                mDockBeadNeighbours, neighbours, left, right, row.drawnPageFade());
+        }
+        if (moving == null && mDockBeadsMoving == null) return;
+        if (moving != null && moving.equals(mDockBeadsMoving)) return;
+        mDockBeadsMoving = moving;
+        View host = hotView(R.id.accessory_surface_host);
+        if (host instanceof DockSurfaceHostLayout) {
+            DockSurfaceHostLayout beadHost = (DockSurfaceHostLayout) host;
+            beadHost.setBeadSpan(moving != null ? mDockBeadsSpanLeft : Float.NaN,
+                moving != null ? mDockBeadsSpanRight : Float.NaN);
+            beadHost.setBeads(dockBeadsDrawn());
+        }
+        if (moving == null) {
+            // Back at rest: the page the row settled on may hold other icons than the beads did.
+            boolean wereBeads = mDockBeads != null;
+            refreshDockBeads();
+            if (host instanceof DockSurfaceHostLayout)
+                ((DockSurfaceHostLayout) host).setBeads(mDockBeads);
+            if (wereBeads != (mDockBeads != null) && mChrome != null)
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                    | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        }
+        DockShelfView shelf = hotView(R.id.accessory_shelf_fx);
+        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsDrawn());
+        rebuildBackdropGlassEffectForLens();
+    }
     /** The row's icon boxes, read into this; one icon more than the beads hold says "too many". */
     private final float[] mDockBeadBoxes =
         new float[(com.termux.app.dock.LensBeadGeometry.MAX_BEADS + 1) * 4];
@@ -4896,7 +4958,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!refreshDockBeads()) return;
         rebuildBackdropGlassEffectForLens();
         DockShelfView shelf = findViewById(R.id.accessory_shelf_fx);
-        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(mDockBeads);
+        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsDrawn());
         if (wereBeads != (mDockBeads != null) && mChrome != null)
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -4918,7 +4980,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             DockSurfaceHostLayout beadHost = (DockSurfaceHostLayout) host;
             beadHost.setSlabOnlyChildren(findViewById(R.id.accessory_top_edge_fx),
                 findViewById(R.id.accessory_edge_glow_fx));
-            beadHost.setBeads(beads);
+            beadHost.setBeads(dockBeadsDrawn());
         }
         if (modeChanged && host != null && mDockShapeCut)
             applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
@@ -4953,6 +5015,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (rowAt == null || hostAt == null) return null;
         float dx = rowAt[0] - hostAt[0];
         float dy = rowAt[1] - hostAt[1];
+        // The span the row clips its icons to while a swipe carries them: the beads follow there.
+        mDockBeadsRowDx = dx;
+        mDockBeadsSpanLeft = Math.max(0f, dx);
+        mDockBeadsSpanRight = Math.min(host.getWidth(), dx + row.getWidth());
         float[] boxes = new float[count * 4];
         for (int i = 0; i < count; i++) {
             boxes[i * 4] = mDockBeadBoxes[i * 4] + dx;
@@ -11617,6 +11683,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mFirstBootTour != null) mFirstBootTour.onPinEditorClosed(saved, pinnedCount);
             }
         });
+        // The Lens beads ride under the icons while a page swipe carries them.
+        mSuggestionBarView.setIconMotionListener(this::onDockIconsMoved);
         mSuggestionBarView.setOverflowInteractionListener(new SuggestionBarView.OverflowInteractionListener() {
             @Override
             public void onOverflowInteractionChanged(boolean interacting) {

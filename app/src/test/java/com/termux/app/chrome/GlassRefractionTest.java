@@ -134,7 +134,7 @@ public class GlassRefractionTest {
             "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
             "uClarity", "uTouchActive", "uTouch", "uTouchRadius", "uTouchLens", "uEdgeGain",
             "uKeyLight", "uLiveClarity", "uSoftRim", "uShelf", "uReflect", "uReflRow",
-            "uBead", "uBeadXA", "uBeadXB",
+            "uBead", "uBeadXA", "uBeadXB", "uBeadXC",
         };
         for (String name : written) {
             assertTrue(name + " is declared",
@@ -170,11 +170,24 @@ public class GlassRefractionTest {
         assertTrue(agsl.contains("max(rMax.y - q.y, 0.0)"));
         assertFalse("the slab's rect is not read under a bead's reflection",
             agsl.contains("uRectMax.y - q.y"));
-        // No loop and no array: eight compares.
+        // No loop and no array: one compare a slot.
         assertFalse(agsl.contains("for ("));
         assertFalse(Pattern.compile("uniform \\w+ \\w+\\[").matcher(agsl).find());
-        assertEquals(8, count(agsl, "if (d < bd)") + 1);
+        assertEquals(GlassRefraction.BEAD_SLOTS, count(agsl, "if (d < bd)") + 1);
         assertTrue(agsl.contains("const float kBeadBandShare = " + GlassRefraction.BEAD_BAND_SHARE + ";"));
+    }
+
+    @Test
+    public void theProgramReadsTwelveBeads() {
+        String agsl = GlassRefraction.AGSL;
+        // Twelve slots: a swipe carries the neighbouring page's beads in beside a full row.
+        assertTrue(agsl.contains("if (d < bd) { bd = d; bx = uBeadXC.w; }"));
+        // Every slot beyond the beads given is parked, never nearer than a real bead.
+        float[] twelve = new float[12];
+        for (int i = 0; i < twelve.length; i++) twelve[i] = 50f + i * 100f;
+        float[] slots = GlassRefraction.beadSlots(twelve, 14);
+        assertEquals(1150f, slots[11], 0f);
+        assertEquals(1150f, GlassRefraction.nearestBeadX(5000f, slots), 0f);
     }
 
     @Test
@@ -185,12 +198,14 @@ public class GlassRefractionTest {
         assertEquals(300f, GlassRefraction.nearestBeadX(201f, centers), 0f);
         assertEquals(500f, GlassRefraction.nearestBeadX(10000f, centers), 0f);
         assertEquals("a tie is the first", 100f, GlassRefraction.nearestBeadX(200f, centers), 0f);
-        // The program's eight slots: the beads in order, the rest parked where nothing is nearer.
+        // The program's twelve slots: the beads in order, the rest parked where nothing is nearer.
         float[] slots = GlassRefraction.beadSlots(centers, 3);
-        assertEquals(8, slots.length);
+        assertEquals(12, slots.length);
+        assertEquals(GlassRefraction.BEAD_SLOTS, slots.length);
         assertEquals(100f, slots[0], 0f);
         assertEquals(500f, slots[2], 0f);
-        for (int i = 3; i < 8; i++) assertEquals(GlassRefraction.BEAD_UNUSED_X, slots[i], 0f);
+        for (int i = 3; i < slots.length; i++)
+            assertEquals(GlassRefraction.BEAD_UNUSED_X, slots[i], 0f);
         for (float x = -50f; x < 2000f; x += 7f)
             assertEquals(GlassRefraction.nearestBeadX(x, centers),
                 GlassRefraction.nearestBeadX(x, slots), 0f);

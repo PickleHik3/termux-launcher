@@ -131,4 +131,93 @@ public class LensBeadGeometryTest {
         assertEquals(a.centerY - 3f, moved.centerY, 0f);
         assertEquals(a.radiusPx, moved.radiusPx, 0f);
     }
+
+    @Test
+    public void midSwipeEachBeadRidesUnderItsIcon() {
+        LensBeadGeometry.Beads rest = phone();
+        assertNotNull(rest);
+        float width = 411f * DENSITY;
+        float pitch = 76.6f * DENSITY;
+        // A third of the way to the next page: the row's icons are a third of a row to the left,
+        // and the next page's first two stand where the swipe draws them at the right.
+        float offset = -width / 3f;
+        float[] neighbours = {width + offset + 14f * DENSITY + pitch / 2f,
+            width + offset + 14f * DENSITY + 1.5f * pitch};
+        LensBeadGeometry.Beads drawn = LensBeadGeometry.follow(rest, offset, neighbours, 2,
+            0f, width, 1f);
+        // Every bead is a drawn icon's, at its centre, and the same size as at rest.
+        assertEquals(rest.radiusPx, drawn.radiusPx, 0f);
+        assertEquals(rest.centerY, drawn.centerY, 0f);
+        for (int i = 0; i < drawn.count(); i++) {
+            float x = drawn.centerX(i);
+            boolean underAnIcon = false;
+            for (int j = 0; j < rest.count(); j++)
+                underAnIcon |= Math.abs(x - (rest.centerX(j) + offset)) < 1e-3f;
+            for (float n : neighbours) underAnIcon |= Math.abs(x - n) < 1e-3f;
+            assertTrue("bead at " + x + " has its icon", underAnIcon);
+            if (i > 0) assertTrue("left to right", drawn.centerX(i) > drawn.centerX(i - 1));
+        }
+        // The first icon slid off the glass and took its bead along; the rest and both new ones show.
+        assertEquals(rest.count() - 1 + 2, drawn.count());
+    }
+
+    @Test
+    public void aBeadLeavesWithItsIconAndNoneMeansNothingDrawnNotTheSlab() {
+        LensBeadGeometry.Beads rest = phone();
+        assertNotNull(rest);
+        float width = 411f * DENSITY;
+        // A whole row away and nothing staged: no bead is in reach, one is parked far off with
+        // the rest's radius, so the program keeps beads (nothing to draw) instead of the slab.
+        LensBeadGeometry.Beads gone = LensBeadGeometry.follow(rest, -2f * width, new float[0], 0,
+            0f, width, 1f);
+        assertEquals(1, gone.count());
+        assertTrue(gone.centerX(0) < -1e5f);
+        assertTrue(gone.radiusPx > 0f);
+        // A bead whose circle still reaches the glass is kept, one wholly past it is not.
+        float r = rest.radiusPx;
+        float first = rest.centerX(0);
+        assertEquals(rest.count(), LensBeadGeometry.follow(rest, -(first + r) + 1f, new float[0],
+            0, 0f, width, 1f).count());
+        assertEquals(rest.count() - 1, LensBeadGeometry.follow(rest, -(first + r) - 1f,
+            new float[0], 0, 0f, width, 1f).count());
+    }
+
+    @Test
+    public void aSwitchsFadeShrinksTheBeadsWithTheirIconsButNeverToTheSlab() {
+        LensBeadGeometry.Beads rest = phone();
+        assertNotNull(rest);
+        float width = 411f * DENSITY;
+        LensBeadGeometry.Beads half = LensBeadGeometry.follow(rest, 0f, new float[0], 0, 0f,
+            width, 0.5f);
+        assertEquals(rest.radiusPx * 0.5f, half.radiusPx, 1e-3f);
+        LensBeadGeometry.Beads none = LensBeadGeometry.follow(rest, 0f, new float[0], 0, 0f,
+            width, 0f);
+        assertTrue("a radius of 0 would be the slab", none.radiusPx > 0f);
+        // At rest, unmoved and unfaded, follow is the rest's own beads.
+        assertEquals(rest, LensBeadGeometry.follow(rest, 0f, new float[0], 0, 0f, width, 1f));
+    }
+
+    @Test
+    public void aSwipeNeverDrawsMoreBeadsThanTheProgramHolds() {
+        // Eight icons at rest and eight staged: mid-swipe nine reach the glass, past the eight
+        // a row at rest may hold.
+        float[] boxes = new float[8 * 4];
+        for (int i = 0; i < 8; i++) {
+            boxes[i * 4] = 10f + i * 100f;
+            boxes[i * 4 + 1] = 10f;
+            boxes[i * 4 + 2] = 90f + i * 100f;
+            boxes[i * 4 + 3] = 90f;
+        }
+        LensBeadGeometry.Beads rest = LensBeadGeometry.compute(boxes, 8, 0f, 0f, 800f, 100f, 1f);
+        assertNotNull(rest);
+        float[] neighbours = new float[8];
+        for (int i = 0; i < 8; i++) neighbours[i] = 850f - 450f + i * 100f;
+        LensBeadGeometry.Beads drawn = LensBeadGeometry.follow(rest, -450f, neighbours, 8,
+            0f, 800f, 1f);
+        assertEquals(9, drawn.count());
+        assertTrue(drawn.count() <= LensBeadGeometry.MAX_DRAWN_BEADS);
+        assertEquals(com.termux.app.chrome.GlassRefraction.BEAD_SLOTS,
+            LensBeadGeometry.MAX_DRAWN_BEADS);
+        assertTrue(LensBeadGeometry.MAX_BEADS + 2 <= LensBeadGeometry.MAX_DRAWN_BEADS);
+    }
 }

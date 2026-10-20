@@ -21,13 +21,18 @@ import com.termux.app.dock.LensBeadGeometry;
  * slab's own furniture ({@link #setSlabOnlyChildren}: its top seam, its rim glow) is not drawn
  * while beads are. With no beads it is a plain {@link FrameLayout} and draws exactly as before.
  *
- * <p>The clip is one path, built when the beads move, so beads cost nothing per frame.</p>
+ * <p>The clip is one path, built when the beads move, so beads cost nothing per frame at rest.
+ * While a page swipe carries the beads with their icons it is rebuilt on each frame of the swipe,
+ * and also held to the span the row draws its icons in ({@link #setBeadSpan}), so a bead leaves
+ * and arrives exactly where its icon does.</p>
  */
 public final class DockSurfaceHostLayout extends FrameLayout {
 
     @Nullable private LensBeadGeometry.Beads mBeads;
     private final Path mBeadPath = new Path();
     @NonNull private View[] mSlabOnly = new View[0];
+    /** The span the beads are cut to sideways, in this view's coordinates; NaN for none. */
+    private float mSpanLeft = Float.NaN, mSpanRight = Float.NaN;
 
     public DockSurfaceHostLayout(@NonNull Context context) {
         super(context);
@@ -61,6 +66,21 @@ public final class DockSurfaceHostLayout extends FrameLayout {
         invalidate();
     }
 
+    /**
+     * Cuts the beads to {@code left..right} sideways (the span the row clips its icons to while
+     * a page swipe carries them), or lets go with NaN. Redrawn only on a change.
+     */
+    public void setBeadSpan(float left, float right) {
+        if (sameFloat(mSpanLeft, left) && sameFloat(mSpanRight, right)) return;
+        mSpanLeft = left;
+        mSpanRight = right;
+        if (mBeads != null) invalidate();
+    }
+
+    private static boolean sameFloat(float a, float b) {
+        return Float.compare(a, b) == 0;
+    }
+
     /** The beads drawn now, or null for the slab. */
     @Nullable
     public LensBeadGeometry.Beads beads() {
@@ -74,6 +94,8 @@ public final class DockSurfaceHostLayout extends FrameLayout {
             return;
         }
         int save = canvas.save();
+        if (!Float.isNaN(mSpanLeft) && !Float.isNaN(mSpanRight) && mSpanRight > mSpanLeft)
+            canvas.clipRect(mSpanLeft, 0f, mSpanRight, getHeight());
         canvas.clipPath(mBeadPath);
         super.dispatchDraw(canvas);
         canvas.restoreToCount(save);
