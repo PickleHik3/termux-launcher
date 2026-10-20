@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.RectF;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.View;
@@ -33,6 +34,7 @@ import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.slider.Slider;
 
 import com.termux.R;
+import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.LayoutCanvasView;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.place.PlaceArrangeSnapshot;
@@ -69,7 +71,8 @@ import java.util.Locale;
  * cancels. A tap selects an element: one outline along its own shape, its valid edges outlined,
  * the move control outside it, whose menu sends it to an edge or hides it, and on the dock, the
  * keyboard and Home's grid a handle that resizes it with a readout while it is held. The keyboard,
- * selected, shows its type chips and Key radius in the sheet's Row B. Eye-off carries the count of hidden
+ * selected, shows its type chips and Key radius in the sheet's Row B; Home's dock, selected, shows
+ * the dock styles there, one preview per style. Eye-off carries the count of hidden
  * elements and opens their tiles in the sheet; a tile brings its element back to the edge it left,
  * or is dragged onto the canvas to an edge of the user's choosing. Every write goes straight
  * through, so the live place under the canvas follows every edit made in the orientation the phone
@@ -165,6 +168,9 @@ public final class LayoutEditorController {
 
         /** The keyboard's tools in Row B's place while {@code shown}, Corner radius and Margin back otherwise. */
         default void setKeyboardToolsShown(boolean shown) {}
+
+        /** Home's dock styles in Row B's place while {@code shown}, Corner radius and Margin back otherwise. */
+        default void setDockStylesShown(boolean shown) {}
     }
 
     /**
@@ -211,11 +217,14 @@ public final class LayoutEditorController {
         /** The highlight behind eye-off, larger than its 48dp target: the drop area itself. */
         @NonNull final View hiddenHighlight;
         @NonNull final ChipGroup hiddenTiles;
+        /** Home's dock styles, in the sheet's Row B while Home's dock is selected; filled here. */
+        @NonNull final ViewGroup dockStyles;
         @NonNull final TilesHost tilesHost;
 
         public Views(@NonNull ViewGroup canvasHost, @NonNull LayoutCanvasView canvas,
                      @NonNull View keyboardTools, @NonNull ChipGroup keyboardForms,
                      @NonNull TextView keyRadiusLabel, @NonNull Slider keyRadius,
+                     @NonNull ViewGroup dockStyles,
                      @NonNull MaterialButton moveControl,
                      @NonNull MaterialButtonToggleGroup orientation,
                      @NonNull MaterialButtonToggleGroup homeFilter,
@@ -227,6 +236,7 @@ public final class LayoutEditorController {
             this.keyboardForms = keyboardForms;
             this.keyRadiusLabel = keyRadiusLabel;
             this.keyRadius = keyRadius;
+            this.dockStyles = dockStyles;
             this.moveControl = moveControl;
             this.orientation = orientation;
             this.homeFilter = homeFilter;
@@ -485,6 +495,7 @@ public final class LayoutEditorController {
             views.canvas.setSelectedBlock(null);
             views.canvas.setHandleReadout(null);
             views.tilesHost.setKeyboardToolsShown(false);
+            views.tilesHost.setDockStylesShown(false);
             views.moveControl.setVisibility(View.GONE);
             dismissMoveMenu();
             setTilesOpen(views, false);
@@ -536,10 +547,12 @@ public final class LayoutEditorController {
         views.canvas.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
             @Override public void onSelectionChanged(@Nullable LayoutCanvasView.Block selected) {
                 dismissMoveMenu();
-                // The keyboard's tools stand in Row B's place: the tiles give it up to them.
-                if (showsKeyRadius(selected) && mTilesOpen)
+                // The keyboard's tools and the dock styles stand in Row B's place: the tiles give
+                // it up to them.
+                if ((showsKeyRadius(selected) || showsDockStyles(mPlan, selected)) && mTilesOpen)
                     setTilesOpen(views, false);
                 syncKeyboardTools(views);
+                syncDockStyles(views);
                 syncMoveControl(views);
             }
 
@@ -601,6 +614,7 @@ public final class LayoutEditorController {
             mHost.context().getString(R.string.layout_editor_keyboard_forms));
         paintKeyboardTools(views);
         bindKeyRadius(views);
+        bindDockStyles(views);
         // What stands over the canvas follows the elements it is placed by, which move whenever
         // the canvas is laid out again: a new size, a new orientation, a keyboard grown by its
         // handle. Posted, since layout params may change and a layout pass is no place for that.
@@ -741,6 +755,7 @@ public final class LayoutEditorController {
         syncHidden(views, plan);
         syncTrayTarget(views);
         syncKeyboardTools(views);
+        syncDockStyles(views);
         syncMoveControl(views);
         notifyChanged();
     }
@@ -1192,6 +1207,99 @@ public final class LayoutEditorController {
             chip.setChipBackgroundColor(new ColorStateList(states, new int[] {container, 0}));
             chip.setChipIconTint(new ColorStateList(states, new int[] {onContainer, quiet}));
         }
+    }
+
+    // ------------------------------------------------------------------------ the dock styles
+
+    /** Each style's name and silhouette, in {@link DockStyle#values()} order, as the row holds them. */
+    private static final int[] DOCK_STYLE_LABELS = {
+        R.string.layout_editor_dock_style_glass_tray, R.string.layout_editor_dock_style_lens_beads,
+        R.string.layout_editor_dock_style_taskbar, R.string.layout_editor_dock_style_prompt_line,
+        R.string.layout_editor_dock_style_wall_strip};
+    private static final int[] DOCK_STYLE_ICONS = {
+        R.drawable.ic_symbol_dock_glass_tray, R.drawable.ic_symbol_dock_lens_beads,
+        R.drawable.ic_symbol_dock_taskbar, R.drawable.ic_symbol_dock_prompt_line,
+        R.drawable.ic_symbol_dock_wall_strip};
+
+    /**
+     * Whether the dock styles show: in Layout mode on the Home layout, with its dock (the pinned
+     * apps) selected. The Workspace's dock has no style.
+     */
+    @VisibleForTesting
+    static boolean showsDockStyles(@Nullable LayoutEditorPlan plan,
+                                   @Nullable LayoutCanvasView.Block selected) {
+        return plan != null && plan.offersDockStyle() && selected == LayoutCanvasView.Block.APPS_ROW;
+    }
+
+    /**
+     * One item per style in the row: its silhouette on a chip painted as the keyboard's type chips
+     * are, its name under it. The chip and the name are one target.
+     */
+    private void bindDockStyles(@NonNull Views views) {
+        views.dockStyles.removeAllViews();
+        LayoutInflater inflater = LayoutInflater.from(views.dockStyles.getContext());
+        int container = EditorM3.color(views.dockStyles,
+            com.google.android.material.R.attr.colorPrimaryContainer);
+        int onContainer = EditorM3.color(views.dockStyles,
+            com.google.android.material.R.attr.colorOnPrimaryContainer);
+        int quiet = EditorM3.color(views.dockStyles,
+            com.google.android.material.R.attr.colorOnSurfaceVariant);
+        int[][] states = {{android.R.attr.state_checked}, {}};
+        DockStyle[] styles = DockStyle.values();
+        for (int i = 0; i < styles.length; i++) {
+            DockStyle style = styles[i];
+            View item = inflater.inflate(R.layout.layout_editor_dock_style_item, views.dockStyles,
+                false);
+            Chip chip = item.findViewById(R.id.layout_editor_dock_style_chip);
+            TextView label = item.findViewById(R.id.layout_editor_dock_style_label);
+            String name = mHost.context().getString(DOCK_STYLE_LABELS[i]);
+            chip.setChipIconResource(DOCK_STYLE_ICONS[i]);
+            chip.setChipBackgroundColor(new ColorStateList(states, new int[] {container, 0}));
+            chip.setChipIconTint(new ColorStateList(states, new int[] {onContainer, quiet}));
+            chip.setContentDescription(name);
+            label.setText(name);
+            View.OnClickListener pick = tapped -> onDockStylePicked(style);
+            chip.setOnClickListener(pick);
+            item.setOnClickListener(pick);
+            views.dockStyles.addView(item);
+        }
+    }
+
+    /**
+     * The dock styles take Row B while Home's dock is selected, the picked style checked; on
+     * deselect Corner radius and Margin come back. The sheet's height never changes.
+     */
+    private void syncDockStyles(@NonNull Views views) {
+        LayoutEditorPlan plan = mPlan;
+        boolean shown = showsDockStyles(plan, views.canvas.selectedBlock())
+            && !views.canvas.isLifting();
+        if (!shown) {
+            views.tilesHost.setDockStylesShown(false);
+            return;
+        }
+        DockStyle picked = plan.dockStyle();
+        DockStyle[] styles = DockStyle.values();
+        for (int i = 0; i < styles.length && i < views.dockStyles.getChildCount(); i++) {
+            Chip chip = views.dockStyles.getChildAt(i)
+                .findViewById(R.id.layout_editor_dock_style_chip);
+            if (chip.isChecked() != (styles[i] == picked))
+                chip.setChecked(styles[i] == picked);
+        }
+        views.tilesHost.setDockStylesShown(true);
+    }
+
+    /** A style tapped: written for Home, both orientations, and the live dock follows it. */
+    private void onDockStylePicked(@NonNull DockStyle style) {
+        LayoutEditorPlan plan = mPlan;
+        Views views = mViews;
+        if (plan == null)
+            return;
+        LayoutEditorPlan.Drop drop = plan.setDockStyle(style);
+        if (drop != LayoutEditorPlan.Drop.NONE)
+            afterCanvasWrite(drop);
+        // A chip toggles itself on a tap: the picked one is restated, a second tap included.
+        else if (views != null)
+            syncDockStyles(views);
     }
 
     private void bindKeyRadius(@NonNull Views views) {

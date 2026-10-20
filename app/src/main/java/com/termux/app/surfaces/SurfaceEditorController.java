@@ -856,9 +856,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (canvas == null || move == null)
                 return;
             // One set of views per process, like the panel: the controller binds them once. The
-            // keyboard's tools are the sheet's: they take its Row B while the keyboard is selected.
+            // keyboard's tools are the sheet's: they take its Row B while the keyboard is selected,
+            // and Home's dock styles while Home's dock is.
             mLayoutViews = new LayoutEditorController.Views(frame, canvas, panel.keyboardTools(),
-                panel.keyboardForms(), panel.keyRadiusLabel(), panel.keyRadius(), move,
+                panel.keyboardForms(), panel.keyRadiusLabel(), panel.keyRadius(),
+                panel.dockStyles(), move,
                 panel.orientationToggle(), panel.homeFilterToggle(), panel.hiddenControl(),
                 panel.hiddenHighlight(),
                 panel.hiddenTileGroup(), new LayoutEditorController.TilesHost() {
@@ -869,6 +871,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     @Override public void setKeyboardToolsShown(boolean shown) {
                         if (mPanel != null)
                             mPanel.setKeyboardToolsShown(shown);
+                    }
+
+                    @Override public void setDockStylesShown(boolean shown) {
+                        if (mPanel != null)
+                            mPanel.setDockStylesShown(shown);
                     }
                 });
         }

@@ -1603,6 +1603,20 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   On Clear, while a pane moves, its rim's picture is sharper than at rest and settles back to the
   rest look; the text area of the pane never sharpens · emulator.
 
+### Home dock styles (10-20)
+- 2026-10-20 · commit "feat(dock): pick Home's dock style in the Layout editor" · Settings › Home
+  › Layout (or the editor opened on a Home page, Home filter on), in Layout mode tap the dock on
+  the canvas: Row B swaps Corner radius and Margin for five previews with their names (Glass tray,
+  Lens beads, Taskbar, Prompt line, Wall strip), Glass tray filled; the sheet's top edge and
+  Row A do not move, nothing clipped at font scale 1.3 (names may ellipsize, never overlap).
+  Tap Lens beads: it fills, Glass tray clears, the live dock behind is still the glass tray (no
+  blank dock, no crash); tap a preview's name: same. Tap the canvas away from the dock: Corner
+  radius and Margin come back. Undo appears after a pick and puts Glass tray back; Discard after
+  a pick does too; Done keeps it across a force-stop (`layout.home.dock_style` in the prefs).
+  Home filter off (a window): tapping the dock shows no dock styles. The previews read in light,
+  dark and black and the Material You scheme; TalkBack reads each chip's style name ·
+  emulator, portrait and landscape.
+
 ## Developer
 
 ### Living glass (10-19)

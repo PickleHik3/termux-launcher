@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home dock style Taskbar: the strip of running windows over a slab that starts with the Home
+     tile. The Layout editor's dock style chip; tinted by the chip. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="?attr/colorControlNormal"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M7,4.5h10a1,1 0 0 1 1,1v0.5a1,1 0 0 1 -1,1h-10a1,1 0 0 1 -1,-1v-0.5a1,1 0 0 1 1,-1z" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M4.5,9.5h15a2.5,2.5 0 0 1 2.5,2.5v3a2.5,2.5 0 0 1 -2.5,2.5h-15a2.5,2.5 0 0 1 -2.5,-2.5v-3a2.5,2.5 0 0 1 2.5,-2.5z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.6" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5,11.9h2.6a0.6,0.6 0 0 1 0.6,0.6v2.6a0.6,0.6 0 0 1 -0.6,0.6h-2.6a0.6,0.6 0 0 1 -0.6,-0.6v-2.6a0.6,0.6 0 0 1 0.6,-0.6z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M9.7,13.5a1.1,1.1 0 1 0 2.2,0a1.1,1.1 0 1 0 -2.2,0zM12.9,13.5a1.1,1.1 0 1 0 2.2,0a1.1,1.1 0 1 0 -2.2,0zM16.1,13.5a1.1,1.1 0 1 0 2.2,0a1.1,1.1 0 1 0 -2.2,0z" />
+</vector>

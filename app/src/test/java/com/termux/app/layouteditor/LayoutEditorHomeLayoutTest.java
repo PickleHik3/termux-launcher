@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Bar;
 import com.termux.app.place.Element;
@@ -160,5 +161,81 @@ public class LayoutEditorHomeLayoutTest {
         assertEquals(Edge.TOP, plan.shownLayout().slot(Element.APPS).edge);
         Slot workspace = places.forVariant(LayoutVariant.NORMAL).slot(PORTRAIT, Element.APPS);
         assertEquals(Edge.BOTTOM, workspace.edge);
+    }
+
+    /** An install that never picked one, or holds an id this build cannot read, is the glass tray. */
+    @Test
+    public void anAbsentOrUnknownDockStyleReadsAsTheGlassTray() {
+        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
+        prefs().edit().putString("layout.home.dock_style", "ask_bar").commit();
+        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
+        assertEquals(DockStyle.GLASS_TRAY,
+            places.resolve(PORTRAIT, LayoutVariant.HOME).dockStyle);
+    }
+
+    @Test
+    public void theDockStyleIsHomesOneValueForBothOrientations() {
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        assertTrue(plan.offersDockStyle());
+        plan.showOrientation(PlaceOrientation.LANDSCAPE);
+        assertEquals("live whichever orientation the toggle shows", LayoutEditorPlan.Drop.LIVE,
+            plan.setDockStyle(DockStyle.TASKBAR));
+        assertEquals("taskbar", prefs().getString("layout.home.dock_style", null));
+        assertEquals(DockStyle.TASKBAR, places.dockStyle());
+        assertEquals(DockStyle.TASKBAR, places.forVariant(LayoutVariant.NORMAL).dockStyle());
+        assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.TASKBAR));
+    }
+
+    /**
+     * The Home layout carries the style the dock draws: one picked before it is built resolves to
+     * the glass tray, so the dock it reads never goes blank.
+     */
+    @Test
+    public void theHomeLayoutCarriesTheStyleTheDockDraws() {
+        places.forVariant(LayoutVariant.HOME).setDockStyle(DockStyle.WALL_STRIP);
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            assertEquals(DockStyle.effectiveStyle(DockStyle.WALL_STRIP),
+                places.resolve(orientation, LayoutVariant.HOME).dockStyle);
+            assertEquals("the Workspace's dock has no style", DockStyle.GLASS_TRAY,
+                places.resolve(orientation, LayoutVariant.NORMAL).dockStyle);
+        }
+    }
+
+    @Test
+    public void theWorkspaceLayoutOffersNoDockStyle() {
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        assertFalse(plan.offersDockStyle());
+        assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.LENS_BEADS));
+        assertFalse(prefs().contains("layout.home.dock_style"));
+        assertFalse(plan.isDirty());
+    }
+
+    @Test
+    public void aPickedDockStyleIsUnsavedAndDiscardPutsItBack() {
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        plan.setDockStyle(DockStyle.PROMPT_LINE);
+        assertTrue(plan.isDirty());
+
+        plan.revert();
+        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
+        assertFalse(plan.isDirty());
+    }
+
+    @Test
+    public void theHomeFilterCarriesTheDockStyleChoice() {
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        plan.showHome(true);
+        assertTrue(plan.offersDockStyle());
+        plan.setDockStyle(DockStyle.LENS_BEADS);
+        plan.showHome(false);
+        assertFalse(plan.offersDockStyle());
+        assertTrue("the Home layout's pick is still unsaved", plan.isDirty());
+        plan.revert();
+        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
+    }
+
+    private SharedPreferences prefs() {
+        return RuntimeEnvironment.getApplication()
+            .getSharedPreferences("layout-editor-home-test", Context.MODE_PRIVATE);
     }
 }
