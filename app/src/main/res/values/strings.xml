@@ -468,6 +468,8 @@
     <string name="settings_permission_fix_summary">Action needed · Tap to fix.</string>
     <string name="settings_documentation_title">Documentation</string>
     <string name="settings_documentation_summary">Read launcher and terminal guides.</string>
+    <string name="settings_discord_title">Ask on Discord</string>
+    <string name="settings_discord_summary">Get help from the community. The TildeBot help bot answers first.</string>
     <string name="settings_send_feedback_title">Send feedback</string>
     <string name="settings_source_code_title">Source code</string>
     <string name="settings_source_code_summary">GitHub</string>
@@ -2788,9 +2790,9 @@
     <string name="help_topic_copy_summary">Terminal text can be scrolled back, selected and copied.</string>
     <string name="help_topic_copy_action">Long-press the text, then drag the handles over what you want.</string>
     <string name="help_topic_copy_step1">Tap Copy to take the selection.</string>
-    <string name="help_topic_copy_step2">Long-press an empty spot and tap Paste to put it back.</string>
+    <string name="help_topic_copy_step2">Long-press an empty spot and tap Paste to put it back. A copied picture pastes as the path to a saved copy.</string>
     <string name="help_topic_copy_step3">Swipe up with one finger to scroll back through older output.</string>
-    <string name="help_topic_copy_aliases">copy, paste, clipboard, select, selection, scroll, scrollback</string>
+    <string name="help_topic_copy_aliases">copy, paste, clipboard, select, selection, scroll, scrollback, picture, image, screenshot</string>
     <string name="help_topic_mouse_title">Touch and mouse mode</string>
     <string name="help_topic_mouse_summary">Touch scrolls the terminal; mouse mode sends your taps to the program instead.</string>
     <string name="help_topic_mouse_step1">In a full-screen program such as htop or nvim, hold on the text and your finger is the mouse: lift to click, drag to drag.</string>
@@ -3044,7 +3046,7 @@
     <string name="help_home_practice">Practice the basics</string>
     <string name="help_topic_unavailable">This topic is not part of this screen.</string>
     <string name="help_docs_link">Full documentation ↗</string>
-    <string name="help_support_link">Get support ↗</string>
+    <string name="help_support_link">Ask on Discord ↗</string>
     <string name="help_search_suggested">Suggested</string>
     <string name="help_search_kind_guide">Guide</string>
     <string name="help_search_kind_term">Term</string>

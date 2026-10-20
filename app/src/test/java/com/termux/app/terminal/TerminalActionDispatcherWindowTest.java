@@ -76,6 +76,20 @@ public class TerminalActionDispatcherWindowTest {
         assertEquals(java.util.Arrays.asList("make", "test"), host.lastCommand);
         assertEquals("build", host.lastTitle);
         assertTrue("focus defaults true", host.lastFocus);
+        assertEquals(null, host.lastCwd);
+    }
+
+    /** {@code cwd} reaches the window's shell, and {@code pane} names its pane for the pane routes. */
+    @Test
+    public void open_takesACwdAndNamesItsPane() throws JSONException {
+        JSONObject result = dispatcher.execute("window.open", new JSONObject()
+            .put("command", new JSONArray().put("tlstore")).put("cwd", "/data/proj"));
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals("/data/proj", host.lastCwd);
+        assertEquals(result.getString("id"), result.getString("pane"));
+        TerminalPaneController.Window opened = host.windows.get(1);
+        assertEquals(opened.id, result.getLong("windowId"));
+        assertEquals(1, result.getInt("window"));
     }
 
     @Test
@@ -190,6 +204,7 @@ public class TerminalActionDispatcherWindowTest {
         final List<TerminalPaneController.Window> shown = new ArrayList<>();
         List<String> lastCommand = new ArrayList<>();
         String lastTitle;
+        String lastCwd;
         boolean lastFocus;
         boolean refuseOpen;
 
@@ -246,6 +261,7 @@ public class TerminalActionDispatcherWindowTest {
             if (refuseOpen) return null;
             lastCommand = new ArrayList<>(command);
             lastTitle = title;
+            lastCwd = cwd;
             lastFocus = focus;
             TerminalSession session = shell();
             session.mSessionName = title;

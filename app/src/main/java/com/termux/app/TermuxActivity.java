@@ -12081,6 +12081,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void paste() {
+            if (mTermuxTerminalSessionActivityClient == null)
+                return;
+            com.termux.app.terminal.inappkeyboard.RecentScreenshot.Shot screenshot =
+                mInAppKeyboard == null ? null : mInAppKeyboard.takeScreenshotToPaste();
+            if (screenshot != null)
+                mTermuxTerminalSessionActivityClient.pasteContentIntoFocused(screenshot.uri(), screenshot.mime);
+            else
+                mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(getCurrentSession());
+        }
+
+        @Override
+        public void pasteClipboard() {
             if (mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(getCurrentSession());
         }
@@ -23985,6 +23997,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override @Nullable public TerminalSession openCommandPane(
                 @NonNull java.util.List<String> command, @Nullable String cwd,
                 @Nullable String title, boolean focus) {
+            return openCommandPane(command, cwd, title, focus, null);
+        }
+
+        @Override @Nullable public TerminalSession openCommandPane(
+                @NonNull java.util.List<String> command, @Nullable String cwd,
+                @Nullable String title, boolean focus,
+                @Nullable com.termux.app.terminal.TerminalPaneController.PlacementRequest placement) {
             if (!isSplitPanesEnabled() || mPaneController == null
                 || mPaneController.getActiveSession() == null) return null;
             TerminalSession shell = createCommandShell(command, cwd, title);
@@ -24000,10 +24019,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return null;
             }
             boolean[] added = {false};
-            runWithoutNotices(() -> added[0] = mPaneController.addPane(shell, focus));
+            runWithoutNotices(() -> added[0] = placement == null
+                ? mPaneController.addPane(shell, focus)
+                : mPaneController.addPaneAt(shell, placement, focus));
             if (!added[0]) {
                 mTermuxService.killTermuxSession(shell);
                 return null;
+            }
+            // A pane placed in a window that is not on screen is focused there; bringing it up
+            // is what focus means, as pane.focus does for a pane in another window.
+            if (focus && mPaneController.windowOf(shell) != mPaneController.activeWindow()) {
+                activateSessionInPanes(shell);
             }
             return shell;
         }

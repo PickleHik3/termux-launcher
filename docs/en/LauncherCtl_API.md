@@ -150,15 +150,19 @@ destroyed and nothing has recreated it yet — not merely that another app is in
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/v1/panes` | List the windows and panes of the current session |
-| POST | `/v1/panes` | Open a new pane in the current window |
+| POST | `/v1/panes` | Open a new pane, split off the focused pane or one you name |
+| GET | `/v1/panes/{id}` | One pane of the current session, with its window |
 | POST | `/v1/panes/{id}/focus` | Switch to the pane's window and focus it |
+| POST | `/v1/panes/{id}/resize` | Resize a pane opened through this API |
 | POST | `/v1/panes/{id}/write` | Type text into a pane opened through this API |
 | GET | `/v1/panes/{id}/text?lines=N` | Read the last `N` transcript lines of a pane opened through this API |
+| POST | `/v1/panes/{id}/wait` | Wait until a pane opened through this API shows a given text |
 | POST | `/v1/panes/{id}/close` | Close a pane opened through this API |
 
 **Ownership is the security boundary.** Opening a pane marks it as owned by the API; `write`,
-`text` and `close` answer HTTP 403 `not_owned` for any other pane, including every shell the user
-opened by hand. `GET /v1/panes` and `focus` work on all panes. The token therefore buys a pane, not
+`text`, `wait` and `close` answer HTTP 403 `not_owned` for any other pane, including every shell
+the user opened by hand; so does `resize`. `GET /v1/panes`, `GET /v1/panes/{id}` and `focus` work
+on all panes. The token therefore buys a pane, not
 the user's shells — which is why these routes could come back after the general remote-action
 endpoints were removed.
 
@@ -172,51 +176,142 @@ endpoints were removed.
 - `command` — an argv array, or a string that is run through `sh -c`. Omit it for a plain shell.
   The command runs through the user's login shell (so their `PATH` applies) and the shell stays
   behind when the command exits, exactly like a restored workspace pane.
-- `cwd` — defaults to the home directory. `title` — the session name shown on the pane.
+- `cwd` — defaults to the home directory here; `launcherctl pane open` sends the directory it runs
+  in unless `--cwd` is given. `title` — the session name shown on the pane.
 - `focus` — default `true`; `false` leaves the keyboard where the user has it.
 - `tag` — a free-form label (agent name, task id) that `GET /v1/panes` reports back.
+- `print` — `"id"` answers a successful open with the new pane's id alone, one line of
+  `text/plain`, instead of the JSON below (`launcherctl … --print-id`). A refusal is JSON either
+  way, so check the status before using the body as an id.
 
-Under the `dwindle` pane layout the new pane halves the focused pane along its longer side; under
-the other layouts it splits along the window's longer side and the retained layout re-tiles.
+Without placement fields the new pane splits the focused pane: under the `dwindle` pane layout it
+halves that pane along its longer side; under the other layouts it splits along the window's longer
+side and the retained layout re-tiles. These optional fields place it precisely, like
+`tmux split-window -h -l 40%` or `kitty @ launch --location`:
+
+- `from` — the id of the pane to split. It may be in any window of the current session, including
+  one that is not on screen; with `focus` that window is brought up. An id that is not a pane of the
+  current session is HTTP 404 `pane_not_found`; a floating pane is HTTP 409 `pane_not_tiled`.
+  Default: the focused pane. `launcherctl pane open` sends `$TERMUX_LAUNCHER_PANE` (the pane it
+  runs in) unless `--from` is given, and falls back to the focused pane when that one is refused.
+- `direction` — `right`, `left`, `down` or `up`: the side of `from` the new pane goes on. Default:
+  the layout's choice above; `columns` alone means `right`, `rows` alone `down`.
+- `size` — a number from 0.1 to 0.9: the new pane's share of the space taken from `from` along the
+  split. Default 0.5.
+- `columns` / `rows` — instead of `size`, the new pane's width (left/right) or height (up/down) in
+  cells, as a share of `from`'s current size, kept between 0.1 and 0.9 of it so both panes stay
+  usable. Ignored when `size` is given, and when it is on the other axis.
+
+Numbers may also be sent as strings. A bad `direction`, a `size` out of range or a cell count that
+is not a whole number of at least 1 is HTTP 400 `bad_request`, and nothing is opened.
+
+A `direction`, `size`, `columns` or `rows` is honoured exactly. When the window uses an automatic
+layout that would re-tile the new pane away (`grid`, `tall`, `fat`, `horizontal`, `vertical`,
+`stack`), that window switches to manual splits first; `dwindle` keeps managing. `from` alone
+leaves the layout as it is. The response reports the window's layout afterwards as `layout`
+(`null` for manual splits): `{"ok": true, "pane": {…}, "layout": null}`.
 
 Every pane record looks like:
 
 ```json
 {"id": "6d3f…", "title": "~/proj", "name": "preview", "cwd": "/data/data/com.termux/files/home/proj",
  "pid": 12345, "running": true, "columns": 80, "rows": 24, "focused": false,
+ "window": 2, "floating": false, "geometry": {"left": 80, "top": 0, "columns": 40, "rows": 48},
  "agent": {"tag": "claude-code", "command": ["kitten", "icat", "out.png"], "openedAt": 1756569600000}}
 ```
 
-`agent` is `null` for panes the user opened. `GET /v1/panes` returns
-`{"windows": [{"index", "id", "name", "current", "focusedPane", "panes": […]}], "activePane", "layout"}`.
+`agent` is `null` for panes the user opened. `window` is the id of the window holding the pane (the
+`id` of a window entry below, not its index). `geometry` is where the pane sits in cells, relative
+to its window's pane area; it is worked out from the window's splits, so it is current straight
+after an open or resize even before the pane's own `columns`/`rows` catch up, and it is `null` until
+anything in the window has been drawn. `floating` is true for a pane floating above the splits.
+
+`GET /v1/panes` returns
+`{"windows": [{"index", "id", "name", "current", "focusedPane", "owned", "layout", "panes": […]}], "activePane", "layout", "features"}`.
+A window is `owned` when every pane in it was opened through this API. `features` lists what this
+launcher's pane API can do beyond the basics, so a caller can check for it rather than for a
+version: `placement`, `resize`, `geometry` and `windows`, then `info` (`GET /v1/panes/{id}`),
+`wait` (`POST /v1/panes/{id}/wait`) and `print-id` (`"print": "id"` on an open). An older launcher
+lists fewer of them, or has no `features` at all.
+
+`GET /v1/panes/{id}` answers one pane of the current session, owned or not:
+`{"ok": true, "pane": {…}, "window": {"index", "id", "name", "current", "focusedPane", "owned", "layout"}, "layout": …}`,
+the pane record above, its window's entry from the list (without `panes`) and that window's
+layout. It is how a program learns about the pane it runs in — `launcherctl pane current` asks for
+`$TERMUX_LAUNCHER_PANE` — so it can size and place what it opens next. A pane of another session,
+or no pane at all, is HTTP 404 `pane_not_found`.
+
+For callers that parse JSON: the new pane's id is `.pane.id` after `POST /v1/panes` and `.pane`
+(also `.id`) after `POST /v1/windows`, whose window id is `.windowId`; a pane's place is
+`.pane.geometry` and its size `.pane.columns` and `.pane.rows`, and `.pane.window` is the window's
+`id`. With `jq` installed, `launcherctl pane current | jq .pane.geometry`.
+
+`POST /v1/panes/{id}/resize` takes one of `{"size": 0.7}` (the pane's share of the split it sits
+in, 0.1 to 0.9), `{"columns": 60}` (its width, against the nearest side-by-side split) or
+`{"rows": 12}` (its height, against the nearest stacked split), and answers
+`{"ok": true, "pane": {…}, "layout": …}` with the updated record. Like a dragged divider, it
+switches a window with an automatic layout other than `dwindle` to manual splits. A pane with no
+split of that kind to resize against is HTTP 409 `no_split`; a floating one is HTTP 409
+`pane_not_tiled`.
 `write` takes `{"text": "…", "enter": true}` (at most 16 KiB per call; `enter` appends a carriage
 return) and answers 409 `pane_not_running` once the shell has exited. `text` accepts `lines` from 1
 to 500 (default 60). An unknown id is HTTP 404 `pane_not_found`; a pane that could not be opened
 (no session, terminal limit reached, compatibility mode on) is HTTP 409.
 
-Rate limits per minute: list 240, open 30, focus 120, write 240, text 240, close 60.
+`POST /v1/panes/{id}/wait` holds the request until one of the pane's last lines contains a text,
+or matches a regular expression, like `herdr pane wait-output` or polling `text` yourself, without
+the polling:
+
+```json
+{"match": "tests passed", "timeout_ms": 120000, "lines": 60}
+```
+
+- `match` — a literal text, or `regex` — a Java regular expression, matched against each line on
+  its own (so `^` and `$` are the line's ends). Exactly one of the two.
+- `timeout_ms` — 0 to 300000, default 30000. 0 looks once.
+- `lines` — how many of the last lines to search, as for `text` (default 60, at most 500).
+
+The text already in the pane is searched first, so output that came before the wait still counts;
+after that the pane is looked at four times a second. A match answers
+`{"ok": true, "matched": true, "id": "…", "text": "<the newest matching line>", "running": true}`.
+No match in time is HTTP 408 `timeout`, with `"running"` — and a timeout does not mean the command
+did not run, only that the text did not show up: read the pane before running anything again. When
+the pane's shell exits, or the pane is closed, before a match (after one last look) the answer is
+HTTP 409 `pane_not_running`. A missing or empty `match`/`regex`, both at once, a regular expression
+that does not compile, or a `timeout_ms` out of range is HTTP 400 `bad_request`. At most four waits
+run at once; a fifth is HTTP 429 `too_many_waits` until one of them answers. A client must allow the
+request to take as long as `timeout_ms` (`launcherctl pane wait` sets curl's own limit to match).
+
+Rate limits per minute: list 240, pane info 240, open 30, focus 120, resize 120, write 240,
+text 240, wait 240, close 60.
 
 The shell client wraps all of this:
 
 ```sh
-id=$(launcherctl pane open --title preview --no-focus -- kitten icat out.png \
-     | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+id=$(launcherctl pane open --print-id --title tests --no-focus)
 launcherctl pane write "$id" --enter 'make test'
+launcherctl pane wait "$id" --regex 'passed|failed' --timeout 120000
 launcherctl pane read "$id" --lines 40
+launcherctl pane current
 launcherctl pane list
 launcherctl pane focus "$id"
+launcherctl pane open --direction right --size 0.4 --no-focus -- htop
+launcherctl pane resize "$id" --columns 60
 launcherctl pane close "$id"
 ```
 
 `launcherctl pane write` reads the text from its arguments, or from stdin when none are given.
 Every `pane` command prints the server's JSON body and exits 1 on an HTTP error, so the error code
-(`not_owned`, `pane_not_found`, …) is always visible to the caller.
+(`not_owned`, `pane_not_found`, …) is always visible to the caller; `--print-id` prints just the id
+on success. A mistake in the command line exits 2 without asking the launcher anything.
 
 ### Windows
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/v1/windows` | Open a NEW full-size window (not a split) |
+| POST | `/v1/windows/{id}/focus` | Bring a window of the current session to the front |
+| POST | `/v1/windows/{id}/close` | Close a window opened through this API |
 
 A pane shares the screen with whatever else is in the current window; a window is the same kind of
 full-size, own-chip surface `+` in the window strip creates. This route is for a script that wants
@@ -227,7 +322,7 @@ launcher only needs to be running, not in the foreground.
 `POST /v1/windows` takes:
 
 ```json
-{"command": ["tlstore"], "title": "tlstore", "focus": true}
+{"command": ["tlstore"], "title": "tlstore", "cwd": "/data/data/com.termux/files/home", "focus": true}
 ```
 
 - `command` — an argv array, or a string that is run through `sh -c`. Unlike `POST /v1/panes`, this
@@ -237,17 +332,23 @@ launcher only needs to be running, not in the foreground.
   chip goes with it — unlike a pane opened through `POST /v1/panes`, where the shell stays behind.
   If it was the last window, you are left with an empty home, as when you close the last window
   yourself.
-- `title` — the name shown on the window's chip.
+- `title` — the name shown on the window's chip. `cwd` — the folder the command starts in;
+  defaults to the home directory here, while `launcherctl window open` sends the directory it runs
+  in unless `--cwd` is given.
 - `focus` — default `true`, switches the window strip to it; `false` leaves whichever window is on
   screen alone while the new one keeps running behind it.
+- `print` — `"id"` answers a successful open with the window's pane id alone, one line of
+  `text/plain`, as for `POST /v1/panes`.
 
 The response is flat, not a pane record:
 
 ```json
-{"ok": true, "id": "6d3f…", "window": 2, "columns": 80, "rows": 24}
+{"ok": true, "id": "6d3f…", "pane": "6d3f…", "window": 2, "windowId": 7, "columns": 80, "rows": 24}
 ```
 
-`window` is the new window's index, in the same order `GET /v1/panes` lists windows under.
+`id` and `pane` are both the window's pane id, for the pane routes. `window` is the new window's
+index, in the same order `GET /v1/panes` lists windows under; `windowId` is its `id` there, for the
+window routes below.
 `columns`/`rows` are `0` when the window has not been laid out yet (an unfocused window nobody has
 looked at). The opened pane is owned exactly like one opened through `POST /v1/panes`, so
 `/v1/panes/{id}/write|read|close` reach it the same way — `GET /v1/panes` and `/focus` too. A
@@ -255,14 +356,21 @@ window that could not be opened (no session, terminal limit reached, compatibili
 window could never be given a starting size) is HTTP 409 `window_open_failed`; a missing `command`
 is HTTP 400 `bad_request`.
 
-Rate limit: 30 a minute.
+`POST /v1/windows/{id}/focus` and `/close` take a window `id` from `GET /v1/panes` (or the id of
+any pane in the window) and no body. `focus` works on every window of the current session and
+answers `{"ok": true, "window": {…}}` with the window entry; on screen it switches the window strip
+as a tap on the chip would. `close` only reaches an `owned` window — every pane in it opened through
+this API — and is HTTP 403 `not_owned` otherwise, so a window the user split a shell of their own
+into stays theirs. It answers `{"ok": true, "id": 7, "closed": true, "panes": 1}`. An id that names
+no window of the current session is HTTP 404 `window_not_found`.
+
+Rate limits per minute: open 30, focus 120, close 60.
 
 ```sh
-id=$(launcherctl window open --title tlstore --no-focus -- tlstore \
-     | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+id=$(launcherctl window open --print-id --title tlstore --no-focus -- tlstore)
 launcherctl pane read "$id" --lines 40
-launcherctl pane focus "$id"
-launcherctl pane close "$id"
+launcherctl window focus "$id"
+launcherctl window close "$id"
 ```
 
 ### The on-screen keyboard
@@ -742,10 +850,10 @@ Limits are per-route, not global, so heavy generation traffic does not starve un
 | --- | ---: |
 | `POST /v1/apps/launch` | 30 |
 | `POST /v1/auth/rotate` | 5 |
-| `GET /v1/panes`, `POST /v1/panes/{id}/write`, `GET /v1/panes/{id}/text` | 240 |
+| `GET /v1/panes`, `GET /v1/panes/{id}`, `POST /v1/panes/{id}/write`, `GET /v1/panes/{id}/text`, `POST /v1/panes/{id}/wait` | 240 |
 | `POST /v1/panes`, `POST /v1/windows` | 30 |
-| `POST /v1/panes/{id}/focus` | 120 |
-| `POST /v1/panes/{id}/close` | 60 |
+| `POST /v1/panes/{id}/focus`, `POST /v1/panes/{id}/resize`, `POST /v1/windows/{id}/focus` | 120 |
+| `POST /v1/panes/{id}/close`, `POST /v1/windows/{id}/close` | 60 |
 | `POST /v1/panes/{id}/agent` | 600 |
 | `POST /v1/agents/hooks` | 10 |
 | `POST /v1/keyboard/show`, `POST /v1/keyboard/hide` | 240 each |
@@ -801,7 +909,7 @@ Ollama-style routes (`/api/*`) return a flat error string in the Ollama conventi
 }
 ```
 
-Rate-limit errors use `type: "rate_limit_error"` on `/v1/*` and the same flat `error` string on `/api/*`. HTTP status codes follow OpenAI/Ollama conventions (`400`, `401`, `404`, `409`, `429`, `500`, `501`).
+Rate-limit errors use `type: "rate_limit_error"` on `/v1/*` and the same flat `error` string on `/api/*`. HTTP status codes follow OpenAI/Ollama conventions (`400`, `401`, `404`, `409`, `429`, `500`, `501`), plus `408` for a pane wait that timed out.
 
 ## Terminal LLM Client Configuration
 
@@ -897,7 +1005,7 @@ Inspect `/v1/models` first to confirm both `_backend == "mnn-llm"` and the endpo
 - LAN mode trusts every device on the local network; it does not implement per-device authentication, and it carries the token in cleartext.
 - Consider Unix domain sockets for tighter local access boundaries in future.
 - The pane routes' exposure window is now the launcher process's lifetime, not just its time on
-  screen. This does not add capabilities — ownership still confines `write`/`text`/`close` to panes
+  screen. This does not add capabilities — ownership still confines `write`/`text`/`wait`/`close` to panes
   opened through the API, and nothing here can bring the launcher to the Android foreground on its
   own — but the same token now reaches a pane for longer.
 - The signal routes give the token what any program in a shell already has through escape

@@ -167,3 +167,25 @@ Checks 1–5 pass (the developer, 2026-09-28).
    then the cleaned text with changed and added words in the accent and removed words struck
    through. The marks stay until the panel closes; they never fade to plain text. ✓ inserts the plain
    cleaned text (no struck-through words). Undo shows the as-heard text; redo shows the marks again.
+
+## Agent pane control (branch feat/agent-pane-control)
+Checks 1–9 passed on the 1.1.0 candidate (release build, emulator, 2026-10-20): placement, the
+off-screen window, geometry, resize and `no_split`, windows and the refusal to close one not opened
+through `window open`, the caller's directory, `--print-id`, `wait` and its timeout, group help.
+Seen there, not blocking: `pane open` answers the caller's pre-split columns and rows; after
+`window open` typed input reached the Sessions button rather than the new terminal (adb input).
+terminal-browser `run --split right <url>` opened beside the caller on pong (developer, 2026-10-20).
+
+## Pictures through the clipboard (#61) and screenshot paste
+Passed on pong on the 1.1.0 candidate (developer, 2026-10-20): the paste key pastes the latest
+screenshot as a file path.
+
+## Flick on a mouse-tracking TUI (fix/landscape-scroll-keyboard, 2026-10-20)
+Agent check passed again on the 1.1.0 candidate (release build, emulator, 2026-10-20).
+1. **Agent, emulator.** fix(terminal) a flick is a scroll, not also a tap · Landscape, a
+   mouse-tracking program (`printf '\033[?1049h\033[?1000h\033[?1006h'; cat`): a flick of under a
+   row (29 px drag, then a fling) logged onScroll, onFling, onUp with the scroll delivered, sent only
+   wheel reports (`^[[<65;61;9M` x7), no click, and the keyboard stayed down · emulator.
+   (`adb shell input swipe` under ~60 ms can arrive with no move at all, which is a tap: don't read
+   that as the bug.)
+2. **Developer, pong:** passed — opencode in landscape scrolls with no keyboard (developer, 2026-10-20).

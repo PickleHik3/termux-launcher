@@ -58,6 +58,16 @@ final class TapPrecision {
                 mDelivered = true;
         }
 
+        /**
+         * A fling delivers if it is going to move anything: where it comes to rest differs from
+         * where it starts. It is counted at the lift, before the tap is read, so a quick flick
+         * whose drag stayed inside one row is a scroll and never a click as well.
+         */
+        void flung(int from, int to) {
+            if (from != to)
+                mDelivered = true;
+        }
+
         boolean delivered() {
             return mDelivered;
         }

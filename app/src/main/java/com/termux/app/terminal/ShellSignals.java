@@ -150,11 +150,19 @@ public final class ShellSignals {
      * @return false when the launcher is not on screen and nothing was written
      */
     public boolean clipboardWrite(@NonNull String text) {
-        if (!mHost.isVisible())
+        if (!clipboardWritable())
             return false;
         ShareUtils.copyTextToClipboard(mContext, text);
         mHistory.record(text);
         return true;
+    }
+
+    /**
+     * Whether a program may put something on the clipboard right now: only while the launcher is
+     * on screen. The rule {@link #clipboardWrite} and a program's picture write share.
+     */
+    public boolean clipboardWritable() {
+        return mHost.isVisible();
     }
 
     /**
@@ -175,8 +183,21 @@ public final class ShellSignals {
      */
     @Nullable
     public String clipboardReadRefusal() {
+        return clipboardReadRefusal(false);
+    }
+
+    /**
+     * {@link #clipboardReadRefusal()} for a read that may be fetching a paste: when
+     * {@code pasted} — the program brought back the password of the paste event the user just
+     * made — the paste itself is the user's consent, so the setting is not asked. The launcher
+     * still has to be on screen.
+     */
+    @Nullable
+    public String clipboardReadRefusal(boolean pasted) {
         if (!mHost.isVisible())
             return REFUSAL_NOT_VISIBLE;
+        if (pasted)
+            return null;
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(mContext, false);
         if (preferences == null || !preferences.isOsc52ClipboardReadEnabled())
             return REFUSAL_READ_DISABLED;
