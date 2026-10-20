@@ -14,12 +14,15 @@ see [On-device AI](On_Device_AI.md).
 - The launcher only has to be running, not on screen. A command that needs the screen says so.
 - Output is JSON. On an error it prints the server's answer (such as `not_owned` or
   `pane_not_found`) and exits 1; a mistake in the command line exits 2.
-- `launcherctl --help` prints the full usage. The HTTP routes behind each command are in
-  [LauncherCtl API](LauncherCtl_API.md).
+- `launcherctl --help` prints the full usage, and `launcherctl <group> --help` (for example
+  `launcherctl pane --help`) one group's commands, flags and what they do. A group that needs a
+  command, run without one, prints the same help and exits 2 instead of doing anything. The HTTP
+  routes behind each command are in [LauncherCtl API](LauncherCtl_API.md).
 
 **The ownership rule.** A pane or window opened through `launcherctl` belongs to the opener:
-`write`, `read` and `close` only work on panes and windows opened this way. `list` and `focus` work
-on every pane. Your own shells cannot be typed into or read by a script.
+`write`, `read`, `wait`, `resize` and `close` only work on panes and windows opened this way.
+`list`, `current`, `get` and `focus` work on every pane. Your own shells cannot be typed into or
+read by a script.
 
 Commands that report about "this pane" (`agent`, `notify`, `progress`) use `$TERMUX_LAUNCHER_PANE`,
 which every launcher shell has, unless `--pane ID` names another.
@@ -40,38 +43,82 @@ launcherctl launch whatsapp
 ## pane
 
 ```text
-launcherctl pane open [--cwd DIR] [--title NAME] [--tag TAG] [--no-focus] [--] [CMD ARGS...]
+launcherctl pane open [--cwd DIR] [--title NAME] [--tag TAG] [--no-focus] [--print-id]
+                      [--from ID] [--direction right|left|down|up]
+                      [--size 0.1-0.9 | --columns N | --rows N] [--] [CMD ARGS...]
+launcherctl pane current
+launcherctl pane get <id>
 launcherctl pane list
 launcherctl pane focus <id>
+launcherctl pane resize <id> --size 0.1-0.9 | --columns N | --rows N
 launcherctl pane write <id> [--enter] <text>      (or the text on stdin)
 launcherctl pane read <id> [--lines N]
+launcherctl pane wait <id> (--match TEXT | --regex RE) [--timeout MS] [--lines N]
 launcherctl pane close <id>
 ```
 
-- `open` splits a new pane into the current window and prints its `id`. With a command it runs that
-  command in your login shell, and the shell stays when the command ends. `--no-focus` leaves the
-  keyboard where it is; `--tag` is a label `list` reports back.
+- `open` splits a new pane off the pane the command runs in and prints its `id`. With a command it
+  runs that command in your login shell, and the shell stays when the command ends. It starts in
+  the folder the command runs in unless `--cwd` names another. `--no-focus` leaves the keyboard
+  where it is; `--tag` is a label `list` reports back; `--print-id` prints only the new pane's id,
+  one line, instead of the JSON, so `id=$(launcherctl pane open --print-id …)` needs no parsing.
+- Where the pane goes: `--from` names the pane to split instead (an `id` from `list`). When the
+  command does not run in a pane, or its pane floats or is in another session, the focused pane is
+  split, as before. `--direction` (or `--split`) puts the new pane `right`, `left`, `down` or `up`
+  of it; without it the layout chooses. `--size` is the new pane's share of the split pane, from
+  0.1 to 0.9 (default 0.5); `--columns` or `--rows` asks for a width or height in cells instead,
+  kept so both panes stay usable. Asking for a direction or size in a window with an automatic
+  layout (grid, tall, ...) switches that window to manual splits, so the layout cannot move the
+  pane away again.
+- `resize` sets a pane's share of the split it sits in (`--size`), or its width (`--columns`) or
+  height (`--rows`) in cells. Only for panes opened with `pane open` or `window open`.
+- `list` prints every window and pane. Each pane reports its `window`, whether it floats, and its
+  `geometry`: left, top, columns and rows in cells within its window. `list` also prints
+  `features`, what this launcher's pane commands can do (`info`, `wait` and `print-id` are the
+  newest), for a script that may meet an older launcher.
+- `current` prints the pane the command runs in, the way `get` prints any pane of the current
+  session: the record `list` has, plus its window. Outside a launcher pane (`$TERMUX_LAUNCHER_PANE`
+  unset) it says so and exits 2.
 - `write` types into the pane; `--enter` presses Enter after it. At most 16 KiB per call.
 - `read` prints the last lines of the pane, 60 by default, up to 500.
+- `wait` returns as soon as one of the pane's last lines (60 by default, `--lines` for more)
+  contains `TEXT`, or matches the regular expression `RE`, and prints that line as `text`. Text
+  already in the pane counts. It gives up after `--timeout` milliseconds, 30000 by default and at
+  most 300000, with `timeout`, or with `pane_not_running` when the pane's shell ends first; both
+  exit 1. A timeout does not mean the command did not run, only that the text did not appear: read
+  the pane before running it again.
 
 ```sh
-id=$(launcherctl pane open --title preview --no-focus -- kitten icat out.png | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+id=$(launcherctl pane open --print-id --title tests --no-focus)
 launcherctl pane write "$id" --enter 'make test'
+launcherctl pane wait "$id" --regex 'passed|failed' --timeout 120000
 launcherctl pane read "$id" --lines 40
+launcherctl pane open --direction right --size 0.4 --no-focus -- htop   # beside this pane
+launcherctl pane resize "$id" --columns 60
+launcherctl pane current | jq .pane.geometry                          # with jq installed
 ```
 
 ## window
 
 ```text
-launcherctl window open [--title NAME] [--no-focus] [--] CMD ARGS...
+launcherctl window open [--cwd DIR] [--title NAME] [--no-focus] [--print-id] [--] CMD ARGS...
+launcherctl window list
+launcherctl window focus <id>
+launcherctl window close <id>
 ```
 
-Opens a whole new full-size window with its own chip, not a pane beside the one on screen. The
-command is required, and the window closes when it ends. `--no-focus` keeps the current window in
-front while the new one runs behind it. The `pane` commands reach the new window by its `id`.
+`open` opens a whole new full-size window with its own chip, not a pane beside the one on screen.
+The command is required, and the window closes when it ends. `--cwd` is the folder it starts in,
+the folder the command runs in by default; `--no-focus` keeps the current window in front while
+the new one runs behind it. The `pane` commands reach the new window's pane by its `id` (also
+printed as `pane`); `--print-id` prints only that id.
+
+`list` prints the same windows and panes as `pane list`. `focus` brings a window to the front;
+`close` closes one opened with `window open`, and only while every pane in it was opened that way.
+Both take a window's `id` from `list`, or the `id` of any pane in it.
 
 ```sh
-id=$(launcherctl window open --title tlstore --no-focus -- tlstore | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+id=$(launcherctl window open --print-id --title tlstore --no-focus -- tlstore)
 ```
 
 ## agent

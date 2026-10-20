@@ -44,7 +44,7 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 
 ## Editions
 
-> **Three editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. If you want to install it alongside your existing termux install, choose either **`com.termux.launcher.nix`** or **`io.vaj.tl`**.
+> **Three editions are available.** The **`com.termux`** build is the **recommended** version: it stays fully compatible with the upstream Termux package ecosystem. If you want to install it alongside your existing Termux install, choose either **`com.termux.launcher.nix`** or **`io.vaj.tl`**.
 
 Every release ships the same launcher built from the same source; the editions differ only in Android package identity and the package ecosystem they use.
 
@@ -52,47 +52,61 @@ Every release ships the same launcher built from the same source; the editions d
 |---|---|---|---|
 | Package name | `com.termux` | `com.termux.launcher.nix` | `io.vaj.tl` |
 | Release tag | `vX.Y.Z` | `nix-vX.Y.Z` | `vaj-vX.Y.Z` |
-| Alongside official Termux? | ❌ No — same package name, replaces it | ✅ Yes — installs side by side | ✅ Yes — installs side by side |
+| Obtainium | [<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="44">][obt-termux]<br>[pre-release][obt-termux-pre] | [<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="44">][obt-nix]<br>[pre-release][obt-nix-pre] | [<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="44">][obt-vaj]<br>[pre-release][obt-vaj-pre] |
+| Alongside official Termux? | ❌ No: same package name, replaces it | ✅ Yes, installs side by side | ✅ Yes, installs side by side |
 | Package manager | `pkg` / APT | [Nix](https://nixos.org) ([guide](docs/en/Nix_Package_Management.md)) | `pkg` / APT |
 | Package repository | official Termux repos | official `nixpkgs` binary cache | small VAJ APT repo (`https://repo.pathayam.xyz`) |
-| Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a, x86_64 — bootstrap downloaded on first run | arm64-v8a (aarch64) only, bootstrap downloaded on first run |
-| Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) / [Termux:Boot](https://github.com/PickleHik3/termux-boot/releases) (plain tags) | [TLNix:API](https://github.com/PickleHik3/termux-api/releases/tag/nix-v0.53.1) / [TLNix:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/nix-v0.32.2) / [TLNix:Boot](https://github.com/PickleHik3/termux-boot/releases/tag/nix-v0.8.1) (`nix-v*` tags) | same forks, `-vaj` tagged releases |
+| Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a, x86_64; bootstrap downloaded on first run | arm64-v8a (aarch64) only; bootstrap downloaded on first run |
+| Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases/tag/v0.53.2) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/v0.32.3) / [Termux:Boot](https://github.com/PickleHik3/termux-boot/releases/tag/v0.8.2) (plain tags) | [TLNix:API](https://github.com/PickleHik3/termux-api/releases/tag/nix-v0.53.2) / [TLNix:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/nix-v0.32.3) / [TLNix:Boot](https://github.com/PickleHik3/termux-boot/releases/tag/nix-v0.8.2) (`nix-v*` tags) | [Termux:API](https://github.com/PickleHik3/termux-api/releases/tag/v0.53.2-vaj) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/v0.32.3-vaj) / [Termux:Boot](https://github.com/PickleHik3/termux-boot/releases/tag/v0.8.2-vaj) (`-vaj` tags) |
 
-> ⚠️ **The VAJ edition is to be considered as just a demo.**. It runs off my manually maintained custom APT repo (`https://repo.pathayam.xyz`), which carries only a small fraction of the Termux package set; keeping its crucial packages updated is hard for me, pkg updates may come or may not. Nix edition is suggested if you want to use it along with official termux-app — the **[VAJ to Nix migration guide](docs/en/VAJ_To_Nix_Migration.md)** may help. for the curious among you, this is a [pathayam](https://commons.wikimedia.org/wiki/File:Exhibits_at_Koyikkal_Palace_Museum_Nedumangad_162.jpg), the sketchy URL is because i am just reusing my personal domain for homelab which was never supposed to see the light of day :(. 
+> ⚠️ **The VAJ edition is a demo.** It runs off my manually maintained APT repo (`https://repo.pathayam.xyz`), which carries only a small fraction of the Termux package set, and keeping its crucial packages updated is hard for me, so `pkg` updates may or may not come. If you want the launcher next to official Termux, use the Nix edition; the **[VAJ to Nix migration guide](docs/en/VAJ_To_Nix_Migration.md)** may help. For the curious, this is a [pathayam](https://commons.wikimedia.org/wiki/File:Exhibits_at_Koyikkal_Palace_Museum_Nedumangad_162.jpg); the odd URL is my homelab domain, which was never supposed to see the light of day :(
 
-Companion add-ons must be the matching builds from this project's forks (they share the launcher's signing key and package family); official F-Droid add-ons will not pair with any edition. Nix-edition companions ship as `nix-v*` tagged releases (TLNix:API, TLNix:Styling, TLNix:Boot).
+Companion add-ons must be the matching builds from this project's forks (they share the launcher's signing key and package family); official F-Droid add-ons will not pair with any edition.
 
 ## Installation
 
-Download the latest APK of your chosen [edition](#editions) from [Releases](https://github.com/PickleHik3/termux-launcher/releases), install it, then select Termux Launcher as your Android home app.
+Download the latest APK of your chosen [edition](#editions) from [Releases](https://github.com/PickleHik3/termux-launcher/releases), install it, then select Termux Launcher as your Android home app. [Get started](docs/en/Get_Started.md) walks through the first launch; the **com.termux** edition installs over official Termux and keeps your files, but it is a one-way move.
 
 ### Stable or pre-release
 
-There are two channels. **Stable** releases (`vX.Y.Z`, one build per edition) are what most people should run. The **pre-release** channel (`vX.Y.Z-pre.N`, with `nix-` and `vaj-` builds alongside, marked *Pre-release* on the releases page) is a rolling build of what is heading for the next stable plus experiments that may still change or be dropped; each drop's notes list everything it has beyond the latest stable. Both channels are signed with the same key and share a version code, so you can install one over the other in either direction and keep your data. When reporting an issue from a pre-release, include the version from Settings › About — it ends in `-pre.N`.
+There are two channels. **Stable** releases (`vX.Y.Z`, one build per edition) are what most people should run. The **pre-release** channel (`vX.Y.Z-pre.N`, with `nix-` and `vaj-` builds alongside, marked *Pre-release* on the releases page) is a rolling build of what is heading for the next stable plus experiments that may still change or be dropped; each drop's notes list everything it has beyond the latest stable. Both channels are signed with the same key and share a version code, so you can install one over the other in either direction and keep your data. When reporting an issue from a pre-release, include the version from Settings › About; it ends in `-pre.N`.
 
-Recommended setup:
+### Updates with Obtainium
 
-- [Shizuku](https://github.com/rikkaapps/shizuku) only if you want optional privileged features
+[Obtainium](https://github.com/ImranR98/Obtainium) can install the launcher and keep it updated from this repository. Every edition and both channels are published here, so add it with the link for your edition and channel: the link sets Obtainium to fetch only that edition's APK.
+
+| Edition | Stable | Pre-release |
+|---|---|---|
+| Termux (`com.termux`) | [Add to Obtainium][obt-termux] | [Add to Obtainium][obt-termux-pre] |
+| Nix (`com.termux.launcher.nix`) | [Add to Obtainium][obt-nix] | [Add to Obtainium][obt-nix-pre] |
+| VAJ (`io.vaj.tl`) | [Add to Obtainium][obt-vaj] | [Add to Obtainium][obt-vaj-pre] |
+
+To change channel later, open the app in Obtainium and switch **Include prereleases**. Leave **Verify the 'latest' tag** off, and keep **Hide downgrades as updates** (Obtainium's own settings) on, so a pre-release install is never offered an older stable.
+
+Adding the repository URL by hand works too: set **Filter APKs by regular expression** to `_termux_`, `_nix_` or `_vaj_` for your edition, and turn on **Include prereleases** for the pre-release channel.
+
+### Recommended setup
+
+- [Shizuku](https://github.com/rikkaapps/shizuku), only if you want the optional privileged features
 - Matching companion forks when using Termux add-ons (pick the release matching your [edition](#editions): plain tag for `com.termux`, `nix-v*` tag for `com.termux.launcher.nix`, `-vaj` tag for `io.vaj.tl`):
   - [Termux:API](https://github.com/PickleHik3/termux-api/releases)
   - [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases)
-  - [Termux:Boot](https://github.com/PickleHik3/termux-boot/releases) — runs the scripts in `~/.termux/boot/` after a restart
+  - [Termux:Boot](https://github.com/PickleHik3/termux-boot/releases), which runs the scripts in `~/.termux/boot/` after a restart
+- A Nerd Font from the in-app font picker (**Settings › Terminal › Font**); it configures the font properly for the kitty protocol features
+- A speech model from **Settings › Keyboard › Voice input** if you want on-device dictation; see [Voice input](docs/en/Voice_Input.md)
 
 The built-in terminal keyboard is enabled on fresh installs; an external keyboard app is optional.
-See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
 ### Quick start script
 
-`tlstore`, the launcher's own tool store, installs my personal shell setup (fish, Oh My Posh with wallpaper Material colors, zoxide, eza and a couple of fish plugins), a Neovim colour scheme that follows your wallpaper, the binaries — sigye, the animated-logo fastfetch, kitten — and Claude Code. A config file of yours is never replaced without showing you the change and asking first, and whatever it does replace gets a timestamped `.bak`. It's already on your phone — no download needed:
+`tlstore`, the launcher's own tool store, is already on your phone. The first line installs the fish shell with the store's own prompt (Pure's two-line layout with Nerd Font icons, in your wallpaper's colours), eza, zoxide and two fish plugins; the second opens a picker for everything else in the store (dawn, fastfetch, btop, terminal-browser, herdr, the agent skills, Claude Code, Codex, opencode, sigye, kitten). A config file of yours is never replaced without showing you the change and asking first, and whatever it does replace gets a timestamped `.bak`. The wallpaper-matching Neovim colour scheme is not a store item: it lives under **Settings › Appearance › Tools that follow the terminal colours**.
 
 ```sh
 tlstore shell
 tlstore install
 ```
 
-The first line installs the shell setup in one go; the second opens a picker for everything else, including Claude Code. See the [tlstore guide](docs/en/Tlstore.md) for the full command list.
-
-Its highly recommended that you use the in-app font picker (**Settings › Terminal › Font**) to install a nerd font since it will configure it properly for seamless font rendering using kitty protocol related features.
+See the [tlstore guide](docs/en/Tlstore.md) for the full command list.
 
 ## Documentation
 
@@ -147,3 +161,10 @@ tiling and focused-pane behaviour. Thanks also to the speech-model authors, Goog
 the LiteRT conversion contributors, and the authors of dawn, fastfetch, sigye and the other
 [tlstore tools](https://github.com/PickleHik3/tlstore). This launcher would not exist without
 all that work. The [notices](THIRD_PARTY_NOTICES.md) describe what is included and adapted.
+
+[obt-termux]: https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.termux%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FPickleHik3%2Ftermux-launcher%22%2C%22author%22%3A%22PickleHik3%22%2C%22name%22%3A%22Termux%20Launcher%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5Ev%5B0-9%5D%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22_termux_%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5B0-9%5D.%2A%5C%22%7D%22%7D
+[obt-termux-pre]: https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.termux%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FPickleHik3%2Ftermux-launcher%22%2C%22author%22%3A%22PickleHik3%22%2C%22name%22%3A%22Termux%20Launcher%20pre-release%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5Ev%5B0-9%5D%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22_termux_%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5B0-9%5D.%2A%5C%22%7D%22%7D
+[obt-nix]: https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.termux.launcher.nix%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FPickleHik3%2Ftermux-launcher%22%2C%22author%22%3A%22PickleHik3%22%2C%22name%22%3A%22Termux%20Launcher%20%28Nix%29%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5Enix-v%5B0-9%5D%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22_nix_%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5B0-9%5D.%2A%5C%22%7D%22%7D
+[obt-nix-pre]: https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.termux.launcher.nix%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FPickleHik3%2Ftermux-launcher%22%2C%22author%22%3A%22PickleHik3%22%2C%22name%22%3A%22Termux%20Launcher%20%28Nix%29%20pre-release%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5Enix-v%5B0-9%5D%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22_nix_%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5B0-9%5D.%2A%5C%22%7D%22%7D
+[obt-vaj]: https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22io.vaj.tl%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FPickleHik3%2Ftermux-launcher%22%2C%22author%22%3A%22PickleHik3%22%2C%22name%22%3A%22Termux%20Launcher%20%28VAJ%29%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5Evaj-v%5B0-9%5D%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22_vaj_%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5B0-9%5D.%2A%5C%22%7D%22%7D
+[obt-vaj-pre]: https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22io.vaj.tl%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FPickleHik3%2Ftermux-launcher%22%2C%22author%22%3A%22PickleHik3%22%2C%22name%22%3A%22Termux%20Launcher%20%28VAJ%29%20pre-release%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5Evaj-v%5B0-9%5D%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22_vaj_%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5B0-9%5D.%2A%5C%22%7D%22%7D

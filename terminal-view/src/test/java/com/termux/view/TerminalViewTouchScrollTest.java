@@ -38,13 +38,18 @@ public class TerminalViewTouchScrollTest {
     private final ByteArrayOutputStream mWritten = new ByteArrayOutputStream();
     private TerminalView mView;
     private TerminalEmulator mEmulator;
+    /** Taps the client was told a mouse-tracking program got, each of which raises the keyboard. */
+    private int mMouseTrackingTaps;
 
     @Before
     public void setUp() {
         mView = new TerminalView(RuntimeEnvironment.getApplication(), null);
         mView.setTerminalViewClient((TerminalViewClient) Proxy.newProxyInstance(
             TerminalViewClient.class.getClassLoader(), new Class<?>[] { TerminalViewClient.class },
-            (proxy, method, args) -> defaultFor(method.getReturnType())));
+            (proxy, method, args) -> {
+                if (method.getName().equals("onMouseTrackingTap")) mMouseTrackingTaps++;
+                return defaultFor(method.getReturnType());
+            }));
         mView.setTextSize(24);
         mView.layout(0, 0, 1080, 1600);
         mEmulator = new TerminalEmulator(new TerminalOutput() {
@@ -107,6 +112,19 @@ public class TerminalViewTouchScrollTest {
         drag(300f, 900f, 900f - 5 * lineSpacing());
         assertFalse(printable(written()), SGR_MOUSE.matcher(written()).find());
         assertEquals("", written());
+    }
+
+    @Test
+    public void aStillTapOnAMouseTrackingProgramIsStillAClickAndATap() {
+        enter("\u001b[?1049h\u001b[?1000h\u001b[?1006h");
+        long down = SystemClock.uptimeMillis();
+        dispatch(MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, 300f, 900f, 0));
+        dispatch(MotionEvent.obtain(down, down + 60, MotionEvent.ACTION_UP, 300f, 900f, 0));
+
+        Matcher matcher = SGR_MOUSE.matcher(written());
+        assertTrue("no click for a tap: " + printable(written()), matcher.find());
+        assertEquals(TerminalEmulator.MOUSE_LEFT_BUTTON, Integer.parseInt(matcher.group(1)));
+        assertEquals(1, mMouseTrackingTaps);
     }
 
     private void enter(String sequence) {

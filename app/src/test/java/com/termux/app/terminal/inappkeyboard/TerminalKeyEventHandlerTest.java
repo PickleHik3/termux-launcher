@@ -180,6 +180,7 @@ public class TerminalKeyEventHandlerTest {
         for (KeyValue.Editing editing : KeyValue.Editing.values()) {
             int copies = mHost.copies;
             int pastes = mHost.pastes;
+            int clipboardPastes = mHost.clipboardPastes;
             int keys = mTerminal.keyCalls.size();
             int codePoints = mTerminal.codePointCalls.size();
             int logs = mHost.logs.size();
@@ -193,8 +194,13 @@ public class TerminalKeyEventHandlerTest {
                     assertEquals(copies + 1, mHost.copies);
                     break;
                 case PASTE:
-                case PASTE_PLAIN:
                     assertEquals(pastes + 1, mHost.pastes);
+                    assertEquals(clipboardPastes, mHost.clipboardPastes);
+                    break;
+                case PASTE_PLAIN:
+                    // Plain paste is always the clipboard, never a screenshot the keyboard offers.
+                    assertEquals(clipboardPastes + 1, mHost.clipboardPastes);
+                    assertEquals(pastes, mHost.pastes);
                     break;
                 case CUT:
                     assertEquals(1, mHost.cuts);
@@ -599,6 +605,17 @@ public class TerminalKeyEventHandlerTest {
     }
 
     @Test
+    public void pasteMayBeAScreenshotButPlainPasteIsTheClipboard() {
+        mHandler.key_up(KeyValue.getKeyByName("paste"), Pointers.Modifiers.EMPTY);
+        assertEquals(1, mHost.pastes);
+        assertEquals(0, mHost.clipboardPastes);
+
+        mHandler.key_up(KeyValue.getKeyByName("pasteAsPlainText"), Pointers.Modifiers.EMPTY);
+        assertEquals(1, mHost.pastes);
+        assertEquals(1, mHost.clipboardPastes);
+    }
+
+    @Test
     public void aDispatchedValueReachesTheTerminalWhenNothingClaimsIt() {
         mHandler.dispatchKeyValue(KeyValue.getKeyByName("paste"));
 
@@ -707,6 +724,7 @@ public class TerminalKeyEventHandlerTest {
     private static final class FakeHostActions implements HostActions {
 
         private int pastes;
+        private int clipboardPastes;
         private int copies;
         private int selectAlls;
         private int cuts;
@@ -733,6 +751,11 @@ public class TerminalKeyEventHandlerTest {
         @Override
         public void paste() {
             pastes++;
+        }
+
+        @Override
+        public void pasteClipboard() {
+            clipboardPastes++;
         }
 
         @Override
@@ -822,7 +845,7 @@ public class TerminalKeyEventHandlerTest {
         }
 
         private int totalActions() {
-            return pastes + copies + textLayouts + numericLayouts + greekLayouts + nextLayouts +
+            return pastes + clipboardPastes + copies + textLayouts + numericLayouts + greekLayouts + nextLayouts +
                 previousLayouts + settings + hides + clipboardPanels + capsLocks + voiceRequests;
         }
     }

@@ -3,7 +3,11 @@ package com.termux.app.terminal.inappkeyboard;
 /** Activity-owned actions that do not belong in terminal input dispatch. */
 public interface HostActions {
 
+    /** The paste key: a fresh screenshot the keyboard offers, or else the clipboard. */
     void paste();
+
+    /** Plain paste, what a modifier makes of the paste key: always the clipboard. */
+    default void pasteClipboard() { paste(); }
 
     void copySelection();
 

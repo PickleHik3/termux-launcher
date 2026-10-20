@@ -92,6 +92,14 @@ The app never edits your rc files. Open a new shell afterwards; scrollback from 
   palette (`Ctrl+Alt+V` with **Split-pane controls** off).
 - **Settings → Terminal → Clipboard → Clean up clipboard text** ("Trim trailing spaces and
   single-line paste newlines."), on by default, tidies copied text.
+- **Pictures.** When the clipboard holds a picture, pasting saves a copy and pastes the path to it,
+  such as `/data/data/com.termux/files/usr/tmp/clipboard/clip-20261012-080910.png` (each edition
+  has its own folder). Shells, and coding agents such as Claude Code and Codex, take a picture that
+  way. Copies are named for the moment they were pasted, and only the newest 20 are kept.
+- **Pictures from the keyboard.** A picture the system keyboard inserts (from its clipboard strip,
+  or a GIF) pastes the same way.
+- A program that asks to handle pastes itself (kitty's paste events, as some editors and browsers
+  do) is told what you pasted and fetches it, text or picture, instead of having it typed in.
 
 The terminal, the keyboard's paste key, the Linux display and every Android app share one
 clipboard.
@@ -99,7 +107,9 @@ clipboard.
 ## Programs and the clipboard
 
 A program in the terminal can write the clipboard with the OSC 52 escape or kitty's OSC 5522 (as
-`kitten clipboard` does); a write from a pane needs the launcher on screen. Reading it back needs
+`kitten clipboard` does), and with OSC 5522 it can copy and read pictures too; a write from a pane
+needs the launcher on screen. A picture a program copies pastes into other apps like any copied
+picture. Reading it back needs
 the launcher on screen and **Settings → Terminal → Clipboard → Let programs read the clipboard**
 ("Programs in the terminal can paste what you copied."), on by default. Turn it off if you would
 rather programs could not read what you copied. `launcherctl clipboard copy` writes even while the
