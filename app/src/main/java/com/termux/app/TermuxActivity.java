@@ -16518,17 +16518,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Stands the strip {@link #RUN_STRIP_AIR_DP} above the edge that covers Home from below (the
      * keyboard's top while one is up, else the dock's top, its dashes included, so the strip never
      * covers the dashes), and as far in from the screen's sides as the dock's slab; set only on a
-     * change. Whether the strip shows.
+     * change. The edges are in the float layer's pixels, as laid out
+     * ({@link #homeEdgesInFloatLayer}, {@link com.termux.app.dock.RunStripPlacement}). Whether
+     * the strip shows.
      */
     private boolean placeRunStrip(int dockTopPx, int keyboardTopPx) {
         com.termux.app.dock.RunStripView strip = mRunStrip;
         com.termux.app.terminal.HomeFloatLayer layer = mPaneController == null ? null
             : mPaneController.homeFloatLayer();
         if (strip == null || layer == null || strip.getVisibility() != View.VISIBLE) return false;
-        int[] at = new int[2];
-        layer.getLocationOnScreen(at);
-        int edge = keyboardTopPx >= 0 ? keyboardTopPx : dockTopPx;
-        float y = edge - runStripBandPx(true) - at[1] - strip.getTop();
+        float y = com.termux.app.dock.RunStripPlacement.translationYPx(dockTopPx, keyboardTopPx,
+            runStripBandPx(true), strip.getTop());
         if (strip.getTranslationY() != y) strip.setTranslationY(y);
         int side = Math.max(Math.round(dpToPx(RUN_STRIP_SIDE_DP)),
             getDockLayout().horizontalInsetPx);
@@ -25351,26 +25351,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (stack == null || root == null) return;
         int[] at = new int[2];
         stack.getLocationOnScreen(at);
-        int stackBottom = Math.round(at[1] - stack.getTranslationY()) + stack.getHeight();
         // A root margin written since the last layout moves the stack by as much on the next one,
         // and so does its own (the system keyboard's lift with the bars hidden): it stands on its
         // parent's bottom, less the margin.
+        int unlaidStackShift = 0;
         if (mTermuxActivityRootView != null)
-            stackBottom += mTermuxActivityRootView.unlaidBottomMarginGivebackPx();
+            unlaidStackShift += mTermuxActivityRootView.unlaidBottomMarginGivebackPx();
         if (stack.getParent() instanceof ViewGroup
             && stack.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup parent = (ViewGroup) stack.getParent();
             int laidMargin = parent.getHeight() - parent.getPaddingBottom() - stack.getBottom();
             if (parent.getHeight() > 0 && stack.getHeight() > 0)
-                stackBottom += laidMargin
+                unlaidStackShift += laidMargin
                     - ((ViewGroup.MarginLayoutParams) stack.getLayoutParams()).bottomMargin;
         }
+        int stackBottom = Math.round(at[1] - stack.getTranslationY()) + stack.getHeight()
+            + unlaidStackShift;
         // The dock's top at rest, wherever a system keyboard has pushed it: the floats' room is
         // the same with either keyboard up, and they meet the keyboard's top instead.
         int dockTop = KeyboardOverlayPolicy.homeDockRestTopPx(stackBottom, mHomeFloatDockPx,
             mHomeFloatImePushPx);
         int keyboardTop = KeyboardOverlayPolicy.homeKeyboardTopPx(mHomeFloatKeyboardShown,
             mHomeFloatImePushPx, stackBottom, mHomeFloatStackPx);
+        // The same two edges in the float layer's own pixels, for the chips and the run strip
+        // that stand on them: read from where the stack and the layer are laid out, not where
+        // they show, so a pass made while the editor's frame is scaled (a Dock style picked in
+        // the Layout editor) or the page is posed places them where they belong once that
+        // transform is gone (RunStripPlacement).
+        int[] inLayer = homeEdgesInFloatLayer(root, stack, unlaidStackShift, dockTop,
+            keyboardTop);
+        int dockTopInLayer = inLayer[0];
+        int keyboardTopInLayer = inLayer[1];
         root.getLocationOnScreen(at);
         int roomTop = at[1];
         androidx.core.view.WindowInsetsCompat insets =
@@ -25393,12 +25404,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // is up, and while they show the floats' room ends above them.
         mHomeChipsDockTopPx = dockTop;
         mHomeChipsKeyboardTopPx = keyboardTop;
-        boolean chipsShown = placeHomeFloatChips(dockTop, keyboardTop);
+        boolean chipsShown = placeHomeFloatChips(dockTopInLayer, keyboardTopInLayer);
         mHomeFloatChipsBandTaken = chipsShown;
         int chipsBand = com.termux.app.terminal.HomeFloatChipsPolicy.bandPx(
             getResources().getDisplayMetrics().density, chipsShown);
         // The Taskbar's run strip stands there instead of the chips, and gives the same way.
-        boolean stripShown = placeRunStrip(dockTop, keyboardTop);
+        boolean stripShown = placeRunStrip(dockTopInLayer, keyboardTopInLayer);
         mRunStripBandTaken = stripShown;
         chipsBand += runStripBandPx(stripShown);
         dockTop -= chipsBand;
@@ -25410,20 +25421,56 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The dock's resting top and the keyboard's top (-1 while none is up) in the float layer's
+     * pixels, from the stack's and the layer's laid-out tops under the root
+     * ({@link com.termux.app.dock.RunStripPlacement#laidTopIn}), the stack's bottom moved by
+     * {@code unlaidStackShiftPx} as the next layout will move it. Where either is not under the
+     * root, from the on-screen edges ({@code dockTopOnScreenPx}, {@code keyboardTopOnScreenPx})
+     * less the layer's on-screen top, as before.
+     */
+    @NonNull
+    private int[] homeEdgesInFloatLayer(@NonNull View root, @NonNull View stack,
+                                        int unlaidStackShiftPx, int dockTopOnScreenPx,
+                                        int keyboardTopOnScreenPx) {
+        com.termux.app.terminal.HomeFloatLayer layer = mPaneController == null ? null
+            : mPaneController.homeFloatLayer();
+        if (layer == null) return new int[]{dockTopOnScreenPx, keyboardTopOnScreenPx};
+        int notUnder = com.termux.app.dock.RunStripPlacement.NOT_UNDER;
+        int layerTop = notUnder;
+        int stackTop = notUnder;
+        if (root instanceof ViewGroup) {
+            layerTop = com.termux.app.dock.RunStripPlacement.laidTopIn((ViewGroup) root, layer);
+            stackTop = com.termux.app.dock.RunStripPlacement.laidTopIn((ViewGroup) root, stack);
+        }
+        if (layerTop == notUnder || stackTop == notUnder) {
+            int[] at = new int[2];
+            layer.getLocationOnScreen(at);
+            return new int[]{dockTopOnScreenPx - at[1], keyboardTopOnScreenPx < 0 ? -1
+                : Math.max(0, keyboardTopOnScreenPx - at[1])};
+        }
+        int stackBottom = stackTop + stack.getHeight() + unlaidStackShiftPx;
+        int dockTop = KeyboardOverlayPolicy.homeDockRestTopPx(stackBottom, mHomeFloatDockPx,
+            mHomeFloatImePushPx) - layerTop;
+        int keyboardTop = KeyboardOverlayPolicy.homeKeyboardTopPx(mHomeFloatKeyboardShown,
+            mHomeFloatImePushPx, stackBottom, mHomeFloatStackPx);
+        if (keyboardTop >= 0) keyboardTop = Math.max(0, keyboardTop - layerTop);
+        return new int[]{dockTop, keyboardTop};
+    }
+
+    /**
      * Stands the chips' row on the edge that covers Home from below
      * ({@link com.termux.app.terminal.HomeFloatChipsPolicy#rowTopPx}), as a translation in the
-     * float layer, set only on a change. Whether the row shows.
+     * float layer, set only on a change; the edges are in the layer's pixels
+     * ({@link #homeEdgesInFloatLayer}). Whether the row shows.
      */
     private boolean placeHomeFloatChips(int dockTopPx, int keyboardTopPx) {
         com.termux.app.terminal.HomeFloatChipsView chips = mHomeFloatChips;
         com.termux.app.terminal.HomeFloatLayer layer = mPaneController == null ? null
             : mPaneController.homeFloatLayer();
         if (chips == null || layer == null || chips.getVisibility() != View.VISIBLE) return false;
-        int[] at = new int[2];
-        layer.getLocationOnScreen(at);
         float y = com.termux.app.terminal.HomeFloatChipsPolicy.rowTopPx(
             getResources().getDisplayMetrics().density, dockTopPx, keyboardTopPx)
-            - at[1] - chips.getTop();
+            - chips.getTop();
         if (chips.getTranslationY() != y) chips.setTranslationY(y);
         return true;
     }
