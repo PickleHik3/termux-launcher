@@ -3494,8 +3494,9 @@ public final class TerminalView extends View {
             // rows, where the resize will put it: drawing starts that many rows up and is moved up
             // by as many lines, so mTopRow, hit-testing and every row below stay where they were.
             final int fillRows = currentTravelFillRows();
-            final float fillClipTop = fillRows > 0 ? travelFillClipTopPx(mTravelAnchorOffsetPx,
-                mTravelHeadroomChangePx, mTravelProgress, mRenderer.mFontLineSpacingAndAscent) : 0f;
+            final float fillClipTop = fillRows > 0 ? GridPixels.snap(travelFillClipTopPx(
+                mTravelAnchorOffsetPx, mTravelHeadroomChangePx, mTravelProgress,
+                mRenderer.mFontLineSpacingAndAscent)) : 0f;
             final int drawTopRow = mTopRow - fillRows;
             final int extraRows = fillRows + (scrollOffset != 0f ? 1 : 0);
             if (canvasTranslated) {
@@ -3779,8 +3780,9 @@ public final class TerminalView extends View {
      */
     public float getPaddingRowTop(int row) {
         if (mRenderer == null) return 0f;
-        float drawOffset = getVerticalContentOffset() - mScrollOffsetPixels;
-        return Math.round(drawOffset + mRenderer.getFontLineSpacingAndAscent() + row * mRenderer.getFontLineSpacing());
+        int drawOffset = GridPixels.snap(getVerticalContentOffset() - mScrollOffsetPixels);
+        return GridPixels.rowEdge(drawOffset + mRenderer.getFontLineSpacingAndAscent(),
+            mRenderer.getFontLineSpacing(), row);
     }
 
     /**
@@ -4031,11 +4033,14 @@ public final class TerminalView extends View {
      * How far down the grid is drawn this frame. A travelling grid is drawn from where it stood
      * when the travel began, displaced toward where the settle's resize will put it (see
      * mTravelActive); a smooth scroll shifts it by its pixel offset.
+     *
+     * <p>Always a whole number of pixels ({@link GridPixels#snap}): the grid is translated by this,
+     * and a fraction here would put every row's edge between two pixels.
      */
     private float currentDrawOffset() {
-        return (mTravelActive
+        return GridPixels.snap((mTravelActive
             ? mTravelAnchorOffsetPx + mTravelDisplacementPx : getVerticalContentOffset())
-            - mScrollOffsetPixels;
+            - mScrollOffsetPixels);
     }
 
     /**
