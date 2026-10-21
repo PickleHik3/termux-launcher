@@ -2,7 +2,7 @@ package com.termux.app.chrome;
 
 import androidx.annotation.NonNull;
 
-/** The one rule that turns three facts about the system wallpaper into a {@link WallpaperPicture}. */
+/** The one rule that turns the facts about the wallpaper into a {@link WallpaperPicture}. */
 public final class WallpaperPicturePolicy {
 
     private WallpaperPicturePolicy() {
@@ -20,7 +20,20 @@ public final class WallpaperPicturePolicy {
     @NonNull
     public static WallpaperPicture resolve(boolean serviceRunning, boolean launcherSetCurrentWallpaper,
                                            boolean stillFileExists) {
-        if (!serviceRunning || launcherSetCurrentWallpaper) {
+        return resolve(serviceRunning, launcherSetCurrentWallpaper, stillFileExists, false);
+    }
+
+    /**
+     * {@link #resolve(boolean, boolean, boolean)} with the launcher's app-only picture.
+     *
+     * @param appOnlyPictureOnDisk the picker set a picture for the launcher alone and its exact
+     *                             copy is on disk: the launcher draws that copy itself, so it is
+     *                             the picture on screen whatever Android runs behind it
+     */
+    @NonNull
+    public static WallpaperPicture resolve(boolean serviceRunning, boolean launcherSetCurrentWallpaper,
+                                           boolean stillFileExists, boolean appOnlyPictureOnDisk) {
+        if (appOnlyPictureOnDisk || !serviceRunning || launcherSetCurrentWallpaper) {
             return WallpaperPicture.MATCHES_SCREEN;
         }
         return stillFileExists ? WallpaperPicture.BEST_EFFORT : WallpaperPicture.NO_STILL;
