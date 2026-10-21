@@ -16,8 +16,6 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.place.HomeChromePolicy;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
@@ -980,15 +978,6 @@ public class HomeFloatTest {
 
     private static void idle() {
         Shadows.shadowOf(Looper.getMainLooper()).idle();
-    }
-
-    @Test
-    public void homeWearsNoStatusBarWhetherFloatsExistOrNot() {
-        // 2026-10-19: no bar comes onto Home with the floats; minimised ones wait in chips above
-        // the dock instead.
-        assertFalse(HomeChromePolicy.statusShownAtRest(PaneWallPage.WIDGETS));
-        assertTrue(HomeChromePolicy.statusShownAtRest(PaneWallPage.TERMINAL));
-        assertTrue(HomeChromePolicy.statusShownAtRest(PaneWallPage.DISPLAY));
     }
 
     // --- The float's shell gets its size ---

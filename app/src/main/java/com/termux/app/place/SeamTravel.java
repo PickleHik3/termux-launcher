@@ -62,7 +62,7 @@ public final class SeamTravel {
 
     /** Whether two pages are on different halves of the wall: one a Home page, one a window. */
     public static boolean crosses(@NonNull PaneWallPage a, @NonNull PaneWallPage b) {
-        return HomeChromePolicy.isHome(a) != HomeChromePolicy.isHome(b);
+        return (a == PaneWallPage.WIDGETS) != (b == PaneWallPage.WIDGETS);
     }
 
     /**
@@ -195,7 +195,7 @@ public final class SeamTravel {
      * Whether the Workspace's bar can be laid out over a Home page for a slide toward the
      * Workspace without moving anything on that page: Home stands nothing on its top or side edges,
      * whose stacks the bar's band would push in. The bar overlays Home's canvas
-     * ({@link HomeChromePolicy#statusOverlays}), so with those edges empty nothing on Home moves.
+     * (a Home page starts at the canvas's top, {@link PageTopInsets#pageTopInsetPx}), so with those edges empty nothing on Home moves.
      */
     public static boolean statusCanArriveOver(@NonNull PlaceLayout home) {
         return EdgeStackPolicy.stack(home, Edge.TOP).isEmpty()
@@ -210,8 +210,8 @@ public final class SeamTravel {
      * right on a frame between two Home pages, the side the Workspace stands on in the row.
      */
     public static float workspaceScreenXPx(@NonNull Frame frame, int widthPx) {
-        boolean fromWorkspace = !HomeChromePolicy.isHome(frame.from);
-        boolean towardWorkspace = !HomeChromePolicy.isHome(frame.toward);
+        boolean fromWorkspace = frame.from != PaneWallPage.WIDGETS;
+        boolean towardWorkspace = frame.toward != PaneWallPage.WIDGETS;
         if (fromWorkspace && towardWorkspace) return 0f;
         if (!fromWorkspace && !towardWorkspace) return widthPx;
         // The far side of a frame stands one width to the right of the near one.

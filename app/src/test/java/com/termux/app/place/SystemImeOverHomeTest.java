@@ -2,8 +2,6 @@ package com.termux.app.place;
 
 import static org.junit.Assert.assertEquals;
 
-import com.termux.app.wall.PaneWallPage;
-
 import org.junit.Test;
 
 /**
@@ -82,8 +80,7 @@ public class SystemImeOverHomeTest {
         int rootInnerBottom = WINDOW_BOTTOM - rootFitBottomPx;
         int stackTop = rootInnerBottom - STACK_MARGIN - DOCK;
         int take = KeyboardOverlayPolicy.systemImeTakePx(rootFitBottomPx, NAV_BAR, 0);
-        boolean dockOverlays = HomeChromePolicy.dockOverlays(
-            home ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL);
+        boolean dockOverlays = home;
         int overlap = KeyboardOverlayPolicy.overlapPx(dockOverlays, DOCK, STACK_MARGIN, 0,
             dockOverlays ? take : 0);
         return stackTop + overlap;

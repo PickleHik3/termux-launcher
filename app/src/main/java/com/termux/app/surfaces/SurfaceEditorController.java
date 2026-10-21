@@ -44,7 +44,6 @@ import com.termux.app.chrome.GlassMotion;
 import com.termux.app.fragments.settings.LayoutCanvasView;
 import com.termux.app.layouteditor.EditorM3;
 import com.termux.app.layouteditor.LayoutEditorController;
-import com.termux.app.place.HomeChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.statusbar.TopPaneClockForm;
 import com.termux.app.surfaces.AppearanceLooks.Control;
@@ -280,7 +279,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * Over a window they are the Workspace's, as they always were.
      */
     private boolean editsHome() {
-        return HomeChromePolicy.wearsHomeShape(editedPage());
+        return editedPage() == PaneWallPage.WIDGETS;
     }
 
     /** Corners' legend: the scope word on Home, so a Home edit never reads as the Workspace's. */
@@ -629,9 +628,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             restore = null;
         // The remembered place only on the half the wall rests on: the editor edits the page the
         // wall rests on, never a half left in an earlier session.
-        if (restore != null && layoutMode && place == null)
-            place = HomeChromePolicy.restoredEditorPlace(placeNamed(restore.place),
-                mHost.pageOnScreen());
+        if (restore != null && layoutMode && place == null) {
+            PaneWallPage remembered = placeNamed(restore.place);
+            if (remembered != null
+                && !com.termux.app.place.SeamTravel.crosses(remembered, mHost.pageOnScreen()))
+                place = remembered;
+        }
         mOpen = true;
         mHost.retainGlassCapture(true);
         // No Look drag is under way at an open: a preview left behind by one that never saw its
@@ -3027,7 +3029,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
-        boolean home = HomeChromePolicy.wearsHomeShape(page);
+        boolean home = page == PaneWallPage.WIDGETS;
         layout.setShape(prefs.getLayoutStyle(home),
             AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(home)),
             AppearanceLooks.marginDp(prefs.getLayoutMarginDp(home)));

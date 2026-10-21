@@ -404,7 +404,7 @@ public class LensBeadGeometryTest {
             com.termux.app.wall.PaneWallPage.WIDGETS, com.termux.app.wall.PaneWallPage.TERMINAL);
         com.termux.app.place.PlaceChromeTravel.States states = place ->
             new com.termux.app.place.PlaceChromeTravel.Rest(false, false,
-                !com.termux.app.place.HomeChromePolicy.isHome(place));
+                place != com.termux.app.wall.PaneWallPage.WIDGETS);
         float rest = 80f;
         float cover = 300f;
         int width = 1000;
