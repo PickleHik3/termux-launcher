@@ -85,6 +85,13 @@ the **Drawer tile**, which any design can carry.
 _Avoid_: dock style (the old name, it collides with **Style**), dock form, dock theme, Glass tray,
 Lens beads, Wall strip, Taskbar (old names; Taskbar became the Drawer tile, Prompt line the Search field)
 
+**Dress**:
+Everything a page wears: the layout it follows and the elements it leaves out, the **Dock design**,
+the **Search field** and **Drawer tile**, the **Style**, Corners and Margin, and the keyboard's
+shape. Home's dress equals a window's, less the extra keys, unless Home holds a **Home layout**.
+Whether the keyboard is open is not dress; each half remembers that.
+_Avoid_: outfit, chrome plan, place chrome
+
 **Drawer tile**:
 A dock tile that opens the app drawer, there when the layout turns it on, with any **Dock design**,
 standing at the start, middle or end of the apps row. Once the Taskbar design's (until 2026-10-21).
@@ -271,6 +278,11 @@ dragging back before the first window returns to the last Home page. In code it 
 `PaneWallPage`. See ADR 0008.
 _Avoid_: pane wall (the retired name), pager, strip, carousel, home screen
 
+**Window chip**:
+The status bar's chip for one window, the display window or a **Home float**, the same chips in the
+same order on both halves of the wall. #3 Strip's tiles show the same window chips at tile size.
+_Avoid_: pill (the dictation control), window pill, run strip entry, float chip
+
 **Workspace**:
 The terminal half of the wall, right of Home: the current session's windows, then the display
 windows, under the full chrome. It exists while its row has at least one window; closing the last
@@ -402,8 +414,9 @@ _Avoid_: bar (for the keyboard), widget, slot (the store's word for where an ele
 
 **Home layout**:
 An opt-in layout of Home's own, for a user who wants Home laid out unlike the Workspace. Off by
-default, when Home wears the one shared layout; while on, the bar and dock may change on the swipe
-between the halves. It is to the layout what a surface's override is to **Base**.
+default, when Home wears the one shared layout, its **Style**, Corners and Margin included; while
+on, Home holds its own copy of all of them, and the bar and dock may change on the swipe between the
+halves. It is to the layout what a surface's override is to **Base**.
 _Avoid_: Home variant, Home place
 
 **Layout editor**:

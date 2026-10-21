@@ -50,6 +50,49 @@ tile**). It changes the dock-design work in [`home-dock-styles-2026-10-20.md`](h
 - Migration: Prompt line → #1 Tray with the Search field on; Taskbar → #1 Tray with the Drawer
   tile on (its position kept).
 
+## Deepenings
+
+From the architecture review of 2026-10-21 (report: `~/reports/architecture-chrome-2026-10-21/`,
+not in the repo). Each lands as its own pure refactor, with today's behaviour kept and the suite green,
+before the build step that changes behaviour through it.
+
+### The Dress resolver (before step 1), in `chrome/`
+
+- For any page it answers the page's **Dress**: the layout worn and the elements that page leaves
+  out, the Dock design, the Search field and Drawer tile, Style/Corners/Margin, and the keyboard's
+  shape (height, chin, rows, form). Whether the keyboard is open is not dress; each half remembers
+  that (Home's stays closed, ADR 0003).
+- With the Home layout off, Home's Style, Corners and Margin follow the shared layout (decided
+  2026-10-21; 0008 had made them Home's own). The Home-layout migration also carries a differing
+  Home shape.
+- The activity, the Layout editor (in place of `LayoutVariant.offers` and its Home filter) and later
+  the seam crossing all read the dress.
+- `HomeChromePolicy` is deleted. Its call sites (38 in `TermuxActivity`) move to the dress one by
+  one; sites that mean "is this a Home page" (paging, the home press) keep a plain page check.
+  `homeDockStyle()` goes with it.
+
+### The window chips (before step 2), in `chrome/`
+
+- One ordered list of **window chips**: the Workspace's windows, the display window at its slot,
+  the Home floats. The bar and the #3 Strip tiles adapt it, and the run strip does too until step 3
+  drops it. Shell marks are observed once per refresh, before the list is built.
+- One place decides what a tap or close on a chip means (slide to that window, travel Home and
+  restore that float, close that window); the activity carries it out, and its four tap paths
+  become one. `WindowChipTarget` is absorbed; `RunStripModel` and the float chips go with their
+  steps.
+
+### Tests
+
+Both are tested on the plain JVM through their interfaces, with no Robolectric and no reflection
+into `TermuxActivity`. Reflection-based activity tests that cover the same paths are trimmed once
+the new tests cover them.
+
+### Later, inside steps 3 and 4
+
+The seam crossing (one module from first frame to settle, fed two dresses), the Dock design seam
+(#1–#3 behind one adapter each, toggles apart), and per-layout keys plus a "do these differ" query
+in the layout store.
+
 ## Build order
 
 Each step lands and passes an emulator check before the next.
