@@ -46,14 +46,16 @@ public final class SeamCrossing {
         @NonNull final PlaceLayout layout;
         @NonNull final SeamDress.StackDress stack;
         final boolean keyboardUp;
+        final int restRowsPx;
 
         private Half(@NonNull PaneWallPage page, @NonNull Dress dress, @NonNull PlaceLayout layout,
-                     @NonNull SeamDress.StackDress stack, boolean keyboardUp) {
+                     @NonNull SeamDress.StackDress stack, boolean keyboardUp, int restRowsPx) {
             this.page = page;
             this.dress = dress;
             this.layout = layout;
             this.stack = stack;
             this.keyboardUp = keyboardUp;
+            this.restRowsPx = restRowsPx;
         }
 
         /**
@@ -68,7 +70,21 @@ public final class SeamCrossing {
         public static Half of(@NonNull PaneWallPage page, @NonNull Dress dress,
                               @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
                               boolean keyboardUp) {
-            return new Half(page, dress, layout, stack, keyboardUp);
+            return new Half(page, dress, layout, stack, keyboardUp, -1);
+        }
+
+        /**
+         * @param restRowsPx the dock rows' height as the half's layout lays them out at rest, less
+         *                   the extra keys row itself: each row's own air as its neighbours there
+         *                   give it (the A-Z row's chin and crown, the apps row's air alone or
+         *                   shared). Negative while unknown, and a fold then reads no difference.
+         * @see #of(PaneWallPage, Dress, PlaceLayout, SeamDress.StackDress, boolean)
+         */
+        @NonNull
+        public static Half of(@NonNull PaneWallPage page, @NonNull Dress dress,
+                              @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
+                              boolean keyboardUp, int restRowsPx) {
+            return new Half(page, dress, layout, stack, keyboardUp, restRowsPx);
         }
     }
 
@@ -265,6 +281,11 @@ public final class SeamCrossing {
         /** The dock rows a fold leaves standing, outside the extra keys; empty unless it folds. */
         @NonNull java.util.List<Element> foldHeld = java.util.Collections.emptyList();
         /**
+         * How much taller the keyless half's rows rest than the other half's less the extra keys,
+         * which a fold travels too ({@link SeamTravel#foldRowsSinkPx}); 0 unless it folds.
+         */
+        int foldRestGrowthPx;
+        /**
          * Whether the halves dress the stack differently, and so whether it is dressed again when it
          * changes halves; whether it then dips whole, keyboard included; which half keeps a keyboard
          * in the stack.
@@ -368,6 +389,10 @@ public final class SeamCrossing {
         mRun.foldHeld = mRun.plan == DockPlan.FOLD_OUT ? SeamTravel.rowsOutsideExtraKeys(here)
             : mRun.plan == DockPlan.FOLD_IN ? SeamTravel.rowsOutsideExtraKeys(there)
             : java.util.Collections.emptyList();
+        // Its rows travel from one half's rest to the other's: the keyless half's may stand
+        // taller than the keyed half's less the extra keys (the A-Z row's chin on the rim).
+        mRun.foldRestGrowthPx = foldRestGrowthPx(mRun.plan, committed.restRowsPx,
+            other.restRowsPx);
         // Only from Home: the Workspace's bar is the one that travels with its page, unless the
         // bar is one across the wall and stands still.
         mRun.statusMayShow = !mRun.barStill && committed.page == PaneWallPage.WIDGETS
@@ -556,6 +581,27 @@ public final class SeamCrossing {
      */
     public boolean foldHolds(@NonNull Element row) {
         return mRun.foldHeld.contains(row);
+    }
+
+    /**
+     * How much taller the keyless half's dock rows rest than the keyed half's less the extra keys
+     * row, which a fold's rows travel on top of the extra keys' height so its end at Home's side
+     * is Home's rest ({@link SeamTravel#foldRowsSinkPx}). 0 while nothing folds, and wherever
+     * either half's rows were not known at begin.
+     */
+    public int foldRestGrowthPx() {
+        return mRun.foldRestGrowthPx;
+    }
+
+    /** The keyless half's rest rows less the keyed half's, for a fold; 0 otherwise or unknown. */
+    private static int foldRestGrowthPx(@NonNull DockPlan plan, int committedRowsPx,
+                                        int otherRowsPx) {
+        if (committedRowsPx < 0 || otherRowsPx < 0) return 0;
+        switch (plan) {
+            case FOLD_OUT: return otherRowsPx - committedRowsPx;
+            case FOLD_IN: return committedRowsPx - otherRowsPx;
+            default: return 0;
+        }
     }
 
     /**

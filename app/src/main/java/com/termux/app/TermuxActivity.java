@@ -22037,12 +22037,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.Dress otherDress = dressOf(other);
         // A keyboard in the stack, not one floating in a frame of its own: the committed half's
         // as it is up now, the other's as it wants one on arrival.
+        // And each half's dock rows at rest, less the extra keys, so a fold travels from one
+        // half's rest to the other's (SeamCrossing.foldRestGrowthPx).
         com.termux.app.place.SeamCrossing.Half here = com.termux.app.place.SeamCrossing.Half.of(
             mLastWallPage, committedDress, committed, stackDressOf(committedDress, orientation),
-            committedKeyboardVisible() && !isKeyboardFloating());
+            committedKeyboardVisible() && !isKeyboardFloating(), dockRowsAtRestPx(committed));
         com.termux.app.place.SeamCrossing.Half there = com.termux.app.place.SeamCrossing.Half.of(
             other, otherDress, otherLayout, stackDressOf(otherDress, orientation),
-            mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other));
+            mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other),
+            dockRowsAtRestPx(otherLayout));
         boolean begins = mSeamCrossing.other() == null;
         mSeamCrossing.begin(here, there,
             com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mSeamFrameGlass,
@@ -22053,6 +22056,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             refreshTerminalWindowBar();
             mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         }
+    }
+
+    /**
+     * The dock rows {@code layout} lays out at rest, less the extra keys row itself: each row as
+     * its neighbours there give it its air (the A-Z row's chin on the dock's rim, its crown, the
+     * apps row's air alone or shared), from the same policy the geometry pass sizes them by.
+     * Once per crossing, at its begin; -1 before the preferences are read.
+     */
+    private int dockRowsAtRestPx(@NonNull PlaceLayout layout) {
+        if (mPreferences == null) return -1;
+        return DockLayoutPolicy.compute(buildDockInputs(0, layout)).combinedHeight(0, false);
     }
 
     /** {@link #frameStandsDown} as the seam's crossing asks it, bound once rather than per gesture. */
@@ -22449,6 +22463,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** How far the dock rows' layers last sank into the keyboard's top edge. */
     private float mSeamRowSinkPx;
+    /** How much of the rows' layers that sink cut; and the sheet's sink and cut, for a fold. */
+    private float mSeamRowCutPx;
+    private float mSeamSheetSinkPx;
+    private float mSeamSheetCutPx;
+    /** How far a fold sank the A-Z row's own layers while it held that row. */
+    private float mSeamHeldSinkPx;
     /** Whether that sink left the A-Z row's layers standing, for a fold that holds the row. */
     private boolean mSeamRowSinkHoldsAz;
 
@@ -22476,7 +22496,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * into its own bottom edge. Wherever the row stands in the stack, the rows between it and the
      * screen's edge are held where they are laid out (EdgeStackView.holdOutside,
      * SeamCrossing.foldHolds), and only the rows on the canvas's side of it go down, to where they
-     * rest without it. Reads two view heights, no store.
+     * rest without it.
+     *
+     * <p>Where they rest is Home's own stack, which is not the window's less the extra keys (#94):
+     * the window's stack keeps the terminal's flush padding, half of it under the rows, and Home's
+     * A-Z row stands on the dock's rim and carries its chin there (SeamCrossing.foldRestGrowthPx).
+     * The rows and the sheet travel those too (SeamTravel.foldRowsSinkPx, foldSheetSinkPx), so at
+     * Home's end the stack stands exactly as Home's settle lays it out and the settle moves
+     * nothing. Only while the stack lays the window's rows out, the extra keys among them; Home's
+     * own rows are at their rest. Reads view heights and a padding, no store.
      */
     private void applySeamFoldSink() {
         if (Float.isNaN(mTravelFoldShare)) return;
@@ -22484,12 +22512,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View keys = hotView(R.id.terminal_toolbar_host);
         boolean keysInStack = rowStack != null && keys != null && keys.getParent() == rowStack
             && keys.getVisibility() == View.VISIBLE;
-        float sink = com.termux.app.place.SeamTravel.foldSinkPx(
-            keysInStack ? keys.getHeight() : 0, mTravelFoldShare);
-        applySeamRowSink(sink, mSeamCrossing.foldHolds(com.termux.app.place.Element.AZ));
+        if (!keysInStack) {
+            applySeamRowSink(0f);
+            return;
+        }
+        float share = mTravelFoldShare;
+        int keysPx = keys.getHeight();
+        View stack = hotView(R.id.accessory_stack_container);
+        int padUnderRows = stack != null ? Math.max(0, stack.getPaddingBottom()) : 0;
+        int flush = Math.max(0, mAppliedTerminalFlushPaddingPx);
+        int growth = mSeamCrossing.foldRestGrowthPx();
+        float cut = com.termux.app.place.SeamTravel.foldSinkPx(keysPx, share);
+        float rows = com.termux.app.place.SeamTravel.foldRowsSinkPx(keysPx, share, padUnderRows,
+            growth);
+        float sheet = com.termux.app.place.SeamTravel.foldSheetSinkPx(keysPx, share, flush,
+            growth);
+        float held = com.termux.app.place.SeamTravel.foldHeldSinkPx(padUnderRows, share);
+        // With rows held outside the extra keys, the keys row cuts itself (holdOutside) and the
+        // stack is cut only where the held rows end; with none, the stack's cut is the keys'.
+        boolean holdsAz = mSeamCrossing.foldHolds(com.termux.app.place.Element.AZ);
+        boolean holdsRows = holdsAz || mSeamCrossing.foldHolds(com.termux.app.place.Element.APPS);
+        applySeamLayerSink(rows, holdsRows ? rows - held : cut, sheet, sheet - held, held,
+            holdsAz);
         if (rowStack instanceof com.termux.app.place.EdgeStackView) {
-            ((com.termux.app.place.EdgeStackView) rowStack).holdOutside(
-                keysInStack ? keys : null, sink);
+            ((com.termux.app.place.EdgeStackView) rowStack).holdOutside(keys, rows - held, cut);
         }
     }
 
@@ -22500,7 +22546,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * with a keyboard in the stack; 0 puts every layer back.
      */
     private void applySeamRowSink(float sinkPx) {
-        applySeamRowSink(sinkPx, false);
+        applySeamLayerSink(sinkPx, sinkPx, sinkPx, sinkPx, 0f, false);
         // Every sink but a fold's moves the rows together: a fold's hold, if one ran, lets go.
         View rowStack = hotView(R.id.accessory_row_stack);
         if (rowStack instanceof com.termux.app.place.EdgeStackView) {
@@ -22508,16 +22554,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** {@link #applySeamRowSink(float)}, leaving the A-Z row's own layers standing if asked. */
-    private void applySeamRowSink(float sinkPx, boolean holdsAz) {
-        if (sinkPx == mSeamRowSinkPx && holdsAz == mSeamRowSinkHoldsAz) return;
-        mSeamRowSinkPx = sinkPx;
+    /**
+     * The dock's layers drawn lower than they are laid out, each cut at its own laid-out bottom
+     * less a hidden part: the rows' layers by {@code rowsPx}, cut by {@code rowsCutPx}; the dock's
+     * sheet by {@code sheetPx}, cut by {@code sheetCutPx}; and, for a fold that holds the A-Z
+     * row, that row's own layers by {@code heldPx}, uncut. A sink into the keyboard moves them all
+     * alike; a fold's differ (applySeamFoldSink).
+     */
+    private void applySeamLayerSink(float rowsPx, float rowsCutPx, float sheetPx,
+                                    float sheetCutPx, float heldPx, boolean holdsAz) {
+        if (rowsPx == mSeamRowSinkPx && rowsCutPx == mSeamRowCutPx
+            && sheetPx == mSeamSheetSinkPx && sheetCutPx == mSeamSheetCutPx
+            && heldPx == mSeamHeldSinkPx && holdsAz == mSeamRowSinkHoldsAz) return;
+        mSeamRowSinkPx = rowsPx;
+        mSeamRowCutPx = rowsCutPx;
+        mSeamSheetSinkPx = sheetPx;
+        mSeamSheetCutPx = sheetCutPx;
+        mSeamHeldSinkPx = heldPx;
         mSeamRowSinkHoldsAz = holdsAz;
         for (int id : SEAM_ROW_LAYERS) {
             View layer = hotView(id);
             if (layer == null) continue;
-            float layerSink = holdsAz && isSeamAzLayer(id) ? 0f : sinkPx;
-            int hidden = Math.round(layerSink);
+            boolean sheet = id == R.id.accessory_surface_host;
+            boolean held = holdsAz && isSeamAzLayer(id);
+            float layerSink = held ? heldPx : sheet ? sheetPx : rowsPx;
+            int hidden = held ? 0 : Math.round(sheet ? sheetCutPx : rowsCutPx);
             if (layer.getTranslationY() != layerSink) layer.setTranslationY(layerSink);
             if (hidden <= 0) {
                 if (layer.getClipBounds() != null) layer.setClipBounds(null);

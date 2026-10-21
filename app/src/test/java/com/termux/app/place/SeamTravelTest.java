@@ -240,6 +240,108 @@ public class SeamTravelTest {
         assertEquals(0f, SeamTravel.foldSinkPx(110, 3f), EPSILON);
     }
 
+    // ---- the fold lands on Home's rest (#94: "the dock moves down, then snaps back up") -------
+
+    /** The stack's container bottom on screen, which the margin under it fixes on both halves. */
+    private static final int BOTTOM = 2000;
+    private static final float DENSITY = 2.75f;
+    private static final int APPS_PX = 150;
+    private static final int KEYS_PX = 110;
+
+    /** The A-Z row as the real policy lays it out in a stack: its chin only on the dock's rim. */
+    private static int azPx(List<Element> outermostFirst) {
+        return com.termux.app.terminal.AccessoryStackLayoutPolicy.computeAzRowHeightPx(true,
+            com.termux.app.terminal.AccessoryStackLayoutPolicy.rowOverAz(outermostFirst),
+            com.termux.app.terminal.AccessoryStackLayoutPolicy.rowUnderAz(outermostFirst),
+            DENSITY);
+    }
+
+    /** The rows a layout's bottom stack lays out at rest, less the extra keys row itself. */
+    private static int restRowsPx(PlaceLayout layout) {
+        List<Element> stack = EdgeStackPolicy.stack(layout, Edge.BOTTOM);
+        return (stack.contains(Element.APPS) ? APPS_PX : 0)
+            + (stack.contains(Element.AZ) ? azPx(stack) : 0);
+    }
+
+    /**
+     * The window's stack laid out through a fold, read at one share: where the rows' top, the
+     * rows' drawn bottom, and the sheet's top and bottom stand on screen. {@code flushPx} is the
+     * terminal's flush padding, half of it under the rows (the stack's bottom padding), the rest
+     * of it glass over them.
+     */
+    private static float[] foldAt(float share, int windowRowsPx, int flushPx, int growthPx) {
+        int padUnder = flushPx / 2;
+        int laidOutRows = windowRowsPx + KEYS_PX;
+        float rowsSink = SeamTravel.foldRowsSinkPx(KEYS_PX, share, padUnder, growthPx);
+        float sheetSink = SeamTravel.foldSheetSinkPx(KEYS_PX, share, flushPx, growthPx);
+        float heldSink = SeamTravel.foldHeldSinkPx(padUnder, share);
+        float rowsTop = BOTTOM - padUnder - laidOutRows + rowsSink;
+        // The rows are cut at their own bottom by the extra keys' hidden part.
+        float rowsBottom = BOTTOM - padUnder + rowsSink - SeamTravel.foldSinkPx(KEYS_PX, share);
+        float sheetTop = BOTTOM - laidOutRows - flushPx + sheetSink;
+        // The sheet is cut by its sink less the padding under the rows it goes down with.
+        float sheetBottom = BOTTOM - padUnder + sheetSink - (sheetSink - heldSink);
+        return new float[] {rowsTop, rowsBottom, sheetTop, sheetBottom};
+    }
+
+    @Test
+    public void homesRowsRestTallerThanTheWindowsLessTheExtraKeysByTheAzChin() {
+        // The shipped order: the extra keys outermost, under the letters. On Home the letters are
+        // the rim and carry their chin, so Home's rows are not the window's less the keys.
+        List<Element> window = EdgeStackPolicy.stack(workspaceWithDock(), Edge.BOTTOM);
+        assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.AZ, Element.APPS), window);
+        int chin = Math.round(DENSITY * 10f);
+        assertEquals(chin, restRowsPx(homeWithDock()) - restRowsPx(workspaceWithDock()));
+    }
+
+    @Test
+    public void aFoldOutEndsWhereHomesStackRestsChinAndFlushPaddingIncluded() {
+        int windowRows = restRowsPx(workspaceWithDock());
+        int homeRows = restRowsPx(homeWithDock());
+        int growth = homeRows - windowRows;
+        for (int flush : new int[] {0, 1, 24, 37}) {
+            float[] end = foldAt(0f, windowRows, flush, growth);
+            // Home's rest: no flush padding, the rows and the sheet on the stack's bottom.
+            assertEquals("rows' top, flush " + flush, BOTTOM - homeRows, end[0], 0.5f);
+            assertEquals("sheet's top, flush " + flush, BOTTOM - homeRows, end[2], 0.5f);
+            assertEquals("sheet's bottom, flush " + flush, BOTTOM, end[3], 0.5f);
+            // The letters end where Home draws them: their chin's air under them, on the glass.
+            assertEquals("letters' bottom, flush " + flush, BOTTOM - growth, end[1], 0.5f);
+            // And the window's end is the window's rest: nothing moved there.
+            float[] start = foldAt(1f, windowRows, flush, growth);
+            assertEquals(BOTTOM - flush / 2 - windowRows - KEYS_PX, start[0], 0.5f);
+            assertEquals(BOTTOM - windowRows - KEYS_PX - flush, start[2], 0.5f);
+            assertEquals(BOTTOM - flush / 2, start[3], 0.5f);
+        }
+    }
+
+    @Test
+    public void aFoldsRowsOnlyEverGoOneWayAndNeverPastHomesRest() {
+        int windowRows = restRowsPx(workspaceWithDock());
+        int homeRows = restRowsPx(homeWithDock());
+        float previous = Float.NEGATIVE_INFINITY;
+        for (int i = 0; i <= 50; i++) {
+            float share = 1f - i / 50f;
+            float top = foldAt(share, windowRows, 24, homeRows - windowRows)[0];
+            assertTrue("backwards at " + share, top >= previous);
+            assertTrue("past Home's rest at " + share, top <= BOTTOM - homeRows + 0.5f);
+            previous = top;
+        }
+    }
+
+    @Test
+    public void aFoldWithNothingElseDifferentIsTheExtraKeysAlone() {
+        // No flush padding and rows alike on both halves: the sink is the keys' hidden part.
+        for (float share : new float[] {0f, 0.25f, 1f}) {
+            assertEquals(SeamTravel.foldSinkPx(KEYS_PX, share),
+                SeamTravel.foldRowsSinkPx(KEYS_PX, share, 0, 0), EPSILON);
+            assertEquals(SeamTravel.foldSinkPx(KEYS_PX, share),
+                SeamTravel.foldSheetSinkPx(KEYS_PX, share, 0, 0), EPSILON);
+            assertEquals(0f, SeamTravel.foldHeldSinkPx(0, share), EPSILON);
+        }
+        assertEquals(6f, SeamTravel.foldHeldSinkPx(12, 0.5f), EPSILON);
+    }
+
     @Test
     public void theSameRowsOnBothHalvesStayPut() {
         Map<Element, Slot> slots = new EnumMap<>(Element.class);
