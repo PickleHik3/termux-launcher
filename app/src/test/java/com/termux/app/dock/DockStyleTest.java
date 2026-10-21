@@ -1,9 +1,11 @@
 package com.termux.app.dock;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.EnumSet;
 
 /**
@@ -60,16 +62,25 @@ public class DockStyleTest {
         assertEquals(DockStyle.TASKBAR, DockStyle.effectiveStyle(DockStyle.TASKBAR));
     }
 
+    /** The Prompt line is the Search field now (#96): a stray stored id draws as the tray. */
     @Test
-    public void thePromptLineIsBuilt() {
-        assertEquals(DockStyle.PROMPT_LINE, DockStyle.effectiveStyle(DockStyle.PROMPT_LINE));
+    public void thePromptLineIsNoDesignAnyMore() {
+        assertEquals(DockStyle.GLASS_TRAY, DockStyle.effectiveStyle(DockStyle.PROMPT_LINE));
+        assertFalse(DockStyle.BUILT.contains(DockStyle.PROMPT_LINE));
+        assertFalse("the picker never offers it", DockStyle.CHOICES.contains(DockStyle.PROMPT_LINE));
     }
 
     @Test
-    public void theWallStripIsBuiltAndSoIsEveryStyle() {
+    public void theWallStripIsBuiltAndSoIsEveryChoice() {
         assertEquals(DockStyle.WALL_STRIP, DockStyle.effectiveStyle(DockStyle.WALL_STRIP));
-        assertEquals("all five styles draw", EnumSet.allOf(DockStyle.class), DockStyle.BUILT);
-        for (DockStyle style : DockStyle.values())
+        assertEquals("every choice draws", EnumSet.copyOf(DockStyle.CHOICES), DockStyle.BUILT);
+        for (DockStyle style : DockStyle.CHOICES)
             assertEquals(style, DockStyle.effectiveStyle(style));
+    }
+
+    @Test
+    public void thePickerOffersTheDesignsInOrder() {
+        assertEquals(Arrays.asList(DockStyle.GLASS_TRAY, DockStyle.LENS_BEADS, DockStyle.TASKBAR,
+            DockStyle.WALL_STRIP), DockStyle.CHOICES);
     }
 }

@@ -127,7 +127,7 @@ public final class DockLayout {
     /** Configured dock corner radius in dp, or a negative value for the follow-the-style radius. */
     private final int mConfiguredCornerRadiusDp;
 
-    // --- The Prompt line's field (DockSurfaceSpec.PROMPT_LINE); all zero on every other dock ---
+    // --- The Search field (#96), under the apps row of any design; all zero while it is off ---
     /**
      * The band the field takes under the apps row on the same slab, as laid out now: the field
      * view and the slab's padding under it. It eases between 0 and

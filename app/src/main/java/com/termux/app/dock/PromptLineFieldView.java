@@ -24,8 +24,9 @@ import com.termux.terminal.TerminalColors;
 import com.termux.terminal.TextStyle;
 
 /**
- * The Prompt line's field (spec "Prompt line"): the command palette's search, standing in Home's
- * dock as a shell prompt, {@code ~ ❯ Search apps, commands, settings}, on a darker well.
+ * The <b>Search field</b> (once the Prompt line design's field, spec "Prompt line"; a toggle
+ * beside any Dock design since #96): the command palette's search, standing in the dock under its
+ * apps row as a shell prompt, {@code ~ ❯ Search apps, commands, settings}, on a darker well.
  *
  * <p>It holds no text of its own and takes no focus: it is a door. A tap opens the palette and
  * the keyboard with the caret in the palette's own query line

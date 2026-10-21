@@ -1251,15 +1251,19 @@ public final class LayoutEditorController {
 
     // ------------------------------------------------------------------------ the dock styles
 
-    /** Each style's name and silhouette, in {@link DockStyle#values()} order, as the row holds them. */
+    /** Each design's name and silhouette, in {@link DockStyle#CHOICES} order, as the row holds them. */
     private static final int[] DOCK_STYLE_LABELS = {
         R.string.layout_editor_dock_style_glass_tray, R.string.layout_editor_dock_style_lens_beads,
-        R.string.layout_editor_dock_style_taskbar, R.string.layout_editor_dock_style_prompt_line,
-        R.string.layout_editor_dock_style_wall_strip};
+        R.string.layout_editor_dock_style_taskbar, R.string.layout_editor_dock_style_wall_strip};
     private static final int[] DOCK_STYLE_ICONS = {
         R.drawable.ic_symbol_dock_glass_tray, R.drawable.ic_symbol_dock_lens_beads,
-        R.drawable.ic_symbol_dock_taskbar, R.drawable.ic_symbol_dock_prompt_line,
-        R.drawable.ic_symbol_dock_wall_strip};
+        R.drawable.ic_symbol_dock_taskbar, R.drawable.ic_symbol_dock_wall_strip};
+
+    /**
+     * The Search field toggle, the row's last item after a divider (#96); null before the row is
+     * bound.
+     */
+    @Nullable private Chip mSearchFieldChip;
 
     /**
      * Whether the dock styles show: in Layout mode on the Home layout, with its dock (the pinned
@@ -1272,8 +1276,10 @@ public final class LayoutEditorController {
     }
 
     /**
-     * One item per style in the row: its silhouette on a chip painted as the keyboard's type chips
-     * are, its name under it. The chip and the name are one target.
+     * One item per design in the row: its silhouette on a chip painted as the keyboard's type
+     * chips are, its name under it. The chip and the name are one target. After a divider, the
+     * Search field toggle in the same dress (#96): checked while the edited layout carries the
+     * field, with whichever design is picked.
      */
     private void bindDockStyles(@NonNull Views views) {
         views.dockStyles.removeAllViews();
@@ -1285,24 +1291,42 @@ public final class LayoutEditorController {
         int quiet = EditorM3.color(views.dockStyles,
             com.google.android.material.R.attr.colorOnSurfaceVariant);
         int[][] states = {{android.R.attr.state_checked}, {}};
-        DockStyle[] styles = DockStyle.values();
-        for (int i = 0; i < styles.length; i++) {
-            DockStyle style = styles[i];
-            View item = inflater.inflate(R.layout.layout_editor_dock_style_item, views.dockStyles,
-                false);
-            Chip chip = item.findViewById(R.id.layout_editor_dock_style_chip);
-            TextView label = item.findViewById(R.id.layout_editor_dock_style_label);
-            String name = mHost.context().getString(DOCK_STYLE_LABELS[i]);
-            chip.setChipIconResource(DOCK_STYLE_ICONS[i]);
-            chip.setChipBackgroundColor(new ColorStateList(states, new int[] {container, 0}));
-            chip.setChipIconTint(new ColorStateList(states, new int[] {onContainer, quiet}));
-            chip.setContentDescription(name);
-            label.setText(name);
+        List<DockStyle> styles = DockStyle.CHOICES;
+        for (int i = 0; i < styles.size(); i++) {
+            DockStyle style = styles.get(i);
             View.OnClickListener pick = tapped -> onDockStylePicked(style);
-            chip.setOnClickListener(pick);
-            item.setOnClickListener(pick);
-            views.dockStyles.addView(item);
+            addDockStyleItem(views, inflater, states, container, onContainer, quiet,
+                DOCK_STYLE_LABELS[i], DOCK_STYLE_ICONS[i],
+                mHost.context().getString(DOCK_STYLE_LABELS[i]), pick);
         }
+        views.dockStyles.addView(inflater.inflate(R.layout.layout_editor_dock_style_divider,
+            views.dockStyles, false));
+        mSearchFieldChip = addDockStyleItem(views, inflater, states, container, onContainer,
+            quiet, R.string.layout_editor_search_field_label, R.drawable.ic_symbol_dock_prompt_line,
+            mHost.context().getString(R.string.layout_editor_search_field),
+            tapped -> onSearchFieldToggled());
+    }
+
+    /** One item of the row, its chip painted and named, the chip and the name one target. */
+    @NonNull
+    private Chip addDockStyleItem(@NonNull Views views, @NonNull LayoutInflater inflater,
+                                  @NonNull int[][] states, int container, int onContainer,
+                                  int quiet, int labelRes, int iconRes,
+                                  @NonNull String description,
+                                  @NonNull View.OnClickListener onTap) {
+        View item = inflater.inflate(R.layout.layout_editor_dock_style_item, views.dockStyles,
+            false);
+        Chip chip = item.findViewById(R.id.layout_editor_dock_style_chip);
+        TextView label = item.findViewById(R.id.layout_editor_dock_style_label);
+        chip.setChipIconResource(iconRes);
+        chip.setChipBackgroundColor(new ColorStateList(states, new int[] {container, 0}));
+        chip.setChipIconTint(new ColorStateList(states, new int[] {onContainer, quiet}));
+        chip.setContentDescription(description);
+        label.setText(labelRes);
+        chip.setOnClickListener(onTap);
+        item.setOnClickListener(onTap);
+        views.dockStyles.addView(item);
+        return chip;
     }
 
     /**
@@ -1318,14 +1342,32 @@ public final class LayoutEditorController {
             return;
         }
         DockStyle picked = plan.dockStyle();
-        DockStyle[] styles = DockStyle.values();
-        for (int i = 0; i < styles.length && i < views.dockStyles.getChildCount(); i++) {
+        List<DockStyle> styles = DockStyle.CHOICES;
+        for (int i = 0; i < styles.size() && i < views.dockStyles.getChildCount(); i++) {
             Chip chip = views.dockStyles.getChildAt(i)
                 .findViewById(R.id.layout_editor_dock_style_chip);
-            if (chip.isChecked() != (styles[i] == picked))
-                chip.setChecked(styles[i] == picked);
+            if (chip.isChecked() != (styles.get(i) == picked))
+                chip.setChecked(styles.get(i) == picked);
         }
+        Chip search = mSearchFieldChip;
+        boolean field = plan.searchField();
+        if (search != null && search.isChecked() != field)
+            search.setChecked(field);
         views.tilesHost.setDockStylesShown(true);
+    }
+
+    /** The Search field toggle tapped: on or off for the edited layout, its design kept. */
+    private void onSearchFieldToggled() {
+        LayoutEditorPlan plan = mPlan;
+        Views views = mViews;
+        if (plan == null)
+            return;
+        LayoutEditorPlan.Drop drop = plan.setSearchField(!plan.searchField());
+        if (drop != LayoutEditorPlan.Drop.NONE)
+            afterCanvasWrite(drop);
+        // The chip toggles itself on a tap: the stored state is restated either way.
+        if (views != null)
+            syncDockStyles(views);
     }
 
     /** A style tapped: written for Home, both orientations, and the live dock follows it. */

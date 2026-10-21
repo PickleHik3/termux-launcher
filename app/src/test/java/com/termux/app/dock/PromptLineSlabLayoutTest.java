@@ -9,8 +9,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
 /**
- * The Prompt line's one taller slab: the tray's apps row untouched, then the palette's field
- * under it on the same glass, as wide as the row's 14 dp inset leaves it, the well standing as
+ * The Search field's taller slab (once the Prompt line design's, #96): the apps row untouched,
+ * then the palette's field under it on the same glass, with any Dock design, as wide as the row's 14 dp inset leaves it, the well standing as
  * far from the slab's lower edge as the icons do from its upper one, and the stack taller by the
  * field's band and nothing else. The band eases with the reveal; at none it is the tray.
  */
@@ -40,7 +40,7 @@ public class PromptLineSlabLayoutTest {
 
     private static DockLayout line(boolean capsule, boolean alone, float preset, float reveal) {
         return DockLayoutPolicy.compute(inputs(capsule, alone, preset)
-            .surface(DockSurfaceSpec.PROMPT_LINE).promptFieldReveal(reveal).build());
+            .surface(DockSurfaceSpec.GLASS_TRAY).promptFieldReveal(reveal).build());
     }
 
     private static boolean isPromptField(Field field) {
@@ -156,18 +156,18 @@ public class PromptLineSlabLayoutTest {
     public void onlyTheDocksOwnRowCarriesTheField() {
         // A row on another edge, a rail, or no row at all: no field, whatever the reveal.
         DockLayout top = DockLayoutPolicy.compute(inputs(true, true, 2.18f).appsRowOnEdge(true)
-            .surface(DockSurfaceSpec.PROMPT_LINE).promptFieldReveal(1f).build());
+            .surface(DockSurfaceSpec.GLASS_TRAY).promptFieldReveal(1f).build());
         assertEquals(0, top.promptFieldBandPx);
         DockLayout rail = DockLayoutPolicy.compute(inputs(true, true, 2.18f).appsRowOnEdge(true)
             .appsOnRail(true).appsRowPageStripShown(false)
-            .surface(DockSurfaceSpec.PROMPT_LINE).promptFieldReveal(1f).build());
+            .surface(DockSurfaceSpec.GLASS_TRAY).promptFieldReveal(1f).build());
         assertEquals(0, rail.promptFieldBandPx);
         DockLayout none = DockLayoutPolicy.compute(inputs(true, true, 2.18f).appsRowEnabledPref(false)
-            .surface(DockSurfaceSpec.PROMPT_LINE).promptFieldReveal(1f).build());
+            .surface(DockSurfaceSpec.GLASS_TRAY).promptFieldReveal(1f).build());
         assertEquals(0, none.promptFieldBandPx);
         assertEquals(0, none.combinedHeight(BASE_TOOLBAR_PX, false));
         DockLayout noStore = DockLayoutPolicy.compute(inputs(true, true, 2.18f)
-            .preferencesAvailable(false).surface(DockSurfaceSpec.PROMPT_LINE)
+            .preferencesAvailable(false).surface(DockSurfaceSpec.GLASS_TRAY)
             .promptFieldReveal(1f).build());
         assertEquals(0, noStore.promptFieldBandPx);
     }
@@ -179,5 +179,37 @@ public class PromptLineSlabLayoutTest {
         float well = WallStripRowPolicy.tileRadiusPx(dockRadius, line.promptFieldWellGapPx);
         assertEquals(dockRadius - line.promptFieldWellGapPx, well, 1e-3f);
         assertTrue(well > 0f);
+    }
+
+    private static DockLayout design(DockSurfaceSpec spec, float fieldReveal) {
+        return DockLayoutPolicy.compute(inputs(true, true, 2.18f).surface(spec)
+            .promptFieldReveal(fieldReveal).wallStripReveal(spec.wallStrip ? 1f : 0f).build());
+    }
+
+    /**
+     * The Search field stands under the apps row with every design (#96): the same band whatever
+     * the design, the stack taller by it and nothing else, and the Strip with the field the
+     * tallest dock of all.
+     */
+    @Test
+    public void theFieldStandsUnderTheAppsRowOfEveryDesign() {
+        DockSurfaceSpec[] designs = {DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.LENS_BEADS,
+            DockSurfaceSpec.TASKBAR, DockSurfaceSpec.WALL_STRIP};
+        int band = design(DockSurfaceSpec.GLASS_TRAY, 1f).promptFieldBandPx;
+        assertTrue(band > 0);
+        int tallest = 0;
+        for (DockSurfaceSpec spec : designs) {
+            DockLayout without = design(spec, 0f);
+            DockLayout with = design(spec, 1f);
+            assertEquals(spec.name, band, with.promptFieldBandPx);
+            assertEquals(spec.name, 0, without.promptFieldBandPx);
+            assertEquals(spec.name, without.wallStripBandPx, with.wallStripBandPx);
+            assertEquals(spec.name, without.appsBarHeightPx, with.appsBarHeightPx);
+            assertEquals(spec.name, without.combinedHeight(BASE_TOOLBAR_PX, false) + band,
+                with.combinedHeight(BASE_TOOLBAR_PX, false));
+            tallest = Math.max(tallest, with.combinedHeight(BASE_TOOLBAR_PX, false));
+        }
+        assertEquals("the Strip with the field is the tallest",
+            design(DockSurfaceSpec.WALL_STRIP, 1f).combinedHeight(BASE_TOOLBAR_PX, false), tallest);
     }
 }

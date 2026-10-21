@@ -100,21 +100,10 @@ public class DockSurfaceSpecLayoutTest {
             DockSurfaceSpec.LENS_BEADS.softRimDp < DockSurfaceSpec.GLASS_TRAY.softRimDp);
     }
 
+    /** The Prompt line is the Search field now (#96): a stray stored one draws the tray. */
     @Test
-    public void thePromptLineIsTheTraysGlassWithTheField() {
-        assertSame(DockSurfaceSpec.PROMPT_LINE, DockSurfaceSpec.forStyle(DockStyle.PROMPT_LINE));
-        DockSurfaceSpec line = DockSurfaceSpec.PROMPT_LINE;
-        DockSurfaceSpec tray = DockSurfaceSpec.GLASS_TRAY;
-        assertTrue(line.promptField);
-        assertFalse(tray.promptField);
-        assertFalse(DockSurfaceSpec.LENS_BEADS.promptField);
-        assertFalse(DockSurfaceSpec.PLAIN.promptField);
-        assertFalse("one slab, never beads", line.beads);
-        assertEquals(tray.dashesAboveSlab, line.dashesAboveSlab);
-        assertEquals(tray.softRimDp, line.softRimDp, 0f);
-        assertEquals(tray.shelf, line.shelf, 0f);
-        assertEquals(tray.iconReflections, line.iconReflections);
-        assertEquals(tray.contactShadow, line.contactShadow);
+    public void aStrayPromptLineDrawsTheTray() {
+        assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(DockStyle.PROMPT_LINE));
     }
 
     @Test
@@ -124,11 +113,10 @@ public class DockSurfaceSpecLayoutTest {
         DockSurfaceSpec tray = DockSurfaceSpec.GLASS_TRAY;
         assertTrue(bar.taskbar);
         for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN, tray,
-                DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.PROMPT_LINE}) {
+                DockSurfaceSpec.LENS_BEADS}) {
             assertFalse(other.name, other.taskbar);
             assertEquals(other.name, 1f, other.reflectionScale, 0f);
         }
-        assertFalse("tiles only, no field", bar.promptField);
         assertFalse("one slab, never beads", bar.beads);
         assertEquals(tray.dashesAboveSlab, bar.dashesAboveSlab);
         assertEquals(tray.softRimDp, bar.softRimDp, 0f);
@@ -148,12 +136,11 @@ public class DockSurfaceSpecLayoutTest {
         assertTrue("the tiles are never reflected: the lower bevel alone",
             wall.reflectsLowerBevelOnly());
         for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN, tray,
-                DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.PROMPT_LINE, DockSurfaceSpec.TASKBAR}) {
+                DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.TASKBAR}) {
             assertFalse(other.name, other.wallStrip);
             assertFalse(other.name, other.reflectsLowerBevelOnly());
         }
         assertFalse("one slab, never beads", wall.beads);
-        assertFalse(wall.promptField);
         assertFalse(wall.taskbar);
         assertEquals(tray.dashesAboveSlab, wall.dashesAboveSlab);
         assertEquals(tray.softRimDp, wall.softRimDp, 0f);
@@ -171,7 +158,7 @@ public class DockSurfaceSpecLayoutTest {
             assertEquals(LensBeadGeometry.rowSideInsetPx(DENSITY), beads.appsRowExtraSideInsetPx());
             assertEquals(Math.round(9f * DENSITY), beads.appsRowExtraSideInsetPx());
             for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN,
-                    DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.PROMPT_LINE}) {
+                    DockSurfaceSpec.GLASS_TRAY}) {
                 DockLayout layout = DockLayoutPolicy.compute(inputs(capsule, true, true, 2.18f)
                     .surface(other).promptFieldReveal(1f).build());
                 assertEquals(other.name, 0, layout.appsRowExtraSideInsetPx());

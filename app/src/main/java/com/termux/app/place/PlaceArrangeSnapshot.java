@@ -103,15 +103,18 @@ public final class PlaceArrangeSnapshot {
     private final boolean mHomeAlwaysOn;
     /** The layout's Dock design as picked, both orientations. */
     @NonNull private final DockStyle mDockStyle;
+    /** Whether the layout turns the Search field on beside its design, both orientations. */
+    private final boolean mSearchField;
 
     private PlaceArrangeSnapshot(@NonNull LayoutVariant variant, @NonNull List<Entry> entries,
                                  boolean keyboardShown, boolean homeAlwaysOn,
-                                 @NonNull DockStyle dockStyle) {
+                                 @NonNull DockStyle dockStyle, boolean searchField) {
         mVariant = variant;
         mEntries = Collections.unmodifiableList(entries);
         mKeyboardShown = keyboardShown;
         mHomeAlwaysOn = homeAlwaysOn;
         mDockStyle = dockStyle;
+        mSearchField = searchField;
     }
 
     /** The layout the store is on, in both orientations. */
@@ -130,7 +133,7 @@ public final class PlaceArrangeSnapshot {
             entries.add(new Entry(layout, orientation));
         // The variant's own keyboard element: the Home layout's is always on, not the switch.
         return new PlaceArrangeSnapshot(variant, entries, layout.isKeyboardShown(),
-            layout.isHomeKeyboardAlwaysOn(), layout.dockStyle());
+            layout.isHomeKeyboardAlwaysOn(), layout.dockStyle(), layout.searchField());
     }
 
     /** The variant this snapshot was taken of, and restores onto. */
@@ -146,6 +149,7 @@ public final class PlaceArrangeSnapshot {
         layout.setHomeKeyboardAlwaysOn(mHomeAlwaysOn);
         layout.setKeyboardShown(mKeyboardShown);
         layout.setDockStyle(mDockStyle);
+        layout.setSearchField(mSearchField);
     }
 
     /** The whole arrangement as one string, for the editor's unsaved-changes comparison. */
@@ -156,7 +160,8 @@ public final class PlaceArrangeSnapshot {
         for (Entry entry : mEntries) entry.appendTo(out);
         out.append("keyboard:").append(mKeyboardShown)
             .append("|always:").append(mHomeAlwaysOn)
-            .append("|dock:").append(mDockStyle.storageValue());
+            .append("|dock:").append(mDockStyle.storageValue())
+            .append("|search:").append(mSearchField);
         return out.toString();
     }
 }
