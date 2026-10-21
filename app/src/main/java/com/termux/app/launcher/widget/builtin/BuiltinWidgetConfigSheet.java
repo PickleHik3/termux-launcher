@@ -154,20 +154,25 @@ public final class BuiltinWidgetConfigSheet {
      * The Glass row: Page / On / Off, and Bare on the widgets that offer it. The supplier gives
      * what is picked, or null when the widget has no such row (Glance, always Bare).
      */
-    @NonNull private static java.util.function.Supplier<String> glassRow(
+    /** The Glass row's segmented control carries this tag, for tests. */
+    static final String GLASS_CHOICE_TAG = "builtin_widget_glass_choice";
+
+    @NonNull static java.util.function.Supplier<String> glassRow(
             @NonNull Context context, @NonNull LinearLayout column, @NonNull Bundle current,
             boolean noFields, float density, @NonNull String[] glassValues) {
         if (glassValues.length == 0) return () -> null;
+        // The label on its own line and the segments across the whole row, each the same width:
+        // four choices on the label's line left Bare a sliver with no label on a narrow phone.
         LinearLayout glass = new LinearLayout(context);
-        glass.setOrientation(LinearLayout.HORIZONTAL);
-        glass.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        glass.setOrientation(LinearLayout.VERTICAL);
         TextView glassLabel = new TextView(context);
         glassLabel.setText(R.string.builtin_widget_glass);
         glassLabel.setTextAppearance(com.google.android.material.R.style
             .TextAppearance_Material3_BodyLarge);
-        glass.addView(glassLabel, new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        glass.addView(glassLabel, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         MaterialButtonToggleGroup glassChoice = new MaterialButtonToggleGroup(context);
+        glassChoice.setTag(GLASS_CHOICE_TAG);
         glassChoice.setSingleSelection(true);
         glassChoice.setSelectionRequired(true);
         int[] glassLabels = new int[glassValues.length];
@@ -179,14 +184,23 @@ public final class BuiltinWidgetConfigSheet {
                 com.google.android.material.R.attr.materialButtonOutlinedStyle);
             button.setId(View.generateViewId());
             button.setText(glassLabels[i]);
+            button.setSingleLine(true);
+            button.setMinWidth(0);
+            button.setMinimumWidth(0);
+            int side = Math.round(4 * density);
+            button.setPaddingRelative(side, button.getPaddingTop(), side,
+                button.getPaddingBottom());
             glassIds[i] = button.getId();
-            glassChoice.addView(button);
+            glassChoice.addView(button, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             if (glassValues[i].equals(storedGlass == null ? "" : storedGlass))
                 glassChoice.check(button.getId());
         }
         if (glassChoice.getCheckedButtonId() == View.NO_ID) glassChoice.check(glassIds[0]);
-        glass.addView(glassChoice, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams choiceParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        choiceParams.topMargin = Math.round(4 * density);
+        glass.addView(glassChoice, choiceParams);
         LinearLayout.LayoutParams glassParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         glassParams.topMargin = Math.round((noFields ? 4 : 16) * density);
