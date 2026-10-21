@@ -138,8 +138,11 @@ public class OneByOneFitTest {
             fontScale(scale);
             for (int[] card : CARDS) {
                 String where = "analog 1x1 " + card[0] + "x" + card[1] + "dp at font " + scale;
-                BuiltinWidgetView view = laidOut(BuiltinWidgetKind.CLOCK_ANALOG, card[0], card[1]);
-                View face = only(view, AnalogClockFaceView.class);
+                android.os.Bundle analog = new android.os.Bundle();
+                analog.putString(ClockWidgetSettings.KEY_FACE, ClockFace.ANALOG.key);
+                BuiltinWidgetView view = laidOut(BuiltinWidgetKind.CLOCK, card[0], card[1],
+                    analog);
+                View face = only(view, ClockFaceView.class);
                 assertNotNull(where + ": a face", face);
                 int side = px(OneByOneFit.artSide(card[0], card[1], OneByOneFit.INSET_DP));
                 assertEquals(where + ": the dial fills the card to the inset", side,
@@ -170,13 +173,18 @@ public class OneByOneFitTest {
 
     @NonNull private BuiltinWidgetView laidOut(@NonNull BuiltinWidgetKind kind, int widthDp,
                                                int heightDp) {
+        return laidOut(kind, widthDp, heightDp, null);
+    }
+
+    @NonNull private BuiltinWidgetView laidOut(@NonNull BuiltinWidgetKind kind, int widthDp,
+                                               int heightDp, @Nullable android.os.Bundle config) {
         BuiltinWidgetServices services = new BuiltinWidgetServices(context, HOST);
         BuiltinWidgetStyle style = BuiltinWidgetStyle.resolve(context,
             BuiltinWidgetStyle.Numerals.values()[0], false, null);
         BuiltinWidgetView view = BuiltinWidgetFactory.create(context, kind, services, style);
         view.setPreview(true);
         view.setCells(1, 1);
-        view.bind(null);
+        view.bind(config);
         int w = px(widthDp);
         int h = px(heightDp);
         view.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),

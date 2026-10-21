@@ -158,6 +158,7 @@ final class WidgetPlanView extends View {
                     top + Math.max(height, 1f)), paint);
             }
             case TOUCH:
+            case FACE:
             default:
                 return null;
         }

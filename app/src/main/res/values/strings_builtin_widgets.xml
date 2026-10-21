@@ -2,8 +2,7 @@
 <resources>
     <!-- The launcher's own widgets, as the picker lists them. -->
     <string name="builtin_widget_group">Termux Launcher</string>
-    <string name="builtin_widget_clock_analog">Analog clock</string>
-    <string name="builtin_widget_clock_digital">Digital clock</string>
+    <string name="builtin_widget_clock">Clock</string>
     <string name="builtin_widget_agenda">Agenda</string>
     <string name="builtin_widget_weather">Weather</string>
     <string name="builtin_widget_battery">Battery</string>

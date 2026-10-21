@@ -13,8 +13,7 @@ public final class BuiltinWidgetFactory {
                                                     @NonNull BuiltinWidgetServices services,
                                                     @NonNull BuiltinWidgetStyle style) {
         switch (kind) {
-            case CLOCK_ANALOG: return new AnalogClockWidgetView(context, services, style);
-            case CLOCK_DIGITAL: return new DigitalClockWidgetView(context, services, style);
+            case CLOCK: return new ClockWidgetView(context, services, style);
             case AGENDA: return new AgendaWidgetView(context, services, style);
             case WEATHER: return new WeatherWidgetView(context, services, style);
             case BATTERY: return new BatteryWidgetView(context, services, style);

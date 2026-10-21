@@ -25,7 +25,9 @@ final class WidgetLayoutPlan {
         /** A hairline. */
         RULE,
         /** Where a tap lands; drawn as nothing. */
-        TOUCH
+        TOUCH,
+        /** A box the widget draws into itself (the Clock's face); the plan view leaves it empty. */
+        FACE
     }
 
     /** The colour role a part is drawn in; the view maps it to the widget's style. */
@@ -114,6 +116,10 @@ final class WidgetLayoutPlan {
 
         @NonNull static Part touch(@NonNull String id, @NonNull Box box) {
             return new Part(id, Type.TOUCH, box, "", null, false, 0f, Ink.RULE, 0f, 0f);
+        }
+
+        @NonNull static Part face(@NonNull String id, @NonNull Box box) {
+            return new Part(id, Type.FACE, box, "", null, false, 0f, Ink.STRONG, 0f, 0f);
         }
 
         @NonNull @Override public String toString() {

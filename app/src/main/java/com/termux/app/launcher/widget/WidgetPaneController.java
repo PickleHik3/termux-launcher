@@ -872,7 +872,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (item.info == null) {
             // One of the launcher's own: a single durable write, no consent, no configure.
             if (item.builtinKind == null) return LauncherWidgetHostController.AddResult.FAILED;
-            return widgets.addBuiltin(item.builtinKind, rect, page, revision, null);
+            return widgets.addBuiltin(item.builtinKind, rect, page, revision,
+                builtins.initialConfig(item.builtinKind));
         }
         Rect bounds = pane.grid().metrics().boundsFor(rect);
         // The first options describe the same area the grid will report once the cell is laid
@@ -1165,7 +1166,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 kind == null ? builtin.builtinKind : pane.getResources().getString(kind.label));
             builtins.services().host().onSystemImeRequested();
             BuiltinWidgetConfigSheet.show(pane.getContext(), title, builtins.configFields(builtin),
-                builtin.sizeOptions(), config -> {
+                builtins.settingsOf(builtin), config -> {
                     if (widgets.updateBuiltinConfig(appWidgetId, config)) render();
                 }, () -> builtins.services().host().onSystemImeReleased());
             return;

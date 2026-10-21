@@ -9,11 +9,13 @@ import com.termux.R;
 /**
  * The launcher's own widgets: the catalogue the picker offers and the key a record is stored
  * under. The {@link #id} is durable — it is what the repository persists — so it never changes
- * once shipped; the label and the default span are presentation.
+ * once shipped; the label and the default span are presentation. A kind that merged into another
+ * keeps its id as an alias ({@link BuiltinWidgetAliases}) and leaves this list, so the picker
+ * no longer offers it while the records placed under it keep loading.
  */
 public enum BuiltinWidgetKind {
-    CLOCK_ANALOG("clock.analog", R.string.builtin_widget_clock_analog, 1, 1),
-    CLOCK_DIGITAL("clock.digital", R.string.builtin_widget_clock_digital, 2, 1),
+    /** The one Clock, on eight faces; {@code clock.analog} and {@code clock.digital} open as it. */
+    CLOCK("clock", R.string.builtin_widget_clock, 2, 1),
     AGENDA("agenda", R.string.builtin_widget_agenda, 2, 1),
     WEATHER("weather", R.string.builtin_widget_weather, 2, 1),
     BATTERY("battery", R.string.builtin_widget_battery, 1, 1),
@@ -37,8 +39,16 @@ public enum BuiltinWidgetKind {
         this.defaultColumns = defaultColumns; this.defaultRows = defaultRows;
     }
 
-    /** The kind stored under {@code id}, or null for one this build does not know. */
+    /**
+     * The kind a record stored under {@code id} opens as: a current kind's own id, or a retired
+     * kind's alias ({@link BuiltinWidgetAliases#kindOf}); null for one this build does not know.
+     */
     @Nullable public static BuiltinWidgetKind fromId(@Nullable String id) {
+        return BuiltinWidgetAliases.kindOf(id);
+    }
+
+    /** The current kind whose own id is {@code id}, aliases left out. */
+    @Nullable static BuiltinWidgetKind currentFromId(@Nullable String id) {
         if (id == null) return null;
         for (BuiltinWidgetKind kind : values()) if (kind.id.equals(id)) return kind;
         return null;

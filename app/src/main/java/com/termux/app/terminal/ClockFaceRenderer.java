@@ -310,6 +310,37 @@ public final class ClockFaceRenderer {
 
     /** Largest scale the fit mode grows the FULL face to. */
     static final float FIT_MAX_SCALE = 1.35f;
+    /**
+     * The ceiling a widget host hands the fit ({@link #forWidget}): a Clock widget's face fills a
+     * card several times the bar's height, so it grows until its box, not the bar's 1.35, stops it.
+     */
+    public static final float WIDGET_FIT_MAX_SCALE = 8f;
+    /** The largest scale the fit grows the FULL face to; the bar's, unless a host hands another. */
+    private float mFitCeiling = FIT_MAX_SCALE;
+    /**
+     * Whether the FULL face draws its own date row (with the bar's hairline out to the box edge).
+     * A widget host draws its date as a part of its own layout and turns it off.
+     */
+    private boolean mDateRow = true;
+    /** Whether the seconds are drawn; the bar always draws them. */
+    private boolean mShowSeconds = true;
+    /**
+     * Whether a 12-hour clock's period is drawn beside an inline meta run. A widget too narrow
+     * for it at the Label role sheds it rather than shrink it under the 11sp floor; the digits
+     * stay 12-hour. The bar's stacked column always draws it.
+     */
+    private boolean mShowPeriod = true;
+    /** Whether a seconds digit animates when it changes; a widget's face turns only on the minute. */
+    private boolean mSecondsAnimated = true;
+    /**
+     * Whether the seconds and the period run in one line on the digits' baseline, both at the
+     * Label role, rather than stacked with the period at a fraction of it. The widget's: its
+     * period then never paints under the 11sp floor, and a 1×1's short band never has to hold
+     * two rows.
+     */
+    private boolean mInlineMeta;
+    /** The label-space gap between the seconds and the period on an inline meta run. */
+    private static final float INLINE_META_GAP_DP = 4f;
     /** Smallest scale any plan hands out, so a starved budget never inverts the face. */
     private static final float MIN_SCALE = .05f;
     /** Budget the host hands the face; height 0 means no fit (the legacy shrink-only path). */
@@ -323,6 +354,78 @@ public final class ClockFaceRenderer {
 
     public ClockFaceRenderer(@NonNull Resources resources) {
         mResources = resources;
+    }
+
+    /**
+     * A renderer for a host that is not the status bar: the Clock widget. It draws the FULL face's
+     * time band alone, without the bar's date row and its hairline running to the box edge (the
+     * widget sets its date in its own layout), fits it to whatever box the host hands it up to
+     * {@link #WIDGET_FIT_MAX_SCALE}, and turns the seconds without animating them, so the face
+     * moves only on the minute. The host never sees the bar's {@link TopPaneClockForm}.
+     */
+    @NonNull
+    public static ClockFaceRenderer forWidget(@NonNull Resources resources) {
+        ClockFaceRenderer renderer = new ClockFaceRenderer(resources);
+        renderer.mForm = TopPaneClockForm.FULL;
+        renderer.mDateRow = false;
+        renderer.mSecondsAnimated = false;
+        renderer.mFitCeiling = WIDGET_FIT_MAX_SCALE;
+        renderer.mInlineMeta = true;
+        return renderer;
+    }
+
+    /** Whether the seconds are drawn. Returns true if it changed; the face's width moves with it. */
+    public boolean setSeconds(boolean seconds) {
+        if (mShowSeconds == seconds) return false;
+        mShowSeconds = seconds;
+        return true;
+    }
+
+    public boolean isShowingSeconds() {
+        return mShowSeconds;
+    }
+
+    /** Whether a 12-hour period is drawn on the inline meta run. Returns true if it changed. */
+    public boolean setPeriodShown(boolean shown) {
+        if (mShowPeriod == shown) return false;
+        mShowPeriod = shown;
+        return true;
+    }
+
+    public boolean isShowingPeriod() {
+        return mShowPeriod;
+    }
+
+    /** The FULL fit's ceiling, {@link #FIT_MAX_SCALE} unless a host asks for more. */
+    public float fitCeiling() {
+        return mFitCeiling;
+    }
+
+    /**
+     * The FULL face's painted height in a {@code widthPx} by {@code heightPx} box, fitted as
+     * {@link #setFitBudget} would fit it there: what a host lays the face out at. Needs a snapshot.
+     */
+    public float fittedColumnPx(float widthPx, float heightPx) {
+        if (mSnapshot == null || widthPx <= 0f || heightPx <= 0f) return 0f;
+        float[] plan = fitScalePlan(fullParts(), heightPx, widthPx, 0f, mFitCeiling, mPlan);
+        return mFitParts.column(plan[0], plan[1] > 0f);
+    }
+
+    /** The FULL face's scale in a {@code widthPx} by {@code heightPx} box; see {@link #fittedColumnPx}. */
+    public float fittedScale(float widthPx, float heightPx) {
+        if (mSnapshot == null || widthPx <= 0f || heightPx <= 0f) return 0f;
+        return fitScalePlan(fullParts(), heightPx, widthPx, 0f, mFitCeiling, mPlan)[0];
+    }
+
+    /** The FULL face's painted width in a {@code widthPx} by {@code heightPx} box. */
+    public float fittedWidthPx(float widthPx, float heightPx) {
+        if (mSnapshot == null || widthPx <= 0f || heightPx <= 0f) return 0f;
+        return fitScalePlan(fullParts(), heightPx, widthPx, 0f, mFitCeiling, mPlan)[2];
+    }
+
+    /** The Label role's painted size, in sp: what the seconds and the period are drawn at. */
+    public static float labelRoleSp() {
+        return LABEL_SP;
     }
 
     /**
@@ -560,6 +663,23 @@ public final class ClockFaceRenderer {
         FitParts parts = mFitParts;
         float band = dp(fullBandHeightDp());
         parts.band = band;
+        parts.timeScaled = fullTimeScaledPx();
+        parts.timeFixed = fullTimeLabelPx();
+        if (!mDateRow) {
+            // The host sets the date: the column is the band, with Tape's minute track under it.
+            parts.columnScaled = band;
+            parts.columnFixed = 0f;
+            parts.strokeScaled = 0f;
+            parts.strokeFloor = 0f;
+            if (isStyle(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE)) {
+                parts.columnScaled += dp(TAPE_TRACK_GAP_DP);
+                parts.strokeScaled = TAPE_TRACK_FRACTION * band;
+                parts.strokeFloor = dp(STROKE_FLOOR_DP);
+            }
+            parts.dateScaled = 0f;
+            parts.dateFixed = 0f;
+            return parts;
+        }
         parts.columnScaled = band + dp(fullDateGapDp());
         parts.columnFixed = labelRowPx(dateTypeface());
         parts.strokeScaled = 0f;
@@ -570,8 +690,6 @@ public final class ClockFaceRenderer {
             parts.strokeScaled = TAPE_TRACK_FRACTION * band;
             parts.strokeFloor = dp(STROKE_FLOOR_DP);
         }
-        parts.timeScaled = fullTimeScaledPx();
-        parts.timeFixed = fullTimeLabelPx();
         // Tape's date sits under the time with no hairline; every other date row keeps one.
         parts.dateScaled = isStyle(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE)
             ? 0f : dp(2f * RULE_GAP_DP + MIN_RULE_DP);
@@ -581,24 +699,47 @@ public final class ClockFaceRenderer {
 
     /** The FULL time band's digits and the gap before the meta column, at scale 1. */
     private float fullTimeScaledPx() {
+        float gap = hasMetaColumn() ? dp(fullMetaGapDp()) : 0f;
         switch (mStyle) {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
-                return dp(94f) + dp(6f);
+                return dp(94f) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
-                return spacedTextWidth(timeText(), minimalTypeface(), 38f, -.02f) + dp(6f);
+                return spacedTextWidth(timeText(), minimalTypeface(), 38f, -.02f) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
-                return dotTextWidth(timeText(), LED_CELL_FRACTION * dp(26f)) + dp(7f);
+                return dotTextWidth(timeText(), LED_CELL_FRACTION * dp(26f)) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
-                return spacedTextWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + dp(5f);
+                return spacedTextWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
-                return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + dp(6f);
+                return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + gap;
             default:
-                return dp(flipRowWidthDp(FULL_FLIP_CARD_DP, FULL_FLIP_DIGIT_GAP_DP) + 6.7f);
+                return dp(flipRowWidthDp(FULL_FLIP_CARD_DP, FULL_FLIP_DIGIT_GAP_DP)) + gap;
         }
+    }
+
+    /** The FULL band's gap between the digits and the meta column, per face. */
+    private float fullMetaGapDp() {
+        switch (mStyle) {
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
+                return 7f;
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
+                return 5f;
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP:
+                return 6.7f;
+            default:
+                return 6f;
+        }
+    }
+
+    /** Whether a meta column follows the digits: the seconds, or a 12-hour clock's period. */
+    private boolean hasMetaColumn() {
+        return mShowSeconds
+            || (mShowPeriod && mSnapshot != null && !mSnapshot.period.isEmpty());
     }
 
     /** The FULL meta column — the seconds, with the period over them — at its painted size. */
     private float fullTimeLabelPx() {
+        if (!hasMetaColumn()) return 0f;
+        if (mInlineMeta) return inlineMetaWidth();
         if (isStyle(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP)) {
             return fullFlipMetaWidth();
         }
@@ -1027,7 +1168,8 @@ public final class ClockFaceRenderer {
     private float[] fullPlan(int heightPx) {
         FitParts parts = fullParts();
         if (fitActive()) {
-            return fitScalePlan(parts, mFitHeightPx, mFitWidthPx, fullFloor(), mPlan);
+            return fitScalePlan(parts, mFitHeightPx, mFitWidthPx, fullFloor(), mFitCeiling,
+                mPlan);
         }
         float scale = Math.max(MIN_SCALE, Math.min(1f, parts.solveColumn(heightPx)));
         mPlan[0] = scale;
@@ -1124,17 +1266,24 @@ public final class ClockFaceRenderer {
     @NonNull
     static float[] fitScalePlan(@NonNull FitParts parts, float heightBudget, float widthBudget,
                                 float floor, @NonNull float[] out) {
+        return fitScalePlan(parts, heightBudget, widthBudget, floor, FIT_MAX_SCALE, out);
+    }
+
+    /** {@link #fitScalePlan(FitParts, float, float, float, float[])} under {@code ceiling}. */
+    @NonNull
+    static float[] fitScalePlan(@NonNull FitParts parts, float heightBudget, float widthBudget,
+                                float floor, float ceiling, @NonNull float[] out) {
         float byColumn = parts.solveColumn(heightBudget);
         float scale;
         boolean date;
         if (byColumn >= floor) {
-            scale = Math.min(byColumn, FIT_MAX_SCALE);
+            scale = Math.min(byColumn, ceiling);
             scale = Math.min(scale, widthScale(widthBudget, parts.timeScaled, parts.timeFixed));
             scale = Math.min(scale, widthScale(widthBudget, parts.dateScaled, parts.dateFixed));
             date = true;
         } else {
             float byBand = Math.max(floor,
-                Math.min(heightBudget / Math.max(.01f, parts.band), FIT_MAX_SCALE));
+                Math.min(heightBudget / Math.max(.01f, parts.band), ceiling));
             scale = Math.min(byBand,
                 widthScale(widthBudget, parts.timeScaled, parts.timeFixed));
             date = false;
@@ -1234,7 +1383,7 @@ public final class ClockFaceRenderer {
         float x = drawFullFlipCards(canvas, now, digitBaseline);
         drawFullFlipMetaColumn(canvas, x + dp(6.7f), digitBaseline, now);
         canvas.restore();
-        drawFullFlipDateRow(canvas, dateTop, right);
+        if (mDateRow) drawFullFlipDateRow(canvas, dateTop, right);
     }
 
     private float drawFullFlipCards(Canvas canvas, long now, float digitBaseline) {
@@ -1373,6 +1522,10 @@ public final class ClockFaceRenderer {
     }
 
     private void drawFullFlipMetaColumn(Canvas canvas, float x, float digitBaseline, long now) {
+        if (mInlineMeta) {
+            drawInlineMeta(canvas, x, digitBaseline, condensedBoldTypeface());
+            return;
+        }
         Typeface face = condensedBoldTypeface();
         float cellWidth = widestDigitsWidth(1, face, mLabelSp) / mScale;
         float secondsSp = labelSp();
@@ -1581,7 +1734,7 @@ public final class ClockFaceRenderer {
         drawStackedMetaColumn(canvas, x + dp(6f), dp(30f), Typeface.MONOSPACE,
             Typeface.MONOSPACE, true, now, LCD_DURATION_MS);
         canvas.restore();
-        drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.MONOSPACE);
+        if (mDateRow) drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.MONOSPACE);
     }
 
     private void drawCompactLcd(Canvas canvas, long now) {
@@ -1697,7 +1850,7 @@ public final class ClockFaceRenderer {
         drawStackedMetaColumn(canvas, x + dp(6f), baseline, Typeface.DEFAULT,
             mediumTypeface(), false, now, TEXT_DURATION_MS);
         canvas.restore();
-        drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.DEFAULT);
+        if (mDateRow) drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.DEFAULT);
     }
 
     private void drawCompactMinimal(Canvas canvas, long now) {
@@ -1724,7 +1877,7 @@ public final class ClockFaceRenderer {
         drawStackedMetaColumn(canvas, x + dp(6f), baseline, mediumTypeface(),
             Typeface.DEFAULT_BOLD, false, now, TEXT_DURATION_MS);
         canvas.restore();
-        drawDateRow(canvas, dateTop, right, mSnapshot.date, mediumTypeface());
+        if (mDateRow) drawDateRow(canvas, dateTop, right, mSnapshot.date, mediumTypeface());
     }
 
     private void drawCompactSlab(Canvas canvas, long now) {
@@ -1748,6 +1901,15 @@ public final class ClockFaceRenderer {
         drawStackedMetaColumn(canvas, x + dp(5f), baseline, Typeface.MONOSPACE,
             Typeface.MONOSPACE, false, now, TEXT_DURATION_MS);
         canvas.restore();
+        if (!mDateRow) {
+            // No date: the minute track sits under the time, as wide as the time row.
+            canvas.save();
+            canvas.translate(bandDx, 0f);
+            drawMinuteTrack(canvas, dp(22f) + dp(TAPE_TRACK_GAP_DP),
+                mFitParts.timeWidth(mScale) / mScale, bandStroke(TAPE_TRACK_FRACTION, dp(22f)));
+            canvas.restore();
+            return;
+        }
         float rowHeight = mFitParts.columnFixed / mScale;
         drawLabel(canvas, mSnapshot.date, bandDx,
             baseline(dateTop, rowHeight, Typeface.MONOSPACE, labelSp()), labelSp(),
@@ -1787,7 +1949,7 @@ public final class ClockFaceRenderer {
         drawStackedMetaColumn(canvas, x + dp(7f), cell * 7f, Typeface.MONOSPACE,
             Typeface.MONOSPACE, false, now, LED_DURATION_MS);
         canvas.restore();
-        drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.MONOSPACE);
+        if (mDateRow) drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.MONOSPACE);
     }
 
     private void drawCompactLed(Canvas canvas, long now) {
@@ -1926,6 +2088,10 @@ public final class ClockFaceRenderer {
     private void drawStackedMetaColumn(Canvas canvas, float x, float baseline,
                                        Typeface secondsFace, Typeface periodFace,
                                        boolean boxedPeriod, long now, long duration) {
+        if (mInlineMeta) {
+            drawInlineMeta(canvas, x, baseline, secondsFace);
+            return;
+        }
         float secondsSp = labelSp();
         mPaint.setTypeface(secondsFace);
         mPaint.setLetterSpacing(0f);
@@ -1988,6 +2154,43 @@ public final class ClockFaceRenderer {
         float spacing = (width - natural) / (gaps * dp(periodDp));
         drawLabel(canvas, period, x - spacing * dp(periodDp) / 2f, periodBaseline, periodDp,
             periodFace, spacing, mPeriodInk);
+    }
+
+    /** The inline meta run's painted width: the seconds' widest pair, then the period. */
+    private float inlineMetaWidth() {
+        Typeface face = secondsTypeface();
+        float width = mShowSeconds ? widestDigitsWidth(2, face, LABEL_SP) : 0f;
+        if (mShowPeriod && !mSnapshot.period.isEmpty()) {
+            if (mShowSeconds) width += dp(INLINE_META_GAP_DP);
+            width += spacedTextWidth(mSnapshot.period, face, LABEL_SP, 0f);
+        }
+        return width;
+    }
+
+    /**
+     * The seconds and the period in one run on {@code baseline}, both at the Label role, the
+     * seconds in a slot as wide as the face's widest pair so the period never moves.
+     */
+    private void drawInlineMeta(Canvas canvas, float x, float baseline, Typeface face) {
+        float cursor = x;
+        if (mShowSeconds) {
+            float slot = widestDigitsWidth(2, face, mLabelSp) / mScale;
+            mPaint.setTypeface(face);
+            mPaint.setLetterSpacing(0f);
+            mPaint.setTextSize(sp(labelSp()));
+            mPaint.setTextAlign(Paint.Align.LEFT);
+            mPaint.setColor(mSecondsInk);
+            float digit = cursor;
+            for (int i = 0; i < 2; i++) {
+                char c = mSnapshot.ss.charAt(i);
+                canvas.drawText(CharAdvances.charString(c), digit, baseline, mPaint);
+                digit += mSecondsAdvances.advance(c, face, mPaint.getTextSize(), 0f, mMeasure);
+            }
+            cursor += slot + lp(INLINE_META_GAP_DP);
+        }
+        if (mShowPeriod && !mSnapshot.period.isEmpty()) {
+            drawLabel(canvas, mSnapshot.period, cursor, baseline, labelSp(), face, 0f, mPeriodInk);
+        }
     }
 
     /**
@@ -2096,7 +2299,17 @@ public final class ClockFaceRenderer {
     }
 
     private float minuteFraction() {
+        // Without seconds the face repaints once a minute: the track shows the hour instead.
+        if (!mShowSeconds) return clamp01(minutesValue() / 60f);
         return clamp01(secondsValue() / 60f);
+    }
+
+    private int minutesValue() {
+        try {
+            return Integer.parseInt(mSnapshot.mm);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private int secondsValue() {
@@ -2269,6 +2482,7 @@ public final class ClockFaceRenderer {
         for (long changedAt : mChangedAt) {
             if (changedAt > 0L && now - changedAt < duration) return true;
         }
+        if (!mSecondsAnimated || !mShowSeconds) return false;
         long secondsDuration = mForm == TopPaneClockForm.FULL
             && TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP.equals(mStyle)
             ? SECONDS_FLIP_DURATION_MS : duration;
@@ -2299,7 +2513,7 @@ public final class ClockFaceRenderer {
 
     @VisibleForTesting
     float secondsProgress(int digit, long now, long duration) {
-        if (mLazyMode || mSecondsChangedAt[digit] <= 0L) return 1f;
+        if (mLazyMode || !mSecondsAnimated || mSecondsChangedAt[digit] <= 0L) return 1f;
         return clamp01((now - mSecondsChangedAt[digit]) / (float) duration);
     }
 
