@@ -12,8 +12,10 @@ Open **Appearance** in any of these ways, then tap **Layout** in the pill at the
 - Hold a corner of a page and tap **Appearance**.
 - Long-press the terminal and choose **Appearance**.
 
-Home, Terminal and Display share one layout, so whatever you arrange lands on all three. The canvas
-shows the place you opened it from. Portrait and landscape each have their own layout, and the
+Home and the Workspace share one layout, so whatever you arrange lands on both; Home just leaves
+out the extra keys. To give Home a layout of its own, set the **Layout** line in the editor to
+**Home's own** (the default is **One layout**); the house segment in the row then previews Home. The
+canvas shows the page you opened it from. Portrait and landscape each have their own layout, and the
 canvas draws the other orientation in your device's real shape, so a tablet looks like a tablet.
 
 ## The editor
@@ -69,6 +71,12 @@ and both orientations. A swipe up from the bottom border also turns it back on.
 Tap something on the canvas to select it; anything with a size gets a handle. Each size is set per
 orientation, and a readout shows it while you hold the handle.
 
+- **Dock design**: select the dock, on any page, and pick **#1 Tray** (the default), **#2 Beads**
+  or **#3 Strip** (a big clock and a tile for each terminal; the clock slides out at three or more
+  terminals). Two toggles beside the picker work with any design: **Search field**, the
+  command-palette field under the apps row (with Beads it sits in its own capsule under the beads),
+  and **Drawer tile**, a tile that opens the app drawer and can stand at the start, middle or end
+  of the apps row (with Beads it gets its own bead).
 - **Dock height**: drag the dock's inner edge ("Dock N dp"). The icons grow and shrink with it.
 - **Keyboard height**: drag the keyboard's top edge ("Keyboard N dp").
 - **Bottom padding**: drag the bottom of the keys up for space under the last row ("Bottom padding
@@ -90,14 +98,15 @@ and split keyboards are on [Keyboard](Keyboard.md).
 
 ## Minimal mode
 
-Minimal mode is a second saved layout. It starts with only the content showing: the status bar, the
+Minimal mode is a second saved layout for windows. It starts with only the content showing: the status bar, the
 pinned apps, the A–Z index, the extra keys and the keyboard go away, and the widgets, terminal or
 display take the room. Open Layout while it is on to choose what it keeps.
 
 - **Turn it on**: hold a corner and tap the four outward corners. **Turn it off**: the same button,
   now pointing inward. Nothing else turns it off.
-- It is one mode for the whole launcher. Turn it on from Widgets and the terminal and display are
-  minimal too; moving between places never turns it off. It stays on across restarts.
+- It is one mode for every window, and it affects only windows: Home ignores it and keeps its normal
+  look. Moving between pages never turns it off, and it stays on across restarts. From anywhere,
+  including Home, the command palette's **Minimal on/off** action switches it.
 - Everything else works as in your normal layout. Splits show all their panes, and the status bar
   and borders answer the same gestures.
 - The keyboard goes down when you enter. Swipe up from the bottom border, or tap the terminal, to
