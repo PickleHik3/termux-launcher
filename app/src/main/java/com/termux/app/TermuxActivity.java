@@ -4672,7 +4672,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // preference.
             program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook)
                 .withCover(Math.max(0f, navStrip ? mNavStripGlassCover : mDockGlassCover)));
-            // The dock style's own glass (the Glass tray's soft rim, shelf and icon reflection);
+            // The Dock design's own glass (the Tray's soft rim, shelf and icon reflection);
             // the strip under the pill wears none of it.
             if (navStrip) {
                 program.setDockSurface(0f, 0f);
@@ -14359,39 +14359,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * nothing in it.
      */
     private final com.termux.app.chrome.DressResolver mDresses =
-        new com.termux.app.chrome.DressResolver(new com.termux.app.chrome.DressResolver.Source() {
-            @Override public boolean minimal() {
-                return isMinimalMode();
-            }
-
-            @Override public boolean homeLayout() {
-                PlaceLayoutStore store = placeLayoutStore();
-                return store != null && store.hasHomeLayout();
-            }
-
-            @NonNull @Override public com.termux.app.dock.DockStyle dockDesign(
-                    @NonNull com.termux.app.place.LayoutVariant layout) {
-                PlaceLayoutStore store = placeLayoutStore();
-                return store != null ? store.forVariant(layout).dockStyle()
-                    : com.termux.app.dock.DockStyle.GLASS_TRAY;
-            }
-
-            @Override public boolean searchField(
-                    @NonNull com.termux.app.place.LayoutVariant layout) {
-                PlaceLayoutStore store = placeLayoutStore();
-                return store != null && store.forVariant(layout).searchField();
-            }
-
-            @Override public boolean drawerTile(
-                    @NonNull com.termux.app.place.LayoutVariant layout) {
-                PlaceLayoutStore store = placeLayoutStore();
-                return store != null && store.forVariant(layout).drawerTile();
-            }
-
-            @NonNull @Override public com.termux.app.place.WallHalfShape shape(boolean home) {
-                return com.termux.app.place.WallHalfShape.read(mPreferences, home);
-            }
-        });
+        com.termux.app.chrome.DressResolver.over(this::placeLayoutStore);
 
     /** What {@code page} wears now. */
     @NonNull
@@ -14450,8 +14418,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the switch once per revision.
      */
     private boolean homeHoldsOwnLayout() {
-        PlaceLayoutStore store = placeLayoutStore();
-        return store != null && store.hasHomeLayout();
+        return mDresses.layoutOf(com.termux.app.wall.PaneWallPage.WIDGETS)
+            == com.termux.app.place.LayoutVariant.HOME;
     }
 
     /**
@@ -15572,7 +15540,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout previous = mAppliedPlaceLayout;
         boolean arrangementChanged = !layout.equals(previous);
         mAppliedPlaceLayout = layout;
-        // A Dock style picked in the Layout editor: the dock takes its new shape on this pass.
+        // A Dock design picked in the Layout editor: the dock takes its new shape on this pass.
         boolean dockStyleChanged = previous != null && previous.dockStyle != layout.dockStyle;
         // The Search field toggled there, with whichever design (#96).
         boolean searchField = committedSearchField();
@@ -16503,7 +16471,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Lays the dock out and dresses its glass again for the spec it wears now: a settle between
-     * halves of different designs ({@link #restyleDockSurfaceForPageIfChanged}), or a Dock style
+     * halves of different designs ({@link #restyleDockSurfaceForPageIfChanged}), or a Dock design
      * picked in the
      * Layout editor ({@link #doSyncPlaceLayout}), live, with no restart. The backdrop up stays
      * until the re-cut one replaces it, so the switch never shows a bare frame.
@@ -16525,9 +16493,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ------------------------------------------------------------------ Drawer tile
     //
-    // The Drawer tile (#97; once the Taskbar design): where the page's layout turns it on
+    // The Drawer tile (#97): where the page's layout turns it on
     // (Dress.drawerTile) the dock row holds a tile that opens the app drawer among the apps
-    // (SuggestionBarView.setHomeTile, where it stands persisted per layout in PlaceLayoutStore),
+    // (SuggestionBarView.setDrawerTile, where it stands persisted per layout in PlaceLayoutStore),
     // with any Dock design, on whichever half wears the layout. On Lens beads it stands on a bead
     // of its own, as an app does. Nothing here runs at rest.
 
@@ -16543,7 +16511,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (bar == null) return;
         boolean on = mPreferences != null && mDresses.drawerTileOf(mLastWallPage);
         PlaceLayoutStore store = committedDockStore();
-        bar.setHomeTile(on ? (store != null ? store.drawerTilePosition()
+        bar.setDrawerTile(on ? (store != null ? store.drawerTilePosition()
                 : com.termux.app.dock.DrawerTilePolicy.DEFAULT) : null,
             on ? mDrawerTileListener : null);
     }
@@ -16562,13 +16530,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The Drawer tile opens the drawer as Home's own drawer entry does, on either half, and
      * remembers its place.
      */
-    private final SuggestionBarView.HomeTileListener mDrawerTileListener =
-        new SuggestionBarView.HomeTileListener() {
-            @Override public void onHomeTileTapped() {
+    private final SuggestionBarView.DrawerTileListener mDrawerTileListener =
+        new SuggestionBarView.DrawerTileListener() {
+            @Override public void onDrawerTileTapped() {
                 openAppDrawerFromHome();
             }
 
-            @Override public void onHomeTileMoved(
+            @Override public void onDrawerTileMoved(
                     @NonNull com.termux.app.dock.DrawerTilePolicy.Position position) {
                 PlaceLayoutStore store = committedDockStore();
                 if (store != null) store.setDrawerTilePosition(position);
@@ -16578,13 +16546,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ------------------------------------------------------------------ Search field
     //
-    // The Search field (#96; once the Prompt line design), on either half's dock, with any Dock
+    // The Search field (#96), on either half's dock, with any Dock
     // design: where the page's layout turns it on (Dress.searchField) the command palette's
     // field stands under the apps row on the same slab (DockLayout.promptFieldBandPx), in the
     // row's own host, so the dock's one glass, its shelf and its reflection are the taller slab's
     // (under Lens beads the row keeps its beads and the field stands in a glass capsule of its
     // own under them, LensBeadGeometry.withCapsule, #84); the Workspace's extra keys stay a
-    // band of their own beside it. The toggle, or a Dock style picked, in the Layout editor eases
+    // band of their own beside it. The toggle, or a Dock design picked, in the Layout editor eases
     // the slab's height in or out over a short run of frames, each a dock pass and one re-cut of
     // its glass; nothing runs before or after it.
 
@@ -16678,7 +16646,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * A Dock style was picked: where the Search field or the Wall strip's row comes or goes
+     * A Dock design was picked: where the Search field or the Wall strip's row comes or goes
      * on a dock in view, the slab eases from what it shows now to its new height, before any pass
      * lays the new style out, on either half. Anywhere else (the dock not laid out yet, reduced
      * motion) the passes land it at once.
@@ -17077,7 +17045,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         java.util.List<com.termux.app.chrome.WindowChips.Chip<
             com.termux.app.terminal.TerminalPaneController.Window>> tiles =
-                chips.chips(com.termux.app.chrome.WindowChips.Surface.WALL_STRIP);
+                chips.chips();
         java.util.List<float[]> shapes = new java.util.ArrayList<>(tiles.size());
         java.util.List<Long> keys = new java.util.ArrayList<>(tiles.size());
         for (com.termux.app.chrome.WindowChips.Chip<
@@ -17133,13 +17101,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The bar's {@code +}: a new Workspace window, after the one in front, on both halves (#90).
-     * Tapped on Home it slides the Workspace in on the new window, as the Strip's {@code +} does;
-     * a Home float stays the long-press menu's Terminal.
+     * The bar's {@code +}: a new Workspace window in the current session's row, after the one in
+     * front, on both halves (#90). Tapped on Home it slides the Workspace in on the new window, as
+     * the Strip's {@code +} does; a Home float stays the long-press menu's Terminal. Without split
+     * panes there are no windows to add, and the bar shows no {@code +} on either half
+     * (refreshPlaceBar).
+     *
+     * <p>Never a new session while one stands (createRowWindow).
      */
     private void onBarNewWindow() {
+        if (!isSplitPanesEnabled()) return;
         if (isWidgetsPageShowing()) {
-            if (!isSplitPanesEnabled()) return;
             onWallStripNewTerminal();
             return;
         }
@@ -21993,9 +21965,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean fold = seam.folds();
         boolean rowsSink = seam.rowsSink(keyboardPx);
         if (fold) {
-            // Only the extra keys fold: the rows sink by the row's hidden part into their own
-            // bottom edge, so the rest of the dock stands still (#94).
+            // Only the extra keys fold: that row shuts into its own bottom edge, the rows on the
+            // canvas's side of it sink by its hidden part, and the rows between it and the
+            // screen's edge stand still, wherever it stands in the stack (#94).
             mTravelFoldShare = seam.extraKeysShare();
+            // A fold in lays the extra keys out on this frame: the sink is re-read once the stack
+            // has laid them out, before the frame is drawn.
+            listenForSeamFold();
             applySeamFoldSink();
         } else {
             mTravelFoldShare = Float.NaN;
@@ -22055,15 +22031,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.SeamCrossing.Half there = com.termux.app.place.SeamCrossing.Half.of(
             other, otherDress, otherLayout, stackDressOf(otherDress, orientation),
             mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other));
-        boolean barFirst = mSeamCrossing.begin(here, there,
+        boolean begins = mSeamCrossing.other() == null;
+        mSeamCrossing.begin(here, there,
             com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mSeamFrameGlass,
                 isSplitPanesEnabled()));
-        // A fold in lays the extra keys out on this frame: the sink is re-read once the stack has
-        // laid them out, before the frame is drawn.
-        if (mSeamCrossing.folds()) listenForSeamFold();
         // From Home, the bar takes off Home's dress for the Workspace's while it is still hidden,
         // before any pass lays it out over Home.
-        if (barFirst) {
+        if (begins && mSeamCrossing.barTakesWorkspaceDressFirst()) {
             refreshTerminalWindowBar();
             mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         }
@@ -22457,9 +22431,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int[] SEAM_ROW_LAYERS = {R.id.accessory_surface_host,
         R.id.apps_bar_az_fx_underlay, R.id.accessory_row_stack, R.id.apps_bar_az_fx_overlay,
         R.id.apps_bar_az_label_overlay};
+    /** The layers drawn over the A-Z row alone, which a fold that holds that row leaves be. */
+    private static final int[] SEAM_AZ_LAYERS = {R.id.apps_bar_az_fx_underlay,
+        R.id.apps_bar_az_fx_overlay, R.id.apps_bar_az_label_overlay};
 
     /** How far the dock rows' layers last sank into the keyboard's top edge. */
     private float mSeamRowSinkPx;
+    /** Whether that sink left the A-Z row's layers standing, for a fold that holds the row. */
+    private boolean mSeamRowSinkHoldsAz;
 
     /**
      * How much of the extra keys row a fold across the seam shows (SeamTravel.extraKeysShare),
@@ -22481,16 +22460,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * A fold's sink from the extra keys row as the stack lays it out now: the rows go down by
-     * the part of that row the fold hides, cut at their own bottom, so the row shuts or opens on
-     * the dock's edge while the rows above it never move. Reads two view heights, no store.
+     * the part of that row the fold hides, cut at their own bottom, so the row shuts or opens
+     * into its own bottom edge. Wherever the row stands in the stack, the rows between it and the
+     * screen's edge are held where they are laid out (EdgeStackView.holdOutside,
+     * SeamCrossing.foldHolds), and only the rows on the canvas's side of it go down, to where they
+     * rest without it. Reads two view heights, no store.
      */
     private void applySeamFoldSink() {
         if (Float.isNaN(mTravelFoldShare)) return;
         View rowStack = hotView(R.id.accessory_row_stack);
         View keys = hotView(R.id.terminal_toolbar_host);
-        int band = rowStack != null && keys != null && keys.getParent() == rowStack
-            && keys.getVisibility() == View.VISIBLE ? keys.getHeight() : 0;
-        applySeamRowSink(com.termux.app.place.SeamTravel.foldSinkPx(band, mTravelFoldShare));
+        boolean keysInStack = rowStack != null && keys != null && keys.getParent() == rowStack
+            && keys.getVisibility() == View.VISIBLE;
+        float sink = com.termux.app.place.SeamTravel.foldSinkPx(
+            keysInStack ? keys.getHeight() : 0, mTravelFoldShare);
+        applySeamRowSink(sink, mSeamCrossing.foldHolds(com.termux.app.place.Element.AZ));
+        if (rowStack instanceof com.termux.app.place.EdgeStackView) {
+            ((com.termux.app.place.EdgeStackView) rowStack).holdOutside(
+                keysInStack ? keys : null, sink);
+        }
     }
 
     /**
@@ -22500,13 +22488,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * with a keyboard in the stack; 0 puts every layer back.
      */
     private void applySeamRowSink(float sinkPx) {
-        if (sinkPx == mSeamRowSinkPx) return;
+        applySeamRowSink(sinkPx, false);
+        // Every sink but a fold's moves the rows together: a fold's hold, if one ran, lets go.
+        View rowStack = hotView(R.id.accessory_row_stack);
+        if (rowStack instanceof com.termux.app.place.EdgeStackView) {
+            ((com.termux.app.place.EdgeStackView) rowStack).holdOutside(null, 0f);
+        }
+    }
+
+    /** {@link #applySeamRowSink(float)}, leaving the A-Z row's own layers standing if asked. */
+    private void applySeamRowSink(float sinkPx, boolean holdsAz) {
+        if (sinkPx == mSeamRowSinkPx && holdsAz == mSeamRowSinkHoldsAz) return;
         mSeamRowSinkPx = sinkPx;
-        int hidden = Math.round(sinkPx);
+        mSeamRowSinkHoldsAz = holdsAz;
         for (int id : SEAM_ROW_LAYERS) {
             View layer = hotView(id);
             if (layer == null) continue;
-            if (layer.getTranslationY() != sinkPx) layer.setTranslationY(sinkPx);
+            float layerSink = holdsAz && isSeamAzLayer(id) ? 0f : sinkPx;
+            int hidden = Math.round(layerSink);
+            if (layer.getTranslationY() != layerSink) layer.setTranslationY(layerSink);
             if (hidden <= 0) {
                 if (layer.getClipBounds() != null) layer.setClipBounds(null);
                 continue;
@@ -22521,6 +22521,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The dock's glass samples the wallpaper where it is drawn; a transform redraws nothing.
         View backdrop = hotView(R.id.accessory_blur_backdrop);
         if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
+    }
+
+    private static boolean isSeamAzLayer(int id) {
+        for (int az : SEAM_AZ_LAYERS) if (az == id) return true;
+        return false;
     }
 
     /**
@@ -23586,8 +23591,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             bar.setChromeInk(mChrome.ink());
             bar.setPlaceAccent(placeAccent);
             bar.setVisibility(windowsShown && !isStatusBarVertical() ? View.VISIBLE : View.GONE);
-            // The plus opens a terminal window right after the window in front, whichever it is.
-            bar.setCreateButtonShown(workspace);
+            // The plus opens a terminal window right after the window in front, whichever it is;
+            // without split panes there are no windows to open, on either half.
+            bar.setCreateButtonShown(workspace && isSplitPanesEnabled());
         }
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
@@ -27089,28 +27095,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull com.termux.app.terminal.TerminalWindowBar bar) {
         java.util.List<Integer> foregroundPids = new java.util.ArrayList<>();
         // The window chips (the display window's at its place among the terminal windows', ADR
-        // 0008 amended 2026-10-19, then the Home floats), built once and dressed once: each row
-        // window's shells are observed for this refresh's marks before any surface adapts them.
+        // 0008 amended 2026-10-19, then the Home floats), built once and dressed once: every
+        // window's shells, the floats' included, are observed once for this refresh's marks, and
+        // the bar and the Wall strip both show the chips as they come out of that.
         com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
             chips = windowChips();
-        boolean home = isWidgetsPageShowing();
         // One bar across the wall (#90): the same chips in the same order on Home as on every
         // window, the display window's at its place and the Home floats after the row's.
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
-            windowChipItems(chips, com.termux.app.chrome.WindowChips.Surface.BAR, foregroundPids);
-        if (home) {
-            // Home's dock may show the same chips too: the Wall strip's
-            // tiles. Seen from Home nobody looks at a row window, so the bar's chips are
-            // dressed as the strips' are and serve them as they stand.
+            windowChipItems(chips, foregroundPids);
+        // Home's dock may show the same chips as the Wall strip's tiles, and so may a window whose
+        // dock wears the Wall strip over its apps (#93).
+        if (isWidgetsPageShowing() || wallStripFed() && wallStripOn(mLastWallPage))
             syncWallStrip(chips, items);
-        } else {
-            // A window whose dock wears the Wall strip shows the row over its apps (#93): its
-            // tiles follow the windows here too, dressed as the strip dresses them.
-            if (wallStripFed() && wallStripOn(mLastWallPage))
-                syncWallStrip(chips, windowChipItems(chips,
-                    com.termux.app.chrome.WindowChips.Surface.WALL_STRIP,
-                    new java.util.ArrayList<>()));
-        }
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
         // The row's own windows can be dragged to reorder, the display window's chip with them:
         // not the Home floats' after them. The same on both halves.
@@ -27129,6 +27126,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncBackgroundProcessStack();
         scheduleShellPhaseJudgement();
         java.util.List<Integer> pids = collectAllPanePids();
+        // The Home floats' shells are the session's windows too, and their chips carry the same
+        // marks as the row's: the trackers keep them, and the resolver reads their foreground.
+        if (mPaneController != null) {
+            for (com.termux.app.terminal.TerminalPaneController.Window window : chipFloats()) {
+                for (TerminalSession shell : mPaneController.shellsOf(window)) {
+                    if (shell.getPid() > 0 && !pids.contains(shell.getPid()))
+                        pids.add(shell.getPid());
+                }
+            }
+        }
         java.util.HashSet<Integer> live = new java.util.HashSet<>(pids);
         mShellPhases.retain(live);
         mAgentStatuses.retain(live);
@@ -27137,11 +27144,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The chip for the row's terminal window {@code window} at {@code index}, its marks read from
-     * this refresh's observation of its shells; {@code seen} when the user is looking at it.
+     * The chip for the terminal window {@code window} at {@code index} — a row's window or a Home
+     * float — its marks read from this refresh's observation of its shells; {@code seen} when the
+     * user is looking at it.
      */
     @NonNull
-    private com.termux.app.terminal.TerminalWindowBar.WindowItem rowWindowItem(
+    private com.termux.app.terminal.TerminalWindowBar.WindowItem windowItem(
             @NonNull com.termux.app.terminal.TerminalPaneController.Window window, int index,
             @NonNull java.util.List<Integer> foregroundPids, boolean seen, long now) {
         TerminalSession session = mPaneController.windowActiveSession(window);
@@ -29042,6 +29050,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** A fresh shell as a new window of the row, wherever the wall is (the entry's New window). */
     private void createRowWindow() {
         if (!isSplitPanesEnabled() || mPaneController == null) return;
+        if (mCurrentWSession == null && !mWSessions.isEmpty()) {
+            // Sessions stand but none is current (the row emptied under Home): the window opens
+            // in the one the Workspace shows next, as after a close (showNextSessionAfterClose),
+            // never in a session of its own beside them.
+            mCurrentWSession = mWSessions.get(0);
+            mPaneController.showWindow(mCurrentWSession.currentWindow());
+        }
         if (mCurrentWSession == null) { // no session yet -> behave like new session
             getTermuxTerminalSessionClient().addNewSession(false, null);
             return;
@@ -29309,37 +29324,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalPaneController.Window focused =
             mPaneController.focusedHomeFloat();
         for (com.termux.app.terminal.TerminalPaneController.Window window : chipFloats()) {
-            chips.addFloat(window, window.isMinimised(), window.homePage() >= 0,
-                window == focused);
+            chips.addFloat(window, window.isMinimised(), window == focused);
         }
         return chips;
     }
 
     /**
-     * Each chip {@code surface} shows, dressed for the bar, in its order: a row window's marks
-     * read from this refresh's one observation of its shells, the display window's chip named
-     * after its app, a float's carrying its page. On the bar in the Workspace the window in front
-     * is the one the user is looking at, and so acknowledged; nobody looks at a row window from
-     * Home, whichever surface shows its chip there.
+     * Every window chip, dressed once, in its order: a terminal window's marks — a row window's
+     * and a Home float's alike — read from this refresh's one observation of its shells, the
+     * display window's chip named after its app, a float's carrying its page. In the Workspace the
+     * window in front is the one the user is looking at, and so acknowledged; nobody looks at a
+     * row window from Home, whichever surface shows its chip there, while the float in focus
+     * there is in plain sight.
      */
     @NonNull
     private java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> windowChipItems(
             @NonNull com.termux.app.chrome.WindowChips<
                 com.termux.app.terminal.TerminalPaneController.Window> chips,
-            @NonNull com.termux.app.chrome.WindowChips.Surface surface,
             @NonNull java.util.List<Integer> foregroundPids) {
         java.util.List<com.termux.app.chrome.WindowChips.Chip<
-            com.termux.app.terminal.TerminalPaneController.Window>> list = chips.chips(surface);
+            com.termux.app.terminal.TerminalPaneController.Window>> list =
+                chips.chips();
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
             new java.util.ArrayList<>(list.size());
         if (list.isEmpty() || mPaneController == null) return items;
         long now = android.os.SystemClock.uptimeMillis();
         // The bar on Home shows the same chips (#90), but nobody looks at a row window from
         // there: its attention marks stay until the window is in front in the Workspace.
-        boolean looking = surface == com.termux.app.chrome.WindowChips.Surface.BAR
-            && !isWidgetsPageShowing();
+        boolean home = isWidgetsPageShowing();
+        boolean looking = !home;
         boolean onDisplay = looking && isDisplayWindowInFront();
         int current = mCurrentWSession == null ? -1 : mCurrentWSession.current;
+        com.termux.app.terminal.TerminalPaneController.Window focusedFloat =
+            home ? mPaneController.focusedHomeFloat() : null;
         for (com.termux.app.chrome.WindowChips.Chip<
                 com.termux.app.terminal.TerminalPaneController.Window> chip : list) {
             com.termux.app.terminal.TerminalPaneController.Window window = chip.window;
@@ -29349,13 +29366,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 boolean seen = looking && chip.index == current && !onDisplay;
                 // Looking at the window is the acknowledgement: whatever it wanted, the user is here.
                 if (seen) clearWindowAttention(window);
-                items.add(rowWindowItem(window, chip.index, foregroundPids, seen, now));
+                items.add(windowItem(window, chip.index, foregroundPids, seen, now));
             } else {
-                // Home floats are windows of the session too: chips after the row's, marked, a
-                // minimised one said to be folded into its chip (#91).
-                TerminalSession session = mPaneController.windowActiveSession(window);
-                items.add(buildWindowItem(session, items.size(), foregroundPids,
-                    mPaneController.windowName(window))
+                // Home floats are windows of the session too: chips after the row's, marked as
+                // the row's are, a minimised one said to be folded into its chip (#91). The one in
+                // focus on Home is the one the user is looking at.
+                boolean seen = window == focusedFloat && !chip.minimised;
+                if (seen) clearWindowAttention(window);
+                items.add(windowItem(window, items.size(), foregroundPids, seen, now)
                     .withHomeFloat(window.homePage(), getString(chip.minimised
                         ? R.string.window_chip_home_float_minimised
                         : R.string.window_chip_home_float, window.homePage() + 1))

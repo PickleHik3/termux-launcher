@@ -1328,10 +1328,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             Object shown = child.getTag(R.id.terminal_window_tab_state);
             if (!force && shown instanceof WindowItem && ((WindowItem) shown).sameActivity(item)
                 && ((WindowItem) shown).label.equals(item.label)) continue;
-            if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)
-                || ((WindowItem) shown).minimised != item.minimised) {
+            if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)) {
                 setTitle((TextView) child, item);
             }
+            MinimisedDotDrawable.wear((TextView) child, item.minimised);
             applyChipWatermark((TextView) child, item, i == mSelectedIndex ? 1f : 0f);
             child.setAlpha(item.restAlpha());
             child.setTag(R.id.terminal_window_tab_state, item);
@@ -1350,8 +1350,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     @NonNull
     private CharSequence tabText(@NonNull WindowItem item) {
-        // A minimised float's dot, after the title: a bullet, in the title's own ink and alpha.
-        String title = titleOf(item.label) + (item.minimised ? " \u2022" : "");
+        String title = titleOf(item.label);
         return TerminalLabelSymbolSpans.apply(
             com.termux.shared.termux.font.NerdFontSpans.span(getContext(), title), mSymbolMaps);
     }
@@ -1681,15 +1680,28 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      * once per minimise, for the float's flight into its chip.
      */
     public boolean chipBoundsOnScreen(int index, @NonNull android.graphics.Rect out) {
-        if (!isShown() || index < 0 || index >= mItems.size() || index >= mTabs.getChildCount())
+        return chipBoundsOnScreen(this, mTabs, index, mItems.size(), out);
+    }
+
+    /**
+     * Where {@code chips}' child at {@code index} stands on screen, cut to the part {@code host}
+     * shows: false while the host is not on screen, {@code index} is not one of its
+     * {@code itemCount} chips, the chip is not laid out, or it is scrolled out of sight. The bar's
+     * row and the status bar's window column ask it alike.
+     */
+    public static boolean chipBoundsOnScreen(@NonNull View host,
+                                             @NonNull android.view.ViewGroup chips,
+                                             int index, int itemCount,
+                                             @NonNull android.graphics.Rect out) {
+        if (!host.isShown() || index < 0 || index >= itemCount || index >= chips.getChildCount())
             return false;
-        View chip = mTabs.getChildAt(index);
+        View chip = chips.getChildAt(index);
         if (chip.getWidth() <= 0 || chip.getHeight() <= 0) return false;
         int[] at = new int[2];
         chip.getLocationOnScreen(at);
         out.set(at[0], at[1], at[0] + chip.getWidth(), at[1] + chip.getHeight());
-        getLocationOnScreen(at);
-        return out.intersect(at[0], at[1], at[0] + getWidth(), at[1] + getHeight());
+        host.getLocationOnScreen(at);
+        return out.intersect(at[0], at[1], at[0] + host.getWidth(), at[1] + host.getHeight());
     }
 
     /** Told about every chip tap, including the one spent on revealing the close button. */
@@ -1755,6 +1767,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         tab.setMinWidth(dp(ChipWatermarkGeometry.GLYPH_SIZE_DP)
             + dp(ChipWatermarkGeometry.TITLE_NUDGE_DP) + dp(3.5f) * 2);
         applyChipWatermark(tab, item, selected ? 1f : 0f);
+        // A minimised float's mark: the same dot the status column's chips wear, in the title's ink.
+        MinimisedDotDrawable.wear(tab, item.minimised);
         tab.setSelected(selected);
         tab.setFocusable(true);
         return tab;

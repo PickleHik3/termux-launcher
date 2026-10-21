@@ -72,8 +72,8 @@ import java.util.Locale;
  * cancels. A tap selects an element: one outline along its own shape, its valid edges outlined,
  * the move control outside it, whose menu sends it to an edge or hides it, and on the dock, the
  * keyboard and Home's grid a handle that resizes it with a readout while it is held. The keyboard,
- * selected, shows its type chips and Key radius in the sheet's Row B; Home's dock, selected, shows
- * the dock styles there, one preview per style. Eye-off carries the count of hidden
+ * selected, shows its type chips and Key radius in the sheet's Row B; the dock, selected, shows
+ * the Dock designs there, one preview per design. Eye-off carries the count of hidden
  * elements and opens their tiles in the sheet; a tile brings its element back to the edge it left,
  * or is dragged onto the canvas to an edge of the user's choosing. Every write goes straight
  * through, so the live place under the canvas follows every edit made in the orientation the phone
@@ -170,7 +170,7 @@ public final class LayoutEditorController {
         /** The keyboard's tools in Row B's place while {@code shown}, Corner radius and Margin back otherwise. */
         default void setKeyboardToolsShown(boolean shown) {}
 
-        /** Home's dock styles in Row B's place while {@code shown}, Corner radius and Margin back otherwise. */
+        /** The Dock designs in Row B's place while {@code shown}, Corner radius and Margin back otherwise. */
         default void setDockStylesShown(boolean shown) {}
     }
 
@@ -223,7 +223,7 @@ public final class LayoutEditorController {
         /** The highlight behind eye-off, larger than its 48dp target: the drop area itself. */
         @NonNull final View hiddenHighlight;
         @NonNull final ChipGroup hiddenTiles;
-        /** Home's dock styles, in the sheet's Row B while Home's dock is selected; filled here. */
+        /** The Dock designs, in the sheet's Row B while the dock is selected; filled here. */
         @NonNull final ViewGroup dockStyles;
         @NonNull final TilesHost tilesHost;
 
@@ -555,7 +555,7 @@ public final class LayoutEditorController {
         views.canvas.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
             @Override public void onSelectionChanged(@Nullable LayoutCanvasView.Block selected) {
                 dismissMoveMenu();
-                // The keyboard's tools and the dock styles stand in Row B's place: the tiles give
+                // The keyboard's tools and the Dock designs stand in Row B's place: the tiles give
                 // it up to them.
                 if ((showsKeyRadius(selected) || showsDockStyles(mPlan, selected)) && mTilesOpen)
                     setTilesOpen(views, false);
@@ -1249,7 +1249,7 @@ public final class LayoutEditorController {
         }
     }
 
-    // ------------------------------------------------------------------------ the dock styles
+    // ----------------------------------------------------------------------- the Dock designs
 
     /** Each design's name and silhouette, in {@link DockStyle#CHOICES} order, as the row holds them. */
     private static final int[] DOCK_STYLE_LABELS = {
@@ -1268,13 +1268,17 @@ public final class LayoutEditorController {
     @Nullable private Chip mDrawerTileChip;
 
     /**
-     * Whether the dock styles show: in Layout mode on the Home layout, with its dock (the pinned
-     * apps) selected. The Workspace's dock has no style.
+     * Whether the Dock designs show: in Layout mode on any layout, Home's or a window's (#93), with
+     * the dock selected — its pinned apps row, or its A–Z row where the layout shows the index and
+     * not the apps, which makes that row the whole dock.
      */
     @VisibleForTesting
     static boolean showsDockStyles(@Nullable LayoutEditorPlan plan,
                                    @Nullable LayoutCanvasView.Block selected) {
-        return plan != null && plan.offersDockStyle() && selected == LayoutCanvasView.Block.APPS_ROW;
+        if (plan == null) return false;
+        if (selected == LayoutCanvasView.Block.APPS_ROW) return true;
+        return selected == LayoutCanvasView.Block.ALPHABETS_ROW
+            && plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden;
     }
 
     /**
@@ -1336,7 +1340,7 @@ public final class LayoutEditorController {
     }
 
     /**
-     * The dock styles take Row B while Home's dock is selected, the picked style checked; on
+     * The Dock designs take Row B while the dock is selected, the picked design checked; on
      * deselect Corner radius and Margin come back. The sheet's height never changes.
      */
     private void syncDockStyles(@NonNull Views views) {

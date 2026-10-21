@@ -177,6 +177,26 @@ public class LayoutCanvasViewTest {
         assertEquals(LayoutCanvasView.CanvasKind.DISPLAY, view.canvasKind());
     }
 
+    /**
+     * Home wears the status bar as a window does (#90): its preview stands the bar where the
+     * layout places it, and the widget grid's page starts below it, as a window's page does.
+     */
+    @Test
+    public void homesPreviewStandsTheBarAndItsGridStartsBelowIt() {
+        LayoutCanvasView view = sized();
+        view.setLayout(layout(RowPlacement.BOTTOM, 4, 5), PlaceOrientation.PORTRAIT,
+            PaneWallPage.WIDGETS);
+        RectF bar = view.blockRect(LayoutCanvasView.Block.STATUS_BAR);
+        RectF page = view.blockRect(LayoutCanvasView.Block.CANVAS);
+        assertNotNull("Home's preview draws its status bar", bar);
+        assertNotNull(page);
+        assertTrue("the grid's page starts below the bar", page.top >= bar.bottom);
+        view.setLayout(layout(RowPlacement.BOTTOM, 4, 5), PlaceOrientation.PORTRAIT,
+            PaneWallPage.TERMINAL);
+        assertEquals("the same page top as a window's", view.blockRect(
+            LayoutCanvasView.Block.CANVAS).top, page.top, 0.5f);
+    }
+
     @Test
     public void theWidgetGridCollapsesOnlyWhenACellWouldBeTooSmall() {
         LayoutCanvasView view = sized();

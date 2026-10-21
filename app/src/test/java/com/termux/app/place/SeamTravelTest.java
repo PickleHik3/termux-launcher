@@ -158,16 +158,49 @@ public class SeamTravelTest {
         assertTrue(SeamTravel.showsOtherDock(DockPlan.FOLD_IN, 0.01f));
     }
 
-    @Test
-    public void extraKeysNotOutermostStillDip() {
-        // The extra keys between the A-Z row and the apps: taking them away moves the A-Z row's
-        // neighbours, which no fold on the dock's edge stands in for.
+    /** A window whose bottom stack is, outermost first, {@code outermostFirst}. */
+    private static PlaceLayout windowStacking(Element... outermostFirst) {
         Map<Element, Slot> slots = new EnumMap<>(Element.class);
-        slots.put(Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS));
-        slots.put(Element.AZ, Slot.on(Edge.BOTTOM, Element.AZ).withOrder(0));
-        slots.put(Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS).withOrder(1));
-        PlaceLayout window = layout(slots);
-        assertSame(Element.AZ, EdgeStackPolicy.stack(window, Edge.BOTTOM).get(0));
+        for (int order = 0; order < outermostFirst.length; order++) {
+            Element element = outermostFirst[order];
+            slots.put(element, Slot.on(Edge.BOTTOM, element).withOrder(order));
+        }
+        return layout(slots);
+    }
+
+    @Test
+    public void extraKeysInTheMiddleFoldToo() {
+        // The extra keys between the A-Z row and the apps: the A-Z row, outside them, stays where
+        // it stands; the apps, on the canvas's side, go down by the part the fold hides.
+        PlaceLayout window = windowStacking(Element.AZ, Element.EXTRA_KEYS, Element.APPS);
+        assertEquals(Arrays.asList(Element.AZ, Element.EXTRA_KEYS, Element.APPS),
+            EdgeStackPolicy.stack(window, Edge.BOTTOM));
+        assertSame(DockPlan.FOLD_OUT, SeamTravel.dockPlan(window, homeWithDock()));
+        assertSame(DockPlan.FOLD_IN, SeamTravel.dockPlan(homeWithDock(), window));
+        assertEquals(Arrays.asList(Element.AZ), SeamTravel.rowsOutsideExtraKeys(window));
+    }
+
+    @Test
+    public void extraKeysInnermostFoldWithEveryOtherRowHeld() {
+        // The extra keys against the canvas: both rows outside them hold, nothing else sinks.
+        PlaceLayout window = windowStacking(Element.AZ, Element.APPS, Element.EXTRA_KEYS);
+        assertSame(DockPlan.FOLD_OUT, SeamTravel.dockPlan(window, homeWithDock()));
+        assertSame(DockPlan.FOLD_IN, SeamTravel.dockPlan(homeWithDock(), window));
+        assertEquals(Arrays.asList(Element.AZ, Element.APPS),
+            SeamTravel.rowsOutsideExtraKeys(window));
+    }
+
+    @Test
+    public void extraKeysOutermostHoldNothing() {
+        // The shipped order: the extra keys against the screen's edge, every row above them sinks.
+        assertTrue(SeamTravel.rowsOutsideExtraKeys(workspaceWithDock()).isEmpty());
+        assertTrue(SeamTravel.rowsOutsideExtraKeys(homeWithDock()).isEmpty());
+    }
+
+    @Test
+    public void rowsThatChangeOrderBesideTheExtraKeysStillDip() {
+        // Taking the extra keys away is not all that differs: the apps and the A-Z row swap too.
+        PlaceLayout window = windowStacking(Element.APPS, Element.EXTRA_KEYS, Element.AZ);
         assertSame(DockPlan.DIP, SeamTravel.dockPlan(window, homeWithDock()));
     }
 

@@ -300,16 +300,7 @@ public final class LayoutEditorPlan {
         return Drop.LIVE;
     }
 
-    // -------------------------------------------------------------------------- the dock style
-
-    /**
-     * Whether the dock style picker is offered: where the edited layout's page picks its Dock
-     * design, a Home page on whichever layout it wears; the Workspace's dock is the tray until
-     * #93 (home-dock-styles spec, "The choice").
-     */
-    public boolean offersDockStyle() {
-        return dress().picksDockDesign();
-    }
+    // ------------------------------------------------------------------------ the Dock design
 
     /**
      * The edited layout's Dock design as picked, whether or not it is drawn yet: what the picker
@@ -321,29 +312,21 @@ public final class LayoutEditorPlan {
     }
 
     /**
-     * A dock style picked, for the edited layout. One value for both orientations, so the live
-     * dock follows it whichever orientation the toggle shows; nothing is written where no page
-     * picks a design.
+     * A Dock design picked, for the edited layout. One value for both orientations, so the live
+     * dock follows it whichever orientation the toggle shows. Every layout holds one, Home's and
+     * the windows' alike (#93).
      */
     @NonNull
     public Drop setDockStyle(@NonNull DockStyle style) {
         // Only what the picker offers: the Prompt line is the Search field now (#96), the Taskbar
         // the Drawer tile (#97).
-        if (!offersDockStyle() || !DockStyle.CHOICES.contains(style) || style == dockStyle())
+        if (!DockStyle.CHOICES.contains(style) || style == dockStyle())
             return Drop.NONE;
         mPlaces.setDockStyle(style);
         return Drop.LIVE;
     }
 
     // ------------------------------------------------------------------- the Search field
-
-    /**
-     * Whether the Search field toggle is offered: beside the design picker, wherever it is
-     * (#96), since the field goes with any design.
-     */
-    public boolean offersSearchField() {
-        return offersDockStyle();
-    }
 
     /** Whether the edited layout turns the Search field on: what the toggle shows. */
     public boolean searchField() {
@@ -356,21 +339,13 @@ public final class LayoutEditorPlan {
      */
     @NonNull
     public Drop setSearchField(boolean on) {
-        if (!offersSearchField() || on == searchField())
+        if (on == searchField())
             return Drop.NONE;
         mPlaces.setSearchField(on);
         return Drop.LIVE;
     }
 
     // -------------------------------------------------------------------- the Drawer tile
-
-    /**
-     * Whether the Drawer tile toggle is offered: beside the design picker, wherever it is (#97),
-     * since the tile goes with any design.
-     */
-    public boolean offersDrawerTile() {
-        return offersDockStyle();
-    }
 
     /** Whether the edited layout turns the Drawer tile on: what the toggle shows. */
     public boolean drawerTile() {
@@ -384,7 +359,7 @@ public final class LayoutEditorPlan {
      */
     @NonNull
     public Drop setDrawerTile(boolean on) {
-        if (!offersDrawerTile() || on == drawerTile())
+        if (on == drawerTile())
             return Drop.NONE;
         mPlaces.setDrawerTile(on);
         return Drop.LIVE;

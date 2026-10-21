@@ -46,7 +46,7 @@ public final class SurfaceEditorScene {
 
     /**
      * The scene one place's arrangement makes, with the two states that are not the arrangement's:
-     * whether the embedded keyboard is up, and which dock style is on.
+     * whether the embedded keyboard is up, and which Dock design is on.
      */
     @NonNull
     public static SurfaceEditorScene of(@NonNull PlaceLayout layout, boolean keyboardShown,

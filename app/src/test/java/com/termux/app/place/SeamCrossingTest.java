@@ -172,8 +172,8 @@ public class SeamCrossingTest {
             PaneWallPage other = SeamTravel.otherHalfPage(frame, committed);
             if (other != null && other != crossing.other()) {
                 begins++;
-                boolean first = crossing.begin(here, there, stage);
-                if (begins == 1) barFirst = first;
+                crossing.begin(here, there, stage);
+                if (begins == 1) barFirst = crossing.barTakesWorkspaceDressFirst();
             }
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
             if (answers.relayout()) crossing.standLayout();
@@ -181,7 +181,7 @@ public class SeamCrossingTest {
             Step step = new Step();
             step.fraction = fraction;
             step.active = crossing.other() != null;
-            step.progress = answers.progress();
+            step.progress = SeamTravel.otherHalfProgress(frame, committed);
             step.dockReveal = answers.dockReveal();
             step.keyboardReveal = answers.keyboardReveal();
             step.extraKeysShare = answers.extraKeysShare();
@@ -316,6 +316,63 @@ public class SeamCrossingTest {
         drive.crossing.end();
         assertFalse(landing.redressesBack(PaneWallPage.TERMINAL));
         assertFalse(landing.redressesBack(PaneWallPage.WIDGETS));
+    }
+
+    /**
+     * The one layout with its bottom rows in another order, outermost first: the window's, and
+     * Home's less the extra keys.
+     */
+    private static PlaceLayout windowStacking(Element... outermostFirst) {
+        PlaceLayout layout = window();
+        for (int order = 0; order < outermostFirst.length; order++) {
+            Element element = outermostFirst[order];
+            layout = layout.withSlot(element, Slot.on(Edge.BOTTOM, element).withOrder(order));
+        }
+        return layout;
+    }
+
+    private static PlaceLayout homeOf(@NonNull PlaceLayout window) {
+        return window.withSlot(Element.EXTRA_KEYS,
+            window.slot(Element.EXTRA_KEYS).withHidden(true));
+    }
+
+    @Test
+    public void extraKeysInTheMiddleFoldWithTheRowsOutsideThemHeld() {
+        PlaceLayout window = windowStacking(Element.AZ, Element.EXTRA_KEYS, Element.APPS);
+        for (PaneWallPage from : new PaneWallPage[] {PaneWallPage.TERMINAL, PaneWallPage.WIDGETS}) {
+            Drive drive = from == PaneWallPage.TERMINAL
+                ? drive(new Stored(), PaneWallPage.TERMINAL, window, false, PaneWallPage.WIDGETS,
+                    homeOf(window), false, false)
+                : drive(new Stored(), PaneWallPage.WIDGETS, homeOf(window), false,
+                    PaneWallPage.TERMINAL, window, false, false);
+            drive.slow(0f, 0.6f);
+            assertOnlyTheExtraKeysFold(drive);
+            // The A-Z row stands between the extra keys and the screen's edge: it never moves.
+            assertTrue(drive.crossing.foldHolds(Element.AZ));
+            assertFalse(drive.crossing.foldHolds(Element.APPS));
+            assertFalse(drive.crossing.foldHolds(Element.EXTRA_KEYS));
+            drive.crossing.land();
+            assertFalse("a landed crossing holds nothing", drive.crossing.foldHolds(Element.AZ));
+            drive.crossing.end();
+        }
+    }
+
+    @Test
+    public void extraKeysInnermostFoldWithEveryOtherRowHeld() {
+        PlaceLayout window = windowStacking(Element.AZ, Element.APPS, Element.EXTRA_KEYS);
+        Drive drive = drive(new Stored(), PaneWallPage.TERMINAL, window, false,
+            PaneWallPage.WIDGETS, homeOf(window), false, false).slow(0f, 1f);
+        assertOnlyTheExtraKeysFold(drive);
+        assertTrue(drive.crossing.foldHolds(Element.AZ));
+        assertTrue(drive.crossing.foldHolds(Element.APPS));
+    }
+
+    @Test
+    public void extraKeysOutermostHoldNoRow() {
+        Drive drive = oneLayout(PaneWallPage.TERMINAL).slow(0f, 0.5f);
+        assertOnlyTheExtraKeysFold(drive);
+        assertFalse(drive.crossing.foldHolds(Element.AZ));
+        assertFalse(drive.crossing.foldHolds(Element.APPS));
     }
 
     @Test

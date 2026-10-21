@@ -13,6 +13,26 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "fix(statusbar): the bar's + opens a window in the current session's row on
+  both halves" · on Home with a session up, tap the bar's + (and the Strip's +): the Workspace
+  slides in on a new window right after the one in front, the session badge's count unchanged
+  (the emulator showed a new session, "2", at d0fa1f662; the cause was not reproduced, so check
+  after a float took the row's last window too); split panes off: no + on either half · emulator.
+- 2026-10-21 · commit "fix(place): the extra keys fold wherever they stand in the bottom stack"
+  (#94) · Layout editor: put the extra keys between the A–Z row and the apps, then innermost;
+  swipe Home↔window slow and reversed: the rows between the keys and the screen's edge never
+  move, the keys shut into their own bottom edge, the rows above sink by their height, the
+  hairlines move with their rows; the shipped order folds as before · emulator.
+- 2026-10-21 · commits "fix(statusbar): the minimised dot is built once…" and "fix(chrome):
+  window chips observed once per refresh, Home floats marked too" · minimise a Home float: its
+  chip on the bar's row and in the side column wears the same small dot, top end corner, dimmed
+  chip; a float running a command or ringing the bell shows the ring/bell like a row window's;
+  a window whose dock wears the Strip shows the same marks on its tiles as on the bar; no
+  stutter while the bar's glass re-measures · emulator.
+- 2026-10-21 · commit "fix(layouteditor): the Dock design picker shows for a dock of the A-Z row
+  alone" (#93) · Layout editor: put the apps row away, select the A–Z row → the designs show in
+  Row B, labelled "Dock design"; with the apps row shown, selecting the A–Z row keeps Corner
+  radius and Margin; the sheet keeps its height · emulator.
 - 2026-10-21 · commit "feat(dock): beads keep the Search field in a glass capsule" (#84) · #2 Beads
   + Search field: beads stay, the field sits in its own glass capsule under them on Home and a
   window; tap opens the palette; swipe Home↔window melts beads and capsule together; A–Z row on

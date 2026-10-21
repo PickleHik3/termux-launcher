@@ -830,9 +830,9 @@
             app:tickVisibilityMode="hidden" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Home's dock styles (home-dock-styles spec, "The choice"): while Home's dock is selected
+    <!-- The Dock designs (home-dock-styles spec, "The choice"; #93): while the dock is selected
          they stand where Corner radius and Margin are, as the keyboard's tools do, pinned to the
-         same extent so the sheet keeps its height. One preview per style with its name under it,
+         same extent so the sheet keeps its height. One preview per design with its name under it,
          the picked one filled; LayoutEditorController fills the row. -->
     <LinearLayout
         android:id="@+id/layout_editor_dock_styles"

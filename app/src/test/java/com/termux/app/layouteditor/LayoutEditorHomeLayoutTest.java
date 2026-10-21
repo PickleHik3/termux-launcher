@@ -187,7 +187,6 @@ public class LayoutEditorHomeLayoutTest {
     @Test
     public void theHomeLayoutsDesignIsItsOwnOneValueForBothOrientations() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
-        assertTrue(plan.offersDockStyle());
         plan.showOrientation(PlaceOrientation.LANDSCAPE);
         assertEquals("live whichever orientation the toggle shows", LayoutEditorPlan.Drop.LIVE,
             plan.setDockStyle(DockStyle.WALL_STRIP));
@@ -230,7 +229,6 @@ public class LayoutEditorHomeLayoutTest {
     @Test
     public void theWorkspaceLayoutOffersItsDockDesign() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
-        assertTrue(plan.offersDockStyle());
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setDockStyle(DockStyle.LENS_BEADS));
         assertEquals(DockStyle.LENS_BEADS, places.forVariant(LayoutVariant.NORMAL).dockStyle());
         assertEquals("the Home layout keeps its own", DockStyle.GLASS_TRAY,
@@ -253,10 +251,8 @@ public class LayoutEditorHomeLayoutTest {
     public void theHomeFilterCarriesTheDockStyleChoice() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
         plan.showHome(true);
-        assertTrue(plan.offersDockStyle());
         plan.setDockStyle(DockStyle.LENS_BEADS);
         plan.showHome(false);
-        assertTrue("a window offers its layout's design", plan.offersDockStyle());
         assertTrue("the Home layout's pick is still unsaved", plan.isDirty());
         plan.revert();
         assertEquals(DockStyle.GLASS_TRAY, places.forVariant(LayoutVariant.HOME).dockStyle());

@@ -109,7 +109,6 @@ public final class SeamCrossing {
 
     /** One frame's answers. The same object every frame: read it before the next frame. */
     public static final class Answers {
-        float progress;
         float dockReveal;
         float keyboardReveal;
         boolean folds;
@@ -128,7 +127,6 @@ public final class SeamCrossing {
         }
 
         void clear(float dock, float keyboard) {
-            progress = 0f;
             dockReveal = dock;
             keyboardReveal = keyboard;
             folds = false;
@@ -141,11 +139,6 @@ public final class SeamCrossing {
             beadShare = Float.NaN;
             moved = false;
             barRedressed = false;
-        }
-
-        /** How far the chrome has gone into the other half, 0 to 1 ({@link SeamTravel#otherHalfProgress}). */
-        public float progress() {
-            return progress;
         }
 
         /** How much of the dock rows the stack stands shows: the seam's reveal, else the frame's. */
@@ -256,48 +249,71 @@ public final class SeamCrossing {
         }
     }
 
-    // ---- What a crossing reads once, as it begins ----
-
-    @Nullable private PaneWallPage mCommitted;
-    /** The other half's page, its layout, and the dock's plan for the crossing. */
-    @Nullable private PaneWallPage mOther;
-    @Nullable private PlaceLayout mOtherLayout;
-    @NonNull private DockPlan mPlan = DockPlan.NONE;
     /**
-     * Whether the halves dress the stack differently, and so whether it is dressed again when it
-     * changes halves; whether it then dips whole, keyboard included; which half keeps a keyboard
-     * in the stack.
+     * Everything one crossing holds, from its begin to its settle. A new one is taken at each
+     * settle instead of every field being put back by hand: {@link #land} keeps only what the
+     * page's commit still reads ({@link Run#landed}), and {@link #end} starts afresh.
      */
-    private boolean mDressDiffers, mShapeDiffers, mWholeStack;
-    private boolean mCommittedKeyboard, mOtherKeyboard;
-    /**
-     * Whether both halves stand the bar alike, in one shape, so it stands still (#90); otherwise
-     * whether the Workspace's bar rides with its page; and whether a slide from Home may lay the
-     * Workspace's bar out over Home.
-     */
-    private boolean mBarStill, mBarRides, mStatusMayShow;
-    /** Whether beads melt on this crossing, and whether the committed half is the beaded one. */
-    private boolean mBeadMelt, mBeadsCommitted;
-    /** The halves' Dock designs and Search fields; the designs null while no crossing holds them. */
-    @Nullable private DockStyle mCommittedDesign, mOtherDesign;
-    private boolean mCommittedSearchField, mOtherSearchField;
-    /** The arrangements the seam can stand, laid out at begin: the other half's rows, bar, both. */
-    @Nullable private PlaceLayout mDockLayout, mStatusLayout, mDockStatusLayout;
+    private static final class Run {
+        // ---- What a crossing reads once, as it begins ----
 
-    // ---- What the frames move ----
+        @Nullable PaneWallPage committed;
+        /** The other half's page, its layout, and the dock's plan for the crossing. */
+        @Nullable PaneWallPage other;
+        @Nullable PlaceLayout otherLayout;
+        @NonNull DockPlan plan = DockPlan.NONE;
+        /** The dock rows a fold leaves standing, outside the extra keys; empty unless it folds. */
+        @NonNull java.util.List<Element> foldHeld = java.util.Collections.emptyList();
+        /**
+         * Whether the halves dress the stack differently, and so whether it is dressed again when it
+         * changes halves; whether it then dips whole, keyboard included; which half keeps a keyboard
+         * in the stack.
+         */
+        boolean dressDiffers, shapeDiffers, wholeStack;
+        boolean committedKeyboard, otherKeyboard;
+        /**
+         * Whether both halves stand the bar alike, in one shape, so it stands still (#90); otherwise
+         * whether the Workspace's bar rides with its page; and whether a slide from Home may lay the
+         * Workspace's bar out over Home.
+         */
+        boolean barStill, barRides, statusMayShow;
+        /** Whether beads melt on this crossing, and whether the committed half is the beaded one. */
+        boolean beadMelt, beadsCommitted;
+        /** The halves' Dock designs and Search fields; the designs null while no crossing holds them. */
+        @Nullable DockStyle committedDesign, otherDesign;
+        boolean committedSearchField, otherSearchField;
+        /** The arrangements the seam can stand, laid out at begin: the other half's rows, bar, both. */
+        @Nullable PlaceLayout dockLayout, statusLayout, dockStatusLayout;
 
-    /** The arrangement the chrome stands in, null while it stands in the committed one. */
-    @Nullable private PlaceLayout mLayout;
-    /** Whether the arrangement stands the other half's dock rows, and its bar. */
-    private boolean mDockShown, mStatusShown;
-    /** The page whose half the stack wears; null while it wears the committed page's. */
-    @Nullable private PaneWallPage mStackDressPage;
-    /** The stack changed halves while they dress it differently: the next pass dresses it. */
-    private boolean mRestylePending;
-    /** The page the bar is dressed for while it rides; null otherwise. */
-    @Nullable private PaneWallPage mBarPage;
-    /** How far the slide has come toward the other half while the halves' bands differ; NaN otherwise. */
-    private float mBandProgress = Float.NaN;
+        // ---- What the frames move ----
+
+        /** The arrangement the chrome stands in, null while it stands in the committed one. */
+        @Nullable PlaceLayout layout;
+        /** Whether the arrangement stands the other half's dock rows, and its bar. */
+        boolean dockShown, statusShown;
+        /** The page whose half the stack wears; null while it wears the committed page's. */
+        @Nullable PaneWallPage stackDressPage;
+        /** The stack changed halves while they dress it differently: the next pass dresses it. */
+        boolean restylePending;
+        /** The page the bar is dressed for while it rides; null otherwise. */
+        @Nullable PaneWallPage barPage;
+        /** How far the slide has come toward the other half while the halves' bands differ; NaN otherwise. */
+        float bandProgress = Float.NaN;
+
+        /** What a landed crossing keeps through the page's commit: the stack's dress. */
+        @NonNull
+        Run landed() {
+            Run kept = new Run();
+            kept.committed = committed;
+            kept.other = other;
+            kept.stackDressPage = stackDressPage;
+            kept.dressDiffers = dressDiffers;
+            kept.shapeDiffers = shapeDiffers;
+            return kept;
+        }
+    }
+
+    @NonNull private Run mRun = new Run();
 
     private final Answers mAnswers = new Answers();
     private final Landing mLanding = new Landing();
@@ -306,63 +322,73 @@ public final class SeamCrossing {
      * The crossing begins on the first frame that reaches {@code other}'s half, or reads the
      * halves again for a frame that reaches another page of it; what the frames have laid out
      * stays as it is. Reads and lays out everything the frames will need.
-     *
-     * @return whether the status bar must take off Home's dress for the Workspace's now, while it
-     *         is still hidden, before any pass lays it out over Home
      */
-    public boolean begin(@NonNull Half committed, @NonNull Half other, @NonNull Stage stage) {
-        boolean begins = mOther == null;
+    public void begin(@NonNull Half committed, @NonNull Half other, @NonNull Stage stage) {
         PlaceLayout here = committed.layout;
         PlaceLayout there = other.layout;
-        mCommitted = committed.page;
-        mOther = other.page;
-        mOtherLayout = there;
+        mRun.committed = committed.page;
+        mRun.other = other.page;
+        mRun.otherLayout = there;
         // Each half's Dock design, read once here so the frames read no store: one layout gives
         // both halves one design, and then no band eases and no bead melts (#93).
-        mCommittedDesign = committed.dress.dockDesign();
-        mOtherDesign = other.dress.dockDesign();
-        mCommittedSearchField = committed.dress.searchField();
-        mOtherSearchField = other.dress.searchField();
-        mDressDiffers = !committed.stack.equals(other.stack);
-        mShapeDiffers = !committed.stack.shape.equals(other.stack.shape);
+        mRun.committedDesign = committed.dress.dockDesign();
+        mRun.otherDesign = other.dress.dockDesign();
+        mRun.committedSearchField = committed.dress.searchField();
+        mRun.otherSearchField = other.dress.searchField();
+        mRun.dressDiffers = !committed.stack.equals(other.stack);
+        mRun.shapeDiffers = !committed.stack.shape.equals(other.stack.shape);
         // One bar across the wall (#90): where both halves stand it alike, in one shape, it
         // stands still on the crossing instead of riding with the Workspace's page.
-        mBarStill = here.slot(Element.STATUS).equals(there.slot(Element.STATUS)) && !mShapeDiffers;
+        mRun.barStill = here.slot(Element.STATUS).equals(there.slot(Element.STATUS)) && !mRun.shapeDiffers;
         PlaceLayout workspaceSide = committed.page == PaneWallPage.WIDGETS ? there : here;
-        mBarRides = !mBarStill && !workspaceSide.slot(Element.STATUS).hidden;
+        mRun.barRides = !mRun.barStill && !workspaceSide.slot(Element.STATUS).hidden;
         // A keyboard in the stack, not one floating in a frame of its own.
-        mCommittedKeyboard = committed.keyboardUp
+        mRun.committedKeyboard = committed.keyboardUp
             && here.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
-        mOtherKeyboard = other.keyboardUp
+        mRun.otherKeyboard = other.keyboardUp
             && there.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
         // Beads melt only where one half's dock draws them and the other's does not: the
         // committed half's as they lie now, the other's as its layout lays its row out (the
         // Workspace's extra keys, or a keyboard in the stack, keep the slab there). The Search
         // field keeps the beads, in a capsule of its own under them (#84).
-        boolean otherBeads = mOtherDesign == DockStyle.LENS_BEADS
+        boolean otherBeads = mRun.otherDesign == DockStyle.LENS_BEADS
             && LensBeadGeometry.rowWearsBeads(there,
                 !stackDressedApart(committed.page) && stage.frameGlass.standsDown(),
-                mOtherKeyboard);
-        mBeadMelt = stage.beadsDrawn != otherBeads;
-        mBeadsCommitted = stage.beadsDrawn;
+                mRun.otherKeyboard);
+        mRun.beadMelt = stage.beadsDrawn != otherBeads;
+        mRun.beadsCommitted = stage.beadsDrawn;
         boolean exchangeable = SeamTravel.dockExchangeable(here)
             && SeamTravel.dockExchangeable(there);
-        mPlan = SeamDress.plan(SeamTravel.dockPlan(here, there), exchangeable, mDressDiffers,
-            mCommittedKeyboard || !EdgeStackPolicy.stack(here, Edge.BOTTOM).isEmpty(),
-            mOtherKeyboard || !EdgeStackPolicy.stack(there, Edge.BOTTOM).isEmpty());
-        mWholeStack = SeamDress.wholeStack(mPlan, mDressDiffers);
+        mRun.plan = SeamDress.plan(SeamTravel.dockPlan(here, there), exchangeable, mRun.dressDiffers,
+            mRun.committedKeyboard || !EdgeStackPolicy.stack(here, Edge.BOTTOM).isEmpty(),
+            mRun.otherKeyboard || !EdgeStackPolicy.stack(there, Edge.BOTTOM).isEmpty());
+        mRun.wholeStack = SeamDress.wholeStack(mRun.plan, mRun.dressDiffers);
+        // The layout a fold runs in stands the extra keys: the committed one folding out, the
+        // other half's folding in.
+        mRun.foldHeld = mRun.plan == DockPlan.FOLD_OUT ? SeamTravel.rowsOutsideExtraKeys(here)
+            : mRun.plan == DockPlan.FOLD_IN ? SeamTravel.rowsOutsideExtraKeys(there)
+            : java.util.Collections.emptyList();
         // Only from Home: the Workspace's bar is the one that travels with its page, unless the
         // bar is one across the wall and stands still.
-        mStatusMayShow = !mBarStill && committed.page == PaneWallPage.WIDGETS
+        mRun.statusMayShow = !mRun.barStill && committed.page == PaneWallPage.WIDGETS
             && other.page != PaneWallPage.WIDGETS && SeamTravel.statusRides(there)
             && SeamTravel.statusCanArriveOver(here) && stage.splitPanes;
-        boolean dockMayShow = mPlan == DockPlan.SLIDE_IN || mPlan == DockPlan.FOLD_IN
-            || mPlan == DockPlan.DIP;
-        mDockLayout = dockMayShow ? SeamTravel.withDockOf(here, there) : null;
-        mStatusLayout = mStatusMayShow ? SeamTravel.withStatusOf(here, there) : null;
-        mDockStatusLayout = dockMayShow && mStatusMayShow
-            ? SeamTravel.withStatusOf(mDockLayout, there) : null;
-        return begins && mShapeDiffers && committed.page == PaneWallPage.WIDGETS;
+        boolean dockMayShow = mRun.plan == DockPlan.SLIDE_IN || mRun.plan == DockPlan.FOLD_IN
+            || mRun.plan == DockPlan.DIP;
+        mRun.dockLayout = dockMayShow ? SeamTravel.withDockOf(here, there) : null;
+        mRun.statusLayout = mRun.statusMayShow ? SeamTravel.withStatusOf(here, there) : null;
+        mRun.dockStatusLayout = dockMayShow && mRun.statusMayShow
+            ? SeamTravel.withStatusOf(mRun.dockLayout, there) : null;
+    }
+
+    /**
+     * Whether the status bar takes off Home's dress for the Workspace's as a crossing begins,
+     * while it is still hidden, before any pass lays it out over Home: from Home, toward a half
+     * that shapes the stack otherwise. Asked once, right after the {@link #begin} that started the
+     * crossing.
+     */
+    public boolean barTakesWorkspaceDressFirst() {
+        return mRun.shapeDiffers && mRun.committed == PaneWallPage.WIDGETS;
     }
 
     /**
@@ -370,7 +396,7 @@ public final class SeamCrossing {
      * has not reached the other half answers the travel's own reveals and nothing else.
      *
      * @param dressable         whether the chrome can be dressed yet (the preferences are read)
-     * @param bandEaseRuns      whether a Dock style switch is easing the dock's bands, which own
+     * @param bandEaseRuns      whether a Dock design switch is easing the dock's bands, which own
      *                          them while it runs
      * @param fieldUnderPalette whether the command palette is up over the Search field, which then
      *                          stays the design's own
@@ -380,68 +406,67 @@ public final class SeamCrossing {
                          boolean fieldUnderPalette) {
         Answers answers = mAnswers;
         answers.clear(frame.dockReveal, frame.keyboardReveal);
-        PaneWallPage committed = mCommitted;
-        PaneWallPage other = mOther;
+        PaneWallPage committed = mRun.committed;
+        PaneWallPage other = mRun.other;
         if (committed == null || other == null) return answers;
         float progress = SeamTravel.otherHalfProgress(frame, committed);
-        answers.progress = progress;
         // Which half's dress the stack wears, noting a change for this frame's pass.
-        PaneWallPage stackPage = SeamDress.stackPage(committed, other, mPlan, progress);
+        PaneWallPage stackPage = SeamDress.stackPage(committed, other, mRun.plan, progress);
         PaneWallPage dressPage = stackPage == committed ? null : stackPage;
-        if (dressPage != mStackDressPage) {
-            mStackDressPage = dressPage;
-            if (mDressDiffers) mRestylePending = true;
+        if (dressPage != mRun.stackDressPage) {
+            mRun.stackDressPage = dressPage;
+            if (mRun.dressDiffers) mRun.restylePending = true;
         }
         boolean crosses = SeamTravel.crosses(committed, other);
         // A band only one half's dock carries follows its page across the seam.
-        if (dressable && crosses && !bandEaseRuns && mCommittedDesign != null
-            && mOtherDesign != null) {
-            boolean stripMoves = (mCommittedDesign == DockStyle.WALL_STRIP)
-                != (mOtherDesign == DockStyle.WALL_STRIP);
-            boolean fieldMoves = !fieldUnderPalette && mCommittedSearchField != mOtherSearchField;
+        if (dressable && crosses && !bandEaseRuns && mRun.committedDesign != null
+            && mRun.otherDesign != null) {
+            boolean stripMoves = (mRun.committedDesign == DockStyle.WALL_STRIP)
+                != (mRun.otherDesign == DockStyle.WALL_STRIP);
+            boolean fieldMoves = !fieldUnderPalette && mRun.committedSearchField != mRun.otherSearchField;
             float share = clamp01(progress);
-            if ((stripMoves || fieldMoves) && Float.compare(share, mBandProgress) != 0) {
-                mBandProgress = share;
+            if ((stripMoves || fieldMoves) && Float.compare(share, mRun.bandProgress) != 0) {
+                mRun.bandProgress = share;
                 answers.bandsMoved = true;
             }
         }
         // Lens beads only one half draws melt into the slab, or come out of it, the same way.
-        if (dressable && crosses && mBeadMelt) {
-            if (mBeadsCommitted && SeamTravel.committedRowsLeave(mPlan)) {
+        if (dressable && crosses && mRun.beadMelt) {
+            if (mRun.beadsCommitted && SeamTravel.committedRowsLeave(mRun.plan)) {
                 // The beaded half's rows sink below the stack's bottom edge, which cuts them flat:
                 // the beads melt while the chrome still rests and sink as the slab.
                 answers.beadShare = LensBeadGeometry.leavingMeltShare(
                     SeamTravel.otherHalfFraction(frame, committed), PlaceChromeTravel.LANDING);
             } else {
                 float share = clamp01(progress);
-                answers.beadShare = mBeadsCommitted ? 1f - share : share;
+                answers.beadShare = mRun.beadsCommitted ? 1f - share : share;
             }
         }
         // The stack stands the other half's rows, dressed for that half, from the frame the plan
         // says; from Home the Workspace's bar is laid out as the slide starts.
-        boolean dockShown = SeamTravel.showsOtherDock(mPlan, progress);
-        boolean statusShown = progress > 0f && mStatusMayShow;
-        if (dockShown != mDockShown || statusShown != mStatusShown || mRestylePending) {
-            mDockShown = dockShown;
-            mStatusShown = statusShown;
+        boolean dockShown = SeamTravel.showsOtherDock(mRun.plan, progress);
+        boolean statusShown = progress > 0f && mRun.statusMayShow;
+        if (dockShown != mRun.dockShown || statusShown != mRun.statusShown || mRun.restylePending) {
+            mRun.dockShown = dockShown;
+            mRun.statusShown = statusShown;
             answers.relayout = true;
-            answers.restyle = mRestylePending;
-            answers.restyleShape = mShapeDiffers;
-            mRestylePending = false;
+            answers.restyle = mRun.restylePending;
+            answers.restyleShape = mRun.shapeDiffers;
+            mRun.restylePending = false;
         }
-        if (mPlan != DockPlan.NONE) answers.dockReveal = SeamTravel.dockReveal(mPlan, progress);
-        answers.moved = answers.relayout || mPlan != DockPlan.NONE;
+        if (mRun.plan != DockPlan.NONE) answers.dockReveal = SeamTravel.dockReveal(mRun.plan, progress);
+        answers.moved = answers.relayout || mRun.plan != DockPlan.NONE;
         // Between halves that dress the stack differently the keyboard dips with the rows, so it
         // is below the screen where the stack changes its dress.
-        if (mWholeStack) {
+        if (mRun.wholeStack) {
             answers.keyboardReveal = SeamDress.wholeStackKeyboardReveal(progress,
-                mCommittedKeyboard, mOtherKeyboard);
+                mRun.committedKeyboard, mRun.otherKeyboard);
         }
-        answers.folds = SeamTravel.folds(mPlan);
-        if (answers.folds) answers.extraKeysShare = SeamTravel.extraKeysShare(mPlan, progress);
+        answers.folds = SeamTravel.folds(mRun.plan);
+        if (answers.folds) answers.extraKeysShare = SeamTravel.extraKeysShare(mRun.plan, progress);
         // With a keyboard in the stack the rows sink into its top edge; a whole-stack dip moves
         // both by the translation.
-        answers.rowsSink = !answers.folds && mPlan != DockPlan.NONE && !mWholeStack;
+        answers.rowsSink = !answers.folds && mRun.plan != DockPlan.NONE && !mRun.wholeStack;
         return answers;
     }
 
@@ -450,8 +475,8 @@ public final class SeamCrossing {
      * ({@link Answers#relayout}): {@link #layout} answers it from here on.
      */
     public void standLayout() {
-        mLayout = mDockShown ? (mStatusShown ? mDockStatusLayout : mDockLayout)
-            : mStatusShown ? mStatusLayout : null;
+        mRun.layout = mRun.dockShown ? (mRun.statusShown ? mRun.dockStatusLayout : mRun.dockLayout)
+            : mRun.statusShown ? mRun.statusLayout : null;
     }
 
     /**
@@ -464,16 +489,16 @@ public final class SeamCrossing {
      * @param hostCanRide whether the bar's host is laid out, along the top, on a wall
      */
     public boolean rideBar(@NonNull Frame frame, boolean hostCanRide) {
-        boolean rides = hostCanRide && mOther != null && mBarRides
+        boolean rides = hostCanRide && mRun.other != null && mRun.barRides
             && (frame.from == PaneWallPage.WIDGETS || frame.toward == PaneWallPage.WIDGETS);
         PaneWallPage barPage = null;
         if (rides) {
             barPage = frame.toward != PaneWallPage.WIDGETS ? frame.toward
                 : frame.from != PaneWallPage.WIDGETS ? frame.from
-                : mCommitted == PaneWallPage.WIDGETS ? null : mCommitted;
+                : mRun.committed == PaneWallPage.WIDGETS ? null : mRun.committed;
         }
-        mAnswers.barRedressed = barPage != mBarPage;
-        mBarPage = barPage;
+        mAnswers.barRedressed = barPage != mRun.barPage;
+        mRun.barPage = barPage;
         return rides;
     }
 
@@ -485,42 +510,19 @@ public final class SeamCrossing {
     @NonNull
     public Landing land() {
         Landing landing = mLanding;
-        landing.bandsMoved = !Float.isNaN(mBandProgress);
-        landing.laidOut = mLayout != null;
-        landing.barTravelled = mBarPage != null;
-        landing.dressedFor = mStackDressPage;
-        landing.dressDiffered = mDressDiffers;
-        landing.shapeDiffered = mShapeDiffers;
-        mBandProgress = Float.NaN;
-        mCommittedDesign = null;
-        mOtherDesign = null;
-        mBeadMelt = false;
-        mLayout = null;
-        mDockShown = false;
-        mStatusShown = false;
-        mOtherLayout = null;
-        mPlan = DockPlan.NONE;
-        mWholeStack = false;
-        mCommittedKeyboard = false;
-        mOtherKeyboard = false;
-        mRestylePending = false;
-        mBarPage = null;
-        mBarStill = false;
-        mBarRides = false;
-        mStatusMayShow = false;
-        mDockLayout = null;
-        mStatusLayout = null;
-        mDockStatusLayout = null;
+        landing.bandsMoved = !Float.isNaN(mRun.bandProgress);
+        landing.laidOut = mRun.layout != null;
+        landing.barTravelled = mRun.barPage != null;
+        landing.dressedFor = mRun.stackDressPage;
+        landing.dressDiffered = mRun.dressDiffers;
+        landing.shapeDiffered = mRun.shapeDiffers;
+        mRun = mRun.landed();
         return landing;
     }
 
     /** The settle's second half, after the page's commit: the stack's dress lets go. */
     public void end() {
-        mCommitted = null;
-        mOther = null;
-        mStackDressPage = null;
-        mDressDiffers = false;
-        mShapeDiffers = false;
+        mRun = new Run();
     }
 
     // ---- What the chrome reads of a crossing between frames ----
@@ -528,13 +530,13 @@ public final class SeamCrossing {
     /** The other half's page the crossing was begun for; null while none runs. */
     @Nullable
     public PaneWallPage other() {
-        return mOther;
+        return mRun.other;
     }
 
     /** The other half's layout as the crossing read it; null while none runs and once landed. */
     @Nullable
     public PlaceLayout otherLayout() {
-        return mOtherLayout;
+        return mRun.otherLayout;
     }
 
     /**
@@ -544,12 +546,16 @@ public final class SeamCrossing {
      */
     @Nullable
     public PlaceLayout layout() {
-        return mLayout;
+        return mRun.layout;
     }
 
-    /** Whether the crossing folds the extra keys rather than moving the rows. */
-    public boolean folds() {
-        return SeamTravel.folds(mPlan);
+    /**
+     * Whether a fold leaves {@code row} where it stands: a dock row between the extra keys and the
+     * screen's bottom edge ({@link SeamTravel#rowsOutsideExtraKeys}). False for every row while
+     * nothing folds.
+     */
+    public boolean foldHolds(@NonNull Element row) {
+        return mRun.foldHeld.contains(row);
     }
 
     /**
@@ -558,7 +564,7 @@ public final class SeamCrossing {
      */
     @Nullable
     public PaneWallPage stackDressPage() {
-        return mStackDressPage;
+        return mRun.stackDressPage;
     }
 
     /**
@@ -566,19 +572,19 @@ public final class SeamCrossing {
      * mid-slide, once it stands the rows of a half that shapes it differently.
      */
     public boolean stackDressedApart(@NonNull PaneWallPage committed) {
-        return mShapeDiffers && mStackDressPage != null
-            && SeamTravel.crosses(mStackDressPage, committed);
+        return mRun.shapeDiffers && mRun.stackDressPage != null
+            && SeamTravel.crosses(mRun.stackDressPage, committed);
     }
 
     /** The committed half's Dock design as the crossing read it; null while none holds one. */
     @Nullable
     public DockStyle committedDesign() {
-        return mCommittedDesign;
+        return mRun.committedDesign;
     }
 
     /** The committed half's Search field as the crossing read it, while it holds a design. */
     public boolean committedSearchField() {
-        return mCommittedSearchField;
+        return mRun.committedSearchField;
     }
 
     /**
@@ -586,9 +592,9 @@ public final class SeamCrossing {
      * toward the other half's as the slide eases the bands; {@code here} while nothing eases.
      */
     public float searchFieldShare(float here) {
-        if (Float.isNaN(mBandProgress) || mOtherDesign == null) return here;
-        float there = mOtherSearchField ? 1f : 0f;
-        return here + (there - here) * mBandProgress;
+        if (Float.isNaN(mRun.bandProgress) || mRun.otherDesign == null) return here;
+        float there = mRun.otherSearchField ? 1f : 0f;
+        return here + (there - here) * mRun.bandProgress;
     }
 
     /**
@@ -597,10 +603,10 @@ public final class SeamCrossing {
      * while nothing eases.
      */
     public float designShare(@NonNull DockStyle design, float here) {
-        DockStyle other = mOtherDesign;
-        if (Float.isNaN(mBandProgress) || other == null) return here;
+        DockStyle other = mRun.otherDesign;
+        if (Float.isNaN(mRun.bandProgress) || other == null) return here;
         float there = other == design ? 1f : 0f;
-        return here + (there - here) * mBandProgress;
+        return here + (there - here) * mRun.bandProgress;
     }
 
     private static float clamp01(float value) {

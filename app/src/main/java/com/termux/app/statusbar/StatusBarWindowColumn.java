@@ -90,15 +90,8 @@ public final class StatusBarWindowColumn extends ScrollView {
      * Asked once per minimise, for the float's flight into its chip.
      */
     public boolean chipBoundsOnScreen(int index, @NonNull android.graphics.Rect out) {
-        if (!isShown() || index < 0 || index >= mItems.size() || index >= mStack.getChildCount())
-            return false;
-        View chip = mStack.getChildAt(index);
-        if (chip.getWidth() <= 0 || chip.getHeight() <= 0) return false;
-        int[] at = new int[2];
-        chip.getLocationOnScreen(at);
-        out.set(at[0], at[1], at[0] + chip.getWidth(), at[1] + chip.getHeight());
-        getLocationOnScreen(at);
-        return out.intersect(at[0], at[1], at[0] + getWidth(), at[1] + getHeight());
+        return com.termux.app.terminal.TerminalWindowBar.chipBoundsOnScreen(this, mStack, index,
+            mItems.size(), out);
     }
 
     /** The place's colour, so the column reads as part of the place it belongs to. */
@@ -233,34 +226,19 @@ public final class StatusBarWindowColumn extends ScrollView {
                 : WindowChipInk.towardPolarity(glass.restingSurface, markColor(item), pale(),
                     OnGlass.TARGET_BODY_TEXT));
         }
-        chip.setBackground(chipBackground(item, selected));
+        // The chip keeps its one shape and only its colours move, for the same reason as the dot.
+        if (chip.getBackground() instanceof GradientDrawable) {
+            paintChipBackground((GradientDrawable) chip.getBackground(), item, selected);
+        } else {
+            GradientDrawable shape = new GradientDrawable();
+            paintChipBackground(shape, item, selected);
+            chip.setBackground(shape);
+        }
         // A minimised float (#91): the chip at reduced emphasis, and a small dot in its corner in
-        // the chip's own ink.
+        // the chip's own ink. The dot reads the ink at draw time, so it is only ever put on or
+        // taken off here: this is reached from the draw pass, and a new foreground asks for layout.
         chip.setAlpha(item.restAlpha());
-        chip.setForeground(item.minimised ? minimisedDot(chip.getCurrentTextColor()) : null);
-    }
-
-    /** The dot a minimised float's chip wears, in its top end corner. */
-    @NonNull
-    private android.graphics.drawable.Drawable minimisedDot(int color) {
-        final float size = WindowItem.MINIMISED_DOT_DP * density();
-        final float inset = 3f * density();
-        final android.graphics.Paint paint = new android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG);
-        paint.setColor(color);
-        return new android.graphics.drawable.Drawable() {
-            @Override public void draw(@NonNull android.graphics.Canvas canvas) {
-                boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
-                float cx = rtl ? getBounds().left + inset + size / 2f
-                    : getBounds().right - inset - size / 2f;
-                canvas.drawCircle(cx, getBounds().top + inset + size / 2f, size / 2f, paint);
-            }
-            @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); }
-            @Override public void setColorFilter(@Nullable android.graphics.ColorFilter filter) {
-                paint.setColorFilter(filter);
-            }
-            @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
-        };
+        com.termux.app.terminal.MinimisedDotDrawable.wear(chip, item.minimised);
     }
 
     /** The corner the bar's chips wear, shared with the badge and the lens icons. */
@@ -355,9 +333,8 @@ public final class StatusBarWindowColumn extends ScrollView {
             ContextCompat.getColor(getContext(), R.color.termux_on_surface_variant));
     }
 
-    @NonNull
-    private GradientDrawable chipBackground(@NonNull WindowItem item, boolean selected) {
-        GradientDrawable shape = new GradientDrawable();
+    private void paintChipBackground(@NonNull GradientDrawable shape, @NonNull WindowItem item,
+                                     boolean selected) {
         shape.setShape(GradientDrawable.RECTANGLE);
         float radius = mChipRadiusPx >= 0f ? mChipRadiusPx : 8f * density();
         shape.setCornerRadius(Math.min(radius, CHIP_SIZE_DP * density() / 2f));
@@ -378,7 +355,7 @@ public final class StatusBarWindowColumn extends ScrollView {
                         || item.agentState == com.termux.app.terminal.AgentStatus.State.WORKING
                         ? 170 : 70));
             }
-            return shape;
+            return;
         }
         // The rim is the whole chip here — there is no room for the row's corner dots, so working,
         // asking and finished are the rim's colour. That makes it the only carrier of its own
@@ -389,7 +366,6 @@ public final class StatusBarWindowColumn extends ScrollView {
         shape.setStroke(Math.round(density()), selected
             ? glass.selectedStroke
             : WindowChipInk.towardPolarity(glass.band, mark, pale(), OnGlass.TARGET_LARGE_TEXT));
-        return shape;
     }
 
     private float density() {

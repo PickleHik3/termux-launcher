@@ -255,8 +255,8 @@ public class WallStripModelTest {
     public void fromTheWindowChips_kindsSelectionAndMinimisedFloatsFollowTheChips() {
         // a D b, then floats f (minimised) and g (in focus), as Home's dock sees them.
         WindowChips<String> chips = new WindowChips<>(true, true, Arrays.asList("a", "b"), 1, 0)
-            .addFloat("f", true, true, false)
-            .addFloat("g", false, true, true);
+            .addFloat("f", true, false)
+            .addFloat("g", false, true);
         List<WindowItem> items = Arrays.asList(chip("a"), chip("Display"), chip("b"),
             chip("f"), chip("g"));
         List<WallStripModel.Entry> entries =

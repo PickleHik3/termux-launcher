@@ -299,6 +299,12 @@ public final class PlaceLayoutStore {
      */
     private int mHomeLayoutRevision = Integer.MIN_VALUE;
     private boolean mHomeLayout;
+    /**
+     * Minimal mode as last read, cached as the Home layout switch is: a window's Dock design is
+     * the minimal layout's or the normal one's, and the key lens asks that design every frame.
+     */
+    private int mMinimalRevision = Integer.MIN_VALUE;
+    private boolean mMinimal;
     private int mDockDesignRevision = Integer.MIN_VALUE;
     @Nullable private LayoutVariant mDockDesignVariant;
     @NonNull private DockStyle mDockDesign = DockStyle.GLASS_TRAY;
@@ -551,11 +557,11 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * {@code variant}'s layout as {@code page} wears it. A window wears it whole, its dock the
-     * tray. A Home page on the shared layout leaves out what Home never wears (the extra keys,
-     * {@link DressResolver#wornBy}), its keyboard element is always on, Home's own
-     * whichever layout it wears ({@link #isHomeKeyboardAlwaysOn}), and its dock draws the design
-     * the layout holds. On the Home layout it is that layout as it resolves.
+     * {@code variant}'s layout as {@code page} wears it. A window wears it whole, its dock in the
+     * Dock design the layout holds (#93). A Home page on the shared layout leaves out what Home
+     * never wears (the extra keys, {@link DressResolver#wornBy}), its keyboard element is always
+     * on, Home's own whichever layout it wears ({@link #isHomeKeyboardAlwaysOn}), and its dock
+     * draws the design the layout holds too. On the Home layout it is that layout as it resolves.
      */
     @NonNull
     public PlaceLayout resolve(@NonNull PlaceOrientation orientation,
@@ -569,7 +575,7 @@ public final class PlaceLayoutStore {
                 resolved = resolved.withSlot(element, slot.withHidden(true));
         }
         return resolved.withKeyboardShown(isHomeKeyboardAlwaysOn())
-            .withDockStyle(DressResolver.dockDesignOn(page, layout.dockStyle()));
+            .withDockStyle(DockStyle.effectiveStyle(layout.dockStyle()));
     }
 
     /** As {@link #resolve(PlaceOrientation, LayoutVariant)}, for the variant this store is on. */
@@ -593,8 +599,8 @@ public final class PlaceLayoutStore {
             isKeyboardShown(),
             widgetColumns(orientation),
             widgetRows(orientation),
-            // The Dock design the dress puts on the variant: the one it holds, on either half.
-            DressResolver.dockDesignOn(variant, dockStyle()));
+            // The Dock design the variant draws: the one it holds, on either half.
+            DockStyle.effectiveStyle(dockStyle()));
     }
 
     /**
@@ -654,7 +660,7 @@ public final class PlaceLayoutStore {
     /**
      * The Dock design this view's layout holds, whether or not it is drawn yet; what the Layout
      * editor's picker shows. What a page's dock draws is its dress's ({@link
-     * DressResolver#dockDesignOn}), on the resolved layout as {@link PlaceLayout#dockStyle}. Read
+     * DockStyle#effectiveStyle} of it), on the resolved layout as {@link PlaceLayout#dockStyle}. Read
      * on travel frames (the bead melt), so it is read once per revision.
      */
     @NonNull
@@ -1194,7 +1200,12 @@ public final class PlaceLayoutStore {
      * remembered.
      */
     public boolean isMinimal() {
-        return mStore != null && mStore.getBoolean(minimalKey(), false);
+        int revision = mRevision.get();
+        if (mMinimalRevision != revision) {
+            mMinimal = mStore != null && mStore.getBoolean(minimalKey(), false);
+            mMinimalRevision = revision;
+        }
+        return mMinimal;
     }
 
     public void setMinimal(boolean minimal) {

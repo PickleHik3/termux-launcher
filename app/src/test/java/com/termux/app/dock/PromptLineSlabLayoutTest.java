@@ -213,4 +213,37 @@ public class PromptLineSlabLayoutTest {
         assertEquals("the Strip with the field is the tallest",
             design(DockSurfaceSpec.WALL_STRIP, 1f).combinedHeight(BASE_TOOLBAR_PX, false), tallest);
     }
+
+    /**
+     * The Strip and the Search field together (#84 item 3): at every size preset, floating or
+     * docked, alone or with the index, each keeps its own band, neither eats the other's or the
+     * apps row's, and the stack is taller by exactly the two of them.
+     */
+    @Test
+    public void theStripAndTheFieldFitTogetherAtEverySize() {
+        for (boolean capsule : new boolean[] {false, true}) {
+            for (boolean alone : new boolean[] {false, true}) {
+                for (int preset = 0; preset < DockLayoutPolicy.sizePresetCount(); preset++) {
+                    float scale = DockLayoutPolicy.sizePreset(preset);
+                    String what = "capsule=" + capsule + " alone=" + alone + " preset=" + preset;
+                    DockLayout tray = tray(capsule, alone, scale);
+                    DockLayout field = line(capsule, alone, scale, 1f);
+                    DockLayout strip = DockLayoutPolicy.compute(inputs(capsule, alone, scale)
+                        .surface(DockSurfaceSpec.WALL_STRIP).wallStripReveal(1f).build());
+                    DockLayout both = DockLayoutPolicy.compute(inputs(capsule, alone, scale)
+                        .surface(DockSurfaceSpec.WALL_STRIP).wallStripReveal(1f)
+                        .promptFieldReveal(1f).build());
+                    assertEquals(what, field.promptFieldBandPx, both.promptFieldBandPx);
+                    assertEquals(what, strip.wallStripBandPx, both.wallStripBandPx);
+                    assertEquals(what, tray.appsBarHeightPx, both.appsBarHeightPx);
+                    assertTrue(what, both.promptFieldBandPx > 0 && both.wallStripBandPx > 0);
+                    for (boolean keys : new boolean[] {false, true}) {
+                        assertEquals(what, tray.combinedHeight(BASE_TOOLBAR_PX, keys)
+                                + both.promptFieldBandPx + both.wallStripBandPx,
+                            both.combinedHeight(BASE_TOOLBAR_PX, keys));
+                    }
+                }
+            }
+        }
+    }
 }
