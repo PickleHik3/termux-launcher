@@ -40,6 +40,7 @@ public class DressResolverTest {
         boolean homeLayout;
         final EnumMap<LayoutVariant, DockStyle> designs = new EnumMap<>(LayoutVariant.class);
         final EnumMap<LayoutVariant, Boolean> searchFields = new EnumMap<>(LayoutVariant.class);
+        final EnumMap<LayoutVariant, Boolean> drawerTiles = new EnumMap<>(LayoutVariant.class);
         WallHalfShape workspace = WORKSPACE;
         WallHalfShape home = HOME;
 
@@ -47,6 +48,7 @@ public class DressResolverTest {
             for (LayoutVariant layout : LayoutVariant.values()) {
                 designs.put(layout, DockStyle.GLASS_TRAY);
                 searchFields.put(layout, false);
+                drawerTiles.put(layout, false);
             }
         }
 
@@ -57,6 +59,9 @@ public class DressResolverTest {
         }
         @Override public boolean searchField(@NonNull LayoutVariant layout) {
             return searchFields.get(layout);
+        }
+        @Override public boolean drawerTile(@NonNull LayoutVariant layout) {
+            return drawerTiles.get(layout);
         }
         @NonNull @Override public WallHalfShape shape(boolean home) {
             return home ? this.home : workspace;
@@ -344,20 +349,80 @@ public class DressResolverTest {
             dresses.dressOf(PaneWallPage.WIDGETS).searchField(), terminal().searchField());
     }
 
+    /**
+     * A stray Prompt line or Taskbar (an id the migration has not reached) draws the tray, and
+     * neither brings its old toggle: the field and the tile are the stored toggles' (#96, #97).
+     */
     @Test
-    public void aStrayPromptLineDrawsTheTrayAndTheDrawerTileStillComesWithTheTaskbar() {
+    public void aStrayPromptLineOrTaskbarDrawsTheTrayWithNoToggleOfItsOwn() {
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.PROMPT_LINE);
         assertEquals(DockStyle.GLASS_TRAY, home().dockDesign());
         assertFalse("the field is the stored toggle's", home().searchField());
         assertFalse(home().drawerTile());
 
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.TASKBAR);
-        assertTrue(home().drawerTile());
-        assertTrue(terminal().drawerTile());
+        assertEquals(DockStyle.GLASS_TRAY, home().dockDesign());
+        assertEquals(DockStyle.GLASS_TRAY, terminal().dockDesign());
+        assertFalse("the tile is the stored toggle's", home().drawerTile());
         assertFalse(home().searchField());
+    }
 
-        stored.designs.put(LayoutVariant.NORMAL, DockStyle.GLASS_TRAY);
-        assertFalse(home().drawerTile());
+    // ------------------------------------------------------------------ the Drawer tile (#97)
+
+    /** The Drawer tile is the layout's toggle: both halves wear it on one layout. */
+    @Test
+    public void theDrawerTileIsTheLayoutsToggleOnBothHalves() {
+        stored.drawerTiles.put(LayoutVariant.NORMAL, true);
+        for (Dress dress : new Dress[] {home(), terminal()}) {
+            assertTrue(dress.drawerTile());
+            assertEquals(DockStyle.GLASS_TRAY, dress.dockDesign());
+        }
+        assertTrue(dresses.drawerTileOf(PaneWallPage.WIDGETS));
+        assertTrue(dresses.drawerTileOf(PaneWallPage.TERMINAL));
+        assertTrue(dresses.drawerTileOf(PaneWallPage.DISPLAY));
+    }
+
+    @Test
+    public void theDrawerTileGoesWithEveryDesignAndBesideTheSearchField() {
+        for (DockStyle style : DockStyle.CHOICES) {
+            stored.designs.put(LayoutVariant.NORMAL, style);
+            for (boolean tile : new boolean[] {false, true}) {
+                stored.drawerTiles.put(LayoutVariant.NORMAL, tile);
+                for (boolean field : new boolean[] {false, true}) {
+                    stored.searchFields.put(LayoutVariant.NORMAL, field);
+                    for (Dress dress : new Dress[] {home(), terminal()}) {
+                        assertEquals(style.name(), style, dress.dockDesign());
+                        assertEquals(style.name(), tile, dress.drawerTile());
+                        assertEquals(style.name(), field, dress.searchField());
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    public void theDrawerTileIsEachLayoutsOwn() {
+        stored.drawerTiles.put(LayoutVariant.NORMAL, true);
+        stored.minimal = true;
+        assertFalse("the minimal layout holds its own", terminal().drawerTile());
+        assertTrue("Home wears the normal layout", home().drawerTile());
+        stored.minimal = false;
+        stored.homeLayout = true;
+        assertFalse("a Home layout holds its own", home().drawerTile());
+        assertFalse(dresses.drawerTileOf(PaneWallPage.WIDGETS));
+        assertTrue(terminal().drawerTile());
+        stored.drawerTiles.put(LayoutVariant.HOME, true);
+        assertTrue(dresses.drawerTileOf(PaneWallPage.WIDGETS));
+    }
+
+    @Test
+    public void theDrawerTileAloneChangesTheDress() {
+        Dress without = terminal();
+        stored.drawerTiles.put(LayoutVariant.NORMAL, true);
+        assertNotEquals(without, terminal());
+        assertNotEquals(without.hashCode(), terminal().hashCode());
+        stored.drawerTiles.put(LayoutVariant.NORMAL, false);
+        assertEquals(without, terminal());
     }
 
     @Test

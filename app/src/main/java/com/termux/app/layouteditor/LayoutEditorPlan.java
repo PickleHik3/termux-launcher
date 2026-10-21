@@ -327,7 +327,8 @@ public final class LayoutEditorPlan {
      */
     @NonNull
     public Drop setDockStyle(@NonNull DockStyle style) {
-        // Only what the picker offers: the Prompt line is the Search field now (#96).
+        // Only what the picker offers: the Prompt line is the Search field now (#96), the Taskbar
+        // the Drawer tile (#97).
         if (!offersDockStyle() || !DockStyle.CHOICES.contains(style) || style == dockStyle())
             return Drop.NONE;
         mPlaces.setDockStyle(style);
@@ -358,6 +359,34 @@ public final class LayoutEditorPlan {
         if (!offersSearchField() || on == searchField())
             return Drop.NONE;
         mPlaces.setSearchField(on);
+        return Drop.LIVE;
+    }
+
+    // -------------------------------------------------------------------- the Drawer tile
+
+    /**
+     * Whether the Drawer tile toggle is offered: beside the design picker, wherever it is (#97),
+     * since the tile goes with any design.
+     */
+    public boolean offersDrawerTile() {
+        return offersDockStyle();
+    }
+
+    /** Whether the edited layout turns the Drawer tile on: what the toggle shows. */
+    public boolean drawerTile() {
+        return mPlaces.drawerTile();
+    }
+
+    /**
+     * The Drawer tile turned on or off for the edited layout, both orientations, its design and
+     * the tile's place in the row left as they are; the live dock's row takes or gives back the
+     * tile's slot.
+     */
+    @NonNull
+    public Drop setDrawerTile(boolean on) {
+        if (!offersDrawerTile() || on == drawerTile())
+            return Drop.NONE;
+        mPlaces.setDrawerTile(on);
         return Drop.LIVE;
     }
 

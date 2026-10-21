@@ -904,10 +904,11 @@ public final class SuggestionBarView extends GridLayout
         this.maxButtonCount = maxButtonCount;
     }
 
-    // ------------------------------------------------------------------ the Taskbar's Home tile
+    // ------------------------------------------------------------------ the Drawer tile
     //
-    // Home's Taskbar dock (DockSurfaceSpec.TASKBAR) holds a Home tile among the apps: a tile like
-    // theirs that opens the drawer, in one of the row's slots (TaskbarHomeTilePolicy), so a page
+    // Where the page's layout turns the Drawer tile on (#97; once the Taskbar design's "Home
+    // tile", still the names here), with any Dock design, the row holds a tile among the apps: a
+    // tile like theirs that opens the drawer, in one of the row's slots (DrawerTilePolicy), so a page
     // holds one app fewer and the apps keep their own order around it. It is no pin: it has no
     // menu, it cannot be unpinned, and a long press picks it up to be dragged to the row's start,
     // middle or end. It stands still while a finger swipes the row's pages.
@@ -918,11 +919,11 @@ public final class SuggestionBarView extends GridLayout
         void onHomeTileTapped();
 
         /** The tile was dragged and let go nearest {@code position}, which is not where it was. */
-        void onHomeTileMoved(@NonNull com.termux.app.dock.TaskbarHomeTilePolicy.Position position);
+        void onHomeTileMoved(@NonNull com.termux.app.dock.DrawerTilePolicy.Position position);
     }
 
-    /** Where the Home tile stands, or null for a row with none (every dock but the Taskbar). */
-    @Nullable private com.termux.app.dock.TaskbarHomeTilePolicy.Position homeTilePosition;
+    /** Where the Home tile stands, or null for a row with none (the Drawer tile toggled off). */
+    @Nullable private com.termux.app.dock.DrawerTilePolicy.Position homeTilePosition;
     @Nullable private HomeTileListener homeTileListener;
     /** The Home tile's slot as the last render built it, or null when it built none. */
     @Nullable private View homeTileSlot;
@@ -938,7 +939,7 @@ public final class SuggestionBarView extends GridLayout
      * The Home tile at {@code position}, or none for null. A change re-lays the row's slots: on a
      * row at rest (no A-Z, no typed line) it renders now, otherwise with the next render.
      */
-    public void setHomeTile(@Nullable com.termux.app.dock.TaskbarHomeTilePolicy.Position position,
+    public void setHomeTile(@Nullable com.termux.app.dock.DrawerTilePolicy.Position position,
                             @Nullable HomeTileListener listener) {
         homeTileListener = listener;
         if (homeTilePosition == position) return;
@@ -960,7 +961,7 @@ public final class SuggestionBarView extends GridLayout
         });
     }
 
-    /** Whether the row lays a Home tile out: the Taskbar's, lying down. */
+    /** Whether the row lays a Home tile out: the Drawer tile's, lying down. */
     private boolean homeTileActive() {
         return homeTilePosition != null && !vertical;
     }
@@ -969,7 +970,20 @@ public final class SuggestionBarView extends GridLayout
     private int pinnedRowAppSlots() {
         int slots = Math.max(1, maxButtonCount);
         return homeTileActive()
-            ? Math.max(1, com.termux.app.dock.TaskbarHomeTilePolicy.appSlots(slots)) : slots;
+            ? Math.max(1, com.termux.app.dock.DrawerTilePolicy.appSlots(slots)) : slots;
+    }
+
+    /**
+     * The Drawer tile's icon centre along the row as laid out, where it stands while a swipe
+     * carries the pages, or NaN where the row holds none: Lens beads keep its bead there.
+     */
+    public float drawerTileCenterX() {
+        View shell = homeTileSlot;
+        if (!homeTileShown() || shell == null || shell.getVisibility() != VISIBLE
+            || !(shell instanceof ViewGroup) || ((ViewGroup) shell).getChildCount() == 0)
+            return Float.NaN;
+        View box = ((ViewGroup) shell).getChildAt(0);
+        return shell.getLeft() + box.getLeft() + box.getWidth() * 0.5f;
     }
 
     /** Whether the row on screen holds the Home tile (a pinned page lying down). */
@@ -984,7 +998,7 @@ public final class SuggestionBarView extends GridLayout
      */
     private int pinnedColumnOf(int app, int appSlots) {
         if (!homeTileShown()) return app;
-        return com.termux.app.dock.TaskbarHomeTilePolicy.slotOf(app, homeTilePosition, appSlots);
+        return com.termux.app.dock.DrawerTilePolicy.slotOf(app, homeTilePosition, appSlots);
     }
 
     private int pinnedColumnCount(int appSlots) {
@@ -1014,7 +1028,7 @@ public final class SuggestionBarView extends GridLayout
             // A share of the box rather than pixels, so a new icon size keeps the glyph's air.
             tile.setImageDrawable(new android.graphics.drawable.InsetDrawable(glyph, 0.27f));
         }
-        tile.setContentDescription(getContext().getString(R.string.dock_taskbar_home_tile));
+        tile.setContentDescription(getContext().getString(R.string.dock_drawer_tile));
         tile.setOnClickListener(v -> {
             if (homeTileListener != null) homeTileListener.onHomeTileTapped();
         });
@@ -1027,7 +1041,7 @@ public final class SuggestionBarView extends GridLayout
     /**
      * The tile's touch: a tap is the button's own click; a long press without travel picks the
      * tile up, and from then the drag is the tile's (the row reads the gesture as a child's) until
-     * it lets go, nearest {@link com.termux.app.dock.TaskbarHomeTilePolicy#dropAt} of where its
+     * it lets go, nearest {@link com.termux.app.dock.DrawerTilePolicy#dropAt} of where its
      * centre is across the row.
      */
     private final class HomeTileTouch implements View.OnTouchListener {
@@ -1092,8 +1106,8 @@ public final class SuggestionBarView extends GridLayout
                     float centre = shell.getLeft() + shell.getWidth() / 2f + shell.getTranslationX();
                     float fraction = getWidth() <= 0 ? 0.5f : centre / getWidth();
                     if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) fraction = 1f - fraction;
-                    com.termux.app.dock.TaskbarHomeTilePolicy.Position drop =
-                        com.termux.app.dock.TaskbarHomeTilePolicy.dropAt(fraction);
+                    com.termux.app.dock.DrawerTilePolicy.Position drop =
+                        com.termux.app.dock.DrawerTilePolicy.dropAt(fraction);
                     shell.animate().cancel();
                     shell.animate().scaleX(1f).scaleY(1f).translationX(0f).setDuration(140L)
                         .setInterpolator(new DecelerateInterpolator()).start();
@@ -3196,7 +3210,7 @@ public final class SuggestionBarView extends GridLayout
 
     /** The child-owned cases, read live: all three begin <em>during</em> the stream, not before it. */
     private boolean isGestureOwnedByChild() {
-        // The Taskbar's Home tile picked up: its drag is the tile's, not a page swipe or a pull.
+        // The Drawer tile picked up: its drag is the tile's, not a page swipe or a pull.
         if (homeTileDragging) return true;
         LongPressPickupState state = activeLongPressPickupState;
         return state != null
@@ -3517,7 +3531,7 @@ public final class SuggestionBarView extends GridLayout
             pinnedPageIndex = DockPagingModel.clampPage(pinnedPageIndex, totalPages);
             pinnedPageOffset = pinnedPageIndex * pinnedItemsPerPage;
             buttonCount = Math.max(1, pinnedItemsPerPage);
-            // The Taskbar's Home tile takes a slot of its own beside the page's apps.
+            // The Drawer tile takes a slot of its own beside the page's apps.
             if (homeTileActive()) buttonCount = Math.max(1, pinnedItemsPerPage) + 1;
             if (isMostUsedDynamicPage(pinnedPageIndex)) {
                 // Dynamic most-used page: render ranked apps as launch-only buttons. pinnedForSlots
@@ -3579,12 +3593,12 @@ public final class SuggestionBarView extends GridLayout
         homeTileSlot = null;
         homeTileColumn = -1;
         homeTileAppSlots = 0;
-        // The Taskbar's Home tile, on a pinned page lying down: where it stands among the page's
+        // The Drawer tile, on a pinned page lying down: where it stands among the page's
         // app slots, which keep their order around it.
         boolean homeTileRow = pinnedSurface && homeTileActive() && homeTilePosition != null;
         int homeAppSlots = homeTileRow ? Math.max(1, pinnedItemsPerPage) : 0;
         int homeColumn = homeTileRow
-            ? com.termux.app.dock.TaskbarHomeTilePolicy.homeSlot(homeTilePosition, homeAppSlots) : -1;
+            ? com.termux.app.dock.DrawerTilePolicy.tileSlot(homeTilePosition, homeAppSlots) : -1;
         clearAzFocusedEntry();
         clearTerminalSearchFocus();
         lastAzResolvedSlot = -1;
@@ -3619,7 +3633,7 @@ public final class SuggestionBarView extends GridLayout
             int renderCol = azPreview && azPriorityColumns != null
                 ? azPriorityColumns[col]
                 : homeTileRow
-                    ? com.termux.app.dock.TaskbarHomeTilePolicy.slotOf(col, homeTilePosition,
+                    ? com.termux.app.dock.DrawerTilePolicy.slotOf(col, homeTilePosition,
                         homeAppSlots)
                     : (renderStartCol + col);
             LayoutParams param = createSlotParams(renderCol);
@@ -3954,7 +3968,7 @@ public final class SuggestionBarView extends GridLayout
         // The icon the dock handed over, which outranks the hint whenever it is set.
         signature = (31 * signature) + (vertical ? 0 : dockIconSizePx);
         signature = (31 * signature) + Math.max(1, buttonCount);
-        // Where the Taskbar's Home tile stands moves every slot after it.
+        // Where the Drawer tile stands moves every slot after it.
         signature = (31 * signature) + (homeTileActive() ? homeTilePosition.ordinal() + 1 : 0);
         signature = (31 * signature) + pinnedPageIndex;
         signature = (31 * signature) + activeAzPageIndex;
@@ -7296,12 +7310,12 @@ public final class SuggestionBarView extends GridLayout
         if (homeTile) {
             // Columns around the Home tile hold the page's apps in order; a drop on the tile
             // itself lands beside it, on the side the finger is, or the other where none is.
-            int app = com.termux.app.dock.TaskbarHomeTilePolicy.appAt(hoveredSlot,
+            int app = com.termux.app.dock.DrawerTilePolicy.appAt(hoveredSlot,
                 homeTilePosition, homeTileAppSlots);
             if (app < 0) {
-                int after = com.termux.app.dock.TaskbarHomeTilePolicy.appAt(hoveredSlot + 1,
+                int after = com.termux.app.dock.DrawerTilePolicy.appAt(hoveredSlot + 1,
                     homeTilePosition, homeTileAppSlots);
-                int before = com.termux.app.dock.TaskbarHomeTilePolicy.appAt(hoveredSlot - 1,
+                int before = com.termux.app.dock.DrawerTilePolicy.appAt(hoveredSlot - 1,
                     homeTilePosition, homeTileAppSlots);
                 boolean right = (dropXRatio >= 0.5f && after >= 0) || before < 0;
                 app = Math.max(0, right ? after : before);

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Drawer tile toggle (once the Taskbar style, #97): a slab that starts with the tile, the
+     apps after it. The Layout editor's toggle chip beside the dock styles; tinted by the chip. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="?attr/colorControlNormal"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M4.5,8h15a2.5,2.5 0 0 1 2.5,2.5v3a2.5,2.5 0 0 1 -2.5,2.5h-15a2.5,2.5 0 0 1 -2.5,-2.5v-3a2.5,2.5 0 0 1 2.5,-2.5z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.6" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5,10.4h2.6a0.6,0.6 0 0 1 0.6,0.6v2.6a0.6,0.6 0 0 1 -0.6,0.6h-2.6a0.6,0.6 0 0 1 -0.6,-0.6v-2.6a0.6,0.6 0 0 1 0.6,-0.6z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M9.7,12a1.1,1.1 0 1 0 2.2,0a1.1,1.1 0 1 0 -2.2,0zM12.9,12a1.1,1.1 0 1 0 2.2,0a1.1,1.1 0 1 0 -2.2,0zM16.1,12a1.1,1.1 0 1 0 2.2,0a1.1,1.1 0 1 0 -2.2,0z" />
+</vector>

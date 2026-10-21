@@ -87,7 +87,6 @@ public class DockSurfaceSpecLayoutTest {
     public void eachDesignHasItsSpec() {
         assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(DockStyle.GLASS_TRAY));
         assertSame(DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.forStyle(DockStyle.LENS_BEADS));
-        assertSame(DockSurfaceSpec.TASKBAR, DockSurfaceSpec.forStyle(DockStyle.TASKBAR));
         assertSame(DockSurfaceSpec.WALL_STRIP, DockSurfaceSpec.forStyle(DockStyle.WALL_STRIP));
         assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(null));
         assertTrue(DockSurfaceSpec.LENS_BEADS.beads);
@@ -106,25 +105,16 @@ public class DockSurfaceSpecLayoutTest {
         assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(DockStyle.PROMPT_LINE));
     }
 
+    /**
+     * The Taskbar is the Drawer tile now (#97), a toggle beside any design: a stray stored one
+     * draws the tray, and no spec holds the reflection under the tray's but the Wall strip's.
+     */
     @Test
-    public void theTaskbarIsTheTraysGlassWithTheHomeTileAndALowReflection() {
-        assertSame(DockSurfaceSpec.TASKBAR, DockSurfaceSpec.forStyle(DockStyle.TASKBAR));
-        DockSurfaceSpec bar = DockSurfaceSpec.TASKBAR;
-        DockSurfaceSpec tray = DockSurfaceSpec.GLASS_TRAY;
-        assertTrue(bar.taskbar);
-        for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN, tray,
-                DockSurfaceSpec.LENS_BEADS}) {
-            assertFalse(other.name, other.taskbar);
+    public void aStrayTaskbarDrawsTheTray() {
+        assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(DockStyle.TASKBAR));
+        for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN,
+                DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.LENS_BEADS})
             assertEquals(other.name, 1f, other.reflectionScale, 0f);
-        }
-        assertFalse("one slab, never beads", bar.beads);
-        assertEquals(tray.dashesAboveSlab, bar.dashesAboveSlab);
-        assertEquals(tray.softRimDp, bar.softRimDp, 0f);
-        assertEquals(tray.shelf, bar.shelf, 0f);
-        assertTrue(bar.iconReflections);
-        assertTrue(bar.contactShadow);
-        assertTrue("the reflection is held under the tray's",
-            bar.reflectionScale > 0f && bar.reflectionScale < 1f);
     }
 
     @Test
@@ -136,12 +126,11 @@ public class DockSurfaceSpecLayoutTest {
         assertTrue("the tiles are never reflected: the lower bevel alone",
             wall.reflectsLowerBevelOnly());
         for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN, tray,
-                DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.TASKBAR}) {
+                DockSurfaceSpec.LENS_BEADS}) {
             assertFalse(other.name, other.wallStrip);
             assertFalse(other.name, other.reflectsLowerBevelOnly());
         }
         assertFalse("one slab, never beads", wall.beads);
-        assertFalse(wall.taskbar);
         assertEquals(tray.dashesAboveSlab, wall.dashesAboveSlab);
         assertEquals(tray.softRimDp, wall.softRimDp, 0f);
         assertEquals(tray.shelf, wall.shelf, 0f);

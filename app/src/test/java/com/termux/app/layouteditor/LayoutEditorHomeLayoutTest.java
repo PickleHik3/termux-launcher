@@ -190,26 +190,26 @@ public class LayoutEditorHomeLayoutTest {
         assertTrue(plan.offersDockStyle());
         plan.showOrientation(PlaceOrientation.LANDSCAPE);
         assertEquals("live whichever orientation the toggle shows", LayoutEditorPlan.Drop.LIVE,
-            plan.setDockStyle(DockStyle.TASKBAR));
-        assertEquals("taskbar", prefs().getString("layout.home.dock_design", null));
-        assertEquals(DockStyle.TASKBAR, places.forVariant(LayoutVariant.HOME).dockStyle());
+            plan.setDockStyle(DockStyle.WALL_STRIP));
+        assertEquals("wall_strip", prefs().getString("layout.home.dock_design", null));
+        assertEquals(DockStyle.WALL_STRIP, places.forVariant(LayoutVariant.HOME).dockStyle());
         assertEquals("the shared layout keeps its own", DockStyle.GLASS_TRAY,
             places.forVariant(LayoutVariant.NORMAL).dockStyle());
-        assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.TASKBAR));
+        assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.WALL_STRIP));
     }
 
-    /** The Taskbar's Home tile starts at the row's start and is stored next to the design. */
+    /** The Drawer tile starts at the row's start, and where it is dropped is each layout's own. */
     @Test
     public void theHomeLayoutsDrawerTileStandsWhereItWasDropped() {
         PlaceLayoutStore home = places.forVariant(LayoutVariant.HOME);
-        assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.START,
-            home.taskbarHomeTile());
-        home.setTaskbarHomeTile(com.termux.app.dock.TaskbarHomeTilePolicy.Position.END);
+        assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.START,
+            home.drawerTilePosition());
+        home.setDrawerTilePosition(com.termux.app.dock.DrawerTilePolicy.Position.END);
         assertEquals("end", prefs().getString("layout.home.drawer_tile_position", null));
-        assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.END,
-            home.taskbarHomeTile());
-        assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.START,
-            places.taskbarHomeTile());
+        assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.END,
+            home.drawerTilePosition());
+        assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.START,
+            places.drawerTilePosition());
     }
 
     /**

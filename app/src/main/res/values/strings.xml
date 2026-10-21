@@ -2020,13 +2020,17 @@
                 <string name="layout_editor_dock_styles">Dock style</string>
                 <string name="layout_editor_dock_style_glass_tray">Glass tray</string>
                 <string name="layout_editor_dock_style_lens_beads">Lens beads</string>
-                <string name="layout_editor_dock_style_taskbar">Taskbar</string>
                 <string name="layout_editor_dock_style_wall_strip">Wall strip</string>
                 <!-- The Search field toggle beside the dock styles (#96): the command palette's
                      field under the dock's apps row, with any style. The label stands under its
                      chip in a fifth of the row, so it stays one short word. -->
                 <string name="layout_editor_search_field">Search field</string>
                 <string name="layout_editor_search_field_label">Search</string>
+                <!-- The Drawer tile toggle after the Search field (#97; once the Taskbar style): a
+                     tile among the dock's apps that opens the app drawer, with any style. Its
+                     label shares the row the same way, so it too stays one short word. -->
+                <string name="layout_editor_drawer_tile">Drawer tile</string>
+                <string name="layout_editor_drawer_tile_label">Drawer</string>
                 <!-- What a resize handle shows while it is dragged, in the store's real units. The
                      dp forms are the live launcher measured after the write; the × forms are for
                      the orientation the phone is not in, where there is nothing live to measure. -->
@@ -2178,8 +2182,8 @@
     <string name="dock_prompt_line_hint">Search apps, commands, settings</string>
     <string name="dock_run_strip_attention">%1$s, needs attention</string>
     <string name="dock_wall_strip_new_terminal">New terminal</string>
-    <!-- The Taskbar's Home tile, spoken: it opens the app drawer; hold to move it. -->
-    <string name="dock_taskbar_home_tile">All apps</string>
+    <!-- The Drawer tile (#97), spoken: it opens the app drawer; hold to move it. -->
+    <string name="dock_drawer_tile">All apps</string>
     <string name="palette_home_minimise_floats">Minimise all floats</string>
     <string name="palette_home_minimise_floats_hint">Tuck every floating terminal into its chip</string>
     <string name="palette_home_restore_floats">Restore floats</string>

@@ -11,7 +11,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 
 import com.termux.R;
-import com.termux.app.dock.TaskbarHomeTilePolicy;
+import com.termux.app.dock.DrawerTilePolicy;
 import com.termux.app.launcher.LauncherEntries;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherConfigRepository;
@@ -39,9 +39,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The Taskbar's Home tile on the dock's row (spec "Taskbar"): it takes one of the row's slots, so
+ * The Drawer tile on the dock's row (#97, once the Taskbar's): it takes one of the row's slots, so
  * a page holds one app fewer; it stands at the start, the middle or the end with the apps in
- * their own order around it; a tap is the drawer's; and every other dock has none.
+ * their own order around it; a tap is the drawer's; and a row with the toggle off has none.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
@@ -52,12 +52,12 @@ public class SuggestionBarHomeTileTest {
     private Activity activity;
     private SuggestionBarView bar;
     private int taps;
-    private final List<TaskbarHomeTilePolicy.Position> moves = new ArrayList<>();
+    private final List<DrawerTilePolicy.Position> moves = new ArrayList<>();
 
     private final SuggestionBarView.HomeTileListener listener =
         new SuggestionBarView.HomeTileListener() {
             @Override public void onHomeTileTapped() { taps++; }
-            @Override public void onHomeTileMoved(@NonNull TaskbarHomeTilePolicy.Position p) {
+            @Override public void onHomeTileMoved(@NonNull DrawerTilePolicy.Position p) {
                 moves.add(p);
             }
         };
@@ -82,7 +82,7 @@ public class SuggestionBarHomeTileTest {
     }
 
     @Test public void theHomeTileTakesOneOfTheRowsSlots() {
-        bar.setHomeTile(TaskbarHomeTilePolicy.Position.START, listener);
+        bar.setHomeTile(DrawerTilePolicy.Position.START, listener);
         idle();
         assertNotNull(homeTile());
         assertEquals("a page holds one app fewer", 6, bar.computePinnedItemsPerPage());
@@ -95,19 +95,19 @@ public class SuggestionBarHomeTileTest {
     }
 
     @Test public void theAppsKeepTheirOrderAroundTheTile() {
-        bar.setHomeTile(TaskbarHomeTilePolicy.Position.START, listener);
+        bar.setHomeTile(DrawerTilePolicy.Position.START, listener);
         idle();
         assertTrue("at the start the tile stands before the apps",
             centreX(homeTile()) < centreX(terminal()));
 
-        bar.setHomeTile(TaskbarHomeTilePolicy.Position.END, listener);
+        bar.setHomeTile(DrawerTilePolicy.Position.END, listener);
         idle();
         assertTrue("at the end it stands after them", centreX(homeTile()) > centreX(terminal()));
         assertTrue("in the row's last slot", centreX(homeTile()) > bar.getWidth() * 6f / 7f);
     }
 
     @Test public void aTapOpensTheDrawer() {
-        bar.setHomeTile(TaskbarHomeTilePolicy.Position.MIDDLE, listener);
+        bar.setHomeTile(DrawerTilePolicy.Position.MIDDLE, listener);
         idle();
         View tile = homeTile();
         assertNotNull(tile);
@@ -116,8 +116,32 @@ public class SuggestionBarHomeTileTest {
         assertTrue("a tap is not a move", moves.isEmpty());
     }
 
+    /**
+     * On Lens beads the tile stands on a bead of its own (#97): its box is one of the row's icon
+     * boxes the beads are cut from, and the centre the beads keep still mid-swipe is that box's.
+     */
+    @Test public void theTileIsOneOfTheBeadedBoxesAndNamesItsCentre() {
+        assertTrue("no tile, no still centre", Float.isNaN(bar.drawerTileCenterX()));
+        float[] boxes = new float[4 * 16];
+        int without = bar.layoutIconBoxes(boxes);
+
+        bar.setHomeTile(DrawerTilePolicy.Position.END, listener);
+        idle();
+        int with = bar.layoutIconBoxes(boxes);
+        assertEquals("the tile is one more box", without + 1, with);
+        float tile = bar.drawerTileCenterX();
+        assertTrue(!Float.isNaN(tile));
+        boolean matched = false;
+        for (int i = 0; i < with; i++)
+            matched |= Math.abs((boxes[i * 4] + boxes[i * 4 + 2]) * 0.5f - tile) < 0.5f;
+        assertTrue("the still centre is the tile's box's", matched);
+        int[] row = new int[2];
+        bar.getLocationOnScreen(row);
+        assertEquals(centreX(homeTile()) - row[0], tile, 1f);
+    }
+
     private View homeTile() {
-        return findNamed(bar, activity.getString(R.string.dock_taskbar_home_tile));
+        return findNamed(bar, activity.getString(R.string.dock_drawer_tile));
     }
 
     private View terminal() {

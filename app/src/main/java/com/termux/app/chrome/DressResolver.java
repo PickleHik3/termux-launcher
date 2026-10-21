@@ -47,6 +47,9 @@ public final class DressResolver {
         /** Whether one layout turns the Search field on, beside its design (#96). */
         boolean searchField(@NonNull LayoutVariant layout);
 
+        /** Whether one layout turns the Drawer tile on, beside its design (#97). */
+        boolean drawerTile(@NonNull LayoutVariant layout);
+
         /** One half's Style, Corners and Margin as stored: Home's own, or the Workspace's. */
         @NonNull
         WallHalfShape shape(boolean home);
@@ -86,6 +89,10 @@ public final class DressResolver {
                 return places.forVariant(layout).searchField();
             }
 
+            @Override public boolean drawerTile(@NonNull LayoutVariant layout) {
+                return places.forVariant(layout).drawerTile();
+            }
+
             @NonNull @Override public WallHalfShape shape(boolean home) {
                 return places.halfShape(home);
             }
@@ -103,7 +110,7 @@ public final class DressResolver {
         LayoutVariant layout = layoutOf(page);
         return new Dress(layout, home ? HOME_LEAVES_OUT : NONE_LEFT_OUT,
             DockStyle.effectiveStyle(mSource.dockDesign(layout)), mSource.searchField(layout),
-            mSource.shape(home && layout == LayoutVariant.HOME));
+            mSource.drawerTile(layout), mSource.shape(home && layout == LayoutVariant.HOME));
     }
 
     /**
@@ -135,6 +142,14 @@ public final class DressResolver {
      */
     public boolean searchFieldOf(@NonNull PaneWallPage page) {
         return mSource.searchField(layoutOf(page));
+    }
+
+    /**
+     * Whether the page's dock carries the Drawer tile ({@link Dress#drawerTile}), read without
+     * the rest of the dress, as {@link #searchFieldOf} is: the dock's row asks it.
+     */
+    public boolean drawerTileOf(@NonNull PaneWallPage page) {
+        return mSource.drawerTile(layoutOf(page));
     }
 
     /**

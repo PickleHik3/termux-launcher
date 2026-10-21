@@ -8,7 +8,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
-import com.termux.app.dock.TaskbarHomeTilePolicy;
+import com.termux.app.dock.DrawerTilePolicy;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -67,7 +67,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * keeping a Home that differed as a Home layout ({@link #migrateToOneLayout}). Version 10 gives a
  * kept Home layout the Workspace's status bar, which Home now wears ({@link
  * #migrateHomeLayoutToTheBar}). Version 11 turns the Prompt line design into the Tray with the
- * Search field on ({@link #migratePromptLineToTheSearchField}).
+ * Search field on ({@link #migratePromptLineToTheSearchField}). Version 12 turns the Taskbar
+ * design into the Tray with the Drawer tile on where it stood ({@link
+ * #migrateTaskbarToTheDrawerTile}).
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
  * tested as one.
@@ -75,7 +77,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the current ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 11;
+    @VisibleForTesting static final int MIGRATION_VERSION = 12;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -180,11 +182,17 @@ public final class PlaceLayoutStore {
      * with the field on).
      */
     private static final String KEY_SEARCH_FIELD = "search_field";
-    /** The Drawer tile, as {@link #KEY_SEARCH_FIELD} is the Search field: the Taskbar's (#97). */
+    /**
+     * Whether a layout's dock carries the Drawer tile among its apps, a toggle of its own beside
+     * the design (#97), as {@link #KEY_SEARCH_FIELD} is the Search field: {@code
+     * layout.drawer_tile}, {@code layout.minimal.drawer_tile}, {@code layout.home.drawer_tile}.
+     * Absent is off, unless the layout still holds the Taskbar design the tile came from (version
+     * 12 of the migration turns that into the Tray with the tile on).
+     */
     private static final String KEY_DRAWER_TILE = "drawer_tile";
     /**
      * Where a layout's Drawer tile stands in the dock row, a
-     * {@link TaskbarHomeTilePolicy.Position} value. Absent is the start.
+     * {@link DrawerTilePolicy.Position} value. Absent is the start.
      */
     private static final String KEY_DRAWER_TILE_POSITION = "drawer_tile_position";
     /**
@@ -298,6 +306,10 @@ public final class PlaceLayoutStore {
     private int mSearchFieldRevision = Integer.MIN_VALUE;
     @Nullable private LayoutVariant mSearchFieldVariant;
     private boolean mSearchField;
+    /** This view's Drawer tile as last read, cached as the Search field is: the row asks it. */
+    private int mDrawerTileRevision = Integer.MIN_VALUE;
+    @Nullable private LayoutVariant mDrawerTileVariant;
+    private boolean mDrawerTile;
 
     /** What each page wears, over this view; made the first time a page asks. */
     @Nullable private DressResolver mDresses;
@@ -660,19 +672,20 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * A design picked for this view's layout. The Search field is a toggle of its own and stays
-     * as it is ({@link #setSearchField}); the Drawer tile is written beside the design as the
-     * Taskbar brings it today, until #97 splits it off as well.
+     * A design picked for this view's layout. The Search field and the Drawer tile are toggles of
+     * their own and stay as they are ({@link #setSearchField}, {@link #setDrawerTile}).
      */
     public void setDockStyle(@NonNull DockStyle style) {
         if (mStore == null || style == dockStyle()) return;
-        SharedPreferences.Editor editor = mStore.edit();
-        putDockDesign(editor, activeVariant(), style);
-        editor.apply();
+        mStore.edit().putString(layoutWideKey(activeVariant(), KEY_DOCK_DESIGN),
+            style.storageValue()).apply();
         mRevision.incrementAndGet();
     }
 
-    /** One layout's design, with the Drawer tile the Taskbar brings. */
+    /**
+     * One layout's design as version 9 moved it, with the Drawer tile the Taskbar brought then:
+     * version 12 turns that Taskbar into the Tray and keeps the tile.
+     */
     private static void putDockDesign(@NonNull SharedPreferences.Editor editor,
                                       @NonNull LayoutVariant variant, @NonNull DockStyle style) {
         editor.putString(layoutWideKey(variant, KEY_DOCK_DESIGN), style.storageValue())
@@ -703,9 +716,32 @@ public final class PlaceLayoutStore {
         mRevision.incrementAndGet();
     }
 
-    /** Whether this view's layout carries the Drawer tile; read as {@link #searchField} is. */
+    /**
+     * Whether this view's layout carries the Drawer tile among the dock's apps, with whichever
+     * design it holds (#97); read and cached as {@link #searchField} is. A layout that never
+     * stored the toggle reads it off the design: on only for a Taskbar the migration has not
+     * turned into the Tray yet.
+     */
     public boolean drawerTile() {
-        return toggle(KEY_DRAWER_TILE, DockStyle.TASKBAR);
+        if (mStore == null) return false;
+        LayoutVariant variant = activeVariant();
+        int revision = mRevision.get();
+        if (mDrawerTileRevision != revision || mDrawerTileVariant != variant) {
+            mDrawerTile = toggle(KEY_DRAWER_TILE, DockStyle.TASKBAR);
+            mDrawerTileRevision = revision;
+            mDrawerTileVariant = variant;
+        }
+        return mDrawerTile;
+    }
+
+    /**
+     * The Drawer tile turned on or off for this view's layout, its design and the tile's place
+     * ({@link #drawerTilePosition}) left as they are.
+     */
+    public void setDrawerTile(boolean on) {
+        if (mStore == null || on == drawerTile()) return;
+        mStore.edit().putBoolean(layoutWideKey(activeVariant(), KEY_DRAWER_TILE), on).apply();
+        mRevision.incrementAndGet();
     }
 
     private boolean toggle(@NonNull String key, @NonNull DockStyle bringer) {
@@ -716,13 +752,13 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * Where the Drawer tile (the Taskbar's Home tile) stands in this view's layout's dock row;
-     * the start until the user drags it.
+     * Where the Drawer tile stands in this view's layout's dock row, whether or not the tile is
+     * on, so it comes back where it was; the start until the user drags it.
      */
     @NonNull
-    public TaskbarHomeTilePolicy.Position taskbarHomeTile() {
-        if (mStore == null) return TaskbarHomeTilePolicy.DEFAULT;
-        return TaskbarHomeTilePolicy.parse(mStore.getString(
+    public DrawerTilePolicy.Position drawerTilePosition() {
+        if (mStore == null) return DrawerTilePolicy.DEFAULT;
+        return DrawerTilePolicy.parse(mStore.getString(
             layoutWideKey(activeVariant(), KEY_DRAWER_TILE_POSITION), null));
     }
 
@@ -730,10 +766,10 @@ public final class PlaceLayoutStore {
      * The tile dropped at {@code position}. Not a layout change: the dock row re-lays its slots
      * itself.
      */
-    public void setTaskbarHomeTile(@NonNull TaskbarHomeTilePolicy.Position position) {
-        if (mStore == null || position == taskbarHomeTile()) return;
+    public void setDrawerTilePosition(@NonNull DrawerTilePolicy.Position position) {
+        if (mStore == null || position == drawerTilePosition()) return;
         mStore.edit().putString(layoutWideKey(activeVariant(), KEY_DRAWER_TILE_POSITION),
-            TaskbarHomeTilePolicy.persisted(position)).apply();
+            DrawerTilePolicy.persisted(position)).apply();
     }
 
     /** {@code layout.home.<key>}: the Home layout's own, for both orientations. */
@@ -1382,6 +1418,7 @@ public final class PlaceLayoutStore {
         if (fromVersion < 9) migrateToOneLayout();
         if (fromVersion < 10) migrateHomeLayoutToTheBar();
         if (fromVersion < 11) migratePromptLineToTheSearchField();
+        if (fromVersion < 12) migrateTaskbarToTheDrawerTile();
         mStore.edit().putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
         mRevision.incrementAndGet();
     }
@@ -1469,6 +1506,24 @@ public final class PlaceLayoutStore {
                 continue;
             editor.putString(design, DockStyle.GLASS_TRAY.storageValue())
                 .putBoolean(layoutWideKey(variant, KEY_SEARCH_FIELD), true);
+        }
+        editor.apply();
+    }
+
+    /**
+     * Version 12: the Taskbar design is the Drawer tile now (#97). Every layout that holds it,
+     * normal, minimal or Home's, holds the Tray instead with the tile on, and the tile stays where
+     * the user had dragged it ({@link #KEY_DRAWER_TILE_POSITION} is untouched). Every other layout
+     * keeps its design and its stored toggle.
+     */
+    private void migrateTaskbarToTheDrawerTile() {
+        SharedPreferences.Editor editor = mStore.edit();
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            String design = layoutWideKey(variant, KEY_DOCK_DESIGN);
+            if (!DockStyle.TASKBAR.storageValue().equals(mStore.getString(design, null)))
+                continue;
+            editor.putString(design, DockStyle.GLASS_TRAY.storageValue())
+                .putBoolean(layoutWideKey(variant, KEY_DRAWER_TILE), true);
         }
         editor.apply();
     }
