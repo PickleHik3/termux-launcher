@@ -48,8 +48,8 @@ public final class WidgetCellView extends FrameLayout {
 
     private final int gutter;
     private final int touchSlop;
-    /** This cell's own corner radius; the radius the platform gives widget backgrounds by default. */
-    private final float cornerRadius;
+    /** The Look's Corners in px, as the built-ins use; capped at the system radius by {@link WidgetCornerPolicy}. */
+    private float cornerRadius;
     private final Path clipPath = new Path();
     private final RectF clipRect = new RectF();
     /** True when the provider's own background opted out of clipping; see {@link WidgetCornerPolicy}. */
@@ -70,7 +70,7 @@ public final class WidgetCellView extends FrameLayout {
         super(context);
         gutter = gutterPx(getResources());
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        cornerRadius = systemWidgetRadius(context);
+        cornerRadius = lookRadius(context);
         setPadding(gutter, gutter, gutter, gutter);
         setClipChildren(true);
         setClipToPadding(true);
@@ -129,6 +129,9 @@ public final class WidgetCellView extends FrameLayout {
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         getViewTreeObserver().addOnGlobalFocusChangeListener(globalFocusWatch);
+        // The Look may have changed while this cell was off screen.
+        cornerRadius = lookRadius(getContext());
+        refreshCornerClip();
     }
 
     @Override protected void onDetachedFromWindow() {
@@ -212,6 +215,15 @@ public final class WidgetCellView extends FrameLayout {
             }
         }
         return 16f * density;
+    }
+
+    /** The Look's Corners, or the system radius where the preferences cannot be read. */
+    private static float lookRadius(@NonNull Context context) {
+        try {
+            return com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle.lookCornerRadiusPx(context);
+        } catch (RuntimeException e) {
+            return systemWidgetRadius(context);
+        }
     }
 
     @Override protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
