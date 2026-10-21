@@ -1955,7 +1955,7 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   rows than Home's (A–Z, toolbar), the beads give way to the slab where the stack changes rows,
   as before · emulator for the look (record at 60 fps), pong for jank (one dock effect rebuild a
   frame while the share moves, `scripts/perf-frametime.sh` on a seam fling).
-- 2026-10-21 · ISSUE1 · keyboard and dock on a swipe to the previous window · Workspace with
+- 2026-10-21 · 2abea4147 · keyboard and dock on a swipe to the previous window · Workspace with
   three terminal windows, keyboard up, on the last window (`launcherctl window focus <last>`,
   `launcherctl keyboard show`): a slow rightward swipe on the terminal's text (`adb shell input
   swipe 200 700 900 700 1200`), recorded at 60 fps: the dock and the in-app keyboard stay where
@@ -1965,6 +1965,17 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   as before. Window 2 → window 1 by chip tap and by `window.select` too (pong's report did not
   say which route): no frame with the keyboard or the dock gone. Under Glass tray and Lens beads
   · emulator, then pong.
+- 2026-10-21 · ISSUE2 · Lens beads melting on the way out · Home on Lens beads, the Workspace's
+  dock with other rows (A–Z, toolbar; keyboard up and down): a slow Home → Workspace drag
+  recorded at 60 fps, cropped to the dock's bottom 300 px: over the first ~8 % of the drag, before
+  the dock moves, the beads swell inside the slab's rounded outline into the slab; from the first
+  frame the dock sinks it is the rounded slab, cut by the screen's bottom band as on the way
+  back, never beads cut by a flat line; no pale line left at the dock's foot while the
+  Workspace's stack is below the edge. Drag back before letting go: the beads come back out of
+  the slab once the dock is home. Same rows on both halves (no A–Z, no toolbar on the
+  Workspace's dock): the melt still follows the whole slide. The way back (Workspace → Home)
+  looks as before. Frame time of a seam fling on pong: one dock effect rebuild a frame only over
+  the first stretch · emulator for the look, pong for jank.
 
 ### Living glass (10-19)
 - 2026-10-19 · feat(glass) living glass · Taste on pong, on a dark and on a pale wallpaper, under
