@@ -90,6 +90,26 @@ public final class SeamTravel {
     }
 
     /**
+     * How far, 0 to 1, the wall itself has gone into the other half: {@link #otherHalfProgress} on
+     * the wall's own way rather than the chrome's, so it moves over the stretch at either end
+     * ({@link PlaceChromeTravel#LANDING}) where the chrome rests too.
+     */
+    public static float otherHalfFraction(@NonNull Frame frame, @NonNull PaneWallPage committed) {
+        boolean fromOther = crosses(frame.from, committed);
+        boolean towardOther = crosses(frame.toward, committed);
+        if (fromOther == towardOther) return fromOther ? 1f : 0f;
+        return towardOther ? frame.fraction : 1f - frame.fraction;
+    }
+
+    /**
+     * Whether a plan takes the committed half's dock rows off the screen on the way into the other
+     * half: a slide out, or a dip (the other half's rows come up after them).
+     */
+    public static boolean committedRowsLeave(@NonNull DockPlan plan) {
+        return plan == DockPlan.SLIDE_OUT || plan == DockPlan.DIP;
+    }
+
+    /**
      * Whether a layout's dock can be exchanged mid-slide: every dock row it shows lies along the
      * bottom above the keyboard, and its status bar is not a band of the same stack. A row on a
      * side or the top edge takes room from the canvas's sides or top, which no translation of the

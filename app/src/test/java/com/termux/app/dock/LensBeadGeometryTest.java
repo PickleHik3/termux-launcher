@@ -376,6 +376,78 @@ public class LensBeadGeometryTest {
         assertTrue(LensBeadGeometry.meltRadiusPx(rest, cover, 0.95f) - rest < 0.02f * (cover - rest));
     }
 
+    /** Leaving Home with its rows: the melt runs over the lead-in and is done at its end. */
+    @Test
+    public void leavingBeadsMeltOverTheLeadIn() {
+        float leadIn = 0.08f;
+        assertEquals(1f, LensBeadGeometry.leavingMeltShare(0f, leadIn), 0f);
+        assertEquals(1f, LensBeadGeometry.leavingMeltShare(Float.NaN, leadIn), 0f);
+        assertEquals(0.5f, LensBeadGeometry.leavingMeltShare(0.04f, leadIn), 0.0001f);
+        assertEquals(0f, LensBeadGeometry.leavingMeltShare(leadIn, leadIn), 0f);
+        assertEquals(0f, LensBeadGeometry.leavingMeltShare(0.6f, leadIn), 0f);
+        float last = 1f;
+        for (float away = 0f; away <= 1f; away += 0.005f) {
+            float share = LensBeadGeometry.leavingMeltShare(away, leadIn);
+            assertTrue("Home's share rose as the wall went away", share <= last + 1e-6f);
+            last = share;
+        }
+    }
+
+    /**
+     * The beads are the slab, with no shadow or glow of their own left, on every frame where the
+     * stack has started to sink below its bottom edge (pass 6: beads cut flat by it, and a pale
+     * line of their glow left behind). Home → Workspace with different rows: a dip.
+     */
+    @Test
+    public void leavingBeadsAreTheSlabBeforeTheStackSinks() {
+        java.util.List<com.termux.app.wall.PaneWallPage> row = java.util.Arrays.asList(
+            com.termux.app.wall.PaneWallPage.WIDGETS, com.termux.app.wall.PaneWallPage.TERMINAL);
+        com.termux.app.place.PlaceChromeTravel.States states = place ->
+            new com.termux.app.place.PlaceChromeTravel.Rest(false, false,
+                !com.termux.app.place.HomeChromePolicy.isHome(place));
+        float rest = 80f;
+        float cover = 300f;
+        int width = 1000;
+        boolean melting = false;
+        for (int px = 0; px <= width; px += 2) {
+            com.termux.app.place.PlaceChromeTravel.Frame frame =
+                com.termux.app.place.PlaceChromeTravel.at(row,
+                    com.termux.app.wall.PaneWallPage.WIDGETS, -px, width, states);
+            float share = LensBeadGeometry.leavingMeltShare(
+                com.termux.app.place.SeamTravel.otherHalfFraction(frame,
+                    com.termux.app.wall.PaneWallPage.WIDGETS),
+                com.termux.app.place.PlaceChromeTravel.LANDING);
+            float dockReveal = com.termux.app.place.SeamTravel.dockReveal(
+                com.termux.app.place.SeamTravel.DockPlan.DIP,
+                com.termux.app.place.SeamTravel.otherHalfProgress(frame,
+                    com.termux.app.wall.PaneWallPage.WIDGETS));
+            float radius = LensBeadGeometry.meltRadiusPx(rest, cover, share);
+            if (radius > rest) melting = true;
+            if (dockReveal < 1f) {
+                assertEquals("beads still melting while the stack sinks, at " + px + " px",
+                    cover, radius, 0.001f);
+                assertEquals(0f, LensBeadGeometry.beadShelfAlpha(share), 0f);
+            }
+        }
+        assertTrue("the beads never swelled", melting);
+    }
+
+    /** The beads' shadows and glow: whole at rest, gone once the beads cover the slab. */
+    @Test
+    public void theBeadShelfFadesAsTheBeadsMelt() {
+        assertEquals(1f, LensBeadGeometry.beadShelfAlpha(1f), 0f);
+        assertEquals(1f, LensBeadGeometry.beadShelfAlpha(Float.NaN), 0f);
+        assertEquals(0f, LensBeadGeometry.beadShelfAlpha(LensBeadGeometry.MELT_COVERED_SHARE),
+            0.0001f);
+        assertEquals(0f, LensBeadGeometry.beadShelfAlpha(0f), 0f);
+        float last = 1f;
+        for (float share = 1f; share >= 0f; share -= 0.05f) {
+            float alpha = LensBeadGeometry.beadShelfAlpha(share);
+            assertTrue(alpha <= last + 1e-6f);
+            last = alpha;
+        }
+    }
+
     @Test
     public void withRadiusKeepsTheBeadsWhereTheyStand() {
         LensBeadGeometry.Beads beads = phone();

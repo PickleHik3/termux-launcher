@@ -139,6 +139,38 @@ public class DockBeadsLeaveTest {
         assertTrue("the slab kept a swipe's sideways cut", Float.isNaN(span[0]) && Float.isNaN(span[1]));
     }
 
+    /**
+     * The beads' shadows and glow fade out as the beads melt (none left once they cover the
+     * slab, pass 6's pale line along the dock's foot) and are whole again at rest.
+     */
+    @Test
+    public void theBeadShelfFadesWithTheMeltAndIsWholeAtRest() {
+        TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
+        DockShelfView shelf = new DockShelfView(activity);
+        assertEquals("a new shelf shows its bead shadows whole", 1f, shelf.beadShelfAlpha(), 0f);
+
+        ReflectionHelpers.setField(activity, "mSeamBeadShare", LensBeadGeometry.MELT_COVERED_SHARE);
+        float covered = ReflectionHelpers.callInstanceMethod(activity, "dockBeadShelfAlpha");
+        assertEquals("beads covering the slab still shadow the wallpaper", 0f, covered, 0.0001f);
+        shelf.setBeadShelfAlpha(covered);
+        assertEquals(0f, shelf.beadShelfAlpha(), 0.0001f);
+
+        ReflectionHelpers.setField(activity, "mSeamBeadShare", 0.6f);
+        float melting = ReflectionHelpers.callInstanceMethod(activity, "dockBeadShelfAlpha");
+        assertTrue(melting > 0f && melting < 1f);
+
+        ReflectionHelpers.setField(activity, "mSeamBeadShare", Float.NaN);
+        float rest = ReflectionHelpers.callInstanceMethod(activity, "dockBeadShelfAlpha");
+        assertEquals("at rest the bead shadows are whole", 1f, rest, 0f);
+        shelf.setBeadShelfAlpha(rest);
+        assertEquals(1f, shelf.beadShelfAlpha(), 0f);
+
+        shelf.setBeadShelfAlpha(-1f);
+        assertEquals(0f, shelf.beadShelfAlpha(), 0f);
+        shelf.setBeadShelfAlpha(Float.NaN);
+        assertEquals(1f, shelf.beadShelfAlpha(), 0f);
+    }
+
     @Test
     public void theGlassHostsResizeReRunsTheAccessoryRender() {
         boolean watched = false;

@@ -4827,6 +4827,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && host.getVisibility() == View.VISIBLE && !state.keyboardShown
             && (isRoundedDockStyle() || beads) && dockSurfaceSpec().contactShadow;
         shelf.setBeads(show ? dockBeadsShadowed() : null);
+        shelf.setBeadShelfAlpha(dockBeadShelfAlpha());
         if (!show) {
             shelf.follow(null);
             if (shelf.getVisibility() != View.INVISIBLE) shelf.setVisibility(View.INVISIBLE);
@@ -4901,6 +4902,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             beads.radiusPx, cover, mSeamBeadShare));
     }
 
+    /** How much of the beads' shadows and glow show: all at rest, none once they cover the slab. */
+    private float dockBeadShelfAlpha() {
+        return com.termux.app.dock.LensBeadGeometry.beadShelfAlpha(mSeamBeadShare);
+    }
+
     /** The slab clip the host cuts melting beads to: the slab's corners; NaN at rest. */
     private float dockBeadSlabClipPx() {
         if (mDockBeads == null || Float.isNaN(mSeamBeadShare) || mSeamBeadShare >= 1f) return Float.NaN;
@@ -4913,9 +4919,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * One frame of a slide across the seam while Home's dock wears Lens beads: the beads melt
      * into the slab as Home slides away, swelling under their icons until, cut to the slab's
      * outline, they are the slab, and come back out of it as Home returns, as the Prompt line's
-     * and the Wall strip's bands follow Home's share ({@link #syncSeamBandShare}). Each frame the
-     * share moves re-cuts the host's clip and rebuilds the dock's effect once; nothing for any
-     * other style, and nothing at rest.
+     * and the Wall strip's bands follow Home's share ({@link #syncSeamBandShare}). Where Home's
+     * rows leave the screen on the way out they melt over the wall's first stretch, while the
+     * chrome still rests (LensBeadGeometry.leavingMeltShare), so they sink as the slab rather
+     * than as beads cut flat by the stack's bottom edge; their shadows and glow fade as they
+     * swell. Each frame the share moves re-cuts the host's clip and rebuilds the dock's effect
+     * once; nothing for any other style, and nothing at rest.
      */
     private void syncSeamBeadMelt(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
         if (mTravelSeamOther == null || mPreferences == null || mChrome == null) return;
@@ -4923,9 +4932,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean committedHome = com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage);
         if (committedHome == com.termux.app.place.HomeChromePolicy.wearsHomeShape(mTravelSeamOther))
             return;
-        float progress = Math.max(0f, Math.min(1f,
-            com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage)));
-        float share = committedHome ? 1f - progress : progress;
+        float share;
+        if (committedHome && com.termux.app.place.SeamTravel.committedRowsLeave(mTravelSeamPlan)) {
+            // Home's rows sink below the stack's bottom edge, which cuts them flat: the beads
+            // melt while the chrome still rests and sink as the slab, the mirror of the way back.
+            share = com.termux.app.dock.LensBeadGeometry.leavingMeltShare(
+                com.termux.app.place.SeamTravel.otherHalfFraction(frame, mLastWallPage),
+                com.termux.app.place.PlaceChromeTravel.LANDING);
+        } else {
+            float progress = Math.max(0f, Math.min(1f,
+                com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage)));
+            share = committedHome ? 1f - progress : progress;
+        }
         if (Float.compare(share, mSeamBeadShare) == 0) return;
         mSeamBeadShare = share;
         applyDockBeadMelt(false);
@@ -4948,7 +4966,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             beadHost.setSlabClip(dockBeadSlabClipPx());
         }
         DockShelfView shelf = hotView(R.id.accessory_shelf_fx);
-        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsShadowed());
+        if (shelf != null) {
+            if (shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsShadowed());
+            shelf.setBeadShelfAlpha(dockBeadShelfAlpha());
+        }
         if (modeChanged) {
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -22051,9 +22072,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.wall.PaneWallPage> pages = placesOf(mPaneWallController.pages());
         // The committed place is named so its keyboard, going away, is put away over the first
         // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
+        // A slide toward another window of the Workspace stays on its place: the wall's offset
+        // alone reads the previous window as Home, the place on the left.
         com.termux.app.place.PlaceChromeTravel.Frame frame =
             com.termux.app.place.PlaceChromeTravel.at(pages, currentWallPlace(),
-                offsetPx, wall.getWidth(), mChromeRestStates, mLastWallPage);
+                offsetPx, wall.getWidth(), mChromeRestStates, mLastWallPage,
+                mPaneWallController::showsInnerPage);
         // Across the seam, how the stack crosses and which half's dress it wears are read before
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
         readSeamTravel(frame);

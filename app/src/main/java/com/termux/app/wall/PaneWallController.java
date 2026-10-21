@@ -482,7 +482,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // Positive: the pages sit to the right, so what is coming in is on the left.
         int steps = offsetPx > 0f ? -1 : 1;
         float neighbourAt;
-        if (!mWall.isCrossSlide() && hasInnerPage(current, steps)) {
+        if (showsInnerPage(steps)) {
             // A border drag toward the next window inside the Workspace.
             neighbourAt = restAt + steps;
         } else {
@@ -491,6 +491,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             neighbourAt = neighbour == current ? at : rowIndexOf(neighbour, homes, windows);
         }
         return WallParallax.slidePosition(at, neighbourAt, offsetPx, width);
+    }
+
+    /**
+     * Whether the page the wall shows {@code steps} away from the current one (-1 on its left, +1
+     * on its right) is a window of the current page's own — the previous or next window inside
+     * the Workspace — rather than the next view on the row: as the wall places its pages
+     * ({@link PaneWallLayout#applyPagePositions}), so never during a slide from one view to
+     * another. What reads the wall's offset as a place change asks this first.
+     */
+    public boolean showsInnerPage(int steps) {
+        return !mWall.isCrossSlide() && hasInnerPage(mWall.currentPage(), steps);
     }
 
     /** Where the page {@code kind}'s view shows sits in the row. */

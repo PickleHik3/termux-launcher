@@ -56,6 +56,8 @@ public final class DockShelfView extends View {
     private final Paint mBeadGlow = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** The bead radius and lower edge the two paints were built for. */
     private float mBeadPaintRadius = Float.NaN, mBeadPaintBottom = Float.NaN;
+    /** How much of the beads' shadows and glow show, 0 to 1: they fade as the beads melt. */
+    private float mBeadShelfAlpha = 1f;
     private final Path mBeadPath = new Path();
     @Nullable private View mHost;
 
@@ -118,6 +120,23 @@ public final class DockShelfView extends View {
         mBeads = beadsInHost;
         rebuildBeads();
         invalidate();
+    }
+
+    /**
+     * How much of the beads' own shadows and glow show, 0 to 1: all at rest, fading as the beads
+     * swell into the slab across the seam, so none is left on the wallpaper once they cover it.
+     * The paints are kept; redrawn only on a change while beads are drawn.
+     */
+    public void setBeadShelfAlpha(float alpha) {
+        float a = Float.isNaN(alpha) ? 1f : Math.max(0f, Math.min(1f, alpha));
+        if (a == mBeadShelfAlpha) return;
+        mBeadShelfAlpha = a;
+        if (mBeads != null) invalidate();
+    }
+
+    /** The beads' shadows' and glow's share, 0 to 1. */
+    float beadShelfAlpha() {
+        return mBeadShelfAlpha;
     }
 
     /** The beads the shelf shadows, in the host's coordinates; null for the slab. */
@@ -237,6 +256,10 @@ public final class DockShelfView extends View {
         float density = getResources().getDisplayMetrics().density;
         com.termux.app.dock.LensBeadGeometry.Beads beads = mBeads;
         if (beads != null) {
+            if (mBeadShelfAlpha <= 0f) return;
+            int alpha = Math.round(255f * mBeadShelfAlpha);
+            mBeadShadow.setAlpha(alpha);
+            mBeadGlow.setAlpha(alpha);
             // Each bead's own shelf, clipped out of every bead's glass.
             int save = canvas.save();
             canvas.clipOutPath(mBeadPath);

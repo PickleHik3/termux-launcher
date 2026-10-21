@@ -249,11 +249,50 @@ public final class LensBeadGeometry {
      * they stay there.
      */
     public static float meltRadiusPx(float restPx, float coverPx, float homeShare) {
+        return restPx + (Math.max(restPx, coverPx) - restPx) * meltProgress(homeShare);
+    }
+
+    /**
+     * How far the beads have melted into the slab at Home's share {@code homeShare}, 0 (their own
+     * size) to 1 (covering it, from {@link #MELT_COVERED_SHARE} down), on the smooth step
+     * {@link #meltRadiusPx} swells them by. Their shadows and glow on the wallpaper fade by the
+     * rest of it ({@link #beadShelfAlpha}).
+     */
+    public static float meltProgress(float homeShare) {
         float share = Float.isNaN(homeShare) ? 1f : Math.max(0f, Math.min(1f, homeShare));
         float t = (1f - share) / (1f - MELT_COVERED_SHARE);
         t = Math.max(0f, Math.min(1f, t));
-        float eased = t * t * (3f - 2f * t);
-        return restPx + (Math.max(restPx, coverPx) - restPx) * eased;
+        return t * t * (3f - 2f * t);
+    }
+
+    /**
+     * How much of the beads' own shadows and glow on the wallpaper show at Home's share
+     * {@code homeShare}: all of them at rest, none once the beads cover the slab. The shadows sit
+     * under each bead's lower edge, which the swelling glass leaves behind; kept whole they were
+     * left on the wallpaper as a pale line along the dock's foot after the beads had become the
+     * slab (pass 6, outbound).
+     */
+    public static float beadShelfAlpha(float homeShare) {
+        return 1f - meltProgress(homeShare);
+    }
+
+    /**
+     * Home's share the beads melt by while Home's dock rows leave the screen across the seam (a
+     * dip or a slide out, from Home). The stack sinks below its own laid-out bottom, which cuts
+     * whatever passes it flat; beads still melting by Home's share of the chrome's way were cut
+     * there as beads, a flat line across their lower halves (pass 6). So they melt over the
+     * stretch of the wall's way where the chrome still rests, {@code leadIn} of it (the chrome's
+     * landing margin), and are the slab, cut by nothing but its own outline, before the stack
+     * moves; from there it sinks as the slab, as it rises on the way back. One function of the
+     * wall's position, so a drag that turns back un-melts them through the same numbers.
+     *
+     * @param awayFraction how far the wall itself has gone from Home's half, 0 to 1
+     * @param leadIn       the stretch of the wall's way over which the chrome rests
+     */
+    public static float leavingMeltShare(float awayFraction, float leadIn) {
+        if (Float.isNaN(awayFraction)) return 1f;
+        if (leadIn <= 0f) return awayFraction > 0f ? 0f : 1f;
+        return 1f - Math.max(0f, Math.min(1f, awayFraction / leadIn));
     }
 
     /**
