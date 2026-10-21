@@ -29427,7 +29427,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mPaneController.windowName(window))
                     .withHomeFloat(window.homePage(), getString(chip.minimised
                         ? R.string.window_chip_home_float_minimised
-                        : R.string.window_chip_home_float, window.homePage() + 1)));
+                        : R.string.window_chip_home_float, window.homePage() + 1))
+                    .withMinimised(chip.minimised));
             }
         }
         return items;

@@ -29,6 +29,21 @@ import static org.junit.Assert.assertTrue;
 public class TerminalWindowBarTest {
 
     @Test
+    public void aMinimisedFloatsChipIsDimmedAndSurvivesTheCopies() {
+        TerminalWindowBar.WindowItem open = new TerminalWindowBar.WindowItem("~", "home")
+            .withHomeFloat(0, "Home float, page 1");
+        TerminalWindowBar.WindowItem parked = open.withMinimised(true);
+        org.junit.Assert.assertEquals(1f, open.restAlpha(), 0f);
+        org.junit.Assert.assertEquals(TerminalWindowBar.WindowItem.MINIMISED_ALPHA,
+            parked.restAlpha(), 0f);
+        org.junit.Assert.assertNotEquals("the dot is part of what a chip draws", open, parked);
+        org.junit.Assert.assertTrue(parked.withBusy(true).withAttention(true).withDone(true)
+            .withProgress(5, false).withIcon(null).minimised);
+        org.junit.Assert.assertSame(parked, parked.withMinimised(true));
+        org.junit.Assert.assertFalse(parked.withMinimised(false).minimised);
+    }
+
+    @Test
     public void setWindows_marksSelectionAndDispatchesClicks() {
         TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
         assertTrue(bar.getClipToPadding());
