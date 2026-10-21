@@ -221,7 +221,9 @@ public class WeatherLayoutPlanTest {
         assertEquals("Partly cloudy", plan.part("condition").text);
         // The whole line is wider than the design 2×1's column: the rain chance goes, not cut.
         assertEquals("H 24 · L 15", plan.part("details").text);
-        assertEquals("Sunset 19:42", plan.part("sun").text);
+        // The sun line goes whole or not at all: this test's wide measure leaves it out here.
+        Part sun = plan.part("sun");
+        assertTrue(sun == null || "Sunset 19:42".equals(sun.text));
         assertTrue(plan.partsStartingWith("hour.").isEmpty());
         assertTrue(plan.partsStartingWith("day.").isEmpty());
     }
@@ -306,6 +308,25 @@ public class WeatherLayoutPlanTest {
             }
         }
         assertTrue("some card is narrow enough to shorten the line", shortened);
+    }
+
+    /** "Sunrise 7:34" was cut to "Sunris…" at font 2.0 on a 2×1: it goes whole or not at all. */
+    @Test public void theSunLineIsNeverCut() {
+        for (BuiltinWidgetSpan span : BuiltinWidgetSpan.values()) {
+            for (float[] size : sizes(span)) {
+                for (float scale : FONT_SCALES) {
+                    for (WeatherWidgetModel model : Arrays.asList(typical(), longWords())) {
+                        Part sun = plan(span, size[0], size[1], scale, model).part("sun");
+                        if (sun == null) continue;
+                        float natural = MEASURE.widthDp(sun.text, sun.role, sun.numeric,
+                            sun.sizeDp);
+                        assertTrue(span + " " + size[0] + "x" + size[1] + " font " + scale + ": "
+                            + sun.text + " is cut to " + sun.box.width,
+                            natural <= sun.box.width + WidgetLayoutPlan.EPSILON);
+                    }
+                }
+            }
+        }
     }
 
     @Test public void theEmptyCardSaysWhyAndHowToRetry() {

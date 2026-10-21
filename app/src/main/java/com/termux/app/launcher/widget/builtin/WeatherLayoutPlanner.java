@@ -655,6 +655,10 @@ final class WeatherLayoutPlanner {
             }
             String sun = m.sun == WeatherWidgetModel.Sun.RISE ? words.sunrise(m.sunTime)
                 : m.sun == WeatherWidgetModel.Sun.SET ? words.sunset(m.sunTime) : "";
+            // Never cut: a sun line wider than the column is left out, as the details' forms are.
+            if (!sun.isEmpty() && width(sun, Role.BODY, false) > room + WidgetLayoutPlan.EPSILON) {
+                sun = "";
+            }
             if (!sun.isEmpty()) lines.add(new Line("sun", sun, Role.BODY, Ink.SOFT, 2, GAP_S));
         }
 

@@ -417,4 +417,10 @@ final class ClockFaceView extends View {
     }
 
     @VisibleForTesting @Nullable ClockFaceRenderer renderer() { return renderer; }
+
+    /** The face's main ink, for tests. */
+    @VisibleForTesting @ColorInt int inkForTests() { return ink; }
+
+    /** The surface the face's ink is toned on, for tests. */
+    @VisibleForTesting @ColorInt int groundForTests() { return ground; }
 }

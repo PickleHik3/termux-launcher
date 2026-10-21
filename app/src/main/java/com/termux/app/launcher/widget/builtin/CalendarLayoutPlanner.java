@@ -222,6 +222,17 @@ final class CalendarLayoutPlanner {
             this.letters = letters; this.cells = cells; this.digits = digits; this.dots = dots;
         }
 
+        /**
+         * The selected day's circle in cell {@code index}: the cell's shorter side less the
+         * cells' own gap, centred, so it never touches the circle of the cell beside it.
+         */
+        @NonNull Box selectedDisc(int index) {
+            Box cell = cells.get(index);
+            float diameter = Math.max(0f, Math.min(cell.width, cell.height) - CELL_GAP_DP);
+            return new Box(cell.left + (cell.width - diameter) / 2f,
+                cell.top + (cell.height - diameter) / 2f, diameter, diameter);
+        }
+
         /** Column {@code col} from the top of its name to the bottom of its last cell. */
         @NonNull Box column(int col) {
             Box cell = cells.get(col);
@@ -549,16 +560,32 @@ final class CalendarLayoutPlanner {
             text(HEADER, area.left, area.top, area.width, header, headerRole, false, Ink.STRONG);
             float top = area.top + headerH + GAP_S;
             if (!content.permitted) {
-                String allow = words.allowAccess();
-                if (width(allow, Role.BODY, false) > area.width) allow = words.allowShort();
                 float lineTop = top + GAP_S;
                 if (lineTop + lineH(Role.BODY) > area.bottom() + EPS) {
                     lineTop = area.bottom() - lineH(Role.BODY);
                 }
-                text(ALLOW, area.left, lineTop, area.width, allow, Role.BODY, false, Ink.MOON);
-                Part line = parts.get(parts.size() - 1);
-                parts.add(Part.touch(ALLOW_TOUCH, target(new Box(area.left, line.box.top,
-                    area.width, line.box.height))));
+                // The longest form that fits whole, never cut: the sentence, the short form,
+                // its first word, each at Body then Label; none fitting, the line is left out
+                // and the header's card still opens the request.
+                String shortForm = words.allowShort();
+                int space = shortForm.indexOf(' ');
+                String[] forms = { words.allowAccess(), shortForm,
+                    space > 0 ? shortForm.substring(0, space) : shortForm };
+                Role[] roles = { Role.BODY, Role.LABEL };
+                boolean placed = false;
+                for (Role role : roles) {
+                    for (String form : forms) {
+                        if (width(form, role, false) > area.width + EPS) continue;
+                        text(ALLOW, area.left, lineTop, area.width, form, role, false, Ink.MOON);
+                        placed = true;
+                        break;
+                    }
+                    if (placed) break;
+                }
+                float lineHeight = placed ? parts.get(parts.size() - 1).box.height
+                    : lineH(Role.BODY);
+                parts.add(Part.touch(ALLOW_TOUCH, target(new Box(area.left, lineTop, area.width,
+                    lineHeight))));
                 return;
             }
             if (!content.loaded) return;
