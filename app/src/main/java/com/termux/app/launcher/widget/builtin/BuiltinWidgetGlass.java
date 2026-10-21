@@ -23,7 +23,28 @@ public final class BuiltinWidgetGlass {
     /** The explicit off: solid whatever the page says. Absent (or empty) follows the page. */
     public static final String OFF = "off";
 
+    /**
+     * The opt-in Bare appearance (glossary: Bare), offered on Clock and Weather as a fourth
+     * choice of the same row. Glass is off while it holds; the Look's Clear stop never sets it.
+     */
+    public static final String BARE = "bare";
+
     private BuiltinWidgetGlass() {}
+
+    /** Whether the stored choice is Bare. */
+    public static boolean choseBare(@Nullable String stored) { return BARE.equals(stored); }
+
+    /**
+     * The values the Glass row offers a kind, in order ("" follows the page): Page, On, Off, and
+     * Bare for Clock and Weather. Glance is always Bare, so it has no row: empty. A null kind
+     * (unknown) gets the three every widget has.
+     */
+    @NonNull public static String[] choices(@Nullable BuiltinWidgetKind kind) {
+        if (kind == BuiltinWidgetKind.GLANCE) return new String[0];
+        if (kind == BuiltinWidgetKind.CLOCK || kind == BuiltinWidgetKind.WEATHER)
+            return new String[] {"", ON, OFF, BARE};
+        return new String[] {"", ON, OFF};
+    }
 
     /**
      * Whether a widget wears glass: its own choice when it made one ("on" or "off"), else the
@@ -32,7 +53,7 @@ public final class BuiltinWidgetGlass {
      */
     public static boolean resolve(@Nullable String stored, boolean pageOn) {
         if (ON.equals(stored)) return true;
-        if (OFF.equals(stored)) return false;
+        if (OFF.equals(stored) || BARE.equals(stored)) return false;
         return pageOn;
     }
 
@@ -41,7 +62,8 @@ public final class BuiltinWidgetGlass {
      * (follow the page) like every empty field.
      */
     public static void write(@NonNull Map<String, String> values, @Nullable String choice) {
-        values.put(CONFIG_KEY, ON.equals(choice) || OFF.equals(choice) ? choice : "");
+        values.put(CONFIG_KEY,
+            ON.equals(choice) || OFF.equals(choice) || BARE.equals(choice) ? choice : "");
     }
 
     /**
