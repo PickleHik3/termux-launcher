@@ -22,7 +22,7 @@ or drop: reason (docs/agents/releasing.md, "Promoting from pre to a stable"). --
 These may change or be dropped before they reach a stable release.
 
 - Linux apps whose installer left a placeholder in place of their command, such as Termux's Chromium, now open from the drawer; an app whose command is missing says which one instead of a generic error. (merge 7940a21ed on `pre`) <!-- stays: P1, P2 -->
-- Settings → Display → Linux apps → Set up Linux apps → Graphics has a Benchmark graphics row that copies `termux-x11-gpu-setup`, so the graphics benchmark no longer needs `tlstore display`. (commit on `pre`) <!-- stays: P1, P2 -->
+- Benchmark graphics, under Settings → Display → Linux apps → Set up Linux apps → Graphics, tries every graphics option this phone has and keeps the fastest. (merge d55271a54 on `pre`) <!-- stays: P1, P2 -->
 
 ## Editions
 <!-- Only what is exclusive to the Nix or VAJ build of this drop; say so when nothing is. -->

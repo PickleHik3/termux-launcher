@@ -232,7 +232,6 @@ step as it goes, asks before installing anything, and writes what it decided to
 the container. `--keep` leaves every package in place, `--skip-proot` skips the container,
 `--yes` skips the question, and `--display=N` runs the tests on display `:N` (`:7` by default).
 
-
 Check what you got with `glmark2-es2` (from `x11-repo`): its first lines name the renderer, and
 the score with the Display place *showing* is the one that means anything; hidden, the server has
 no surface and the number is meaningless.
