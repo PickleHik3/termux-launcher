@@ -3,14 +3,17 @@ package com.termux.app.dock;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
- * The shape Home's dock is drawn in, picked in the Layout editor while it edits Home's layout
- * (project-docs/active/home-dock-styles-2026-10-20.md, "The choice"). One value for Home, both
- * orientations; the Workspace's dock has no style and stays as it is.
+ * The shape the dock is drawn in (the glossary's <b>Dock design</b>), picked in the Layout editor
+ * with the dock selected on any page (project-docs/active/home-dock-styles-2026-10-20.md, "The
+ * choice"). One value per layout, both orientations, so it dresses the dock on both halves unless
+ * Home holds a Home layout of its own (#93).
  *
  * <p>The stored id is the contract: it is what the preference holds, so a style is renamed in
  * code and strings, never in {@link #storageValue}. Anything the store cannot read, an absent key
@@ -24,9 +27,19 @@ public enum DockStyle {
     GLASS_TRAY("glass_tray"),
     /** No plate: each app on its own round glass lens. */
     LENS_BEADS("lens_beads"),
-    /** A Home tile beside the apps, and a strip of running windows above. */
+    /**
+     * Once the tray with a tile that opens the drawer among the apps; the tile is the <b>Drawer
+     * tile</b> toggle now, beside any design (#97). Kept only so a stored id still parses: the
+     * store's migration turns it into {@link #GLASS_TRAY} with the tile on at its place, it is
+     * never offered ({@link #CHOICES}) and never drawn ({@link #BUILT}).
+     */
     TASKBAR("taskbar"),
-    /** The apps above a permanent command palette field, styled as a shell prompt. */
+    /**
+     * Once the apps above the command palette's field; the field is the <b>Search field</b>
+     * toggle now, beside any design (#96). Kept only so a stored id still parses: the store's
+     * migration turns it into {@link #GLASS_TRAY} with the field on, it is never offered
+     * ({@link #CHOICES}) and never drawn ({@link #BUILT}).
+     */
     PROMPT_LINE("prompt_line"),
     /** A first row for the Workspace (a clock and the terminals) above the apps. */
     WALL_STRIP("wall_strip");
@@ -37,7 +50,12 @@ public enum DockStyle {
      */
     @NonNull
     public static final Set<DockStyle> BUILT = Collections.unmodifiableSet(EnumSet.of(GLASS_TRAY, LENS_BEADS,
-        TASKBAR, PROMPT_LINE, WALL_STRIP));
+        WALL_STRIP));
+
+    /** The designs the Layout editor's picker offers, in the order it shows them. */
+    @NonNull
+    public static final List<DockStyle> CHOICES = Collections.unmodifiableList(Arrays.asList(
+        GLASS_TRAY, LENS_BEADS, WALL_STRIP));
 
     @NonNull private final String mId;
 

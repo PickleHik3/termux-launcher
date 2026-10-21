@@ -3,7 +3,6 @@ package com.termux.app.surfaces;
 import android.content.SharedPreferences;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -37,13 +36,6 @@ final class AppearanceSnapshot {
     private final String mMaterial;
     private final int mIntensity;
     private final String mDockStyle;
-    /**
-     * Home's own Style, Corners and Margin as stored, null while unset: an unset value reads the
-     * Workspace's, and has to come back unset rather than pinned at what it read.
-     */
-    @Nullable private final String mHomeStyleRaw;
-    @Nullable private final Integer mHomeCornersRaw;
-    @Nullable private final Integer mHomeMarginRaw;
     private final boolean mBorder;
     private final int mTerminalRadius;
     private final int mPaneGap;
@@ -98,9 +90,6 @@ final class AppearanceSnapshot {
         mMaterial = prefs.getSurfaceMaterial();
         mIntensity = prefs.getSurfaceMaterialIntensity();
         mDockStyle = prefs.getAppLauncherDockStyle();
-        mHomeStyleRaw = rawString(prefs, TERMUX_APP.KEY_HOME_LAYOUT_STYLE);
-        mHomeCornersRaw = rawInt(prefs, TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS);
-        mHomeMarginRaw = rawInt(prefs, TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP);
         mBorder = prefs.isTerminalBorderEnabled();
         mTerminalRadius = prefs.getTerminalCornerRadius();
         mPaneGap = prefs.getTerminalPaneGap();
@@ -159,7 +148,6 @@ final class AppearanceSnapshot {
         prefs.setSurfaceMaterial(mMaterial);
         prefs.setSurfaceMaterialIntensity(mIntensity);
         prefs.setAppLauncherDockStyle(mDockStyle);
-        restoreHomeShape(prefs, mHomeStyleRaw, mHomeCornersRaw, mHomeMarginRaw);
         prefs.setTerminalBorderEnabled(mBorder);
         prefs.setTerminalCornerRadius(mTerminalRadius);
         prefs.setTerminalPaneGap(mPaneGap);
@@ -203,8 +191,6 @@ final class AppearanceSnapshot {
         for (int value : mRaws) out.append(value).append(',');
         return out.append('|').append(mMaterial).append('|').append(mIntensity)
             .append('|').append(mDockStyle).append('|').append(mBorder)
-            .append('|').append(mHomeStyleRaw).append('|').append(mHomeCornersRaw)
-            .append('|').append(mHomeMarginRaw)
             .append('|').append(mTerminalRadius).append('|').append(mPaneGap)
             .append('|').append(mWallpaperTerminalOpacity)
             .append('|').append(mTint).append('|').append(mRim).append('|').append(mMotion)
@@ -268,49 +254,6 @@ final class AppearanceSnapshot {
         } catch (ClassCastException e) {
             return Float.NaN;
         }
-    }
-
-    /** The stored string, or null when the key is absent (or not a string). */
-    @Nullable
-    private static String rawString(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key) {
-        SharedPreferences store = SharedPreferencesPreview.readsFor(prefs.getSharedPreferences());
-        if (store == null || !store.contains(key))
-            return null;
-        try {
-            return store.getString(key, null);
-        } catch (ClassCastException e) {
-            return null;
-        }
-    }
-
-    /** The stored int, or null when the key is absent (or not an int). */
-    @Nullable
-    private static Integer rawInt(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key) {
-        SharedPreferences store = SharedPreferencesPreview.readsFor(prefs.getSharedPreferences());
-        if (store == null || !store.contains(key))
-            return null;
-        try {
-            return store.getInt(key, 0);
-        } catch (ClassCastException e) {
-            return null;
-        }
-    }
-
-    /** Puts Home's three values back: written as they were, or removed when they were unset. */
-    private static void restoreHomeShape(@NonNull TermuxAppSharedPreferences prefs,
-                                         @Nullable String style, @Nullable Integer corners,
-                                         @Nullable Integer margin) {
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store == null)
-            return;
-        SharedPreferences.Editor editor = store.edit();
-        if (style == null) editor.remove(TERMUX_APP.KEY_HOME_LAYOUT_STYLE);
-        else editor.putString(TERMUX_APP.KEY_HOME_LAYOUT_STYLE, style);
-        if (corners == null) editor.remove(TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS);
-        else editor.putInt(TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS, corners);
-        if (margin == null) editor.remove(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP);
-        else editor.putInt(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, margin);
-        editor.apply();
     }
 
     private static void restoreKeyRadius(@NonNull TermuxAppSharedPreferences prefs, float raw) {

@@ -142,7 +142,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
          */
         @Nullable public final Bitmap icon;
 
+        /** Whether this is a Home float's chip while the float is minimised (#91). */
+        public final boolean minimised;
+
         public static final int NO_PERCENTAGE = -1;
+        /** A minimised float's chip, as an alpha: reduced emphasis against an open window's. */
+        public static final float MINIMISED_ALPHA = 0.75f;
+        /** The dot a minimised float's chip wears, its diameter. */
+        public static final float MINIMISED_DOT_DP = 4f;
 
         public WindowItem(@NonNull String label, @NonNull String spokenLabel) {
             this(label, spokenLabel, false, false);
@@ -185,6 +192,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                           boolean attention, int progress, boolean progressError, boolean done,
                           boolean doneFailed, @Nullable AgentStatus.State agentState,
                           @Nullable Bitmap icon) {
+            this(label, spokenLabel, busy, attention, progress, progressError, done, doneFailed,
+                agentState, icon, false);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done,
+                          boolean doneFailed, @Nullable AgentStatus.State agentState,
+                          @Nullable Bitmap icon, boolean minimised) {
+            this.minimised = minimised;
             this.label = label;
             this.spokenLabel = spokenLabel;
             this.busy = busy;
@@ -206,14 +222,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withBusy(boolean busy) {
             return busy == this.busy ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         @NonNull
         public WindowItem withAttention(boolean attention) {
             return attention == this.attention ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         @NonNull
@@ -226,7 +242,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withDone(boolean done, boolean failed) {
             return done == this.done && failed == this.doneFailed ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    failed, agentState, icon);
+                    failed, agentState, icon, minimised);
         }
 
         /** The shell's own progress report; {@link #NO_PERCENTAGE} for indeterminate. */
@@ -234,7 +250,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withProgress(int progress, boolean progressError) {
             return progress == this.progress && progressError == this.progressError ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         /** The rolled-up agent reading for this window's panes; null leaves it to the shell. */
@@ -242,7 +258,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withAgentState(@Nullable AgentStatus.State agentState) {
             return agentState == this.agentState ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         /**
@@ -254,7 +270,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withIcon(@Nullable Bitmap icon) {
             return icon == this.icon ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         /**
@@ -265,7 +281,24 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withHomeFloat(int page, @NonNull String spokenMark) {
             return new WindowItem(label + HomeFloatPolicy.chipPageMark(page),
                 spokenLabel + ", " + spokenMark, busy, attention, progress, progressError, done,
-                doneFailed, agentState, icon);
+                doneFailed, agentState, icon, minimised);
+        }
+
+        /**
+         * A minimised Home float's chip (#91): drawn at {@link #MINIMISED_ALPHA} with a small dot
+         * ({@link #MINIMISED_DOT_DP}), the way the old run strip marked a parked float. The
+         * spoken label already says it, so this is the sighted reading only.
+         */
+        @NonNull
+        public WindowItem withMinimised(boolean minimised) {
+            return minimised == this.minimised ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState, icon, minimised);
+        }
+
+        /** The alpha this chip rests at: dimmed while it is a minimised float's. */
+        public float restAlpha() {
+            return minimised ? MINIMISED_ALPHA : 1f;
         }
 
         /** Whether the two would draw the same marks. Labels are compared separately. */
@@ -273,7 +306,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             return busy == other.busy && attention == other.attention && done == other.done
                 && doneFailed == other.doneFailed
                 && progress == other.progress && progressError == other.progressError
-                && agentState == other.agentState && icon == other.icon;
+                && agentState == other.agentState && icon == other.icon
+                && minimised == other.minimised;
         }
 
         /**
@@ -306,6 +340,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             hash = 31 * hash + (attention ? 1 : 0);
             hash = 31 * hash + (done ? 1 : 0);
             hash = 31 * hash + (doneFailed ? 1 : 0);
+            hash = 31 * hash + (minimised ? 1 : 0);
             hash = 31 * hash + progress;
             hash = 31 * hash + (progressError ? 1 : 0);
             hash = 31 * hash + (agentState == null ? 0 : agentState.hashCode());
@@ -1296,7 +1331,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)) {
                 setTitle((TextView) child, item);
             }
+            MinimisedDotDrawable.wear((TextView) child, item.minimised);
             applyChipWatermark((TextView) child, item, i == mSelectedIndex ? 1f : 0f);
+            child.setAlpha(item.restAlpha());
             child.setTag(R.id.terminal_window_tab_state, item);
         }
         updateBusyAnimator();
@@ -1637,6 +1674,36 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return mCloseButton != null && mCloseButton.getVisibility() == VISIBLE ? mCloseButton : null;
     }
 
+    /**
+     * Where the chip at {@code index} stands on screen, cut to the part the bar shows: false while
+     * the bar is not on screen, the chip is not laid out, or it is scrolled out of sight. Asked
+     * once per minimise, for the float's flight into its chip.
+     */
+    public boolean chipBoundsOnScreen(int index, @NonNull android.graphics.Rect out) {
+        return chipBoundsOnScreen(this, mTabs, index, mItems.size(), out);
+    }
+
+    /**
+     * Where {@code chips}' child at {@code index} stands on screen, cut to the part {@code host}
+     * shows: false while the host is not on screen, {@code index} is not one of its
+     * {@code itemCount} chips, the chip is not laid out, or it is scrolled out of sight. The bar's
+     * row and the status bar's window column ask it alike.
+     */
+    public static boolean chipBoundsOnScreen(@NonNull View host,
+                                             @NonNull android.view.ViewGroup chips,
+                                             int index, int itemCount,
+                                             @NonNull android.graphics.Rect out) {
+        if (!host.isShown() || index < 0 || index >= itemCount || index >= chips.getChildCount())
+            return false;
+        View chip = chips.getChildAt(index);
+        if (chip.getWidth() <= 0 || chip.getHeight() <= 0) return false;
+        int[] at = new int[2];
+        chip.getLocationOnScreen(at);
+        out.set(at[0], at[1], at[0] + chip.getWidth(), at[1] + chip.getHeight());
+        host.getLocationOnScreen(at);
+        return out.intersect(at[0], at[1], at[0] + host.getWidth(), at[1] + host.getHeight());
+    }
+
     /** Told about every chip tap, including the one spent on revealing the close button. */
     public void setOnChipTappedListener(@Nullable OnChipTappedListener listener) {
         mChipTapListener = listener;
@@ -1700,6 +1767,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         tab.setMinWidth(dp(ChipWatermarkGeometry.GLYPH_SIZE_DP)
             + dp(ChipWatermarkGeometry.TITLE_NUDGE_DP) + dp(3.5f) * 2);
         applyChipWatermark(tab, item, selected ? 1f : 0f);
+        // A minimised float's mark: the same dot the status column's chips wear, in the title's ink.
+        MinimisedDotDrawable.wear(tab, item.minimised);
         tab.setSelected(selected);
         tab.setFocusable(true);
         return tab;
@@ -1878,7 +1947,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             applyTitleHalo(tab, selected ? 1f : 0f);
             ChipWatermarkDrawable chip = chipWatermarkAt(i);
             if (chip != null) chip.setSelection(selected ? 1f : 0f);
-            tab.setAlpha(1f);
+            tab.setAlpha(mItems.get(i).restAlpha());
             tab.setTranslationX(0f);
         }
     }
@@ -1906,7 +1975,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 applyTitleHalo(tab, 0f);
                 if (chip != null) chip.setSelection(0f);
             }
-            tab.setAlpha(1f);
+            tab.setAlpha(mItems.get(i).restAlpha());
             tab.setTranslationX(0f);
         }
     }

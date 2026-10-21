@@ -856,4 +856,26 @@ public class EdgeStackPolicyTest {
         assertEquals(0, EdgeStackPolicy.sideStackBottomInsetPx(layout, Edge.LEFT, true, 400));
         assertEquals(0, EdgeStackPolicy.sideStackBottomInsetPx(layout, Edge.RIGHT, true, 400));
     }
+
+    /**
+     * Moved from the Home chrome policy's test. Home wears no status bar of any kind
+     * (2026-10-19): its layout keeps the bar put away, so nothing stands on the top edge for it
+     * and the grid starts where the page's top does, below the system bar's inset alone. A bar
+     * there would overlay the page.
+     */
+    @Test
+    public void homeWearsNoStatusBarSoTheGridStartsAtThePagesTop() {
+        PlaceLayout home = new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM,
+            true, Edge.BOTTOM, RowPlacement.HIDDEN,
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5)
+            .withSlot(Element.STATUS, Slot.hiddenFrom(Edge.TOP, 0));
+        EdgeStackPolicy.Metrics metrics = EdgeStackPolicy.Metrics.builder()
+            .status(120, 200).apps(150, 90).az(40, 60).extraKeys(80, 100).build();
+        boolean overlays = true;
+        assertEquals(0, EdgeStackPolicy.contentInsets(home, metrics).top
+            - EdgeStackPolicy.topOverlapPx(home, metrics, overlays));
+        assertEquals(0, EdgeStackPolicy.stackThicknessPx(home, Edge.TOP, metrics));
+        assertEquals(0, EdgeStackPolicy.sideStackTopInsetPx(home, Edge.LEFT, metrics,
+            overlays));
+    }
 }

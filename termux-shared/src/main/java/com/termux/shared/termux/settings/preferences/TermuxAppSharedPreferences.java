@@ -282,66 +282,41 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     // ---- Style, Corners and Margin per half of the wall (ADR 0008) ----
     //
-    // The Workspace's are the keys every surface always read; Home's are their own keys beside
-    // them (TERMUX_APP.KEY_HOME_*). A Home value never written reads the Workspace's, so an
-    // upgrade looks as it did and Home follows the Workspace until the user sets Home apart.
+    // Linked across the wall since #84: both halves wear the Workspace's values, the keys every
+    // surface always read, a Home layout of its own included, so crossing between the halves
+    // never changes the chrome's shape. A half is still named so callers that ask for one keep
+    // reading and writing the right value; Home's old keys beside them (TERMUX_APP.KEY_HOME_*)
+    // are dropped by the layout store's migration and never read.
 
-    /** Whether Home's value under {@code key} has been written, and so no longer follows the Workspace's. */
-    private boolean isHomeShapeSet(@NonNull String key) {
-        return mSharedPreferences != null && mSharedPreferences.contains(key);
-    }
-
-    /** The Style a half wears: Home's for {@code home}, else the Workspace's {@link #getLayoutStyle()}. */
+    /** The Style a half wears: the Workspace's {@link #getLayoutStyle()} on either half. */
     @NonNull
     public LayoutStyle getLayoutStyle(boolean home) {
-        if (!home || !isHomeShapeSet(TERMUX_APP.KEY_HOME_LAYOUT_STYLE))
-            return getLayoutStyle();
-        return LayoutStyle.parse(SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_HOME_LAYOUT_STYLE, TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_STYLE, true));
+        return getLayoutStyle();
     }
 
+    /** Sets the Style both halves wear, from either half. */
     public void setLayoutStyle(boolean home, @NonNull LayoutStyle style) {
-        if (!home) {
-            setLayoutStyle(style);
-            return;
-        }
-        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_HOME_LAYOUT_STYLE,
-            style.storageValue(), false);
+        setLayoutStyle(style);
     }
 
-    /** Corners for a half, in dp as stored (-1 is auto): Home's for {@code home}, else Base's. */
+    /** Corners for a half, in dp as stored (-1 is auto): Base's on either half. */
     public int getLayoutCornersDp(boolean home) {
-        return homeOrBase(home, TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS,
-            SurfaceProperty.CORNER_RADIUS);
+        return getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS);
     }
 
+    /** Sets the Corners both halves wear, from either half. */
     public void setLayoutCornersDp(boolean home, int dp) {
-        writeHomeOrBase(home, TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS,
-            SurfaceProperty.CORNER_RADIUS, dp);
+        setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, dp);
     }
 
-    /** Margin for a half, in dp as stored: Home's for {@code home}, else Base's side gap. */
+    /** Margin for a half, in dp as stored: Base's side gap on either half. */
     public int getLayoutMarginDp(boolean home) {
-        return homeOrBase(home, TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, SurfaceProperty.SIDE_GAP);
+        return getSurfaceBaseValue(SurfaceProperty.SIDE_GAP);
     }
 
+    /** Sets the Margin both halves wear, from either half. */
     public void setLayoutMarginDp(boolean home, int dp) {
-        writeHomeOrBase(home, TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, SurfaceProperty.SIDE_GAP, dp);
-    }
-
-    private int homeOrBase(boolean home, @NonNull String homeKey, @NonNull SurfaceProperty property) {
-        int base = getSurfaceBaseValue(property);
-        if (!home || !isHomeShapeSet(homeKey))
-            return base;
-        return SharedPreferenceUtils.getInt(mSharedPreferences, homeKey, base);
-    }
-
-    private void writeHomeOrBase(boolean home, @NonNull String homeKey,
-                                 @NonNull SurfaceProperty property, int dp) {
-        if (home)
-            SharedPreferenceUtils.setInt(mSharedPreferences, homeKey, dp, false);
-        else
-            setSurfaceBaseValue(property, dp);
+        setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, dp);
     }
 
     /**

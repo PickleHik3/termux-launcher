@@ -14,6 +14,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.view.ViewTreeObserver;
 import android.util.AttributeSet;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -118,6 +119,20 @@ public final class WidgetPaneView extends FrameLayout {
          * with what is under the finger.
          */
         default boolean yieldsSidewaysSwipe(float x, float y) { return false; }
+        /** Whether anything of the page in view is drawn on the layer now (a float that is up). */
+        default boolean showsAnything() { return false; }
+    }
+
+    /**
+     * What else may lie over Home, read each frame rather than pushed: the drawer and the palette
+     * open and close along many paths, and a hint still drawn under one is what a missed one
+     * looks like ({@link WidgetEmptyHintPolicy}).
+     */
+    public interface HintCover {
+        /** The app drawer's plane is engaged: open, or on its way in or out. */
+        boolean drawerUp();
+        /** The command palette is open. */
+        boolean paletteUp();
     }
 
     /** Fraction of the pane width a released drag must cross to commit a page switch. */
@@ -212,7 +227,7 @@ public final class WidgetPaneView extends FrameLayout {
         // The page dots sit in a band below the grid, never over its last row. The band is kept
         // whether or not the dots show, so adding a page does not shrink every cell.
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
-        gridParams.bottomMargin = dp(DOTS_HEIGHT_DP + DOTS_BOTTOM_MARGIN_DP + DOTS_GAP_DP);
+        gridParams.bottomMargin = gridBottomInsetPx(0, getResources().getDisplayMetrics().density);
         addView(grid, gridParams);
 
         empty = new LinearLayout(context); empty.setOrientation(LinearLayout.VERTICAL);
@@ -253,6 +268,37 @@ public final class WidgetPaneView extends FrameLayout {
 
     private WidgetPickerAdapter.Listener providerListener;
     @Nullable private View pinnedLayer;
+    @Nullable private HintCover hintCover;
+    /** A few boolean reads a frame; only a change touches the hint. */
+    private final ViewTreeObserver.OnPreDrawListener hintCoverCheck = () -> {
+        syncEmptyHint();
+        return true;
+    };
+
+    /** What else may cover Home, so the empty page's hint steps out from under it. */
+    public void setEmptyHintCover(@Nullable HintCover cover) {
+        hintCover = cover;
+        syncEmptyHint();
+    }
+
+    /**
+     * The empty page's hint, hidden (not gone: the page's layout stays) while a float, the drawer
+     * or the palette is over it. Each of those is see-through, so the hint would read through it.
+     */
+    private void syncEmptyHint() {
+        boolean floatOnPage = pinnedLayer instanceof PagePinnedLayer
+            && pinnedLayer.getVisibility() == VISIBLE && ((PagePinnedLayer) pinnedLayer).showsAnything();
+        HintCover cover = hintCover;
+        boolean shown = WidgetEmptyHintPolicy.shown(floatOnPage,
+            cover != null && cover.drawerUp(), cover != null && cover.paletteUp());
+        int visibility = shown ? VISIBLE : INVISIBLE;
+        if (emptyMessage.getVisibility() != visibility) emptyMessage.setVisibility(visibility);
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        getViewTreeObserver().addOnPreDrawListener(hintCoverCheck);
+    }
 
     /**
      * Pins {@code layer} to the Home pages: drawn over the grid and under the page dots, the picker
@@ -325,6 +371,41 @@ public final class WidgetPaneView extends FrameLayout {
         applyContentShift();
     }
     @NonNull public WidgetGridView grid() { return grid; }
+
+    /** The band at the pane's bottom the dock takes at rest; see {@link #setDockReservePx}. */
+    private int dockReservePx;
+
+    /**
+     * The band at the pane's bottom the dock stands over at rest
+     * ({@code KeyboardOverlayPolicy#homeGridDockReservePx}, #104): the page dots and the grid stand
+     * above it, so the grid's last row is never behind the dock. The grid's rows are cut from what
+     * is left.
+     */
+    public void setDockReservePx(int px) {
+        int wanted = Math.max(0, px);
+        if (dockReservePx == wanted) return;
+        dockReservePx = wanted;
+        float density = getResources().getDisplayMetrics().density;
+        LayoutParams gridParams = (LayoutParams) grid.getLayoutParams();
+        gridParams.bottomMargin = gridBottomInsetPx(wanted, density);
+        grid.setLayoutParams(gridParams);
+        LayoutParams dotsParams = (LayoutParams) dots.getLayoutParams();
+        dotsParams.bottomMargin = wanted + Math.round(DOTS_BOTTOM_MARGIN_DP * density);
+        dots.setLayoutParams(dotsParams);
+    }
+
+    public int dockReservePx() {
+        return dockReservePx;
+    }
+
+    /**
+     * How far above the pane's bottom the grid ends: the dock's band, then the page dots' band
+     * (kept whether or not the dots show, so adding a page does not shrink every cell).
+     */
+    static int gridBottomInsetPx(int dockReservePx, float density) {
+        return Math.max(0, dockReservePx)
+            + Math.round((DOTS_HEIGHT_DP + DOTS_BOTTOM_MARGIN_DP + DOTS_GAP_DP) * density);
+    }
 
     /**
      * A pane corner may still claim the finger that is down, so nothing in the grid runs a long
@@ -1014,6 +1095,7 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
+        getViewTreeObserver().removeOnPreDrawListener(hintCoverCheck);
         if (contentSettle != null) { contentSettle.end(); contentSettle = null; }
         if (pagingVelocity != null) { pagingVelocity.recycle(); pagingVelocity = null; }
         if (seamVelocity != null) { seamVelocity.recycle(); seamVelocity = null; }

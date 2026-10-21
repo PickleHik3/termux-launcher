@@ -109,6 +109,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         default boolean bodySwipePagesWall(float rawX, float rawY) { return false; }
         /**
+         * Whether a clearly sideways swipe that starts at this screen point, in a terminal
+         * window's last row on the seam band, pages the row ({@link
+         * PaneWallLayout.Listener#isSeamSwipePaging}): the pane under the finger gives the swipe
+         * away. The body swipe's setting is not asked; the band is the bottom border's.
+         */
+        default boolean seamSwipePagesWall(float rawX, float rawY) {
+            return bodySwipePagesWall(rawX, rawY);
+        }
+        /**
          * The keyboard swipe was claimed, going up ({@code opening}) or down, and the keyboard is
          * to follow the finger: the keyboard's height in px the finger drives it over, or 0 where
          * it cannot follow, and the swipe then asks through {@link #onBorderKeyboardSwipe} on
@@ -715,6 +724,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public boolean isBodySwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
         return page == PaneWallPage.TERMINAL && !mWall.isDisplayInFront()
             && mHost.bodySwipePagesWall(rawX, rawY);
+    }
+
+    /**
+     * A terminal window's last row pages the row by a clearly sideways swipe from the seam band
+     * ({@link SeamSwipe}), where the terminal gives the swipe away, whatever the body swipe's
+     * setting. Not the display window's picture, which takes every touch.
+     */
+    @Override
+    public boolean isSeamSwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
+        return page == PaneWallPage.TERMINAL && !mWall.isDisplayInFront()
+            && mHost.seamSwipePagesWall(rawX, rawY);
     }
 
     @Override

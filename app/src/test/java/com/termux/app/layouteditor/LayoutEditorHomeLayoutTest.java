@@ -34,9 +34,10 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The Layout editor opened on a Home page edits the Home layout and offers only its elements —
- * the pinned apps, the A–Z index and the keyboard, whose chip is always on — while opened on a
- * window it edits the Workspace layout with the full set, as before (ADR 0008).
+ * While Home holds a Home layout, the Layout editor opened on a Home page edits it and offers only
+ * its elements — the pinned apps, the A–Z index and the keyboard, whose chip is always on — while
+ * opened on a window it edits the Workspace layout with the full set (ADR 0008, kept by ADR 0009
+ * as the opt-in Home layout).
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -56,6 +57,8 @@ public class LayoutEditorHomeLayoutTest {
         prefs.edit().clear().commit();
         launcher = new TermuxAppSharedPreferences(app, prefs, null);
         places = new PlaceLayoutStore(launcher);
+        // Home holds a Home layout of its own here; the shared layout is LayoutEditorSharedLayoutTest.
+        places.setHomeLayout(true);
     }
 
     @Test
@@ -72,13 +75,14 @@ public class LayoutEditorHomeLayoutTest {
     }
 
     @Test
-    public void theHomeTrayHoldsOnlyTheDockRowsAndTheKeyboard() {
+    public void theHomeTrayHoldsTheBarTheDockRowsAndTheKeyboard() {
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         places.setAzRowShown(PORTRAIT, true);
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
-        // Fresh from its seed: the status bar and the extra keys are put away, and so is the
-        // keyboard, but only the keyboard is the Home layout's to bring back.
+        // Fresh from its seed: the extra keys are put away, and so is the keyboard, but only the
+        // keyboard is the Home layout's to bring back. The bar comes shown (#90).
         assertEquals(Arrays.asList(LayoutEditorPlan.TrayItem.KEYBOARD), plan.trayItems());
+        assertFalse(plan.shownLayout().slot(Element.STATUS).hidden);
 
         plan.drop(Bar.APPS_ROW, null);
         plan.drop(Bar.AZ_INDEX, null);
@@ -86,10 +90,15 @@ public class LayoutEditorHomeLayoutTest {
         assertEquals(Arrays.asList(LayoutEditorPlan.TrayItem.PINNED_APPS,
             LayoutEditorPlan.TrayItem.AZ_INDEX, LayoutEditorPlan.TrayItem.KEYBOARD), tray);
         assertEquals(LayoutEditorPlan.Drop.NONE,
-            plan.restore(LayoutEditorPlan.TrayItem.STATUS_BAR));
-        assertEquals(LayoutEditorPlan.Drop.NONE,
             plan.restore(LayoutEditorPlan.TrayItem.EXTRA_KEYS));
+
+        // The bar is Home's to put away and bring back.
+        plan.drop(Bar.STATUS_BAR, null);
+        assertTrue(plan.trayItems().contains(LayoutEditorPlan.TrayItem.STATUS_BAR));
         assertTrue(plan.shownLayout().slot(Element.STATUS).hidden);
+        assertEquals(LayoutEditorPlan.Drop.LIVE,
+            plan.restore(LayoutEditorPlan.TrayItem.STATUS_BAR));
+        assertFalse(plan.shownLayout().slot(Element.STATUS).hidden);
     }
 
     @Test
@@ -107,9 +116,10 @@ public class LayoutEditorHomeLayoutTest {
     }
 
     @Test
-    public void theStatusBarAndTheExtraKeysStandNowhereOnTheHomeLayout() {
+    public void theExtraKeysStandNowhereOnTheHomeLayout_theBarWhereItIsPlaced() {
         PlaceLayoutStore home = places.forVariant(LayoutVariant.HOME);
-        assertFalse(LayoutChooserModel.applyDrop(home, PORTRAIT, Bar.STATUS_BAR, Edge.TOP));
+        assertTrue(LayoutChooserModel.applyDrop(home, PORTRAIT, Bar.STATUS_BAR, Edge.BOTTOM));
+        assertEquals(Edge.BOTTOM, home.resolve(PORTRAIT).slot(Element.STATUS).edge);
         assertFalse(LayoutChooserModel.applyDrop(home, PORTRAIT, Bar.EXTRA_KEYS, Edge.BOTTOM));
         assertTrue(LayoutChooserModel.applyDrop(home, PORTRAIT, Bar.APPS_ROW, Edge.TOP));
         assertEquals(Edge.TOP, home.resolve(PORTRAIT).slot(Element.APPS).edge);
@@ -166,39 +176,39 @@ public class LayoutEditorHomeLayoutTest {
     /** An install that never picked one, or holds an id this build cannot read, is the glass tray. */
     @Test
     public void anAbsentOrUnknownDockStyleReadsAsTheGlassTray() {
-        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
-        prefs().edit().putString("layout.home.dock_style", "ask_bar").commit();
-        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
+        PlaceLayoutStore home = places.forVariant(LayoutVariant.HOME);
+        assertEquals(DockStyle.GLASS_TRAY, home.dockStyle());
+        prefs().edit().putString("layout.home.dock_design", "ask_bar").commit();
+        assertEquals(DockStyle.GLASS_TRAY, home.dockStyle());
         assertEquals(DockStyle.GLASS_TRAY,
             places.resolve(PORTRAIT, LayoutVariant.HOME).dockStyle);
     }
 
     @Test
-    public void theDockStyleIsHomesOneValueForBothOrientations() {
+    public void theHomeLayoutsDesignIsItsOwnOneValueForBothOrientations() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
-        assertTrue(plan.offersDockStyle());
         plan.showOrientation(PlaceOrientation.LANDSCAPE);
         assertEquals("live whichever orientation the toggle shows", LayoutEditorPlan.Drop.LIVE,
-            plan.setDockStyle(DockStyle.TASKBAR));
-        assertEquals("taskbar", prefs().getString("layout.home.dock_style", null));
-        assertEquals(DockStyle.TASKBAR, places.dockStyle());
-        assertEquals(DockStyle.TASKBAR, places.forVariant(LayoutVariant.NORMAL).dockStyle());
-        assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.TASKBAR));
+            plan.setDockStyle(DockStyle.WALL_STRIP));
+        assertEquals("wall_strip", prefs().getString("layout.home.dock_design", null));
+        assertEquals(DockStyle.WALL_STRIP, places.forVariant(LayoutVariant.HOME).dockStyle());
+        assertEquals("the shared layout keeps its own", DockStyle.GLASS_TRAY,
+            places.forVariant(LayoutVariant.NORMAL).dockStyle());
+        assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.WALL_STRIP));
     }
 
-    /** The Taskbar's Home tile starts at the row's start and is stored next to the dock style. */
+    /** The Drawer tile starts at the row's start, and where it is dropped is each layout's own. */
     @Test
-    public void theTaskbarHomeTileIsHomesOneStoredPosition() {
-        assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.START,
-            places.taskbarHomeTile());
-        places.forVariant(LayoutVariant.NORMAL).setTaskbarHomeTile(
-            com.termux.app.dock.TaskbarHomeTilePolicy.Position.END);
-        assertEquals("end", prefs().getString("layout.home.taskbar_home_tile", null));
-        assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.END,
-            places.taskbarHomeTile());
-        prefs().edit().putString("layout.home.taskbar_home_tile", "sideways").commit();
-        assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.START,
-            places.taskbarHomeTile());
+    public void theHomeLayoutsDrawerTileStandsWhereItWasDropped() {
+        PlaceLayoutStore home = places.forVariant(LayoutVariant.HOME);
+        assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.START,
+            home.drawerTilePosition());
+        home.setDrawerTilePosition(com.termux.app.dock.DrawerTilePolicy.Position.END);
+        assertEquals("end", prefs().getString("layout.home.drawer_tile_position", null));
+        assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.END,
+            home.drawerTilePosition());
+        assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.START,
+            places.drawerTilePosition());
     }
 
     /**
@@ -211,28 +221,29 @@ public class LayoutEditorHomeLayoutTest {
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             assertEquals(DockStyle.effectiveStyle(DockStyle.WALL_STRIP),
                 places.resolve(orientation, LayoutVariant.HOME).dockStyle);
-            assertEquals("the Workspace's dock has no style", DockStyle.GLASS_TRAY,
+            assertEquals("the Workspace's layout keeps its own design", DockStyle.GLASS_TRAY,
                 places.resolve(orientation, LayoutVariant.NORMAL).dockStyle);
         }
     }
 
     @Test
-    public void theWorkspaceLayoutOffersNoDockStyle() {
+    public void theWorkspaceLayoutOffersItsDockDesign() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
-        assertFalse(plan.offersDockStyle());
-        assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.LENS_BEADS));
-        assertFalse(prefs().contains("layout.home.dock_style"));
-        assertFalse(plan.isDirty());
+        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setDockStyle(DockStyle.LENS_BEADS));
+        assertEquals(DockStyle.LENS_BEADS, places.forVariant(LayoutVariant.NORMAL).dockStyle());
+        assertEquals("the Home layout keeps its own", DockStyle.GLASS_TRAY,
+            places.forVariant(LayoutVariant.HOME).dockStyle());
+        assertTrue(plan.isDirty());
     }
 
     @Test
     public void aPickedDockStyleIsUnsavedAndDiscardPutsItBack() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
-        plan.setDockStyle(DockStyle.PROMPT_LINE);
+        plan.setDockStyle(DockStyle.WALL_STRIP);
         assertTrue(plan.isDirty());
 
         plan.revert();
-        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
+        assertEquals(DockStyle.GLASS_TRAY, places.forVariant(LayoutVariant.HOME).dockStyle());
         assertFalse(plan.isDirty());
     }
 
@@ -240,13 +251,11 @@ public class LayoutEditorHomeLayoutTest {
     public void theHomeFilterCarriesTheDockStyleChoice() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
         plan.showHome(true);
-        assertTrue(plan.offersDockStyle());
         plan.setDockStyle(DockStyle.LENS_BEADS);
         plan.showHome(false);
-        assertFalse(plan.offersDockStyle());
         assertTrue("the Home layout's pick is still unsaved", plan.isDirty());
         plan.revert();
-        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
+        assertEquals(DockStyle.GLASS_TRAY, places.forVariant(LayoutVariant.HOME).dockStyle());
     }
 
     private SharedPreferences prefs() {

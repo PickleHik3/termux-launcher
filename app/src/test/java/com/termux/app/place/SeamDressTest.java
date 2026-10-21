@@ -34,7 +34,7 @@ public class SeamDressTest {
         Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY);
 
     private static final PlaceChromeTravel.States STATES = place -> new Rest(false, false,
-        !HomeChromePolicy.isHome(place));
+        place != PaneWallPage.WIDGETS);
 
     /** The frame {@code fraction} of the way from the terminal to Home, committed to the terminal. */
     private static Frame terminalToHome(float fraction) {

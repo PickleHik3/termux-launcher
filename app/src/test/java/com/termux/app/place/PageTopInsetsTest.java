@@ -38,7 +38,7 @@ public class PageTopInsetsTest {
 
     /** The Workspace's layout: the bar along the top, the dock along the bottom. */
     private static final PlaceLayout WORKSPACE = layout(Edge.TOP, Edge.BOTTOM);
-    /** Home's: no status bar at all (2026-10-19). */
+    /** A Home layout that puts the bar away. */
     private static final PlaceLayout HOME_LAYOUT = WORKSPACE.withSlot(Element.STATUS,
         Slot.hiddenFrom(Edge.TOP, 0));
     /** Home with the Workspace's bar brought over it for a slide toward the Workspace. */
@@ -51,12 +51,20 @@ public class PageTopInsetsTest {
      * content column the activity lays out (EdgeStackView.overlayFollowing, PaneWallLayout).
      */
     private static int pageTopPx(PaneWallPage page, PaneWallPage committed, boolean wallAtRest,
-                                 PlaceLayout onScreen, EdgeStackPolicy.Metrics metrics) {
+                                 PlaceLayout onScreen, PlaceLayout home,
+                                 EdgeStackPolicy.Metrics metrics) {
         boolean reaches = PageTopInsets.canvasReachesUnderBar(committed, wallAtRest);
         int reach = PageTopInsets.canvasReachPx(reaches, true, onScreen, metrics);
         int canvasTop = EdgeStackPolicy.stackThicknessPx(onScreen, Edge.TOP, metrics) - reach;
         return canvasTop + PageTopInsets.pageTopInsetPx(page,
-            PageTopInsets.workspaceTopInsetPx(reaches, true, onScreen, WORKSPACE, metrics));
+            PageTopInsets.workspaceTopInsetPx(reaches, true, onScreen, WORKSPACE, metrics),
+            PageTopInsets.homeTopInsetPx(reaches, true, home, metrics));
+    }
+
+    /** {@link #pageTopPx}, Home on a Home layout that puts the bar away. */
+    private static int pageTopPx(PaneWallPage page, PaneWallPage committed, boolean wallAtRest,
+                                 PlaceLayout onScreen, EdgeStackPolicy.Metrics metrics) {
+        return pageTopPx(page, committed, wallAtRest, onScreen, HOME_LAYOUT, metrics);
     }
 
     @Test
@@ -70,12 +78,50 @@ public class PageTopInsetsTest {
     }
 
     @Test
-    public void aHomePageStartsAtTheCanvasTopAndAWindowOneBandBelow() {
-        assertEquals(0, PageTopInsets.pageTopInsetPx(HOME, BAR));
-        assertEquals(BAR, PageTopInsets.pageTopInsetPx(WINDOW, BAR));
+    public void aHomePageStartsAtItsOwnInsetAndAWindowAtTheWorkspaces() {
+        assertEquals(0, PageTopInsets.pageTopInsetPx(HOME, BAR, 0));
+        assertEquals(BAR, PageTopInsets.pageTopInsetPx(HOME, 0, BAR));
+        assertEquals(BAR, PageTopInsets.pageTopInsetPx(WINDOW, BAR, 0));
         assertEquals("the display window's frame is a Workspace page", BAR,
-            PageTopInsets.pageTopInsetPx(null, BAR));
-        assertEquals(0, PageTopInsets.pageTopInsetPx(WINDOW, -5));
+            PageTopInsets.pageTopInsetPx(null, BAR, 0));
+        assertEquals(0, PageTopInsets.pageTopInsetPx(WINDOW, -5, 0));
+        assertEquals(0, PageTopInsets.pageTopInsetPx(HOME, 0, -5));
+    }
+
+    /**
+     * One bar across the wall (#90): a Home that wears the Workspace's bar starts below it as a
+     * window's page does, at rest and on every frame of the swipe both ways, so the bar and the
+     * two pages line up across the seam.
+     */
+    @Test
+    public void aHomeWearingTheBarStartsBelowItLikeAWindowAtEveryStep() {
+        for (int bar : new int[] {BAR, COMPACT_BAR}) {
+            EdgeStackPolicy.Metrics m = metrics(bar);
+            int window = pageTopPx(WINDOW, WINDOW, true, WORKSPACE, WORKSPACE, m);
+            assertEquals("below the bar", bar, window);
+            assertEquals(window, pageTopPx(HOME, HOME, true, WORKSPACE, WORKSPACE, m));
+            assertEquals(window, pageTopPx(WINDOW, HOME, true, WORKSPACE, WORKSPACE, m));
+            for (PaneWallPage committed : new PaneWallPage[] {WINDOW, HOME}) {
+                assertEquals(committed.name(), window,
+                    pageTopPx(HOME, committed, false, WORKSPACE, WORKSPACE, m));
+                assertEquals(committed.name(), window,
+                    pageTopPx(WINDOW, committed, false, WORKSPACE, WORKSPACE, m));
+            }
+        }
+    }
+
+    @Test
+    public void homesInsetIsItsOwnBarsBandOnlyWhileTheCanvasReaches() {
+        EdgeStackPolicy.Metrics m = metrics(BAR);
+        assertEquals(BAR, PageTopInsets.homeTopInsetPx(true, true, WORKSPACE, m));
+        assertEquals("a Home layout without the bar", 0,
+            PageTopInsets.homeTopInsetPx(true, true, HOME_LAYOUT, m));
+        assertEquals("a bar on the bottom edge", 0, PageTopInsets.homeTopInsetPx(true, true,
+            layout(Edge.BOTTOM, Edge.BOTTOM), m));
+        assertEquals("below the bar there is nothing to inset", 0,
+            PageTopInsets.homeTopInsetPx(false, true, WORKSPACE, m));
+        assertEquals("compatibility mode shows no bar", 0,
+            PageTopInsets.homeTopInsetPx(true, false, WORKSPACE, m));
     }
 
     /** The slide from the terminal to Home: every frame, then the settle, puts each page where it was. */

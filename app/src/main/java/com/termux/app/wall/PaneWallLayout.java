@@ -230,6 +230,16 @@ public final class PaneWallLayout extends ViewGroup {
             return false;
         }
         /**
+         * Whether a clearly sideways swipe that starts at the screen point ({@code rawX}, {@code
+         * rawY}) in {@code page}'s last row, on the seam band above the bottom border ({@link
+         * SeamSwipe}), pages the wall: the terminal there gives the swipe away. The band is the
+         * border's, so the body swipe's setting does not turn it off. Asked once as a finger
+         * lands there, on a wall that can page.
+         */
+        default boolean isSeamSwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
+            return isBodySwipePaging(page, rawX, rawY);
+        }
+        /**
          * A drag is taking the wall from {@code page}, a border drag or Home's plain swipe past
          * its last page: the moment to put the neighbouring view on the page beside the seam
          * (the first window when leaving Home) while it is still off screen.
@@ -923,6 +933,14 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** Release the drag at {@code velocityPxPerSec} (positive to the right). */
     public void endDrag(float velocityPxPerSec) {
+        endDrag(velocityPxPerSec, 0f);
+    }
+
+    /**
+     * {@link #endDrag(float)}, for a drag claimed once the finger had already gone {@code
+     * leadPx} sideways ({@link BorderDrag#claimLead}), which the flick's least distance counts.
+     */
+    public void endDrag(float velocityPxPerSec, float leadPx) {
         if (!mDragging) return;
         mDragging = false;
         // The finger let go: a sunk page springs back up as the wall carries it.
@@ -930,7 +948,7 @@ public final class PaneWallLayout extends ViewGroup {
         boolean previousExists = canStep(-1);
         boolean nextExists = canStep(1);
         int steps = PaneWallPolicy.settle(mOffsetPx, velocityPxPerSec, getWidth(),
-            getResources().getDisplayMetrics().density, previousExists, nextExists);
+            getResources().getDisplayMetrics().density, previousExists, nextExists, leadPx);
         // The wall's own speed at the release, which the settle carries on from.
         float velocity = PaneWallPolicy.wallVelocity(mOffsetPx, velocityPxPerSec, previousExists,
             nextExists);
@@ -1085,6 +1103,7 @@ public final class PaneWallLayout extends ViewGroup {
                 if (claim == BorderDrag.Claim.PAGING) {
                     // Slid sideways off a border outside the text: the wall's at once, no hold.
                     mHoldHandler.removeCallbacks(mHoldElapsed);
+                    if (mBorderDrag.seamSlides()) lightSeamGlow(event.getX());
                     if (takeBorderDrag(event.getX()) && mBorderVelocity != null) {
                         mBorderVelocity.addMovement(event);
                     }
@@ -1113,14 +1132,7 @@ public final class PaneWallLayout extends ViewGroup {
                     return true;
                 }
                 if (mBorderDrag.isPaging()) {
-                    float velocity = 0f;
-                    if (mBorderVelocity != null) {
-                        mBorderVelocity.addMovement(event);
-                        mBorderVelocity.computeCurrentVelocity(1000);
-                        velocity = mBorderVelocity.getXVelocity();
-                    }
-                    releaseBorderDrag();
-                    endDrag(velocity);
+                    releasePagingDrag(event);
                     return true;
                 }
                 break;
@@ -1154,6 +1166,142 @@ public final class PaneWallLayout extends ViewGroup {
         return handled;
     }
 
+    /**
+     * The flick's release of a border drag the wall owns: the finger's speed, and the travel its
+     * claim left out ({@link BorderDrag#claimLead}), decide where the wall lands.
+     */
+    private void releasePagingDrag(@NonNull MotionEvent event) {
+        float velocity = 0f;
+        if (mBorderVelocity != null) {
+            mBorderVelocity.addMovement(event);
+            mBorderVelocity.computeCurrentVelocity(1000);
+            velocity = mBorderVelocity.getXVelocity();
+        }
+        float lead = mBorderDrag.claimLead();
+        releaseBorderDrag();
+        endDrag(velocity, lead);
+    }
+
+    /**
+     * Whether the wall is following a finger the dock has, from the dock's top in the seam band
+     * ({@link #dispatchDockSeamTouch}); cleared by the wall's own next press.
+     */
+    private boolean mDockSeamPress;
+    /** Scratch for {@link #dispatchDockSeamTouch}: the wall's place on screen. */
+    private final int[] mDockSeamLocation = new int[2];
+
+    /**
+     * Every touch on the window, before any view has it, from whoever routes it (the activity),
+     * so the seam band reaches into the dock's top ({@link SeamSwipe}): the dock keeps a finger
+     * that lands there, and the wall watches it alongside. While this returns false the event
+     * goes on to the views as usual. It returns true from the move that sets off clearly sideways
+     * on the current window's seam ({@link BorderDrag#downOnDock}) to the lift: the wall has the
+     * drag, exactly as from the border's air, and the router owes the dock a cancel and sends it
+     * nothing more. A tap, a still finger, a steeper start or a second finger leave the dock its
+     * gesture, and the hold never pages from there.
+     */
+    public boolean dispatchDockSeamTouch(@NonNull MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            armDockSeam(event);
+            return false;
+        }
+        if (!mDockSeamPress) return false;
+        getLocationOnScreen(mDockSeamLocation);
+        float x = event.getRawX() - mDockSeamLocation[0];
+        float y = event.getRawY() - mDockSeamLocation[1];
+        boolean paging = mBorderDrag.isPaging();
+        switch (action) {
+            case MotionEvent.ACTION_MOVE:
+                if (paging) {
+                    if (mBorderVelocity != null) mBorderVelocity.addMovement(event);
+                    dragTo(mBorderDrag.travel(x));
+                    return true;
+                }
+                BorderDrag.Claim claim = mBorderDrag.move(x, y);
+                if (claim == BorderDrag.Claim.PAGING) {
+                    lightSeamGlow(x);
+                    if (takeBorderDrag(x) && mBorderVelocity != null) {
+                        mBorderVelocity.addMovement(event);
+                    }
+                    syncBorderGlow();
+                    return true;
+                }
+                if (claim != BorderDrag.Claim.PENDING) endDockSeam();
+                return false;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                if (paging) return true;
+                endDockSeam();
+                return false;
+            case MotionEvent.ACTION_POINTER_UP:
+                return paging;
+            case MotionEvent.ACTION_UP:
+                if (paging) {
+                    releasePagingDrag(event);
+                    mDockSeamPress = false;
+                    syncBorderGlow();
+                    return true;
+                }
+                endDockSeam();
+                return false;
+            case MotionEvent.ACTION_CANCEL:
+                if (paging) {
+                    releaseBorderDrag();
+                    cancelDrag();
+                    mDockSeamPress = false;
+                    syncBorderGlow();
+                    return true;
+                }
+                endDockSeam();
+                return false;
+            default:
+                return paging;
+        }
+    }
+
+    /**
+     * A finger landed somewhere on the window: the wall follows it only where it is on the
+     * dock's top in the current window's seam band, on a wall that can page, while no finger of
+     * the wall's own is pressing.
+     */
+    private void armDockSeam(@NonNull MotionEvent event) {
+        mDockSeamPress = false;
+        if (!mGesturesEnabled || mBorderDrag.isArmed() || mDragging) return;
+        if (mPages.size() <= 1 || mCurrent == PaneWallPage.WIDGETS) return;
+        if (mListener != null && !mListener.isBorderPagingEnabled(mCurrent)) return;
+        if (!isShown() || !loadBorderZone(true)) return;
+        getLocationOnScreen(mDockSeamLocation);
+        float x = event.getRawX() - mDockSeamLocation[0];
+        float y = event.getRawY() - mDockSeamLocation[1];
+        if (!mBorderDrag.downOnDock(x, y, mBorderZone,
+                ViewConfiguration.get(getContext()).getScaledTouchSlop(), true)) {
+            return;
+        }
+        mDockSeamPress = true;
+        mBorderDownX = x;
+        mBorderDownY = y;
+    }
+
+    /** The dock's press turned out to be the dock's: the wall lets it go. */
+    private void endDockSeam() {
+        mDockSeamPress = false;
+        releaseBorderDrag();
+    }
+
+    /**
+     * A clearly sideways start on the seam band beyond the air — the window's last row or the
+     * dock's top — claimed the wall: no glow was lit at the touch, since a tap there is the
+     * content's, so the bottom border lights now, under the pane at {@code x}, full at once.
+     */
+    private void lightSeamGlow(float x) {
+        if (mGlow.isHeld()) return;
+        mGlowPage = mPageViews.get(mCurrent);
+        mGlowPageWidth = mGlowPage == null ? 0 : mGlowPage.getWidth();
+        mGlowPageHeight = mGlowPage == null ? 0 : mGlowPage.getHeight();
+        loadGlowEdge(mGlowPage, x);
+        mGlow.light(BorderDrag.Border.BOTTOM);
+    }
+
     /** Whether the wall owns the finger: the page drag, or one of the border swipes. */
     private boolean isBorderClaimed() {
         return mBorderDrag.isPaging() || mBorderDrag.isKeyboardSwipe()
@@ -1185,6 +1333,9 @@ public final class PaneWallLayout extends ViewGroup {
      * zone reaches in, and keeps it unless the finger sets off up or down before the hold.
      */
     private void armBorderDrag(@NonNull MotionEvent event) {
+        // A finger of the wall's own comes first: whatever the dock's press was following is
+        // the dock's from here.
+        mDockSeamPress = false;
         releaseBorderDrag();
         if (!mGesturesEnabled) return;
         boolean canPage = mPages.size() > 1
@@ -1197,9 +1348,15 @@ public final class PaneWallLayout extends ViewGroup {
         boolean bodySwipe = canPage && mListener != null
             && mBorderZone.holds(event.getX(), event.getY())
             && mListener.isBodySwipePaging(mCurrent, event.getRawX(), event.getRawY());
+        // On the seam band's last row, the terminal there is asked the same, whatever the
+        // setting: the band is the bottom border's.
+        boolean seamSwipe = canPage && mListener != null
+            && mBorderZone.seamAt(event.getX(), event.getY()) == SeamSwipe.Start.PANE
+            && (bodySwipe
+                || mListener.isSeamSwipePaging(mCurrent, event.getRawX(), event.getRawY()));
         boolean armed = mBorderDrag.down(event.getX(), event.getY(), mBorderZone,
             ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardSwipe,
-            statusSwipe, topGestureLimit(), bodySwipe);
+            statusSwipe, topGestureLimit(), bodySwipe, seamSwipe);
         if (!armed) return;
         mBorderDownX = event.getX();
         mBorderDownY = event.getY();
@@ -1248,6 +1405,19 @@ public final class PaneWallLayout extends ViewGroup {
             .corner(CornerZones.paneSizePx(density))
             .pills(grabberCentreX(page, slide), BorderDrag.PILL_SWIPE_WIDTH_DP * density,
                 BorderDrag.PILL_SWIPE_REACH_DP * density);
+        // A window's bottom border is a seam band a fingertip tall, reaching into its last row
+        // and the dock's top (SeamSwipe). Only for a press: the drawn borders never need it. A
+        // Home page has no border.
+        if (withSlide && mCurrent != PaneWallPage.WIDGETS) {
+            float dockTop = dockGlassTopInWall();
+            boolean dockBelow = !Float.isNaN(dockTop) && dockTop >= page.getBottom();
+            float airBottom = dockBelow ? Math.min(getHeight(), dockTop) : getHeight();
+            mBorderZone.seam(dockBelow ? dockTop : Float.NaN,
+                SeamSwipe.paneReachPx(airBottom - page.getBottom(), density),
+                SeamSwipe.dockReachPx(density));
+        } else {
+            mBorderZone.clearSeam();
+        }
         // A Home page's grabber stands over the dock, and its swipe starts by it there.
         if (mCurrent == PaneWallPage.WIDGETS && loadHomeGrabber(page)) {
             mBorderZone.bottomPill(mHomeHit[0] + slide, mHomeHit[1], mHomeHit[2] + slide,
@@ -1288,6 +1458,21 @@ public final class PaneWallLayout extends ViewGroup {
         if (root == null || root == this) return Float.NaN;
         View dock = root.findViewById(com.termux.R.id.accessory_surface_host);
         if (!isOnScreen(dock)) dock = root.findViewById(com.termux.R.id.accessory_stack_container);
+        if (!isOnScreen(dock)) return Float.NaN;
+        dock.getLocationInWindow(mDockLocation);
+        getLocationInWindow(mWindowLocation);
+        return mDockLocation[1] - mWindowLocation[1];
+    }
+
+    /**
+     * The top of the dock's glass on screen, in the wall's coordinates; NaN where the glass is not
+     * shown. Unlike {@link #dockTopInWall} it never falls back to the whole stack, whose top may
+     * be the keyboard's: the seam band reaches into the dock's top and nothing else's.
+     */
+    private float dockGlassTopInWall() {
+        View root = getRootView();
+        if (root == null || root == this) return Float.NaN;
+        View dock = root.findViewById(com.termux.R.id.accessory_surface_host);
         if (!isOnScreen(dock)) return Float.NaN;
         dock.getLocationInWindow(mDockLocation);
         getLocationInWindow(mWindowLocation);
@@ -2704,8 +2889,8 @@ public final class PaneWallLayout extends ViewGroup {
     /**
      * How far a Workspace page starts below the wall's top (PageTopInsets.workspaceTopInsetPx):
      * the status bar's band while the canvas reaches up under the bar, so the terminal and the
-     * display window keep their place on screen whichever way the canvas stands, while a Home
-     * page starts at the top. 0 while the canvas stands below the bar.
+     * display window keep their place on screen whichever way the canvas stands; a Home page
+     * starts at {@link #mHomeTopInsetPx}. 0 while the canvas stands below the bar.
      */
     private int mWorkspaceTopInsetPx;
 
@@ -2717,9 +2902,27 @@ public final class PaneWallLayout extends ViewGroup {
         requestLayout();
     }
 
+    /**
+     * How far a Home page starts below the wall's top (PageTopInsets.homeTopInsetPx): the band of
+     * the bar Home wears along the top while the canvas reaches up under it, so Home starts below
+     * its bar as a window's page does (#90), and its top border, where the status swipe starts,
+     * is at the bar's foot. 0 for a Home without a bar along the top, and while the canvas stands
+     * below the bar.
+     */
+    private int mHomeTopInsetPx;
+
+    /** See {@link #mHomeTopInsetPx}. */
+    public void setHomeTopInsetPx(int px) {
+        int inset = Math.max(0, px);
+        if (inset == mHomeTopInsetPx) return;
+        mHomeTopInsetPx = inset;
+        requestLayout();
+    }
+
     /** Where {@code child} starts below the wall's top, beyond its frame (PageTopInsets). */
     private int pageTopInsetPx(@NonNull View child) {
-        return PageTopInsets.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx);
+        return PageTopInsets.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx,
+            mHomeTopInsetPx);
     }
 
     /** The page {@code child} is registered as, or null for a view that is no page. */

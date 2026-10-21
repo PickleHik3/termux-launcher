@@ -2,6 +2,12 @@ package com.termux.app.launcher.widget;
 
 import android.graphics.Rect;
 
+import com.termux.app.chrome.ChromePolicy;
+import com.termux.app.dock.DockLayout;
+import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.dock.DockSurfaceSpec;
+import com.termux.app.place.KeyboardOverlayPolicy;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -126,5 +132,67 @@ public class WidgetGridMetricsTest {
         assertEquals(6, WidgetGridMetrics.effectiveMaxSpan(1, 2, 6));
         assertEquals(3, WidgetGridMetrics.effectiveMaxSpan(3, 2, 6));
         assertEquals(6, WidgetGridMetrics.effectiveMaxSpan(9, 2, 6));
+    }
+
+    /**
+     * #104: on Home the content reaches under the whole accessory stack, so the dock floats over
+     * the grid; the emulator showed row 5 of a 5-row grid behind it. For every dock design (and
+     * the plain dock), with the Strip's row fully in, edge to edge and as a capsule, the grid's
+     * last row ends at or above the dock's top, as the dock's own layout reports its height. On
+     * the Workspace half the content already ends at the stack's top and nothing is reserved; the
+     * last row stands in the same place on both halves, so a slide across the seam re-cuts nothing.
+     */
+    @Test public void theLastRowEndsAboveTheDock_forEveryDockDesign_onBothHalves() {
+        float density = 2.75f;
+        int width = 1080, height = 2400, toolbarPx = 103;
+        int rim = Math.round(16 * density);
+        int gap = Math.round(WidgetGridMetrics.GAP_DP * density);
+        WidgetGridDefinition grid = new WidgetGridDefinition(5, 4);
+        WidgetCellRect lastRow = new WidgetCellRect(0, 4, 2, 5);
+        DockSurfaceSpec[] designs = {DockSurfaceSpec.PLAIN, DockSurfaceSpec.GLASS_TRAY,
+            DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.WALL_STRIP};
+        for (DockSurfaceSpec design : designs) {
+            for (boolean capsule : new boolean[] {false, true}) {
+                for (boolean extraKeys : new boolean[] {false, true}) {
+                    DockLayout dock = DockLayoutPolicy.compute(DockLayoutPolicy.DockInputs.builder()
+                        .capsule(capsule).appsRowAlone(false).appsRowNextToCanvas(true)
+                        .density(density).barHeightScale(DockLayoutPolicy.sizePreset(0))
+                        .configuredCornerRadiusDp(-1).appsRowEnabledPref(true)
+                        .azRowEnabledPref(true).baseToolbarHeightPx(toolbarPx)
+                        .surface(design).wallStripReveal(1f).build());
+                    int dockPx = dock.combinedHeight(toolbarPx, extraKeys);
+                    int edgeGap = ChromePolicy.bottomEdgeGapPx(capsule, dock.capsuleBottomGapPx);
+                    int dockTop = height - edgeGap - dockPx;
+                    String what = design + " capsule=" + capsule + " extraKeys=" + extraKeys;
+                    assertTrue(what + ": the dock has a height", dockPx > 0);
+
+                    int homeReserve = KeyboardOverlayPolicy.homeGridDockReservePx(true, dockPx,
+                        edgeGap);
+                    Rect homeBody = new Rect(0, 0, width,
+                        height - WidgetPaneView.gridBottomInsetPx(homeReserve, density));
+                    Rect home = new WidgetGridMetrics(homeBody, 0, rim, gap, grid, false)
+                        .boundsFor(lastRow);
+                    assertTrue(what + ": Home's last row ends at " + home.bottom
+                        + ", the dock's top is " + dockTop, home.bottom <= dockTop);
+
+                    int workspaceReserve = KeyboardOverlayPolicy.homeGridDockReservePx(false,
+                        dockPx, edgeGap);
+                    assertEquals(what, 0, workspaceReserve);
+                    Rect workspaceBody = new Rect(0, 0, width,
+                        dockTop - WidgetPaneView.gridBottomInsetPx(workspaceReserve, density));
+                    Rect workspace = new WidgetGridMetrics(workspaceBody, 0, rim, gap, grid,
+                        false).boundsFor(lastRow);
+                    assertTrue(what, workspace.bottom <= dockTop);
+                    assertEquals(what + ": the same cell on both halves", home, workspace);
+                }
+            }
+        }
+    }
+
+    /** With no dock rows on screen nothing is reserved, so a hidden dock gives the rows back. */
+    @Test public void noDockReservesNothing() {
+        assertEquals(0, KeyboardOverlayPolicy.homeGridDockReservePx(true, 0, 30));
+        assertEquals(0, KeyboardOverlayPolicy.homeGridDockReservePx(false, 300, 30));
+        assertEquals(330, KeyboardOverlayPolicy.homeGridDockReservePx(true, 300, 30));
     }
 }

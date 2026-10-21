@@ -52,7 +52,7 @@ public final class KeyboardOverlayPolicy {
 
     /**
      * How far the content root reaches past the top of the accessory stack once the dock is
-     * counted too: on a Home page ({@link HomeChromePolicy#dockOverlays}) the whole stack and the
+     * counted too: on a Home page, where the dock floats over the grid, the whole stack and the
      * margin under it, so the widget grid keeps its full height and the dock and the keyboard draw
      * over it; everywhere else the keyboard's share alone, as {@link #contentOverlapPx} says.
      */
@@ -98,6 +98,24 @@ public final class KeyboardOverlayPolicy {
      */
     public static int homeDockRestTopPx(int stackBottomPx, int dockPx, int imePushPx) {
         return stackBottomPx + Math.max(0, imePushPx) - Math.max(0, dockPx);
+    }
+
+    /**
+     * The band at the bottom of the widget pane the dock takes at rest (#104): on a Home page,
+     * where the content reaches under the whole stack ({@link #overlapPx}) and the dock floats over
+     * the grid, the dock's rows ({@code dockRestPx}, what the dock's layout reports for them, a
+     * bottom status band included) and the edge gap under them; the grid's rows end above it.
+     * Zero on the Workspace half, whose content already ends at the stack's top, and zero with no
+     * dock rows on screen.
+     *
+     * <p>The rest height, not the stack's: a keyboard, the system's or the in-app one, still floats
+     * over the grid with the dock riding on it, so it never re-cuts a widget on its way in or out.
+     * With the dock the same on both halves the last row stands in the same place either side of
+     * the seam.
+     */
+    public static int homeGridDockReservePx(boolean dockOverlays, int dockRestPx, int edgeGapPx) {
+        if (!dockOverlays || dockRestPx <= 0) return 0;
+        return dockRestPx + Math.max(0, edgeGapPx);
     }
 
     /**

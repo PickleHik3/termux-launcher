@@ -7,14 +7,11 @@ This page covers what it shows, how to open it, and its settings under **Setting
 
 ## What it shows
 
-- **Place icon and clock.** The icon beside the clock names the place you are on: a house for Home,
-  a prompt for Terminal, a screen for Display. The other two places peek in from the bar's edges,
-  on the side each one slides in from; tap one to go there. The Display icon reads quieter until a
-  display is running.
-- **The row for this place.** On the terminal: the session number, then a pill for each window,
-  then `+` for a new window. On Display: the apps open on the display, front one selected. On
-  Home: only the readings and the weather, centred under the clock.
-- **Readings.** CPU, memory and weather, as switched on in Settings.
+- **The clock.** The same on Home and in the Workspace, with no marks for the place you are on.
+- **The row of windows.** The same on Home and in the Workspace: the session number, then a window
+  chip for each Workspace window, the display window and each Home float, in that order, then `+`
+  for a new window. On Home, `+` opens a new Workspace window and slides you to it.
+- **Readings.** CPU, memory and weather, as switched on in Settings, on Home and in the Workspace.
 - **Mouse mode.** A small mouse at the end of the readings means mouse mode is on.
 
 ## Open and fold it
@@ -25,23 +22,23 @@ The bar has a slim form and an open form with a larger clock and room for cards.
   of the border. Let go past about a third of the way, or flick, and it finishes on its own.
 - Or drag across the bar itself.
 
-The top-border swipe works on every place, minimal mode included, while the bar stands along the
+The top-border swipe works on Home and in the Workspace, minimal mode included, while the bar stands along the
 top. A swipe that starts in Android's own strip at the very top of the screen still pulls the
-notification shade. A sideways swipe along the window pills scrolls the pills and never changes
+notification shade. A sideways swipe along the window chips scrolls the chips and never changes
 place.
 
 ## Tap targets
 
 - The **session number** opens the sessions manager. See
   [Panes, windows and sessions](Panes_Windows_And_Sessions.md).
-- A **window pill** switches to that window; `+` makes a new one.
+- A **window chip** switches to that window, sliding there from Home too; the × closes it. `+` makes a new one. A minimised Home float shows dimmed with a dot; tap it to bring the float back.
 - **CPU**, **memory** or **weather** opens a detail card. The weather card credits Open-Meteo.
 - In the open bar, the **clock** opens Android's clock app and the **cog** opens Settings.
 - The **mouse** turns mouse mode off.
 
-## Window pills
+## Window chips
 
-A pill shows one short item: the open file in an editor, the running program, or the directory of
+A chip shows one short item: the open file in an editor, the running program, or the directory of
 an idle shell. A program with its own icon, such as python, shows the icon alone. Marks sit in the
 icon's place:
 
@@ -104,10 +101,10 @@ The bar can stand on any edge, or be hidden, in Appearance → **Layout**:
 
 - **Top**: the bar described above.
 - **Bottom**: it sits on the dock and grows upward when opened, with the clock at its foot.
-- **Left or right**: a narrow column with the place badge, one chip per window and the readings;
+- **Left or right**: a narrow column with one chip per window and the readings;
   the clock is written hour over minutes when the column is open.
 
-Hidden, the clock, weather and window pills go with it and the content takes the room. The corner
+Hidden, the clock, weather and window chips go with it and the content takes the room. The corner
 tab still opens Appearance, so you can bring it back. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 

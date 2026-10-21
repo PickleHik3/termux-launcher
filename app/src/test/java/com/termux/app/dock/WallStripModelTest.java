@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.chrome.WindowChips;
 import com.termux.app.terminal.AgentStatus;
 import com.termux.app.terminal.TerminalWindowBar.WindowItem;
 
@@ -14,39 +15,38 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The run strip from the window bar's chips: one numbered entry per chip in the bar's order, the
+ * The Wall strip's entries from the window bar's chips: one numbered entry per chip in the bar's order, the
  * one in front lit, the display window and the Home floats told apart, a minimised float marked,
  * attention as the chip column reads it, {@code +} last, and nothing at all when nothing runs.
  */
-public class RunStripModelTest {
+public class WallStripModelTest {
 
     private static WindowItem chip(String label) {
         return new WindowItem(label, label);
     }
 
-    private static List<RunStripModel.Entry> build(List<WindowItem> chips, int selected, int row,
+    private static List<WallStripModel.Entry> build(List<WindowItem> chips, int selected, int row,
                                                    int display, boolean[] minimised) {
-        return RunStripModel.build(chips, selected, row, display, minimised, "New window");
+        return WallStripModel.build(chips, selected, row, display, minimised, "New window");
     }
 
     @Test
     public void nothingRunning_isNoStrip_notALonePlus() {
         assertTrue(build(Collections.emptyList(), -1, 0, -1, null).isEmpty());
         assertTrue(build(null, -1, 0, -1, null).isEmpty());
-        assertFalse(RunStripModel.isShown(build(null, -1, 0, -1, null)));
     }
 
     @Test
     public void oneEntryPerChip_numberedInOrder_plusLast() {
-        List<RunStripModel.Entry> entries = build(
+        List<WallStripModel.Entry> entries = build(
             Arrays.asList(chip("❯ nvim"), chip("❯ htop")), 0, 2, -1, null);
         assertEquals(3, entries.size());
         assertEquals("1", entries.get(0).number);
         assertEquals("❯ nvim", entries.get(0).label);
         assertEquals("2", entries.get(1).number);
         assertEquals(1, entries.get(1).chipIndex);
-        RunStripModel.Entry plus = entries.get(2);
-        assertEquals(RunStripModel.Kind.NEW_WINDOW, plus.kind);
+        WallStripModel.Entry plus = entries.get(2);
+        assertEquals(WallStripModel.Kind.NEW_WINDOW, plus.kind);
         assertEquals(-1, plus.chipIndex);
         assertEquals("+", plus.number);
         assertEquals("New window", plus.spokenLabel);
@@ -54,7 +54,7 @@ public class RunStripModelTest {
 
     @Test
     public void theWindowInFront_isLit_andOnlyIt() {
-        List<RunStripModel.Entry> entries = build(
+        List<WallStripModel.Entry> entries = build(
             Arrays.asList(chip("a"), chip("b"), chip("c")), 1, 3, -1, null);
         assertFalse(entries.get(0).current);
         assertTrue(entries.get(1).current);
@@ -64,29 +64,29 @@ public class RunStripModelTest {
 
     @Test
     public void noneInFront_litsNothing() {
-        for (RunStripModel.Entry entry : build(Arrays.asList(chip("a")), -1, 0, -1, null))
+        for (WallStripModel.Entry entry : build(Arrays.asList(chip("a")), -1, 0, -1, null))
             assertFalse(entry.current);
     }
 
     @Test
     public void displayWindow_andHomeFloats_areToldApart() {
-        List<RunStripModel.Entry> entries = build(
+        List<WallStripModel.Entry> entries = build(
             Arrays.asList(chip("nvim"), chip("GIMP"), chip("btop"), chip("float")), 0, 3, 1,
             new boolean[]{true});
-        assertEquals(RunStripModel.Kind.WINDOW, entries.get(0).kind);
-        assertEquals(RunStripModel.Kind.DISPLAY, entries.get(1).kind);
-        assertEquals(RunStripModel.Kind.WINDOW, entries.get(2).kind);
-        assertEquals(RunStripModel.Kind.HOME_FLOAT, entries.get(3).kind);
+        assertEquals(WallStripModel.Kind.WINDOW, entries.get(0).kind);
+        assertEquals(WallStripModel.Kind.DISPLAY, entries.get(1).kind);
+        assertEquals(WallStripModel.Kind.WINDOW, entries.get(2).kind);
+        assertEquals(WallStripModel.Kind.HOME_FLOAT, entries.get(3).kind);
         assertTrue(entries.get(3).minimised);
         assertFalse(entries.get(0).minimised);
     }
 
     @Test
     public void onHome_everyChipIsAFloat_andMissingFlagsReadAsShown() {
-        List<RunStripModel.Entry> entries = build(
+        List<WallStripModel.Entry> entries = build(
             Arrays.asList(chip("one"), chip("two")), -1, 0, -1, new boolean[]{false});
-        assertEquals(RunStripModel.Kind.HOME_FLOAT, entries.get(0).kind);
-        assertEquals(RunStripModel.Kind.HOME_FLOAT, entries.get(1).kind);
+        assertEquals(WallStripModel.Kind.HOME_FLOAT, entries.get(0).kind);
+        assertEquals(WallStripModel.Kind.HOME_FLOAT, entries.get(1).kind);
         assertFalse(entries.get(0).minimised);
         assertFalse(entries.get(1).minimised);
     }
@@ -96,7 +96,7 @@ public class RunStripModelTest {
         WindowItem bell = chip("a").withAttention(true);
         WindowItem blocked = chip("b").withAgentState(AgentStatus.State.BLOCKED);
         WindowItem working = chip("c").withAgentState(AgentStatus.State.WORKING);
-        List<RunStripModel.Entry> entries = build(Arrays.asList(bell, blocked, working,
+        List<WallStripModel.Entry> entries = build(Arrays.asList(bell, blocked, working,
             chip("d").withBusy(true)), 0, 4, -1, null);
         assertTrue(entries.get(0).attention);
         assertTrue(entries.get(1).attention);
@@ -108,19 +108,19 @@ public class RunStripModelTest {
 
     @Test
     public void rowCountPastTheChips_isHeldToThem() {
-        List<RunStripModel.Entry> entries = build(Arrays.asList(chip("a")), 0, 5, -1, null);
-        assertEquals(RunStripModel.Kind.WINDOW, entries.get(0).kind);
+        List<WallStripModel.Entry> entries = build(Arrays.asList(chip("a")), 0, 5, -1, null);
+        assertEquals(WallStripModel.Kind.WINDOW, entries.get(0).kind);
         assertEquals(2, entries.size());
     }
 
     @Test
     public void rowEntries_leaveOutFloatsAndPlus() {
-        List<RunStripModel.Entry> entries = build(
+        List<WallStripModel.Entry> entries = build(
             Arrays.asList(chip("nvim"), chip("GIMP"), chip("float")), 0, 2, 1, null);
-        List<RunStripModel.Entry> row = RunStripModel.rowEntries(entries);
+        List<WallStripModel.Entry> row = WallStripModel.rowEntries(entries);
         assertEquals(2, row.size());
-        assertEquals(RunStripModel.Kind.WINDOW, row.get(0).kind);
-        assertEquals(RunStripModel.Kind.DISPLAY, row.get(1).kind);
+        assertEquals(WallStripModel.Kind.WINDOW, row.get(0).kind);
+        assertEquals(WallStripModel.Kind.DISPLAY, row.get(1).kind);
     }
 
     @Test
@@ -138,7 +138,7 @@ public class RunStripModelTest {
 
     @Test
     public void theProcessGlyph_isKeptApart_andTheLabelIsPlainText() {
-        List<RunStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " home"),
+        List<WallStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " home"),
             chip(ASTRAL + " notes.md"), chip("plain")), 0, 3, -1, null);
         assertEquals(TERMINAL, entries.get(0).glyph);
         assertEquals("home", entries.get(0).label);
@@ -146,12 +146,12 @@ public class RunStripModelTest {
         assertEquals("notes.md", entries.get(1).label);
         assertEquals("", entries.get(2).glyph);
         assertEquals("plain", entries.get(2).label);
-        for (RunStripModel.Entry entry : entries) assertNoNerdSymbol(entry.label + entry.shortLabel);
+        for (WallStripModel.Entry entry : entries) assertNoNerdSymbol(entry.label + entry.shortLabel);
     }
 
     @Test
     public void aGlyphInsideANamedLabel_isTakenOut() {
-        List<RunStripModel.Entry> entries = build(
+        List<WallStripModel.Entry> entries = build(
             Arrays.asList(chip(TERMINAL + " my " + ASTRAL + " box")), 0, 1, -1, null);
         assertEquals(TERMINAL, entries.get(0).glyph);
         assertEquals("my box", entries.get(0).label);
@@ -159,21 +159,21 @@ public class RunStripModelTest {
 
     @Test
     public void aGlyphAlone_isAllGlyph_andAGlyphRunIntoAWordIsNotTheProcessGlyph() {
-        assertEquals(TERMINAL, RunStripModel.leadingGlyph(TERMINAL));
-        assertEquals("", RunStripModel.leadingGlyph(TERMINAL + "x"));
-        assertEquals("", RunStripModel.leadingGlyph("~ home"));
+        assertEquals(TERMINAL, WallStripModel.leadingGlyph(TERMINAL));
+        assertEquals("", WallStripModel.leadingGlyph(TERMINAL + "x"));
+        assertEquals("", WallStripModel.leadingGlyph("~ home"));
     }
 
     private static void assertNoNerdSymbol(String text) {
         text.codePoints().forEach(cp -> assertFalse(Integer.toHexString(cp),
-            RunStripModel.isNerdSymbol(cp)));
+            WallStripModel.isNerdSymbol(cp)));
     }
 
     // ---------------------------------------------------------------- what tells entries apart
 
     @Test
     public void programs_readAsThemselves() {
-        List<RunStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " nvim"),
+        List<WallStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " nvim"),
             chip(TERMINAL + " htop"), chip(TERMINAL + " home"), chip(TERMINAL + " git")), 0, 4,
             -1, null);
         assertEquals("nvim", entries.get(0).shortLabel);
@@ -184,7 +184,7 @@ public class RunStripModelTest {
 
     @Test
     public void aUserAtHostLead_isNeverWhatIsShown() {
-        List<RunStripModel.Entry> entries = build(Arrays.asList(chip("u0_a123@localhost: ~/proj"),
+        List<WallStripModel.Entry> entries = build(Arrays.asList(chip("u0_a123@localhost: ~/proj"),
             chip("u0_a123@localhost:~/src"), chip("[me@box htop]"), chip("me@box")), 0, 4, -1,
             null);
         assertEquals("~/proj", entries.get(0).shortLabel);
@@ -196,13 +196,13 @@ public class RunStripModelTest {
 
     @Test
     public void aLeadEveryEntryShares_isLeftOff_atAWordBoundary() {
-        List<RunStripModel.Entry> entries = build(Arrays.asList(chip("ssh prod-1"),
+        List<WallStripModel.Entry> entries = build(Arrays.asList(chip("ssh prod-1"),
             chip("ssh prod-2"), chip("ssh staging")), 0, 3, -1, null);
         assertEquals("prod-1", entries.get(0).shortLabel);
         assertEquals("prod-2", entries.get(1).shortLabel);
         assertEquals("staging", entries.get(2).shortLabel);
         // A shared lead inside a word is not cut: "project" and "projector" share "project".
-        List<RunStripModel.Entry> words = build(Arrays.asList(chip("project"),
+        List<WallStripModel.Entry> words = build(Arrays.asList(chip("project"),
             chip("projector")), 0, 2, -1, null);
         assertEquals("project", words.get(0).shortLabel);
         assertEquals("projector", words.get(1).shortLabel);
@@ -210,14 +210,14 @@ public class RunStripModelTest {
 
     @Test
     public void sameLabels_keepTheirWholeText() {
-        List<RunStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " home"),
+        List<WallStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " home"),
             chip(TERMINAL + " home"), chip(TERMINAL + " home")), 0, 3, -1, null);
         for (int i = 0; i < 3; i++) assertEquals("home", entries.get(i).shortLabel);
     }
 
     @Test
     public void aFloatsPageMark_isLeftOffItsShortLabel_butNotARowWindows() {
-        List<RunStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " nvim"),
+        List<WallStripModel.Entry> entries = build(Arrays.asList(chip(TERMINAL + " nvim"),
             chip(TERMINAL + " v · 2"), chip(TERMINAL + " home · 2")), 0, 2, -1, null);
         assertEquals("v · 2", entries.get(1).shortLabel);
         assertEquals("home", entries.get(2).shortLabel);
@@ -227,7 +227,7 @@ public class RunStripModelTest {
 
     @Test
     public void plus_hasNoLabelOrGlyph() {
-        RunStripModel.Entry plus = build(Arrays.asList(chip(TERMINAL + " a")), 0, 1, -1, null)
+        WallStripModel.Entry plus = build(Arrays.asList(chip(TERMINAL + " a")), 0, 1, -1, null)
             .get(1);
         assertEquals("", plus.label);
         assertEquals("", plus.shortLabel);
@@ -238,57 +238,40 @@ public class RunStripModelTest {
 
     @Test
     public void wallEntries_keepTheRowAndTheFloats_inChipOrder_plusLeftOut() {
-        List<RunStripModel.Entry> entries = build(
+        List<WallStripModel.Entry> entries = build(
             Arrays.asList(chip("nvim"), chip("GIMP"), chip("float")), 0, 2, 1,
             new boolean[]{true});
-        List<RunStripModel.Entry> wall = RunStripModel.wallEntries(entries);
+        List<WallStripModel.Entry> wall = WallStripModel.wallEntries(entries);
         assertEquals(3, wall.size());
-        assertEquals(RunStripModel.Kind.WINDOW, wall.get(0).kind);
-        assertEquals(RunStripModel.Kind.DISPLAY, wall.get(1).kind);
-        assertEquals(RunStripModel.Kind.HOME_FLOAT, wall.get(2).kind);
+        assertEquals(WallStripModel.Kind.WINDOW, wall.get(0).kind);
+        assertEquals(WallStripModel.Kind.DISPLAY, wall.get(1).kind);
+        assertEquals(WallStripModel.Kind.HOME_FLOAT, wall.get(2).kind);
         assertTrue(wall.get(2).isFloat());
         assertFalse(wall.get(0).isFloat());
         assertEquals(2, wall.get(2).chipIndex);
     }
 
-    // ---------------------------------------------------------------- label room
-
     @Test
-    public void labelRooms_allFit_eachGetsWhatItWants() {
-        float[] rooms = RunStripModel.labelRooms(new float[]{30f, 40f, 0f}, 200f, 104f, 28f);
-        assertEquals(30f, rooms[0], 0f);
-        assertEquals(40f, rooms[1], 0f);
-        assertEquals(0f, rooms[2], 0f);
-    }
-
-    @Test
-    public void labelRooms_shortOnesKeepTheirs_longOnesSplitTheRest() {
-        float[] rooms = RunStripModel.labelRooms(new float[]{30f, 100f, 100f}, 150f, 104f, 28f);
-        assertEquals(30f, rooms[0], 0f);
-        assertEquals(60f, rooms[1], 0.001f);
-        assertEquals(60f, rooms[2], 0.001f);
-    }
-
-    @Test
-    public void labelRooms_heldToTheMost() {
-        float[] rooms = RunStripModel.labelRooms(new float[]{300f}, 1000f, 104f, 28f);
-        assertEquals(104f, rooms[0], 0f);
-    }
-
-    @Test
-    public void labelRooms_tooLittleForTheLongOnes_isNumbersAlone() {
-        float[] rooms = RunStripModel.labelRooms(new float[]{30f, 100f, 100f, 100f}, 90f, 104f,
-            28f);
-        for (float room : rooms) assertEquals(0f, room, 0f);
-    }
-
-    @Test
-    public void labelRooms_fourShortLabels_onAPhoneStrip_allShowWhole() {
-        // 411 dp wide, five entries (four and +): what the badges, pads and gaps leave.
-        float fixed = 2f * 6f + 5f * 30f + 4f * 4f + 4f * (41f - 30f);
-        float word = 4f * 7.8f;
-        float[] rooms = RunStripModel.labelRooms(new float[]{word, word, word, word},
-            411f - fixed, 104f, 28f);
-        for (float room : rooms) assertEquals(word, room, 0f);
+    public void fromTheWindowChips_kindsSelectionAndMinimisedFloatsFollowTheChips() {
+        // a D b, then floats f (minimised) and g (in focus), as Home's dock sees them.
+        WindowChips<String> chips = new WindowChips<>(true, true, Arrays.asList("a", "b"), 1, 0)
+            .addFloat("f", true, false)
+            .addFloat("g", false, true);
+        List<WindowItem> items = Arrays.asList(chip("a"), chip("Display"), chip("b"),
+            chip("f"), chip("g"));
+        List<WallStripModel.Entry> entries =
+            WallStripModel.of(chips, WindowChips.Surface.WALL_STRIP, items, "New window");
+        assertEquals(6, entries.size());
+        assertEquals(WallStripModel.Kind.WINDOW, entries.get(0).kind);
+        assertEquals(WallStripModel.Kind.DISPLAY, entries.get(1).kind);
+        assertEquals(WallStripModel.Kind.WINDOW, entries.get(2).kind);
+        assertEquals(WallStripModel.Kind.HOME_FLOAT, entries.get(3).kind);
+        assertTrue(entries.get(3).minimised);
+        assertFalse(entries.get(4).minimised);
+        assertTrue("the float in focus is lit", entries.get(4).current);
+        assertFalse(entries.get(0).current);
+        assertEquals(WallStripModel.Kind.NEW_WINDOW, entries.get(5).kind);
+        assertEquals(entries,
+            WallStripModel.of(chips, WindowChips.Surface.WALL_STRIP, items, "New window"));
     }
 }

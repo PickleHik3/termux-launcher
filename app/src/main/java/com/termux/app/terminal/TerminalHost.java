@@ -664,6 +664,14 @@ public interface TerminalHost extends SoftKeyboardPolicy {
         return false;
     }
 
+    /**
+     * Turns minimal mode on or off, as the corner tab's minimal button does, from any page.
+     * Answers whether minimal mode is on now.
+     */
+    default boolean toggleMinimalMode() {
+        return false;
+    }
+
     /** Toggles the key inspector, answering whether it is now open. */
     boolean toggleKeyInspector();
 
