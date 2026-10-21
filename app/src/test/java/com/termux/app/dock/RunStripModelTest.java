@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.chrome.WindowChips;
 import com.termux.app.terminal.AgentStatus;
 import com.termux.app.terminal.TerminalWindowBar.WindowItem;
 
@@ -290,5 +291,29 @@ public class RunStripModelTest {
         float[] rooms = RunStripModel.labelRooms(new float[]{word, word, word, word},
             411f - fixed, 104f, 28f);
         for (float room : rooms) assertEquals(word, room, 0f);
+    }
+
+    @Test
+    public void fromTheWindowChips_kindsSelectionAndMinimisedFloatsFollowTheChips() {
+        // a D b, then floats f (minimised) and g (in focus), as Home's dock sees them.
+        WindowChips<String> chips = new WindowChips<>(true, true, Arrays.asList("a", "b"), 1, 0)
+            .addFloat("f", true, true, false)
+            .addFloat("g", false, true, true);
+        List<WindowItem> items = Arrays.asList(chip("a"), chip("Display"), chip("b"),
+            chip("f"), chip("g"));
+        List<RunStripModel.Entry> entries =
+            RunStripModel.of(chips, WindowChips.Surface.RUN_STRIP, items, "New window");
+        assertEquals(6, entries.size());
+        assertEquals(RunStripModel.Kind.WINDOW, entries.get(0).kind);
+        assertEquals(RunStripModel.Kind.DISPLAY, entries.get(1).kind);
+        assertEquals(RunStripModel.Kind.WINDOW, entries.get(2).kind);
+        assertEquals(RunStripModel.Kind.HOME_FLOAT, entries.get(3).kind);
+        assertTrue(entries.get(3).minimised);
+        assertFalse(entries.get(4).minimised);
+        assertTrue("the float in focus is lit", entries.get(4).current);
+        assertFalse(entries.get(0).current);
+        assertEquals(RunStripModel.Kind.NEW_WINDOW, entries.get(5).kind);
+        assertEquals(entries,
+            RunStripModel.of(chips, WindowChips.Surface.WALL_STRIP, items, "New window"));
     }
 }

@@ -16512,8 +16512,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The run strip, built with Home's float layer; null before. */
     @Nullable private com.termux.app.dock.RunStripView mRunStrip;
-    /** How many of the strip's chips were the row's windows, the display's included, as last fed. */
-    private int mRunStripRowCount;
     /** Whether the floats' room last gave up the strip's band ({@link #syncHomeFloatObstructions}). */
     private boolean mRunStripBandTaken;
     /** Whether the strip is fading out because nothing runs any more. */
@@ -16586,51 +16584,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
 
     /**
-     * Feeds the run strip on Home from the windows the Workspace's bar shows: the row's windows,
-     * the display window's at its place, then the Home floats, a minimised one marked. Nobody is
-     * looking at a row window from Home, so none is acknowledged here; the lit entry is the Home
-     * float in focus, else the window the Workspace has in front.
+     * Feeds the run strip on Home from the window chips ({@code chips}, dressed as {@code items}
+     * by {@link #windowChipItems}): the row's windows, the display window's at its place, then
+     * the Home floats, a minimised one marked; the lit entry is the Home float in focus, else the
+     * window the Workspace has in front.
      */
-    private void syncRunStrip(@NonNull java.util.List<Integer> foregroundPids) {
+    private void syncRunStrip(@NonNull com.termux.app.chrome.WindowChips<
+                com.termux.app.terminal.TerminalPaneController.Window> chips,
+            @NonNull java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items) {
         if (mRunStrip == null) return;
         if (!runStripWanted() || mPaneController == null) {
             setRunStripEntries(java.util.Collections.emptyList());
             return;
         }
-        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
-            new java.util.ArrayList<>();
-        int rowCount = 0;
-        int selected = -1;
-        int displayChip = -1;
-        if (mCurrentWSession != null || isDisplayOnRow()) {
-            long now = android.os.SystemClock.uptimeMillis();
-            int slot = displayRowSlot();
-            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
-                rowWindows();
-            rowCount = com.termux.app.wall.DisplaySlot.rowCount(windows.size(), slot);
-            selected = com.termux.app.statusbar.WindowChipTarget.selectedChip(rowCurrentIndex(),
-                rowCount);
-            displayChip = slot >= 0 ? slot : -1;
-            for (int i = 0; i < windows.size(); i++) {
-                if (i == slot) items.add(displayWindowItem());
-                items.add(rowWindowItem(windows.get(i), i, foregroundPids, false, now));
-            }
-            if (slot == windows.size()) items.add(displayWindowItem());
-        }
-        int firstFloat = items.size();
-        addHomeFloatChips(items, foregroundPids);
-        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
-        boolean[] minimised = new boolean[floats.size()];
-        com.termux.app.terminal.TerminalPaneController.Window focused =
-            mPaneController.focusedHomeFloat();
-        for (int i = 0; i < minimised.length; i++) {
-            com.termux.app.terminal.TerminalPaneController.Window window = floats.get(i);
-            minimised[i] = window.isMinimised();
-            if (window == focused && !window.isMinimised()) selected = firstFloat + i;
-        }
-        mRunStripRowCount = rowCount;
-        setRunStripEntries(com.termux.app.dock.RunStripModel.build(items, selected, rowCount,
-            displayChip, minimised, getString(R.string.launcher_entry_new_window)));
+        setRunStripEntries(com.termux.app.dock.RunStripModel.of(chips,
+            com.termux.app.chrome.WindowChips.Surface.RUN_STRIP, items,
+            getString(R.string.launcher_entry_new_window)));
     }
 
     /**
@@ -16686,24 +16655,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyRunStripGlass(false);
         boolean shown = mRunStrip != null && mRunStrip.getVisibility() == View.VISIBLE;
         if (shown != mRunStripBandTaken) syncHomeFloatObstructions();
-    }
-
-    /**
-     * An entry of the strip was tapped: a Home float comes back on its page; a row window (the
-     * display window's included) is brought in front and the Workspace slides in on it.
-     */
-    private void onRunStripWindowTapped(int chipIndex) {
-        if (mPaneController == null || chipIndex < 0) return;
-        if (chipIndex >= mRunStripRowCount) {
-            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats =
-                chipFloats();
-            int at = chipIndex - mRunStripRowCount;
-            if (at < floats.size()) showHomeFloat(floats.get(at));
-            return;
-        }
-        if (mPaneWallController == null) return;
-        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
-        showRowWindow(chipIndex);
     }
 
     /** The band the floats' room gives up to the strip while it shows, px. */
@@ -17163,7 +17114,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.dock.WallStripRowView makeWallStripRow() {
         com.termux.app.dock.WallStripRowView row = new com.termux.app.dock.WallStripRowView(this);
         row.setListener(new com.termux.app.dock.WallStripRowView.Listener() {
-            @Override public void onTileTapped(int chipIndex) { onWallStripTileTapped(chipIndex); }
+            @Override public void onTileTapped(int chipIndex) {
+                onWindowChip(com.termux.app.chrome.WindowChips.Surface.WALL_STRIP, chipIndex,
+                    false);
+            }
 
             @Override public void onTileLongPressed(int chipIndex, @NonNull Rect anchor) {
                 showWallStripTileMenu(chipIndex, anchor);
@@ -17229,85 +17183,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Feeds the row on Home from the windows the Workspace's bar shows: the row's terminal
-     * windows and the display window's at its place, then Home's floats (as the Taskbar's run
-     * strip lists them), each with its split shape. Nobody is looking at a row window from Home,
-     * so none is acknowledged here; the ringed tile is the Home float in focus, else the window
-     * the Workspace has in front.
+     * Feeds the row on Home from the window chips ({@code chips}, dressed as {@code items} by
+     * {@link #windowChipItems}): the row's terminal windows and the display window's at its
+     * place, then Home's floats (as the Taskbar's run strip lists them), each with its split
+     * shape; the ringed tile is the Home float in focus, else the window the Workspace has in
+     * front.
      */
-    private void syncWallStrip(@NonNull java.util.List<Integer> foregroundPids) {
+    private void syncWallStrip(@NonNull com.termux.app.chrome.WindowChips<
+                com.termux.app.terminal.TerminalPaneController.Window> chips,
+            @NonNull java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items) {
         com.termux.app.dock.WallStripRowView row = mWallStripRow;
         if (row == null) return;
         if (!wallStripWanted() || mPaneController == null || !isSplitPanesEnabled()) {
             row.setTiles(java.util.Collections.emptyList());
             return;
         }
-        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
-            new java.util.ArrayList<>();
-        java.util.List<float[]> shapes = new java.util.ArrayList<>();
-        java.util.List<Long> keys = new java.util.ArrayList<>();
-        int rowCount = 0;
-        int selected = -1;
-        int displayChip = -1;
-        if (mCurrentWSession != null || isDisplayOnRow()) {
-            long now = android.os.SystemClock.uptimeMillis();
-            int slot = displayRowSlot();
-            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
-                rowWindows();
-            rowCount = com.termux.app.wall.DisplaySlot.rowCount(windows.size(), slot);
-            selected = com.termux.app.statusbar.WindowChipTarget.selectedChip(rowCurrentIndex(),
-                rowCount);
-            displayChip = slot >= 0 ? slot : -1;
-            for (int i = 0; i < windows.size(); i++) {
-                if (i == slot) {
-                    items.add(displayWindowItem());
-                    shapes.add(null);
-                    keys.add(WALL_STRIP_DISPLAY_KEY);
-                }
-                com.termux.app.terminal.TerminalPaneController.Window window = windows.get(i);
-                items.add(rowWindowItem(window, i, foregroundPids, false, now));
-                java.util.List<int[]> cells = new java.util.ArrayList<>();
-                for (TerminalSession shell : mPaneController.shellsOf(window))
-                    cells.add(mPaneController.paneCellGeometry(shell));
-                shapes.add(com.termux.app.dock.WallStripRowPolicy.splitShape(cells));
-                keys.add((long) System.identityHashCode(window));
-            }
-            if (slot == windows.size()) {
-                items.add(displayWindowItem());
+        java.util.List<com.termux.app.chrome.WindowChips.Chip<
+            com.termux.app.terminal.TerminalPaneController.Window>> tiles =
+                chips.chips(com.termux.app.chrome.WindowChips.Surface.WALL_STRIP);
+        java.util.List<float[]> shapes = new java.util.ArrayList<>(tiles.size());
+        java.util.List<Long> keys = new java.util.ArrayList<>(tiles.size());
+        for (com.termux.app.chrome.WindowChips.Chip<
+                com.termux.app.terminal.TerminalPaneController.Window> chip : tiles) {
+            if (chip.window == null) {
+                // The display window's tile: one whole pane, keyed as no terminal window is.
                 shapes.add(null);
                 keys.add(WALL_STRIP_DISPLAY_KEY);
+                continue;
             }
-        }
-        // Then Home's floats, as the Taskbar's run strip lists them: each a tile of its own after
-        // the row's, a minimised one marked, the float in focus ringed.
-        int firstFloat = items.size();
-        addHomeFloatChips(items, foregroundPids);
-        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
-        boolean[] minimised = new boolean[floats.size()];
-        com.termux.app.terminal.TerminalPaneController.Window focused =
-            mPaneController.focusedHomeFloat();
-        for (int i = 0; i < floats.size(); i++) {
-            com.termux.app.terminal.TerminalPaneController.Window window = floats.get(i);
-            minimised[i] = window.isMinimised();
-            if (window == focused && !window.isMinimised()) selected = firstFloat + i;
             java.util.List<int[]> cells = new java.util.ArrayList<>();
-            for (TerminalSession shell : mPaneController.shellsOf(window))
+            for (TerminalSession shell : mPaneController.shellsOf(chip.window))
                 cells.add(mPaneController.paneCellGeometry(shell));
             shapes.add(com.termux.app.dock.WallStripRowPolicy.splitShape(cells));
-            keys.add((long) System.identityHashCode(window));
+            keys.add((long) System.identityHashCode(chip.window));
         }
-        mWallStripRowCount = rowCount;
         java.util.List<com.termux.app.dock.RunStripModel.Entry> entries =
-            com.termux.app.dock.RunStripModel.build(items, selected, rowCount, displayChip,
-                minimised, getString(R.string.launcher_entry_new_window));
+            com.termux.app.dock.RunStripModel.of(chips,
+                com.termux.app.chrome.WindowChips.Surface.WALL_STRIP, items,
+                getString(R.string.launcher_entry_new_window));
         // Every entry but + is a tile (tilesOf leaves + out): the row's windows, then the floats,
-        // in the order the shapes and keys were laid down above.
+        // in the chips' order, as the shapes and keys were laid down above.
         row.setTiles(com.termux.app.dock.WallStripRowView.tilesOf(
             com.termux.app.dock.RunStripModel.wallEntries(entries), shapes, keys));
     }
-
-    /** How many of the Wall strip's tiles were the row's windows, the display's included. */
-    private int mWallStripRowCount;
 
     /**
      * The row takes the windows as they are now, on Home where it shows; elsewhere it keeps what
@@ -17323,24 +17241,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!isWidgetsPageShowing()) return;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) syncWindowBarItems(bar);
-    }
-
-    /**
-     * A tile was tapped: its window (the display window's included) is brought in front and the
-     * Workspace slides in on it, as the run strip's row entries do.
-     */
-    private void onWallStripTileTapped(int chipIndex) {
-        if (mPaneController == null || mPaneWallController == null || chipIndex < 0) return;
-        // A Home float's tile brings it back on its page; Home stays in view.
-        if (chipIndex >= mWallStripRowCount) {
-            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats =
-                chipFloats();
-            int at = chipIndex - mWallStripRowCount;
-            if (at < floats.size()) showHomeFloat(floats.get(at));
-            return;
-        }
-        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
-        showRowWindow(chipIndex);
     }
 
     /**
@@ -17389,10 +17289,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             items.add(Menu.NONE, 3, 3, R.string.tool_window_close);
             menu.setOnMenuItemClickListener(item -> {
                 switch (item.getItemId()) {
-                    case 0: onWallStripTileTapped(chipIndex); return true;
+                    case 0:
+                        onWindowChip(com.termux.app.chrome.WindowChips.Surface.WALL_STRIP,
+                            chipIndex, false);
+                        return true;
                     case 1: moveWindow(chipIndex, chipIndex - 1); return true;
                     case 2: moveWindow(chipIndex, chipIndex + 1); return true;
-                    case 3: closeRowWindow(chipIndex); return true;
+                    case 3:
+                        onWindowChip(com.termux.app.chrome.WindowChips.Surface.WALL_STRIP,
+                            chipIndex, true);
+                        return true;
                     default: return false;
                 }
             });
@@ -25142,11 +25048,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // with Home and are never on the Workspace.
         com.termux.app.terminal.HomeFloatChipsView chips =
             new com.termux.app.terminal.HomeFloatChipsView(this);
-        chips.setListener(index -> {
-            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> minimised =
-                minimisedHomeFloats();
-            if (index >= 0 && index < minimised.size()) showHomeFloat(minimised.get(index));
-        });
+        chips.setListener(index -> onWindowChip(
+            com.termux.app.chrome.WindowChips.Surface.FLOAT_CHIPS, index, false));
         layer.addView(chips, new android.widget.FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL));
@@ -25154,7 +25057,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Taskbar's run strip rides there too, where the chips stand: Home's alone.
         com.termux.app.dock.RunStripView strip = new com.termux.app.dock.RunStripView(this);
         strip.setListener(new com.termux.app.dock.RunStripView.Listener() {
-            @Override public void onWindowTapped(int chipIndex) { onRunStripWindowTapped(chipIndex); }
+            @Override public void onWindowTapped(int chipIndex) {
+                onWindowChip(com.termux.app.chrome.WindowChips.Surface.RUN_STRIP, chipIndex,
+                    false);
+            }
             @Override public void onNewWindowTapped() { createNewWindow(); }
         });
         android.widget.FrameLayout.LayoutParams stripParams =
@@ -25177,14 +25083,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mHomeChipsDockTopPx = Integer.MAX_VALUE;
     private int mHomeChipsKeyboardTopPx = -1;
 
-    /** The minimised Home floats, in the order they were opened: one chip each. */
+    /**
+     * The minimised Home floats, in the order they were opened: one chip each, as the window
+     * chips list them for the float chips
+     * ({@link com.termux.app.chrome.WindowChips.Surface#FLOAT_CHIPS}).
+     */
     @NonNull
     private java.util.List<com.termux.app.terminal.TerminalPaneController.Window>
             minimisedHomeFloats() {
+        java.util.List<com.termux.app.chrome.WindowChips.Chip<
+            com.termux.app.terminal.TerminalPaneController.Window>> chips =
+                windowChips(false).chips(com.termux.app.chrome.WindowChips.Surface.FLOAT_CHIPS);
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> minimised =
-            new java.util.ArrayList<>();
-        for (com.termux.app.terminal.TerminalPaneController.Window window : chipFloats()) {
-            if (window.isMinimised() && window.homePage() >= 0) minimised.add(window);
+            new java.util.ArrayList<>(chips.size());
+        for (com.termux.app.chrome.WindowChips.Chip<
+                com.termux.app.terminal.TerminalPaneController.Window> chip : chips) {
+            minimised.add(chip.window);
         }
         return minimised;
     }
@@ -26810,42 +26724,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyHomeSettings();
     }
 
-    /** A window chip was tapped, in the row's pills or the column's stack. */
-    private void selectWindowFromStatusBar(int index) {
-        if (!isSplitPanesEnabled()) return;
-        com.termux.app.terminal.TerminalPaneController.Window homeFloat = floatOfChip(index);
-        if (homeFloat != null) {
-            showHomeFloat(homeFloat);
-            return;
-        }
-        if (isWidgetsPageShowing()) return;
-        if (mPaneController == null) return;
-        // The display's chip brings the display window in front the way any window's chip brings
-        // its window: it is a window of the row, at its place among the others.
-        com.termux.app.statusbar.WindowChipTarget target =
-            com.termux.app.statusbar.WindowChipTarget.of(index, rowWindowCount(),
-                chipFloats().size());
-        if (target.kind == com.termux.app.statusbar.WindowChipTarget.Kind.WINDOW) {
-            showRowWindow(target.index);
-        }
-    }
-
     /**
-     * The × on a window chip was tapped: a terminal window takes its panes with it, the display
-     * window stops its display ({@link #closeDisplayWindowFromRow}), a float's shell ends.
+     * A tap, or a close ({@code close}, the × on a chip), on the window chip at {@code index} of
+     * {@code surface}: the bar's row or its column, Home's run strip, a Wall strip tile or one of
+     * the float chips. The window chips say what it means ({@link
+     * com.termux.app.chrome.WindowChips#tap}, {@link com.termux.app.chrome.WindowChips#close}),
+     * each surface counting its own index, and this carries it out: a window is brought in front
+     * (the display window's as any other's, at its place in the row), the Workspace sliding in
+     * first from Home's dock; a float comes back on its Home page; a window closes, a terminal
+     * window taking its panes with it and the display window stopping its display ({@link
+     * #closeDisplayWindowFromRow}); a float's shell ends.
      */
-    private void closeWindowFromStatusBar(int index) {
-        if (!isSplitPanesEnabled()) return;
-        com.termux.app.terminal.TerminalPaneController.Window homeFloat = floatOfChip(index);
-        if (homeFloat != null) {
-            // A float's × closes it as its titlebar's Close does: its shell ends.
-            TerminalSession shell = mPaneController.windowActiveSession(homeFloat);
-            if (shell != null) shell.finishIfRunning();
+    private void onWindowChip(@NonNull com.termux.app.chrome.WindowChips.Surface surface,
+                              int index, boolean close) {
+        if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && !isSplitPanesEnabled())
             return;
+        if (mPaneController == null) return;
+        // The float chips count only the floats: no row is read for them.
+        com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
+            chips = windowChips(surface != com.termux.app.chrome.WindowChips.Surface.FLOAT_CHIPS);
+        com.termux.app.chrome.WindowChips.Meaning<
+            com.termux.app.terminal.TerminalPaneController.Window> meaning =
+                close ? chips.close(surface, index) : chips.tap(surface, index);
+        switch (meaning.action) {
+            case SHOW_WINDOW:
+                if (meaning.travel) {
+                    if (mPaneWallController == null) return;
+                    mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL,
+                        isVisible());
+                }
+                showRowWindow(meaning.row);
+                return;
+            case RESTORE_FLOAT:
+                if (meaning.window != null) showHomeFloat(meaning.window);
+                return;
+            case CLOSE_WINDOW:
+                closeRowWindow(meaning.row);
+                return;
+            case CLOSE_FLOAT: {
+                // A float's × closes it as its titlebar's Close does: its shell ends.
+                TerminalSession shell = meaning.window == null ? null
+                    : mPaneController.windowActiveSession(meaning.window);
+                if (shell != null) shell.finishIfRunning();
+                return;
+            }
+            default:
         }
-        if (isWidgetsPageShowing()) return;
-        if (mPaneController == null || index < 0 || index >= rowWindowCount()) return;
-        closeRowWindow(index);
     }
 
     /** True when any pane of the current session's window at {@code index} is running something. */
@@ -26883,15 +26807,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // way, so one selection rule serves both.
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
-        if (windowColumn != null) windowColumn.setListener(this::selectWindowFromStatusBar);
-        bar.setOnWindowSelectedListener(this::selectWindowFromStatusBar);
+        if (windowColumn != null) windowColumn.setListener(index ->
+            onWindowChip(com.termux.app.chrome.WindowChips.Surface.BAR, index, false));
+        bar.setOnWindowSelectedListener(index ->
+            onWindowChip(com.termux.app.chrome.WindowChips.Surface.BAR, index, false));
         // Every chip tap, not only the ones that change which window is current: the tap that
         // asks the selected chip for its close button is spent on that reveal and never reaches
         // the selection listener, and it is exactly the tap the run's window card asks for.
         bar.setOnChipTappedListener(index -> {
             if (mFirstBootTour != null) mFirstBootTour.onWindowSelected(String.valueOf(index));
         });
-        bar.setOnWindowCloseRequestedListener(this::closeWindowFromStatusBar);
+        bar.setOnWindowCloseRequestedListener(index ->
+            onWindowChip(com.termux.app.chrome.WindowChips.Surface.BAR, index, true));
         // A chip dragged along the row and dropped: the window moves there, and stays current if
         // it was. Only the row's windows' chips lift, the display window's among them
         // (setMovableChipCount below).
@@ -27544,56 +27471,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private java.util.List<Integer> syncWindowBarItems(
             @NonNull com.termux.app.terminal.TerminalWindowBar bar) {
-        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
-            new java.util.ArrayList<>();
         java.util.List<Integer> foregroundPids = new java.util.ArrayList<>();
-        int selected = -1;
-        // Whether the chips below stand for this session's row at all. The bar is shared with the
-        // other places, which fill it with something else entirely.
-        boolean rowWindows = false;
-        int rowCount = 0;
-        // The display window is a window of the row (ADR 0008, amended 2026-10-19): its chip
-        // stands at its place among the terminal windows' chips, selected while it is in front.
-        if (isWidgetsPageShowing()) {
-            // Home wears no status bar: the row is empty there, and the minimised Home floats
-            // come back from the chips above the dock instead, or the Taskbar's run strip.
-            selected = -1;
-            syncRunStrip(foregroundPids);
-            syncWallStrip(foregroundPids);
-        } else if (mPaneController != null && (mCurrentWSession != null || isDisplayOnRow())) {
-            rowWindows = true;
-            long now = android.os.SystemClock.uptimeMillis();
-            boolean onDisplay = isDisplayWindowInFront();
-            int slot = displayRowSlot();
-            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
-                rowWindows();
-            rowCount = com.termux.app.wall.DisplaySlot.rowCount(windows.size(), slot);
-            selected = com.termux.app.statusbar.WindowChipTarget.selectedChip(rowCurrentIndex(),
-                rowCount);
-            int current = mCurrentWSession == null ? -1 : mCurrentWSession.current;
-            for (int i = 0; i < windows.size(); i++) {
-                // The display window's chip, where it stands among the windows'.
-                if (i == slot) items.add(displayWindowItem());
-                com.termux.app.terminal.TerminalPaneController.Window window = windows.get(i);
-                // Looking at the window is the acknowledgement: whatever it wanted, the user is here.
-                if (i == current && !onDisplay) clearWindowAttention(window);
-                items.add(rowWindowItem(window, i, foregroundPids, i == current && !onDisplay, now));
-            }
-            if (slot == windows.size()) items.add(displayWindowItem());
-            // Home floats are windows of the session too: chips after the row's, marked as floats.
-            addHomeFloatChips(items, foregroundPids);
+        // The window chips (the display window's at its place among the terminal windows', ADR
+        // 0008 amended 2026-10-19, then the Home floats), built once and dressed once: each row
+        // window's shells are observed for this refresh's marks before any surface adapts them.
+        com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
+            chips = windowChips(true);
+        boolean home = isWidgetsPageShowing();
+        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items;
+        if (home) {
+            // Home wears no status bar: the bar is empty there, and the Taskbar's run strip or
+            // the Wall strip's tiles show the chips, or the float chips above the dock bring the
+            // minimised floats back. Nothing is observed while neither strip is fed.
+            items = homeDockShowsWindowChips()
+                ? windowChipItems(chips, com.termux.app.chrome.WindowChips.Surface.RUN_STRIP,
+                    foregroundPids)
+                : java.util.Collections.emptyList();
+            syncRunStrip(chips, items);
+            syncWallStrip(chips, items);
+            items = java.util.Collections.emptyList();
+        } else {
+            items = windowChipItems(chips, com.termux.app.chrome.WindowChips.Surface.BAR,
+                foregroundPids);
         }
+        int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
         // The row's own windows can be dragged to reorder, the display window's chip with them:
         // not the Home floats' after them, and nothing on the places that fill the bar otherwise.
-        bar.setMovableChipCount(rowWindows ? rowCount : 0);
+        bar.setMovableChipCount(home ? 0 : chips.rowCount());
         bar.setWindows(items, selected);
         // The row is rebuilt whenever anything about a window changes, so the count is the edge
         // the tour reads: one more chip is the +, one fewer is a chip's ×. Only the terminal
         // windows, though — the Widgets place empties the bar, and neither that nor the display
         // window coming or going is a terminal window opening or closing.
         if (mFirstBootTour != null)
-            mFirstBootTour.onWindowCountSettled(rowWindows && mCurrentWSession != null
-                ? mCurrentWSession.windows.size() : -1);
+            mFirstBootTour.onWindowCountSettled(!home && mPaneController != null
+                && mCurrentWSession != null ? mCurrentWSession.windows.size() : -1);
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setWindows(items, selected);
@@ -29787,33 +29699,87 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return floats;
     }
 
-    /** Where the chips before the floats end: none on Home, the row's windows elsewhere. */
-    private int firstFloatChipIndex() {
-        if (isWidgetsPageShowing()) return 0;
-        return rowWindowCount();
-    }
-
-    /** The float a chip stands for, or null when the chip is a window's. */
-    @Nullable
-    private com.termux.app.terminal.TerminalPaneController.Window floatOfChip(int index) {
-        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
-        int at = index - firstFloatChipIndex();
-        return at >= 0 && at < floats.size() ? floats.get(at) : null;
-    }
-
-    /** One chip per Home float, each carrying its page, appended to {@code items}. */
-    private void addHomeFloatChips(
-            @NonNull java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items,
-            @NonNull java.util.List<Integer> foregroundPids) {
-        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> floats = chipFloats();
-        for (int i = 0; i < floats.size(); i++) {
-            com.termux.app.terminal.TerminalPaneController.Window window = floats.get(i);
-            TerminalSession session = mPaneController.windowActiveSession(window);
-            items.add(buildWindowItem(session, items.size(), foregroundPids,
-                mPaneController.windowName(window))
-                .withHomeFloat(window.homePage(),
-                    getString(R.string.window_chip_home_float, window.homePage() + 1)));
+    /**
+     * The window chips as they stand now ({@link com.termux.app.chrome.WindowChips}), seen from
+     * Home while Home shows: with {@code withRow}, the current row's windows, the display
+     * window's at its place, the one in front; then the Home floats in the order they were
+     * opened, each minimised or not, on a page or not, in focus or not. Without {@code withRow}
+     * the floats alone, for the float chips, which count nothing else. Nothing is observed here.
+     */
+    @NonNull
+    private com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
+            windowChips(boolean withRow) {
+        boolean rowShown = withRow && mPaneController != null
+            && (mCurrentWSession != null || isDisplayOnRow());
+        com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
+            chips = new com.termux.app.chrome.WindowChips<>(isWidgetsPageShowing(), rowShown,
+                rowShown ? rowWindows()
+                    : java.util.Collections.<com.termux.app.terminal.TerminalPaneController.Window>
+                        emptyList(),
+                rowShown ? displayRowSlot() : com.termux.app.wall.DisplaySlot.NONE,
+                rowShown ? rowCurrentIndex() : 0);
+        if (mPaneController == null) return chips;
+        com.termux.app.terminal.TerminalPaneController.Window focused =
+            mPaneController.focusedHomeFloat();
+        for (com.termux.app.terminal.TerminalPaneController.Window window : chipFloats()) {
+            chips.addFloat(window, window.isMinimised(), window.homePage() >= 0,
+                window == focused);
         }
+        return chips;
+    }
+
+    /**
+     * Whether Home's dock shows the window chips this refresh: the Taskbar's run strip, or the
+     * Wall strip's row (fed only with split panes on), each once made.
+     */
+    private boolean homeDockShowsWindowChips() {
+        return mPaneController != null
+            && ((mRunStrip != null && runStripWanted())
+                || (mWallStripRow != null && wallStripWanted() && isSplitPanesEnabled()));
+    }
+
+    /**
+     * Each chip {@code surface} shows, dressed for the bar, in its order: a row window's marks
+     * read from this refresh's one observation of its shells, the display window's chip named
+     * after its app, a float's carrying its page. On the bar, the Workspace's, the window in front
+     * is the one the user is looking at, and so acknowledged; nobody looks at a row window from
+     * Home.
+     */
+    @NonNull
+    private java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> windowChipItems(
+            @NonNull com.termux.app.chrome.WindowChips<
+                com.termux.app.terminal.TerminalPaneController.Window> chips,
+            @NonNull com.termux.app.chrome.WindowChips.Surface surface,
+            @NonNull java.util.List<Integer> foregroundPids) {
+        java.util.List<com.termux.app.chrome.WindowChips.Chip<
+            com.termux.app.terminal.TerminalPaneController.Window>> list = chips.chips(surface);
+        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
+            new java.util.ArrayList<>(list.size());
+        if (list.isEmpty() || mPaneController == null) return items;
+        long now = android.os.SystemClock.uptimeMillis();
+        boolean looking = surface == com.termux.app.chrome.WindowChips.Surface.BAR;
+        boolean onDisplay = looking && isDisplayWindowInFront();
+        int current = mCurrentWSession == null ? -1 : mCurrentWSession.current;
+        for (com.termux.app.chrome.WindowChips.Chip<
+                com.termux.app.terminal.TerminalPaneController.Window> chip : list) {
+            com.termux.app.terminal.TerminalPaneController.Window window = chip.window;
+            if (window == null) {
+                items.add(displayWindowItem());
+            } else if (chip.kind == com.termux.app.chrome.WindowChips.Kind.WINDOW) {
+                boolean seen = looking && chip.index == current && !onDisplay;
+                // Looking at the window is the acknowledgement: whatever it wanted, the user is here.
+                if (seen) clearWindowAttention(window);
+                items.add(rowWindowItem(window, chip.index, foregroundPids, seen, now));
+            } else {
+                // Home floats are windows of the session too: chips after the row's, marked.
+                TerminalSession session = mPaneController.windowActiveSession(window);
+                items.add(buildWindowItem(session, items.size(), foregroundPids,
+                    mPaneController.windowName(window))
+                    .withHomeFloat(window.homePage(),
+                        getString(R.string.window_chip_home_float, window.homePage() + 1)));
+            }
+        }
+        return items;
     }
 
     /**

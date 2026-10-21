@@ -3,6 +3,7 @@ package com.termux.app.dock;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.WindowChips;
 import com.termux.app.terminal.AgentStatus;
 import com.termux.app.terminal.TerminalWindowBar.WindowItem;
 
@@ -15,8 +16,8 @@ import java.util.regex.Pattern;
  * The Taskbar's run strip (spec "Taskbar"): one numbered entry per running window, then {@code +}
  * for a new window, built from the same chips the Workspace's window bar shows.
  *
- * <p>The chips come in the bar's order ({@link com.termux.app.statusbar.WindowChipTarget}): the
- * row's windows, the display window's among them at its place, then the Home floats. An entry
+ * <p>The chips come in the window chips' order ({@link WindowChips}): the row's windows, the
+ * display window's among them at its place, then the Home floats. An entry
  * keeps its chip's index, so a tap goes wherever a tap on that chip goes. The entry in front is
  * lit, a minimised float is marked, and a window asking for the user (its bell, or an agent
  * blocked on it, as the chip column reads it) carries the attention mark. Nothing running is no
@@ -164,6 +165,28 @@ public final class RunStripModel {
         entries.add(new Entry(Kind.NEW_WINDOW, -1, "+", "", "", "", newWindowSpoken, false, false,
             false, false));
         return entries;
+    }
+
+    /**
+     * The strip for the window chips {@code chips} as {@code surface} (the run strip, or the Wall
+     * strip's tiles) shows them, {@code items} each chip dressed for the bar, in the same order:
+     * the entry in front is the one {@code surface} selects, a minimised float is marked.
+     */
+    @NonNull
+    public static List<Entry> of(@NonNull WindowChips<?> chips,
+                                 @NonNull WindowChips.Surface surface,
+                                 @NonNull List<WindowItem> items,
+                                 @NonNull String newWindowSpoken) {
+        List<? extends WindowChips.Chip<?>> list = chips.chips(surface);
+        boolean[] minimised = new boolean[Math.max(0, list.size() - chips.rowCount())];
+        for (WindowChips.Chip<?> chip : list) {
+            if (chip.kind == WindowChips.Kind.HOME_FLOAT && chip.index >= 0
+                    && chip.index < minimised.length) {
+                minimised[chip.index] = chip.minimised;
+            }
+        }
+        return build(items, chips.selected(surface), chips.rowCount(), chips.displayChip(),
+            minimised, newWindowSpoken);
     }
 
     /** Asking for the user, the way the window chip column reads it: a bell, or a blocked agent. */
