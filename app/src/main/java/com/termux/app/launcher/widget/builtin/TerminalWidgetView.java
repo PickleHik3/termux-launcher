@@ -129,6 +129,30 @@ public final class TerminalWidgetView extends BuiltinWidgetView implements Hoste
     @Override public int groundAlpha() { return cardAlpha(); }
 
     /**
+     * The terminal's veil: the palette's background over the card at the smallest alpha, no less
+     * than the card's own, at which the palette's foreground reads at 4.5:1 and its dim (faint)
+     * foreground at 3:1 on what the widget stands on ({@link #groundSurface}). By day over a
+     * dark wallpaper a light palette's dark words stood on the see-through card and vanished.
+     */
+    @Override public int groundAlpha(int paletteBackground, int paletteForeground) {
+        return terminalGroundAlpha(cardAlpha(), groundSurface(), paletteBackground,
+            paletteForeground);
+    }
+
+    /** {@link #groundAlpha(int, int)} as arithmetic, for tests. */
+    static int terminalGroundAlpha(int cardAlpha, int groundSurface, int paletteBackground,
+                                   int paletteForeground) {
+        if (cardAlpha >= 255) return 255;
+        com.termux.app.chrome.OnGlass.Resolution veil =
+            com.termux.app.chrome.OnGlass.resolveFixedInk(groundSurface,
+                android.graphics.Color.TRANSPARENT, paletteForeground,
+                com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT,
+                com.termux.app.terminal.PaneGlass.dimTerminalInk(paletteForeground),
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT, paletteBackground, 255);
+        return Math.max(cardAlpha, android.graphics.Color.alpha(veil.veil));
+    }
+
+    /**
      * How long the card's ground or corner has to rest before the pane in it is dressed again. A
      * slider drags them through many values; the card's own clip follows every one in place, and
      * the pane (its text clearance, its ground) is dressed once, where the slider settles.

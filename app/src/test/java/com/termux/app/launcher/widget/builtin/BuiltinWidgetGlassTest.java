@@ -21,6 +21,11 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import android.graphics.Color;
+
+import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.OnGlass;
+import com.termux.app.chrome.WidgetInkSource;
 import com.termux.app.terminal.PaneGlassBackdropView;
 import com.termux.app.terminal.PaneSurfaceStyle;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
@@ -159,7 +164,7 @@ public class BuiltinWidgetGlassTest {
         assertTrue(BuiltinWidgetGlass.slabShown(true, false, true));
         assertFalse(BuiltinWidgetGlass.slabShown(false, false, true));
         assertFalse("a picker card samples nothing", BuiltinWidgetGlass.slabShown(true, true, true));
-        assertFalse("off the wallpaper: the see-through card alone",
+        assertFalse("off the wallpaper: the solid card",
             BuiltinWidgetGlass.slabShown(true, false, false));
     }
 
@@ -181,19 +186,186 @@ public class BuiltinWidgetGlassTest {
     }
 
     @Test
-    public void offIsTheSolidCardAndOnIsTheSeeThroughOne() {
+    public void offIsTheSolidCardAndOnWithNoGlassToWearIsTooSo() {
         Plain view = new Plain(context, services, style);
         view.bind(null);
         assertSame("off: the host's own look", style, view.style());
         assertEquals("the solid card's ground is whole", 255, view.groundAlpha());
         view.bind(glassOn());
         assertTrue(view.isGlassOn());
-        assertTrue(view.style().glass);
-        assertEquals(style.cornerRadiusPx, view.style().cornerRadiusPx, 0f);
-        assertEquals(style.onSurface, view.style().onSurface);
+        assertSame("no Look to wear: the solid card, not a see-through one", style,
+            view.style());
+        assertEquals(255, view.groundAlpha());
         view.bind(new Bundle());
         assertFalse(view.isGlassOn());
         assertSame("back off: the solid card again", style, view.style());
+    }
+
+    /** Spec #101: each named condition alone puts the solid card on. */
+    @Test
+    public void theSolidCardStandsInForGlassUnderEachNamedCondition() {
+        assertFalse("glass", BuiltinWidgetGlass.solidFallback(true, true, false, false, false));
+        assertTrue("off the wallpaper",
+            BuiltinWidgetGlass.solidFallback(false, true, false, false, false));
+        assertTrue("the shared frame not ready",
+            BuiltinWidgetGlass.solidFallback(true, false, false, false, false));
+        assertTrue("battery saver", BuiltinWidgetGlass.solidFallback(true, true, true, false, false));
+        assertTrue("outline text", BuiltinWidgetGlass.solidFallback(true, true, false, true, false));
+        assertTrue("high contrast",
+            BuiltinWidgetGlass.solidFallback(true, true, false, false, true));
+        assertTrue(BuiltinWidgetGlass.glassWorn(true, false, true, true, false, false, false));
+        assertFalse(BuiltinWidgetGlass.glassWorn(true, false, true, true, true, false, false));
+        assertFalse("the switch off", BuiltinWidgetGlass.glassWorn(false, false, true, true,
+            false, false, false));
+    }
+
+    /** The card follows the page's ink; night forces dark whatever the ink. */
+    @Test
+    public void theCardsSideFollowsThePagesInkAndNightForcesDark() {
+        assertTrue(BuiltinWidgetGlass.darkCard(false, ChromeInk.Polarity.PALE_INK));
+        assertFalse(BuiltinWidgetGlass.darkCard(false, ChromeInk.Polarity.DARK_INK));
+        assertFalse("no chrome to ask: the theme's card", BuiltinWidgetGlass.darkCard(false, null));
+        assertTrue(BuiltinWidgetGlass.darkCard(true, ChromeInk.Polarity.DARK_INK));
+
+        BuiltinWidgetStyle night = themed(com.google.android.material.R.style.Theme_Material3_Dark);
+        assertTrue(night.dark && night.night);
+        assertSame("night forces the dark card on either ink", night, night.onInk(false));
+        assertSame(night, night.onInk(true));
+
+        BuiltinWidgetStyle day = dayStyle();
+        assertFalse("the day theme's card is light", day.dark);
+        BuiltinWidgetStyle dark = day.onInk(true);
+        assertTrue(dark.dark);
+        assertFalse("still the day theme", dark.night);
+        assertSame("made once", dark, day.onInk(true));
+        assertSame("the dark ink keeps the theme's card", day, day.onInk(false));
+        assertSame("a dark card is itself on either ink", dark, dark.onInk(false));
+        assertTrue("a dark card", OnGlass.ratio(dark.card, Color.BLACK) < OnGlass.ratio(dark.card,
+            Color.WHITE));
+        for (int text : new int[] {dark.onSurface, dark.onSurfaceVariant}) {
+            assertTrue("pale text reads on it", OnGlass.ratio(text, dark.card)
+                >= OnGlass.TARGET_BODY_TEXT);
+        }
+        assertTrue("and its accent", OnGlass.ratio(dark.primary, dark.card)
+            >= OnGlass.TARGET_LARGE_TEXT);
+        for (int fill : new int[] {dark.card, dark.container, dark.containerHigh,
+                day.glassVariant(context).container, day.glassVariant(context).card}) {
+            assertEquals("every fill is opaque: no glass on glass", 255, Color.alpha(fill));
+        }
+    }
+
+    /** A style resolved in {@code theme}, whatever theme the test's application wears. */
+    private BuiltinWidgetStyle themed(int theme) {
+        return BuiltinWidgetStyle.resolve(new android.view.ContextThemeWrapper(context, theme),
+            BuiltinWidgetStyle.Direction.TONAL, false, null);
+    }
+
+    private BuiltinWidgetStyle dayStyle() {
+        return themed(com.google.android.material.R.style.Theme_Material3_Light);
+    }
+
+    /** The edge rim: wanted where the card would vanish into the wallpaper behind it. */
+    @Test
+    public void theRimDrawsWhereTheCardWouldVanish() {
+        BuiltinWidgetStyle day = dayStyle();
+        assertTrue(BuiltinWidgetGlass.edgeRimWanted(day.card, 0xFFE8E4DC));
+        assertFalse(BuiltinWidgetGlass.edgeRimWanted(day.card, Color.BLACK));
+        BuiltinWidgetStyle dark = day.onInk(true);
+        assertTrue(BuiltinWidgetGlass.edgeRimWanted(dark.card, 0xFF1B1A17));
+        assertFalse(BuiltinWidgetGlass.edgeRimWanted(dark.card, Color.WHITE));
+    }
+
+    /**
+     * The Terminal widget's veil: on glass, the palette's background is laid over the card at
+     * the smallest alpha the palette's foreground reads at, never less than the card's own.
+     */
+    @Test
+    public void theTerminalWidgetsVeilHoldsThePalettesInk() {
+        int lightBg = 0xFFFAFAFA;
+        int darkFg = 0xFF202020;
+        int darkGround = 0xFF303236;
+        int alpha = TerminalWidgetView.terminalGroundAlpha(102, darkGround, lightBg, darkFg);
+        assertTrue("raised above the card's own: " + alpha, alpha > 102);
+        int surface = OnGlass.opaque(OnGlass.composite(OnGlass.withAlpha(lightBg, alpha),
+            darkGround));
+        assertTrue(OnGlass.ratio(darkFg, surface) >= OnGlass.TARGET_BODY_TEXT);
+        assertEquals("a palette that reads already keeps the card's", 102,
+            TerminalWidgetView.terminalGroundAlpha(102, darkGround, 0xFF101010, 0xFFF0F0F0));
+        assertEquals("the solid card is whole", 255,
+            TerminalWidgetView.terminalGroundAlpha(255, darkGround, lightBg, darkFg));
+    }
+
+    /** A Look the chrome stands behind: the widget band's polarity, frame and answers. */
+    private static final class InkLook implements PaneSurfaceStyle, WidgetInkSource {
+        @NonNull final PaneSurfaceStyle look;
+        @NonNull ChromeInk.Polarity polarity = ChromeInk.Polarity.DARK_INK;
+        boolean frameReady = true;
+        int wallpaper = 0xFF202226;
+
+        InkLook(@NonNull PaneSurfaceStyle look) { this.look = look; }
+
+        @NonNull @Override public ChromeInk.Polarity widgetPolarity() { return polarity; }
+        @Override public boolean widgetFrameReady() { return frameReady; }
+        @NonNull @Override public OnGlass.Resolution widgetInk(@NonNull Rect rootRect, int body,
+                                                               int veilColor, int textInk,
+                                                               int graphicInk) {
+            return OnGlass.resolveWidget(wallpaper, body, textInk, OnGlass.TARGET_BODY_TEXT,
+                graphicInk, OnGlass.TARGET_LARGE_TEXT, veilColor);
+        }
+        @Override public int widgetWallpaper(@NonNull Rect rootRect) { return wallpaper; }
+
+        @Override public boolean isPaneGlassActive() { return look.isPaneGlassActive(); }
+        @Override public Bitmap paneGlassBlurFrame() { return look.paneGlassBlurFrame(); }
+        @NonNull @Override public Rect paneGlassBlurFrameRect() { return look.paneGlassBlurFrameRect(); }
+        @Override public android.graphics.ColorFilter paneGlassFrostFilter() { return null; }
+        @Override public int paneGlassTintColor() { return 0x4DE1E7F2; }
+        @Override public android.graphics.drawable.Drawable paneGlassGrainLayer() { return null; }
+        @Override public int paneGlassGrainStrength() { return 0; }
+        @Override public float paneGlassCornerRadiusPx() { return 0f; }
+        @Override public int paneCornerRadiusDp() { return look.paneCornerRadiusDp(); }
+        @Override public int paneGapDp() { return 0; }
+    }
+
+    /**
+     * On the page: a frame not ready is the solid card until it lands; the glass card over a
+     * dark wallpaper wears its veil, so its ground is thicker than the Look's tint and lift alone;
+     * the page's pale ink puts the dark card on and builds the layout in it, once.
+     */
+    @Test
+    public void onThePageTheCardFollowsTheBandAndFallsBackToSolid() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        Page page = new Page(activity);
+        InkLook look = new InkLook(glass(true, Bitmap.createBitmap(10, 20,
+            Bitmap.Config.ARGB_8888)));
+        look.frameReady = false;
+        page.glass = look;
+        Plain view = new Plain(activity, services, dayStyle());
+        view.bind(glassOn());
+        page.addView(view, new FrameLayout.LayoutParams(200, 100));
+        activity.setContentView(page);
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        PaneGlassBackdropView slab = slabOf(view);
+        assertTrue("no frame yet: no slab", slab == null || slab.getVisibility() == View.GONE);
+        assertFalse(view.style().glass);
+        assertEquals(255, view.groundAlpha());
+
+        look.frameReady = true;
+        view.onGlassStyle(look);
+        slab = slabOf(view);
+        assertTrue(slab != null && slab.getVisibility() == View.VISIBLE);
+        assertTrue(view.style().glass);
+        int tintAndLift = 255 - Math.round((255 - 0x4D)
+            * (255 - OnGlass.widgetLiftAlpha255(0x4D)) / 255f);
+        assertTrue("the light card's veil over a dark wallpaper: " + view.groundAlpha(),
+            view.groundAlpha() > tintAndLift);
+
+        int builds = view.builds;
+        look.polarity = ChromeInk.Polarity.PALE_INK;
+        view.onGlassStyle(look);
+        assertTrue("the page's pale ink: the dark card", view.style().dark);
+        assertEquals("built again in it", builds + 1, view.builds);
+        view.onGlassStyle(look);
+        assertEquals("the same answer builds nothing", builds + 1, view.builds);
     }
 
     @Test
@@ -212,13 +384,18 @@ public class BuiltinWidgetGlassTest {
         assertTrue(slab != null && slab.getVisibility() == View.VISIBLE);
         assertSame("under the card", slab, view.getChildAt(0));
         assertSame(frame, slab.heldFrame());
-        assertNull("the slab's tint is the card: no fill over it", cardOf(view).getBackground());
-        assertEquals("the ground is the Look's tint", 0x80, view.groundAlpha());
+        assertTrue("the card's fill over it is the body's lift",
+            cardOf(view).getBackground() instanceof GradientDrawable);
+        int lift = OnGlass.widgetLiftAlpha255(0x80);
+        assertEquals("the ground is the Look's tint and the lift",
+            255 - Math.round((255 - 0x80) * (255 - lift) / 255f), view.groundAlpha());
 
-        // Off the wallpaper there is no glass to wear: the see-through card comes back.
+        // Off the wallpaper there is no glass to wear: the solid card comes back.
         view.onGlassStyle(glass(false, null));
         assertEquals(View.GONE, slab.getVisibility());
         assertTrue(cardOf(view).getBackground() instanceof GradientDrawable);
+        assertFalse(view.style().glass);
+        assertEquals(255, view.groundAlpha());
         view.onGlassStyle(page.glass);
         assertEquals(View.VISIBLE, slab.getVisibility());
 

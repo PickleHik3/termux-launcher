@@ -3757,7 +3757,12 @@ public class TerminalPaneController {
                 ? emulator.mColors.mCurrentColors[com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND]
                 : com.termux.terminal.TerminalColors.COLOR_SCHEME
                     .mDefaultColors[com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND];
-            setBackgroundColor(HomeFloatPolicy.hostedGround(background, slot.groundAlpha()));
+            int foreground = emulator != null
+                ? emulator.mColors.mCurrentColors[com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND]
+                : com.termux.terminal.TerminalColors.COLOR_SCHEME
+                    .mDefaultColors[com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND];
+            setBackgroundColor(HomeFloatPolicy.hostedGround(background,
+                slot.groundAlpha(background, foreground)));
         }
 
         void leaveSlot() {

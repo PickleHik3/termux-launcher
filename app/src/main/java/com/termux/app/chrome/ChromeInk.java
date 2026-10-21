@@ -76,6 +76,12 @@ import java.util.Map;
  * of the one pane band, each memoised here on its own rect ({@link #terminalPane}); the band's vote
  * is the mean of its panes, so a split cannot outvote the rest of the chrome.</p>
  *
+ * <h3>Home widgets</h3>
+ * <p>Each Home widget is a rect of {@link GlassBackdropCache.Band#WIDGET}, memoised here like a
+ * terminal pane ({@link #widget}). Its inks are its card's roles on the chrome's polarity, held by
+ * a veil of the card's colour over its glass body; it takes the polarity and casts no vote, since
+ * its card's light or dark follows the polarity it would vote on.</p>
+ *
  * <h3>How hard, and where</h3>
  * <p>Every target a band asks at is scaled by the user's one legibility control,
  * {@link LegibilityLevel} (the "Terminal contrast" choice: body text at 3.0, 4.5 or 7.0), before
@@ -547,6 +553,121 @@ public final class ChromeInk {
     /** Terminal panes remembered right now, for tests. */
     int paneAnswerCountForTests() {
         return mPanes.size();
+    }
+
+    // ------------------------------------------------------------------ the widget band
+
+    /** Widgets a wall's pages hold at once, and then some; an older rect is dropped, not an error. */
+    static final int MAX_WIDGET_ANSWERS = 32;
+
+    /** One widget's standing answer, remembered on its own rect. */
+    private static final class WidgetAnswer {
+        int wallpaper;
+        boolean sampled;
+        int dim;
+        boolean answered;
+        int body;
+        int veilColor;
+        int textInk;
+        int graphicInk;
+        double textTarget;
+        double graphicTarget;
+        @Nullable OnGlass.Resolution resolution;
+    }
+
+    /** Each widget's answer by its root-space rect, eldest first. Cleared by {@link #invalidate}. */
+    @NonNull private final java.util.LinkedHashMap<Rect, WidgetAnswer> mWidgets =
+        new java.util.LinkedHashMap<>(MAX_WIDGET_ANSWERS, 0.75f, true);
+
+    /**
+     * One Home widget's answer ({@link GlassBackdropCache.Band#WIDGET}): the veil its card lays
+     * over its body so the card's inks read on what is behind this widget, at 4.5:1 for body and
+     * label and 3:1 for hero numerals and graphics, both scaled by the legibility level
+     * ({@link OnGlass#resolveWidget}).
+     *
+     * <p>The inks are the card's roles on the page's one polarity ({@link #polarity}), the one the
+     * dock and the bars are drawn in, so a widget never reads as the opposite of the dock beside
+     * it; that is also why the band casts no vote. Memoised on the widget's rect like a terminal
+     * pane: asked again with the same inputs, nothing is sampled or searched, and only a widget
+     * that moved, a new wallpaper, dim, palette or level ({@link #invalidate}) re-derives it. A
+     * widget asked about before the wallpaper is readable is answered on the mode's nominal glass
+     * and samples again next time.</p>
+     *
+     * @param rootRect the widget's laid-out rect, in the root container's untransformed space
+     * @param body what the widget draws over the wallpaper, alpha included: the Look's slab tint
+     *     with the body's lift on glass, the opaque card on the solid one
+     * @param veilColor the card's colour on the page's polarity, which the veil moves toward
+     * @param textInk the card's weakest text ink (its on-surface-variant role)
+     * @param graphicInk the ink of its hero numerals and graphics (its accent)
+     */
+    @NonNull
+    public OnGlass.Resolution widget(@NonNull Rect rootRect, @ColorInt int body,
+                                     @ColorInt int veilColor, @ColorInt int textInk,
+                                     @ColorInt int graphicInk) {
+        readMode();
+        double textTarget = mLevel.target(OnGlass.TARGET_BODY_TEXT);
+        double graphicTarget = mLevel.target(OnGlass.TARGET_LARGE_TEXT);
+        WidgetAnswer answer = widgetSample(rootRect);
+        if (answer.answered && answer.resolution != null && answer.dim == mDimColor
+                && answer.body == body && answer.veilColor == veilColor
+                && answer.textInk == textInk && answer.graphicInk == graphicInk
+                && Double.compare(answer.textTarget, textTarget) == 0
+                && Double.compare(answer.graphicTarget, graphicTarget) == 0) {
+            return answer.resolution;
+        }
+        int under = OnGlass.backdrop(answer.wallpaper, mDimColor, Color.TRANSPARENT);
+        OnGlass.Resolution resolution = OnGlass.resolveWidget(under, body, textInk, textTarget,
+            graphicInk, graphicTarget, veilColor);
+        // Answered for good only once the wallpaper was really read; a nominal answer asks again.
+        answer.answered = answer.sampled;
+        answer.resolution = resolution;
+        answer.dim = mDimColor;
+        answer.body = body;
+        answer.veilColor = veilColor;
+        answer.textInk = textInk;
+        answer.graphicInk = graphicInk;
+        answer.textTarget = textTarget;
+        answer.graphicTarget = graphicTarget;
+        return resolution;
+    }
+
+    /**
+     * What a widget at {@code rootRect} stands on before its own card: the wallpaper under the
+     * launcher's dim, opaque. Shares the widget's one sample with {@link #widget}; the card's rim
+     * is decided against it ({@link OnGlass#cardShowsEdge}).
+     */
+    @ColorInt
+    public int widgetWallpaper(@NonNull Rect rootRect) {
+        readMode();
+        return OnGlass.backdrop(widgetSample(rootRect).wallpaper, mDimColor, Color.TRANSPARENT);
+    }
+
+    /** The widget's remembered entry at {@code rootRect}, sampled when it has not been read yet. */
+    @NonNull
+    private WidgetAnswer widgetSample(@NonNull Rect rootRect) {
+        WidgetAnswer answer = mWidgets.get(rootRect);
+        if (answer == null) {
+            answer = new WidgetAnswer();
+            if (mWidgets.size() >= MAX_WIDGET_ANSWERS) {
+                java.util.Iterator<Rect> eldest = mWidgets.keySet().iterator();
+                eldest.next();
+                eldest.remove();
+            }
+            mWidgets.put(new Rect(rootRect), answer);
+        }
+        if (!answer.sampled) {
+            int read = mCache.sampleUncached(rootRect);
+            answer.sampled = Color.alpha(read) != 0;
+            int wallpaper = answer.sampled ? read : mCache.fallbackWallpaper();
+            if (wallpaper != answer.wallpaper) answer.answered = false;
+            answer.wallpaper = wallpaper;
+        }
+        return answer;
+    }
+
+    /** Widgets remembered right now, for tests. */
+    int widgetAnswerCountForTests() {
+        return mWidgets.size();
     }
 
     /**
@@ -1420,6 +1541,7 @@ public final class ChromeInk {
         mCache.invalidate();
         mVotes.clear();
         mPanes.clear();
+        mWidgets.clear();
         for (Contract contract : mContracts.values()) {
             contract.veil = Color.TRANSPARENT;
             contract.fixedAnswer = null;
