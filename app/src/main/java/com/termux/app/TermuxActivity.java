@@ -17133,13 +17133,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The bar's {@code +}: a new Workspace window, after the one in front, on both halves (#90).
-     * Tapped on Home it slides the Workspace in on the new window, as the Strip's {@code +} does;
-     * a Home float stays the long-press menu's Terminal.
+     * The bar's {@code +}: a new Workspace window in the current session's row, after the one in
+     * front, on both halves (#90). Tapped on Home it slides the Workspace in on the new window, as
+     * the Strip's {@code +} does; a Home float stays the long-press menu's Terminal. Without split
+     * panes there are no windows to add, and the bar shows no {@code +} on either half
+     * (refreshPlaceBar).
+     *
+     * <p>Never a new session while one stands (createRowWindow).
      */
     private void onBarNewWindow() {
+        if (!isSplitPanesEnabled()) return;
         if (isWidgetsPageShowing()) {
-            if (!isSplitPanesEnabled()) return;
             onWallStripNewTerminal();
             return;
         }
@@ -23619,8 +23623,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             bar.setChromeInk(mChrome.ink());
             bar.setPlaceAccent(placeAccent);
             bar.setVisibility(windowsShown && !isStatusBarVertical() ? View.VISIBLE : View.GONE);
-            // The plus opens a terminal window right after the window in front, whichever it is.
-            bar.setCreateButtonShown(workspace);
+            // The plus opens a terminal window right after the window in front, whichever it is;
+            // without split panes there are no windows to open, on either half.
+            bar.setCreateButtonShown(workspace && isSplitPanesEnabled());
         }
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
@@ -29077,6 +29082,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** A fresh shell as a new window of the row, wherever the wall is (the entry's New window). */
     private void createRowWindow() {
         if (!isSplitPanesEnabled() || mPaneController == null) return;
+        if (mCurrentWSession == null && !mWSessions.isEmpty()) {
+            // Sessions stand but none is current (the row emptied under Home): the window opens
+            // in the one the Workspace shows next, as after a close (showNextSessionAfterClose),
+            // never in a session of its own beside them.
+            mCurrentWSession = mWSessions.get(0);
+            mPaneController.showWindow(mCurrentWSession.currentWindow());
+        }
         if (mCurrentWSession == null) { // no session yet -> behave like new session
             getTermuxTerminalSessionClient().addNewSession(false, null);
             return;
