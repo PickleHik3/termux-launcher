@@ -455,16 +455,28 @@ public final class DockLayoutPolicy {
         // Only on the dock's own row: a row on another edge, or no row, carries no field.
         float reveal = Float.isNaN(in.promptFieldReveal)
             ? 0f : Math.max(0f, Math.min(1f, in.promptFieldReveal));
+        // Under Lens beads the row keeps its beads and the field stands in a glass capsule of its
+        // own under them (#84): as wide as the apps row, and the capsule's air over it, so the
+        // capsule stands the beads' own gap under them (LensBeadGeometry.CAPSULE_TOP_PAD_DP).
+        // The dock is that much taller than the slab's with the field, and nothing else moves.
         if (appsRowEnabled && reveal > 0f && out.appsBarHeightPx > 0) {
+            boolean beads = in.surface.beads;
             int fieldPx = promptFieldHeightPx(density);
             int padPx = promptFieldBottomPadPx(airPx, density);
-            int fullPx = fieldPx + padPx;
+            int topPadPx = beads ? LensBeadGeometry.capsuleTopPadPx(density) : 0;
+            int fullPx = topPadPx + fieldPx + padPx;
             out.promptFieldFullBandPx = fullPx;
             out.promptFieldBandPx = Math.round(fullPx * reveal);
             out.promptFieldHeightPx = Math.min(out.promptFieldBandPx, Math.round(fieldPx * reveal));
-            out.promptFieldBottomPadPx = out.promptFieldBandPx - out.promptFieldHeightPx;
+            out.promptFieldTopPadPx = Math.min(out.promptFieldBandPx - out.promptFieldHeightPx,
+                Math.round(topPadPx * reveal));
+            out.promptFieldBottomPadPx = out.promptFieldBandPx - out.promptFieldHeightPx
+                - out.promptFieldTopPadPx;
             out.promptFieldWellGapPx = airPx;
-            out.promptFieldSideInsetPx = out.horizontalInsetPx + promptFieldSideInsetPx(density);
+            out.promptFieldSideInsetPx = beads
+                ? appsRowSideInsetPx(capsule ? out.capsuleContentInsetPx : out.horizontalInsetPx,
+                    true, density)
+                : out.horizontalInsetPx + promptFieldSideInsetPx(density);
         }
 
         // The Wall strip's first row, over the apps row on the same slab. The slab's padding over
@@ -566,6 +578,20 @@ public final class DockLayoutPolicy {
      */
     public static int promptFieldBottomPadPx(int airPx, float density) {
         return Math.max(0, airPx - promptFieldWellInsetPx(density));
+    }
+
+    /**
+     * The dock's apps row's side inset from the screen edge, on each side, for the content inset
+     * the row's style gives ({@code contentInsetPx}: the capsule's content inset, or the slab's
+     * margin docked). The row reads with more side padding than the A–Z row because its icons
+     * are space-between (half a slot of empty space at each edge), so the inset is trimmed ~18%
+     * to line the icons up with the letters' span; Lens beads narrow the slots a little more
+     * ({@link LensBeadGeometry#ROW_SIDE_INSET_DP}) so the end beads stand clear of the screen's
+     * edges.
+     */
+    public static int appsRowSideInsetPx(int contentInsetPx, boolean beads, float density) {
+        return Math.round(contentInsetPx * 0.82f)
+            + (beads ? LensBeadGeometry.rowSideInsetPx(density) : 0);
     }
 
     /** {@link #PROMPT_FIELD_SIDE_INSET_DP} in px. */

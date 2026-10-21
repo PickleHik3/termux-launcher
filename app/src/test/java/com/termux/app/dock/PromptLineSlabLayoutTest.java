@@ -188,8 +188,8 @@ public class PromptLineSlabLayoutTest {
 
     /**
      * The Search field stands under the apps row with every design (#96): the same band whatever
-     * the design, the stack taller by it and nothing else, and the Strip with the field the
-     * tallest dock of all.
+     * the design (Lens beads add the capsule's air over it, #84), the stack taller by it and
+     * nothing else, and the Strip with the field the tallest dock of all.
      */
     @Test
     public void theFieldStandsUnderTheAppsRowOfEveryDesign() {
@@ -201,11 +201,12 @@ public class PromptLineSlabLayoutTest {
         for (DockSurfaceSpec spec : designs) {
             DockLayout without = design(spec, 0f);
             DockLayout with = design(spec, 1f);
-            assertEquals(spec.name, band, with.promptFieldBandPx);
+            int specBand = band + (spec.beads ? LensBeadGeometry.capsuleTopPadPx(DENSITY) : 0);
+            assertEquals(spec.name, specBand, with.promptFieldBandPx);
             assertEquals(spec.name, 0, without.promptFieldBandPx);
             assertEquals(spec.name, without.wallStripBandPx, with.wallStripBandPx);
             assertEquals(spec.name, without.appsBarHeightPx, with.appsBarHeightPx);
-            assertEquals(spec.name, without.combinedHeight(BASE_TOOLBAR_PX, false) + band,
+            assertEquals(spec.name, without.combinedHeight(BASE_TOOLBAR_PX, false) + specBand,
                 with.combinedHeight(BASE_TOOLBAR_PX, false));
             tallest = Math.max(tallest, with.combinedHeight(BASE_TOOLBAR_PX, false));
         }

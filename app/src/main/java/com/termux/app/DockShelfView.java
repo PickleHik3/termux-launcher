@@ -59,6 +59,13 @@ public final class DockShelfView extends View {
     /** How much of the beads' shadows and glow show, 0 to 1: they fade as the beads melt. */
     private float mBeadShelfAlpha = 1f;
     private final Path mBeadPath = new Path();
+    /** The Search field's capsule under the beads, its shadow and glow, while it stands there. */
+    private boolean mHasCapsule;
+    private final RectF mCapsuleRect = new RectF();
+    private final RectF mCapsulePaintRect = new RectF();
+    private float mCapsuleShadowHalf, mCapsuleGlowHalf;
+    private final Paint mCapsuleShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mCapsuleGlow = new Paint(Paint.ANTI_ALIAS_FLAG);
     @Nullable private View mHost;
 
     private final View.OnLayoutChangeListener mHostLayout =
@@ -152,7 +159,10 @@ public final class DockShelfView extends View {
     private void rebuildBeads() {
         com.termux.app.dock.LensBeadGeometry.Beads beads = mBeads;
         mBeadPath.reset();
-        if (beads == null || !mHasSlab) return;
+        if (beads == null || !mHasSlab) {
+            mHasCapsule = false;
+            return;
+        }
         float density = getResources().getDisplayMetrics().density;
         float dx = mSlab.left;
         float dy = mSlab.top;
@@ -161,6 +171,7 @@ public final class DockShelfView extends View {
         for (int i = 0; i < beads.count(); i++) {
             mBeadPath.addCircle(beads.centerX(i) + dx, beads.centerY + dy, r, Path.Direction.CW);
         }
+        rebuildCapsule(beads, dx, dy, density);
         if (r == mBeadPaintRadius && bottom == mBeadPaintBottom) return;
         mBeadPaintRadius = r;
         mBeadPaintBottom = bottom;
@@ -171,6 +182,40 @@ public final class DockShelfView extends View {
         mBeadGlow.setShader(ellipse(Color.WHITE, DockGlassRendering.BEAD_GLOW_ALPHA, 0f, bottom,
             r * DockGlassRendering.BEAD_GLOW_HALF_WIDTH_SHARE,
             DockGlassRendering.BEAD_GLOW_DEPTH_DP * density));
+    }
+
+    /**
+     * The Search field's capsule under the beads (#84), in this view's coordinates: its outline
+     * joins the beads' (nothing of the shelf is drawn under its glass), and it wears a bead's
+     * shadow and glow drawn out along its lower edge, the straight run and the low share of each
+     * round end. Its paints are built again only when the capsule moved.
+     */
+    private void rebuildCapsule(@NonNull com.termux.app.dock.LensBeadGeometry.Beads beads,
+                                float dx, float dy, float density) {
+        if (!beads.hasCapsule()) {
+            mHasCapsule = false;
+            return;
+        }
+        float r = beads.capsuleRadiusPx();
+        float left = beads.capsuleLeft + dx;
+        float top = beads.capsuleTop + dy;
+        float right = beads.capsuleRight + dx;
+        float bottom = beads.capsuleBottom + dy;
+        mCapsuleRect.set(left, top, right, bottom);
+        mBeadPath.addRoundRect(mCapsuleRect, r, r, Path.Direction.CW);
+        if (mHasCapsule && mCapsulePaintRect.equals(mCapsuleRect)) return;
+        mHasCapsule = true;
+        mCapsulePaintRect.set(mCapsuleRect);
+        float run = Math.max(0f, (right - left) * 0.5f - r);
+        float cx = (left + right) * 0.5f;
+        float rise = DockGlassRendering.BEAD_SHADOW_RISE_DP * density;
+        mCapsuleShadowHalf = run + r * DockGlassRendering.BEAD_SHADOW_HALF_WIDTH_SHARE;
+        mCapsuleGlowHalf = run + r * DockGlassRendering.BEAD_GLOW_HALF_WIDTH_SHARE;
+        mCapsuleShadow.setShader(ellipse(Color.BLACK, DockGlassRendering.BEAD_SHADOW_ALPHA, cx,
+            bottom - rise, mCapsuleShadowHalf,
+            DockGlassRendering.BEAD_SHADOW_DEPTH_DP * density + rise));
+        mCapsuleGlow.setShader(ellipse(Color.WHITE, DockGlassRendering.BEAD_GLOW_ALPHA, cx,
+            bottom, mCapsuleGlowHalf, DockGlassRendering.BEAD_GLOW_DEPTH_DP * density));
     }
 
     /** The host's laid-out bounds in this view's coordinates, and its outline's corner radius. */
@@ -278,6 +323,16 @@ public final class DockShelfView extends View {
                     mBeadShadow);
                 canvas.drawRect(-hg, bottom - glowReach, hg, bottom + glowReach, mBeadGlow);
                 canvas.translate(-cx, 0f);
+            }
+            if (mHasCapsule) {
+                mCapsuleShadow.setAlpha(alpha);
+                mCapsuleGlow.setAlpha(alpha);
+                float cx = mCapsuleRect.centerX();
+                float cb = mCapsuleRect.bottom;
+                canvas.drawRect(cx - mCapsuleShadowHalf, cb - rise - shadowReach,
+                    cx + mCapsuleShadowHalf, cb + shadowReach, mCapsuleShadow);
+                canvas.drawRect(cx - mCapsuleGlowHalf, cb - glowReach, cx + mCapsuleGlowHalf,
+                    cb + glowReach, mCapsuleGlow);
             }
             canvas.restoreToCount(save);
             return;

@@ -628,6 +628,12 @@ public final class GlassRefraction {
         "uniform float4 uBeadXA;\n" +
         "uniform float4 uBeadXB;\n" +
         "uniform float4 uBeadXC;\n" +
+        // The Search field's capsule under the beads (#84): its left, top, right and bottom in
+        // the surface's px, a stadium (its corners half its height); right not past left is
+        // none. One more shape of the beads' glass: a pixel is the capsule's where it stands
+        // deeper in it than in its nearest bead, so a melt's swelling beads take it over.
+        // setBeadCapsule in Java.
+        "uniform float4 uBeadCap;\n" +
         // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
         // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
         // refracting the wallpaper that shows through the transparent key cell. uLensActive carries
@@ -872,10 +878,22 @@ public final class GlassRefraction {
         // everything below (the rim, its light, the shelf, the reflection) is that bead's. A
         // pixel clear of every bead draws nothing and reads no sample.
         "    bool beads = uBead.y > 0.0;\n" +
+        "    bool onCap = false;\n" +
         "    if (beads) {\n" +
         "        center = float2(nearestBead(fragCoord.x), uBead.x);\n" +
         "        b = float2(uBead.y, uBead.y);\n" +
         "        cr = uBead.y;\n" +
+        "        if (uBeadCap.z > uBeadCap.x) {\n" +
+        "            float2 capC = (uBeadCap.xy + uBeadCap.zw) * 0.5;\n" +
+        "            float2 capB = (uBeadCap.zw - uBeadCap.xy) * 0.5;\n" +
+        "            float capR = min(capB.x, capB.y);\n" +
+        "            if (sdRoundRect(fragCoord - capC, capB, capR) < sdRoundRect(fragCoord - center, b, cr)) {\n" +
+        "                center = capC;\n" +
+        "                b = capB;\n" +
+        "                cr = capR;\n" +
+        "                onCap = true;\n" +
+        "            }\n" +
+        "        }\n" +
         "    }\n" +
         "    float2 rMin = center - b;\n" +
         "    float2 rMax = center + b;\n" +
@@ -915,7 +933,7 @@ public final class GlassRefraction {
         // pull is the same held share of that narrower band, which reads as the stronger lens.
         // beadSoftBandPx in Java.
         "        if (beads) {\n" +
-        "            softB = min(max(uSoftRim, 0.5 * uBand), kBeadBandShare * uBead.y) * (1.0 + kShelfThick * lower);\n" +
+        "            softB = min(max(uSoftRim, 0.5 * uBand), kBeadBandShare * cr) * (1.0 + kShelfThick * lower);\n" +
         "        }\n" +
         "        softS = min(uStrength * (1.0 + kShelfThick * lower), kSoftPull * softB);\n" +
         "        t = clamp(inside / softB, 0.0, 1.0);\n" +
@@ -1149,7 +1167,8 @@ public final class GlassRefraction {
         // and the icon's own cover, and never past the glass's alpha. The picture stands
         // kReflDepthDp behind the face, so a tilt shifts it by twice the tilt there (the law of
         // reflection); flat, which is every resting slab, it is exactly where the icons are.
-        "    if (uReflect > 0.0 && inside > 0.0) {\n" +
+        // The capsule holds the field, not the icons: it reflects none of them.
+        "    if (uReflect > 0.0 && inside > 0.0 && !onCap) {\n" +
         "        float2 q = fragCoord + uTilt * (2.0 * kReflDepthDp * uDensity);\n" +
         "        float rTop = beads ? uBead.x - uBead.z : uReflRow.x;\n" +
         "        float rBot = beads ? uBead.x + uBead.z : uReflRow.y;\n" +
@@ -2073,10 +2092,13 @@ public final class GlassRefraction {
         /** The reflection's strength while on, 0..1: 1 but while it fades in or out. */
         private float mReflectStrength = 1f;
         private float mReflTop = Float.NaN, mReflBottom = Float.NaN;
-        /** The beads as last written: {@code uBead} and the twelve slots; radius 0 is none. */
-        private final float[] mBeadWritten = new float[3 + BEAD_SLOTS];
+        /**
+         * The beads as last written: {@code uBead}, the twelve slots and {@code uBeadCap};
+         * radius 0 is none.
+         */
+        private final float[] mBeadWritten = new float[3 + BEAD_SLOTS + 4];
         private boolean mBeadWrittenValid;
-        private final float[] mBeadNext = new float[3 + BEAD_SLOTS];
+        private final float[] mBeadNext = new float[3 + BEAD_SLOTS + 4];
 
         private Program(float density) {
             mShader = new RuntimeShader(AGSL);
@@ -2121,6 +2143,32 @@ public final class GlassRefraction {
             writeBeads();
         }
 
+        /**
+         * The Search field's glass capsule under the beads (#84): a stadium at {@code left..right}
+         * by {@code top..bottom} in the surface's own coordinates, drawn as one more of the
+         * beads' shapes, with their rim, shelf and light, and none of the icons' reflection.
+         * Read only while beads are on; {@link #clearBeads} and {@link #clearBeadCapsule} take it
+         * off. Written only on a change.
+         */
+        public void setBeadCapsule(float left, float top, float right, float bottom) {
+            if (!(right > left) || !(bottom > top)) {
+                clearBeadCapsule();
+                return;
+            }
+            int at = 3 + BEAD_SLOTS;
+            mBeadNext[at] = left;
+            mBeadNext[at + 1] = top;
+            mBeadNext[at + 2] = right;
+            mBeadNext[at + 3] = bottom;
+            writeBeads();
+        }
+
+        /** No capsule under the beads. */
+        public void clearBeadCapsule() {
+            Arrays.fill(mBeadNext, 3 + BEAD_SLOTS, mBeadNext.length, 0f);
+            writeBeads();
+        }
+
         /** No beads: the slab, as every surface always drew. */
         public void clearBeads() {
             Arrays.fill(mBeadNext, 0f);
@@ -2142,6 +2190,7 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uBeadXA", n[3], n[4], n[5], n[6]);
             mShader.setFloatUniform("uBeadXB", n[7], n[8], n[9], n[10]);
             mShader.setFloatUniform("uBeadXC", n[11], n[12], n[13], n[14]);
+            mShader.setFloatUniform("uBeadCap", n[15], n[16], n[17], n[18]);
         }
 
         /**

@@ -134,7 +134,7 @@ public class GlassRefractionTest {
             "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
             "uClarity", "uTouchActive", "uTouch", "uTouchRadius", "uTouchLens", "uEdgeGain",
             "uKeyLight", "uLiveClarity", "uSoftRim", "uShelf", "uReflect", "uReflRow",
-            "uBead", "uBeadXA", "uBeadXB", "uBeadXC",
+            "uBead", "uBeadXA", "uBeadXB", "uBeadXC", "uBeadCap",
         };
         for (String name : written) {
             assertTrue(name + " is declared",
@@ -175,6 +175,22 @@ public class GlassRefractionTest {
         assertFalse(Pattern.compile("uniform \\w+ \\w+\\[").matcher(agsl).find());
         assertEquals(GlassRefraction.BEAD_SLOTS, count(agsl, "if (d < bd)") + 1);
         assertTrue(agsl.contains("const float kBeadBandShare = " + GlassRefraction.BEAD_BAND_SHARE + ";"));
+    }
+
+    @Test
+    public void theSearchFieldsCapsuleIsOneMoreBeadShape() {
+        String agsl = GlassRefraction.AGSL;
+        // A stadium from its rect, read only under beads, and only where it is set.
+        assertTrue(agsl.contains("if (uBeadCap.z > uBeadCap.x) {"));
+        assertTrue(agsl.contains("float capR = min(capB.x, capB.y);"));
+        // A pixel is the capsule's where it stands deeper in it than in its nearest bead, so the
+        // melt's swelling beads take it over; one more distance, no pass and no sample of its own.
+        assertTrue(agsl.contains(
+            "if (sdRoundRect(fragCoord - capC, capB, capR) < sdRoundRect(fragCoord - center, b, cr)) {"));
+        // Its rim band is held by its own corner, as a bead's is by its radius.
+        assertTrue(agsl.contains("kBeadBandShare * cr)"));
+        // It holds the field, not the icons: no reflection on it.
+        assertTrue(agsl.contains("if (uReflect > 0.0 && inside > 0.0 && !onCap) {"));
     }
 
     @Test
@@ -1411,7 +1427,7 @@ public class GlassRefractionTest {
         String agsl = GlassRefraction.AGSL;
         assertTrue(agsl.contains("    if (uSoftRim > 0.0) {\n"));
         assertTrue(agsl.contains("        if (uShelf > 0.0 && n.y > 0.0) {\n"));
-        assertTrue(agsl.contains("    if (uReflect > 0.0 && inside > 0.0) {\n"));
+        assertTrue(agsl.contains("    if (uReflect > 0.0 && inside > 0.0 && !onCap) {\n"));
         // The resting narrow ring is still the first word on the pull; the soft band overrides it
         // only behind its gate.
         int ring = agsl.indexOf("float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;");

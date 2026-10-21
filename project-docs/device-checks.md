@@ -13,6 +13,10 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "feat(dock): beads keep the Search field in a glass capsule" (#84) · #2 Beads
+  + Search field: beads stay, the field sits in its own glass capsule under them on Home and a
+  window; tap opens the palette; swipe Home↔window melts beads and capsule together; A–Z row on
+  still turns beads into the slab · emulator.
 - 2026-10-21 · commit "fix(terminal): a bottom-anchored growth pulls down history only as far as
   it goes" · short session (a few lines, no scrollback): open the Layout editor, Done → the
   keyboard goes down and the terminal output stays at the top, no blank band above it; long
