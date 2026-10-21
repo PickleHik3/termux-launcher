@@ -17348,6 +17348,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The bar's {@code +}: a new Workspace window, after the one in front, on both halves (#90).
+     * Tapped on Home it slides the Workspace in on the new window, as the Strip's {@code +} does;
+     * a Home float stays the long-press menu's Terminal.
+     */
+    private void onBarNewWindow() {
+        if (isWidgetsPageShowing()) {
+            if (!isSplitPanesEnabled()) return;
+            onWallStripNewTerminal();
+            return;
+        }
+        createNewWindow();
+    }
+
+    /**
      * A long press on a tile: the window chips have no menu of their own (a chip's long press
      * lifts it to move), so the tile offers what the chips do, as a small menu at the tile:
      * switch to the window, move it left or right in the row, close it.
@@ -26943,7 +26957,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // (setMovableChipCount below).
         bar.setOnWindowChipMovedListener(this::moveWindow);
         // On the display window too: the new window goes right after it, as after any window.
-        bar.setOnCreateWindowListener(this::createNewWindow);
+        bar.setOnCreateWindowListener(this::onBarNewWindow);
         applyLazyMode();
 
         com.termux.app.statusbar.SessionsIndicatorView sessionsIndicator =
