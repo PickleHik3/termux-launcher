@@ -397,6 +397,44 @@ public class ClockWidgetTest {
             failures.isEmpty());
     }
 
+    /**
+     * The date takes the longest of its forms that fits its line, never cut (emulator, build
+     * 7dbf41b90, font 2.0: "Wed, Oct…"); at every span, size and font scale.
+     */
+    @Test public void theDateTakesAShorterFormRatherThanBeingCut() {
+        WidgetLayoutPlan.Measure measure = (text, role, numeric, size) -> {
+            float em = 0f;
+            for (int i = 0; i < text.length(); i++) {
+                char c = text.charAt(i);
+                em += Character.isDigit(c) ? 0.57f : c == ' ' ? 0.28f : 0.6f;
+            }
+            return em * size;
+        };
+        List<String> dates = Arrays.asList("Wed, Oct 21", "Oct 21", "Wed 21");
+        ClockLayoutPlanner.FaceMeasure faceMeasure = (widthDp, maxHeightDp) ->
+            Math.min(maxHeightDp, widthDp / 3f);
+        boolean shortened = false;
+        for (float scale : FONT_SCALES) {
+            for (BuiltinWidgetSpan span : BuiltinWidgetSpan.values()) {
+                for (int[] size : sizesFor(span)) {
+                    WidgetLayoutPlan plan = ClockLayoutPlanner.plan(span, size[0], size[1],
+                        scale, ClockFace.SLAB, dates, "", new ArrayList<>(), faceMeasure,
+                        measure);
+                    WidgetLayoutPlan.Part date = plan.part(ClockLayoutPlanner.DATE);
+                    if (date == null) continue;
+                    String where = span + " " + size[0] + "x" + size[1] + " font " + scale
+                        + ": " + date.text;
+                    assertTrue(where, dates.contains(date.text));
+                    if (!date.text.equals(dates.get(0))) shortened = true;
+                    if (date.text.equals(dates.get(dates.size() - 1))) continue;
+                    assertTrue(where + " is cut to " + date.box.width, measure.widthDp(date.text,
+                        date.role, false, date.sizeDp) <= date.box.width + 0.01f);
+                }
+            }
+        }
+        assertTrue("some line is narrow enough to shorten the date", shortened);
+    }
+
     /** Draws the face into a canvas wider than its box and finds any ink past the box's edge. */
     private static void checkInkInside(@NonNull ClockFaceView faceView, @NonNull String where,
                                        @NonNull List<String> failures) {

@@ -117,12 +117,30 @@ final class ClockLayoutPlanner {
                                           @NonNull List<ZoneColumn> zones,
                                           @NonNull FaceMeasure faceMeasure,
                                           @NonNull Measure measure) {
+        return plan(span, widthDp, heightDp, fontScale, face,
+            date.isEmpty() ? Collections.<String>emptyList() : Collections.singletonList(date),
+            alarm, zones, faceMeasure, measure);
+    }
+
+    /**
+     * As above, with the date in its forms, longest first ("Wed, Oct 21", "Oct 21", "Wed 21"):
+     * the date line takes the longest that fits its width at its role, so it is never cut to
+     * "Wed, Oct…". Only where none fits is the shortest cut.
+     */
+    @NonNull static WidgetLayoutPlan plan(@NonNull BuiltinWidgetSpan span, float widthDp,
+                                          float heightDp, float fontScale,
+                                          @NonNull ClockFace face, @NonNull List<String> dates,
+                                          @NonNull String alarm,
+                                          @NonNull List<ZoneColumn> zones,
+                                          @NonNull FaceMeasure faceMeasure,
+                                          @NonNull Measure measure) {
+        String date = dates.isEmpty() ? "" : dates.get(0);
         Box card = new Box(0f, 0f, widthDp, heightDp);
         Box inner = WidgetLayoutPlan.insetBox(widthDp, heightDp, WidgetTokens.insetDp(span));
         List<Part> parts = new ArrayList<>();
         boolean showsDate = span != BuiltinWidgetSpan.ONE_BY_ONE && !date.isEmpty();
         boolean showsAlarm = showsDate && span.isTall() && !alarm.isEmpty();
-        Texts texts = new Texts(date, showsDate, alarm, showsAlarm, fontScale, measure);
+        Texts texts = new Texts(dates, showsDate, alarm, showsAlarm, fontScale, measure);
         Box left = inner;
         if (span.isWide() && !zones.isEmpty()) {
             left = addZones(span, inner, fontScale, zones, measure, parts);
@@ -270,7 +288,8 @@ final class ClockLayoutPlanner {
 
     /** The date and the alarm, at the roles they can still be set at. */
     private static final class Texts {
-        @NonNull final String date;
+        /** The date's forms, longest first. */
+        @NonNull final List<String> dates;
         @NonNull final String alarm;
         boolean showsDate;
         boolean showsAlarm;
@@ -278,9 +297,9 @@ final class ClockLayoutPlanner {
         final float fontScale;
         @NonNull final Measure measure;
 
-        Texts(@NonNull String date, boolean showsDate, @NonNull String alarm, boolean showsAlarm,
-              float fontScale, @NonNull Measure measure) {
-            this.date = date; this.showsDate = showsDate;
+        Texts(@NonNull List<String> dates, boolean showsDate, @NonNull String alarm,
+              boolean showsAlarm, float fontScale, @NonNull Measure measure) {
+            this.dates = dates; this.showsDate = showsDate;
             this.alarm = alarm; this.showsAlarm = showsAlarm;
             this.fontScale = fontScale; this.measure = measure;
         }
@@ -334,6 +353,14 @@ final class ClockLayoutPlanner {
         private void addDate(float left, float top, float width, boolean centred,
                              @NonNull List<Part> parts) {
             float size = dateSize();
+            String date = dates.get(dates.size() - 1);
+            for (String form : dates) {
+                if (measure.widthDp(form, dateRole(), false, size)
+                    <= width + WidgetLayoutPlan.EPSILON) {
+                    date = form;
+                    break;
+                }
+            }
             float shown = Math.min(width, measure.widthDp(date, dateRole(), false, size));
             float x = centred ? left + (width - shown) / 2f : left;
             parts.add(Part.text(DATE, new Box(x, top, centred ? shown : width, dateLine()), date,
