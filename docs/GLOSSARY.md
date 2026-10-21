@@ -121,19 +121,14 @@ _Avoid_: place, widgets page, desktop
 A **window** of the current session drawn floating over one Home page instead of in the Workspace's
 row: born full-size, moved only by its **titlebar** (a **body swipe** on its terminal pages Home as
 a swipe beside it does), resized at its bottom-right corner, minimised into
-its **float chip** above the dock and docked into the row by the titlebar's Dock. It is what
-Terminal from Home opens. The Workspace's chips, the drawer and the shortcuts see it like any
-window.
+its **window chip** in the status bar and docked into the row by the titlebar's Dock. It is what
+Terminal from Home opens. The bar's chips, the drawer and the shortcuts see it like any window.
 _Avoid_: floating terminal (in prose), scratchpad (that is the toggled one), popup
 
 **Float chip**:
-A minimised **Home float**'s chip: a small glass chip, like the dock's glass, in a row centred
-just above the dock on Home (above the keyboard while one is up), showing the float's glyph and
-short name. A tap brings the float back onto its page; Minimise flies the float into it. While the
-row shows, Home floats keep clear of it. Never on the Workspace, where the window chips stand for
-the floats. To retire (decided 2026-10-21): with the status bar on Home, a minimised float becomes
-a chip in the bar on both halves, like a window's.
-_Avoid_: Home pills (removed 2026-10-19), windows pill, minimised pill
+Retired 2026-10-21: a minimised **Home float** is a **window chip** in the status bar on both
+halves, and Minimise flies the float into that chip. There is no row of chips above the dock.
+_Avoid_: float chip (for the bar's chip, say window chip), Home pills, minimised pill
 
 **Keyboard swipe**:
 The one way to the keyboard in the **Workspace**: an up or down swipe that starts on the window's
@@ -268,8 +263,7 @@ _Avoid_: terminal icon (in prose), Create Pane, Open Workspace
 **Titlebar**:
 The translucent glass strip along the top of every floating pane, Home float and the scratchpad:
 the drag handle and Minimise, Maximise and Close; Dock is in the menu a long press on the handle
-opens. The focused Home float's titlebar also carries the CPU and RAM readings at its leading end,
-drawn as the status bar draws them; on a narrow float RAM gives way first, then CPU. It replaces
+opens. It carries no readings: the status bar shows them on both halves (2026-10-21). It replaces
 the floating pane's move corner and pill; resizing stays at the bottom-right corner.
 _Avoid_: pill (the retired control; the dictation pill is another thing), header, handle bar
 
