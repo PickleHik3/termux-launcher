@@ -442,7 +442,7 @@ public class TerminalPaneController {
      * Home floats a terminal widget hosts, in the order they were opened. Each is also in
      * {@link #mWindows}, so a shell finds it as a window and no adoption makes a second one, but
      * none is in {@link #mHomeFloats}: everything that lists, counts or lays out Home floats
-     * (the window chips, the float chips above the dock, minimise, the page's floats, the birth
+     * (the window chips, minimise, the page's floats, the birth
      * cascade, Saved sessions) reads that list and so never sees one.
      */
     private final List<Window> mHostedFloats = new ArrayList<>();
@@ -3406,7 +3406,7 @@ public class TerminalPaneController {
     }
 
     /**
-     * Minimise's flight: the float shrinks into its chip above the dock, or, with no chip to aim
+     * Minimise's flight: the float shrinks into its window chip in the bar, or, with no chip to aim
      * at, down and away toward the dock. Hidden when it lands.
      */
     private boolean flyIntoChip(@NonNull Window w, @NonNull FloatingPaneContainer container) {

@@ -14,10 +14,10 @@ import java.util.List;
  * order, the display window's chip at its place among the terminal windows' like any window's
  * (ADR 0008, amended 2026-10-19), then the Home floats in the order they were opened, each marked
  * minimised or not. Every surface that shows window chips adapts this list ({@link Surface}): the
- * bar and its window column, Home's Taskbar run strip, the Wall strip's tiles, and the chips
- * minimised floats come back from. This is also the one place that says which chip is selected
- * and what a tap or a close on a chip means ({@link Meaning}); the activity carries the meaning
- * out.
+ * bar and its window column, Home's Taskbar run strip and the Wall strip's tiles. A minimised
+ * float folds into its chip in the bar, on both halves (#91), and comes back from it. This is
+ * also the one place that says which chip is selected and what a tap or a close on a chip means
+ * ({@link Meaning}); the activity carries the meaning out.
  *
  * <p>Built afresh per refresh and per tap from what the activity holds: the row's windows, where
  * the display window stands, which window is in front, and the floats. Pure: {@code W} is the
@@ -32,15 +32,14 @@ public final class WindowChips<W> {
     public enum Surface {
         /**
          * The status bar and its window column: every chip, the same on both halves of the wall
-         * (#90); a window's tap on Home slides the Workspace in.
+         * (#90), a minimised float's among them (#91); a window's tap on Home slides the
+         * Workspace in, a float's in the Workspace travels Home.
          */
         BAR,
         /** Home's Taskbar run strip: every chip; a window's tap slides the Workspace in. */
         RUN_STRIP,
         /** The Wall strip's tiles: as the run strip. */
-        WALL_STRIP,
-        /** The chips above Home's dock: the minimised floats that stand on a Home page. */
-        FLOAT_CHIPS
+        WALL_STRIP
     }
 
     /** One window chip. */
@@ -82,7 +81,10 @@ public final class WindowChips<W> {
             NONE,
             /** Bring the row's window at {@link #row} in front, the display window's included. */
             SHOW_WINDOW,
-            /** Travel Home to {@link #window}'s page and bring that float back, focused. */
+            /**
+             * Bring the float {@link #window} back on its Home page, focused: the wall travels
+             * Home first when the chip was tapped in the Workspace ({@link #travel}).
+             */
             RESTORE_FLOAT,
             /** Close the row's window at {@link #row}: the display window's stops the display. */
             CLOSE_WINDOW,
@@ -95,7 +97,10 @@ public final class WindowChips<W> {
         public final int row;
         /** The float, for a float's meaning; null otherwise. */
         @Nullable public final W window;
-        /** Whether the Workspace slides in first: the chip was tapped away from it. */
+        /**
+         * Whether the wall travels first: to the Workspace for a window's chip tapped on Home,
+         * Home for a float's chip tapped in the Workspace.
+         */
         public final boolean travel;
 
         Meaning(@NonNull Action action, int row, @Nullable W window, boolean travel) {
@@ -172,14 +177,6 @@ public final class WindowChips<W> {
     @NonNull
     public List<Chip<W>> chips(@NonNull Surface surface) {
         switch (surface) {
-            case FLOAT_CHIPS: {
-                List<Chip<W>> minimised = new ArrayList<>(mFloats);
-                for (Chip<W> chip : mChips) {
-                    if (chip.kind == Kind.HOME_FLOAT && chip.minimised && chip.onPage)
-                        minimised.add(chip);
-                }
-                return minimised;
-            }
             default:
                 return Collections.unmodifiableList(mChips);
         }
@@ -190,6 +187,18 @@ public final class WindowChips<W> {
         return mRowCount;
     }
 
+    /**
+     * The bar's chip for the float {@code window}, minimised or not, or -1 when it is no float's:
+     * where minimise's flight lands.
+     */
+    public int barChipOf(@NonNull W window) {
+        for (int i = mRowCount; i < mChips.size(); i++) {
+            Chip<W> chip = mChips.get(i);
+            if (chip.kind == Kind.HOME_FLOAT && window.equals(chip.window)) return i;
+        }
+        return -1;
+    }
+
     /** The display window's chip, or -1 while it is not on the row. */
     public int displayChip() {
         return mDisplayChip;
@@ -197,14 +206,13 @@ public final class WindowChips<W> {
 
     /**
      * The chip {@code surface} selects, or -1: on the bar the row's window in front, held to the
-     * row, alike on both halves so the bar stands still on the swipe; on the strips the float in focus, else the same; none among the float chips.
+     * row, alike on both halves so the bar stands still on the swipe; on the strips the float in
+     * focus, else the same.
      */
     public int selected(@NonNull Surface surface) {
         switch (surface) {
             case BAR:
                 return mRowShown ? rowFront() : -1;
-            case FLOAT_CHIPS:
-                return -1;
             default:
                 if (mFocusedChip >= 0) return mFocusedChip;
                 return mRowShown ? rowFront() : -1;
@@ -214,14 +222,15 @@ public final class WindowChips<W> {
     /**
      * What a tap on {@code surface}'s chip at {@code index} means: a window's brings it in front,
      * the Workspace sliding in when the chip is on Home's dock or on the bar seen from Home; a
-     * float's travels Home to its page and brings it back.
+     * float's brings it back on its Home page, the wall travelling Home first when the chip was
+     * tapped in the Workspace.
      */
     @NonNull
     public Meaning<W> tap(@NonNull Surface surface, int index) {
         Chip<W> chip = chipAt(surface, index);
         if (chip == null) return nothing();
         if (chip.kind == Kind.HOME_FLOAT)
-            return new Meaning<>(Meaning.Action.RESTORE_FLOAT, -1, chip.window, false);
+            return new Meaning<>(Meaning.Action.RESTORE_FLOAT, -1, chip.window, !mHome);
         return new Meaning<>(Meaning.Action.SHOW_WINDOW, chip.row, null,
             surface == Surface.RUN_STRIP || surface == Surface.WALL_STRIP
                 || surface == Surface.BAR && mHome);
