@@ -1965,7 +1965,7 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   as before. Window 2 → window 1 by chip tap and by `window.select` too (pong's report did not
   say which route): no frame with the keyboard or the dock gone. Under Glass tray and Lens beads
   · emulator, then pong.
-- 2026-10-21 · ISSUE2 · Lens beads melting on the way out · Home on Lens beads, the Workspace's
+- 2026-10-21 · 49e41cd56 · Lens beads melting on the way out · Home on Lens beads, the Workspace's
   dock with other rows (A–Z, toolbar; keyboard up and down): a slow Home → Workspace drag
   recorded at 60 fps, cropped to the dock's bottom 300 px: over the first ~8 % of the drag, before
   the dock moves, the beads swell inside the slab's rounded outline into the slab; from the first
