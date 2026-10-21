@@ -84,6 +84,23 @@ public final class StatusBarWindowColumn extends ScrollView {
 
     public void setListener(@Nullable OnWindowSelectedListener listener) { mListener = listener; }
 
+    /**
+     * Where the chip at {@code index} stands on screen, cut to the part the column shows: false
+     * while the column is not on screen, the chip is not laid out, or it is scrolled out of sight.
+     * Asked once per minimise, for the float's flight into its chip.
+     */
+    public boolean chipBoundsOnScreen(int index, @NonNull android.graphics.Rect out) {
+        if (!isShown() || index < 0 || index >= mItems.size() || index >= mStack.getChildCount())
+            return false;
+        View chip = mStack.getChildAt(index);
+        if (chip.getWidth() <= 0 || chip.getHeight() <= 0) return false;
+        int[] at = new int[2];
+        chip.getLocationOnScreen(at);
+        out.set(at[0], at[1], at[0] + chip.getWidth(), at[1] + chip.getHeight());
+        getLocationOnScreen(at);
+        return out.intersect(at[0], at[1], at[0] + getWidth(), at[1] + getHeight());
+    }
+
     /** The place's colour, so the column reads as part of the place it belongs to. */
     public void setPlaceAccent(int accent) {
         if (mAccent == accent) return;
