@@ -65,7 +65,7 @@ public class BuiltinWidgetGlassTest {
     private static final class Plain extends BuiltinWidgetView {
         Plain(@NonNull Context context, @NonNull BuiltinWidgetServices services,
               @NonNull BuiltinWidgetStyle style) {
-            super(context, BuiltinWidgetKind.BATTERY, services, style);
+            super(context, BuiltinWidgetKind.DEVICE, services, style);
         }
 
         int builds;

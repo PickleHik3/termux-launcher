@@ -18,8 +18,8 @@ public enum BuiltinWidgetKind {
     CLOCK("clock", R.string.builtin_widget_clock, 2, 1),
     AGENDA("agenda", R.string.builtin_widget_agenda, 2, 1),
     WEATHER("weather", R.string.builtin_widget_weather, 2, 1),
-    BATTERY("battery", R.string.builtin_widget_battery, 1, 1),
-    SYSTEM("system", R.string.builtin_widget_system, 2, 1),
+    /** The phone's own state, battery first; {@code battery} and {@code system} open as it. */
+    DEVICE("device", R.string.builtin_widget_device, 2, 1),
     MEDIA("media", R.string.builtin_widget_media, 2, 1),
     NOTIFICATIONS("notifications", R.string.builtin_widget_notifications, 2, 2),
     TASKS("tasks", R.string.builtin_widget_tasks, 2, 2),

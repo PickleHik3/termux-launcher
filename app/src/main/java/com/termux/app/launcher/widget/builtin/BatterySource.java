@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The battery as the Battery and System widgets read it: one sticky {@code ACTION_BATTERY_CHANGED}
+ * The battery as the Device widget reads it: one sticky {@code ACTION_BATTERY_CHANGED}
  * receiver for the whole process, registered while at least one widget holds the source and
  * dropped a turn after the last lets go ({@link SourceLease}), so a widget that rebuilds keeps
  * the one receiver rather than registering a new one in the system server. Each broadcast

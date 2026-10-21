@@ -53,14 +53,16 @@ public class BuiltinWidgetFillTest {
     }
 
     @Test public void oneRowCardsTallerThanTheDesignAreZoomedToFill() {
+        // Notes: the System widget this was written for became the Device, which plans its own
+        // layout at the card's size (#117). Notes zooms only as far as it loses no line.
         for (BuiltinWidgetKind kind : new BuiltinWidgetKind[] {
-            BuiltinWidgetKind.SYSTEM}) {
+            BuiltinWidgetKind.NOTES}) {
             for (int columns : new int[] {2, 4}) {
                 BuiltinWidgetView view = laidOut(kind, columns, 1, columns * 92 - 4, 118);
                 View content = view.content();
                 String where = kind + " " + columns + "x1 at 118dp";
                 assertTrue(where + " is zoomed: " + content.getScaleY(),
-                    content.getScaleY() > 1.2f);
+                    content.getScaleY() > 1.1f);
                 assertEquals(where + " fills the card's height", view.getHeight(),
                     content.getHeight() * content.getScaleY(), 2f);
                 assertEquals(where + " fills the card's width", view.getWidth(),
@@ -70,7 +72,7 @@ public class BuiltinWidgetFillTest {
     }
 
     @Test public void aCardNoTallerThanTheDesignIsNotZoomed() {
-        BuiltinWidgetView view = laidOut(BuiltinWidgetKind.SYSTEM, 2, 1, 184, 92);
+        BuiltinWidgetView view = laidOut(BuiltinWidgetKind.NOTES, 2, 1, 184, 92);
         assertEquals(1f, view.content().getScaleY(), 0f);
         assertEquals(view.getHeight(), view.content().getHeight());
     }
