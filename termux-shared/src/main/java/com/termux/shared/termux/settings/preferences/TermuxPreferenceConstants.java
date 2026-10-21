@@ -1712,6 +1712,22 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_WALLPAPER_APP_ONLY = false;
 
         /**
+         * The Material seed colour taken from the app-only picture when it was set, so the theme
+         * can wear the picture's colours without decoding it at activity creation. 0 means none
+         * could be taken. Only meaningful while {@link #KEY_WALLPAPER_APP_ONLY_SEED_STAMP} matches
+         * the exact copy on disk.
+         */
+        public static final String KEY_WALLPAPER_APP_ONLY_SEED = "wallpaper_app_only_seed";
+        public static final int DEFAULT_VALUE_WALLPAPER_APP_ONLY_SEED = 0;
+
+        /**
+         * The exact copy the seed above was taken from, as its {@code lastModified()} and
+         * {@code length()} folded together; 0 when no seed was ever taken.
+         */
+        public static final String KEY_WALLPAPER_APP_ONLY_SEED_STAMP = "wallpaper_app_only_seed_stamp";
+        public static final long DEFAULT_VALUE_WALLPAPER_APP_ONLY_SEED_STAMP = 0L;
+
+        /**
          * The picker's "Also set as phone wallpaper", remembered. Offered only while the launcher
          * is not the home app; ticked, a pick goes to Android's wallpapers as well.
          */

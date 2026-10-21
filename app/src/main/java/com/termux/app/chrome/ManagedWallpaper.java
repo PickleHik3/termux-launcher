@@ -119,8 +119,9 @@ public final class ManagedWallpaper {
      * The launcher's own picture only: {@code source} (a picture {@link #stageSource} staged)
      * becomes the exact copy and the exported copy, exactly as a Home set makes them, and is
      * marked app-only. Android's home and lock wallpapers are not touched. The stored system id is
-     * cleared, since the exact copy is no longer the phone's picture; the mark is written last, so
-     * a reader that sees it finds the copy already on disk. Blocking; call it off the main thread.
+     * cleared, since the exact copy is no longer the phone's picture, and the picture's Material
+     * seed is stored; the mark is written last, so a reader that sees it finds the copy (and the
+     * seed) already there. Blocking; call it off the main thread.
      *
      * @return false when the staged picture could not become the exact copy
      */
@@ -136,6 +137,10 @@ public final class ManagedWallpaper {
                 return false;
             }
             preferences.setManagedWallpaperSystemId(TERMUX_APP.DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID);
+            // The picture's Material seed, taken here on the worker from a small decode so no
+            // activity creation ever decodes it; before the mark, so a theme that sees the mark
+            // finds the seed beside it.
+            com.termux.app.theme.AppOnlyWallpaperColors.takeAndStoreSeed(context, preferences);
             preferences.setWallpaperAppOnly(true);
             return true;
         } catch (Exception e) {
