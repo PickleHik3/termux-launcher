@@ -160,8 +160,7 @@ public class GlanceWidgetView extends BuiltinWidgetView implements BatterySource
         WidgetLayoutPlan.Ink sky = WidgetLayoutPlan.Ink.CLOUD;
         WeatherController.Weather forecast = weather;
         if (forecast != null && forecast.valid) {
-            WeatherWidgetModel model = WeatherWidgetModel.from(forecast, fahrenheit(), is24(),
-                Calendar.getInstance());
+            WeatherWidgetModel model = weatherModel(forecast);
             temp = model.temp;
             glyph = model.glyph;
             sky = skyInk(model.tone);
@@ -202,9 +201,33 @@ public class GlanceWidgetView extends BuiltinWidgetView implements BatterySource
     private boolean is24() { return DateFormat.is24HourFormat(getContext()); }
 
     private boolean fahrenheit() {
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
+        TermuxAppSharedPreferences preferences = preferences();
         return preferences != null && preferences.isStatusWidgetWeatherFahrenheit();
     }
+
+    /**
+     * The weather now, as line one shows it: built again only when the forecast or the unit
+     * changed, not on every battery broadcast and minute tick. The temperature, glyph and tone it
+     * reads come from the forecast's current conditions alone, never from the time.
+     */
+    @NonNull private WeatherWidgetModel weatherModel(@NonNull WeatherController.Weather forecast) {
+        boolean fahrenheit = fahrenheit();
+        WeatherWidgetModel model = shownModel;
+        if (model == null || shownModelFor != forecast
+            || shownModelFetchedAt != forecast.fetchedAtMs || shownModelFahrenheit != fahrenheit) {
+            model = WeatherWidgetModel.from(forecast, fahrenheit, is24(), Calendar.getInstance());
+            shownModel = model;
+            shownModelFor = forecast;
+            shownModelFetchedAt = forecast.fetchedAtMs;
+            shownModelFahrenheit = fahrenheit;
+        }
+        return model;
+    }
+
+    @Nullable private WeatherWidgetModel shownModel;
+    @Nullable private WeatherController.Weather shownModelFor;
+    private long shownModelFetchedAt;
+    private boolean shownModelFahrenheit;
 
     /** Line two's words, from the app's strings. */
     @NonNull private GlanceLayoutPlanner.Words words() {

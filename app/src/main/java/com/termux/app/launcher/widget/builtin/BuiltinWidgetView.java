@@ -538,6 +538,18 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     }
 
     /**
+     * Whether the page should hold the Look's blur frame for this widget: its Glass on and no
+     * system ask (battery saver, outline text, high contrast) drawing it solid instead
+     * ({@link BuiltinWidgetGlass#holdsFrame}).
+     */
+    public final boolean wantsGlassFrame() {
+        if (preview || !isGlassOn()) return false;
+        BuiltinWidgetGlass.SystemAsks asks = BuiltinWidgetGlass.SystemAsks.current(getContext());
+        return BuiltinWidgetGlass.holdsFrame(true, false, asks.batterySaver, asks.outlineText,
+            asks.highContrast);
+    }
+
+    /**
      * Whether this widget asks to be drawn Bare (glossary: Bare): no card, rim or slab, its ink
      * straight on the wallpaper behind it, measured there on the widget band, with a soft dim of
      * at most {@link com.termux.app.chrome.OnGlass#BARE_MAX_DIM} only where the measurement says
@@ -880,6 +892,23 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     /** Render as a picker card: no live subscriptions, sample data where there is none. */
     public final void setPreview(boolean value) { preview = value; }
     public final boolean isPreview() { return preview; }
+
+    @Nullable private com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+        preferences;
+
+    /**
+     * The app's preferences, built once for this widget rather than on every refresh: a build
+     * opens the stores and reads the font settings, while each getter reads the live store, so a
+     * setting changed since is still read as it is now. Null where they cannot be read.
+     */
+    @Nullable protected final com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+            preferences() {
+        if (preferences == null) {
+            preferences = com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(getContext(), false);
+        }
+        return preferences;
+    }
 
     @NonNull public final BuiltinWidgetStyle style() { return style; }
     @NonNull public final BuiltinWidgetSpan span() { return span; }

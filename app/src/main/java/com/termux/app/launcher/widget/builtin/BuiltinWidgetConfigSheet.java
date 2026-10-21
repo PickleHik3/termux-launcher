@@ -105,24 +105,49 @@ public final class BuiltinWidgetConfigSheet {
             .setView(scroll)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.builtin_widget_settings_save, (dialog, which) -> {
-                // What the sheet does not offer (a widget's own state, kept in its settings)
-                // stays as it was; what it offers is written whole.
-                Map<String, String> values = new LinkedHashMap<>();
-                for (String key : current.keySet()) {
-                    Object kept = current.get(key);
-                    if (kept instanceof String) values.put(key, (String) kept);
-                }
-                String picked = glassPicked.get();
-                if (picked != null) BuiltinWidgetGlass.write(values, picked);
-                values.putAll(chosen);
+                Map<String, String> texts = new LinkedHashMap<>();
                 for (TextInputEditText input : inputs) {
                     CharSequence text = input.getText();
-                    values.put(String.valueOf(input.getTag()), text == null ? "" : text.toString().trim());
+                    texts.put(String.valueOf(input.getTag()), text == null ? "" : text.toString().trim());
                 }
-                listener.onSaved(BuiltinWidgetHost.configOf(values));
+                listener.onSaved(BuiltinWidgetHost.configOf(
+                    savedValues(fields, current, glassPicked.get(), chosen, texts)));
             })
             .setOnDismissListener(dialog -> { if (onDismiss != null) onDismiss.run(); })
             .show();
+    }
+
+    /**
+     * What Save writes, before {@link BuiltinWidgetHost#configOf} drops the empty fields. What the
+     * sheet does not offer (a widget's own state, kept in its settings) stays as it was; what it
+     * offers is written whole, except a switch the record stores no answer for that is still
+     * where it opened: its fallback may follow something outside the widget (the Clock's 24-hour
+     * time follows the phone's), and writing it would pin that.
+     *
+     * @param glass what the Glass row holds, or null for a widget without one
+     */
+    @NonNull static Map<String, String> savedValues(
+            @NonNull List<BuiltinWidgetView.ConfigField> fields, @NonNull Bundle current,
+            @Nullable String glass, @NonNull Map<String, String> chosen,
+            @NonNull Map<String, String> texts) {
+        Map<String, String> values = new LinkedHashMap<>();
+        for (String key : current.keySet()) {
+            Object kept = current.get(key);
+            if (kept instanceof String) values.put(key, (String) kept);
+        }
+        if (glass != null) BuiltinWidgetGlass.write(values, glass);
+        values.putAll(chosen);
+        for (BuiltinWidgetView.ConfigField field : fields) {
+            if (field.type != BuiltinWidgetView.ConfigField.Type.SWITCH) continue;
+            String stored = current.getString(field.key);
+            boolean answered = BuiltinWidgetView.ConfigField.ON.equals(stored)
+                || BuiltinWidgetView.ConfigField.OFF.equals(stored);
+            if (answered || !field.fallback.equals(chosen.get(field.key))) continue;
+            values.remove(field.key);
+            if (stored != null) values.put(field.key, stored);
+        }
+        values.putAll(texts);
+        return values;
     }
 
     /**

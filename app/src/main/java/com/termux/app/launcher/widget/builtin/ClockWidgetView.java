@@ -211,8 +211,7 @@ public class ClockWidgetView extends BuiltinWidgetView {
 
     private boolean lazy() {
         if (isPreview()) return true;
-        TermuxAppSharedPreferences preferences =
-            TermuxAppSharedPreferences.build(getContext(), false);
+        TermuxAppSharedPreferences preferences = preferences();
         return preferences != null && preferences.isLazyModeEnabled();
     }
 

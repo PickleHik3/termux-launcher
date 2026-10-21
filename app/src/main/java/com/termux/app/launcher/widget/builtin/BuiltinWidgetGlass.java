@@ -98,6 +98,110 @@ public final class BuiltinWidgetGlass {
     }
 
     /**
+     * Whether the page holds the Look's blur frame for a widget: its Glass on, a live widget, and
+     * none of battery saver, outline text or high contrast putting the solid card on instead. The
+     * frame's own readiness is not asked: it is held so that it can become ready.
+     */
+    public static boolean holdsFrame(boolean widgetGlass, boolean preview, boolean batterySaver,
+                                     boolean outlineText, boolean highContrast) {
+        return widgetGlass && !preview && !batterySaver && !outlineText && !highContrast;
+    }
+
+    /**
+     * Watches the system asks behind {@link #solidFallback} — battery saver, outline text and the
+     * system contrast — for one page, from {@link #start} until {@link #stop}, and tells the page
+     * when one changed, after {@link SystemAsks#invalidate}, so its widgets are dressed again
+     * without waiting for a dress pass. Main thread only. Registered once per page, never per
+     * widget; a re-dress changes none of the three, so it cannot loop.
+     */
+    public static final class SystemWatch {
+        @NonNull private final android.content.Context context;
+        @NonNull private final Runnable onChange;
+        @NonNull private final android.os.Handler main =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+        private boolean started;
+
+        private final android.content.BroadcastReceiver powerSave =
+            new android.content.BroadcastReceiver() {
+                @Override public void onReceive(android.content.Context c,
+                                                android.content.Intent intent) { changed(); }
+            };
+        private final android.database.ContentObserver outlineText =
+            new android.database.ContentObserver(main) {
+                @Override public void onChange(boolean selfChange) { changed(); }
+            };
+        /** {@code UiModeManager.ContrastChangeListener} on Android 14 and later, else null. */
+        @Nullable private Object contrast;
+
+        public SystemWatch(@NonNull android.content.Context context, @NonNull Runnable onChange) {
+            this.context = context.getApplicationContext() != null
+                ? context.getApplicationContext() : context;
+            this.onChange = onChange;
+        }
+
+        /** Starts watching; idempotent. */
+        public void start() {
+            if (started) return;
+            started = true;
+            try {
+                context.registerReceiver(powerSave, new android.content.IntentFilter(
+                    android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
+            } catch (RuntimeException ignored) { }
+            try {
+                context.getContentResolver().registerContentObserver(
+                    android.provider.Settings.Secure.getUriFor(OUTLINE_TEXT_SETTING), false,
+                    outlineText);
+            } catch (RuntimeException ignored) { }
+            if (android.os.Build.VERSION.SDK_INT >= 34) startContrast();
+        }
+
+        /** Stops watching; idempotent. */
+        public void stop() {
+            if (!started) return;
+            started = false;
+            try { context.unregisterReceiver(powerSave); } catch (RuntimeException ignored) { }
+            try {
+                context.getContentResolver().unregisterContentObserver(outlineText);
+            } catch (RuntimeException ignored) { }
+            if (android.os.Build.VERSION.SDK_INT >= 34) stopContrast();
+        }
+
+        @androidx.annotation.RequiresApi(34)
+        private void startContrast() {
+            try {
+                android.app.UiModeManager uiMode = (android.app.UiModeManager)
+                    context.getSystemService(android.content.Context.UI_MODE_SERVICE);
+                if (uiMode == null) return;
+                android.app.UiModeManager.ContrastChangeListener listener = level -> changed();
+                uiMode.addContrastChangeListener(main::post, listener);
+                contrast = listener;
+            } catch (RuntimeException ignored) { }
+        }
+
+        @androidx.annotation.RequiresApi(34)
+        private void stopContrast() {
+            Object listener = contrast;
+            contrast = null;
+            if (!(listener instanceof android.app.UiModeManager.ContrastChangeListener)) return;
+            try {
+                android.app.UiModeManager uiMode = (android.app.UiModeManager)
+                    context.getSystemService(android.content.Context.UI_MODE_SERVICE);
+                if (uiMode != null) uiMode.removeContrastChangeListener(
+                    (android.app.UiModeManager.ContrastChangeListener) listener);
+            } catch (RuntimeException ignored) { }
+        }
+
+        private void changed() {
+            if (!started) return;
+            SystemAsks.invalidate();
+            onChange.run();
+        }
+    }
+
+    /** The secure setting outline text (and high-contrast text before it) is stored under. */
+    static final String OUTLINE_TEXT_SETTING = "high_text_contrast_enabled";
+
+    /**
      * Whether a widget that asks to be drawn Bare (glossary: Bare) is: its ink straight on the
      * wallpaper, with no card, rim or slab. Only the widget asks (Glance always, Clock and
      * Weather by their own choice); nothing of the Look turns it on, its Clear stop included,
@@ -167,6 +271,9 @@ public final class BuiltinWidgetGlass {
             return sLast;
         }
 
+        /** A system ask changed ({@link SystemWatch}): the next {@link #current} reads again. */
+        public static void invalidate() { sLast = null; }
+
         private static boolean batterySaver(@NonNull android.content.Context context) {
             try {
                 android.os.PowerManager power = (android.os.PowerManager)
@@ -184,7 +291,7 @@ public final class BuiltinWidgetGlass {
         private static boolean outlineText(@NonNull android.content.Context context) {
             try {
                 return android.provider.Settings.Secure.getInt(context.getContentResolver(),
-                    "high_text_contrast_enabled", 0) == 1;
+                    OUTLINE_TEXT_SETTING, 0) == 1;
             } catch (RuntimeException e) {
                 return false;
             }

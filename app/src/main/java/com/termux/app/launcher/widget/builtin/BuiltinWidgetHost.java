@@ -225,11 +225,18 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
         }
     }
 
-    /** Settings written by the sheet, as the bundle a record keeps. */
+    /**
+     * Settings written by the sheet, as the bundle a record keeps. An empty field is left out,
+     * except a Clock's time zone: there it is the user's own "none", which must be stored so a
+     * migrated Analog clock does not bring its old city back ({@link BuiltinWidgetAliases#settings}).
+     */
     @NonNull public static Bundle configOf(@NonNull Map<String, String> values) {
         Bundle bundle = new Bundle();
         for (Map.Entry<String, String> entry : values.entrySet()) {
-            if (entry.getValue() != null && !entry.getValue().isEmpty()) {
+            if (entry.getValue() == null) continue;
+            boolean zone = ClockWidgetSettings.KEY_ZONE1.equals(entry.getKey())
+                || ClockWidgetSettings.KEY_ZONE2.equals(entry.getKey());
+            if (!entry.getValue().isEmpty() || zone) {
                 bundle.putString(entry.getKey(), entry.getValue());
             }
         }

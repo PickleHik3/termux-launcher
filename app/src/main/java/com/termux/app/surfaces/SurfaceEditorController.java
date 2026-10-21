@@ -3573,7 +3573,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int roomBelow = anchor.getRootView().getHeight() - mNavInsetPx
             - (anchorAt[1] + anchor.getHeight()) - dp(FRAME_GAP_DP);
         int room = Math.max(dp(CLOCK_POPUP_MIN_HEIGHT_DP), mSidePane ? roomBelow : roomAbove);
-        int height = Math.min(dp(CLOCK_POPUP_HEIGHT_DP), room);
+        int height = Math.min(dp(clockPopupHeightDp(prefs().getTopPaneClockStyle())), room);
         popup.setHeight(height);
         popup.setVerticalOffset(mSidePane ? 0 : -(anchor.getHeight() + height));
         popup.setOnDismissListener(() -> mClockDropdown = null);
@@ -3596,8 +3596,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         popup.show();
     }
 
-    /** Six 48dp face rows, the weight row and the position row, as the popup wants to stand. */
-    private static final int CLOCK_POPUP_HEIGHT_DP = 6 * 48 + 56 + 56;
+    /**
+     * The popup's height as it wants to stand: six 48dp face rows and the 56dp position row, and
+     * the 56dp weight row only while Minimal is the face ({@link #clockDropdownRows}), so no
+     * blank strip is left where it is not shown.
+     */
+    public static int clockPopupHeightDp(@Nullable String current) {
+        return 6 * 48 + (isMinimalStyle(current) ? 56 : 0) + 56;
+    }
+
     private static final int CLOCK_POPUP_MIN_HEIGHT_DP = 160;
 
     private void dismissClockDropdown() {

@@ -122,7 +122,7 @@ public class WeatherWidgetView extends BuiltinWidgetView {
     }
 
     private boolean fahrenheit() {
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
+        TermuxAppSharedPreferences preferences = preferences();
         return preferences != null && preferences.isStatusWidgetWeatherFahrenheit();
     }
 

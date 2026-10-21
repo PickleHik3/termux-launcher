@@ -107,7 +107,9 @@ public final class BatteryHistoryStore {
      * How fast the battery has been going down, in whole percent an hour, from the newest run of
      * heard hours in which the level only fell or held (oldest first, as {@link #levels} gives
      * them), over at most {@link #DRAIN_HOURS}. -1 while that is unknown: the newest hour is
-     * empty, the run is under an hour long, or nothing was used.
+     * empty, the run is under an hour long, or nothing was used; and -1 below half a percent an
+     * hour, which rounds to no whole percent, so the Device line says what it says without a rate
+     * rather than overstating a slow drain as 1%/h.
      */
     static int drainPerHour(@NonNull int[] levels) {
         int last = levels.length - 1;
@@ -120,7 +122,8 @@ public final class BatteryHistoryStore {
         int hours = last - first;
         int drop = levels[first] - levels[last];
         if (hours < 1 || drop <= 0) return -1;
-        return Math.max(1, Math.round(drop / (float) hours));
+        int rate = Math.round(drop / (float) hours);
+        return rate < 1 ? -1 : rate;
     }
 
     @NonNull static String encode(@NonNull int[] levels) {

@@ -272,6 +272,14 @@ public final class WidgetGridView extends ViewGroup {
 
     @Nullable public WidgetCellView cellForId(int id) { return cells.get(id); }
 
+    /**
+     * The Look's Corners as the page dresses its built-ins, a Corners slider's every tick
+     * included: every cell re-clips in place, so a hosted app widget's corner moves with theirs.
+     */
+    public void setCellCornerRadius(float radiusPx) {
+        for (WidgetCellView cell : cells.values()) cell.setLookCornerRadius(radiusPx);
+    }
+
     /** Supplies the views of the launcher's own widgets; the grid never builds one itself. */
     public interface BuiltinFactory {
         /** The live view for {@code record}, brought up to date with its span and settings. */
