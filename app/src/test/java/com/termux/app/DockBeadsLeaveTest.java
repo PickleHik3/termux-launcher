@@ -127,7 +127,10 @@ public class DockBeadsLeaveTest {
         host.draw(canvas);
         assertEquals("control: beads skip the slab's own children", 0, drawn[0]);
 
+        // Mid-melt across the seam the beads are also cut to the slab's outline.
+        host.setSlabClip(30f);
         host.setBeads(null);
+        assertTrue("the slab kept a melt's slab cut", Float.isNaN(host.slabClipRadius()));
         host.draw(canvas);
         assertEquals("the slab's own children are drawn again", 1, drawn[0]);
         float[] span = {

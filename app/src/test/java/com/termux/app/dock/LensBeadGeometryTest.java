@@ -331,4 +331,60 @@ public class LensBeadGeometryTest {
         assertTrue(!LensBeadGeometry.rowWearsBeads(homeLayout(row, false, bottom), true, false));
         assertTrue(!LensBeadGeometry.rowWearsBeads(homeLayout(row, false, bottom), false, true));
     }
+
+    // ---------------------------------------------------------------- melt across the seam
+
+    /** Every point of the slab lies inside the bead nearest it, at the cover radius. */
+    @Test
+    public void theCoverRadiusCoversTheWholeSlab() {
+        LensBeadGeometry.Beads beads = phone();
+        assertNotNull(beads);
+        float width = 411f * DENSITY;
+        float height = (6.5f + 58f + 6.5f) * DENSITY;
+        float cover = LensBeadGeometry.coverRadiusPx(beads, width, height);
+        assertTrue(cover > beads.radiusPx);
+        for (float x = 0f; x <= width; x += 3f) {
+            for (float y : new float[] {0f, height / 2f, height}) {
+                float nearest = Float.MAX_VALUE;
+                for (int i = 0; i < beads.count(); i++) {
+                    float dx = x - beads.centerX(i);
+                    float dy = y - beads.centerY;
+                    nearest = Math.min(nearest, (float) Math.sqrt(dx * dx + dy * dy));
+                }
+                assertTrue("(" + x + ", " + y + ") is outside every bead", nearest <= cover);
+            }
+        }
+    }
+
+    /** Home's share 1 is the beads' own size; they swell as it falls and cover by its last part. */
+    @Test
+    public void theBeadsSwellWithHomesShareAndCoverBeforeTheFarSide() {
+        float rest = 80f;
+        float cover = 300f;
+        assertEquals(rest, LensBeadGeometry.meltRadiusPx(rest, cover, 1f), 0.001f);
+        assertEquals(rest, LensBeadGeometry.meltRadiusPx(rest, cover, Float.NaN), 0.001f);
+        assertEquals(cover, LensBeadGeometry.meltRadiusPx(rest, cover,
+            LensBeadGeometry.MELT_COVERED_SHARE), 0.001f);
+        assertEquals(cover, LensBeadGeometry.meltRadiusPx(rest, cover, 0f), 0.001f);
+        float last = rest;
+        for (float share = 1f; share >= 0f; share -= 0.05f) {
+            float r = LensBeadGeometry.meltRadiusPx(rest, cover, share);
+            assertTrue("the beads shrank as Home slid away", r >= last - 0.001f);
+            last = r;
+        }
+        // Eased in: the first stretch of the slide barely moves them.
+        assertTrue(LensBeadGeometry.meltRadiusPx(rest, cover, 0.95f) - rest < 0.02f * (cover - rest));
+    }
+
+    @Test
+    public void withRadiusKeepsTheBeadsWhereTheyStand() {
+        LensBeadGeometry.Beads beads = phone();
+        assertNotNull(beads);
+        LensBeadGeometry.Beads swollen = beads.withRadius(beads.radiusPx * 2f);
+        assertEquals(beads.count(), swollen.count());
+        assertEquals(beads.centerX(2), swollen.centerX(2), 0f);
+        assertEquals(beads.centerY, swollen.centerY, 0f);
+        assertEquals(beads.radiusPx * 2f, swollen.radiusPx, 0f);
+        assertTrue(beads.withRadius(beads.radiusPx) == beads);
+    }
 }

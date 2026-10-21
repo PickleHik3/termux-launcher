@@ -4750,11 +4750,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     private void applyDockSurfaceGlass(@NonNull com.termux.app.chrome.GlassRefraction.Program program) {
         com.termux.app.dock.DockSurfaceSpec spec = dockSurfaceSpec();
-        com.termux.app.dock.LensBeadGeometry.Beads beads = spec.beads ? dockBeadsDrawn() : null;
+        // Beads are drawn under Home's Lens beads, and across the seam while they melt into the
+        // slab with Home's share of the slide (dockBeadsWanted), whichever page is committed.
+        com.termux.app.dock.LensBeadGeometry.Beads beads = dockBeadsDrawn();
         if (beads != null) {
             // Lens beads: each bead floats, whatever the Style, so each wears the shelf's lip;
-            // the beads stand where the host's origin sits in the backdrop.
-            program.setDockSurface(spec.softRimDp, spec.shelf);
+            // the beads stand where the host's origin sits in the backdrop. The glass is the
+            // beads' own whichever page is committed, so a melt keeps it to the far side.
+            com.termux.app.dock.DockSurfaceSpec beadSpec = com.termux.app.dock.DockSurfaceSpec.LENS_BEADS;
+            program.setDockSurface(beadSpec.softRimDp, beadSpec.shelf);
             com.termux.app.dock.LensBeadGeometry.Beads inGlass =
                 beads.offset(mGlassOriginLeft, mGlassOriginTop);
             float[] centers = new float[inGlass.count()];
@@ -4822,7 +4826,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean show = state != null && mGlassParamsValid && host != null
             && host.getVisibility() == View.VISIBLE && !state.keyboardShown
             && (isRoundedDockStyle() || beads) && dockSurfaceSpec().contactShadow;
-        shelf.setBeads(show ? dockBeadsDrawn() : null);
+        shelf.setBeads(show ? dockBeadsShadowed() : null);
         if (!show) {
             shelf.follow(null);
             if (shelf.getVisibility() != View.INVISIBLE) shelf.setVisibility(View.INVISIBLE);
@@ -4855,10 +4859,102 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final float[] mDockBeadNeighbours =
         new float[com.termux.app.dock.LensBeadGeometry.MAX_DRAWN_BEADS];
 
-    /** The beads as the dock draws them now: moving with a swipe, or at rest. */
+    /**
+     * Home's share of a slide across the seam while Home's dock wears Lens beads (1 on Home, 0
+     * on the Workspace), which the beads melt into the slab by ({@link #syncSeamBeadMelt}); NaN
+     * otherwise, the beads then their own size.
+     */
+    private float mSeamBeadShare = Float.NaN;
+
+    /**
+     * Whether the dock draws beads now (the row still has to wear them, {@link #resolveDockBeads}):
+     * under Home's Lens beads, but not where a slide has carried Home wholly off; and across the
+     * seam from the Workspace while any of Home's share shows, so they come in as the page does.
+     */
+    private boolean dockBeadsWanted() {
+        if (mPreferences == null) return false;
+        if (dockSurfaceSpec().beads) return Float.isNaN(mSeamBeadShare) || mSeamBeadShare > 0f;
+        return !Float.isNaN(mSeamBeadShare) && mSeamBeadShare > 0f
+            && homeDockStyle() == com.termux.app.dock.DockStyle.LENS_BEADS;
+    }
+
+    /** The beads where the row draws its icons now: moving with a swipe, or at rest. */
+    @Nullable
+    private com.termux.app.dock.LensBeadGeometry.Beads dockBeadsShadowed() {
+        return mDockBeads != null && mDockBeadsMoving != null ? mDockBeadsMoving : mDockBeads;
+    }
+
+    /**
+     * The beads as the dock's glass draws them now: where the row draws its icons, swollen by a
+     * melt across the seam toward the slab they cover at its far end. The shadows stay the
+     * beads' own ({@link #dockBeadsShadowed}); the swelling glass covers them.
+     */
     @Nullable
     private com.termux.app.dock.LensBeadGeometry.Beads dockBeadsDrawn() {
-        return mDockBeads != null && mDockBeadsMoving != null ? mDockBeadsMoving : mDockBeads;
+        com.termux.app.dock.LensBeadGeometry.Beads beads = dockBeadsShadowed();
+        if (beads == null || Float.isNaN(mSeamBeadShare) || mSeamBeadShare >= 1f) return beads;
+        View host = hotView(R.id.accessory_surface_host);
+        if (host == null || host.getWidth() <= 0 || host.getHeight() <= 0) return beads;
+        float cover = com.termux.app.dock.LensBeadGeometry.coverRadiusPx(beads, host.getWidth(),
+            host.getHeight());
+        return beads.withRadius(com.termux.app.dock.LensBeadGeometry.meltRadiusPx(
+            beads.radiusPx, cover, mSeamBeadShare));
+    }
+
+    /** The slab clip the host cuts melting beads to: the slab's corners; NaN at rest. */
+    private float dockBeadSlabClipPx() {
+        if (mDockBeads == null || Float.isNaN(mSeamBeadShare) || mSeamBeadShare >= 1f) return Float.NaN;
+        View host = hotView(R.id.accessory_surface_host);
+        if (host == null) return Float.NaN;
+        return isRoundedDockStyle() ? resolveDockCapsuleCornerRadiusPx(host.getHeight()) : 0f;
+    }
+
+    /**
+     * One frame of a slide across the seam while Home's dock wears Lens beads: the beads melt
+     * into the slab as Home slides away, swelling under their icons until, cut to the slab's
+     * outline, they are the slab, and come back out of it as Home returns, as the Prompt line's
+     * and the Wall strip's bands follow Home's share ({@link #syncSeamBandShare}). Each frame the
+     * share moves re-cuts the host's clip and rebuilds the dock's effect once; nothing for any
+     * other style, and nothing at rest.
+     */
+    private void syncSeamBeadMelt(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
+        if (mTravelSeamOther == null || mPreferences == null || mChrome == null) return;
+        if (homeDockStyle() != com.termux.app.dock.DockStyle.LENS_BEADS) return;
+        boolean committedHome = com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage);
+        if (committedHome == com.termux.app.place.HomeChromePolicy.wearsHomeShape(mTravelSeamOther))
+            return;
+        float progress = Math.max(0f, Math.min(1f,
+            com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage)));
+        float share = committedHome ? 1f - progress : progress;
+        if (Float.compare(share, mSeamBeadShare) == 0) return;
+        mSeamBeadShare = share;
+        applyDockBeadMelt(false);
+    }
+
+    /**
+     * The beads drawn again for {@link #mSeamBeadShare}: the host's clip and slab cut, and the
+     * dock's effect once. Beads coming or going (Home's share reaching or leaving nothing) dress
+     * the dock again, as a row turning to beads or back does. Mid-slide the row is read again
+     * only when beads are to come or go ({@code settled}: always, the slide having landed).
+     */
+    private void applyDockBeadMelt(boolean settled) {
+        boolean wereBeads = mDockBeads != null;
+        boolean modeChanged = (settled || dockBeadsWanted() != wereBeads)
+            && refreshDockBeads() && wereBeads != (mDockBeads != null);
+        View host = hotView(R.id.accessory_surface_host);
+        if (host instanceof DockSurfaceHostLayout) {
+            DockSurfaceHostLayout beadHost = (DockSurfaceHostLayout) host;
+            beadHost.setBeads(dockBeadsDrawn());
+            beadHost.setSlabClip(dockBeadSlabClipPx());
+        }
+        DockShelfView shelf = hotView(R.id.accessory_shelf_fx);
+        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsShadowed());
+        if (modeChanged) {
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        } else if (mDockBeads != null) {
+            rebuildBackdropGlassEffectForLens();
+        }
     }
 
     /**
@@ -4902,7 +4998,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         }
         DockShelfView shelf = hotView(R.id.accessory_shelf_fx);
-        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsDrawn());
+        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsShadowed());
         rebuildBackdropGlassEffectForLens();
     }
     /** The row's icon boxes, read into this; one icon more than the beads hold says "too many". */
@@ -4931,7 +5027,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * of them otherwise, so the Glass tray and the Workspace's dock carry no listener of this.
      */
     private void syncDockBeadsListeners() {
-        boolean beads = dockSurfaceSpec().beads;
+        boolean beads = dockBeadsWanted();
         View host = beads ? findViewById(R.id.accessory_surface_host) : null;
         View row = beads ? mSuggestionBarView : null;
         if (mDockBeadsWatchedHost != host) {
@@ -4970,7 +5066,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!refreshDockBeads()) return;
         rebuildBackdropGlassEffectForLens();
         DockShelfView shelf = findViewById(R.id.accessory_shelf_fx);
-        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsDrawn());
+        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsShadowed());
         if (wereBeads != (mDockBeads != null) && mChrome != null)
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -5014,7 +5110,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private com.termux.app.dock.LensBeadGeometry.Beads resolveDockBeads() {
-        if (mPreferences == null || !dockSurfaceSpec().beads) return null;
+        if (!dockBeadsWanted()) return null;
         SuggestionBarView row = mSuggestionBarView;
         View host = findViewById(R.id.accessory_surface_host);
         View container = findViewById(R.id.accessory_stack_container);
@@ -21963,6 +22059,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         readSeamTravel(frame);
         // Home's own bands on its dock follow the page across the seam.
         syncSeamBandShare(frame);
+        // And Home's Lens beads melt into the slab, or come out of it, the same way.
+        syncSeamBeadMelt(frame);
         // The dock rows are always laid out by the layout on screen, the minimal one included
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
         if (!mTravelKeyboardPreRolled
@@ -22608,6 +22706,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // lands on, and a slide that came back lays them out whole again just after it.
             boolean bandShareMoved = !Float.isNaN(mTravelHomeBandShare);
             mTravelHomeBandShare = Float.NaN;
+            // Melting beads land as the page did: their own size on Home, the slab elsewhere.
+            boolean beadsMelted = !Float.isNaN(mSeamBeadShare);
+            mSeamBeadShare = Float.NaN;
             // The material blend, if one ran, has landed on the arriving place's material; the
             // pass below paints that material plainly, and the blend's layers go with it.
             mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
@@ -22660,6 +22761,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mX11Display.onUserKeyboardIntent(true);
             }
             syncPlaceState(page, leavingKeyboardUp);
+            if (beadsMelted) applyDockBeadMelt(true);
             if (bandShareMoved && page == left && setTerminalToolbarHeight(false))
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                     | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
