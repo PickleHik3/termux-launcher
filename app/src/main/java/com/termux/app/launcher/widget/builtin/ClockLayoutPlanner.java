@@ -9,6 +9,7 @@ import com.termux.app.launcher.widget.builtin.WidgetLayoutPlan.Part;
 import com.termux.app.launcher.widget.builtin.WidgetTokens.Role;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -22,8 +23,24 @@ import java.util.List;
 final class ClockLayoutPlanner {
     private ClockLayoutPlanner() { }
 
-    /** Past its 2×2 the Clock adds nothing yet; the time zones (#113) extend it to 4×1 and 4×2. */
-    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetSpan.TWO_BY_TWO;
+    /** The Clock grows to 4×2: the wide spans carry the time zones (#113). */
+    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetSpan.FOUR_BY_TWO;
+
+    /** One extra time zone as a column: its city, its time, and (4×2) how it differs from here. */
+    static final class ZoneColumn {
+        @NonNull final String city;
+        @NonNull final String time;
+        @NonNull final String offset;
+
+        ZoneColumn(@NonNull String city, @NonNull String time, @NonNull String offset) {
+            this.city = city; this.time = time; this.offset = offset;
+        }
+    }
+
+    /** The most zones the Clock shows. */
+    static final int MAX_ZONES = 2;
+    /** The narrowest the face and its date are kept at beside the zones. */
+    static final float LEFT_MIN_DP = 96f;
 
     static final String FACE = "face";
     static final String DATE = "date";
@@ -45,6 +62,18 @@ final class ClockLayoutPlanner {
     private static final float GAP_S = WidgetTokens.GAP_TIGHT_DP;
     private static final float GAP_M = WidgetTokens.GAP_DP;
     private static final float GAP_L = WidgetTokens.GAP_LOOSE_DP;
+    private static final float HAIRLINE_DP = 1f;
+    static final String ZONE_RULE = "zone.%d.rule";
+    static final String ZONE_CITY = "zone.%d.city";
+    static final String ZONE_TIME = "zone.%d.time";
+    static final String ZONE_OFFSET = "zone.%d.offset";
+
+    /** The roles a zone column's time and its city (and offset) try, in order. */
+    private static final Role[][] ZONE_ROLES = {
+        {Role.HEADLINE, Role.LABEL},
+        {Role.TITLE, Role.LABEL},
+        {Role.TITLE, Role.LABEL_FORCED},
+    };
 
     /** How tall the face paints in a box, so the parts under it sit right under its ink. */
     interface FaceMeasure {
@@ -71,20 +100,106 @@ final class ClockLayoutPlanner {
                                           @NonNull ClockFace face, @NonNull String date,
                                           @NonNull String alarm, @NonNull FaceMeasure faceMeasure,
                                           @NonNull Measure measure) {
+        return plan(span, widthDp, heightDp, fontScale, face, date, alarm,
+            Collections.emptyList(), faceMeasure, measure);
+    }
+
+    /**
+     * As above, with the time zones: at 4×1 and 4×2 each is a column right of the face, behind a
+     * hairline, its city over its time (and, at 4×2, its offset). Where the room is short the
+     * column's roles step down, then the offset goes, then the second zone, then the first, so
+     * the face always keeps {@link #LEFT_MIN_DP}.
+     */
+    @NonNull static WidgetLayoutPlan plan(@NonNull BuiltinWidgetSpan span, float widthDp,
+                                          float heightDp, float fontScale,
+                                          @NonNull ClockFace face, @NonNull String date,
+                                          @NonNull String alarm,
+                                          @NonNull List<ZoneColumn> zones,
+                                          @NonNull FaceMeasure faceMeasure,
+                                          @NonNull Measure measure) {
         Box card = new Box(0f, 0f, widthDp, heightDp);
         Box inner = WidgetLayoutPlan.insetBox(widthDp, heightDp, WidgetTokens.insetDp(span));
         List<Part> parts = new ArrayList<>();
         boolean showsDate = span != BuiltinWidgetSpan.ONE_BY_ONE && !date.isEmpty();
         boolean showsAlarm = showsDate && span.isTall() && !alarm.isEmpty();
         Texts texts = new Texts(date, showsDate, alarm, showsAlarm, fontScale, measure);
+        Box left = inner;
+        if (span.isWide() && !zones.isEmpty()) {
+            left = addZones(span, inner, fontScale, zones, measure, parts);
+        }
         if (face == ClockFace.ANALOG) {
-            dial(span, inner, texts, parts);
+            dial(span, left, texts, parts);
         } else {
-            digital(span, inner, texts, faceMeasure, parts);
+            digital(span, left, texts, faceMeasure, parts);
         }
         parts.add(Part.touch(TOUCH, card));
         return new WidgetLayoutPlan(BuiltinWidgetKind.CLOCK, span, MAX_SPAN, fontScale, card,
             inner, parts);
+    }
+
+    // ----- the time zones -------------------------------------------------------------------
+
+    /**
+     * Adds the zone columns at the right of {@code inner} and returns what is left for the face.
+     * Adds none (and returns {@code inner}) when not even one fits.
+     */
+    @NonNull private static Box addZones(@NonNull BuiltinWidgetSpan span, @NonNull Box inner,
+                                         float fontScale, @NonNull List<ZoneColumn> zones,
+                                         @NonNull Measure measure, @NonNull List<Part> parts) {
+        boolean tall = span.isTall();
+        for (int count = Math.min(MAX_ZONES, zones.size()); count >= 1; count--) {
+            for (boolean offsets = tall; ; offsets = false) {
+                for (Role[] roles : ZONE_ROLES) {
+                    float timeSize = WidgetTokens.sizeDp(roles[0], fontScale);
+                    float textSize = WidgetTokens.sizeDp(roles[1], fontScale);
+                    float stack = WidgetTokens.lineDp(textSize) + GAP_S
+                        + WidgetTokens.lineDp(timeSize)
+                        + (offsets ? GAP_S + WidgetTokens.lineDp(textSize) : 0f);
+                    if (stack > inner.height) continue;
+                    float[] widths = new float[count];
+                    float block = 0f;
+                    for (int i = 0; i < count; i++) {
+                        ZoneColumn zone = zones.get(i);
+                        float w = Math.max(measure.widthDp(zone.time, roles[0], true, timeSize),
+                            measure.widthDp(zone.city, roles[1], false, textSize));
+                        if (offsets) {
+                            w = Math.max(w, measure.widthDp(zone.offset, roles[1], false,
+                                textSize));
+                        }
+                        widths[i] = (float) Math.ceil(w);
+                        block += GAP_L + HAIRLINE_DP + GAP_L + widths[i];
+                    }
+                    if (inner.width - block < LEFT_MIN_DP) continue;
+                    float x = inner.right() - block;
+                    float top = inner.centerY() - stack / 2f;
+                    for (int i = 0; i < count; i++) {
+                        ZoneColumn zone = zones.get(i);
+                        parts.add(Part.rule(String.format(java.util.Locale.ROOT, ZONE_RULE, i),
+                            new Box(x + GAP_L, top, HAIRLINE_DP, stack)));
+                        float left = x + GAP_L + HAIRLINE_DP + GAP_L;
+                        float y = top;
+                        parts.add(Part.text(String.format(java.util.Locale.ROOT, ZONE_CITY, i),
+                            new Box(left, y, widths[i], WidgetTokens.lineDp(textSize)), zone.city,
+                            roles[1], false, textSize, Ink.SOFT));
+                        y += WidgetTokens.lineDp(textSize) + GAP_S;
+                        parts.add(Part.text(String.format(java.util.Locale.ROOT, ZONE_TIME, i),
+                            new Box(left, y, widths[i], WidgetTokens.lineDp(timeSize)), zone.time,
+                            roles[0], true, timeSize, Ink.STRONG));
+                        if (offsets) {
+                            y += WidgetTokens.lineDp(timeSize) + GAP_S;
+                            parts.add(Part.text(String.format(java.util.Locale.ROOT,
+                                ZONE_OFFSET, i), new Box(left, y, widths[i],
+                                WidgetTokens.lineDp(textSize)), zone.offset, roles[1], false,
+                                textSize, Ink.SOFT));
+                        }
+                        x += GAP_L + HAIRLINE_DP + GAP_L + widths[i];
+                    }
+                    return new Box(inner.left, inner.top, inner.width - block, inner.height);
+                }
+                if (!offsets) break;
+            }
+        }
+        return inner;
     }
 
     // ----- the digital faces ----------------------------------------------------------------

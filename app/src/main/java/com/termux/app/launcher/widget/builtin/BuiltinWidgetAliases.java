@@ -117,7 +117,10 @@ public final class BuiltinWidgetAliases {
         if (alias == null) return out;
         for (Map.Entry<String, String> entry : alias.settings.entrySet()) {
             String own = out.getString(entry.getKey());
-            if (own == null || own.isEmpty()) out.putString(entry.getKey(), entry.getValue());
+            // A cleared zone is the user's own "none"; it does not bring the old city back.
+            boolean zone = ClockWidgetSettings.KEY_ZONE1.equals(entry.getKey())
+                || ClockWidgetSettings.KEY_ZONE2.equals(entry.getKey());
+            if (own == null || (own.isEmpty() && !zone)) out.putString(entry.getKey(), entry.getValue());
         }
         return out;
     }

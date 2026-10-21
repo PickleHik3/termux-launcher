@@ -26,5 +26,7 @@
     <string name="bw_clock_seconds">Seconds</string>
     <string name="bw_clock_24_hour">24-hour time</string>
     <!-- The Clock's next alarm at 2×2: %1$s its time, like "07:00" or "Thu 07:00". -->
+    <string name="bw_clock_zones">Time zones</string>
+    <string name="bw_clock_zones_none">None</string>
     <string name="bw_clock_alarm">Alarm %1$s</string>
 </resources>

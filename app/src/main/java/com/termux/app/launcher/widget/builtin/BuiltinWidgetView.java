@@ -51,7 +51,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
          * A text field; a switch, stored "on" or "off"; or one of a few {@link Option}s, as
          * segmented buttons or, with {@link #tiles}, a strip of live previews.
          */
-        public enum Type { TEXT, NUMBER, MULTILINE, SWITCH, CHOICE }
+        public enum Type { TEXT, NUMBER, MULTILINE, SWITCH, CHOICE, ZONES }
 
         /** One value a {@link Type#CHOICE} offers, and its name. */
         public static final class Option {
@@ -82,16 +82,33 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         /** The field shows only while {@link #shownWhenKey} holds {@link #shownWhenValue}. */
         @Nullable public final String shownWhenKey;
         @Nullable public final String shownWhenValue;
+        /** A {@link Type#ZONES} row's second key ({@link #key} is its first); null otherwise. */
+        @Nullable public final String secondKey;
 
         public ConfigField(@NonNull String key, @NonNull CharSequence label, @NonNull Type type,
                            @NonNull String fallback) {
             this(key, label, type, fallback, Collections.emptyList(), null, null, null);
         }
 
+        /** A row that opens two city or time-zone fields, stored under {@code key} and {@code secondKey}. */
+        @NonNull public static ConfigField zones(@NonNull String key, @NonNull String secondKey,
+                                                 @NonNull CharSequence label) {
+            return new ConfigField(key, label, Type.ZONES, "", Collections.emptyList(), null,
+                null, null, secondKey);
+        }
+
         private ConfigField(@NonNull String key, @NonNull CharSequence label, @NonNull Type type,
                             @NonNull String fallback, @NonNull List<Option> options,
                             @Nullable TileArt tiles, @Nullable String shownWhenKey,
                             @Nullable String shownWhenValue) {
+            this(key, label, type, fallback, options, tiles, shownWhenKey, shownWhenValue, null);
+        }
+
+        private ConfigField(@NonNull String key, @NonNull CharSequence label, @NonNull Type type,
+                            @NonNull String fallback, @NonNull List<Option> options,
+                            @Nullable TileArt tiles, @Nullable String shownWhenKey,
+                            @Nullable String shownWhenValue, @Nullable String secondKey) {
+            this.secondKey = secondKey;
             this.key = key; this.label = label; this.type = type; this.fallback = fallback;
             this.options = Collections.unmodifiableList(new ArrayList<>(options));
             this.tiles = tiles;
@@ -115,7 +132,8 @@ public abstract class BuiltinWidgetView extends FrameLayout {
 
         /** This field, shown only while the field {@code key} holds {@code value}. */
         @NonNull public ConfigField shownWhen(@NonNull String key, @NonNull String value) {
-            return new ConfigField(this.key, label, type, fallback, options, tiles, key, value);
+            return new ConfigField(this.key, label, type, fallback, options, tiles, key, value,
+                secondKey);
         }
 
         /** Whether the field shows while the sheet's fields hold {@code values}. */

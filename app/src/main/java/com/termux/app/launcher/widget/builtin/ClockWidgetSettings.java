@@ -29,7 +29,7 @@ public final class ClockWidgetSettings {
     public static final String KEY_SECONDS = "seconds";
     /** 24-hour time; absent follows the phone's format, as the old clocks did. */
     public static final String KEY_24_HOUR = "h24";
-    /** The two cities the analog clock kept; carried for the Clock's time zones (#113). */
+    /** The two cities the analog clock kept; the Clock's two extra time zones (#113); empty or absent is none. */
     public static final String KEY_ZONE1 = "zone1";
     public static final String KEY_ZONE2 = "zone2";
     /** What the analog clock showed while no city was set. */
@@ -84,6 +84,16 @@ public final class ClockWidgetSettings {
 
     public static boolean seconds(@NonNull Bundle settings) {
         return ON.equals(settings.getString(KEY_SECONDS));
+    }
+
+    /** The zones the Clock shows beyond the phone's: the stored ones that name a real zone, at most two. */
+    @NonNull public static java.util.List<java.time.ZoneId> zones(@NonNull Bundle settings) {
+        java.util.List<java.time.ZoneId> zones = new java.util.ArrayList<>(2);
+        for (String key : new String[] {KEY_ZONE1, KEY_ZONE2}) {
+            java.time.ZoneId zone = ClockWidgetFormats.resolveZone(settings.getString(key));
+            if (zone != null) zones.add(zone);
+        }
+        return zones;
     }
 
     /** The widget's 24-hour choice, or {@code phone24} where it stores none. */
