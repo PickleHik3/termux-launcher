@@ -263,6 +263,8 @@ public final class SeamCrossing {
     @Nullable private PaneWallPage mOther;
     @Nullable private PlaceLayout mOtherLayout;
     @NonNull private DockPlan mPlan = DockPlan.NONE;
+    /** The dock rows a fold leaves standing, outside the extra keys; empty unless it folds. */
+    @NonNull private java.util.List<Element> mFoldHeld = java.util.Collections.emptyList();
     /**
      * Whether the halves dress the stack differently, and so whether it is dressed again when it
      * changes halves; whether it then dips whole, keyboard included; which half keeps a keyboard
@@ -351,6 +353,11 @@ public final class SeamCrossing {
             mCommittedKeyboard || !EdgeStackPolicy.stack(here, Edge.BOTTOM).isEmpty(),
             mOtherKeyboard || !EdgeStackPolicy.stack(there, Edge.BOTTOM).isEmpty());
         mWholeStack = SeamDress.wholeStack(mPlan, mDressDiffers);
+        // The layout a fold runs in stands the extra keys: the committed one folding out, the
+        // other half's folding in.
+        mFoldHeld = mPlan == DockPlan.FOLD_OUT ? SeamTravel.rowsOutsideExtraKeys(here)
+            : mPlan == DockPlan.FOLD_IN ? SeamTravel.rowsOutsideExtraKeys(there)
+            : java.util.Collections.emptyList();
         // Only from Home: the Workspace's bar is the one that travels with its page, unless the
         // bar is one across the wall and stands still.
         mStatusMayShow = !mBarStill && committed.page == PaneWallPage.WIDGETS
@@ -500,6 +507,7 @@ public final class SeamCrossing {
         mStatusShown = false;
         mOtherLayout = null;
         mPlan = DockPlan.NONE;
+        mFoldHeld = java.util.Collections.emptyList();
         mWholeStack = false;
         mCommittedKeyboard = false;
         mOtherKeyboard = false;
@@ -550,6 +558,15 @@ public final class SeamCrossing {
     /** Whether the crossing folds the extra keys rather than moving the rows. */
     public boolean folds() {
         return SeamTravel.folds(mPlan);
+    }
+
+    /**
+     * Whether a fold leaves {@code row} where it stands: a dock row between the extra keys and the
+     * screen's bottom edge ({@link SeamTravel#rowsOutsideExtraKeys}). False for every row while
+     * nothing folds.
+     */
+    public boolean foldHolds(@NonNull Element row) {
+        return mFoldHeld.contains(row);
     }
 
     /**

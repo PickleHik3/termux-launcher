@@ -25,9 +25,11 @@ import java.util.List;
  *       second half ({@link DockPlan#DIP}). Either way the rows on screen are only ever moved
  *       (the stack's translation), and laid out once, where nobody can see it.</li>
  *   <li><b>The extra keys alone.</b> Two halves whose rows differ only by the Workspace's extra
- *       keys, its outermost row (one layout on both halves, ADR 0009), fold that row instead: its
- *       height follows the travel, full on the window and none on Home, and the rows above it
- *       never move ({@link DockPlan#FOLD_OUT}, {@link DockPlan#FOLD_IN}).</li>
+ *       keys (one layout on both halves, ADR 0009), wherever that row stands in the stack, fold
+ *       it instead: its height follows the travel, full on the window and none on Home; the rows
+ *       on the canvas's side of it go down by the part it hides, to where they rest without it,
+ *       and the rows between it and the screen's edge never move ({@link DockPlan#FOLD_OUT},
+ *       {@link DockPlan#FOLD_IN}, {@link #rowsOutsideExtraKeys}).</li>
  *   <li><b>The status bar.</b> It is the Workspace's alone, so it travels with the Workspace's
  *       page: its screen position is that page's ({@link #workspaceScreenXPx}), sliding out
  *       with the window toward Home and in with it from Home, instead of fading in place.</li>
@@ -63,13 +65,13 @@ public final class SeamTravel {
         /** Different rows on each: down over the first half, swapped, up over the second. */
         DIP,
         /**
-         * The other half stands the committed half's rows less its outermost row, the extra keys:
-         * the committed rows stay laid out to settle and the extra keys fold shut over the way.
+         * The other half stands the committed half's rows less the extra keys: the committed rows
+         * stay laid out to settle and the extra keys fold shut over the way.
          */
         FOLD_OUT,
         /**
-         * The other half adds the extra keys as its outermost row: its rows are laid out from the
-         * first frame with that row folded shut, and it opens over the way.
+         * The other half adds the extra keys to the committed half's rows: its rows are laid out
+         * from the first frame with that row folded shut, and it opens over the way.
          */
         FOLD_IN
     }
@@ -155,13 +157,29 @@ public final class SeamTravel {
     }
 
     /**
-     * Whether {@code more} is {@code fewer} with the extra keys as one more, outermost row: the
-     * row a fold opens or shuts on the edge, with nothing else in the stack moving.
+     * Whether {@code more} is {@code fewer} with the extra keys as one more row, anywhere in the
+     * stack: the row a fold opens or shuts, every other row keeping its order.
      */
     private static boolean onlyExtraKeysMore(@NonNull List<Element> more,
                                              @NonNull List<Element> fewer) {
-        return more.size() == fewer.size() + 1 && more.get(0) == Element.EXTRA_KEYS
-            && more.subList(1, more.size()).equals(fewer);
+        int keys = more.indexOf(Element.EXTRA_KEYS);
+        if (keys < 0 || more.size() != fewer.size() + 1) return false;
+        return more.subList(0, keys).equals(fewer.subList(0, keys))
+            && more.subList(keys + 1, more.size()).equals(fewer.subList(keys, fewer.size()));
+    }
+
+    /**
+     * The dock rows a fold leaves where they stand: those between the extra keys and the screen's
+     * bottom edge, outermost first, in the layout that stands the extra keys. The rows on the
+     * canvas's side of the extra keys go down with the fold's sink ({@link #foldSinkPx}); these
+     * do not, so the fold is the same wherever the extra keys row stands. Empty where it is the
+     * outermost row, or stands nowhere on the bottom edge.
+     */
+    @NonNull
+    public static List<Element> rowsOutsideExtraKeys(@NonNull PlaceLayout withKeys) {
+        List<Element> stack = EdgeStackPolicy.stack(withKeys, Edge.BOTTOM);
+        int keys = stack.indexOf(Element.EXTRA_KEYS);
+        return keys <= 0 ? java.util.Collections.emptyList() : stack.subList(0, keys);
     }
 
     /** Whether a plan folds the extra keys rather than moving the rows. */
@@ -183,10 +201,11 @@ public final class SeamTravel {
     }
 
     /**
-     * How far a fold sinks the dock's rows into their own bottom edge, so the extra keys row,
-     * {@code extraKeysBandPx} tall where the stack lays it out (0 where it does not), shows
-     * {@code share} of itself ({@link #extraKeysShare}) and the rows above it stand where they
-     * will at rest without it.
+     * How far a fold sinks the extra keys row and the dock's rows on the canvas's side of it, so
+     * that row, {@code extraKeysBandPx} tall where the stack lays it out (0 where it does not),
+     * shows {@code share} of itself ({@link #extraKeysShare}), shut into its own bottom edge, and
+     * the rows above it stand where they will at rest without it. The rows outside it
+     * ({@link #rowsOutsideExtraKeys}) are not sunk.
      */
     public static float foldSinkPx(int extraKeysBandPx, float share) {
         return Math.max(0, extraKeysBandPx) * (1f - clamp01(share));

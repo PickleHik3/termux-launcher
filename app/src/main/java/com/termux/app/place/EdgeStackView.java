@@ -55,6 +55,15 @@ public class EdgeStackView extends LinearLayout {
     /** The draw pass's own buffer for {@link #separatorCenters}, so a frame allocates nothing. */
     @Nullable private int[] mSeparatorScratch;
 
+    /** The band a fold across the seam shuts ({@link #holdOutside}), null while none runs. */
+    @Nullable private View mFoldRow;
+    private float mFoldSinkPx;
+    /** The bands outside the fold, drawn back where they are laid out; reused fold to fold. */
+    @NonNull private final java.util.ArrayList<View> mFoldHeld = new java.util.ArrayList<>(2);
+    /** The first gap, counted from the first child, whose hairline goes back with them. */
+    private int mFoldGapFrom = Integer.MAX_VALUE;
+    @NonNull private final android.graphics.Rect mFoldClip = new android.graphics.Rect();
+
     public EdgeStackView(@NonNull Context context) {
         this(context, null);
     }
@@ -172,6 +181,42 @@ public class EdgeStackView extends LinearLayout {
         invalidate();
     }
 
+    /**
+     * A fold across the seam (#94) on a bottom stack the caller draws {@code sinkPx} lower than it
+     * lays it out, cut at its own bottom: the bands outside {@code fold} — between it and the
+     * screen's edge — are drawn back up by the sink, so they stand where they are laid out, and so
+     * are the hairlines in the gaps beside them; {@code fold} itself is cut at its laid-out bottom
+     * less the sink, so it shuts into its outer edge instead of over them. Where {@code fold} is
+     * the outermost band there is nothing to hold and nothing here changes. Null or 0 puts
+     * everything back. Transforms and a clip only: nothing is laid out again.
+     */
+    public void holdOutside(@Nullable View fold, float sinkPx) {
+        int index = fold != null && mEdge == Edge.BOTTOM ? indexOfChild(fold) : -1;
+        float sink = index >= 0 && index < getChildCount() - 1 ? Math.max(0f, sinkPx) : 0f;
+        View row = sink > 0f ? fold : null;
+        if (row == mFoldRow && sink == mFoldSinkPx) return;
+        if (mFoldRow != null && mFoldRow != row) mFoldRow.setClipBounds(null);
+        for (View held : mFoldHeld) held.setTranslationY(0f);
+        mFoldHeld.clear();
+        mFoldRow = row;
+        mFoldSinkPx = sink;
+        mFoldGapFrom = Integer.MAX_VALUE;
+        if (row != null) {
+            for (int i = index + 1; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                mFoldHeld.add(child);
+                if (child.getTranslationY() != -sink) child.setTranslationY(-sink);
+            }
+            int width = Math.max(1, row.getWidth());
+            // Generous above and to the sides, as the stack's own clip is: only the bottom is cut.
+            mFoldClip.set(-width,
+                -Math.max(row.getHeight(), getResources().getDisplayMetrics().heightPixels),
+                2 * width, Math.max(0, row.getHeight() - Math.round(sink)));
+            row.setClipBounds(mFoldClip);
+        }
+        invalidate();
+    }
+
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         super.dispatchDraw(canvas);
@@ -195,8 +240,9 @@ public class EdgeStackView extends LinearLayout {
         if (mSeparatorScratch == null || mSeparatorScratch.length < mSeparatorCount)
             mSeparatorScratch = new int[mSeparatorCount];
         int count = fillSeparatorCenters(mSeparatorScratch);
+        int held = Math.round(mFoldSinkPx);
         for (int at = 0; at < count; at++) {
-            int gap = mSeparatorScratch[at];
+            int gap = mSeparatorScratch[at] - (at >= mFoldGapFrom ? held : 0);
             int from = gap - (mSeparatorThicknessPx / 2);
             int to = from + mSeparatorThicknessPx;
             if (column) {
@@ -237,11 +283,15 @@ public class EdgeStackView extends LinearLayout {
         int wanted = Math.min(out.length, Math.max(0, mSeparatorCount));
         View previous = null;
         int drawn = 0;
+        int foldIndex = mFoldRow != null ? indexOfChild(mFoldRow) : -1;
+        mFoldGapFrom = Integer.MAX_VALUE;
         for (int index = 0; index < getChildCount() && drawn < wanted; index++) {
             View child = getChildAt(index);
             if (child.getVisibility() == GONE) continue;
             if ((column ? child.getWidth() : child.getHeight()) <= 0) continue;
             if (previous != null) {
+                if (foldIndex >= 0 && index > foldIndex && mFoldGapFrom == Integer.MAX_VALUE)
+                    mFoldGapFrom = drawn;
                 int center = (contentEnd(previous, column) + contentStart(child, column)) / 2;
                 center = clearOfAirMarks(center, previous, column, true);
                 out[drawn++] = clearOfAirMarks(center, child, column, false);
