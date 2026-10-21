@@ -80,13 +80,42 @@ public final class WidgetPaneFrame extends PaneContentFrame
         syncLookWorn();
     }
 
-    /** The Look holds a blur frame for these widgets only while one of them wears its glass. */
+    /**
+     * Battery saver, outline text and the system contrast, watched while the page is attached:
+     * a change re-dresses its widgets at once instead of at the next dress pass.
+     */
+    @Nullable private com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.SystemWatch
+        mSystemWatch;
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (mSystemWatch == null) {
+            mSystemWatch = new com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass
+                .SystemWatch(getContext(), this::onSystemAsksChanged);
+        }
+        mSystemWatch.start();
+    }
+
+    /** A system ask for the solid card changed: the frame is held or let go, the widgets re-dress. */
+    private void onSystemAsksChanged() {
+        syncLookWorn();
+        PaneSurfaceStyle look = widgetGlassStyle();
+        for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget
+                : new java.util.ArrayList<>(mGlassWidgets))
+            widget.onGlassStyle(look);
+    }
+
+    /**
+     * The Look holds a blur frame for these widgets only while one of them would wear its glass:
+     * not for a widget that battery saver, outline text or high contrast draws solid.
+     */
     private void syncLookWorn() {
         com.termux.app.chrome.LookGlassStyle look = mStyle == null ? null : mStyle.lookGlass();
         if (look == null) return;
         boolean worn = false;
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget : mGlassWidgets) {
-            if (widget.isGlassOn()) {
+            if (widget.wantsGlassFrame()) {
                 worn = true;
                 break;
             }
@@ -735,6 +764,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        if (mSystemWatch != null) mSystemWatch.stop();
         cancelHold();
         dismissGridSizePopup();
         mRim.cancel();

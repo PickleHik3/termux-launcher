@@ -266,6 +266,57 @@ public class BuiltinWidgetGlassTest {
             false, false, false));
     }
 
+    /**
+     * The blur frame is held only for a widget that would wear the glass, and a system ask that
+     * changes is heard at once, not at the next dress pass a second later.
+     */
+    @Test
+    public void theFrameIsHeldOnlyForAWidgetThatWouldWearItAndASystemChangeIsHeard() {
+        assertTrue(BuiltinWidgetGlass.holdsFrame(true, false, false, false, false));
+        assertFalse("the switch off", BuiltinWidgetGlass.holdsFrame(false, false, false, false,
+            false));
+        assertFalse("a picker card", BuiltinWidgetGlass.holdsFrame(true, true, false, false, false));
+        assertFalse("battery saver", BuiltinWidgetGlass.holdsFrame(true, false, true, false, false));
+        assertFalse("outline text", BuiltinWidgetGlass.holdsFrame(true, false, false, true, false));
+        assertFalse("high contrast", BuiltinWidgetGlass.holdsFrame(true, false, false, false, true));
+
+        android.os.PowerManager power = (android.os.PowerManager)
+            context.getSystemService(Context.POWER_SERVICE);
+        org.robolectric.shadows.ShadowPowerManager shadow =
+            org.robolectric.Shadows.shadowOf(power);
+        shadow.setIsPowerSaveMode(false);
+        BuiltinWidgetGlass.SystemAsks.invalidate();
+        Plain view = new Plain(context, services, style);
+        view.bind(glassOn());
+        assertTrue(view.wantsGlassFrame());
+        assertFalse(BuiltinWidgetGlass.SystemAsks.current(context).batterySaver);
+
+        int[] changes = {0};
+        BuiltinWidgetGlass.SystemWatch watch =
+            new BuiltinWidgetGlass.SystemWatch(context, () -> changes[0]++);
+        watch.start();
+        watch.start();
+        try {
+            shadow.setIsPowerSaveMode(true);
+            context.sendBroadcast(new android.content.Intent(
+                android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals("heard once, however often started", 1, changes[0]);
+            assertTrue("read again at once", BuiltinWidgetGlass.SystemAsks.current(context)
+                .batterySaver);
+            assertFalse("drawn solid under battery saver: no frame held for it",
+                view.wantsGlassFrame());
+        } finally {
+            watch.stop();
+        }
+        shadow.setIsPowerSaveMode(false);
+        context.sendBroadcast(new android.content.Intent(
+            android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals("stopped: told nothing more", 1, changes[0]);
+        BuiltinWidgetGlass.SystemAsks.invalidate();
+    }
+
     /** The card follows the page's ink; night forces dark whatever the ink. */
     @Test
     public void theCardsSideFollowsThePagesInkAndNightForcesDark() {

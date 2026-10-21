@@ -538,6 +538,18 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     }
 
     /**
+     * Whether the page should hold the Look's blur frame for this widget: its Glass on and no
+     * system ask (battery saver, outline text, high contrast) drawing it solid instead
+     * ({@link BuiltinWidgetGlass#holdsFrame}).
+     */
+    public final boolean wantsGlassFrame() {
+        if (preview || !isGlassOn()) return false;
+        BuiltinWidgetGlass.SystemAsks asks = BuiltinWidgetGlass.SystemAsks.current(getContext());
+        return BuiltinWidgetGlass.holdsFrame(true, false, asks.batterySaver, asks.outlineText,
+            asks.highContrast);
+    }
+
+    /**
      * Whether this widget asks to be drawn Bare (glossary: Bare): no card, rim or slab, its ink
      * straight on the wallpaper behind it, measured there on the widget band, with a soft dim of
      * at most {@link com.termux.app.chrome.OnGlass#BARE_MAX_DIM} only where the measurement says
