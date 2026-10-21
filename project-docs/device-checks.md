@@ -13,6 +13,13 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "fix(x11): termux-x11-gpu-setup puts back only what it installed, also when
+  stopped" · record `apt list --installed` (or `pacman -Qq`), run `termux-x11-gpu-setup --yes`:
+  (a) let it finish: the list is the one before plus the kept packages (x11-repo, xkeyboard-config,
+  the winner's drivers) and what they need; (b) run again and Ctrl-C during a driver install: it
+  says "Stopped before the end", and the list is the one before plus x11-repo and xkeyboard-config
+  only; (c) with a Debian container: `proot-distro login debian -- dpkg -l` is unchanged after
+  the run · emulator (debug build).
 - 2026-10-21 · commit "feat(settings): a Benchmark graphics row" · Settings → Display → Linux apps →
   Set up Linux apps → Graphics shows "Benchmark graphics"; tapping it copies exactly
   `termux-x11-gpu-setup` (no newline) and the toast reads "Benchmark command copied. Paste it into
