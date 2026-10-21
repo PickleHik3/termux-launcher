@@ -340,6 +340,10 @@
     <string name="settings_gui_apps_gpu_copy_summary">Paste it into the terminal to let your apps draw with this phone\'s graphics.</string>
     <string name="settings_gui_apps_gpu_clipboard_label">Graphics setup</string>
     <string name="settings_gui_apps_gpu_copied">Graphics command copied. Paste it into the terminal and press Enter.</string>
+    <string name="settings_gui_apps_gpu_benchmark_title">Benchmark graphics</string>
+    <string name="settings_gui_apps_gpu_benchmark_summary">Tries every option and keeps the fastest. Takes a few minutes.</string>
+    <string name="settings_gui_apps_gpu_benchmark_clipboard_label">Graphics benchmark</string>
+    <string name="settings_gui_apps_gpu_benchmark_copied">Benchmark command copied. Paste it into the terminal and press Enter.</string>
     <string name="settings_x11_display_title">Display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
