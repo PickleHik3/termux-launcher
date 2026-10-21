@@ -44,6 +44,11 @@ under twenty items; past that, the oldest are re-judged first.
   not covered (Home starts below the bar, lined up with the window's page across the swipe); the
   bar's + on Home opens a Workspace window and slides to it · emulator, Home layout off, then on
   with the bar placed apart.
+- 2026-10-21 · commit "fix(chrome): the extra keys fold on the seam instead of the dock dipping" ·
+  One layout, keyboard up and down: a slow swipe window → Home and back keeps the apps row, the
+  A–Z row and the tray's glass on screen all the way; only the extra keys row shuts (opens) on
+  the dock's edge; no jump of the A–Z row at settle; a Floating tray's bottom corners may read
+  square mid-fold; Home layout on with a different shape still dips as before · emulator.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on
