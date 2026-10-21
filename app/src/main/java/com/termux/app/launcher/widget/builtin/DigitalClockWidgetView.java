@@ -120,14 +120,8 @@ public class DigitalClockWidgetView extends BuiltinWidgetView {
     }
 
     private void buildTwoByTwo(@NonNull FrameLayout frame, @NonNull BuiltinWidgetUi ui) {
-        View caption;
-        if (style().isPane()) {
-            caption = ui.caption("", ClockWidgetSupport.GLYPH_CLOCK,
-                getContext().getString(R.string.bw_clocks_pane_caption));
-        } else {
-            captionDate = ui.caption("");
-            caption = captionDate;
-        }
+        captionDate = ui.caption("");
+        View caption = captionDate;
         amPmView = ui.mono("", 10.5f);
         LinearLayout captionRow = wide(ui.row(8, BuiltinWidgetUi.flex(caption), amPmView));
 

@@ -165,12 +165,12 @@ final class WidgetPlanView extends View {
 
     /**
      * Sets {@code paint} up for a role: the sans for words, the numerals with tabular figures (or
-     * the terminal's mono under the Pane direction, until the Numerals choice replaces it).
+     * the terminal's mono under the Mono Numerals choice).
      */
     private void dress(@NonNull TextPaint paint, @NonNull WidgetTokens.Role role, boolean numeric,
                        float sizePx) {
         Typeface face;
-        boolean mono = numeric && style.isPane();
+        boolean mono = numeric && style.monoNumerals();
         if (role == WidgetTokens.Role.HERO) {
             face = mono ? style.monoMedium : heroFace;
         } else if (mono) {

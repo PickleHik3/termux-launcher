@@ -247,7 +247,7 @@ public class TerminalWidgetCoordinatorTest {
     @NonNull private TerminalWidgetView place() {
         BuiltinWidgetServices services = new BuiltinWidgetServices(activity, new ServicesHost());
         BuiltinWidgetStyle style = BuiltinWidgetStyle.resolve(activity,
-            BuiltinWidgetStyle.Direction.values()[0], false, null);
+            BuiltinWidgetStyle.Numerals.values()[0], false, null);
         TerminalWidgetView widget = (TerminalWidgetView) BuiltinWidgetFactory.create(activity,
             BuiltinWidgetKind.TERMINAL, services, style);
         widget.setWidgetId(ID);

@@ -216,8 +216,7 @@ public class NotesWidgetView extends BuiltinWidgetView
     @NonNull private LinearLayout buildTwoByTwo(@NonNull BuiltinWidgetUi ui,
                                                 @Nullable MarkdownFileSource.Snapshot data) {
         String path = shownPath();
-        View caption = ui.caption(FilesWidgetPaths.fileName(path), GLYPH_NOTE,
-            FilesWidgetPaths.display(path, FilesWidgetPaths.home()));
+        View caption = ui.caption(FilesWidgetPaths.fileName(path));
         LinearLayout root = ui.column(8, caption, block(ui, data, 11.5f, 1.55f, 7));
         inset(root, 14, 14, 14, 14, ui);
         return root;

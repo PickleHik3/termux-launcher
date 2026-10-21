@@ -53,9 +53,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * from one place rather than from each way in and out.
          */
         default void onWidgetEditSessionChanged(boolean editing) { }
-        /** How the launcher's own widgets are drawn. */
-        @NonNull default BuiltinWidgetStyle.Direction builtinWidgetDirection() {
-            return BuiltinWidgetStyle.Direction.TONAL;
+        /** The face of every built-in widget numeral. */
+        @NonNull default BuiltinWidgetStyle.Numerals builtinWidgetNumerals() {
+            return BuiltinWidgetStyle.Numerals.SANS;
         }
         /**
          * A long press on the page's free area: the host puts up Home's long-press sheet, whose
@@ -152,7 +152,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         builtins = new BuiltinWidgetHost(pane.getContext(),
             new BuiltinWidgetServices(pane.getContext(),
                 builtinHost != null ? builtinHost : new InertBuiltinHost()),
-            host::builtinWidgetDirection);
+            host::builtinWidgetNumerals);
         pane.grid().setBuiltinFactory(builtins);
         appIcons = new HomeAppIconFactory(pane.getContext(), new HomeAppIconFactory.Listener() {
             @Override public void onUnavailableAppTapped(int id) {

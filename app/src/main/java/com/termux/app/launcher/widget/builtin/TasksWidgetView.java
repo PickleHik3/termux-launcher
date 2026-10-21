@@ -43,7 +43,6 @@ public class TasksWidgetView extends BuiltinWidgetView implements MarkdownFileSo
     static final String KEY_PATH = "path";
     static final String DEFAULT_PATH = "~/notes/tasks.md";
 
-    private static final String GLYPH_CAPTION = "";
     private static final String GLYPH_ADD = "";
     private static final String GLYPH_CHECK = "";
 
@@ -354,8 +353,7 @@ public class TasksWidgetView extends BuiltinWidgetView implements MarkdownFileSo
     }
 
     @NonNull private LinearLayout buildTwoByTwo(@NonNull BuiltinWidgetUi ui, boolean empty, int shown) {
-        View caption = ui.caption(getContext().getString(R.string.bw_files_tasks_today), GLYPH_CAPTION,
-            FilesWidgetPaths.baseName(path()));
+        View caption = ui.caption(getContext().getString(R.string.bw_files_tasks_today));
         TextView add = addDisc(ui, 22, 10f);
         LinearLayout header = ui.row(8, BuiltinWidgetUi.flex(caption), add);
         // The list shows the tasks that fit whole, from the first; at 115dp that is two or three.

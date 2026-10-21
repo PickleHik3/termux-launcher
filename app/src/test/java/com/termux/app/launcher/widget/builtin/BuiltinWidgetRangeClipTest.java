@@ -64,7 +64,7 @@ public class BuiltinWidgetRangeClipTest {
         metrics.densityDpi = 420;
 
         List<String> clips = new ArrayList<>();
-        for (BuiltinWidgetStyle.Direction direction : BuiltinWidgetStyle.Direction.values()) {
+        for (BuiltinWidgetStyle.Numerals direction : BuiltinWidgetStyle.Numerals.values()) {
             BuiltinWidgetStyle style = BuiltinWidgetStyle.resolve(context, direction, false, null);
             for (BuiltinWidgetKind kind : BuiltinWidgetKind.values()) {
                 for (BuiltinWidgetSpan span : BuiltinWidgetSpan.values()) {

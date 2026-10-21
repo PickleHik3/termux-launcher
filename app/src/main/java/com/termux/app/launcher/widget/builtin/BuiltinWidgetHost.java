@@ -38,7 +38,7 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
      * ({@link com.termux.app.chrome.LookGlassSpec}), never a page's or another surface's.
      */
     public interface StyleSource {
-        @NonNull BuiltinWidgetStyle.Direction direction();
+        @NonNull BuiltinWidgetStyle.Numerals numerals();
     }
 
     private final Context context;
@@ -59,13 +59,13 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
     /** The current style, resolved once and kept until {@link #onStyleChanged()}. */
     @NonNull public BuiltinWidgetStyle style() {
         if (style == null) {
-            style = BuiltinWidgetStyle.resolve(context, styleSource.direction(), false,
+            style = BuiltinWidgetStyle.resolve(context, styleSource.numerals(), false,
                 services.host().monoTypeface());
         }
         return style;
     }
 
-    /** The theme, the Look or the direction setting changed: every live view is restyled. */
+    /** The theme, the Look or the Numerals setting changed: every live view is restyled. */
     public void onStyleChanged() {
         style = null;
         BuiltinWidgetStyle next = style();

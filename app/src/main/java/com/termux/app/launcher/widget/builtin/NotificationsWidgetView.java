@@ -413,9 +413,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
                                 @Nullable NotificationsWidgetData.Snapshot data) {
         BuiltinWidgetStyle s = ui.style;
         Resources res = getResources();
-        View caption = ui.caption(res.getString(R.string.bw_signals_notifications_caption), BELL,
-            res.getString(span.isWide() ? R.string.bw_signals_notifications_pane
-                : R.string.bw_signals_notifications_pane_short));
+        View caption = ui.caption(res.getString(R.string.bw_signals_notifications_caption));
         LinearLayout header;
         if (data == null || data.count() == 0) {
             header = ui.row(8, BuiltinWidgetUi.flex(caption));

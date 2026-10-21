@@ -202,17 +202,11 @@ public class AnalogClockWidgetView extends BuiltinWidgetView {
         return zone != null ? zone : ZoneId.of(fallback);
     }
 
-    /** The 2×1 caption: the phone's city (Tonal), or a clock glyph and the city as a path (Pane). */
+    /** The 2×1 caption: the phone's city. */
     @NonNull private View caption(@NonNull BuiltinWidgetUi ui) {
-        if (!style().isPane()) {
-            TextView label = ui.caption("");
-            captionCity = label;
-            return label;
-        }
-        TextView label = ui.text("", 10.5f, style().monoMedium, style().onSurfaceVariant);
+        TextView label = ui.caption("");
         captionCity = label;
-        return ui.row(5, ui.glyph(ClockWidgetSupport.GLYPH_CLOCK, 10.5f, style().primary),
-            BuiltinWidgetUi.flex(label));
+        return label;
     }
 
     @NonNull private AnalogClockFaceView face(int sizeDp, float dotShare) {
@@ -255,8 +249,7 @@ public class AnalogClockWidgetView extends BuiltinWidgetView {
             datedFace.setLabel(ClockWidgetSupport.date("EEEdd", now).toUpperCase(Locale.getDefault()));
         }
         if (captionCity != null) {
-            captionCity.setText(style().isPane() ? ClockWidgetFormats.paneCity(deviceZone)
-                : ClockWidgetFormats.cityName(deviceZone));
+            captionCity.setText(ClockWidgetFormats.cityName(deviceZone));
         }
         String localText = ClockWidgetFormats.hoursMinutes(local, is24);
         String localMarker = marker(local, is24);

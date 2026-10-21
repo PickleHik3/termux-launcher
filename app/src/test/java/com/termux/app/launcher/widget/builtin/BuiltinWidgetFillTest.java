@@ -117,7 +117,7 @@ public class BuiltinWidgetFillTest {
                                                int rows, int widthDp, int heightDp) {
         BuiltinWidgetServices services = new BuiltinWidgetServices(context, HOST);
         BuiltinWidgetStyle style = BuiltinWidgetStyle.resolve(context,
-            BuiltinWidgetStyle.Direction.values()[0], false, null);
+            BuiltinWidgetStyle.Numerals.values()[0], false, null);
         BuiltinWidgetView view = BuiltinWidgetFactory.create(context, kind, services, style);
         view.setPreview(true);
         view.setCells(columns, rows);

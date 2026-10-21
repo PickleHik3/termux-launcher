@@ -801,8 +801,6 @@ public abstract class BuiltinWidgetView extends FrameLayout {
             card.setCornerRadius(cardRadiusPx());
             if (edgeRim) {
                 card.setStroke(Math.round(Math.max(1f, style.density)), style.outline);
-            } else if (style.hasRim()) {
-                card.setStroke(Math.round(style.rimWidthPx), style.rim);
             }
             background.setBackground(card);
         }

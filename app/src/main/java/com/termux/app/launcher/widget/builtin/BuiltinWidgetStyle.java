@@ -1,7 +1,6 @@
 package com.termux.app.launcher.widget.builtin;
 
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
 
@@ -16,28 +15,31 @@ import com.termux.R;
 import com.termux.app.material.M3;
 
 /**
- * The resolved look of every built-in widget: the design's two directions, in the launcher's
- * scheme colours, on either the solid card or the see-through one.
- *
- * <p><b>Tonal</b> is Material containers — sans captions, light mono numerals, pill bars, a
- * filled clock face. <b>Pane</b> dresses a widget like a terminal pane — a hairline rim, mono path
- * captions led by a Nerd glyph, medium numerals, square bars, an outlined face. Both are cut at
- * the Look's Corners (Base's, {@link com.termux.app.chrome.LookGlassSpec}), which every surface
- * shares; a detached surface's never reaches a widget. Every colour is a scheme role read through
+ * The resolved look of every built-in widget: Material containers (sans captions, pill bars, a
+ * filled clock face) in the launcher's scheme colours, on either the solid card or the
+ * see-through one. One {@link Numerals} choice, Sans or Mono, sets the face of every numeral. The
+ * card is cut at the Look's Corners (Base's, {@link com.termux.app.chrome.LookGlassSpec}), which
+ * every surface shares; a detached surface's never reaches a widget. Every colour is a scheme role read through
  * {@link M3}, so a widget follows the terminal scheme, Material You and the scheme-chrome override
  * exactly as the rest of the chrome does.</p>
  */
 public final class BuiltinWidgetStyle {
-    public enum Direction {
-        TONAL("tonal"), PANE("pane");
+    /** The face of every built-in widget's numerals. */
+    public enum Numerals {
+        SANS("sans"), MONO("mono");
         @NonNull public final String key;
-        Direction(@NonNull String key) { this.key = key; }
-        @NonNull public static Direction fromKey(@Nullable String key) {
-            return PANE.key.equals(key) ? PANE : TONAL;
+        Numerals(@NonNull String key) { this.key = key; }
+        /**
+         * The choice a stored value means. The retired directions migrate: Tonal's numerals become
+         * Sans and Pane's Mono; anything else (unset, unknown) is Sans.
+         */
+        @NonNull public static Numerals fromKey(@Nullable String key) {
+            return MONO.key.equals(com.termux.shared.termux.settings.preferences
+                .TermuxAppSharedPreferences.normaliseBuiltinWidgetNumerals(key)) ? MONO : SANS;
         }
     }
 
-    @NonNull public final Direction direction;
+    @NonNull public final Numerals numeralsChoice;
     /**
      * True while the widget wears the Look's glass: the slab is its card and the card's own fill
      * is only the body's lift and veil over it ({@code BuiltinWidgetView}). Inner fills stay
@@ -55,8 +57,6 @@ public final class BuiltinWidgetStyle {
 
     public final float cornerRadiusPx;
     public final float barRadiusPx;
-    public final float rimWidthPx;
-    @ColorInt public final int rim;
 
     /** The card. */
     @ColorInt public final int card;
@@ -79,7 +79,7 @@ public final class BuiltinWidgetStyle {
     @ColorInt public final int done;
     /** The warm accent: the sun, the year bar, the seconds hand. */
     @ColorInt public final int warm;
-    /** The clock face fill (transparent for Pane, which outlines it instead). */
+    /** The clock face fill. */
     @ColorInt public final int face;
     /** The inside of the battery ring. */
     @ColorInt public final int ringInner;
@@ -89,7 +89,7 @@ public final class BuiltinWidgetStyle {
     @NonNull public final Typeface sansBold;
     @NonNull public final Typeface mono;
     @NonNull public final Typeface monoMedium;
-    /** Big numerals: light for Tonal, medium for Pane. */
+    /** Big numerals: light sans, or medium mono, by the {@link Numerals} choice. */
     @NonNull public final Typeface numerals;
     @Nullable public final Typeface nerd;
 
@@ -98,14 +98,13 @@ public final class BuiltinWidgetStyle {
     /** This look on the dark card, made once ({@link #onInk}). */
     @Nullable private BuiltinWidgetStyle darkCache;
 
-    private BuiltinWidgetStyle(@NonNull Context context, @NonNull Direction direction,
+    private BuiltinWidgetStyle(@NonNull Context context, @NonNull Numerals numerals,
                                boolean glass, @Nullable Typeface monoFace, float cornerRadiusPx) {
-        this.direction = direction;
+        this.numeralsChoice = numerals;
         this.glass = glass;
         density = context.getResources().getDisplayMetrics().density;
-        boolean pane = direction == Direction.PANE;
         this.cornerRadiusPx = cornerRadiusPx;
-        barRadiusPx = (pane ? 1f : 99f) * density;
+        barRadiusPx = 99f * density;
 
         onSurface = M3.onSurface(context);
         onSurfaceVariant = M3.onSurfaceVariant(context);
@@ -134,10 +133,8 @@ public final class BuiltinWidgetStyle {
         // One card, glass or not: on glass the slab under it is the card's material and the
         // card's colour is the body's lift and veil over it, so every fill inside stays opaque.
         card = ColorUtils.setAlphaComponent(surfaceContainer, 255);
-        rim = outlineVariant;
         ringInner = card;
-        rimWidthPx = pane ? Math.max(1f, density) : 0f;
-        face = pane ? Color.TRANSPARENT : container;
+        face = container;
 
         sans = Typeface.SANS_SERIF;
         sansMedium = Typeface.create("sans-serif-medium", Typeface.NORMAL);
@@ -145,7 +142,7 @@ public final class BuiltinWidgetStyle {
         Typeface baseMono = monoFace != null ? monoFace : Typeface.MONOSPACE;
         mono = baseMono;
         monoMedium = weighted(baseMono, 500);
-        numerals = pane ? monoMedium : weighted(baseMono, 300);
+        this.numerals = numerals == Numerals.MONO ? monoMedium : weighted(Typeface.SANS_SERIF, 300);
         nerd = com.termux.shared.termux.font.NerdFontSpans.typeface(context);
     }
 
@@ -155,14 +152,13 @@ public final class BuiltinWidgetStyle {
      * chroma kept, so a day scheme's card goes dark on a dark page without leaving its scheme.
      */
     private BuiltinWidgetStyle(@NonNull BuiltinWidgetStyle src, boolean glass, boolean toDark) {
-        direction = src.direction;
+        numeralsChoice = src.numeralsChoice;
         this.glass = glass;
         night = src.night;
         dark = src.dark || toDark;
         density = src.density;
         cornerRadiusPx = src.cornerRadiusPx;
         barRadiusPx = src.barRadiusPx;
-        rimWidthPx = src.rimWidthPx;
         boolean shift = toDark && !src.dark;
         card = shift ? atTone(src.card, DarkTones.CARD) : src.card;
         container = shift ? atTone(src.container, DarkTones.CONTAINER) : src.container;
@@ -188,9 +184,8 @@ public final class BuiltinWidgetStyle {
         error = shift ? atTone(src.error, DarkTones.ERROR) : src.error;
         done = src.done;
         warm = src.warm;
-        rim = shift ? outlineVariant : src.rim;
         ringInner = card;
-        face = direction == Direction.PANE ? Color.TRANSPARENT : container;
+        face = container;
         sans = src.sans;
         sansMedium = src.sansMedium;
         sansBold = src.sansBold;
@@ -237,13 +232,13 @@ public final class BuiltinWidgetStyle {
     }
 
     /**
-     * Resolves the style for {@code direction}, on the see-through card or not, with the
+     * Resolves the style for the {@code numerals} choice, on the see-through card or not, with the
      * terminal's own monospace face when one is known, cut at the Look's Corners as stored now.
      */
     @NonNull public static BuiltinWidgetStyle resolve(@NonNull Context context,
-                                                      @NonNull Direction direction, boolean glass,
+                                                      @NonNull Numerals numerals, boolean glass,
                                                       @Nullable Typeface monoFace) {
-        return new BuiltinWidgetStyle(context, direction, glass, monoFace,
+        return new BuiltinWidgetStyle(context, numerals, glass, monoFace,
             lookCornerRadiusPx(context));
     }
 
@@ -255,7 +250,7 @@ public final class BuiltinWidgetStyle {
     }
 
     /**
-     * This look on the Look's glass ({@link BuiltinWidgetGlass}): the same direction, scheme,
+     * This look on the Look's glass ({@link BuiltinWidgetGlass}): the same numerals, scheme,
      * card side and faces. Itself when it already is glass; made once, so a re-dress with the
      * same answer keeps the same style and builds nothing again.
      */
@@ -276,10 +271,8 @@ public final class BuiltinWidgetStyle {
         return darkCache;
     }
 
-    public boolean isPane() { return direction == Direction.PANE; }
-
     public int dp(float value) { return Math.round(value * density); }
 
-    /** Pane's hairline rim is a stroke; Tonal draws none of its own (see the card's edge rim). */
-    public boolean hasRim() { return rimWidthPx > 0f; }
+    /** True when the numerals are the terminal's mono, so a plan view drops tabular figures. */
+    public boolean monoNumerals() { return numeralsChoice == Numerals.MONO; }
 }

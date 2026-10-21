@@ -61,12 +61,9 @@ public final class TerminalWidgetView extends BuiltinWidgetView implements Hoste
             endedLabel = null;
             return;
         }
-        // The card's rim is drawn under the content; the terminal's ground stops inside it.
-        int rim = style.hasRim() ? (int) Math.ceil(style.rimWidthPx) : 0;
         FrameLayout pane = new FrameLayout(getContext());
         FrameLayout.LayoutParams paneParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        paneParams.setMargins(rim, rim, rim, rim);
         frame.addView(pane, paneParams);
         paneFrame = pane;
         TextView label = ui.sans(getResources().getText(R.string.terminal_widget_ended), 13f, false);
