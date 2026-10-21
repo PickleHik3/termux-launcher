@@ -13,7 +13,7 @@ Latest stable: v1.2.0.
 ## New in this drop
 <!-- Only what this drop adds over the one before it; replace the whole list at every drop. -->
 
-Nothing yet: the next drop restates this list.
+Nothing beyond v1.2.0: this drop restarts the channel on the stable, so a pre-release install is never older than it.
 
 ## Experimental
 <!-- What is on pre and not yet in a stable, one line each; name the pull request or branch it came from,
