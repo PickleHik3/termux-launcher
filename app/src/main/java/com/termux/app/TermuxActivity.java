@@ -15372,8 +15372,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean moved = applyEdgeStacks(layout);
         EdgeStackPolicy.Metrics metrics = buildEdgeStackMetrics();
         // While a Home page can be on screen the canvas reaches up under the status bar and each
-        // page keeps its own top (PageTopInsets): Home's at the canvas's top, the Workspace's a bar
-        // band below it, so a slide across the seam settles without moving either.
+        // page keeps its own top (PageTopInsets): the Workspace's a bar band below it, and Home's
+        // one band of its own bar below it, the same band where Home wears the Workspace's bar
+        // (#90), so a slide across the seam settles without moving either and the two line up.
         boolean reachedBefore = mCanvasReachesUnderBar;
         boolean reaches = canvasReachesUnderBarNow();
         mCanvasReachesUnderBar = reaches;
@@ -15381,10 +15382,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int reachPx = com.termux.app.place.PageTopInsets.canvasReachPx(reaches, barShown, layout,
             metrics);
         boolean reached = applyTopStackOverlap(reachPx);
-        // The bar laid over a Home page puts that page's top border at the bar's foot, where the
-        // status swipe starts on Home as on a window (#90).
-        if (mPaneWallController != null)
-            mPaneWallController.wall().setHomeTopOverlayPx(reachPx);
+        // Home starts below the bar it wears as a window's page does (#90), read off Home's own
+        // layout rather than the one on screen, which a slide from Home may have lent the
+        // Workspace's bar; its top border, where the status swipe starts, is at the bar's foot.
+        if (mPaneWallController != null) {
+            PlaceLayout home = homePlaceLayout();
+            mPaneWallController.wall().setHomeTopInsetPx(home == null ? 0
+                : com.termux.app.place.PageTopInsets.homeTopInsetPx(reaches, barShown, home,
+                    metrics));
+        }
         // The side stacks ride up with the canvas; they start back at the bar's edge.
         boolean overlays = reachPx > 0;
         reached |= applySideStackTopInset(0, R.id.place_edge_stack_left,
@@ -15439,6 +15445,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (store == null) return null;
         return store.resolve(currentPlaceOrientation(),
             store.variantFor(com.termux.app.wall.PaneWallPage.TERMINAL));
+    }
+
+    /** Home's layout in this orientation as a Home page wears it, whatever page is committed. */
+    @Nullable
+    private PlaceLayout homePlaceLayout() {
+        if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS)
+            return committedPlaceLayout(currentPlaceOrientation());
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null) return null;
+        return store.resolve(currentPlaceOrientation(), com.termux.app.wall.PaneWallPage.WIDGETS);
     }
 
     /**

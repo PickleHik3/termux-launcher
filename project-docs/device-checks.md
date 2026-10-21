@@ -41,8 +41,9 @@ under twenty items; past that, the oldest are re-judged first.
   Home shows the launcher bar with the same window chips; a chip on Home slides to its window; ×
   closes it; status swipe works on Home and the shade still pulls from the top strip; no place
   marks, no gap beside the clock; the bar does not move on the Home↔window swipe; widgets are
-  not covered (**known open**: the bar overlays Home's top row, see the #90 hand-over) · emulator,
-  Home layout off, then on with the bar placed apart.
+  not covered (Home starts below the bar, lined up with the window's page across the swipe); the
+  bar's + on Home opens a Workspace window and slides to it · emulator, Home layout off, then on
+  with the bar placed apart.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on

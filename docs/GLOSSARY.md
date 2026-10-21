@@ -52,8 +52,9 @@ _Avoid_: edge swipe, status bar swipe, page swipe
 
 **Chrome**:
 Everything the launcher draws around a page: the status bar, dock, keyboard, borders and corner
-tabs. The **Workspace** wears all of it; a **Home page** wears the same status bar and dock
-(without the extra keys) and the keyboard, as overlays that take no room from the grid. The dock and
+tabs. The **Workspace** wears all of it; a **Home page** wears the same status bar, starting below
+it as a window's page does, and the same dock (without the extra keys) and the keyboard, as
+overlays that take no room from the grid. The dock and
 status bar are one each across both halves and stay put while the wall moves (decided 2026-10-21,
 replacing the 2026-10-19 Home without a launcher status bar).
 _Avoid_: UI (too wide), decoration

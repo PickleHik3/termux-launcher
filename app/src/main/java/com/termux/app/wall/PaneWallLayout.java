@@ -1237,14 +1237,11 @@ public final class PaneWallLayout extends ViewGroup {
         if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return false;
         float density = getResources().getDisplayMetrics().density;
         float slide = withSlide ? page.getTranslationX() : 0f;
-        // A Home page's top border is at the foot of the bar laid over it, the air above it
-        // the bar's own (#90).
-        int overlay = topBorderOverlayPx(page);
-        mBorderZone.page(page.getLeft() + slide, page.getTop() + overlay,
-                page.getRight() + slide, page.getBottom())
+        mBorderZone.page(page.getLeft() + slide, page.getTop(), page.getRight() + slide,
+                page.getBottom())
             // The air above stops at the status bar's edge, not under the bar the canvas
             // reaches up behind (PageTopInsets).
-            .gaps(page.getLeft(), overlay > 0 ? 0 : page.getTop() - pageTopInsetPx(page),
+            .gaps(page.getLeft(), page.getTop() - pageTopInsetPx(page),
                 getWidth() - page.getRight(), getHeight() - page.getBottom())
             .minBand(BorderDrag.MIN_BAND_DP * density)
             .sideReach(BorderDrag.SIDE_REACH_DP * density)
@@ -1913,8 +1910,7 @@ public final class PaneWallLayout extends ViewGroup {
                 mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), visibility);
             }
             if (top) {
-                float topY = pivotY
-                    + (topBorderOverlayPx(page) - page.getPivotY()) * page.getScaleY();
+                float topY = pivotY - page.getPivotY() * page.getScaleY();
                 mStatusGrabber.draw(canvas, centreX, topY, page.getScaleY(), visibility);
             }
         }
@@ -2708,8 +2704,8 @@ public final class PaneWallLayout extends ViewGroup {
     /**
      * How far a Workspace page starts below the wall's top (PageTopInsets.workspaceTopInsetPx):
      * the status bar's band while the canvas reaches up under the bar, so the terminal and the
-     * display window keep their place on screen whichever way the canvas stands, while a Home
-     * page starts at the top. 0 while the canvas stands below the bar.
+     * display window keep their place on screen whichever way the canvas stands; a Home page
+     * starts at {@link #mHomeTopInsetPx}. 0 while the canvas stands below the bar.
      */
     private int mWorkspaceTopInsetPx;
 
@@ -2722,29 +2718,26 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
-     * How far the status bar overlays a Home page's top (#90): the canvas reaches up under the
-     * bar there and the page starts at its top (PageTopInsets), so the page's top border, where
-     * the status swipe starts and its grabber stands, is this far down the page, at the bar's
-     * foot. 0 where no bar overlays it.
+     * How far a Home page starts below the wall's top (PageTopInsets.homeTopInsetPx): the band of
+     * the bar Home wears along the top while the canvas reaches up under it, so Home starts below
+     * its bar as a window's page does (#90), and its top border, where the status swipe starts,
+     * is at the bar's foot. 0 for a Home without a bar along the top, and while the canvas stands
+     * below the bar.
      */
-    private int mHomeTopOverlayPx;
+    private int mHomeTopInsetPx;
 
-    /** See {@link #mHomeTopOverlayPx}. */
-    public void setHomeTopOverlayPx(int px) {
-        int overlay = Math.max(0, px);
-        if (overlay == mHomeTopOverlayPx) return;
-        mHomeTopOverlayPx = overlay;
-        invalidate();
-    }
-
-    /** How far down {@code page} its top border stands: the bar's overlay on a Home page. */
-    private int topBorderOverlayPx(@NonNull View page) {
-        return page == mPageViews.get(PaneWallPage.WIDGETS) ? mHomeTopOverlayPx : 0;
+    /** See {@link #mHomeTopInsetPx}. */
+    public void setHomeTopInsetPx(int px) {
+        int inset = Math.max(0, px);
+        if (inset == mHomeTopInsetPx) return;
+        mHomeTopInsetPx = inset;
+        requestLayout();
     }
 
     /** Where {@code child} starts below the wall's top, beyond its frame (PageTopInsets). */
     private int pageTopInsetPx(@NonNull View child) {
-        return PageTopInsets.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx);
+        return PageTopInsets.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx,
+            mHomeTopInsetPx);
     }
 
     /** The page {@code child} is registered as, or null for a view that is no page. */
