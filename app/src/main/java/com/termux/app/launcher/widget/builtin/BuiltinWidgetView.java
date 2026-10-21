@@ -196,6 +196,8 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     private boolean bareWorn;
     /** What {@link #asksBare} answered at the last bind, so a setting that flips it re-dresses. */
     private boolean askedBare;
+    /** Headroom on a Bare ink's ratio over the rect's mean sample; see {@link #measureBare}. */
+    static final double BARE_SAMPLE_MARGIN = 1.15;
     /** The soft dim under a Bare widget's ink, as measured; transparent where it reads without. */
     private int bareDim;
     /** Whether {@link #bareInks} were measured on the wallpaper, not the theme's own. */
@@ -834,12 +836,19 @@ public abstract class BuiltinWidgetView extends FrameLayout {
                     text, base.primary, graphic, base.card, pale);
             dim = answer.veil;
             ground = answer.surface;
-            bareInks[0] = com.termux.app.chrome.OnGlass.bareInk(answer, base.onSurface, text, pale);
-            bareInks[1] = com.termux.app.chrome.OnGlass.bareInk(answer, base.onSurfaceVariant, text,
+            // The sample is the mean of the whole rect, and the ink stands on one part of a
+            // wallpaper that may grade across it: the inks are toned with headroom so the part
+            // they stand on holds the target too, not only the mean.
+            double inkText = text * BARE_SAMPLE_MARGIN;
+            double inkGraphic = graphic * BARE_SAMPLE_MARGIN;
+            bareInks[0] = com.termux.app.chrome.OnGlass.bareInk(answer, base.onSurface, inkText,
                 pale);
-            bareInks[2] = com.termux.app.chrome.OnGlass.bareInk(answer, base.primary, graphic, pale);
+            bareInks[1] = com.termux.app.chrome.OnGlass.bareInk(answer, base.onSurfaceVariant,
+                inkText, pale);
+            bareInks[2] = com.termux.app.chrome.OnGlass.bareInk(answer, base.primary, inkGraphic,
+                pale);
             // The warm accent is also the caution ink, which is text.
-            bareInks[3] = com.termux.app.chrome.OnGlass.bareInk(answer, base.warm, text, pale);
+            bareInks[3] = com.termux.app.chrome.OnGlass.bareInk(answer, base.warm, inkText, pale);
             measured = true;
         }
         boolean moved = dim != bareDim || cardFill != android.graphics.Color.TRANSPARENT

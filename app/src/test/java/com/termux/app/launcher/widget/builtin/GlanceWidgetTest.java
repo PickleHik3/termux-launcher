@@ -541,6 +541,40 @@ public class GlanceWidgetTest {
         }
     }
 
+    /** A dark theme over a light wallpaper: every Bare ink still holds its ratio on the wallpaper. */
+    @Test
+    public void bareHoldsContrastForADarkThemeOnALightWallpaper() {
+        BuiltinWidgetStyle night = BuiltinWidgetStyle.resolve(new android.view.ContextThemeWrapper(
+                context, com.google.android.material.R.style.Theme_Material3_Dark),
+            BuiltinWidgetStyle.Numerals.SANS, false, null);
+        for (int wallpaper : new int[] {0xFFF4EFE4, 0xFFECECEC, 0xFFFFFFFF, 0xFFD0D4DC}) {
+            Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+            InkLook look = new InkLook();
+            look.polarity = ChromeInk.Polarity.DARK_INK;
+            look.wallpaper = wallpaper;
+            Probe view = new Probe(activity, services, night, true);
+            live(activity, look, view);
+            String at = Integer.toHexString(wallpaper) + " ";
+            assertTrue(at + "bare", view.isBare());
+            assertTrue(at + "onSurface " + OnGlass.ratio(view.style().onSurface, view.ground()),
+                OnGlass.ratio(view.style().onSurface, view.ground()) >= OnGlass.TARGET_BODY_TEXT);
+            // The sample is a mean: the text may stand on a part 4% darker than it.
+            int local = OnGlass.opaque(OnGlass.composite(OnGlass.withAlpha(0xFF000000, 10),
+                view.ground()));
+            assertTrue(at + "onSurface on the darker part",
+                OnGlass.ratio(view.style().onSurface, local) >= OnGlass.TARGET_BODY_TEXT);
+            assertTrue(at + "onSurfaceVariant on the darker part",
+                OnGlass.ratio(view.style().onSurfaceVariant, local) >= OnGlass.TARGET_BODY_TEXT);
+            assertTrue(at + "onSurfaceVariant",
+                OnGlass.ratio(view.style().onSurfaceVariant, view.ground())
+                    >= OnGlass.TARGET_BODY_TEXT);
+            assertTrue(at + "primary", OnGlass.ratio(view.style().primary, view.ground())
+                >= OnGlass.TARGET_LARGE_TEXT);
+            assertTrue(at + "warm", OnGlass.ratio(view.style().warm, view.ground())
+                >= OnGlass.TARGET_BODY_TEXT);
+        }
+    }
+
     /** Bare is the widget's ask only: the Look's Clear stop leaves a card a card. */
     @Test
     public void theLooksClearStopDoesNotTurnBareOn() {
