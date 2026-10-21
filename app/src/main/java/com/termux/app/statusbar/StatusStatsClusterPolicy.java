@@ -5,19 +5,24 @@ import androidx.annotation.NonNull;
 import com.termux.app.wall.PaneWallPage;
 
 /**
- * The CPU/RAM/weather cluster's order and centring: everywhere else it keeps the row's end in its
- * usual CPU · RAM · Weather order; on the Widgets place it reads Weather · RAM · CPU and centres
- * in the row instead. Both are place-driven, not width-driven, so a stat toggling on or off in
+ * The CPU/RAM/weather cluster's order and centring: it keeps the row's end in its usual
+ * CPU · RAM · Weather order on every page since the bar is one across the wall (#90); the Widgets
+ * place used to read Weather · RAM · CPU and centre in the row instead ({@link
+ * #centeredReversed}). Both are place-driven, not width-driven, so a stat toggling on or off in
  * Settings or the weather text changing length never has to re-derive anything.
  */
 public final class StatusStatsClusterPolicy {
 
     private StatusStatsClusterPolicy() {}
 
-    /** Whether the cluster reads Weather · RAM · CPU and centres in the row, instead of the
-     *  default CPU · RAM · Weather at the row's end. */
+    /**
+     * Whether the cluster reads Weather · RAM · CPU and centres in the row, instead of the
+     * default CPU · RAM · Weather at the row's end: on no page since the bar is one across the
+     * wall (#90). Home's bar carries the window chips as every window's does, so its readings keep
+     * the row's end and the bar stands still on the swipe.
+     */
     public static boolean centeredReversed(@NonNull PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS;
+        return false;
     }
 
     /**

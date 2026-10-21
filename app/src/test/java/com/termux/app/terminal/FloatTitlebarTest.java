@@ -269,127 +269,14 @@ public class FloatTitlebarTest {
         assertEquals(View.GONE, strip.getChildAt(0).getVisibility());
     }
 
-    // --- The focused Home float's readings ---
+    // --- The handle ---
 
     @Test
-    public void readings_dropFromTheTrailingEndRamFirstAndNeverTakeTheHandlesSpan() {
-        int[] both = {60, 130};
-        // 400 wide, 120 of buttons, 44 of handle: 236 for readings.
-        assertEquals(2, FloatTitlebarPolicy.readingsThatFit(400, 120, 44, both));
-        // 300 wide: 136 left, RAM's end at 130 still fits.
-        assertEquals(2, FloatTitlebarPolicy.readingsThatFit(300, 120, 44, both));
-        // 280 wide: 116 left, RAM goes, CPU stays.
-        assertEquals(1, FloatTitlebarPolicy.readingsThatFit(280, 120, 44, both));
-        // 220 wide: 56 left, CPU goes too; the buttons and the handle are never given up.
-        assertEquals(0, FloatTitlebarPolicy.readingsThatFit(220, 120, 44, both));
-        assertEquals("RAM alone fits on its own", 1,
-            FloatTitlebarPolicy.readingsThatFit(300, 120, 44, new int[]{70}));
-        assertEquals(0, FloatTitlebarPolicy.readingsThatFit(300, 120, 44, new int[0]));
-    }
-
-    @Test
-    public void grip_centresBetweenTheReadingsAndTheButtonsOrStandsDown() {
-        // Readings end at 100, buttons start at 400 - 120 = 280: the span's middle.
-        assertEquals(190f, FloatTitlebarPolicy.gripCenterPx(400, 120, 100, 28, 8), 0f);
-        assertEquals("no readings: the span the buttons leave", 140f,
-            FloatTitlebarPolicy.gripCenterPx(400, 120, 0, 28, 8), 0f);
+    public void grip_centresInTheSpanTheButtonsLeaveOrStandsDown() {
+        // Buttons start at 400 - 120 = 280: the span's middle.
+        assertEquals(140f, FloatTitlebarPolicy.gripCenterPx(400, 120, 28, 8), 0f);
         assertEquals("too tight for the grip and its air", -1f,
-            FloatTitlebarPolicy.gripCenterPx(400, 120, 240, 28, 8), 0f);
-    }
-
-    @Test
-    public void readings_wearTheStatusBarsTiersAndShowOnAWideStrip() {
-        FloatTitlebarView strip = strip(true, new ArrayList<>());
-        strip.setReadings("12%", "48%");
-        laidOut(strip, 1000);
-        assertTrue(strip.readingShown(true));
-        assertTrue(strip.readingShown(false));
-        assertEquals(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY,
-            strip.readingView(true).colorRole());
-        assertEquals(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY,
-            strip.readingView(false).colorRole());
-        assertFalse("a glance, not a control", strip.readingView(true).isClickable());
-        float density = context().getResources().getDisplayMetrics().density;
-        assertEquals("CPU leads, in from the corner",
-            Math.round(FloatTitlebarPolicy.READINGS_INSET_DP * density),
-            strip.readingView(true).getLeft());
-        assertTrue("RAM after CPU", strip.readingView(false).getLeft()
-            > strip.readingView(true).getRight());
-        assertEquals(FloatTitlebarPolicy.ACTION_NONE,
-            strip.actionAt(strip.readingView(true).getLeft() + 1f, strip.getHeight() / 2f));
-    }
-
-    @Test
-    public void readings_putAwayLeaveThePlainStrip() {
-        FloatTitlebarView strip = strip(true, new ArrayList<>());
-        strip.setReadings("12%", "48%");
-        strip.setReadings(null, null);
-        laidOut(strip, 1000);
-        assertFalse(strip.readingShown(true));
-        assertFalse(strip.readingShown(false));
-        assertEquals(View.GONE, strip.readingView(true).getVisibility());
-    }
-
-    @Test
-    public void readings_atFontScaleOnePointThreeGiveWayRatherThanOverlap() {
-        float previous = context().getResources().getConfiguration().fontScale;
-        RuntimeEnvironment.setFontScale(1.3f);
-        try {
-            float density = context().getResources().getDisplayMetrics().density;
-            int handleMin = Math.round((FloatTitlebarPolicy.GRIP_WIDTH_DP
-                + 2 * FloatTitlebarPolicy.GRIP_AIR_DP) * density);
-            boolean sawDrop = false;
-            for (int widthDp = 150; widthDp <= 400; widthDp += 10) {
-                FloatTitlebarView strip = strip(true, new ArrayList<>());
-                strip.setReadings("100%", "100%");
-                int width = Math.round(widthDp * density);
-                laidOut(strip, width);
-                int buttonsLeft = strip.buttonFor(FloatTitlebarPolicy.ACTION_MINIMISE).getLeft();
-                for (boolean cpu : new boolean[]{true, false}) {
-                    if (!strip.readingShown(cpu)) continue;
-                    assertTrue(widthDp + "dp: a reading stops short of the handle's span",
-                        strip.readingView(cpu).getRight() + handleMin <= buttonsLeft);
-                }
-                if (strip.readingShown(false)) assertTrue("RAM never outlasts CPU",
-                    strip.readingShown(true));
-                sawDrop |= !strip.readingShown(false);
-            }
-            assertTrue("a narrow float drops a reading", sawDrop);
-
-            // In the 24dp strip at 1.3 the readings stand at their own height, unclipped.
-            FloatTitlebarView wide = strip(true, new ArrayList<>());
-            wide.setReadings("100%", "100%");
-            laidOut(wide, Math.round(400 * density));
-            assertTrue(wide.readingShown(true));
-            int free = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-            View cpu = wide.readingView(true);
-            cpu.measure(free, free);
-            assertTrue("the text fits the strip's height",
-                cpu.getMeasuredHeight() <= wide.getHeight());
-        } finally {
-            RuntimeEnvironment.setFontScale(previous);
-        }
-    }
-
-    @Test
-    public void readings_tallerThanTheStripAtAHugeFontScaleAreDroppedNotClipped() {
-        assertTrue(FloatTitlebarPolicy.readingsFitHeight(48, 40));
-        assertTrue(FloatTitlebarPolicy.readingsFitHeight(48, 48));
-        assertFalse(FloatTitlebarPolicy.readingsFitHeight(48, 49));
-        assertFalse("unmeasured", FloatTitlebarPolicy.readingsFitHeight(48, 0));
-
-        float previous = context().getResources().getConfiguration().fontScale;
-        RuntimeEnvironment.setFontScale(2f);
-        try {
-            float density = context().getResources().getDisplayMetrics().density;
-            FloatTitlebarView strip = strip(true, new ArrayList<>());
-            strip.setReadings("100%", "100%");
-            laidOut(strip, Math.round(400 * density));
-            assertFalse(strip.readingShown(true));
-            assertFalse(strip.readingShown(false));
-        } finally {
-            RuntimeEnvironment.setFontScale(previous);
-        }
+            FloatTitlebarPolicy.gripCenterPx(160, 120, 28, 8), 0f);
     }
 
     private static Context context() {

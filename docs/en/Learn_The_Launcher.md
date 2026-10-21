@@ -55,7 +55,7 @@ The corners are not the border. They hold the corner tab (below).
 Hold any corner of a page to show its tab:
 
 - **Terminal**: **Appearance**, minimal mode, automatic tiling, **Open settings** (cog) and **?**.
-- **Widgets**: **Edit widgets**, **Add page**, **Appearance**, minimal mode and **?**.
+- **Widgets**: **Edit widgets**, **Add page**, **Appearance** and **?**.
 - **Display**: turn the display on or off, minimal mode, settings, **Appearance** and **?**.
 - **A split pane**: **Close**, **Move** and **Maximise** instead.
 
@@ -72,7 +72,7 @@ Session
 ```
 
 - A **session** is the top-level group, shown by the number at the start of the status bar.
-- A **window** is a tab inside a session, shown as a pill beside the number.
+- A **window** is a tab inside a session, shown as a window chip beside the number.
 - A **pane** is one shell. A window can be split into several panes.
 - A **workspace** is a saved set of sessions, windows, panes and working directories.
 

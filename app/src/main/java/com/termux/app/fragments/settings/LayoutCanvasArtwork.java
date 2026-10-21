@@ -211,6 +211,38 @@ final class LayoutCanvasArtwork {
     }
 
     /**
+     * The Wall strip's first row over the apps row: the clock as a time and a date line at the
+     * row's start, a terminal tile and the {@code +} tile beside it, at the row's height.
+     */
+    void wallStrip(@NonNull Canvas canvas, @NonNull RectF box, @NonNull Palette p, float k) {
+        float w = box.width() / k;
+        float h = box.height() / k;
+        float pad = 6f;
+        float rowH = h - pad;
+        if (w < 80f || rowH < 12f) return;
+        int saved = begin(canvas, box, k);
+        float inset = 14f;
+        float gap = 6f;
+        float content = w - 2f * inset;
+        float clock = content * 0.56f;
+        float tile = (content - clock - gap) / 2f;
+        float top = pad;
+        float time = Math.min(rowH * 0.45f, clock / 3.2f);
+        text(canvas, "08:03", inset, top + rowH / 2f + time * 0.2f, time, p.text,
+            Paint.Align.LEFT);
+        rr(canvas, inset, top + rowH / 2f + time * 0.45f, clock * 0.5f, 2f, 1f, p.muted);
+        float x = inset + clock + gap;
+        rr(canvas, x, top, tile - gap / 2f, rowH, 6f, p.key);
+        rr(canvas, x + 4f, top + 4f, tile - gap / 2f - 8f, Math.max(0f, rowH - 18f), 3f,
+            p.accentBg);
+        x += tile + gap / 2f;
+        rr(canvas, x, top, tile - gap / 2f, rowH, 6f, p.secondaryBg);
+        text(canvas, "+", x + (tile - gap / 2f) / 2f, top + rowH / 2f + 5f, 14f, p.text,
+            Paint.Align.CENTER);
+        canvas.restoreToCount(saved);
+    }
+
+    /**
      * How many placeholder icons the app icons bar draws along {@code length} pack units: the
      * pack's seven, whatever the user has pinned, or as many as fit a bar too short for seven.
      */

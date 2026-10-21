@@ -46,6 +46,27 @@ final class LayoutCanvasGeometry {
         return layout.appsRowBandPx;
     }
 
+    /**
+     * What the Wall strip's first row adds over the apps row at {@code stripHeightDp}, in dp: the
+     * row and the slab's air over it, {@link DockLayoutPolicy}'s own answer at a density of 1 for
+     * the dock standing alone on its edge.
+     */
+    static int wallStripBandDp(float dockHeightScale, boolean floating, int stripHeightDp) {
+        DockLayout layout = DockLayoutPolicy.compute(DockLayoutPolicy.DockInputs.builder()
+            .preferencesAvailable(true)
+            .capsule(floating)
+            .appsRowAlone(true)
+            .appsRowEnabledPref(true)
+            .density(1f)
+            .barHeightScale(dockHeightScale)
+            .baseToolbarHeightPx(Math.round(BASE_TOOLBAR_DP))
+            .surface(com.termux.app.dock.DockSurfaceSpec.WALL_STRIP)
+            .wallStripReveal(1f)
+            .wallStripHeightDp(stripHeightDp)
+            .build());
+        return layout.wallStripFullBandPx;
+    }
+
     /** The width of a rail the pinned apps stand in when they lie on a side edge, in dp. */
     static int dockRailWidthDp() {
         return Math.round(Math.max(52f, DockLayoutPolicy.DOCK_RAIL_ICON_SIZE_DP

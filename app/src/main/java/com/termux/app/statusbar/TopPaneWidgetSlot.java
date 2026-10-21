@@ -336,10 +336,9 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         int gutter = Math.round(dp(GUTTER_DP));
         int gap = Math.round(dp(GAP_DP));
-        // The bar's home place icon sits beside the clock, whatever the clock's alignment; the
-        // clock and everything else lay out after it. The neighbours peek past the edges behind
-        // the content and take no room.
-        int contentStart = StatusBarLensView.leadingCellWidthPx(getContext());
+        // No place mark stands beside the clock any more (#90), so its cell is closed up: the
+        // clock and everything else start one gutter in, the same air the trailing end keeps.
+        int contentStart = Math.max(StatusBarLensView.leadingCellWidthPx(getContext()), gutter);
         int available = Math.max(0, width - gutter - contentStart);
 
         int clockHeight = height;

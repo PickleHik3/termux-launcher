@@ -308,13 +308,13 @@ public final class StatusBarLensView extends View {
         }
     }
 
-    /** The place's mark: a house for Home, a prompt for the Workspace. */
+    /** The place's mark: a prompt. Never drawn since the bar wears no marks (#90). */
     @NonNull
     private String glyphFor(@NonNull PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS ? "\uf015" : "\uf120";
+        return "\uf120";
     }
 
-    /** What the slot keeps clear at its start, from the bar's edge: the home icon and its gap. */
+    /** What the slot keeps clear at its start for a mark beside the clock: none since #90. */
     public static int leadingCellWidthPx(@NonNull Context context) {
         return StatusBarLensMetrics.leadingCellWidthPx(
             context.getResources().getDisplayMetrics().density);

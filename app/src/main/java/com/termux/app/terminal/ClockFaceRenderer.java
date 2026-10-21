@@ -402,6 +402,19 @@ public final class ClockFaceRenderer {
     }
 
     /**
+     * The largest the fit grows the FULL face to, for a host that is neither the bar nor a widget:
+     * the Wall strip's row, whose clock grows with the row ({@code WallStripRowPolicy
+     * .clockMaxScale}). A ceiling of 0 or less restores the bar's {@link #FIT_MAX_SCALE}.
+     * Returns true if it changed; the face's scale and width move with it.
+     */
+    public boolean setFitCeiling(float ceiling) {
+        float next = ceiling > 0f ? ceiling : FIT_MAX_SCALE;
+        if (next == mFitCeiling) return false;
+        mFitCeiling = next;
+        return true;
+    }
+
+    /**
      * The FULL face's painted height in a {@code widthPx} by {@code heightPx} box, fitted as
      * {@link #setFitBudget} would fit it there: what a host lays the face out at. Needs a snapshot.
      */
@@ -1206,14 +1219,16 @@ public final class ClockFaceRenderer {
     @NonNull
     public float[] fitPlan(float widthBudgetPx, float heightBudgetPx, boolean compactFloor) {
         float floor = compactFloor ? compactColumnHeightDp() / fullBandHeightDp() : 0f;
-        return fitScalePlan(fullParts(), heightBudgetPx, widthBudgetPx, floor, new float[3]);
+        return fitScalePlan(fullParts(), heightBudgetPx, widthBudgetPx, floor, mFitCeiling,
+            new float[3]);
     }
 
     /** Width the FULL face paints inside the given budget, so a host can size the clock to it. */
     public float fitWidthPx(float widthBudgetPx, float heightBudgetPx, boolean compactFloor) {
         if (mSnapshot == null || widthBudgetPx <= 0f || heightBudgetPx <= 0f) return 0f;
         float floor = compactFloor ? compactColumnHeightDp() / fullBandHeightDp() : 0f;
-        return fitScalePlan(fullParts(), heightBudgetPx, widthBudgetPx, floor, mPlan)[2];
+        return fitScalePlan(fullParts(), heightBudgetPx, widthBudgetPx, floor, mFitCeiling,
+            mPlan)[2];
     }
 
     /**
@@ -2308,18 +2323,29 @@ public final class ClockFaceRenderer {
      * Width of {@code text} as {@link #drawFadingTime} paints it: a glyph at a time, so no pair is
      * kerned. Measuring the whole run kerned it ("11" sits tighter in Roboto), and once the face
      * was scaled up to fill a widget the gap the model missed pushed the period off the box's
-     * edge, clipped to "P".
+     * edge, clipped to "P". The same held for letter spacing a platform leaves off a run's ends:
+     * the Wall strip's clock at 128 dp with two terminals lost its period and seconds to its
+     * room's clip on the 2026-10-21 emulator check.
      */
     private float glyphRunWidth(String text, Typeface typeface, float textDp, float letterSpacing) {
         mPaint.setTypeface(typeface);
         mPaint.setLetterSpacing(letterSpacing);
         mPaint.setTextSize(sp(textDp));
+        float width = glyphRunWidth(text, typeface, mPaint.getTextSize(), letterSpacing,
+            mTimeAdvances, mMeasure);
+        mPaint.setLetterSpacing(0f);
+        return width;
+    }
+
+    /** {@code text}'s width as glyphs laid one after another at their own advances. */
+    @VisibleForTesting
+    static float glyphRunWidth(@NonNull String text, @Nullable Object face, float size,
+                               float spacing, @NonNull CharAdvances advances,
+                               @NonNull TextWidths.Measurer measurer) {
         float width = 0f;
         for (int i = 0; i < text.length(); i++) {
-            width += mTimeAdvances.advance(text.charAt(i), typeface, mPaint.getTextSize(),
-                letterSpacing, mMeasure);
+            width += advances.advance(text.charAt(i), face, size, spacing, measurer);
         }
-        mPaint.setLetterSpacing(0f);
         return width;
     }
 

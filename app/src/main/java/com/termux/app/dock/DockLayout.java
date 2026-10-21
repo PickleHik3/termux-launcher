@@ -127,7 +127,7 @@ public final class DockLayout {
     /** Configured dock corner radius in dp, or a negative value for the follow-the-style radius. */
     private final int mConfiguredCornerRadiusDp;
 
-    // --- The Prompt line's field (DockSurfaceSpec.PROMPT_LINE); all zero on every other dock ---
+    // --- The Search field (#96), under the apps row of any design; all zero while it is off ---
     /**
      * The band the field takes under the apps row on the same slab, as laid out now: the field
      * view and the slab's padding under it. It eases between 0 and
@@ -141,11 +141,21 @@ public final class DockLayout {
     /** The slab's padding under the field view, the rest of the band. */
     public final int promptFieldBottomPadPx;
     /**
+     * The air over the field view, the head of the band: none on a slab; under Lens beads the
+     * capsule's air ({@link LensBeadGeometry#CAPSULE_TOP_PAD_DP}), so the field's capsule stands
+     * the beads' own gap under them.
+     */
+    public final int promptFieldTopPadPx;
+    /**
      * The visible gap between the well and the slab's lower edge: the air over the icons, so
      * the slab's outer padding is equal top and bottom. The well's radius nests by it.
      */
     public final int promptFieldWellGapPx;
-    /** The field's side inset from the screen edge: the slab's margin and the row's 14 dp. */
+    /**
+     * The field's side inset from the screen edge: the slab's margin and the row's 14 dp; under
+     * Lens beads the apps row's own ({@link #appsRowSideInsetPx}), so its capsule is as wide as
+     * the row.
+     */
     public final int promptFieldSideInsetPx;
 
     // --- The Wall strip's first row (DockSurfaceSpec.WALL_STRIP); all zero on every other dock ---
@@ -186,6 +196,7 @@ public final class DockLayout {
         this.promptFieldFullBandPx = Math.max(0, b.promptFieldFullBandPx);
         this.promptFieldHeightPx = Math.max(0, b.promptFieldHeightPx);
         this.promptFieldBottomPadPx = Math.max(0, b.promptFieldBottomPadPx);
+        this.promptFieldTopPadPx = Math.max(0, b.promptFieldTopPadPx);
         this.promptFieldWellGapPx = Math.max(0, b.promptFieldWellGapPx);
         this.promptFieldSideInsetPx = Math.max(0, b.promptFieldSideInsetPx);
         this.capsule = b.capsule;
@@ -271,6 +282,15 @@ public final class DockLayout {
     }
 
     /**
+     * The dock's apps row's side inset from the screen edge, on each side
+     * ({@link DockLayoutPolicy#appsRowSideInsetPx}).
+     */
+    public int appsRowSideInsetPx() {
+        return DockLayoutPolicy.appsRowSideInsetPx(
+            capsule ? capsuleContentInsetPx : horizontalInsetPx, surface.beads, density);
+    }
+
+    /**
      * The dock's stacked height for the given extra-keys toolbar height: its rows, the Prompt
      * line's field band under the apps row and the Wall strip's row over it.
      */
@@ -296,6 +316,7 @@ public final class DockLayout {
         int promptFieldFullBandPx;
         int promptFieldHeightPx;
         int promptFieldBottomPadPx;
+        int promptFieldTopPadPx;
         int promptFieldWellGapPx;
         int promptFieldSideInsetPx;
         boolean capsule;

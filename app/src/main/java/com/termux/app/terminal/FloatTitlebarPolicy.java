@@ -31,10 +31,8 @@ public final class FloatTitlebarPolicy {
     public static final int ACTION_CLOSE = 4;
 
     /**
-     * The strip's height: one row of the 18dp glyphs with 3dp of air above and below. The only
-     * text it carries is the focused Home float's readings ({@link #readingsThatFit}), which give
-     * way along the strip rather than ask for more height; a thumb's target is
-     * {@link #BUTTON_REACH_DP}, not this.
+     * The strip's height: one row of the 18dp glyphs with 3dp of air above and below. It carries
+     * no text; a thumb's target is {@link #BUTTON_REACH_DP}, not this.
      */
     public static final int HEIGHT_DP = 24;
     /** The air between the strip and the pane under it, so each reads as its own slab. */
@@ -45,12 +43,6 @@ public final class FloatTitlebarPolicy {
     public static final int GRIP_WIDTH_DP = 28;
     /** The least air the grip keeps on either side inside its span. */
     public static final int GRIP_AIR_DP = 8;
-    /**
-     * Where the focused Home float's readings start, in from the strip's leading edge: clear of
-     * the strip's rounded corner (at most half its height) once the readings' own padding is
-     * counted.
-     */
-    public static final int READINGS_INSET_DP = 4;
     /**
      * How far down from the strip's top a button still takes a press: a thumb-sized target on a
      * thin strip. Past the strip it reaches over the gap and the pane's top edge, under the
@@ -90,49 +82,14 @@ public final class FloatTitlebarPolicy {
     }
 
     /**
-     * How many of the focused Home float's readings the strip shows, leading to trailing: the
-     * strip lays out, from its leading edge, the readings (CPU, then RAM, whichever the status
-     * bar's settings show), then the drag handle, then the buttons. The buttons are never given
-     * up and the handle keeps at least {@code handleMinPx} (the grip and its air), so readings
-     * that do not fit in what is left drop from the trailing end: with both on, RAM goes first,
-     * then CPU. A reading is dropped whole, never ellipsized; nothing overlaps the handle or a
-     * button. Font scale and density reach this only through the measured widths.
-     *
-     * @param readingsEndPx where each count of readings ends, from the strip's leading edge:
-     *     {@code readingsEndPx[k - 1]} is the end of the first {@code k} readings, inset included
+     * The drag handle's grip, centred in the span the buttons leave, measured from the leading
+     * edge: the grip's centre, or -1 when the span cannot hold {@code gripPx} with {@code airPx}
+     * either side.
      */
-    public static int readingsThatFit(int stripWidthPx, int buttonsPx, int handleMinPx,
-                                      @NonNull int[] readingsEndPx) {
-        int room = stripWidthPx - Math.max(0, buttonsPx) - Math.max(0, handleMinPx);
-        int shown = 0;
-        for (int k = 1; k <= readingsEndPx.length; k++) {
-            if (readingsEndPx[k - 1] > room) break;
-            shown = k;
-        }
-        return shown;
-    }
-
-    /**
-     * Whether the readings stand in a strip {@code stripHeightPx} tall at their own height
-     * {@code readingHeightPx}, their text at the user's font scale. Taller, they are dropped,
-     * never clipped or shrunk, so whatever shows reads exactly as the status bar's. In the 24dp
-     * strip the readings fit at font scale 1.3 (about 20dp) and give way near 1.5.
-     */
-    public static boolean readingsFitHeight(int stripHeightPx, int readingHeightPx) {
-        return readingHeightPx > 0 && readingHeightPx <= stripHeightPx;
-    }
-
-    /**
-     * The drag handle's grip, centred in the span between the readings' end
-     * ({@code readingsEndPx}, 0 with none) and the buttons, measured from the leading edge: the
-     * grip's centre, or -1 when the span cannot hold {@code gripPx} with {@code airPx} either side.
-     */
-    public static float gripCenterPx(int stripWidthPx, int buttonsPx, int readingsEndPx,
-                                     int gripPx, int airPx) {
-        int start = Math.max(0, readingsEndPx);
+    public static float gripCenterPx(int stripWidthPx, int buttonsPx, int gripPx, int airPx) {
         int end = stripWidthPx - Math.max(0, buttonsPx);
-        if (end - start < gripPx + 2 * airPx) return -1f;
-        return (start + end) / 2f;
+        if (end < gripPx + 2 * airPx) return -1f;
+        return end / 2f;
     }
 
     /**

@@ -189,4 +189,53 @@ public class WallStripSlabLayoutTest {
         assertEquals(dockRadius - wall.wallStripWellGapPx, tile, 1e-3f);
         assertTrue(tile > 0f);
     }
+
+    // ---------------------------------------------------------------- the row's own height
+
+    private static DockLayout wallAt(int heightDp) {
+        return DockLayoutPolicy.compute(inputs(true, true, 2.18f)
+            .surface(DockSurfaceSpec.WALL_STRIP).wallStripReveal(1f)
+            .wallStripHeightDp(heightDp).build());
+    }
+
+    @Test
+    public void aCallerThatSaysNoHeightGetsTodaysRow() {
+        DockLayout unsaid = wall(true, true, 2.18f, 1f);
+        assertEquals(Math.round(84f * DENSITY), unsaid.wallStripHeightPx);
+        assertEquals(unsaid.wallStripBandPx, wallAt(84).wallStripBandPx);
+    }
+
+    @Test
+    public void theRowStandsAtTheHeightTheLayoutGivesIt_onTheSameSlabAndAir() {
+        DockLayout tall = wallAt(120);
+        DockLayout shipped = wallAt(84);
+        assertEquals(Math.round(120f * DENSITY), tall.wallStripHeightPx);
+        assertEquals(tall.wallStripHeightPx + tall.wallStripTopPadPx, tall.wallStripBandPx);
+        assertEquals("the air over the row is the same", shipped.wallStripTopPadPx,
+            tall.wallStripTopPadPx);
+        assertEquals("the apps row does not move", shipped.appsBarHeightPx,
+            tall.appsBarHeightPx);
+        assertEquals("the stack grows by the row and nothing else",
+            shipped.combinedHeight(BASE_TOOLBAR_PX, false)
+                + tall.wallStripBandPx - shipped.wallStripBandPx,
+            tall.combinedHeight(BASE_TOOLBAR_PX, false));
+    }
+
+    @Test
+    public void theRowsHeightIsClampedToItsRange() {
+        assertEquals(Math.round(WallStripRowPolicy.MIN_HEIGHT_DP * DENSITY),
+            wallAt(20).wallStripHeightPx);
+        assertEquals(Math.round(WallStripRowPolicy.MAX_HEIGHT_DP * DENSITY),
+            wallAt(900).wallStripHeightPx);
+    }
+
+    @Test
+    public void theRowsHeightEasesWithTheRevealLikeTheDefaultOne() {
+        DockLayout half = DockLayoutPolicy.compute(inputs(true, true, 2.18f)
+            .surface(DockSurfaceSpec.WALL_STRIP).wallStripReveal(0.5f)
+            .wallStripHeightDp(120).build());
+        DockLayout full = wallAt(120);
+        assertEquals(full.wallStripFullBandPx, half.wallStripFullBandPx);
+        assertEquals(Math.round(full.wallStripFullBandPx * 0.5f), half.wallStripBandPx);
+    }
 }

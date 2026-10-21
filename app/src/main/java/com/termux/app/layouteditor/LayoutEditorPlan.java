@@ -3,11 +3,12 @@ package com.termux.app.layouteditor;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.Dress;
+import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.place.Element;
-import com.termux.app.place.HomeChromePolicy;
 import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.LayoutVariant;
@@ -38,12 +39,14 @@ import java.util.Map;
  * on the toggle through the store's own setters, the same way a drop does, so the snapshot and the
  * dirty check see every one of them.
  *
- * <p>The Workspace's layout is every window's (ADR 0003), so a write there lands on every window.
- * Home has its own (ADR 0008): the session edits the layout of the page it stands on, and the Home
- * filter ({@link #showHome}) moves it between a Home page and its window, each layout's arrangement
- * at entry kept for Undo. The session knows which place it is on, because that is what the layout
+ * <p>One layout dresses both halves (ADR 0009), so a write there lands on every window and on
+ * Home. Only while Home holds a Home layout does a Home page wear one of its own: the session
+ * edits the layout of the page it stands on, as its dress says, and the Home filter ({@link
+ * #showHome}) moves it between a Home page and its window, each layout's arrangement at entry
+ * kept for Undo. The session knows which place it is on, because that is what the layout
  * canvas draws — Home's grid, the terminal's text, the display's screen — and what decides the
- * handles worth offering: the grid's only on Home.
+ * handles worth offering: the grid's only on Home. Which elements the tray and a drop offer, and
+ * whether the dock's design is picked here, are the edited layout's page's {@link Dress}.
  *
  * <p>Pure: a store in, an answer out, no views, so every case above is testable without a window.
  * {@link LayoutEditorController} is the wiring that draws it, in Layout mode of the one editor.
@@ -70,6 +73,14 @@ public final class LayoutEditorPlan {
      */
     @NonNull private PlaceLayoutStore mPlaces;
     @NonNull private LayoutVariant mVariant;
+    /** What a page wears: the layout the session edits there, and the elements it offers. */
+    @NonNull private final DressResolver mDresses;
+    /**
+     * The page whose layout is being edited, so whose {@link Dress} says what is offered: the page
+     * the session opened on, until the Home filter moves it. A second door ({@link #showPlace})
+     * moves the picture and leaves it.
+     */
+    @NonNull private PaneWallPage mDressedPage;
     /** The place the layout canvas draws and the live place behind the card; never a write target. */
     @NonNull private PaneWallPage mPlace;
     /**
@@ -80,7 +91,9 @@ public final class LayoutEditorPlan {
     /**
      * The arrangement of every variant this session has edited, as the editor found it; what
      * Discard and ↺ put back. The variant the session opened on first; another is taken the
-     * first time the Home filter shows it, before anything can have been written to it.
+     * first time the Home filter shows it, before anything can have been written to it, except to
+     * the sizes the Home and normal layouts share (linked, #84): those it takes from the entry
+     * already kept for the other ({@link #enterVariant}).
      */
     @NonNull private final EnumMap<LayoutVariant, PlaceArrangeSnapshot> mEntries =
         new EnumMap<>(LayoutVariant.class);
@@ -89,14 +102,17 @@ public final class LayoutEditorPlan {
     @NonNull private PlaceOrientation mDeviceOrientation;
     @NonNull private PlaceOrientation mShownOrientation;
 
-    private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull LayoutVariant variant,
-                             @NonNull PaneWallPage place, @NonNull PlaceOrientation deviceOrientation,
+    private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
+                             @NonNull PlaceOrientation deviceOrientation,
                              @Nullable List<PlaceArrangeSnapshot> carriedEntries) {
         mRoot = places;
+        mDresses = DressResolver.of(places);
+        mDressedPage = place;
+        LayoutVariant variant = dress().layout();
         mVariant = variant;
         mPlaces = places.forVariant(variant);
         mPlace = place;
-        mWindowPlace = HomeChromePolicy.isHome(place) ? PaneWallPage.TERMINAL : place;
+        mWindowPlace = place == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL : place;
         mDeviceOrientation = deviceOrientation;
         // The editor opens on what the user is looking at; the toggle is how the other one is asked
         // for.
@@ -115,10 +131,23 @@ public final class LayoutEditorPlan {
         mEntrySignatures.put(entry.variant(), entry.signature());
     }
 
-    /** Takes the variant's arrangement as it stands, the first time the session reaches it. */
+    /**
+     * Takes the variant's arrangement as it stands, the first time the session reaches it. Its
+     * sizes may already have been edited through a layout it shares them with (the Home and
+     * normal layouts, {@link PlaceLayoutStore#sizesLinked}), so those come from that layout's
+     * entry: both entries then hold the sizes as the session found them.
+     */
     private void enterVariant(@NonNull LayoutVariant variant) {
-        if (!mEntries.containsKey(variant))
-            keepEntry(PlaceArrangeSnapshot.capture(mRoot, variant));
+        if (mEntries.containsKey(variant))
+            return;
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(mRoot, variant);
+        for (PlaceArrangeSnapshot kept : mEntries.values()) {
+            if (PlaceLayoutStore.sizesLinked(variant, kept.variant())) {
+                entry = entry.withSizesOf(kept);
+                break;
+            }
+        }
+        keepEntry(entry);
     }
 
     /**
@@ -130,16 +159,7 @@ public final class LayoutEditorPlan {
     public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
                                          @NonNull PaneWallPage place,
                                          @NonNull PlaceOrientation deviceOrientation) {
-        return enter(places, places.variantFor(place), place, deviceOrientation);
-    }
-
-    /** Opens a session over one variant of the layout. */
-    @NonNull
-    public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
-                                         @NonNull LayoutVariant variant,
-                                         @NonNull PaneWallPage place,
-                                         @NonNull PlaceOrientation deviceOrientation) {
-        return new LayoutEditorPlan(places, variant, place, deviceOrientation, null);
+        return new LayoutEditorPlan(places, place, deviceOrientation, null);
     }
 
     /**
@@ -152,8 +172,13 @@ public final class LayoutEditorPlan {
                                          @NonNull PaneWallPage place,
                                          @NonNull PlaceOrientation deviceOrientation,
                                          @Nullable List<PlaceArrangeSnapshot> carriedEntries) {
-        return new LayoutEditorPlan(places, places.variantFor(place), place, deviceOrientation,
-            carriedEntries);
+        return new LayoutEditorPlan(places, place, deviceOrientation, carriedEntries);
+    }
+
+    /** What the page whose layout is being edited wears, as the store stands now. */
+    @NonNull
+    private Dress dress() {
+        return mDresses.dressOf(mDressedPage);
     }
 
     /**
@@ -193,10 +218,14 @@ public final class LayoutEditorPlan {
         return mShownOrientation == mDeviceOrientation;
     }
 
-    /** The arrangement the layout canvas draws: the shown orientation's, resolved. */
+    /**
+     * The arrangement the layout canvas draws: the shown orientation's, resolved as the edited
+     * layout's page wears it, so a Home page on the shared layout is drawn without the extra keys
+     * and with its own keyboard element.
+     */
     @NonNull
     public PlaceLayout shownLayout() {
-        return mPlaces.resolve(mShownOrientation);
+        return mRoot.resolve(mShownOrientation, mVariant, mDressedPage);
     }
 
     // ------------------------------------------------------------------------ what a handle does
@@ -248,6 +277,26 @@ public final class LayoutEditorPlan {
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
 
+    /**
+     * Whether the edited layout's dock wears the Wall strip, so the canvas draws its first row and
+     * the dock's selection carries the row's own handle.
+     */
+    public boolean showsWallStrip() {
+        return dockStyle() == DockStyle.WALL_STRIP;
+    }
+
+    /** The Wall strip's first row in the shown orientation, in dp. */
+    public int wallStripHeightDp() {
+        return mPlaces.wallStripHeightDp(mShownOrientation);
+    }
+
+    /** The Strip row's handle dragged: its height, for the edited layout's shown orientation. */
+    @NonNull
+    public Drop setWallStripHeightDp(int dp) {
+        mPlaces.setWallStripHeightDp(mShownOrientation, dp);
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
     /** Home's corner handle dragged: the grid in whole cells. */
     @NonNull
     public Drop setWidgetGrid(int columns, int rows) {
@@ -270,42 +319,84 @@ public final class LayoutEditorPlan {
 
     /**
      * The keyboard dropped in the tray, or brought back out of it. One switch for both
-     * orientations and every place — the palette's Keyboard on/off — so the live place follows it
-     * whichever orientation the toggle shows.
+     * orientations and every window — the palette's Keyboard on/off — so the live place follows it
+     * whichever orientation the toggle shows. On a Home page it is always on instead, Home's own
+     * whichever layout Home wears: whether the keyboard is up is each half's, not the layout's.
      */
     @NonNull
     public Drop setKeyboardShown(boolean shown) {
-        if (mPlaces.isKeyboardShown() == shown)
+        boolean home = mDressedPage == PaneWallPage.WIDGETS;
+        if ((home ? mRoot.isHomeKeyboardAlwaysOn() : mPlaces.isKeyboardShown()) == shown)
             return Drop.NONE;
-        mPlaces.setKeyboardShown(shown);
+        if (home)
+            mRoot.setHomeKeyboardAlwaysOn(shown);
+        else
+            mPlaces.setKeyboardShown(shown);
         return Drop.LIVE;
     }
 
-    // -------------------------------------------------------------------------- the dock style
+    // ------------------------------------------------------------------------ the Dock design
 
     /**
-     * Whether the dock style picker is offered: on the Home layout only, the Workspace's dock has
-     * no style (home-dock-styles spec, "The choice").
+     * The edited layout's Dock design as picked, whether or not it is drawn yet: what the picker
+     * marks. The shared layout's while Home wears it, the Home layout's while Home holds one.
      */
-    public boolean offersDockStyle() {
-        return mVariant == LayoutVariant.HOME;
-    }
-
-    /** Home's dock style as picked, whether or not it is drawn yet: what the picker marks. */
     @NonNull
     public DockStyle dockStyle() {
         return mPlaces.dockStyle();
     }
 
     /**
-     * A dock style picked. One value for both orientations, so the live dock follows it whichever
-     * orientation the toggle shows; nothing is written off the Home layout.
+     * A Dock design picked, for the edited layout. One value for both orientations, so the live
+     * dock follows it whichever orientation the toggle shows. Every layout holds one, Home's and
+     * the windows' alike (#93).
      */
     @NonNull
     public Drop setDockStyle(@NonNull DockStyle style) {
-        if (!offersDockStyle() || style == dockStyle())
+        // Only what the picker offers: the Prompt line is the Search field now (#96), the Taskbar
+        // the Drawer tile (#97).
+        if (!DockStyle.CHOICES.contains(style) || style == dockStyle())
             return Drop.NONE;
         mPlaces.setDockStyle(style);
+        return Drop.LIVE;
+    }
+
+    // ------------------------------------------------------------------- the Search field
+
+    /** Whether the edited layout turns the Search field on: what the toggle shows. */
+    public boolean searchField() {
+        return mPlaces.searchField();
+    }
+
+    /**
+     * The Search field turned on or off for the edited layout, both orientations, its design
+     * left as it is; the live dock grows or loses the field under its apps row.
+     */
+    @NonNull
+    public Drop setSearchField(boolean on) {
+        if (on == searchField())
+            return Drop.NONE;
+        mPlaces.setSearchField(on);
+        return Drop.LIVE;
+    }
+
+    // -------------------------------------------------------------------- the Drawer tile
+
+    /** Whether the edited layout turns the Drawer tile on: what the toggle shows. */
+    public boolean drawerTile() {
+        return mPlaces.drawerTile();
+    }
+
+    /**
+     * The Drawer tile turned on or off for the edited layout, both orientations, its design and
+     * the tile's place in the row left as they are; the live dock's row takes or gives back the
+     * tile's slot.
+     */
+    @NonNull
+    public Drop setDrawerTile(boolean on) {
+        if (on == drawerTile())
+            return Drop.NONE;
+        mPlaces.setDrawerTile(on);
         return Drop.LIVE;
     }
 
@@ -329,18 +420,19 @@ public final class LayoutEditorPlan {
 
     /**
      * What the tray holds for the shown orientation, in the order it lists them: the bars the
-     * arrangement puts away, then the keyboard while it is switched off. Only what the layout
-     * being edited offers: the Home layout's tray never holds the status bar or the extra keys,
+     * arrangement puts away, then the keyboard while it is switched off. Only what the page whose
+     * layout is being edited wears: Home's tray never holds the status bar or the extra keys,
      * and its keyboard chip, brought back, turns always on on.
      */
     @NonNull
     public List<TrayItem> trayItems() {
         List<TrayItem> items = new ArrayList<>(5);
         PlaceLayout layout = shownLayout();
+        Dress dress = dress();
         for (TrayItem item : TrayItem.values()) {
             if (item.element == null) {
                 if (!layout.keyboardShown) items.add(item);
-            } else if (mVariant.offers(item.element) && layout.slot(item.element).hidden) {
+            } else if (dress.wears(item.element) && layout.slot(item.element).hidden) {
                 items.add(item);
             }
         }
@@ -356,7 +448,7 @@ public final class LayoutEditorPlan {
     public Drop restore(@NonNull TrayItem item) {
         if (item.element == null)
             return setKeyboardShown(true);
-        if (!mVariant.offers(item.element))
+        if (!dress().wears(item.element))
             return Drop.NONE;
         Slot slot = mPlaces.slot(mShownOrientation, item.element);
         if (!slot.hidden && !shownLayout().slot(item.element).hidden)
@@ -373,13 +465,13 @@ public final class LayoutEditorPlan {
      */
     public void showPlace(@NonNull PaneWallPage place) {
         mPlace = place;
-        if (!HomeChromePolicy.isHome(place))
+        if (place != PaneWallPage.WIDGETS)
             mWindowPlace = place;
     }
 
     /** Whether the Home filter is on: the canvas is drawing a Home page. */
     public boolean showsHome() {
-        return HomeChromePolicy.isHome(mPlace);
+        return mPlace == PaneWallPage.WIDGETS;
     }
 
     /**
@@ -395,10 +487,29 @@ public final class LayoutEditorPlan {
     public PaneWallPage showHome(boolean home) {
         PaneWallPage place = home ? PaneWallPage.WIDGETS : mWindowPlace;
         mPlace = place;
-        mVariant = mRoot.variantFor(place);
+        mDressedPage = place;
+        mVariant = dress().layout();
         mPlaces = mRoot.forVariant(mVariant);
         enterVariant(mVariant);
         return place;
+    }
+
+    /** Whether Home holds a Home layout of its own: the Layout editor's Home layout switch. */
+    public boolean hasHomeLayout() {
+        return mRoot.hasHomeLayout();
+    }
+
+    /**
+     * The Home layout switch turned: Home wears its own copy of the layout, or the shared one
+     * again. The page being edited stays; what it wears is re-read, so a Home page edits Home's
+     * layout while the switch is on and the shared one while it is off, and the canvas, offers and
+     * Undo follow. The caller re-lays the live place and restates the shape that page wears.
+     */
+    public void setHomeLayout(boolean on) {
+        mRoot.setHomeLayout(on);
+        mVariant = dress().layout();
+        mPlaces = mRoot.forVariant(mVariant);
+        enterVariant(mVariant);
     }
 
     /** The Portrait / Landscape toggle. Moves the picture and the target of the next drop. */
@@ -434,6 +545,9 @@ public final class LayoutEditorPlan {
     @NonNull
     public Drop drop(@NonNull MiniatureDragPolicy.Bar bar, @Nullable PlaceLayout.Edge edge,
                      int index, boolean underKeyboard) {
+        // A bar the page does not wear stands nowhere on it: Home's status bar and extra keys.
+        if (!dress().wears(bar.element()))
+            return Drop.NONE;
         if (!LayoutChooserModel.applyDrop(mPlaces, mShownOrientation, bar, edge, index,
             underKeyboard))
             return Drop.NONE;

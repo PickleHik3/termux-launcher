@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Home dock style Prompt line: five icons over a shell-prompt search field, in one slab. The
-     Layout editor's dock style chip; tinted by the chip. -->
+<!-- The Search field toggle (once the Prompt line style, #96): five icons over a shell-prompt
+     search field, in one slab. The Layout editor's toggle chip beside the dock styles; tinted by
+     the chip. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="?attr/colorControlNormal"
     android:width="24dp"
     android:height="24dp"

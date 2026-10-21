@@ -11,8 +11,9 @@ import com.termux.app.launcher.widget.WidgetGridMetrics;
  *
  * <p>The grid's rim is Home's Margin and the air between its cells is the grid's own gap
  * ({@link WidgetGridMetrics#GAP_DP}), the same two numbers the live grid and
- * {@link com.termux.app.launcher.widget.WidgetGridCaps} work with. Home wears no status bar, so
- * the grid starts at the opening's top.
+ * {@link com.termux.app.launcher.widget.WidgetGridCaps} work with. The opening is the page as
+ * the layout leaves it, below the status bar wherever Home's layout stands one (#90), so the grid
+ * starts at the opening's top as a window's page does.
  *
  * <p>Rects are written into a caller's {@code float[]} (left, top, right, bottom), so a draw pass
  * allocates nothing. Nothing here touches a view.

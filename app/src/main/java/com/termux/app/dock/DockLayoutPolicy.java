@@ -133,7 +133,7 @@ public final class DockLayoutPolicy {
     public static final float SHARED_ROW_AIR_DP = AccessoryStackLayoutPolicy.AZ_ROW_CROWN_DP;
 
     /**
-     * The Prompt line's field as it stands under the apps row: the field view's height (its tap
+     * The Search field (once the Prompt line's) as it stands under the apps row: the field view's height (its tap
      * target, {@link PromptLineFieldView#HIT_HEIGHT_DP}) and the well drawn centred in it
      * ({@link PromptLineFieldView#WELL_HEIGHT_DP}).
      */
@@ -144,7 +144,7 @@ public final class DockLayoutPolicy {
 
     /** The Wall strip's first row as it stands over the apps row ({@link WallStripRowView#HEIGHT_DP}). */
     public static final float WALL_STRIP_HEIGHT_DP = WallStripRowView.HEIGHT_DP;
-    /** The row's side inset inside the slab: the apps row's 14 dp, as the Prompt line's field. */
+    /** The row's side inset inside the slab: the apps row's 14 dp, as the Search field. */
     public static final float WALL_STRIP_SIDE_INSET_DP = PROMPT_FIELD_SIDE_INSET_DP;
 
     /** Everything the dock's numbers are a function of, snapshotted by the caller. */
@@ -214,10 +214,11 @@ public final class DockLayoutPolicy {
         public final int displayCutoutInsetLeftPx;
         public final int displayCutoutInsetRightPx;
         /**
-         * How much of the Prompt line's field the slab carries under the apps row, 0..1: 1 while
-         * Home's dock wears {@link DockSurfaceSpec#PROMPT_LINE}, 0 for every other dock, and
-         * between while a style switch eases the slab's height. Read off its own value rather
-         * than the spec, so the slab can ease out after the spec has already moved on.
+         * How much of the Search field the slab carries under the apps row, 0..1: 1 while the
+         * page's layout turns the field on, with whichever design (#96), 0 while it does not,
+         * and between while the toggle, the palette or a slide across the seam eases the slab's
+         * height. Read off its own value rather than the dress, so the slab can ease out after
+         * the toggle has already moved on.
          */
         public final float promptFieldReveal;
         /**
@@ -227,10 +228,18 @@ public final class DockLayoutPolicy {
          * {@link #promptFieldReveal} is.
          */
         public final float wallStripReveal;
+        /**
+         * The Wall strip's first row's height in dp, as the page's layout keeps it (the Layout
+         * editor's Strip handle, {@code PlaceLayoutStore#wallStripHeightDp}); zero or less for
+         * the shipped {@link #WALL_STRIP_HEIGHT_DP}. Held to its range
+         * ({@link WallStripRowPolicy#clampHeightDp}).
+         */
+        public final int wallStripHeightDp;
 
         private DockInputs(Builder b) {
             this.promptFieldReveal = b.promptFieldReveal;
             this.wallStripReveal = b.wallStripReveal;
+            this.wallStripHeightDp = b.wallStripHeightDp;
             this.preferencesAvailable = b.preferencesAvailable;
             this.capsule = b.capsule;
             this.appsRowOnEdge = b.appsRowOnEdge;
@@ -289,10 +298,12 @@ public final class DockLayoutPolicy {
             private int displayCutoutInsetRightPx;
             private float promptFieldReveal;
             private float wallStripReveal;
+            private int wallStripHeightDp;
 
             public Builder preferencesAvailable(boolean v) { this.preferencesAvailable = v; return this; }
             public Builder promptFieldReveal(float v) { this.promptFieldReveal = v; return this; }
             public Builder wallStripReveal(float v) { this.wallStripReveal = v; return this; }
+            public Builder wallStripHeightDp(int v) { this.wallStripHeightDp = v; return this; }
             public Builder capsule(boolean v) { this.capsule = v; return this; }
             public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
             public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
@@ -448,22 +459,34 @@ public final class DockLayoutPolicy {
         out.appsRowBandHintPx = Math.max(0, out.appsRowBandPx - airPx - tickSideAirPx);
         out.appsBarHeightHintPx = appsRowEnabled ? out.appsRowBandHintPx : 0;
 
-        // The Prompt line's field, under the apps row on the same slab. Its well keeps the air
+        // The Search field, under the apps row on the same slab, with any design (#96). Its well keeps the air
         // over the icons from the slab's lower edge, so the slab's outer padding is equal top and
         // bottom; the row's own air under the icons is the gap between the icons and the well.
         // Only on the dock's own row: a row on another edge, or no row, carries no field.
         float reveal = Float.isNaN(in.promptFieldReveal)
             ? 0f : Math.max(0f, Math.min(1f, in.promptFieldReveal));
+        // Under Lens beads the row keeps its beads and the field stands in a glass capsule of its
+        // own under them (#84): as wide as the apps row, and the capsule's air over it, so the
+        // capsule stands the beads' own gap under them (LensBeadGeometry.CAPSULE_TOP_PAD_DP).
+        // The dock is that much taller than the slab's with the field, and nothing else moves.
         if (appsRowEnabled && reveal > 0f && out.appsBarHeightPx > 0) {
+            boolean beads = in.surface.beads;
             int fieldPx = promptFieldHeightPx(density);
             int padPx = promptFieldBottomPadPx(airPx, density);
-            int fullPx = fieldPx + padPx;
+            int topPadPx = beads ? LensBeadGeometry.capsuleTopPadPx(density) : 0;
+            int fullPx = topPadPx + fieldPx + padPx;
             out.promptFieldFullBandPx = fullPx;
             out.promptFieldBandPx = Math.round(fullPx * reveal);
             out.promptFieldHeightPx = Math.min(out.promptFieldBandPx, Math.round(fieldPx * reveal));
-            out.promptFieldBottomPadPx = out.promptFieldBandPx - out.promptFieldHeightPx;
+            out.promptFieldTopPadPx = Math.min(out.promptFieldBandPx - out.promptFieldHeightPx,
+                Math.round(topPadPx * reveal));
+            out.promptFieldBottomPadPx = out.promptFieldBandPx - out.promptFieldHeightPx
+                - out.promptFieldTopPadPx;
             out.promptFieldWellGapPx = airPx;
-            out.promptFieldSideInsetPx = out.horizontalInsetPx + promptFieldSideInsetPx(density);
+            out.promptFieldSideInsetPx = beads
+                ? appsRowSideInsetPx(capsule ? out.capsuleContentInsetPx : out.horizontalInsetPx,
+                    true, density)
+                : out.horizontalInsetPx + promptFieldSideInsetPx(density);
         }
 
         // The Wall strip's first row, over the apps row on the same slab. The slab's padding over
@@ -473,7 +496,7 @@ public final class DockLayoutPolicy {
         float wallReveal = Float.isNaN(in.wallStripReveal)
             ? 0f : Math.max(0f, Math.min(1f, in.wallStripReveal));
         if (appsRowEnabled && wallReveal > 0f && out.appsBarHeightPx > 0) {
-            int rowPx = wallStripHeightPx(density);
+            int rowPx = wallStripHeightPx(density, in.wallStripHeightDp);
             int fullPx = rowPx + airPx;
             out.wallStripFullBandPx = fullPx;
             out.wallStripBandPx = Math.round(fullPx * wallReveal);
@@ -537,9 +560,18 @@ public final class DockLayoutPolicy {
         return Math.round(Math.max(0f, density) * LONE_ROW_AIR_DP);
     }
 
-    /** The Wall strip's first row view, px. */
+    /** The Wall strip's first row view at its shipped height, px. */
     public static int wallStripHeightPx(float density) {
         return Math.round(Math.max(0f, density) * WALL_STRIP_HEIGHT_DP);
+    }
+
+    /**
+     * The row at {@code heightDp}, the layout's own height, px: the shipped one for zero or less,
+     * otherwise held to the row's range.
+     */
+    public static int wallStripHeightPx(float density, int heightDp) {
+        if (heightDp <= 0) return wallStripHeightPx(density);
+        return Math.round(Math.max(0f, density) * WallStripRowPolicy.clampHeightDp(heightDp));
     }
 
     /** {@link #WALL_STRIP_SIDE_INSET_DP} in px. */
@@ -547,7 +579,7 @@ public final class DockLayoutPolicy {
         return Math.round(Math.max(0f, density) * WALL_STRIP_SIDE_INSET_DP);
     }
 
-    /** The Prompt line's field view, px: its whole tap target. */
+    /** The Search field's view, px: its whole tap target. */
     public static int promptFieldHeightPx(float density) {
         return Math.round(Math.max(0f, density) * PROMPT_FIELD_HEIGHT_DP);
     }
@@ -565,6 +597,20 @@ public final class DockLayoutPolicy {
      */
     public static int promptFieldBottomPadPx(int airPx, float density) {
         return Math.max(0, airPx - promptFieldWellInsetPx(density));
+    }
+
+    /**
+     * The dock's apps row's side inset from the screen edge, on each side, for the content inset
+     * the row's style gives ({@code contentInsetPx}: the capsule's content inset, or the slab's
+     * margin docked). The row reads with more side padding than the A–Z row because its icons
+     * are space-between (half a slot of empty space at each edge), so the inset is trimmed ~18%
+     * to line the icons up with the letters' span; Lens beads narrow the slots a little more
+     * ({@link LensBeadGeometry#ROW_SIDE_INSET_DP}) so the end beads stand clear of the screen's
+     * edges.
+     */
+    public static int appsRowSideInsetPx(int contentInsetPx, boolean beads, float density) {
+        return Math.round(contentInsetPx * 0.82f)
+            + (beads ? LensBeadGeometry.rowSideInsetPx(density) : 0);
     }
 
     /** {@link #PROMPT_FIELD_SIDE_INSET_DP} in px. */

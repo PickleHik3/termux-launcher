@@ -29,6 +29,9 @@ public final class TerminalClockWidget extends View {
     private static final float SLOT_HEIGHT_DP =
         com.termux.app.statusbar.StatusBarEdgeGeometry.SLOT_DOCKED_DP;
 
+    /** Largest scale the bar's fit grows the FULL face to; see {@link #setFitMaxScale}. */
+    public static final float FIT_MAX_SCALE = ClockFaceRenderer.FIT_MAX_SCALE;
+
     private final ClockFaceRenderer mRenderer;
     private final Runnable mTicker = new Runnable() {
         @Override public void run() {
@@ -318,6 +321,15 @@ public final class TerminalClockWidget extends View {
      */
     public void setFitBudget(float widthPx, float heightPx, boolean shared) {
         if (mRenderer.setFitBudget(widthPx, heightPx, shared)) invalidate();
+    }
+
+    /**
+     * The largest the fit grows the FULL face to; {@link #FIT_MAX_SCALE} unless a host that is
+     * not the bar asks for another (the Wall strip's row, whose clock grows with the row). A
+     * value of 0 or less restores the bar's.
+     */
+    public void setFitMaxScale(float maxScale) {
+        if (mRenderer.setFitCeiling(maxScale)) invalidate();
     }
 
     /** Width the FULL face paints inside the given budget, so the slot can size the clock to it. */
