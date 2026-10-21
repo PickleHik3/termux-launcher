@@ -32,6 +32,9 @@ first within each section. Delete this file with the spec when the work is deliv
 
 Open, newest first. Move an item out when it is fixed (with its commit) or decided.
 
+- 2026-10-21 (emulator, 5568477bd) · Lens beads, Home → Workspace: faint ghost icons may linger
+  in the slab in the last frames of the slide (seen at ~8 fps capture). To be judged on pong.
+
 - Home ⇄ Workspace settle under a style with dashes above the slab: the slab's top still steps by
   the dashes band (6.5 dp) at the settle; the beads' melt hides the beads → slab change, not that.
 - A dock page with fewer apps than slots stays left-aligned: the slot is the grid column in every
