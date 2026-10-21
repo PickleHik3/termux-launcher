@@ -234,11 +234,6 @@ public final class StatusBarWindowColumn extends ScrollView {
             paintChipBackground(shape, item, selected);
             chip.setBackground(shape);
         }
-        // A minimised float (#91): the chip at reduced emphasis, and a small dot in its corner in
-        // the chip's own ink. The dot reads the ink at draw time, so it is only ever put on or
-        // taken off here: this is reached from the draw pass, and a new foreground asks for layout.
-        chip.setAlpha(item.restAlpha());
-        com.termux.app.terminal.MinimisedDotDrawable.wear(chip, item.minimised);
     }
 
     /** The corner the bar's chips wear, shared with the badge and the lens icons. */
@@ -287,6 +282,12 @@ public final class StatusBarWindowColumn extends ScrollView {
             chip.setContentDescription(agentWord == null ? item.spokenLabel
                 : item.spokenLabel + " · " + agentWord + ".");
             dress(chip, item, selected);
+            // A minimised float (#91): the chip at reduced emphasis, and a small dot in its corner
+            // in the chip's own ink. Worn here, as the chip is made, never from dress(): that is
+            // reached from the draw pass, and the dot's room is padding, which asks for layout.
+            // Whether a chip is minimised only changes with the items, which rebuild.
+            chip.setAlpha(item.restAlpha());
+            com.termux.app.terminal.MinimisedDotDrawable.wear(chip, item.minimised);
             chip.setOnClickListener(v -> {
                 if (mListener != null) mListener.onWindowSelected(index);
             });
