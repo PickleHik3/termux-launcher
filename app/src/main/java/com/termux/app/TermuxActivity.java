@@ -27122,28 +27122,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull com.termux.app.terminal.TerminalWindowBar bar) {
         java.util.List<Integer> foregroundPids = new java.util.ArrayList<>();
         // The window chips (the display window's at its place among the terminal windows', ADR
-        // 0008 amended 2026-10-19, then the Home floats), built once and dressed once: each row
-        // window's shells are observed for this refresh's marks before any surface adapts them.
+        // 0008 amended 2026-10-19, then the Home floats), built once and dressed once: every
+        // window's shells, the floats' included, are observed once for this refresh's marks, and
+        // the bar and the Wall strip both show the chips as they come out of that.
         com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
             chips = windowChips();
-        boolean home = isWidgetsPageShowing();
         // One bar across the wall (#90): the same chips in the same order on Home as on every
         // window, the display window's at its place and the Home floats after the row's.
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
-            windowChipItems(chips, com.termux.app.chrome.WindowChips.Surface.BAR, foregroundPids);
-        if (home) {
-            // Home's dock may show the same chips too: the Wall strip's
-            // tiles. Seen from Home nobody looks at a row window, so the bar's chips are
-            // dressed as the strips' are and serve them as they stand.
+            windowChipItems(chips, foregroundPids);
+        // Home's dock may show the same chips as the Wall strip's tiles, and so may a window whose
+        // dock wears the Wall strip over its apps (#93).
+        if (isWidgetsPageShowing() || wallStripFed() && wallStripOn(mLastWallPage))
             syncWallStrip(chips, items);
-        } else {
-            // A window whose dock wears the Wall strip shows the row over its apps (#93): its
-            // tiles follow the windows here too, dressed as the strip dresses them.
-            if (wallStripFed() && wallStripOn(mLastWallPage))
-                syncWallStrip(chips, windowChipItems(chips,
-                    com.termux.app.chrome.WindowChips.Surface.WALL_STRIP,
-                    new java.util.ArrayList<>()));
-        }
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
         // The row's own windows can be dragged to reorder, the display window's chip with them:
         // not the Home floats' after them. The same on both halves.
@@ -27162,6 +27153,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncBackgroundProcessStack();
         scheduleShellPhaseJudgement();
         java.util.List<Integer> pids = collectAllPanePids();
+        // The Home floats' shells are the session's windows too, and their chips carry the same
+        // marks as the row's: the trackers keep them, and the resolver reads their foreground.
+        if (mPaneController != null) {
+            for (com.termux.app.terminal.TerminalPaneController.Window window : chipFloats()) {
+                for (TerminalSession shell : mPaneController.shellsOf(window)) {
+                    if (shell.getPid() > 0 && !pids.contains(shell.getPid()))
+                        pids.add(shell.getPid());
+                }
+            }
+        }
         java.util.HashSet<Integer> live = new java.util.HashSet<>(pids);
         mShellPhases.retain(live);
         mAgentStatuses.retain(live);
@@ -27170,11 +27171,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The chip for the row's terminal window {@code window} at {@code index}, its marks read from
-     * this refresh's observation of its shells; {@code seen} when the user is looking at it.
+     * The chip for the terminal window {@code window} at {@code index} — a row's window or a Home
+     * float — its marks read from this refresh's observation of its shells; {@code seen} when the
+     * user is looking at it.
      */
     @NonNull
-    private com.termux.app.terminal.TerminalWindowBar.WindowItem rowWindowItem(
+    private com.termux.app.terminal.TerminalWindowBar.WindowItem windowItem(
             @NonNull com.termux.app.terminal.TerminalPaneController.Window window, int index,
             @NonNull java.util.List<Integer> foregroundPids, boolean seen, long now) {
         TerminalSession session = mPaneController.windowActiveSession(window);
@@ -29349,30 +29351,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Each chip {@code surface} shows, dressed for the bar, in its order: a row window's marks
-     * read from this refresh's one observation of its shells, the display window's chip named
-     * after its app, a float's carrying its page. On the bar in the Workspace the window in front
-     * is the one the user is looking at, and so acknowledged; nobody looks at a row window from
-     * Home, whichever surface shows its chip there.
+     * Every window chip, dressed once, in its order: a terminal window's marks — a row window's
+     * and a Home float's alike — read from this refresh's one observation of its shells, the
+     * display window's chip named after its app, a float's carrying its page. In the Workspace the
+     * window in front is the one the user is looking at, and so acknowledged; nobody looks at a
+     * row window from Home, whichever surface shows its chip there, while the float in focus
+     * there is in plain sight.
      */
     @NonNull
     private java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> windowChipItems(
             @NonNull com.termux.app.chrome.WindowChips<
                 com.termux.app.terminal.TerminalPaneController.Window> chips,
-            @NonNull com.termux.app.chrome.WindowChips.Surface surface,
             @NonNull java.util.List<Integer> foregroundPids) {
         java.util.List<com.termux.app.chrome.WindowChips.Chip<
-            com.termux.app.terminal.TerminalPaneController.Window>> list = chips.chips(surface);
+            com.termux.app.terminal.TerminalPaneController.Window>> list =
+                chips.chips(com.termux.app.chrome.WindowChips.Surface.BAR);
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
             new java.util.ArrayList<>(list.size());
         if (list.isEmpty() || mPaneController == null) return items;
         long now = android.os.SystemClock.uptimeMillis();
         // The bar on Home shows the same chips (#90), but nobody looks at a row window from
         // there: its attention marks stay until the window is in front in the Workspace.
-        boolean looking = surface == com.termux.app.chrome.WindowChips.Surface.BAR
-            && !isWidgetsPageShowing();
+        boolean home = isWidgetsPageShowing();
+        boolean looking = !home;
         boolean onDisplay = looking && isDisplayWindowInFront();
         int current = mCurrentWSession == null ? -1 : mCurrentWSession.current;
+        com.termux.app.terminal.TerminalPaneController.Window focusedFloat =
+            home ? mPaneController.focusedHomeFloat() : null;
         for (com.termux.app.chrome.WindowChips.Chip<
                 com.termux.app.terminal.TerminalPaneController.Window> chip : list) {
             com.termux.app.terminal.TerminalPaneController.Window window = chip.window;
@@ -29382,13 +29387,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 boolean seen = looking && chip.index == current && !onDisplay;
                 // Looking at the window is the acknowledgement: whatever it wanted, the user is here.
                 if (seen) clearWindowAttention(window);
-                items.add(rowWindowItem(window, chip.index, foregroundPids, seen, now));
+                items.add(windowItem(window, chip.index, foregroundPids, seen, now));
             } else {
-                // Home floats are windows of the session too: chips after the row's, marked, a
-                // minimised one said to be folded into its chip (#91).
-                TerminalSession session = mPaneController.windowActiveSession(window);
-                items.add(buildWindowItem(session, items.size(), foregroundPids,
-                    mPaneController.windowName(window))
+                // Home floats are windows of the session too: chips after the row's, marked as
+                // the row's are, a minimised one said to be folded into its chip (#91). The one in
+                // focus on Home is the one the user is looking at.
+                boolean seen = window == focusedFloat && !chip.minimised;
+                if (seen) clearWindowAttention(window);
+                items.add(windowItem(window, items.size(), foregroundPids, seen, now)
                     .withHomeFloat(window.homePage(), getString(chip.minimised
                         ? R.string.window_chip_home_float_minimised
                         : R.string.window_chip_home_float, window.homePage() + 1))
