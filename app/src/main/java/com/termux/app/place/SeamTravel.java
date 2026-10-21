@@ -24,6 +24,10 @@ import java.util.List;
  *       place at the midpoint, while the whole dock is below the screen's edge, and rise over the
  *       second half ({@link DockPlan#DIP}). Either way the rows on screen are only ever moved
  *       (the stack's translation), and laid out once, where nobody can see it.</li>
+ *   <li><b>The extra keys alone.</b> Two halves whose rows differ only by the Workspace's extra
+ *       keys, its outermost row (one layout on both halves, ADR 0009), fold that row instead: its
+ *       height follows the travel, full on the window and none on Home, and the rows above it
+ *       never move ({@link DockPlan#FOLD_OUT}, {@link DockPlan#FOLD_IN}).</li>
  *   <li><b>The status bar.</b> It is the Workspace's alone, so it travels with the Workspace's
  *       page: its screen position is that page's ({@link #workspaceScreenXPx}), sliding out
  *       with the window toward Home and in with it from Home, instead of fading in place.</li>
@@ -57,7 +61,17 @@ public final class SeamTravel {
         /** The committed half has none: the other half's are laid out at once and rise. */
         SLIDE_IN,
         /** Different rows on each: down over the first half, swapped, up over the second. */
-        DIP
+        DIP,
+        /**
+         * The other half stands the committed half's rows less its outermost row, the extra keys:
+         * the committed rows stay laid out to settle and the extra keys fold shut over the way.
+         */
+        FOLD_OUT,
+        /**
+         * The other half adds the extra keys as its outermost row: its rows are laid out from the
+         * first frame with that row folded shut, and it opens over the way.
+         */
+        FOLD_IN
     }
 
     /** Whether two pages are on different halves of the wall: one a Home page, one a window. */
@@ -135,17 +149,59 @@ public final class SeamTravel {
         if (leaving.equals(arriving)) return DockPlan.NONE;
         if (arriving.isEmpty()) return DockPlan.SLIDE_OUT;
         if (leaving.isEmpty()) return DockPlan.SLIDE_IN;
+        if (onlyExtraKeysMore(leaving, arriving)) return DockPlan.FOLD_OUT;
+        if (onlyExtraKeysMore(arriving, leaving)) return DockPlan.FOLD_IN;
         return DockPlan.DIP;
+    }
+
+    /**
+     * Whether {@code more} is {@code fewer} with the extra keys as one more, outermost row: the
+     * row a fold opens or shuts on the edge, with nothing else in the stack moving.
+     */
+    private static boolean onlyExtraKeysMore(@NonNull List<Element> more,
+                                             @NonNull List<Element> fewer) {
+        return more.size() == fewer.size() + 1 && more.get(0) == Element.EXTRA_KEYS
+            && more.subList(1, more.size()).equals(fewer);
+    }
+
+    /** Whether a plan folds the extra keys rather than moving the rows. */
+    public static boolean folds(@NonNull DockPlan plan) {
+        return plan == DockPlan.FOLD_OUT || plan == DockPlan.FOLD_IN;
+    }
+
+    /**
+     * How much of the extra keys row a fold shows, 0 to 1, at {@code progress} into the other
+     * half: all of it on the window's side, none on Home's.
+     */
+    public static float extraKeysShare(@NonNull DockPlan plan, float progress) {
+        float q = clamp01(progress);
+        switch (plan) {
+            case FOLD_OUT: return 1f - q;
+            case FOLD_IN: return q;
+            default: return 1f;
+        }
+    }
+
+    /**
+     * How far a fold sinks the dock's rows into their own bottom edge, so the extra keys row,
+     * {@code extraKeysBandPx} tall where the stack lays it out (0 where it does not), shows
+     * {@code share} of itself ({@link #extraKeysShare}) and the rows above it stand where they
+     * will at rest without it.
+     */
+    public static float foldSinkPx(int extraKeysBandPx, float share) {
+        return Math.max(0, extraKeysBandPx) * (1f - clamp01(share));
     }
 
     /**
      * Whether the stack stands the other half's rows at {@code progress} into it
      * ({@link #otherHalfProgress}): from the first frame for a slide in, past the midpoint for a
-     * dip, and never before settle for a slide out or no exchange.
+     * dip, and never before settle for a slide out, a fold out or no exchange. A fold in stands
+     * them from the first frame, the extra keys folded shut.
      */
     public static boolean showsOtherDock(@NonNull DockPlan plan, float progress) {
         switch (plan) {
-            case SLIDE_IN: return progress > 0f;
+            case SLIDE_IN:
+            case FOLD_IN: return progress > 0f;
             case DIP: return progress >= DIP_SWAP;
             default: return false;
         }

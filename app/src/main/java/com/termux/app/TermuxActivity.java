@@ -17244,7 +17244,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The row's side inset in its own pixels: where the apps row's first slot draws its icon (the
      * row's icons are space-between, so the last slot's ends as far from the other side), read off
-     * any laid-out icon and its column; the 14 dp inside the slab while no icon is laid out.
+     * any laid-out icon and its column; the 14 dp inside the slab while no icon is laid out, and
+     * never less than that (WallStripRowPolicy.sideInsetPx).
      */
     private float wallStripInsetPx(@NonNull DockLayout layout) {
         float fallback = layout.wallStripSideInsetPx;
@@ -17271,7 +17272,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int column = Math.max(0, Math.min(columns - 1,
             (int) Math.floor((boxLeft + boxRight) / 2f / slot)));
         float first = barLeft + bar.getPaddingLeft() + boxLeft - column * slot;
-        return first > 0f && first < host.getWidth() / 3f ? first : fallback;
+        return com.termux.app.dock.WallStripRowPolicy.sideInsetPx(
+            first > 0f && first < host.getWidth() / 3f ? first : Float.NaN, fallback);
     }
 
     /**
@@ -22205,10 +22207,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // With a keyboard in the stack the rows cannot leave by the stack's own translation, which
         // carries the keyboard too: they sink into the keyboard's top edge instead, and the stack
         // moves only for the keyboard. A whole-stack dip moves both by the translation.
-        boolean rowsSink = mTravelSeamPlan != com.termux.app.place.SeamTravel.DockPlan.NONE
+        boolean fold = com.termux.app.place.SeamTravel.folds(mTravelSeamPlan);
+        boolean rowsSink = !fold
+            && mTravelSeamPlan != com.termux.app.place.SeamTravel.DockPlan.NONE
             && keyboardPx > 0 && !mTravelSeamWholeStack;
-        applySeamRowSink(rowsSink
-            ? travelDockRowsPx(keyboardPx) * (1f - Math.max(0f, Math.min(1f, dockReveal))) : 0f);
+        if (fold) {
+            // Only the extra keys fold: the rows sink by the row's hidden part into their own
+            // bottom edge, so the rest of the dock stands still (#94).
+            mTravelFoldShare = com.termux.app.place.SeamTravel.extraKeysShare(mTravelSeamPlan,
+                com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage));
+            applySeamFoldSink();
+        } else {
+            mTravelFoldShare = Float.NaN;
+            applySeamRowSink(rowsSink
+                ? travelDockRowsPx(keyboardPx) * (1f - Math.max(0f, Math.min(1f, dockReveal)))
+                : 0f);
+        }
         float translation = com.termux.app.place.PlaceChromeTravel.stackTranslationPx(
             keyboardReveal, rowsSink ? 1f : dockReveal, keyboardPx, dockPx);
         if (translation != 0f || mDockTravelTranslationPx != 0f) mChromeTravelMoved = true;
@@ -22300,6 +22314,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     || !EdgeStackPolicy.stack(otherLayout, PlaceLayout.Edge.BOTTOM).isEmpty());
             mTravelSeamWholeStack = com.termux.app.place.SeamDress.wholeStack(mTravelSeamPlan,
                 mTravelSeamDressDiffers);
+            // A fold in lays the extra keys out on this frame: the sink is re-read once the
+            // stack has laid them out, before the frame is drawn.
+            if (com.termux.app.place.SeamTravel.folds(mTravelSeamPlan)) listenForSeamFold();
             // From Home, the bar takes off Home's dress for the Workspace's while it is still
             // hidden, before any pass lays it out over Home.
             if (seamBegins && mTravelSeamShapeDiffers
@@ -22756,6 +22773,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mSeamRowSinkPx;
 
     /**
+     * How much of the extra keys row a fold across the seam shows (SeamTravel.extraKeysShare),
+     * NaN while no fold runs.
+     */
+    private float mTravelFoldShare = Float.NaN;
+    /** The row stack re-reads a running fold's sink whenever it is laid out; added once. */
+    private boolean mSeamFoldListening;
+    private final View.OnLayoutChangeListener mSeamFoldLayoutListener =
+        (v, l, t, r, b, ol, ot, orr, ob) -> applySeamFoldSink();
+
+    private void listenForSeamFold() {
+        if (mSeamFoldListening) return;
+        View rowStack = hotView(R.id.accessory_row_stack);
+        if (rowStack == null) return;
+        rowStack.addOnLayoutChangeListener(mSeamFoldLayoutListener);
+        mSeamFoldListening = true;
+    }
+
+    /**
+     * A fold's sink from the extra keys row as the stack lays it out now: the rows go down by
+     * the part of that row the fold hides, cut at their own bottom, so the row shuts or opens on
+     * the dock's edge while the rows above it never move. Reads two view heights, no store.
+     */
+    private void applySeamFoldSink() {
+        if (Float.isNaN(mTravelFoldShare)) return;
+        View rowStack = hotView(R.id.accessory_row_stack);
+        View keys = hotView(R.id.terminal_toolbar_host);
+        int band = rowStack != null && keys != null && keys.getParent() == rowStack
+            && keys.getVisibility() == View.VISIBLE ? keys.getHeight() : 0;
+        applySeamRowSink(com.termux.app.place.SeamTravel.foldSinkPx(band, mTravelFoldShare));
+    }
+
+    /**
      * The dock's rows drawn {@code sinkPx} lower than they are laid out, each layer cut at its own
      * laid-out bottom, which is the keyboard's top: the rows go into the keyboard's edge rather
      * than across it, while the keyboard stays where its own travel puts it. Over the seam only,
@@ -22896,6 +22945,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTravelBarStill = false;
             mTravelBarRides = false;
             applyStatusTravelX(0f);
+            mTravelFoldShare = Float.NaN;
             applySeamRowSink(0f);
             applyAccessoryStackTranslation();
             applyChromeTravelAlpha(1f, 1f);

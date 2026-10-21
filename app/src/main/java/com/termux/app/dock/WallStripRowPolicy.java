@@ -149,6 +149,18 @@ public final class WallStripRowPolicy {
         }
     }
 
+    /**
+     * The row's side inset: where the apps row's first slot draws its icon ({@code firstIconPx},
+     * NaN while no icon is laid out), but never closer to the slab's side than
+     * {@code slabInsetPx}, the spec's 14 dp inside the slab. Icons laid out to the edges of a slab
+     * that runs to the screen's (Docked, no Margin) would otherwise put the clock and the
+     * {@code +} tile on the screen's edges.
+     */
+    public static float sideInsetPx(float firstIconPx, float slabInsetPx) {
+        float floor = Math.max(0f, slabInsetPx);
+        return firstIconPx > floor ? firstIconPx : floor;
+    }
+
     /** The row at rest with {@code terminals} open. */
     @NonNull
     public static Row layout(float rowWidthPx, float insetPx, float gapPx, int terminals,

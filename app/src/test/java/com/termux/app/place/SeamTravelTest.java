@@ -125,10 +125,86 @@ public class SeamTravelTest {
             SeamTravel.dockPlan(workspaceWithoutDock(), homeWithDock()));
     }
 
+    /** A Home layout of its own that keeps only the pinned apps. */
+    private static PlaceLayout homeAppsOnly() {
+        Map<Element, Slot> slots = new EnumMap<>(Element.class);
+        slots.put(Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS));
+        return layout(slots);
+    }
+
     @Test
     public void differentRowsOnEachHalfDip() {
-        assertSame(DockPlan.DIP, SeamTravel.dockPlan(homeWithDock(), workspaceWithDock()));
-        assertSame(DockPlan.DIP, SeamTravel.dockPlan(workspaceWithDock(), homeWithDock()));
+        assertSame(DockPlan.DIP, SeamTravel.dockPlan(homeAppsOnly(), workspaceWithDock()));
+        assertSame(DockPlan.DIP, SeamTravel.dockPlan(workspaceWithDock(), homeAppsOnly()));
+    }
+
+    @Test
+    public void oneLayoutLessTheExtraKeysFoldsThemInsteadOfDipping() {
+        // One layout on both halves: Home stands the same rows but the extra keys (#94), so the
+        // A-Z row and the apps never leave the screen on the crossing.
+        assertSame(DockPlan.FOLD_OUT, SeamTravel.dockPlan(workspaceWithDock(), homeWithDock()));
+        assertSame(DockPlan.FOLD_IN, SeamTravel.dockPlan(homeWithDock(), workspaceWithDock()));
+        assertTrue(SeamTravel.folds(DockPlan.FOLD_OUT));
+        assertFalse(SeamTravel.folds(DockPlan.DIP));
+        for (float q : new float[] {0f, 0.3f, 0.5f, 0.8f, 1f}) {
+            assertEquals(1f, SeamTravel.dockReveal(DockPlan.FOLD_OUT, q), EPSILON);
+            assertEquals(1f, SeamTravel.dockReveal(DockPlan.FOLD_IN, q), EPSILON);
+        }
+        assertFalse(SeamTravel.committedRowsLeave(DockPlan.FOLD_OUT));
+        assertFalse(SeamTravel.committedRowsLeave(DockPlan.FOLD_IN));
+        // Out, the window's rows stay laid out to settle; in, Home lays them out at once.
+        assertFalse(SeamTravel.showsOtherDock(DockPlan.FOLD_OUT, 1f));
+        assertFalse(SeamTravel.showsOtherDock(DockPlan.FOLD_IN, 0f));
+        assertTrue(SeamTravel.showsOtherDock(DockPlan.FOLD_IN, 0.01f));
+    }
+
+    @Test
+    public void extraKeysNotOutermostStillDip() {
+        // The extra keys between the A-Z row and the apps: taking them away moves the A-Z row's
+        // neighbours, which no fold on the dock's edge stands in for.
+        Map<Element, Slot> slots = new EnumMap<>(Element.class);
+        slots.put(Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS));
+        slots.put(Element.AZ, Slot.on(Edge.BOTTOM, Element.AZ).withOrder(0));
+        slots.put(Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS).withOrder(1));
+        PlaceLayout window = layout(slots);
+        assertSame(Element.AZ, EdgeStackPolicy.stack(window, Edge.BOTTOM).get(0));
+        assertSame(DockPlan.DIP, SeamTravel.dockPlan(window, homeWithDock()));
+    }
+
+    @Test
+    public void theExtraKeysShareRunsFromTheWindowToHome() {
+        // Committed to the window, read through the real frames toward Home (the helper's
+        // fraction runs from Home, 0, to the window, 1).
+        DockPlan out = SeamTravel.dockPlan(workspaceWithDock(), homeWithDock());
+        assertEquals(1f, SeamTravel.extraKeysShare(out,
+            SeamTravel.otherHalfProgress(terminalToHome(1f), PaneWallPage.TERMINAL)), EPSILON);
+        assertEquals(0f, SeamTravel.extraKeysShare(out,
+            SeamTravel.otherHalfProgress(terminalToHome(0f), PaneWallPage.TERMINAL)), EPSILON);
+        // Committed to Home, the other way: none on Home, all of it on the window.
+        DockPlan in = SeamTravel.dockPlan(homeWithDock(), workspaceWithDock());
+        float previous = SeamTravel.extraKeysShare(in,
+            SeamTravel.otherHalfProgress(homeToTerminal(0f), PaneWallPage.WIDGETS));
+        assertEquals(0f, previous, EPSILON);
+        for (int i = 1; i <= 200; i++) {
+            float share = SeamTravel.extraKeysShare(in,
+                SeamTravel.otherHalfProgress(homeToTerminal(i / 200f), PaneWallPage.WIDGETS));
+            assertTrue("jump at " + i, Math.abs(share - previous) < 0.03f);
+            assertTrue("backwards at " + i, share >= previous);
+            previous = share;
+        }
+        assertEquals(1f, previous, EPSILON);
+        // The other plans keep the row whole.
+        assertEquals(1f, SeamTravel.extraKeysShare(DockPlan.DIP, 0.5f), EPSILON);
+    }
+
+    @Test
+    public void theFoldSinksTheRowsByTheHiddenPartOfTheExtraKeys() {
+        assertEquals(0f, SeamTravel.foldSinkPx(110, 1f), EPSILON);
+        assertEquals(55f, SeamTravel.foldSinkPx(110, 0.5f), EPSILON);
+        assertEquals(110f, SeamTravel.foldSinkPx(110, 0f), EPSILON);
+        // A row not laid out (Home's rows before the fold in lays the window's) sinks nothing.
+        assertEquals(0f, SeamTravel.foldSinkPx(0, 0f), EPSILON);
+        assertEquals(0f, SeamTravel.foldSinkPx(110, 3f), EPSILON);
     }
 
     @Test
@@ -190,7 +266,8 @@ public class SeamTravelTest {
     @Test
     public void theRevealIsContinuousOverAWholeSlideFromEitherEnd() {
         // Read through the real frames, committed at Home: no step between frames jumps.
-        DockPlan plan = SeamTravel.dockPlan(homeWithDock(), workspaceWithDock());
+        DockPlan plan = SeamTravel.dockPlan(homeAppsOnly(), workspaceWithDock());
+        assertSame(DockPlan.DIP, plan);
         float previous = SeamTravel.dockReveal(plan,
             SeamTravel.otherHalfProgress(homeToTerminal(0f), PaneWallPage.WIDGETS));
         for (int i = 1; i <= 200; i++) {
