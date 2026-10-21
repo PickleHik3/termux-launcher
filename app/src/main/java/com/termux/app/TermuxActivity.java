@@ -7368,8 +7368,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             storedManagedWallpaperSystemId(), getCurrentSystemWallpaperId(), present,
             exact.lastModified(), exact.length(), width, height, storedWallpaperAppOnly());
         mWallpaperSourceFacts = facts;
+        // An app-only picture set, replaced, ended or gone moves the theme's colours too (ADR
+        // 0009), and Android sends no configuration change for a picture it never got: the theme
+        // is checked wherever these are read again, after the pass that asked.
+        mAccessoryRenderHandler.removeCallbacks(mWallpaperColorsCheck);
+        mAccessoryRenderHandler.post(mWallpaperColorsCheck);
         return facts;
     }
+
+    /** Re-themes the activity when the app-only colours it wears no longer apply. */
+    private final Runnable mWallpaperColorsCheck =
+        () -> TermuxThemeManager.recreateIfWallpaperColorsMoved(this);
 
     private int computeAccessoryBackdropHorizontalOverscanPx(int blurRadiusDp) {
         float blurRadiusPx = ViewUtils.dpToPx(this, Math.max(0, blurRadiusDp));

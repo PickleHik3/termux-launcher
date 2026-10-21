@@ -662,14 +662,19 @@ public final class MaterialTerminalColorScheme {
         }
     }
 
-    /** {@code context} with {@code nightMode} forced onto {@code base}, in the activity's theme. */
+    /**
+     * {@code context} with {@code nightMode} forced onto {@code base}, in the activity's theme —
+     * and in the app-only picture's colours while the activity wears them, which the bare theme
+     * would resolve from Android's wallpaper instead.
+     */
     @NonNull
     private static Context forcedModeContext(@NonNull Context context,
                                              @NonNull Configuration base, int nightMode) {
         Configuration configuration = new Configuration(base);
         configuration.uiMode = (configuration.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | nightMode;
-        return new ContextThemeWrapper(context.createConfigurationContext(configuration),
-            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        return com.termux.app.theme.AppOnlyWallpaperColors.wrap(new ContextThemeWrapper(
+            context.createConfigurationContext(configuration),
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar));
     }
 
     /**

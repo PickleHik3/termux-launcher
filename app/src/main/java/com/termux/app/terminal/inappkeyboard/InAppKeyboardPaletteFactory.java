@@ -197,7 +197,13 @@ public final class InAppKeyboardPaletteFactory {
     @ColorInt
     public static int resolveDockGlassBaseColor(@NonNull Context context) {
         // Same scheme gate as TermuxActivity#resolveAccessoryGlassBaseColor(): the Material You
-        // neutral is only the right base while the chrome is on wallpaper colours.
+        // neutral is only the right base while the chrome is on wallpaper colours. Under an
+        // app-only picture the framework neutral is the phone's wallpaper's, so the theme's own
+        // surface stands in for it, as the activity's glass base reads it.
+        if (isNightMode(context) && com.termux.app.theme.AppOnlyWallpaperColors.isActive(context)) {
+            return MaterialColors.getColor(context,
+                com.google.android.material.R.attr.colorSurface, 0xFF1C1B1F);
+        }
         if (isNightMode(context)
                 && !com.termux.app.theme.LauncherSchemeTheme.isSchemeChromeActive(context)) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {

@@ -3595,6 +3595,26 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_APP_ONLY, value, false);
     }
 
+    /** The app-only picture's Material seed; see {@code KEY_WALLPAPER_APP_ONLY_SEED}. */
+    public int getWallpaperAppOnlySeed() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_APP_ONLY_SEED,
+            TERMUX_APP.DEFAULT_VALUE_WALLPAPER_APP_ONLY_SEED);
+    }
+
+    /** The picture the seed was taken from; see {@code KEY_WALLPAPER_APP_ONLY_SEED_STAMP}. */
+    public long getWallpaperAppOnlySeedStamp() {
+        return SharedPreferenceUtils.getLong(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_APP_ONLY_SEED_STAMP,
+            TERMUX_APP.DEFAULT_VALUE_WALLPAPER_APP_ONLY_SEED_STAMP);
+    }
+
+    /** Stores a seed with the stamp of the picture it was taken from, the two together. */
+    public void setWallpaperAppOnlySeed(int seed, long stamp) {
+        mSharedPreferences.edit()
+            .putInt(TERMUX_APP.KEY_WALLPAPER_APP_ONLY_SEED, seed)
+            .putLong(TERMUX_APP.KEY_WALLPAPER_APP_ONLY_SEED_STAMP, stamp)
+            .apply();
+    }
+
     /** The picker's remembered "Also set as phone wallpaper". */
     public boolean isWallpaperAlsoSetPhone() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_ALSO_SET_PHONE,
