@@ -147,7 +147,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
         public static final int NO_PERCENTAGE = -1;
         /** A minimised float's chip, as an alpha: reduced emphasis against an open window's. */
-        public static final float MINIMISED_ALPHA = 0.6f;
+        public static final float MINIMISED_ALPHA = 0.75f;
         /** The dot a minimised float's chip wears, its diameter. */
         public static final float MINIMISED_DOT_DP = 4f;
 
