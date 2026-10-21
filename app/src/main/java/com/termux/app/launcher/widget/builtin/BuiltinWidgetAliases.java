@@ -58,6 +58,11 @@ public final class BuiltinWidgetAliases {
         alias("clock.digital", BuiltinWidgetKind.CLOCK,
             ClockWidgetSettings.KEY_FACE, ClockFace.NUMERALS.key,
             ClockWidgetSettings.KEY_SECONDS, ClockWidgetSettings.OFF);
+        // The Calendar (#114): the agenda opens on today's events, the month on the month.
+        alias("agenda", BuiltinWidgetKind.CALENDAR,
+            CalendarWidgetSupport.KEY_VIEW, CalendarWidgetSupport.VIEW_EVENTS);
+        alias("calendar.month", BuiltinWidgetKind.CALENDAR,
+            CalendarWidgetSupport.KEY_VIEW, CalendarWidgetSupport.VIEW_MONTH);
     }
 
     /** Files {@code storedId} as opening {@code kind} with {@code keysAndValues} (key, value, ...). */

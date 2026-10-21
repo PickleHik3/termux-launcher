@@ -16,7 +16,6 @@ import com.termux.R;
 public enum BuiltinWidgetKind {
     /** The one Clock, on eight faces; {@code clock.analog} and {@code clock.digital} open as it. */
     CLOCK("clock", R.string.builtin_widget_clock, 2, 1),
-    AGENDA("agenda", R.string.builtin_widget_agenda, 2, 1),
     WEATHER("weather", R.string.builtin_widget_weather, 2, 1),
     BATTERY("battery", R.string.builtin_widget_battery, 1, 1),
     SYSTEM("system", R.string.builtin_widget_system, 2, 1),
@@ -24,7 +23,8 @@ public enum BuiltinWidgetKind {
     NOTIFICATIONS("notifications", R.string.builtin_widget_notifications, 2, 2),
     TASKS("tasks", R.string.builtin_widget_tasks, 2, 2),
     NOTES("notes", R.string.builtin_widget_notes, 2, 2),
-    CALENDAR("calendar.month", R.string.builtin_widget_calendar, 2, 2),
+    /** The one Calendar, events first; {@code agenda} and {@code calendar.month} open as it. */
+    CALENDAR("calendar", R.string.builtin_widget_calendar, 2, 2),
     TERMINAL("terminal", R.string.builtin_widget_terminal, 4, 2);
 
     @NonNull public final String id;
