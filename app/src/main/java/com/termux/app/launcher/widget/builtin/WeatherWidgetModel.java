@@ -24,6 +24,9 @@ final class WeatherWidgetModel {
     /** How a sky glyph is tinted: the sun warm, the moon primary, everything else muted. */
     enum Tone { SUN, MOON, CLOUD }
 
+    /** Which of today's sun times comes next: the sunrise, the sunset, or neither (after dark). */
+    enum Sun { NONE, RISE, SET }
+
     /** Weather Icons night cuts: a clear night, and a partly cloudy one. */
     static final String GLYPH_NIGHT_CLEAR = "\ue32b";
     static final String GLYPH_NIGHT_PARTLY_CLOUDY = "\ue37e";
@@ -32,12 +35,17 @@ final class WeatherWidgetModel {
     static final int FORECAST_DAYS = 5;
 
     static final class Hour {
+        /** "14". */
         @NonNull final String label;
+        /** "14:00", in the user's 12- or 24-hour habit; the strip uses it where it fits. */
+        @NonNull final String longLabel;
         @NonNull final String glyph;
         @NonNull final Tone tone;
         @NonNull final String temp;
-        Hour(@NonNull String label, @NonNull String glyph, @NonNull Tone tone, @NonNull String temp) {
-            this.label = label; this.glyph = glyph; this.tone = tone; this.temp = temp;
+        Hour(@NonNull String label, @NonNull String longLabel, @NonNull String glyph,
+             @NonNull Tone tone, @NonNull String temp) {
+            this.label = label; this.longLabel = longLabel; this.glyph = glyph; this.tone = tone;
+            this.temp = temp;
         }
     }
 
@@ -74,17 +82,26 @@ final class WeatherWidgetModel {
     final int humidityPct;
     /** Wind speed in km/h, -1 when unknown. */
     final int windKmh;
+    /** The chance of rain this hour in percent, -1 when unknown. */
+    final int rainPct;
+    /** Which sun time comes next today, and when, as "19:42" or "7:42"; empty with {@link Sun#NONE}. */
+    @NonNull final Sun sun;
+    @NonNull final String sunTime;
     @NonNull final List<Hour> hours;
     @NonNull final List<Day> days;
 
     WeatherWidgetModel(@NonNull String place, @NonNull String temp, @NonNull String tempBare,
                        @NonNull String condition, @NonNull String glyph, @NonNull Tone tone,
                        @NonNull String high, @NonNull String low, int humidityPct, int windKmh,
+                       int rainPct, @NonNull Sun sun, @NonNull String sunTime,
                        @NonNull List<Hour> hours, @NonNull List<Day> days) {
         this.place = place; this.temp = temp; this.tempBare = tempBare;
         this.condition = condition; this.glyph = glyph; this.tone = tone;
         this.high = high; this.low = low;
         this.humidityPct = humidityPct; this.windKmh = windKmh;
+        this.rainPct = rainPct;
+        this.sun = sunTime.isEmpty() ? Sun.NONE : sun;
+        this.sunTime = this.sun == Sun.NONE ? "" : sunTime;
         this.hours = hours; this.days = days;
     }
 
@@ -92,9 +109,16 @@ final class WeatherWidgetModel {
 
     // ----- building -------------------------------------------------------------------------
 
-    /** The widget's view of a valid forecast, read at {@code now}. */
+    /** The widget's view of a valid forecast, read at {@code now}, with 24-hour times. */
     @NonNull static WeatherWidgetModel from(@NonNull WeatherController.Weather weather,
                                             boolean fahrenheit, @NonNull Calendar now) {
+        return from(weather, fahrenheit, true, now);
+    }
+
+    /** The widget's view of a valid forecast, read at {@code now}, times in the user's habit. */
+    @NonNull static WeatherWidgetModel from(@NonNull WeatherController.Weather weather,
+                                            boolean fahrenheit, boolean is24Hour,
+                                            @NonNull Calendar now) {
         String high = "", low = "";
         if (!weather.daily.isEmpty()) {
             WeatherController.Daily today = weather.daily.get(0);
@@ -105,13 +129,21 @@ final class WeatherWidgetModel {
         List<Hour> hours = new ArrayList<>();
         List<String> isos = new ArrayList<>(weather.hourly.size());
         for (WeatherController.Hourly h : weather.hourly) isos.add(h.iso);
-        int first = firstUpcoming(isos, currentHourIso(now));
+        String hourIso = currentHourIso(now);
+        int first = firstUpcoming(isos, hourIso);
         for (int i = Math.max(0, first); i >= 0 && i < weather.hourly.size()
             && hours.size() < HOURLY_MAX; i++) {
             WeatherController.Hourly h = weather.hourly.get(i);
-            hours.add(new Hour(hourLabel(h.iso), glyph(h.code, h.isDay), tone(h.code, h.isDay),
+            hours.add(new Hour(hourLabel(h.iso), hourLabelLong(h.iso, is24Hour),
+                glyph(h.code, h.isDay), tone(h.code, h.isDay),
                 WeatherController.formatTemp(h.tempC, fahrenheit)));
         }
+        int rain = -1;
+        int thisHour = isos.indexOf(hourIso);
+        if (thisHour >= 0) rain = weather.hourly.get(thisHour).precipProb;
+        Sun sun = nextSun(weather.sunrise, weather.sunset, now);
+        String sunTime = ClockWidgetFormats.clockText(
+            sun == Sun.RISE ? weather.sunrise : sun == Sun.SET ? weather.sunset : "", is24Hour);
 
         // The coming days from tomorrow, on one scale so a bar means the same thing on every row.
         List<Day> days = new ArrayList<>();
@@ -140,10 +172,11 @@ final class WeatherWidgetModel {
             tone(weather.currentCode, weather.currentIsDay), high, low,
             Double.isNaN(weather.humidityPct) ? -1 : (int) Math.round(weather.humidityPct),
             Double.isNaN(weather.windKmh) ? -1 : (int) Math.round(weather.windKmh),
+            rain, sun, sunTime,
             Collections.unmodifiableList(hours), Collections.unmodifiableList(days));
     }
 
-    /** The design's sample: Kuwait City at 13:40 on a sunny Tuesday. */
+    /** The design's sample: Kuwait City at 13:40 on a sunny Tuesday, the sun setting at 17:12. */
     @NonNull static WeatherWidgetModel sample() {
         List<Hour> hours = new ArrayList<>();
         // hour, temperature, WMO code, is-day
@@ -151,7 +184,8 @@ final class WeatherWidgetModel {
             {18, 30, 0, 0} };
         for (int[] h : hourly) {
             boolean day = h[3] == 1;
-            hours.add(new Hour(String.valueOf(h[0]), glyph(h[2], day), tone(h[2], day), h[1] + "°"));
+            hours.add(new Hour(String.valueOf(h[0]), h[0] + ":00", glyph(h[2], day), tone(h[2], day),
+                h[1] + "°"));
         }
         List<Day> days = new ArrayList<>();
         String[] names = { "Wed", "Thu", "Fri", "Sat", "Sun" };
@@ -166,7 +200,7 @@ final class WeatherWidgetModel {
         }
         return new WeatherWidgetModel("Kuwait City", "34°", "34", WeatherController.describe(0),
             glyph(0, true), Tone.SUN,
-            "36", "24", 18, 14, hours, days);
+            "36", "24", 18, 14, -1, Sun.SET, "17:12", hours, days);
     }
 
     // ----- pure helpers ---------------------------------------------------------------------
@@ -193,6 +227,26 @@ final class WeatherWidgetModel {
     @NonNull static String hourLabel(@NonNull String iso) {
         int t = iso.indexOf('T');
         return t >= 0 && iso.length() >= t + 3 ? iso.substring(t + 1, t + 3) : iso;
+    }
+
+    /** "14:00" out of {@code 2026-10-06T14:00}, or "2:00" for a 12-hour habit; empty when unreadable. */
+    @NonNull static String hourLabelLong(@NonNull String iso, boolean is24Hour) {
+        int t = iso.indexOf('T');
+        if (t < 0 || iso.length() < t + 3) return "";
+        return ClockWidgetFormats.clockText(iso.substring(t + 1, t + 3) + ":00", is24Hour);
+    }
+
+    /**
+     * Which of today's sun times comes next at {@code now}: the sunrise before it, the sunset
+     * before that, else neither. Both are "HH:mm"; a missing one is skipped.
+     */
+    @NonNull static Sun nextSun(@NonNull String sunrise, @NonNull String sunset,
+                                @NonNull Calendar now) {
+        String clock = String.format(Locale.ROOT, "%02d:%02d", now.get(Calendar.HOUR_OF_DAY),
+            now.get(Calendar.MINUTE));
+        if (sunrise.length() == 5 && clock.compareTo(sunrise) < 0) return Sun.RISE;
+        if (sunset.length() == 5 && clock.compareTo(sunset) < 0) return Sun.SET;
+        return Sun.NONE;
     }
 
     /**
