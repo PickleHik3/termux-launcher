@@ -2039,6 +2039,7 @@
                 <string name="layout_editor_readout_keyboard_dp">Keyboard %1$d dp</string>
                 <string name="layout_editor_readout_keyboard_scale">Keyboard ×%1$s</string>
                 <string name="layout_editor_readout_chin">Bottom padding %1$d dp</string>
+                <string name="layout_editor_readout_wall_strip">Strip row %1$d dp</string>
                 <string name="layout_editor_readout_grid">%1$d × %2$d cells</string>
                 <!-- The sheet's handle, read aloud: it is pulled or tapped to grow the card. -->
                 <string name="termux_layout_editor_sheet_handle">Expand or collapse the editor</string>

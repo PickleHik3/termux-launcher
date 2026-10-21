@@ -262,6 +262,26 @@ public final class LayoutEditorPlan {
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
 
+    /**
+     * Whether the edited layout's dock wears the Wall strip, so the canvas draws its first row and
+     * the dock's selection carries the row's own handle.
+     */
+    public boolean showsWallStrip() {
+        return dockStyle() == DockStyle.WALL_STRIP;
+    }
+
+    /** The Wall strip's first row in the shown orientation, in dp. */
+    public int wallStripHeightDp() {
+        return mPlaces.wallStripHeightDp(mShownOrientation);
+    }
+
+    /** The Strip row's handle dragged: its height, for the edited layout's shown orientation. */
+    @NonNull
+    public Drop setWallStripHeightDp(int dp) {
+        mPlaces.setWallStripHeightDp(mShownOrientation, dp);
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
     /** Home's corner handle dragged: the grid in whole cells. */
     @NonNull
     public Drop setWidgetGrid(int columns, int rows) {

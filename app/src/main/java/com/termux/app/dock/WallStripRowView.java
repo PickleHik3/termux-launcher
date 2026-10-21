@@ -182,8 +182,8 @@ public final class WallStripRowView extends View {
         return tiles;
     }
 
-    /** The row's height. */
-    public static final float HEIGHT_DP = 84f;
+    /** The row's shipped height; a layout may keep another ({@link WallStripRowPolicy}). */
+    public static final float HEIGHT_DP = WallStripRowPolicy.DEFAULT_HEIGHT_DP;
     static final float DEFAULT_INSET_DP = 14f;
     static final float DEFAULT_GAP_DP = 10f;
     static final float TILE_PAD_DP = 7f;

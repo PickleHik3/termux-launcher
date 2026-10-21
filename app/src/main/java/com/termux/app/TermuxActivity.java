@@ -15669,6 +15669,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mAppliedDockHeightScale = Float.NaN;
     private float mAppliedKeyboardHeightScale = Float.NaN;
     private int mAppliedKeyboardChinDp = -1;
+    /** The Wall strip's row, beside the three: the dock's slab is sized from it too. */
+    private int mAppliedWallStripHeightDp = -1;
 
     /** Whether the sizes the orientation on screen asks for have moved since. */
     private boolean applyPlaceSizes() {
@@ -15676,12 +15678,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float dock = mPreferences.getAppLauncherBarHeightScale();
         float keyboard = mPreferences.getInAppKeyboardHeightScale();
         int chin = mPreferences.getInAppKeyboardBottomPadding();
+        int strip = wallStripHeightDp();
         boolean moved = Float.compare(dock, mAppliedDockHeightScale) != 0
             || Float.compare(keyboard, mAppliedKeyboardHeightScale) != 0
-            || chin != mAppliedKeyboardChinDp;
+            || chin != mAppliedKeyboardChinDp || strip != mAppliedWallStripHeightDp;
         mAppliedDockHeightScale = dock;
         mAppliedKeyboardHeightScale = keyboard;
         mAppliedKeyboardChinDp = chin;
+        mAppliedWallStripHeightDp = strip;
         return moved;
     }
 
@@ -16402,8 +16406,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The Search field under the apps row: all of it while the page's layout turns it on,
             // between while the toggle, the palette or a slide across the seam eases the slab.
             .promptFieldReveal(promptFieldReveal())
-            // The Wall strip's first row over it, the same way.
+            // The Wall strip's first row over it, the same way, at the layout's own height.
             .wallStripReveal(wallStripReveal())
+            .wallStripHeightDp(preferencesAvailable ? wallStripHeightDp() : 0)
             .density(getResources().getDisplayMetrics().density)
             .barHeightScale(preferencesAvailable
                 ? mPreferences.getAppLauncherBarHeightScale() : DockLayoutPolicy.sizePreset(2))
@@ -16977,6 +16982,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         }
         return row;
+    }
+
+    /**
+     * The Wall strip's first row's height in dp, as the layout the stack is dressed for keeps it
+     * in the orientation on screen (the Layout editor's Strip handle): the Home layout's on a
+     * Home page that holds one, and mid-slide the half's whose rows the stack stands, as the
+     * dock's own height is read.
+     */
+    private int wallStripHeightDp() {
+        PlaceLayoutStore store = placeLayoutStore();
+        return store == null ? com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP
+            : store.forVariant(stackVariant()).wallStripHeightDp(currentPlaceOrientation());
     }
 
     /**

@@ -38,7 +38,24 @@ public final class WallStripRowPolicy {
     /** The clock's slide in or out as the terminal count crosses two and three, ms. */
     public static final long CLOCK_SLIDE_MS = 420L;
 
+    /**
+     * The row's height, as each layout keeps it per orientation (the Layout editor's Strip
+     * handle): today's 84 dp until the user drags it. The least keeps every tile a full 48 dp
+     * target with its title on one line and its split shape still drawn; the most is half again
+     * the shipped row, so the terminal over the dock keeps its room.
+     */
+    public static final int DEFAULT_HEIGHT_DP = 84;
+    public static final int MIN_HEIGHT_DP = 56;
+    public static final int MAX_HEIGHT_DP = 128;
+    /** One step of the height, for the canvas's accessibility actions and keys. */
+    public static final int HEIGHT_STEP_DP = 4;
+
     private WallStripRowPolicy() {}
+
+    /** A stored or dragged row height held to its range. */
+    public static int clampHeightDp(int heightDp) {
+        return Math.max(MIN_HEIGHT_DP, Math.min(MAX_HEIGHT_DP, heightDp));
+    }
 
     /** The clock's share of the row at rest with {@code terminals} open. */
     public static float clockShare(int terminals) {

@@ -872,6 +872,61 @@ public class PlaceLayoutStoreTest {
             store.keyboardChinDp(PlaceOrientation.PORTRAIT));
     }
 
+    // ------------------------------------------------------------------ the Wall strip's row
+
+    @Test
+    public void theWallStripsRowIsTodaysHeightUntilItIsSet_andNothingIsWrittenForIt() {
+        PlaceLayoutStore store = store();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            assertEquals(orientation + " row", com.termux.app.dock.WallStripRowPolicy
+                .DEFAULT_HEIGHT_DP, store.wallStripHeightDp(orientation));
+        }
+        assertFalse("reading it migrates nothing",
+            prefs.contains("layout.portrait.wall_strip_height"));
+        assertFalse(prefs.contains("layout.landscape.wall_strip_height"));
+    }
+
+    @Test
+    public void theWallStripsRowIsTheOrientationsAndClamped() {
+        PlaceLayoutStore store = store();
+        store.setWallStripHeightDp(PlaceOrientation.PORTRAIT, 104);
+        assertEquals(104, store.wallStripHeightDp(PlaceOrientation.PORTRAIT));
+        assertEquals(104, prefs.getInt("layout.portrait.wall_strip_height", -1));
+        assertEquals("landscape is untouched",
+            com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP,
+            store.wallStripHeightDp(PlaceOrientation.LANDSCAPE));
+
+        store.setWallStripHeightDp(PlaceOrientation.PORTRAIT, 4);
+        assertEquals(com.termux.app.dock.WallStripRowPolicy.MIN_HEIGHT_DP,
+            store.wallStripHeightDp(PlaceOrientation.PORTRAIT));
+        prefs.edit().putInt("layout.landscape.wall_strip_height", 999).commit();
+        assertEquals(com.termux.app.dock.WallStripRowPolicy.MAX_HEIGHT_DP,
+            store.wallStripHeightDp(PlaceOrientation.LANDSCAPE));
+    }
+
+    @Test
+    public void theWallStripsRowIsEachLayoutsOwn() {
+        PlaceLayoutStore store = store();
+        store.setHomeLayout(true);
+        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        home.setWallStripHeightDp(PlaceOrientation.PORTRAIT, 64);
+        assertEquals(64, home.wallStripHeightDp(PlaceOrientation.PORTRAIT));
+        assertEquals("the shared layout keeps its own",
+            com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP,
+            store.forVariant(LayoutVariant.NORMAL).wallStripHeightDp(PlaceOrientation.PORTRAIT));
+        assertTrue("a Home layout with its own row differs",
+            store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+    }
+
+    @Test
+    public void clearingAnOrientationGivesTheWallStripsRowBack() {
+        PlaceLayoutStore store = store();
+        store.setWallStripHeightDp(PlaceOrientation.PORTRAIT, 120);
+        store.clear(PlaceOrientation.PORTRAIT);
+        assertEquals(com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP,
+            store.wallStripHeightDp(PlaceOrientation.PORTRAIT));
+    }
+
     // ------------------------------------------------------------------ under the keyboard
 
     @Test
