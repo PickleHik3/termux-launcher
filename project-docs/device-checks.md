@@ -13,6 +13,11 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · merge 7940a21ed "launch apps whose desktop file ships an unfilled Exec placeholder" ·
+  With the stock x11 `chromium` (Exec=@@desktop_exec) Chromium opens from the drawer; an app whose
+  command is missing shows "<app> could not start: its command <x> is not installed." once, with no
+  --no-sandbox retry in logcat; a desktop session and an app exiting non-127 behave as before ·
+  pong (release build), logcat `Termux.X11LinuxAppRunner`.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on
