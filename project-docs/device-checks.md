@@ -13,6 +13,19 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "feat(settings): a Battery & performance page for the presets and the
+  motion they trim" · Settings › App › Battery & performance opens with Presets (Reduce idle
+  activity, Low-memory preset) and Smoother motion (Glass refraction, Living glass, Wallpaper
+  parallax, Terminal effect); App behavior's link row opens the same page; Appearance no longer
+  shows Wallpaper parallax. Live greying: Low-memory preset on greys parallax and Terminal effect
+  ("Set by Low-memory preset", parallax off, effect None) and the glass rows ("Off while Reduce
+  idle activity is on", shown off); off again brings back the look, the glass switches as they
+  were, and the stored fancier_glass is never written by the greying. Reduce idle activity alone
+  greys only the glass. Glass refraction off gives Living glass "Needs Glass refraction"; with a
+  wallpaper not picked in the launcher both say "Needs a wallpaper picked in Appearance"; wallpaper
+  mode off gives parallax "Needs a wallpaper". Searching "Reduce idle activity" and "Low-memory
+  preset" lands on the page. The preset's on/off still restyles the launcher as before; Living glass
+  off stops the glass flexing on a page swipe · emulator (API 33+), debug build.
 - 2026-10-21 · 1.1.0-pre.6 crash report (NPE in WidgetPaneController.flipDragPage, moto g15,
   Android 15), cause not yet found: Robolectric does not reproduce it · On the Widgets place, hold
   a widget and drag it into the trailing edge band for two turns (one page, so a page is made; and
