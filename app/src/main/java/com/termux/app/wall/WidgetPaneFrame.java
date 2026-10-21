@@ -182,6 +182,30 @@ public final class WidgetPaneFrame extends PaneContentFrame
         mControls.setListener(this::runControl);
         addView(mControls, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         applyRestingActions();
+        if (mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView) {
+            ((com.termux.app.launcher.widget.WidgetPaneView) mGrid)
+                .setWidgetEditReservedArea(this::fillEditTabInPane);
+        }
+    }
+
+    /**
+     * The editing tab, where it rests once out, in the widget pane's coordinates: the edit chips
+     * of a widget in that corner move below it, since the tab is drawn over them and takes the
+     * taps there for the whole session.
+     */
+    private boolean fillEditTabInPane(@NonNull android.graphics.Rect out) {
+        if (!mEditing || mControls == null || mGrid == null) return false;
+        RectF tab = new RectF();
+        if (!mControls.restingTabBounds(tab)) return false;
+        tab.offset(mControls.getLeft() - mGrid.getLeft(), mControls.getTop() - mGrid.getTop());
+        tab.roundOut(out);
+        return !out.isEmpty();
+    }
+
+    private void invalidateWidgetEditChrome() {
+        if (mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView) {
+            ((com.termux.app.launcher.widget.WidgetPaneView) mGrid).invalidateWidgetEditChrome();
+        }
     }
 
     public void setHost(@Nullable Host host) {
@@ -211,6 +235,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
             applyRestingActions();
             mControls.dismiss();
         }
+        invalidateWidgetEditChrome();
     }
 
     /** Put the controls away, for a host that moved the wall on. */
@@ -297,6 +322,8 @@ public final class WidgetPaneFrame extends PaneContentFrame
                 getContext().getString(R.string.pane_controls_discard_changes)),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
                 getContext().getString(R.string.pane_controls_help)));
+        // The read-out's width follows the grid's size, and the chips clear the tab it is on.
+        invalidateWidgetEditChrome();
     }
 
     /** The tick, in the same hand-drawn family the panes' own close and maximise marks use. */
@@ -551,6 +578,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
         if (mControls == null || mPressedCorner == CornerZones.NONE) return;
         if (!mShownAtDown || mShownCornerAtDown != mPressedCorner) mControls.show(mPressedCorner);
         else dismissControls();
+        invalidateWidgetEditChrome();
     }
 
     private void cancelHold() {

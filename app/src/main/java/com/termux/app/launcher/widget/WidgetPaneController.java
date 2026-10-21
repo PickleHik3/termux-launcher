@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.termux.app.launcher.home.HomeLayoutLock;
@@ -1328,10 +1329,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 pane.postDelayed(mergeArm, HomeFolderPolicy.MERGE_HOVER_MS);
                 overlay.setGhostBounds(null);
             }
+            overlay.clearRefusal();
             previewDisplacement(Collections.emptyMap());
             return;
         }
         clearMergeTarget();
+        showRefusal(edit.moveCandidate.refusedBy, edit.turn.page);
         if (edit.moveCandidate.valid) {
             overlay.setGhostBounds(paneBounds(edit.moveCandidate.rect), true);
         } else if (edit.turn.page != record.page) {
@@ -1541,6 +1544,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         // Dropped over a page with no room for it: the widget goes home, and so does the page.
         boolean blocked = crossed && !committed && !canceled;
+        // A widget that would not step aside says so as the drop springs back. A drop sent home
+        // from another page clears it instead: the page it was measured on is going away, and the
+        // no-room notice below already explains that one.
+        if (canceled || (crossed && !committed)) pane.widgetEditOverlay().clearRefusal();
+        else pane.widgetEditOverlay().flashRefusal();
         if (lifted) returnDraggedCell(appWidgetId);
         // The real layout takes over on render(); a surviving translation would double the offset.
         clearDisplacementPreview(!committed);
@@ -1951,6 +1959,23 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             edit.maxColumnSpan, edit.maxRowSpan);
         pane.widgetEditOverlay().setFrameBounds(paneBounds(edit.resizeCandidate.rect));
         previewDisplacement(edit.resizeCandidate.displaced);
+        showRefusal(edit.resizeCandidate.refusedBy, record.page);
+    }
+
+    /**
+     * Tints the widgets that would not make room for what the finger asks, in the overlay's
+     * refusing red, so a grow that stops short or a drop that springs back shows who stopped it.
+     */
+    private void showRefusal(@NonNull Set<Integer> refusedBy, int page) {
+        if (refusedBy.isEmpty()) {
+            pane.widgetEditOverlay().showRefusal(Collections.emptyList());
+            return;
+        }
+        List<Rect> bounds = new ArrayList<>(refusedBy.size());
+        for (LauncherWidgetRecord other : widgets.repository().recordsOnPage(page)) {
+            if (refusedBy.contains(other.appWidgetId)) bounds.add(paneBounds(other.cell));
+        }
+        pane.widgetEditOverlay().showRefusal(bounds);
     }
 
     private void endResizeDrag() {
@@ -1959,6 +1984,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
         WidgetEditPolicy.Candidate candidate = edit.resizeCandidate;
         edit.resizeCandidate = null;
+        pane.widgetEditOverlay().flashRefusal();
         // The new span and every neighbour it pushed aside go in together: the same atomic batch
         // the move path commits, so a refused write leaves the page exactly as it was.
         if (record != null && candidate != null && !candidate.rect.equals(record.cell)
