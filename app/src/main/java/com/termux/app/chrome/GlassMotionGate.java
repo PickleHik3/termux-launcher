@@ -13,9 +13,8 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 /**
  * The {@link GlassMotionLight.Gate} every glass pane asks as a motion or a press starts: the rule
  * every Fancier Glass motion follows (the phone's animations on, no reduced motion, no lazy mode, no
- * battery saver). Living glass itself is always on: its switch is hidden, and a stored "off" from
- * before is not honoured, since nothing would let the user turn it back on. pre has no Animation speed setting, so
- * the springs run at 1x. Fancier Glass itself is the caller's: only a surface drawing through the
+ * battery saver), and the Living glass switch on Settings › Battery &amp; performance. pre has no
+ * Animation speed setting, so the springs run at 1x. Fancier Glass itself is the caller's: only a surface drawing through the
  * program has glass to move.
  */
 public final class GlassMotionGate {
@@ -30,7 +29,7 @@ public final class GlassMotionGate {
             TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app);
             PowerManager power = app.getSystemService(PowerManager.class);
             return multiplier(ValueAnimator.areAnimatorsEnabled(), ReducedMotion.isEnabled(app),
-                true,
+                prefs == null || prefs.isFancierGlassMotionLightEnabled(),
                 prefs != null && prefs.isLazyModeEnabled(),
                 power != null && power.isPowerSaveMode(),
                 1f);
