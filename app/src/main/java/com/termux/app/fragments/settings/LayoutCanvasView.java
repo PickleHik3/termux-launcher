@@ -2888,8 +2888,8 @@ public final class LayoutCanvasView extends View {
     /**
      * Home's widget grid, as the layout counts it: one faint tile per cell, and on the first two
      * a clock face and a few lines, so the tiles read as widgets rather than as a grid. Its rim is
-     * Home's Margin and its gaps the live grid's, to scale. Home wears no status bar, so the
-     * grid starts at the top of the page's opening.
+     * Home's Margin and its gaps the live grid's, to scale. The grid starts at the top of the
+     * page's opening, which is below the status bar wherever the layout stands one (#90).
      */
     private void drawHomeGrid(@NonNull Canvas canvas, @NonNull RectF pane) {
         if (mLayout == null) return;
