@@ -92,6 +92,17 @@ public final class PlaceChromeTravel {
     }
 
     /**
+     * Answers whether the page the wall shows {@code steps} away from the current one (-1 on its
+     * left, +1 on its right) is another page of the current one's own — the Workspace's previous
+     * or next window — rather than the next place on the row. A drag toward a window moves the
+     * wall's offset exactly as a drag toward the next place does, so the offset alone cannot tell
+     * them apart.
+     */
+    public interface InnerPages {
+        boolean showsInnerPage(int steps);
+    }
+
+    /**
      * The stretch of the way, at either end, over which the chrome already rests: the reveals
      * move over the middle {@code 1 - 2 * LANDING} of a step and sit at the far place's state
      * for the last {@code LANDING} of it. The slide's settle (a spring, {@code wall/SettleSpring};
@@ -204,7 +215,27 @@ public final class PlaceChromeTravel {
     public static Frame at(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
                            float offsetPx, int widthPx, @NonNull States states,
                            @Nullable PaneWallPage leaving) {
+        return at(pages, current, offsetPx, widthPx, states, leaving, null);
+    }
+
+    /**
+     * The same, for a wall whose current page may hold pages of its own beside it
+     * ({@code inner}): a slide toward one of those — from one Workspace window to the next or
+     * the previous — stays on {@code current}'s place, so the frame is its rest. Without this the
+     * offset of a slide toward the previous window read as a slide toward the place on the left,
+     * Home, and the dock and the keyboard sank toward Home's state mid-swipe.
+     *
+     * @param inner null for a row of places only
+     */
+    @NonNull
+    public static Frame at(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
+                           float offsetPx, int widthPx, @NonNull States states,
+                           @Nullable PaneWallPage leaving, @Nullable InnerPages inner) {
         if (widthPx <= 0 || offsetPx == 0f || Float.isNaN(offsetPx)) {
+            return rest(current, states.restOf(current));
+        }
+        // A positive offset brings in what stands on the left (PaneWallLayout#offsetPx).
+        if (inner != null && inner.showsInnerPage(offsetPx > 0f ? -1 : 1)) {
             return rest(current, states.restOf(current));
         }
         // The screen shows position p, in places relative to current: a page r places away is at

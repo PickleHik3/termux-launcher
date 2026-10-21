@@ -1955,10 +1955,16 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   rows than Home's (A–Z, toolbar), the beads give way to the slab where the stack changes rows,
   as before · emulator for the look (record at 60 fps), pong for jank (one dock effect rebuild a
   frame while the share moves, `scripts/perf-frametime.sh` on a seam fling).
-- 2026-10-21 · keyboard flash (not fixed) · Workspace with two terminal windows, keyboard up:
-  window 2 → window 1 by chip tap, by `window.select`, and by swipe; record at 60 fps and say which
-  routes flash and for how many frames. Then the same on a build of a47df0ac3 (before the dock
-  work) to settle whether it predates it · pong, by hand (ask first), or emulator.
+- 2026-10-21 · ISSUE1 · keyboard and dock on a swipe to the previous window · Workspace with
+  three terminal windows, keyboard up, on the last window (`launcherctl window focus <last>`,
+  `launcherctl keyboard show`): a slow rightward swipe on the terminal's text (`adb shell input
+  swipe 200 700 900 700 1200`), recorded at 60 fps: the dock and the in-app keyboard stay where
+  they are on every frame, as on the leftward swipe to the next window; also from the middle
+  window both ways, by a border drag, and a short drag let go that springs back. From the first
+  window the same rightward swipe still brings Home in with the dock and the keyboard travelling
+  as before. Window 2 → window 1 by chip tap and by `window.select` too (pong's report did not
+  say which route): no frame with the keyboard or the dock gone. Under Glass tray and Lens beads
+  · emulator, then pong.
 
 ### Living glass (10-19)
 - 2026-10-19 · feat(glass) living glass · Taste on pong, on a dark and on a pale wallpaper, under

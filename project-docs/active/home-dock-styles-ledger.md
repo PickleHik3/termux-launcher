@@ -25,20 +25,12 @@ first within each section. Delete this file with the spec when the work is deliv
 | Drawer: pull down on Suggested's empty pane closed the drawer, now closes the folder | merged, unchecked on device | ba6144443 |
 | Pong 10-21: Workspace dock malformed after Home → Workspace (a second, unfrosted frame along the slab's bottom). The settle's chrome pass moved the glass host's top up by the dashes band and cut the backdrop and the glass from the host's old height in the same pass; the host was not among the views whose resize re-runs the pass, so the glass stayed a band short. The host's resize now books the pass; leaving beads also drops the moving beads, sideways cut and shelf beads | built, unit-tested, unchecked on device | 2742a62bc |
 | Pong 10-21: clunky Lens beads ⇄ Workspace hand-over. The beads now melt into the slab with Home's share of the slide (they swell under their icons, cut to the slab's outline, covering it by the last 15 %), and come back out of it; one effect rebuild a frame while the share moves | built, unit-tested, unchecked on device | 604fd8558 |
+| Pong 10-21 / emulator pass 6: keyboard and dock sank and came back on a slow swipe to the previous Workspace window (not the next). The chrome's travel (PlaceChromeTravel.at) read the wall's offset against the row's places only, so the offset of a drag toward the previous window read as a slide toward Home, the place on the left; toward the next window there is no place on the right, so it was clean. Predates the dock work: since 3990085b4 (10-17, one row of Home pages and windows) windows are inner pages of the Workspace's page; a47df0ac3 reads the same. The frame now asks the wall whether the page coming in is a window of the current page's own (PaneWallController.showsInnerPage, the rule the parallax already used) and stays at rest then, so Home's share (bands, bead melt, dock rows) is 0 on every window-to-window frame | built, unit-tested (WindowSlideChromeTravelTest), unchecked on device | ISSUE1 |
 
 ## Known issues
 
 Open, newest first. Move an item out when it is fixed (with its commit) or decided.
 
-- 2026-10-21 (pong) · In the Workspace, going from the second terminal window back to the first,
-  the keyboard flashes (seems to disappear and come back). Cause not found. By code it most
-  likely predates the dock work: the window switch path (showRowWindow, showWindowFromBar,
-  animateTerminalWindowArrival, the wall's nudge, which leaves the chrome travel at rest) reads
-  the same at a47df0ac3, and nothing the dock work added (restyle, band ease, Taskbar/Wall strip
-  feeds) runs on a Workspace window switch under Lens beads. The only direction-dependent code
-  found is the arrival's slide direction. Suspect the focus/IME side of the pane re-render
-  (TerminalPaneController.showWindow → render), unconfirmed. Device check owed (device-checks.md,
-  "Home dock: pong fixes").
 - Home ⇄ Workspace settle under a style with dashes above the slab: the slab's top still steps by
   the dashes band (6.5 dp) at the settle; the beads' melt hides the beads → slab change, not that.
 - A dock page with fewer apps than slots stays left-aligned: the slot is the grid column in every

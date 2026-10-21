@@ -22051,9 +22051,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.wall.PaneWallPage> pages = placesOf(mPaneWallController.pages());
         // The committed place is named so its keyboard, going away, is put away over the first
         // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
+        // A slide toward another window of the Workspace stays on its place: the wall's offset
+        // alone reads the previous window as Home, the place on the left.
         com.termux.app.place.PlaceChromeTravel.Frame frame =
             com.termux.app.place.PlaceChromeTravel.at(pages, currentWallPlace(),
-                offsetPx, wall.getWidth(), mChromeRestStates, mLastWallPage);
+                offsetPx, wall.getWidth(), mChromeRestStates, mLastWallPage,
+                mPaneWallController::showsInnerPage);
         // Across the seam, how the stack crosses and which half's dress it wears are read before
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
         readSeamTravel(frame);
