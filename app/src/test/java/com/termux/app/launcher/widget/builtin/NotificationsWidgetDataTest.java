@@ -64,4 +64,49 @@ public class NotificationsWidgetDataTest {
         assertFalse(one.sameAs(NotificationsWidgetData.Snapshot.EMPTY));
         assertFalse(one.sameAs(null));
     }
+
+    private static LauncherCtlNotificationEvent categorised(String key, String pkg, String app,
+                                                            String sender, String text, String category,
+                                                            long time) {
+        return new LauncherCtlNotificationEvent(-1, key, pkg, app, null, sender, sender, text, null,
+            category, null, time, time, time, 0, false);
+    }
+
+    @Test public void systemAndSilentNotificationsAreLeftOut() {
+        List<LauncherCtlNotificationEvent> rows = Arrays.asList(
+            categorised("a", "com.whatsapp", "WhatsApp", "Mum", "hi", "msg", NOW - MINUTE),
+            categorised("b", "android", "Android System", null, "USB charging", null, NOW - MINUTE),
+            categorised("c", "com.android.systemui", "System UI", null, "Battery", null, NOW - MINUTE),
+            categorised("d", "com.some.app", "Some app", null, "downloading", "progress", NOW - MINUTE),
+            categorised("e", "com.news", "News", null, "quiet digest", null, NOW - MINUTE),
+            categorised("f", "com.news", "News", null, "breaking", null, NOW - 2 * MINUTE));
+        NotificationsWidgetData.Snapshot snapshot = NotificationsWidgetData.select(rows, NOW, 50,
+            java.util.Collections.singleton("e"));
+        assertEquals(2, snapshot.count());
+        assertEquals("hi", snapshot.items.get(0).text);
+        assertEquals("breaking", snapshot.items.get(1).text);
+    }
+
+    @Test public void groupsPutPeopleFirstAndCountMessagesPerPersonAndPerApp() {
+        List<LauncherCtlNotificationEvent> rows = Arrays.asList(
+            categorised("n1", "com.news", "News", null, "newest of all", null, NOW - 1 * MINUTE),
+            categorised("n2", "com.news", "News", null, "second", null, NOW - 2 * MINUTE),
+            // One notification carrying three messages shares a key.
+            categorised("w", "com.whatsapp", "WhatsApp", "Mum", "three", "msg", NOW - 3 * MINUTE),
+            categorised("w", "com.whatsapp", "WhatsApp", "Mum", "two", "msg", NOW - 4 * MINUTE),
+            categorised("w", "com.whatsapp", "WhatsApp", "Mum", "one", "msg", NOW - 5 * MINUTE),
+            categorised("s", "com.sms", "Messages", "Alex", "plans", "msg", NOW - 6 * MINUTE));
+        NotificationsWidgetData.Snapshot snapshot = NotificationsWidgetData.select(rows, NOW, 50);
+        assertEquals(3, snapshot.groups.size());
+        assertEquals("Mum", snapshot.groups.get(0).newest.who);
+        assertEquals(3, snapshot.groups.get(0).count);
+        assertEquals("Alex", snapshot.groups.get(1).newest.who);
+        assertEquals(1, snapshot.groups.get(1).count);
+        assertFalse(snapshot.groups.get(2).person());
+        assertEquals("News", snapshot.groups.get(2).newest.app);
+        assertEquals(2, snapshot.groups.get(2).count);
+        assertEquals(6, snapshot.groupedCount());
+        // The items keep one entry per notification.
+        assertEquals(4, snapshot.count());
+    }
 }
