@@ -107,3 +107,12 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - A theme (`cmd uimode night yes`) or font-scale change recreates the activity and closes the
   Appearance editor: live edits stay applied, no Keep/Discard. Same on pre; reopen and check there.
 - Swipes near the dock toggle the Ctrl/Alt/Fn latches and the F-key layer; a force-stop clears them.
+
+## Notes from the v1.2.0 release smoke (2026-10-21, emulator)
+
+- Pong is often asleep (`dumpsys power | grep mWakefulness` not Awake, keyguard up). Check that before taking a lease; a run that finds it asleep reports so at once instead of waking it.
+- Appearance editor: the page icons shift per page (the Look icon sits near x 390 on the Wallpaper page and near x 612 on Layout). On the Look page, tapping the terminal pane in the preview shows Cursor trail and Terminal effect; tapping the keyboard shows Keys, Radius and Spacing; tapping the dock shows Glass, Opacity, Tint, Icon size and App icons. "All surfaces" is a label, not a control.
+- Backup & restore is the last row of Settings, below App behavior. Export settings goes through the system Save picker with a default name (`termux-launcher-settings-<date>.zip`); Save sits near 927,2273 on the emulator.
+- Typing `\e` into the terminal with `ad type`: pass the backslash unescaped, single-quoted in the shell; a pre-escaped form mangles the printf.
+- `ad long` on a dock icon launched the app instead of opening the Unpin popup (see device-checks.md, 2026-10-21).
+

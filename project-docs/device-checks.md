@@ -407,6 +407,7 @@ under twenty items; past that, the oldest are re-judged first.
   read that as the bug.)
 
 ## Developer
+- 2026-10-21 · v1.2.0 release smoke on the emulator · Long-press a pinned icon on the glass dock on pong: the glass lights under the finger and the Unpin popup opens. On the emulator an injected long press (`ad long`) lifted the icon, showed no popup and launched the app on release; artefact of the injected gesture or a real miss · pong, by hand.
 ### Flick on a mouse-tracking TUI (10-20)
 - 2026-10-20 · fix(terminal) a flick is a scroll, not also a tap · On pong with opencode running,
   in landscape and portrait: repeated short and long flicks scroll it and never raise the
