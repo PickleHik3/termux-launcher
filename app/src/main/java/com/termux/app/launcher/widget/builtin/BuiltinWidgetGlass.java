@@ -20,17 +20,28 @@ public final class BuiltinWidgetGlass {
     /** The key the switch is stored under in a widget's settings, and its value while on. */
     public static final String CONFIG_KEY = "glass";
     public static final String ON = "on";
+    /** The explicit off: solid whatever the page says. Absent (or empty) follows the page. */
+    public static final String OFF = "off";
 
     private BuiltinWidgetGlass() {}
 
-    /** Whether a widget's stored settings value has the switch on. Absent or anything else is off. */
-    public static boolean isOn(@Nullable String stored) {
-        return ON.equals(stored);
+    /**
+     * Whether a widget wears glass: its own choice when it made one ("on" or "off"), else the
+     * page's "Widgets on glass" switch. Stored before the switch existed, an absent value was
+     * the default off; it now follows the page, and a stored "on" stays an explicit on.
+     */
+    public static boolean resolve(@Nullable String stored, boolean pageOn) {
+        if (ON.equals(stored)) return true;
+        if (OFF.equals(stored)) return false;
+        return pageOn;
     }
 
-    /** The settings value for the switch: on is stored, off is left out like every empty field. */
-    public static void write(@NonNull Map<String, String> values, boolean on) {
-        values.put(CONFIG_KEY, on ? ON : "");
+    /**
+     * The settings value for the three-state choice: {@link #ON}, {@link #OFF}, or left out
+     * (follow the page) like every empty field.
+     */
+    public static void write(@NonNull Map<String, String> values, @Nullable String choice) {
+        values.put(CONFIG_KEY, ON.equals(choice) || OFF.equals(choice) ? choice : "");
     }
 
     /**

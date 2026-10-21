@@ -160,6 +160,8 @@
     <string name="settings_weather_location_use_device">Use device location</string>
     <string name="settings_theme_header">Theme</string>
     <string name="settings_color_mode_title">App theme</string>
+    <string name="settings_widgets_on_glass_title">Widgets on glass</string>
+    <string name="settings_widgets_on_glass_summary">Widgets wear the Look\'s glass. A widget\'s own Glass setting overrides it.</string>
     <string name="settings_wallpaper_colors_title">Wallpaper colors</string>
     <string name="settings_wallpaper_colors_summary">Match the launcher and terminal to the wallpaper.</string>
     <string name="settings_wallpaper_colors_hint">Overrides manual terminal colors. Turn off, or apply a Termux:Styling scheme, to use your own. Single tokens in ~/.termux/launcher-theme.properties still apply on top.</string>

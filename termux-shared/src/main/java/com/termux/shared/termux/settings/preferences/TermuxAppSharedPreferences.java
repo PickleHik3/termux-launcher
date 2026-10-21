@@ -847,6 +847,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_FANCIER_GLASS_MOTION_LIGHT, value, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_WIDGETS_ON_GLASS}. */
+    public boolean isWidgetsOnGlassEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_WIDGETS_ON_GLASS, TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_WIDGETS_ON_GLASS}. */
+    public void setWidgetsOnGlassEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_WIDGETS_ON_GLASS, value, false);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_SHOW_KEY_HINTS}. */
     public boolean isShowKeyHintsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,

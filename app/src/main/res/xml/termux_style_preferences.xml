@@ -49,6 +49,11 @@
             app:min="90"
             android:max="120"
             android:defaultValue="100" />
+        <SwitchPreferenceCompat
+            app:key="widgets_on_glass"
+            app:title="@string/settings_widgets_on_glass_title"
+            app:summary="@string/settings_widgets_on_glass_summary"
+            android:defaultValue="false" />
     </PreferenceCategory>
 
     <!-- Living glass is always on, so its switch is hidden on every Android version. -->

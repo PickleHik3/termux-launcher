@@ -69,6 +69,8 @@ public abstract class BuiltinWidgetView extends FrameLayout {
      */
     public interface GlassSource {
         @Nullable com.termux.app.terminal.PaneSurfaceStyle widgetGlassStyle();
+        /** The Look's "Widgets on glass" switch: what a widget that follows the page wears. */
+        default boolean widgetsOnGlass() { return false; }
         /** {@code widget} is live on this page, or its switch flipped; idempotent. */
         void addGlassWidget(@NonNull BuiltinWidgetView widget);
         void removeGlassWidget(@NonNull BuiltinWidgetView widget);
@@ -80,8 +82,8 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     @NonNull private BuiltinWidgetStyle hostStyle;
     /** The look drawn: {@link #hostStyle}, or its glass variant while this widget's Glass is on. */
     @NonNull private BuiltinWidgetStyle style;
-    /** This widget's own Glass switch, from its settings ({@link BuiltinWidgetGlass}). */
-    private boolean glassOn;
+    /** This widget's own Glass choice, from its settings ({@link BuiltinWidgetGlass}). */
+    @Nullable private String glassChoice;
     /** The Look's slab under the card while Glass is on; made the first time it is wanted. */
     @Nullable private com.termux.app.terminal.PaneGlassBackdropView slab;
     /** The Look the slab wears now, or null while it wears none. */
@@ -200,9 +202,9 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         boolean changed = !built || !sameConfig(this.config, nextConfig);
         this.config = nextConfig;
         if (!changed) return;
-        boolean glass = BuiltinWidgetGlass.isOn(nextConfig.getString(BuiltinWidgetGlass.CONFIG_KEY));
-        if (glass != glassOn) {
-            glassOn = glass;
+        String choice = nextConfig.getString(BuiltinWidgetGlass.CONFIG_KEY);
+        if (!java.util.Objects.equals(choice, glassChoice)) {
+            glassChoice = choice;
             // The re-dress settles the style; the rebuild below builds in it.
             syncGlassRegistration();
         }
@@ -421,7 +423,10 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     // ----- glass ----------------------------------------------------------------------------
 
     /** Whether this widget's own Glass switch is on. */
-    public final boolean isGlassOn() { return glassOn; }
+    public final boolean isGlassOn() {
+        return BuiltinWidgetGlass.resolve(glassChoice,
+            glassSource != null && glassSource.widgetsOnGlass());
+    }
 
     /**
      * The Look, from the page: its glass under the card while Glass is on, and its Corners for
@@ -552,6 +557,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         if (source != null) takeCorner(source);
         com.termux.app.chrome.WidgetInkSource ink = inkSource(source);
         boolean onWallpaper = com.termux.app.terminal.PaneGlass.isActive(source);
+        boolean glassOn = isGlassOn();
         boolean shown;
         if (BuiltinWidgetGlass.slabShown(glassOn, preview, onWallpaper)) {
             BuiltinWidgetGlass.SystemAsks asks = BuiltinWidgetGlass.SystemAsks.current(getContext());
