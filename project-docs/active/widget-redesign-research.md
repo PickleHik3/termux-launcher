@@ -1,7 +1,8 @@
 # Home widget redesign — research
 
-**Date:** 2026-10-21 · **Base:** `v2-redesign` at `1bfba4cd9` · **Status:** proposal, nothing in
-the app changed.
+**Date:** 2026-10-21 · **Base:** `v2-redesign` at `1bfba4cd9` · **Status:** decided 2026-10-21,
+see ADR 0010 (`docs/adr/0010-home-widgets-one-clock-measured-ink-smaller-set.md`). The decisions are
+in §9; nothing in the app has changed yet.
 
 The question: what should the launcher's own Home widgets become so that they look good, look like
 one family, and each tell you something worth a glance, measured against what Google and Apple
@@ -18,7 +19,7 @@ corners (decided 2026-10-19).
 Every external claim cites its primary source. Section 11 lists the sources, and section 10 lists
 every claim I could not confirm from one. Code references are paths under
 `app/src/main/java/com/termux/app/` unless shown otherwise. **Proposal** marks this note's own
-suggestions.
+suggestions; where the developer has since decided one, §9 says which way.
 
 ## 1. Summary
 
@@ -37,18 +38,31 @@ suggestions.
      words vanish on dark wallpaper by day.
    - Cards also glare on dark wallpaper by day and disappear on light wallpaper, because they follow
      day or night instead of the wallpaper (§2.1).
-3. **Fewer, better widgets.** Of the 12 kinds, 9 remain. The two clocks become one **Clock**, Agenda
-   and Calendar become one **Calendar**, and Battery and System become one **Device**. Weather,
-   Media, Notifications, Tasks and Notes are reworked, and Terminal stays as it is. Every stored
-   kind id keeps loading.
-4. **Three new widgets.** **Glance** is a 4×1 row of date, next event, weather, the next alarm and
-   battery when low. **Sessions** shows your terminal sessions and running jobs. **Command** shows a
-   shell command's output; the spec planned it as `shell` but it was never built.
-5. **Clock: replace, as phase one of the redesign.** One Clock widget offers the six status bar
-   faces plus Analog and today's Numerals, picked in its settings and scaled to the span. All of
-   them draw through one face renderer taken out of `TerminalClockWidget`, so the bar and the widget
-   cannot drift apart. `clock.digital` and `clock.analog` records open as the Clock with the
-   matching face. See §7.
+   - A **Widgets on glass** switch in the Look follows Base, and each widget's own Glass switch
+     stays as an override.
+   - The cardless **Bare** appearance is an opt-in for Clock, Glance and Weather only.
+3. **Fewer, better widgets.** Of the 12 kinds, 9 remain:
+   - The two clocks become one **Clock**.
+   - Agenda and Calendar become one **Calendar**.
+   - Battery and System become one **Device**.
+   - The Scratchpad widget is renamed **Notes**.
+   - Weather, Media, Notifications (narrowed, at least 2×1), Tasks and Notes are reworked.
+   - Terminal is kept, with its defects fixed.
+   - Tonal versus Pane retires for one family with a Numerals Sans/Mono choice.
+   - Every stored kind id keeps loading, as an alias.
+4. **One new widget.** **Glance** is a 4×1 row with the date, the next event, the weather, the next
+   alarm, and the battery when low. It shows no time.
+   - Sessions and Command were proposed and dropped. The window list belongs to the dock rework on
+     `feat/chrome-unification`.
+5. **Clock: replace, as phase two after the defects and the tokens.** This is how the status bar
+   clock designs become placeable on Home.
+   - One Clock widget offers the six status bar faces plus Analog and today's Numerals, picked in
+     its settings and scaled to the span.
+   - All of them draw through one face renderer taken out of `TerminalClockWidget`, so the bar and
+     the widget cannot drift apart.
+   - A new Clock copies the bar's current face once. After that the two are independent.
+   - The face fixes land in the bar too.
+   - `clock.digital` and `clock.analog` records open as the Clock with the matching face. See §7.
 
 ## 2. Current state
 
@@ -443,14 +457,14 @@ is not available.
 | Inner radius | `max(0, outer − inset)` for chips, art and progress tracks | [A-GLANCE-RC], [HIG-WIDGETS] concentric |
 | Element gap | 4, 8 and 12 dp only | One rhythm across widgets |
 | Touch target | 48 dp, or padded to it | WL-4.2 [A-QUAL], already in the spec |
-| Header | A glyph and title row only on list widgets (Calendar, Tasks, Notifications, Notes, Sessions) | WL-3 [A-QUAL] |
+| Header | A glyph and title row only on list widgets (Calendar, Tasks, Notifications, Notes) | WL-3 [A-QUAL] |
 
-- **Hosted app widgets.** They should also be clipped at the Look's Corners, capped at the system
-  radius, so built-in and app widgets match where they can. A provider that draws its own rounded
-  background keeps its own corners, as Launcher3 does (`WidgetCornerPolicy`).
-- **Direction.** Drop Tonal versus Pane as a whole-family direction. It doubles every design and
-  device check: 12 kinds × 5 buckets × 2 directions × glass on/off is 240 states. Keep a single
-  **Numerals: Sans / Mono** choice instead, and let the rim follow the glass. See Q2.
+- **Hosted app widgets (decided, §9.7).** They should also be clipped at the Look's Corners, capped
+  at the system radius, so built-in and app widgets match where they can. A provider that draws its
+  own rounded background keeps its own corners, as Launcher3 does (`WidgetCornerPolicy`).
+- **Direction (decided, §9.4).** Drop Tonal versus Pane as a whole-family direction. It doubles
+  every design and device check: 12 kinds × 5 buckets × 2 directions × glass on/off is 240 states.
+  Keep a single **Numerals: Sans / Mono** choice instead, and let the rim follow the glass.
 
 ### 4.2 Type: five roles, one scale
 
@@ -480,7 +494,7 @@ Sizes are M3's [M3-TYPE]. The emphasized weights follow Android's "bolder … da
 | `onSurface` | Hero and title |
 | `onSurfaceVariant` | Body and label |
 | `primary` | The one accent per widget: the next event, the current hour, the playing state |
-| Semantic: safe, caution, danger, info | Battery low or charging, storage full, a failed job, rain. Taken from Android 17's Live Update semantic set [A17-FEAT] and mapped to the existing `termux_chip_done` and `error`. Always paired with a glyph or word [HIG-WIDGETS] |
+| Semantic: safe, caution, danger, info | Battery low or charging, storage full, an overdue task, rain. Taken from Android 17's Live Update semantic set [A17-FEAT] and mapped to the existing `termux_chip_done` and `error`. Always paired with a glyph or word [HIG-WIDGETS] |
 
 The warm accent stays, but only for the sun.
 
@@ -510,13 +524,16 @@ The warm accent stays, but only for the sun.
 
    This is Apple's Reduce Transparency and Increase Contrast behavior, expressed with Android
    signals.
-5. **Glass per page, not per widget.** Today every widget has its own switch, off by default, so a
-   page can mix glass and solid cards. **Proposal:** one *Widgets on glass* switch in the Look,
-   following Base, with the per-widget switch kept as an override. See Q3.
-6. **Clear, as an opt-in knob.** A *Clear* appearance removes the card, like Apple's clear and
-   StandBy treatments [HIG-WIDGETS]. Ink sits straight on the wallpaper, measured by the same
-   band, with a dim of up to 35 % drawn only where the measurement asks for it [HIG-MATERIALS].
-   It is meant for Clock, Glance and Weather. Off by default.
+5. **Glass per page, not per widget (decided, §9.5).** Today every widget has its own switch, off
+   by default, so a page can mix glass and solid cards. One **Widgets on glass** switch in the Look
+   follows Base, and the per-widget switch is kept as an override.
+6. **Bare, as an opt-in knob (decided, §9.6).** The **Bare** appearance removes the card, like
+   Apple's clear and StandBy treatments [HIG-WIDGETS].
+   - Ink sits straight on the wallpaper, measured by the same band, with a dim of up to 35 % drawn
+     only where the measurement asks for it [HIG-MATERIALS].
+   - It is opted into per widget, and only Clock, Glance and Weather offer it. Off by default.
+   - The name is not "Clear", because Clear is already a stop on the Look slider. Choosing the
+     Clear Look does not turn Bare on.
 7. **The card must show its edge.** On a light wallpaper the cards nearly disappear (§2.1).
    **Proposal:** when the card and the wallpaper behind it measure under 1.5:1, draw the rim at the
    outline role. The 1.5 is a design threshold, not a WCAG rule: 1.4.11 asks 3:1 only of boundaries
@@ -536,7 +553,10 @@ The warm accent stays, but only for the sun.
 - **Picker.** One card per kind with its sizes grouped. The description starts with a verb
   ("See …", "Keep …") [HIG-WIDGETS]. The name appears in the design (WD-4.2 [A-QUAL]).
 
-## 5. Per-widget verdicts (proposal)
+## 5. Per-widget verdicts (decided 2026-10-21)
+
+The developer accepted every verdict below (§9). The Notes rename and the Terminal fixes were
+decided at the same time.
 
 | Today | Verdict | Becomes |
 |---|---|---|
@@ -550,7 +570,7 @@ The warm accent stays, but only for the sun.
 | Media | **Overhaul** | See below |
 | Notifications | **Overhaul, narrowed** | See below |
 | Tasks | **Keep, restyle** | See below |
-| Notes (Scratchpad) | **Keep, restyle** | See below |
+| Scratchpad | **Keep, restyle, rename** | **Notes**. The glossary's *scratchpad* stays the floating, toggled scratchpad |
 | Terminal | **Keep, fix** | The shell rules only (outer corner and inset); its text is the terminal's. The device defects come first: the pane fills only about 75 % of the width, dark words vanish on a dark wallpaper by day (its band gets a veil like `TERMINAL_PANE`), and it opens scrolled to the middle (§2.1) |
 
 Kind ids are durable (`BuiltinWidgetKind` javadoc). A merged kind keeps its id as an alias that
@@ -609,6 +629,8 @@ and the precipitation chance.
 - Bars are at least 6 dp and meet 3:1 against their track [WCAG-1411].
 - Fix the 1×1 ring defect: the hero number is fitted to the ring's inner diameter, never to the
   card (§2.1).
+- The 1×1's font, spacing and outer padding are reworked so that it scales without overlap at any
+  cell size. This is the developer's phase-0 note, shared with the Clock's 1×1.
 
 **Media.**
 
@@ -627,7 +649,7 @@ and the precipitation chance.
 - 1×1 is removed: a bell with a number is what the status bar already shows.
 - A body uses every line it has. On the device it is cut to one word although a second line is
   free.
-- See Q5 on removing it entirely.
+- Decided: narrowed as above, not removed (§9.3).
 
 **Tasks.**
 
@@ -638,19 +660,27 @@ and the precipitation chance.
 - The empty state invites the first task, with "Add a task" as a 48 dp row, and names the file it
   writes to. On the device, "Today +" over "No tasks yet" leaves the 2×2 mostly blank (§2.1).
 
-**Notes.**
+**Notes** (renamed from Scratchpad).
 
 - The file text keeps the mono face at Body 14 sp.
 - Headings use Title.
 - The age label uses Label.
 
-## 6. New widgets (proposal)
+## 6. New widgets (decided 2026-10-21)
+
+Only one new widget is added.
 
 | Widget | Spans | What it adds | Data, already in the app or one call away |
 |---|---|---|---|
-| **Glance** | 4×1 (also 2×1) | One row for the first look of the day: date · next event · weather now · next alarm · battery when under 20 % or charging. Each part hides when it has nothing to say. The row is a Clear-appearance candidate | `CalendarEventsSource`, `WeatherController`, `AlarmManager.getNextAlarmClock()` (API 21 [A-ALARM]), `BatterySource` |
-| **Sessions** | 2×1, 2×2, 4×2 | Open terminal sessions and windows, each with its title, cwd and last line. A job that ended shows its exit status, a failure in the danger color. A tap opens that session. Nothing else on the platform can show this | The session and pane controllers that feed the window chips |
-| **Command** | 2×1, 2×2, 4×1 | The output of a shell command the user names (`uptime`, `git -C ~/proj status -sb`, a script), rerun on an interval of at least 15 min (**proposal**) and on tap, with its age shown. This is the spec's never-built `shell` kind | The login shell, as the spec planned (`first-party-widgets-SPEC.md`, the `shell` row) |
+| **Glance** | 4×1 (also 2×1) | One row for the first look of the day: date · next event · weather now · next alarm · battery when under 20 % or charging. It shows **no time**, which is the Clock's job. Each part hides when it has nothing to say. Bare is offered | `CalendarEventsSource`, `WeatherController`, `AlarmManager.getNextAlarmClock()` (API 21 [A-ALARM]), `BatterySource` |
+
+Dropped by the developer (§9.8):
+
+- **Sessions** (proposed as open sessions and windows, with each job's exit status). The window list
+  belongs to the dock rework that `feat/chrome-unification` is building (ADR 0009). The redesign
+  proposes no widget for it.
+- **Command** (proposed as a shell command's output on an interval, the spec's never-built `shell`
+  kind). It is not built.
 
 Ideas considered and left out:
 
@@ -659,13 +689,19 @@ Ideas considered and left out:
   job. The emulator capture includes one (`appwidget-screentime_*`).
 - **World clock as its own kind.** It is a Clock option instead (§7).
 
-## 7. The clock widget recommendation
+## 7. The clock widget (decided 2026-10-21)
 
-**Recommendation: replace both clock widgets with one Clock widget as part of the redesign, and
-build it first.** Its faces are Analog, Numerals (today's digital), Slab, Flip, LCD, LED matrix,
-Tape and Minimal, chosen in the widget's settings with a live preview strip. Every face draws
-through one face renderer taken out of `TerminalClockWidget`, so the status bar and the widget share
-it.
+**Decision: replace both clock widgets with one Clock widget as part of the redesign.** It is phase
+two, after the device defects and the tokens (§8).
+
+- **Faces.** Analog, Numerals (today's digital), Slab, Flip, LCD, LED matrix, Tape and Minimal,
+  chosen in the widget's settings with a live preview strip.
+- **One renderer.** Every face draws through one face renderer taken out of `TerminalClockWidget`,
+  so the status bar and the widget share it.
+- **What this delivers.** It is how the status bar's clock designs become placeable as Home
+  widgets, which the developer stressed and which is not built yet.
+
+The case below is the one that led to the decision.
 
 Why replace rather than extend:
 
@@ -681,7 +717,8 @@ Why replace rather than extend:
   default, the hairline to the gutter, the reported width, media sharing). The bar then keeps its
   view as a thin host of the same renderer.
 - **The clock anchors the family.** It is the widget most people place, and its hero numerals set
-  the type scale (§4.2). Doing it first fixes the tokens every other widget then uses.
+  the type scale (§4.2). It comes straight after the tokens, so it is the first widget built on
+  them and the proof that they work.
 - **Nothing placed is lost.** `clock.digital` and `clock.analog` records open as Clock with
   face=numerals or face=analog and keep their zones. No stored id changes.
 
@@ -710,10 +747,10 @@ What scaling the bar faces up needs:
   | 4×1 | Time, date and up to two zones in a row |
   | 4×2 | Adds the zones' offsets and, optionally, day progress |
 
-- **Ink.** The faces already use Material roles, so they take the card's ink. In the Clear
+- **Ink.** The faces already use Material roles, so they take the card's ink. In the Bare
   appearance they take `ChromeInk`'s measured ink like the bar does.
-- **Fix the faces first, in the bar.** The device shows weaknesses that scaling up would only
-  enlarge (§2.1):
+- **Fix the faces first, in the bar (decided).** The device shows weaknesses that scaling up would
+  only enlarge (§2.1):
   - LCD: the digits and the glass show very low contrast.
   - Flip: the ghost fold lines over the digits look messy.
   - Minimal: the thin strokes are weak on busy wallpaper.
@@ -722,72 +759,113 @@ What scaling the bar faces up needs:
     11 sp floor.
 
   Taking the renderer out is the moment to correct these:
-  - Every face's digits are held to 3:1, measured, and its labels to 4.5:1.
+  - LCD's contrast is fixed, and every face's digits are held to 3:1, measured, and its labels to
+    4.5:1.
+  - Flip loses the ghost fold lines.
   - Minimal gets a heavier weight option.
-  - The seconds and date follow the Label role.
+  - Tape's date moves in from the far right.
+  - The seconds and date are at least 11 sp, in the Label role.
 
-  These fixes improve the bar too. Slab and LED matrix already read well, so they are the default
-  candidates for a new widget.
+  The fixes land in the bar as well as in the widget.
 - **One place to configure.** The faces' Look and glass settings sit on the Look page today,
   separate from the widget's gear (§2.1). A widget's face, seconds and zones live in its gear,
   with a live preview. The zones also deliver what `docs/en/Widgets.md` already promises for the
   digital clock and the code never built.
 - **Tap.** A tap opens the clock app; a long press does what the grid does today.
-- **The bar is a separate setting.** Picking a face for a widget does not change the bar's face.
-  Q1 asks whether a widget should follow the bar's face by default.
+- **The bar is a separate setting (decided).** A new Clock copies the bar's current face once,
+  when it is placed. After that the widget and the bar are independent: changing one face never
+  changes the other.
+- **1×1 scaling (phase 0).** The Clock's and Device's 1×1 get their font, spacing and outer padding
+  reworked so they scale without overlap (§8, phase 0).
 
-## 8. Phased implementation sketch (proposal)
+## 8. Phased implementation (order decided 2026-10-21)
 
-Each phase is one branch: it builds, gets emulator checks first, and goes to pong in a batch.
+Every phase follows the same loop:
+
+1. **Mockups first.** Codex generates mockups of the phase's widgets on a light and a dark
+   wallpaper, for the developer's taste check before anything is built.
+2. **Build.** One branch per phase.
+3. **Emulator.** Before and after screenshots of every widget the phase touched.
+4. **Pong**, in a batch.
+
 Settings pages are fragile, so each phase's settings footprint stays to one control unless noted.
 
 0. **Device defects, before any redesign** (§2.1):
-   - The Battery 1×1 number overlapping its ring.
-   - The Terminal widget filling 75 % of its width and opening mid-scroll.
-   - Notifications and Tasks hidden behind the dock on rows 4–5.
-   - The edit toolbar covering top-right widgets' X and gear.
-   - No feedback when a drop into an occupied cell snaps back.
-   - The `docs/en/Widgets.md` claim that the digital clock takes time zones.
+   - **Battery 1×1 and Clock 1×1:** rework the font, spacing and outer padding so they scale without
+     overlap at any cell size (the developer's note). This includes the Battery number overlapping
+     its ring and the analog dial filling only about 60 % of its card.
+   - **Terminal widget:** fill the width (today about 75 %), fix the dark ink on dark wallpaper, and
+     open at the bottom of the scrollback rather than mid-scroll.
+   - **Rows 4–5:** Notifications and Tasks are hidden behind the dock.
+   - **Edit mode:** the toolbar covers the X and gear of widgets at the top right, and a drop into an
+     occupied cell snaps back with no feedback.
+   - **Docs:** remove the `docs/en/Widgets.md` claim that the digital clock takes time zones.
 
-   These fixes are small and independent of the redesign, and each can be a fixer task.
+   These fixes are small and independent, and each can be a fixer task.
 1. **Tokens and legibility.**
    - Pure classes: `WidgetTokens` (inset, inner radius, gap, type roles) and `WidgetInk` (the
-     `WIDGET` band).
-   - Restyle every built-in to the type scale. This is mechanical: replace the 10.5 and 9.5 sp
-     sizes and drop the Tonal/Pane fork behind the Numerals choice.
-   - Add the solid fallbacks.
+     `WIDGET` band in `ChromeInk`).
+   - Restyle every built-in to the type scale. This is mechanical: replace the 10.5 and 9.5 sp sizes,
+     and retire the Tonal/Pane fork in favour of the Numerals Sans/Mono choice.
+   - Add the solid fallbacks and the card polarity that follows the ink vote.
+   - **Widgets on glass** in the Look, with the per-widget override.
+   - Clip hosted app widgets at the Look's Corners, capped at the system radius.
    - JVM tests for the inset, inner radius and contrast arithmetic.
    - Device: every kind at the five buckets on a light and a dark wallpaper, glass on and off.
 2. **Clock.**
-   - Take the face renderer out of `TerminalClockWidget`; the bar renders through it, with a
-     before/after screenshot check of all six bar faces.
-   - Add the Clock kind with the face picker and the id aliases.
-   - Retire `DigitalClockWidgetView` and `AnalogClockWidgetView`, after which `ClockNumeralView`
-     remains only if Numerals still uses it.
-3. **Calendar, Weather, Glance.** Merge Agenda and Calendar, overhaul Weather with freshness, then
-   add Glance.
-4. **Device, Media, Notifications, Tasks, Notes.** Merge Battery and System, apply the max spans,
-   and give the picker its descriptions.
-5. **New kinds and knobs.**
-   - Sessions.
-   - Command, which needs a policy for how long and how often a command runs.
-   - The Clear appearance and *Widgets on glass* per page, both opt-in.
+   - Take the face renderer out of `TerminalClockWidget`. The bar renders through it, with the face
+     fixes (§7), and gets a before/after screenshot check of all six bar faces.
+   - Add the Clock kind with its face picker, the copy-once of the bar's face, and the
+     `clock.digital` and `clock.analog` aliases.
+   - Retire `DigitalClockWidgetView` and `AnalogClockWidgetView`. `ClockNumeralView` stays only if
+     Numerals still uses it.
+3. **Calendar, Weather, Glance.**
+   - Merge Agenda and Calendar, with `agenda` and `calendar.month` as aliases.
+   - Overhaul Weather with freshness and the on-card place picker.
+   - Add Glance.
+4. **Device, Media, Notifications, Tasks, Notes.**
+   - Merge Battery and System, with `battery` and `system` as aliases.
+   - Narrow Notifications to a 2×1 minimum.
+   - Rename Scratchpad to Notes.
+   - Apply the max spans, and give the picker its descriptions.
+5. **Bare.** The opt-in Bare appearance for Clock, Glance and Weather.
 
-## 9. Open questions for the developer
+## 9. Decisions (2026-10-21)
 
-1. Should a new Clock widget start on the bar's current face, or on Numerals?
-2. Should Tonal versus Pane be retired for one family with a Sans / Mono numerals choice, or
-   should Pane survive as a dress?
-3. Should glass be one switch for all widgets, on by default when the Look's glass is on, or stay
-   per widget?
-4. Merges: are Agenda + Calendar and Battery + System into one widget each acceptable, given that
-   existing placements keep working through id aliases?
-5. Notifications: narrow it as in §5, or remove it?
-6. Command widget: what limits on the interval and run time, and should it run only while Home is
-   visible?
-7. Hosted app widgets: clip them at the Look's Corners (capped at the system radius) for one
-   corner per page, or leave them on the system radius?
-8. Should the Clear appearance be offered at all, or should glass and solid be enough?
+The developer's answers to the open questions, recorded in ADR 0010.
+
+1. **Clock.** One Clock replaces Analog and Digital.
+   - Faces: Analog, Numerals, Slab, Flip, LCD, LED matrix, Tape and Minimal, through one renderer
+     taken out of `TerminalClockWidget`.
+   - A new Clock copies the bar's current face once. After that the widget and the bar are
+     independent.
+   - The face fixes land in the bar too: LCD contrast, Flip's ghost fold lines, a heavier Minimal
+     option, Tape's date placement, and seconds and date at 11 sp or more.
+   - The old ids load as aliases.
+2. **Merges.** Agenda + Calendar becomes **Calendar**, and Battery + System becomes **Device**.
+   Both are accepted.
+3. **Notifications.** Narrowed as §5 proposes, with a 2×1 minimum span.
+4. **Style.** Tonal versus Pane is retired: one family, with a Numerals Sans/Mono choice.
+5. **Glass.** A **Widgets on glass** switch in the Look follows Base, and each widget's own switch
+   is kept as an override.
+6. **Bare.** The cardless appearance is called **Bare**, not Clear, because Clear is a Look stop.
+   It is an opt-in per widget, offered by Clock, Glance and Weather. The Clear Look does not turn
+   it on.
+7. **Hosted app widgets.** They are clipped at the Look's Corners, capped at the system radius.
+8. **New widgets.** Only **Glance**, which shows no time.
+   - Sessions/Windows and Command are dropped.
+   - The window list belongs to the dock rework on `feat/chrome-unification`, so no widget is
+     proposed for it.
+9. **Terminal widget.** Kept, with its defects fixed.
+10. **Notes.** The Scratchpad widget is renamed Notes. The glossary's scratchpad stays the floating
+    scratchpad.
+11. **Order.**
+    - Phase 0 is the device defects, including the developer's note that the 1×1 Battery and Clock
+      need font, spacing and outer-padding rework to scale without overlap.
+    - Phase 1 is the tokens and legibility.
+    - Phase 2 is the Clock, which is how the status bar's clock designs become placeable on Home.
+12. **Process.** Each phase starts with Codex mockups on a light and a dark wallpaper for a taste
+    check, then the build, the emulator before/after shots, and pong in a batch.
 
 ## 10. Unverified or secondary-only claims
 
