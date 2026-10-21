@@ -13,6 +13,16 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commits "feat(chrome): the glass treats an app-only wallpaper as the launcher's
+  own" and "feat(wallpaper): a picture for the launcher alone while it is not the home app" · With
+  another launcher as the home app: Appearance shows one card titled "Termux Launcher" with an
+  unticked round "Also set as phone wallpaper" and its line under it; pick a photo, Done: the
+  phone's home and lock wallpapers are unchanged (`ad -s emu` home and lock screenshots before and
+  after), the launcher draws the picture behind the terminal with no flash of the phone's
+  wallpaper on a cold start or a rotation, every glass blurs it and Fancier Glass can be turned
+  on and refracts it. Tick the box and Done again: the phone's wallpaper changes, and the tick is
+  still there on reopening. Then make Termux Launcher the home app: the Home and Lock pair is
+  back, Home showing the launcher's picture, Lock the phone's own · emulator, debug build.
 - 2026-10-21 · 1.1.0-pre.6 crash report (NPE in WidgetPaneController.flipDragPage, moto g15,
   Android 15), cause not yet found: Robolectric does not reproduce it · On the Widgets place, hold
   a widget and drag it into the trailing edge band for two turns (one page, so a page is made; and
