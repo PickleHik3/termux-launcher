@@ -24,6 +24,31 @@ first within each section. Delete this file with the spec when the work is deliv
 |---|---|---|
 | Drawer: pull down on Suggested's empty pane closed the drawer, now closes the folder | merged, unchecked on device | ba6144443 |
 
+## Known issues
+
+Open, newest first. Move an item out when it is fixed (with its commit) or decided.
+
+- 2026-10-21 (pong) · With Lens beads on Home, the slide from Home to the Workspace (whose dock is
+  the plain dock) looks clunky: beads and the slab do not hand over smoothly. Being fixed.
+- 2026-10-21 (pong) · Right after swiping from Home (Lens beads) to the Workspace, the Workspace's
+  dock is malformed: the slab's lower-left corner and bottom edge show a second, misaligned
+  frame (screenshot from pong, apps row + A–Z + toolbar). Being fixed.
+- 2026-10-21 (pong) · In the Workspace, going from the second terminal window back to the first,
+  the keyboard flashes (seems to disappear and come back). Cause unknown; may predate the dock
+  work. Being investigated.
+- A dock page with fewer apps than slots stays left-aligned: the slot is the grid column in every
+  drag, swipe and bead calculation, so centring needs an offset threaded through all of them.
+- Idle shells are all titled "home", so run strip entries and Wall strip tiles tell them apart
+  only by their numbers.
+- Lens beads draw the Glass tray while the A–Z row shares the dock's glass (by design: another
+  band on the bead glass would lose its glass).
+- The drawer opens from the dock only past half its travel or on a fling; a slow finger pull
+  cannot commit because Home's dock leaves too little screen below it. Predates the dock work.
+- A "Windows restored from before the restart" toast overlaps the top of Home's clock after a
+  relaunch. Predates the dock work.
+- The ~110 ms frosted frame on the terminal at a Workspace landing (`TerminalView.frostReflow`)
+  predates the dock work and shows under every style.
+
 ## Device checks
 
 Owed checks also go into [`../device-checks.md`](../device-checks.md) in its usual form; this list
