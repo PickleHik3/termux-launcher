@@ -54,6 +54,11 @@ public final class DockSurfaceHostLayout extends FrameLayout {
 
     /** The beads in this view's coordinates, or null for the slab. Redrawn only when they moved. */
     public void setBeads(@Nullable LensBeadGeometry.Beads beads) {
+        // The slab keeps no sideways cut: the next beads start uncut, as a swipe's frames set it.
+        if (beads == null) {
+            mSpanLeft = Float.NaN;
+            mSpanRight = Float.NaN;
+        }
         if (beads == null ? mBeads == null : beads.equals(mBeads)) return;
         mBeads = beads;
         mBeadPath.reset();

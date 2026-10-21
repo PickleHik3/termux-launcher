@@ -4987,12 +4987,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (beads == null ? mDockBeads == null : beads.equals(mDockBeads)) return false;
         boolean modeChanged = (beads == null) != (mDockBeads == null);
         mDockBeads = beads;
+        // Back to the slab, nothing of the beads is kept: a swipe's moving beads would otherwise
+        // be what the next bead mode draws first, and the swipe's sideways cut what it clips to.
+        if (beads == null) mDockBeadsMoving = null;
         View host = findViewById(R.id.accessory_surface_host);
         if (host instanceof DockSurfaceHostLayout) {
             DockSurfaceHostLayout beadHost = (DockSurfaceHostLayout) host;
             beadHost.setSlabOnlyChildren(findViewById(R.id.accessory_top_edge_fx),
                 findViewById(R.id.accessory_edge_glow_fx));
             beadHost.setBeads(dockBeadsDrawn());
+        }
+        if (beads == null) {
+            DockShelfView shelf = findViewById(R.id.accessory_shelf_fx);
+            if (shelf != null) shelf.setBeads(null);
         }
         if (modeChanged && host != null && mDockShapeCut)
             applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
@@ -31424,16 +31431,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         };
-        int[] watchIds = {
-            R.id.terminal_pane_host,
-            R.id.accessory_stack_container,
-            R.id.apps_bar_viewpager,
-            R.id.apps_bar_indicator_band,
-            R.id.apps_bar_az_row,
-            R.id.terminal_toolbar_view_pager,
-            R.id.inapp_keyboard_container
-        };
-        for (int watchId : watchIds) {
+        for (int watchId : ACCESSORY_LAYOUT_WATCH_IDS) {
             View watchView = findViewById(watchId);
             if (watchView != null) {
                 watchView.addOnLayoutChangeListener(mAccessoryLayoutChangeListener);
@@ -31441,20 +31439,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * The views whose resize re-runs the accessory render. The dock's glass host is one of them:
+     * the pass that moves its top (a style whose dashes float above the slab, coming or going at
+     * a Home/Workspace settle) sizes the backdrop and cuts the glass from the host's height before
+     * the host has laid out at the new one, and nothing else in the stack changes size then, so
+     * without this the glass stayed a band short of the slab until something else moved.
+     */
+    static final int[] ACCESSORY_LAYOUT_WATCH_IDS = {
+        R.id.terminal_pane_host,
+        R.id.accessory_stack_container,
+        R.id.accessory_surface_host,
+        R.id.apps_bar_viewpager,
+        R.id.apps_bar_indicator_band,
+        R.id.apps_bar_az_row,
+        R.id.terminal_toolbar_view_pager,
+        R.id.inapp_keyboard_container
+    };
+
     private void removeAccessoryLayoutChangeListeners() {
         if (mAccessoryLayoutChangeListener == null) {
             return;
         }
-        int[] watchIds = {
-            R.id.terminal_pane_host,
-            R.id.accessory_stack_container,
-            R.id.apps_bar_viewpager,
-            R.id.apps_bar_indicator_band,
-            R.id.apps_bar_az_row,
-            R.id.terminal_toolbar_view_pager,
-            R.id.inapp_keyboard_container
-        };
-        for (int watchId : watchIds) {
+        for (int watchId : ACCESSORY_LAYOUT_WATCH_IDS) {
             View watchView = findViewById(watchId);
             if (watchView != null) {
                 watchView.removeOnLayoutChangeListener(mAccessoryLayoutChangeListener);
