@@ -71,6 +71,14 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
         if (mListener != null) mListener.onHomePageShown(mPage);
     }
 
+    /** A float shows on the page in view: the others are gone, and a minimised one is its chip. */
+    @Override
+    public boolean showsAnything() {
+        for (int i = 0; i < getChildCount(); i++)
+            if (getChildAt(i).getVisibility() == VISIBLE) return true;
+        return false;
+    }
+
     @Override
     public boolean holdsPoint(float x, float y) {
         float localX = x - getLeft() - getTranslationX();

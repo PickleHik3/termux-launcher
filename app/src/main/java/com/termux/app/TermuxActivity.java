@@ -28361,6 +28361,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The empty Home page's hint steps out from under the drawer and the palette, both
+     * see-through, as it does from under a float (WidgetEmptyHintPolicy).
+     */
+    private void attachWidgetHintCover() {
+        View view = findViewById(R.id.widget_pane);
+        if (!(view instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
+        ((com.termux.app.launcher.widget.WidgetPaneView) view).setEmptyHintCover(
+            new com.termux.app.launcher.widget.WidgetPaneView.HintCover() {
+                @Override public boolean drawerUp() { return isAppDrawerEngaged(); }
+                @Override public boolean paletteUp() { return isCommandPaletteOpen(); }
+            });
+    }
+
+    /**
      * Where the wall starts: the row position a recreation saved, or on a cold start the page
      * Start in names (Home page 1, or the Workspace). After the widget pane controller exists, so
      * Home can be turned to the right page, and where Home's swipe is given the seam.
@@ -28370,6 +28384,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWidgetPaneController != null) {
             mWidgetPaneController.setSeam(mPaneWallController.homeSeam());
         }
+        attachWidgetHintCover();
         Bundle state = mPendingWallState;
         mPendingWallState = null;
         if (mPaneWallController.restoreInstanceState(state)) return;

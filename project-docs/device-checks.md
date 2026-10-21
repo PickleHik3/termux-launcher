@@ -13,6 +13,12 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "fix(widgets): the empty page's hint steps out from under floats, drawer
+  and palette" · on an empty Home page "Long-press to add widgets" is gone while a Home float
+  shows on the page (anywhere on it, not only over the hint), while the app drawer is open or
+  being dragged, and while the command palette is open; it is back once each goes (float
+  minimised or closed, drawer shut, palette dismissed); no flicker of the hint as the drawer
+  drags; the page's long-press menu still opens on an empty page · emulator.
 - 2026-10-21 · commit "feat(dock): the Drawer tile is a toggle beside any design" (#97) · Drawer
   tile toggle beside Search (Layout editor, dock selected; Row B fits at 360 dp, the "Drawer" label
   not ellipsized, no Taskbar chip); the tile opens the drawer on Home and in a window, with
