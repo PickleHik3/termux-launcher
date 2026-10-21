@@ -2522,6 +2522,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     private static String normalizeTopPaneClockStyle(String value) {
         if (TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB.equals(value)) {

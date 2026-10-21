@@ -154,6 +154,16 @@ public final class TerminalClockWidget extends View {
         invalidate();
     }
 
+    /**
+     * The status bar's measured band under the clock: its effective surface and the ink resolved
+     * on it. The faces tone their digits, LCD segments and labels against it, on the band ink's
+     * side; see {@link ClockFaceRenderer#setBandInk}.
+     */
+    public void setBandInk(@androidx.annotation.ColorInt int surface,
+                           @androidx.annotation.ColorInt int ink) {
+        if (mRenderer.setBandInk(surface, ink)) invalidate();
+    }
+
     /** Every face paints out of these roles, so a wallpaper or scheme change re-tints the whole grid. */
     void refreshColors(@NonNull Context context) {
         mRenderer.setPalette(ClockFaceRenderer.Palette.fromTheme(context));
