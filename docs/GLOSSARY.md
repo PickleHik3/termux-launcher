@@ -92,6 +92,13 @@ keyboard itself has no swipe of its own. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: pull-up, keyboard gesture, hide swipe (the retired swipe on the keyboard's top edge)
 
+**Keyboard mode** (the **display window**):
+Whether an open keyboard, or the touchpad that stands in its place, floats over the **display
+window** (**Overlay**) or takes its room so the display shrinks to what is left (**Resize**). One
+value per orientation, whatever brought the keyboard up. Only the display window has one; a
+terminal's text always makes room.
+_Avoid_: pan, adjust resize, keyboard covers display
+
 **Always on** (the Home keyboard):
 The Home layout's keyboard element shown rather than put away: the keyboard stays up on every Home
 page and the widget grid gives it the rows, with the earlier arrangement kept so that turning it
