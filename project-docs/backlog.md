@@ -47,6 +47,12 @@ and personal configuration stay in tlstore.
 - `tl-priv` (built in PickleHik3/tlstore, `recipes/cross/tl-priv`) pairs with the privileged lane
   allowlist (`app/src/main/java/com/termux/privileged/lane/LaneAllowlist.java`). Verify the version
   coupling and whether the APK should pin and install it the way `app/tlstore.lock` pins tlstore.
+- `tlstore display` is pending removal, probably one release after the Benchmark graphics row
+  (Settings → Display → Linux apps → Set up Linux apps → Graphics, merge d55271a54 on `pre`)
+  reaches a stable. Until then it stays as the old name for `termux-x11-gpu-setup`. Removing it
+  means: drop `cmd_display` in PickleHik3/tlstore (`engine/tlstore`, dispatch and help), cut a
+  tlstore release, bump `app/tlstore.lock`, and remove the mentions in `docs/en/Tlstore.md` and
+  `app/src/main/assets/motd.sh`.
 
 There is no other unblocked implementation slice left from the feasibility study. The remaining
 projects below are gated on measurements, concrete client demand, security/UX design, or an
