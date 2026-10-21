@@ -34,7 +34,7 @@ public class SeamTravelTest {
         Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY);
 
     private static final PlaceChromeTravel.States STATES = place -> new Rest(false, false,
-        !HomeChromePolicy.isHome(place));
+        place != PaneWallPage.WIDGETS);
 
     /** The frame with the wall {@code fraction} of the way from Home to the terminal. */
     private static Frame homeToTerminal(float fraction) {

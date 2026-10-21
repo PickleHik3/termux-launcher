@@ -6,6 +6,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.dock.TaskbarHomeTilePolicy;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -307,12 +308,12 @@ public final class PlaceLayoutStore {
 
     /**
      * The variant a page's chrome is arranged by, and the one the Layout editor opened on it
-     * edits: the Home layout on a Home page, the Workspace's (normal or minimal) on a window
-     * ({@link HomeChromePolicy#variant}).
+     * edits: the layout the page's dress wears ({@link DressResolver#layoutOf}), the Home layout
+     * on a Home page and the Workspace's (normal or minimal) on a window.
      */
     @NonNull
     public LayoutVariant variantFor(@NonNull PaneWallPage page) {
-        return HomeChromePolicy.variant(page, isMinimal());
+        return DressResolver.of(this).layoutOf(page);
     }
 
     /**
@@ -365,9 +366,9 @@ public final class PlaceLayoutStore {
             isKeyboardShown(),
             widgetColumns(orientation),
             widgetRows(orientation),
-            // The Workspace's dock has no style of its own: it stays the dock it has always been.
-            variant == LayoutVariant.HOME ? DockStyle.effectiveStyle(dockStyle())
-                : DockStyle.GLASS_TRAY);
+            // The Dock design the dress puts on the variant: the Workspace's dock has no style of
+            // its own and stays the dock it has always been.
+            DressResolver.dockDesignOn(variant, dockStyle()));
     }
 
     /**

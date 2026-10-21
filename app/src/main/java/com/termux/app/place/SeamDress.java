@@ -119,10 +119,10 @@ public final class SeamDress {
     public static boolean wearsHome(@NonNull Surface surface, @NonNull PaneWallPage committed,
                                     @NonNull PaneWallPage stackPage, boolean seamTravel) {
         switch (surface) {
-            case STACK: return HomeChromePolicy.wearsHomeShape(stackPage);
-            case STATUS: return !seamTravel && HomeChromePolicy.wearsHomeShape(committed);
+            case STACK: return stackPage == PaneWallPage.WIDGETS;
+            case STATUS: return !seamTravel && committed == PaneWallPage.WIDGETS;
             case FRAME:
-            default: return HomeChromePolicy.wearsHomeShape(committed);
+            default: return committed == PaneWallPage.WIDGETS;
         }
     }
 

@@ -9,7 +9,6 @@ import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.place.Element;
-import com.termux.app.place.HomeChromePolicy;
 import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.LayoutVariant;
@@ -110,7 +109,7 @@ public final class LayoutEditorPlan {
         mVariant = variant;
         mPlaces = places.forVariant(variant);
         mPlace = place;
-        mWindowPlace = HomeChromePolicy.isHome(place) ? PaneWallPage.TERMINAL : place;
+        mWindowPlace = place == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL : place;
         mDeviceOrientation = deviceOrientation;
         // The editor opens on what the user is looking at; the toggle is how the other one is asked
         // for.
@@ -385,13 +384,13 @@ public final class LayoutEditorPlan {
      */
     public void showPlace(@NonNull PaneWallPage place) {
         mPlace = place;
-        if (!HomeChromePolicy.isHome(place))
+        if (place != PaneWallPage.WIDGETS)
             mWindowPlace = place;
     }
 
     /** Whether the Home filter is on: the canvas is drawing a Home page. */
     public boolean showsHome() {
-        return HomeChromePolicy.isHome(mPlace);
+        return mPlace == PaneWallPage.WIDGETS;
     }
 
     /**

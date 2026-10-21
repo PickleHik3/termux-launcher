@@ -433,7 +433,7 @@ public final class EdgeStackPolicy {
 
     /**
      * How far the content reaches up under the top edge's stack: the status bar's band while the
-     * bar stands on the top edge and overlays the page ({@link HomeChromePolicy#statusOverlays}),
+     * bar stands on the top edge and overlays the page (as a bar on a Home page would),
      * and nothing otherwise. Applied to the canvas by {@link EdgeStackView#overlayFollowing}, it
      * hands back exactly the band the bar took, so the content keeps the bounds it has without the bar and the bar
      * draws over it. Every other band on the top edge keeps taking its room.
@@ -462,7 +462,7 @@ public final class EdgeStackPolicy {
 
     /**
      * Where a side stack's bands end above its bottom, while the canvas reaches down under the
-     * bottom stack ({@code HomeChromePolicy.dockOverlays}): by exactly that reach — the bottom
+     * bottom stack (as on a Home page): by exactly that reach — the bottom
      * stack and the margin under it, {@code KeyboardOverlayPolicy.overlapPx} — so a side column
      * (the A&#8211;Z rail in landscape on Home) ends above the dock with the frame's own gap, as
      * it does on the Workspace, where the dock takes its own row below the canvas and every side

@@ -1,6 +1,7 @@
 package com.termux.app.chrome;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.dock.DockStyle;
 import com.termux.app.place.Element;
@@ -41,9 +42,11 @@ public final class DressResolver {
         WallHalfShape shape(boolean home);
     }
 
-    /** What a Home page leaves out: the status bar and the extra keys are the Workspace's alone. */
+    /** What the Home layout leaves out: the status bar and the extra keys are the Workspace's alone. */
     @NonNull private static final Set<Element> HOME_LEAVES_OUT =
         EnumSet.of(Element.STATUS, Element.EXTRA_KEYS);
+
+    @NonNull private static final Set<Element> NONE_LEFT_OUT = EnumSet.noneOf(Element.class);
 
     @NonNull private final Source mSource;
 
@@ -72,12 +75,45 @@ public final class DressResolver {
     /** What the page wears, as the store stands now. */
     @NonNull
     public Dress dressOf(@NonNull PaneWallPage page) {
-        if (page == PaneWallPage.WIDGETS) {
-            return new Dress(LayoutVariant.HOME, HOME_LEAVES_OUT,
-                DockStyle.effectiveStyle(mSource.homeDockStyle()), true, mSource.shape(true));
-        }
-        return new Dress(LayoutVariant.of(mSource.minimal()), EnumSet.noneOf(Element.class),
-            DockStyle.GLASS_TRAY, false, mSource.shape(false));
+        boolean home = page == PaneWallPage.WIDGETS;
+        LayoutVariant layout = layoutOf(page);
+        return new Dress(layout, home ? HOME_LEAVES_OUT : NONE_LEFT_OUT,
+            dockDesignOn(layout, home ? mSource.homeDockStyle() : null), picksDockDesign(layout),
+            mSource.shape(home));
+    }
+
+    /**
+     * The layout the page wears ({@link Dress#layout}), read without the rest of the dress: the
+     * question the stack's sizes ask on every pass.
+     */
+    @NonNull
+    public LayoutVariant layoutOf(@NonNull PaneWallPage page) {
+        return page == PaneWallPage.WIDGETS ? LayoutVariant.HOME
+            : LayoutVariant.of(mSource.minimal());
+    }
+
+    /**
+     * Whether a page on {@code layout} wears {@code element} ({@link Dress#wears}), for a reader
+     * that holds a layout rather than a page: the Layout editor's offers, the store's resolve.
+     */
+    public static boolean wornOn(@NonNull LayoutVariant layout, @NonNull Element element) {
+        return layout != LayoutVariant.HOME || !HOME_LEAVES_OUT.contains(element);
+    }
+
+    /** Whether {@code layout} holds a Dock design the user picks ({@link Dress#picksDockDesign}). */
+    public static boolean picksDockDesign(@NonNull LayoutVariant layout) {
+        return layout == LayoutVariant.HOME;
+    }
+
+    /**
+     * The Dock design a page on {@code layout} draws ({@link Dress#dockDesign}): the one picked,
+     * as it draws today ({@link DockStyle#effectiveStyle}), where the layout holds one, and the
+     * tray where it does not.
+     */
+    @NonNull
+    public static DockStyle dockDesignOn(@NonNull LayoutVariant layout,
+                                         @Nullable DockStyle picked) {
+        return picksDockDesign(layout) ? DockStyle.effectiveStyle(picked) : DockStyle.GLASS_TRAY;
     }
 
     /**

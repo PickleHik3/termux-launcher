@@ -41,8 +41,8 @@ import com.termux.view.HoldTiming;
  *
  * <p>A <em>hold</em> on one of the page's four corners drops the same tab the display window's
  * corners drop, with the page's own buttons: the pencil that starts editing the widgets, the plus
- * that adds a page, the wallpaper and help. Home has no minimal mode (ADR 0008,
- * {@link com.termux.app.place.HomeChromePolicy#minimalModeApplies}), so the minimal button every
+ * that adds a page, the wallpaper and help. Home has no minimal mode (ADR 0008:
+ * the Home layout is worn whatever minimal mode says), so the minimal button every
  * window's tab carries is not here.
  * It comes out of the corner that was touched, so the tab lands under the thumb that asked for it.
  * While a widget is being edited those buttons are replaced by the grid's size, which opens the
@@ -638,7 +638,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
         float requestedRadiusPx = PaneGlass.radiusPx(style, density);
         // A Home page wears no frame (ADR 0008): no slab, no line, the widgets straight on the
         // wallpaper as on any launcher. The style still dresses the corner tab below.
-        boolean framed = com.termux.app.place.HomeChromePolicy.bordersShown(PaneWallPage.WIDGETS);
+        boolean framed = false;
         boolean glass = PaneGlass.apply(framed ? style : null, this, mGlass, requestedRadiusPx);
         // The page's frame line: the slab's lit rim on glass, the terminal's plain stroke while
         // the border preference is on without it. Drawn on the page itself, so it moves with the

@@ -10,7 +10,7 @@ import com.termux.app.wall.PaneWallPage;
  * the Workspace never moves a page's content when it settles.
  *
  * <p>The wall's pages share one canvas. The Workspace's status bar takes a band at the top that
- * Home does not have (Home wears no status bar, {@link HomeChromePolicy#statusOverlays}), so a
+ * Home does not have (Home wears no status bar, and a bar there would overlay it), so a
  * canvas that stood below the bar on the Workspace and reached the top on Home moved every page
  * by the band at settle: the terminal down as the bar took its band, Home up as it gave it back.
  *
@@ -37,7 +37,7 @@ public final class PageTopInsets {
      */
     public static boolean canvasReachesUnderBar(@NonNull PaneWallPage committed,
                                                 boolean wallAtRest) {
-        return HomeChromePolicy.statusOverlays(committed) || !wallAtRest;
+        return committed == PaneWallPage.WIDGETS || !wallAtRest;
     }
 
     /**
@@ -75,11 +75,11 @@ public final class PageTopInsets {
 
     /**
      * Where {@code page} starts below the canvas's top: a Home page at the top itself, where the
-     * bar would overlay it ({@link HomeChromePolicy#statusOverlays}); every Workspace page —
+     * bar would overlay it; every Workspace page —
      * {@code null} is one the wall does not know, the display window's — at the Workspace's inset.
      */
     public static int pageTopInsetPx(@Nullable PaneWallPage page, int workspaceTopInsetPx) {
-        if (page != null && HomeChromePolicy.statusOverlays(page)) return 0;
+        if (page == PaneWallPage.WIDGETS) return 0;
         return Math.max(0, workspaceTopInsetPx);
     }
 
@@ -89,6 +89,6 @@ public final class PageTopInsets {
      * the Workspace — the canvas's reach while the chrome is committed to a window, 0 on Home.
      */
     public static int bodySurfaceTopPx(@NonNull PaneWallPage committed, int canvasReachPx) {
-        return HomeChromePolicy.statusOverlays(committed) ? 0 : Math.max(0, canvasReachPx);
+        return committed == PaneWallPage.WIDGETS ? 0 : Math.max(0, canvasReachPx);
     }
 }

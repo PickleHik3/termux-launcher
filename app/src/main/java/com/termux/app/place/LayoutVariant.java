@@ -19,12 +19,13 @@ public enum LayoutVariant {
 
     /**
      * Whether the Layout editor offers this element on this variant, and whether it may ever be
-     * shown there. The Home layout keeps the dock's rows (the pinned apps and the A–Z index); the
-     * status bar and the extra keys are the Workspace's alone. The keyboard is not an element with
-     * a slot and is offered on every variant.
+     * shown there: whether a page on it wears the element, as the dress answers ({@link
+     * com.termux.app.chrome.DressResolver#wornOn}). The Home layout keeps the dock's rows (the
+     * pinned apps and the A–Z index); the status bar and the extra keys are the Workspace's alone.
+     * The keyboard is not an element with a slot and is offered on every variant.
      */
     public boolean offers(@NonNull Element element) {
-        return this != HOME || element == Element.APPS || element == Element.AZ;
+        return com.termux.app.chrome.DressResolver.wornOn(this, element);
     }
 
     /**

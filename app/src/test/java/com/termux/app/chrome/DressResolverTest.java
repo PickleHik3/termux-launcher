@@ -154,4 +154,52 @@ public class DressResolverTest {
         stored.minimal = false;
         assertEquals(before, terminal());
     }
+
+    /** Moved from the Home chrome policy's test: a settle redresses only between halves apart. */
+    @Test
+    public void aCrossingChangesTheShapeWornOnlyWhileTheHalvesDiffer() {
+        assertNotEquals(home().shape(), terminal().shape());
+        assertEquals("window to window", terminal().shape(),
+            dresses.dressOf(PaneWallPage.DISPLAY).shape());
+        stored.home = WallHalfShape.of(LayoutStyle.DOCKED, 12, 8);
+        assertEquals("a Home that still follows the Workspace changes nothing",
+            terminal().shape(), home().shape());
+        stored.home = WallHalfShape.of(LayoutStyle.DOCKED, 12, 9);
+        assertNotEquals("one value apart is enough", terminal().shape(), home().shape());
+    }
+
+    @Test
+    public void theLayoutIsReadAloneAsTheDressWearsIt() {
+        for (boolean minimal : new boolean[] {false, true}) {
+            stored.minimal = minimal;
+            for (PaneWallPage page : PaneWallPage.values())
+                assertEquals(page + (minimal ? " minimal" : ""), dresses.dressOf(page).layout(),
+                    dresses.layoutOf(page));
+        }
+    }
+
+    /** One rule for what the Home layout leaves out, asked by page or by layout. */
+    @Test
+    public void aLayoutWearsWhatItsPagesWear() {
+        for (Element element : Element.values()) {
+            assertEquals(element.name(), home().wears(element),
+                DressResolver.wornOn(LayoutVariant.HOME, element));
+            assertTrue(DressResolver.wornOn(LayoutVariant.NORMAL, element));
+            assertTrue(DressResolver.wornOn(LayoutVariant.MINIMAL, element));
+            for (LayoutVariant layout : LayoutVariant.values())
+                assertEquals(DressResolver.wornOn(layout, element), layout.offers(element));
+        }
+    }
+
+    @Test
+    public void onlyTheHomeLayoutDrawsThePickedDockDesign() {
+        assertTrue(DressResolver.picksDockDesign(LayoutVariant.HOME));
+        assertFalse(DressResolver.picksDockDesign(LayoutVariant.NORMAL));
+        assertFalse(DressResolver.picksDockDesign(LayoutVariant.MINIMAL));
+        assertEquals(DockStyle.LENS_BEADS,
+            DressResolver.dockDesignOn(LayoutVariant.HOME, DockStyle.LENS_BEADS));
+        assertEquals(DockStyle.GLASS_TRAY, DressResolver.dockDesignOn(LayoutVariant.HOME, null));
+        assertEquals(DockStyle.GLASS_TRAY,
+            DressResolver.dockDesignOn(LayoutVariant.NORMAL, DockStyle.LENS_BEADS));
+    }
 }
