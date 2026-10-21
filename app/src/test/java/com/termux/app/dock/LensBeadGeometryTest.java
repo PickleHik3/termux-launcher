@@ -182,6 +182,43 @@ public class LensBeadGeometryTest {
             new float[0], 0, 0f, width, 1f).count());
     }
 
+    /**
+     * The Drawer tile on Lens beads (#97) stands on a bead of its own, one of the row's, and
+     * stands still while a swipe carries the pages: its bead stays under it, every other one
+     * rides with its icon.
+     */
+    @Test
+    public void midSwipeTheDrawerTilesBeadStaysUnderTheStillTile() {
+        LensBeadGeometry.Beads rest = phone();
+        assertNotNull(rest);
+        float width = 411f * DENSITY;
+        float offset = -width / 3f;
+        // The tile at the row's end, a hair off its bead's centre as a laid-out view may be.
+        float tile = rest.centerX(4) + 0.4f;
+        LensBeadGeometry.Beads drawn = LensBeadGeometry.follow(rest, offset, tile, new float[0],
+            0, 0f, width, 1f);
+        boolean stillUnderTheTile = false;
+        for (int i = 0; i < drawn.count(); i++) {
+            float x = drawn.centerX(i);
+            if (Math.abs(x - rest.centerX(4)) < 1e-3f) {
+                stillUnderTheTile = true;
+                continue;
+            }
+            boolean rides = false;
+            for (int j = 0; j < 4; j++) rides |= Math.abs(x - (rest.centerX(j) + offset)) < 1e-3f;
+            assertTrue("bead at " + x + " rides with its icon", rides);
+        }
+        assertTrue("the tile keeps its bead", stillUnderTheTile);
+        // The first icon slid off; the other three ride, and the tile's bead stays.
+        assertEquals(4, drawn.count());
+
+        // No tile, or one nowhere near a bead, is the plain follow.
+        assertEquals(LensBeadGeometry.follow(rest, offset, new float[0], 0, 0f, width, 1f),
+            LensBeadGeometry.follow(rest, offset, Float.NaN, new float[0], 0, 0f, width, 1f));
+        assertEquals(LensBeadGeometry.follow(rest, offset, new float[0], 0, 0f, width, 1f),
+            LensBeadGeometry.follow(rest, offset, -1e4f, new float[0], 0, 0f, width, 1f));
+    }
+
     @Test
     public void aSwitchsFadeShrinksTheBeadsWithTheirIconsButNeverToTheSlab() {
         LensBeadGeometry.Beads rest = phone();

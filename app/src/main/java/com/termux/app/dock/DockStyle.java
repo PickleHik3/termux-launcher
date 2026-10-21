@@ -27,7 +27,12 @@ public enum DockStyle {
     GLASS_TRAY("glass_tray"),
     /** No plate: each app on its own round glass lens. */
     LENS_BEADS("lens_beads"),
-    /** A Home tile beside the apps, and a strip of running windows above. */
+    /**
+     * Once the tray with a tile that opens the drawer among the apps; the tile is the <b>Drawer
+     * tile</b> toggle now, beside any design (#97). Kept only so a stored id still parses: the
+     * store's migration turns it into {@link #GLASS_TRAY} with the tile on at its place, it is
+     * never offered ({@link #CHOICES}) and never drawn ({@link #BUILT}).
+     */
     TASKBAR("taskbar"),
     /**
      * Once the apps above the command palette's field; the field is the <b>Search field</b>
@@ -45,12 +50,12 @@ public enum DockStyle {
      */
     @NonNull
     public static final Set<DockStyle> BUILT = Collections.unmodifiableSet(EnumSet.of(GLASS_TRAY, LENS_BEADS,
-        TASKBAR, WALL_STRIP));
+        WALL_STRIP));
 
     /** The designs the Layout editor's picker offers, in the order it shows them. */
     @NonNull
     public static final List<DockStyle> CHOICES = Collections.unmodifiableList(Arrays.asList(
-        GLASS_TRAY, LENS_BEADS, TASKBAR, WALL_STRIP));
+        GLASS_TRAY, LENS_BEADS, WALL_STRIP));
 
     @NonNull private final String mId;
 

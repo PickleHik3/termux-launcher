@@ -27,15 +27,18 @@ public final class Dress {
     @NonNull private final Set<Element> mLeftOut;
     @NonNull private final DockStyle mDockDesign;
     private final boolean mSearchField;
+    private final boolean mDrawerTile;
     @NonNull private final WallHalfShape mShape;
 
     Dress(@NonNull LayoutVariant layout, @NonNull Set<Element> leftOut,
-          @NonNull DockStyle dockDesign, boolean searchField, @NonNull WallHalfShape shape) {
+          @NonNull DockStyle dockDesign, boolean searchField, boolean drawerTile,
+          @NonNull WallHalfShape shape) {
         mLayout = layout;
         mLeftOut = leftOut.isEmpty() ? Collections.emptySet()
             : Collections.unmodifiableSet(EnumSet.copyOf(leftOut));
         mDockDesign = dockDesign;
         mSearchField = searchField;
+        mDrawerTile = drawerTile;
         mShape = shape;
     }
 
@@ -78,9 +81,12 @@ public final class Dress {
         return mSearchField;
     }
 
-    /** Whether the dock carries the Drawer tile, which opens the app drawer. */
+    /**
+     * Whether the dock carries the Drawer tile, which opens the app drawer: the toggle the page's
+     * layout holds beside its design, with any design (#97; once the Taskbar's tile).
+     */
     public boolean drawerTile() {
-        return mDockDesign == DockStyle.TASKBAR;
+        return mDrawerTile;
     }
 
     /** The Style, Corners and Margin the page's chrome is shaped by. */
@@ -96,18 +102,19 @@ public final class Dress {
         Dress that = (Dress) other;
         return mLayout == that.mLayout && mLeftOut.equals(that.mLeftOut)
             && mDockDesign == that.mDockDesign && mSearchField == that.mSearchField
-            && mShape.equals(that.mShape);
+            && mDrawerTile == that.mDrawerTile && mShape.equals(that.mShape);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(mLayout, mLeftOut, mDockDesign, mSearchField, mShape);
+        return Objects.hash(mLayout, mLeftOut, mDockDesign, mSearchField, mDrawerTile, mShape);
     }
 
     @NonNull
     @Override
     public String toString() {
         return "Dress{" + mLayout + ", leftOut=" + mLeftOut + ", " + mDockDesign
-            + (mSearchField ? "+search_field" : "") + ", " + mShape + "}";
+            + (mSearchField ? "+search_field" : "") + (mDrawerTile ? "+drawer_tile" : "") + ", "
+            + mShape + "}";
     }
 }

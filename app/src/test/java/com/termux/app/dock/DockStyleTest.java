@@ -57,9 +57,12 @@ public class DockStyleTest {
         assertEquals(DockStyle.LENS_BEADS, DockStyle.effectiveStyle(DockStyle.LENS_BEADS));
     }
 
+    /** The Taskbar is the Drawer tile now (#97): a stray stored id draws as the tray. */
     @Test
-    public void theTaskbarIsBuilt() {
-        assertEquals(DockStyle.TASKBAR, DockStyle.effectiveStyle(DockStyle.TASKBAR));
+    public void theTaskbarIsNoDesignAnyMore() {
+        assertEquals(DockStyle.GLASS_TRAY, DockStyle.effectiveStyle(DockStyle.TASKBAR));
+        assertFalse(DockStyle.BUILT.contains(DockStyle.TASKBAR));
+        assertFalse("the picker never offers it", DockStyle.CHOICES.contains(DockStyle.TASKBAR));
     }
 
     /** The Prompt line is the Search field now (#96): a stray stored id draws as the tray. */
@@ -80,7 +83,7 @@ public class DockStyleTest {
 
     @Test
     public void thePickerOffersTheDesignsInOrder() {
-        assertEquals(Arrays.asList(DockStyle.GLASS_TRAY, DockStyle.LENS_BEADS, DockStyle.TASKBAR,
+        assertEquals(Arrays.asList(DockStyle.GLASS_TRAY, DockStyle.LENS_BEADS,
             DockStyle.WALL_STRIP), DockStyle.CHOICES);
     }
 }

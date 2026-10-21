@@ -184,14 +184,39 @@ public final class LensBeadGeometry {
     public static Beads follow(@NonNull Beads rest, float offsetPx,
                                @NonNull float[] neighbourCentersX, int neighbourCount,
                                float left, float right, float scale) {
+        return follow(rest, offsetPx, Float.NaN, neighbourCentersX, neighbourCount, left, right,
+            scale);
+    }
+
+    /**
+     * {@link #follow(Beads, float, float[], int, float, float, float)} for a row holding the
+     * Drawer tile (#97), which is no page's and stands still while the pages move: the rest's
+     * bead nearest {@code stillCenterX} (within a radius of it) stays where it was, under the
+     * tile, while every other one rides with its icon. NaN is a row without the tile.
+     */
+    @NonNull
+    public static Beads follow(@NonNull Beads rest, float offsetPx, float stillCenterX,
+                               @NonNull float[] neighbourCentersX, int neighbourCount,
+                               float left, float right, float scale) {
         float s = Float.isNaN(scale) ? 1f : Math.max(0f, Math.min(1f, scale));
         // Never quite nothing: a radius of 0 is the program's "no beads", which is the slab.
         float radius = Math.max(0.5f, rest.radiusPx * s);
         int neighbours = Math.max(0, Math.min(neighbourCount, neighbourCentersX.length));
+        int still = -1;
+        if (!Float.isNaN(stillCenterX)) {
+            float nearest = rest.radiusPx;
+            for (int i = 0; i < rest.count(); i++) {
+                float away = Math.abs(rest.centerX(i) - stillCenterX);
+                if (away <= nearest) {
+                    nearest = away;
+                    still = i;
+                }
+            }
+        }
         float[] all = new float[rest.count() + neighbours];
         int n = 0;
         for (int i = 0; i < rest.count(); i++) {
-            float cx = rest.centerX(i) + offsetPx;
+            float cx = rest.centerX(i) + (i == still ? 0f : offsetPx);
             if (cx + radius > left && cx - radius < right) all[n++] = cx;
         }
         for (int i = 0; i < neighbours; i++) {

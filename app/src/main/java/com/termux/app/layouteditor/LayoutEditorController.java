@@ -1254,16 +1254,18 @@ public final class LayoutEditorController {
     /** Each design's name and silhouette, in {@link DockStyle#CHOICES} order, as the row holds them. */
     private static final int[] DOCK_STYLE_LABELS = {
         R.string.layout_editor_dock_style_glass_tray, R.string.layout_editor_dock_style_lens_beads,
-        R.string.layout_editor_dock_style_taskbar, R.string.layout_editor_dock_style_wall_strip};
+        R.string.layout_editor_dock_style_wall_strip};
     private static final int[] DOCK_STYLE_ICONS = {
         R.drawable.ic_symbol_dock_glass_tray, R.drawable.ic_symbol_dock_lens_beads,
-        R.drawable.ic_symbol_dock_taskbar, R.drawable.ic_symbol_dock_wall_strip};
+        R.drawable.ic_symbol_dock_wall_strip};
 
     /**
-     * The Search field toggle, the row's last item after a divider (#96); null before the row is
+     * The Search field toggle, the first item after the divider (#96); null before the row is
      * bound.
      */
     @Nullable private Chip mSearchFieldChip;
+    /** The Drawer tile toggle, the row's last item, after the Search field (#97); null before. */
+    @Nullable private Chip mDrawerTileChip;
 
     /**
      * Whether the dock styles show: in Layout mode on the Home layout, with its dock (the pinned
@@ -1278,8 +1280,8 @@ public final class LayoutEditorController {
     /**
      * One item per design in the row: its silhouette on a chip painted as the keyboard's type
      * chips are, its name under it. The chip and the name are one target. After a divider, the
-     * Search field toggle in the same dress (#96): checked while the edited layout carries the
-     * field, with whichever design is picked.
+     * Search field (#96) and the Drawer tile (#97) toggles in the same dress: each checked while
+     * the edited layout carries it, with whichever design is picked.
      */
     private void bindDockStyles(@NonNull Views views) {
         views.dockStyles.removeAllViews();
@@ -1305,6 +1307,10 @@ public final class LayoutEditorController {
             quiet, R.string.layout_editor_search_field_label, R.drawable.ic_symbol_dock_prompt_line,
             mHost.context().getString(R.string.layout_editor_search_field),
             tapped -> onSearchFieldToggled());
+        mDrawerTileChip = addDockStyleItem(views, inflater, states, container, onContainer,
+            quiet, R.string.layout_editor_drawer_tile_label, R.drawable.ic_symbol_dock_drawer_tile,
+            mHost.context().getString(R.string.layout_editor_drawer_tile),
+            tapped -> onDrawerTileToggled());
     }
 
     /** One item of the row, its chip painted and named, the chip and the name one target. */
@@ -1353,6 +1359,10 @@ public final class LayoutEditorController {
         boolean field = plan.searchField();
         if (search != null && search.isChecked() != field)
             search.setChecked(field);
+        Chip drawer = mDrawerTileChip;
+        boolean tile = plan.drawerTile();
+        if (drawer != null && drawer.isChecked() != tile)
+            drawer.setChecked(tile);
         views.tilesHost.setDockStylesShown(true);
     }
 
@@ -1363,6 +1373,20 @@ public final class LayoutEditorController {
         if (plan == null)
             return;
         LayoutEditorPlan.Drop drop = plan.setSearchField(!plan.searchField());
+        if (drop != LayoutEditorPlan.Drop.NONE)
+            afterCanvasWrite(drop);
+        // The chip toggles itself on a tap: the stored state is restated either way.
+        if (views != null)
+            syncDockStyles(views);
+    }
+
+    /** The Drawer tile toggle tapped: on or off for the edited layout, its design kept. */
+    private void onDrawerTileToggled() {
+        LayoutEditorPlan plan = mPlan;
+        Views views = mViews;
+        if (plan == null)
+            return;
+        LayoutEditorPlan.Drop drop = plan.setDrawerTile(!plan.drawerTile());
         if (drop != LayoutEditorPlan.Drop.NONE)
             afterCanvasWrite(drop);
         // The chip toggles itself on a tap: the stored state is restated either way.

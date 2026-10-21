@@ -16,7 +16,8 @@ import java.util.List;
  * been moved since. The three sizes ride along, so a dragged dock, keyboard or chin is exactly as
  * unsaved as a moved bar, and so does the keyboard element's on/off switch, with Home's own
  * (always on), which a Home page edits on whichever layout it wears. Each layout's Dock design
- * rides along too, so a design picked in the editor is undone and asked about like a move.
+ * rides along too, with its Search field and Drawer tile toggles, so a design picked or a toggle
+ * flipped in the editor is undone and asked about like a move.
  *
  * <p>Read and written through {@link PlaceLayoutStore}'s own accessors rather than the raw keys, so
  * a restore writes the value the layout was resolving to whether or not it had a key of its own.
@@ -105,16 +106,20 @@ public final class PlaceArrangeSnapshot {
     @NonNull private final DockStyle mDockStyle;
     /** Whether the layout turns the Search field on beside its design, both orientations. */
     private final boolean mSearchField;
+    /** Whether the layout turns the Drawer tile on beside its design, both orientations. */
+    private final boolean mDrawerTile;
 
     private PlaceArrangeSnapshot(@NonNull LayoutVariant variant, @NonNull List<Entry> entries,
                                  boolean keyboardShown, boolean homeAlwaysOn,
-                                 @NonNull DockStyle dockStyle, boolean searchField) {
+                                 @NonNull DockStyle dockStyle, boolean searchField,
+                                 boolean drawerTile) {
         mVariant = variant;
         mEntries = Collections.unmodifiableList(entries);
         mKeyboardShown = keyboardShown;
         mHomeAlwaysOn = homeAlwaysOn;
         mDockStyle = dockStyle;
         mSearchField = searchField;
+        mDrawerTile = drawerTile;
     }
 
     /** The layout the store is on, in both orientations. */
@@ -133,7 +138,8 @@ public final class PlaceArrangeSnapshot {
             entries.add(new Entry(layout, orientation));
         // The variant's own keyboard element: the Home layout's is always on, not the switch.
         return new PlaceArrangeSnapshot(variant, entries, layout.isKeyboardShown(),
-            layout.isHomeKeyboardAlwaysOn(), layout.dockStyle(), layout.searchField());
+            layout.isHomeKeyboardAlwaysOn(), layout.dockStyle(), layout.searchField(),
+            layout.drawerTile());
     }
 
     /** The variant this snapshot was taken of, and restores onto. */
@@ -150,6 +156,7 @@ public final class PlaceArrangeSnapshot {
         layout.setKeyboardShown(mKeyboardShown);
         layout.setDockStyle(mDockStyle);
         layout.setSearchField(mSearchField);
+        layout.setDrawerTile(mDrawerTile);
     }
 
     /** The whole arrangement as one string, for the editor's unsaved-changes comparison. */
@@ -161,7 +168,8 @@ public final class PlaceArrangeSnapshot {
         out.append("keyboard:").append(mKeyboardShown)
             .append("|always:").append(mHomeAlwaysOn)
             .append("|dock:").append(mDockStyle.storageValue())
-            .append("|search:").append(mSearchField);
+            .append("|search:").append(mSearchField)
+            .append("|drawer:").append(mDrawerTile);
         return out.toString();
     }
 }

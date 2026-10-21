@@ -194,7 +194,7 @@ public class PromptLineSlabLayoutTest {
     @Test
     public void theFieldStandsUnderTheAppsRowOfEveryDesign() {
         DockSurfaceSpec[] designs = {DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.LENS_BEADS,
-            DockSurfaceSpec.TASKBAR, DockSurfaceSpec.WALL_STRIP};
+            DockSurfaceSpec.WALL_STRIP};
         int band = design(DockSurfaceSpec.GLASS_TRAY, 1f).promptFieldBandPx;
         assertTrue(band > 0);
         int tallest = 0;

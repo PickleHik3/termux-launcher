@@ -4784,8 +4784,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Under the Search field the lower bevel shows the icons as the tray's would, aimed that
         // much lower, and nowhere over the field or the icons themselves, with any design.
         int belowPx = mAppliedPromptFieldBandPx;
-        // The Taskbar holds its reflection to a low slab's strength (spec.reflectionScale). The
-        // Wall strip's tiles stand over the icons: its reflection is the lower bevel's alone.
+        // The Wall strip holds its reflection under the tray's (spec.reflectionScale), and its
+        // tiles stand over the icons: its reflection is the lower bevel's alone.
         reflection.bind(program, host, container, mGlassOriginLeft + rowOffset, mGlassOriginTop,
             belowPx, belowPx > 0
                 ? Math.min(PROMPT_LINE_REFLECTION_SCALE, spec.reflectionScale)
@@ -5008,8 +5008,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             for (int i = 0; i < neighbours; i++) mDockBeadNeighbours[i] += mDockBeadsRowDx;
             float left = Float.isNaN(mDockBeadsSpanLeft) ? 0f : mDockBeadsSpanLeft;
             float right = Float.isNaN(mDockBeadsSpanRight) ? Float.MAX_VALUE : mDockBeadsSpanRight;
+            // The Drawer tile is no page's: its bead stands still under it (#97).
+            float tile = row.drawerTileCenterX();
             moving = com.termux.app.dock.LensBeadGeometry.follow(rest, row.drawnPageOffsetPx(),
-                mDockBeadNeighbours, neighbours, left, right, row.drawnPageFade());
+                Float.isNaN(tile) ? Float.NaN : tile + mDockBeadsRowDx, mDockBeadNeighbours,
+                neighbours, left, right, row.drawnPageFade());
         }
         if (moving == null && mDockBeadsMoving == null) return;
         if (moving != null && moving.equals(mDockBeadsMoving)) return;
@@ -11813,8 +11816,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setMostUsedPageEnabled(mPreferences.isAppLauncherMostUsedPageEnabled());
         mSuggestionBarView.setAppDataProvider(mLauncherAppDataProvider);
         mSuggestionBarView.setConfigRepository(mLauncherConfigRepository);
-        // The Taskbar's Home tile, once the row has its pins to lay it out among.
-        syncTaskbarHomeTile();
+        // The Drawer tile, once the row has its pins to lay it out among.
+        syncDrawerTile();
         mSuggestionBarView.setAppCatalogChangedListener(() -> {
             syncAzScrubLettersAndTint();
             syncPinnedAppsHost();
@@ -14406,6 +14409,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return store != null && store.forVariant(layout).searchField();
             }
 
+            @Override public boolean drawerTile(
+                    @NonNull com.termux.app.place.LayoutVariant layout) {
+                PlaceLayoutStore store = placeLayoutStore();
+                return store != null && store.forVariant(layout).drawerTile();
+            }
+
             @NonNull @Override public com.termux.app.place.WallHalfShape shape(boolean home) {
                 return com.termux.app.place.WallHalfShape.read(mPreferences, home);
             }
@@ -15596,6 +15605,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean searchField = committedSearchField();
         dockStyleChanged |= mAppliedSearchField != null && mAppliedSearchField != searchField;
         mAppliedSearchField = searchField;
+        // The Drawer tile toggled there (#97): the row takes or gives back the tile's slot, so
+        // the dock is dressed again (its beads, its reflection), though no band eases.
+        boolean drawerTile = mDresses.drawerTileOf(mLastWallPage);
+        boolean drawerTileChanged = mAppliedDrawerTile != null && mAppliedDrawerTile != drawerTile;
+        mAppliedDrawerTile = drawerTile;
         // Where the new style brings the Wall strip's row or the toggle the Search field, or
         // either goes, the slab eases to its new height from what it shows now: started before
         // any pass below lays it out.
@@ -15649,7 +15663,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setTerminalToolbarHeight();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
-        if (dockStyleChanged) restyleDockSurface();
+        if (dockStyleChanged || drawerTileChanged) restyleDockSurface();
         if (sizesMoved) applySizedSurfaces();
         // Always on brings the keyboard up on Home, or takes it down, once the grid has its rows.
         if (alwaysOnChanged && mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS)
@@ -16504,9 +16518,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                     @NonNull com.termux.app.wall.PaneWallPage to) {
         if (mPreferences == null || mChrome == null) return;
         if (dockSurfaceSpec(from).equals(dockSurfaceSpec(to))
-            && mDresses.searchFieldOf(from) == mDresses.searchFieldOf(to)) {
-            // One design on both, but a Home layout keeps its own Drawer tile's place.
-            if (dockSurfaceSpec(to).taskbar) syncTaskbarHomeTile();
+            && mDresses.searchFieldOf(from) == mDresses.searchFieldOf(to)
+            && mDresses.drawerTileOf(from) == mDresses.drawerTileOf(to)) {
+            // One dress on both, but a Home layout keeps its own Drawer tile's place.
+            syncDrawerTile();
             return;
         }
         // A settle lands the place's geometry at once (ADR 0003): an ease under way gives way.
@@ -16524,8 +16539,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void restyleDockSurface() {
         if (mPreferences == null || mChrome == null) return;
         syncDockBeadsListeners();
-        // The Taskbar's Home tile comes and go with the spec.
-        syncTaskbar();
+        // The Drawer tile comes and goes with the page's toggle.
+        syncDrawerTile();
         // The glass is re-cut even where the geometry did not move: its features are the spec's.
         mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
         updateAppLauncherBarHeight();
@@ -16536,34 +16551,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
-    // ------------------------------------------------------------------ Taskbar
+    // ------------------------------------------------------------------ Drawer tile
     //
-    // The Taskbar (DockSurfaceSpec.TASKBAR): the dock row holds a Home tile among the apps
-    // (SuggestionBarView.setHomeTile, where it stands persisted in PlaceLayoutStore) on whichever
-    // half's dock wears the design (#93). Windows live in the status bar's window chips alone
-    // (#95): nothing stands above the dock for them. Nothing here runs at rest.
+    // The Drawer tile (#97; once the Taskbar design): where the page's layout turns it on
+    // (Dress.drawerTile) the dock row holds a tile that opens the app drawer among the apps
+    // (SuggestionBarView.setHomeTile, where it stands persisted per layout in PlaceLayoutStore),
+    // with any Dock design, on whichever half wears the layout. On Lens beads it stands on a bead
+    // of its own, as an app does. Nothing here runs at rest.
 
-    /** The Home tile follows the dock's spec: on the Taskbar, none elsewhere. */
-    private void syncTaskbar() {
-        syncTaskbarHomeTile();
-    }
+    /** The committed page's Drawer tile as the last place pass saw it; null before one. */
+    @Nullable private Boolean mAppliedDrawerTile;
 
     /**
-     * The dock row holds the Home tile where the committed page's dock wears the Taskbar, on
-     * either half, and none elsewhere.
+     * The dock row holds the Drawer tile where the committed page's layout turns it on, on
+     * either half, with whichever design, and none elsewhere.
      */
-    private void syncTaskbarHomeTile() {
+    private void syncDrawerTile() {
         SuggestionBarView bar = mSuggestionBarView;
         if (bar == null) return;
-        boolean on = mPreferences != null && dockSurfaceSpec().taskbar;
+        boolean on = mPreferences != null && mDresses.drawerTileOf(mLastWallPage);
         PlaceLayoutStore store = committedDockStore();
-        bar.setHomeTile(on ? (store != null ? store.taskbarHomeTile()
-                : com.termux.app.dock.TaskbarHomeTilePolicy.DEFAULT) : null,
-            on ? mTaskbarHomeTileListener : null);
+        bar.setHomeTile(on ? (store != null ? store.drawerTilePosition()
+                : com.termux.app.dock.DrawerTilePolicy.DEFAULT) : null,
+            on ? mDrawerTileListener : null);
     }
 
     /**
-     * The store pinned to the layout the committed page's dock is dressed by, where its Home
+     * The store pinned to the layout the committed page's dock is dressed by, where its Drawer
      * tile is kept: Home's layout on Home, the Workspace's (normal or minimal) on a window.
      */
     @Nullable
@@ -16572,18 +16586,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return store == null ? null : store.forVariant(mDresses.layoutOf(mLastWallPage));
     }
 
-    /** The Home tile opens the drawer as Home's own drawer entry does, and remembers its place. */
-    private final SuggestionBarView.HomeTileListener mTaskbarHomeTileListener =
+    /**
+     * The Drawer tile opens the drawer as Home's own drawer entry does, on either half, and
+     * remembers its place.
+     */
+    private final SuggestionBarView.HomeTileListener mDrawerTileListener =
         new SuggestionBarView.HomeTileListener() {
             @Override public void onHomeTileTapped() {
                 openAppDrawerFromHome();
             }
 
             @Override public void onHomeTileMoved(
-                    @NonNull com.termux.app.dock.TaskbarHomeTilePolicy.Position position) {
+                    @NonNull com.termux.app.dock.DrawerTilePolicy.Position position) {
                 PlaceLayoutStore store = committedDockStore();
-                if (store != null) store.setTaskbarHomeTile(position);
-                syncTaskbarHomeTile();
+                if (store != null) store.setDrawerTilePosition(position);
+                syncDrawerTile();
             }
         };
 

@@ -11,7 +11,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.dock.DockStyle;
-import com.termux.app.dock.TaskbarHomeTilePolicy;
+import com.termux.app.dock.DrawerTilePolicy;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -43,7 +43,7 @@ import java.util.Arrays;
 public class PlaceLayoutStoreTest {
 
     /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
-    private static final int MIGRATED = 11;
+    private static final int MIGRATED = 12;
 
     private Application app;
     private SharedPreferences prefs;
@@ -1117,7 +1117,7 @@ public class PlaceLayoutStoreTest {
         store.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.TOP, Element.APPS));
         store.setDockHeightScale(PORTRAIT, 1.3f);
         store.setDockStyle(DockStyle.LENS_BEADS);
-        store.setTaskbarHomeTile(TaskbarHomeTilePolicy.Position.END);
+        store.setDrawerTilePosition(DrawerTilePolicy.Position.END);
         launcher.setLayoutStyle(false, LayoutStyle.FLOATING);
         launcher.setLayoutMarginDp(false, 14);
         launcher.setLayoutMarginDp(true, 30);
@@ -1127,7 +1127,7 @@ public class PlaceLayoutStoreTest {
         assertEquals(Edge.TOP, home.slot(PORTRAIT, Element.APPS).edge);
         assertEquals(1.3f, home.dockHeightScale(PORTRAIT), 0.001f);
         assertEquals(DockStyle.LENS_BEADS, home.dockStyle());
-        assertEquals(TaskbarHomeTilePolicy.Position.END, home.taskbarHomeTile());
+        assertEquals(DrawerTilePolicy.Position.END, home.drawerTilePosition());
         assertEquals("Home's shape starts as the one it wore", store.halfShape(false),
             store.halfShape(true));
         assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
@@ -1179,19 +1179,91 @@ public class PlaceLayoutStoreTest {
         assertFalse(store.forVariant(LayoutVariant.MINIMAL).searchField());
     }
 
-    /** The Drawer tile still comes with the Taskbar, until #97 splits it off too. */
+    /** The Drawer tile is a toggle of its own beside the design, with any design (#97). */
     @Test
-    public void theDrawerTileIsStillStoredWithTheTaskbar() {
+    public void theDrawerTileIsAToggleIndependentOfTheDesign() {
         PlaceLayoutStore store = store();
         assertFalse(store.drawerTile());
-        store.setDockStyle(DockStyle.TASKBAR);
+
+        store.setDrawerTile(true);
         assertTrue(prefs.getBoolean("layout.drawer_tile", false));
         assertTrue(store.drawerTile());
-        assertFalse("the field is not the design's", store.searchField());
-        assertFalse("another layout's toggles are its own",
-            store.forVariant(LayoutVariant.HOME).drawerTile());
-        store.setDockStyle(DockStyle.GLASS_TRAY);
+        assertTrue("read back by a fresh store", store().drawerTile());
+        for (DockStyle style : DockStyle.CHOICES) {
+            store.setDockStyle(style);
+            assertEquals(style, store.dockStyle());
+            assertTrue("a design picked keeps the tile: " + style, store.drawerTile());
+        }
+        assertFalse("the field is not the tile's", store.searchField());
+        store.setSearchField(true);
+        assertTrue("the field leaves the tile", store.drawerTile());
+        store.setDrawerTile(false);
         assertFalse(store.drawerTile());
+        assertTrue("the tile leaves the field", store.searchField());
+        assertEquals("the toggle leaves the design", DockStyle.WALL_STRIP, store.dockStyle());
+
+        store.setDrawerTile(true);
+        assertFalse("another layout's toggle is its own",
+            store.forVariant(LayoutVariant.HOME).drawerTile());
+        assertFalse(store.forVariant(LayoutVariant.MINIMAL).drawerTile());
+    }
+
+    /** Picking a design writes nothing for the tile: no stray toggle is materialised. */
+    @Test
+    public void aDesignPickedWritesNoDrawerTile() {
+        PlaceLayoutStore store = store();
+        store.setDockStyle(DockStyle.LENS_BEADS);
+        assertFalse(prefs.contains("layout.drawer_tile"));
+        assertFalse(store.drawerTile());
+    }
+
+    /** Taskbar users land on the Tray with the Drawer tile on, where they had dragged it (#97). */
+    @Test
+    public void anUpgradeOnTaskbarLandsOnTheTrayWithTheDrawerTileWhereItStood() {
+        prefs.edit().putInt("place.migrated", 11)
+            .putString("layout.dock_design", "taskbar")
+            .putBoolean("layout.drawer_tile", true)
+            .putString("layout.drawer_tile_position", "end")
+            .putString("layout.minimal.dock_design", "taskbar")
+            .putString("layout.minimal.drawer_tile_position", "middle")
+            .putString("layout.home.dock_design", "lens_beads")
+            .putString("layout.home.drawer_tile_position", "end")
+            .commit();
+        PlaceLayoutStore store = store();
+
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
+        PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
+        assertEquals("glass_tray", prefs.getString("layout.dock_design", null));
+        assertEquals(DockStyle.GLASS_TRAY, normal.dockStyle());
+        assertTrue(normal.drawerTile());
+        assertEquals("the tile stays where it stood", DrawerTilePolicy.Position.END,
+            normal.drawerTilePosition());
+        assertFalse("the field is not the tile's", normal.searchField());
+
+        PlaceLayoutStore minimal = store.forVariant(LayoutVariant.MINIMAL);
+        assertEquals(DockStyle.GLASS_TRAY, minimal.dockStyle());
+        assertTrue("a layout that never stored the toggle gets it too",
+            prefs.getBoolean("layout.minimal.drawer_tile", false));
+        assertEquals(DrawerTilePolicy.Position.MIDDLE, minimal.drawerTilePosition());
+
+        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        assertEquals("another design is left as it was", DockStyle.LENS_BEADS,
+            home.dockStyle());
+        assertFalse(home.drawerTile());
+        assertEquals("its stored place is kept for when it is turned on",
+            DrawerTilePolicy.Position.END, home.drawerTilePosition());
+    }
+
+    @Test
+    public void anUpgradeOnAnotherDesignKeepsItWithoutTheTile() {
+        prefs.edit().putInt("place.migrated", 11)
+            .putString("layout.dock_design", "lens_beads")
+            .putBoolean("layout.drawer_tile", false)
+            .commit();
+        PlaceLayoutStore store = store();
+        assertEquals(DockStyle.LENS_BEADS, store.dockStyle());
+        assertFalse(store.drawerTile());
+        assertFalse(prefs.contains("layout.minimal.drawer_tile"));
     }
 
     /** Prompt line users land on the Tray with the Search field on (#96). */
@@ -1232,14 +1304,14 @@ public class PlaceLayoutStoreTest {
     @Test
     public void theDrawerTilesPositionIsEachLayoutsOwn() {
         PlaceLayoutStore store = store();
-        assertEquals(TaskbarHomeTilePolicy.Position.START, store.taskbarHomeTile());
-        store.setTaskbarHomeTile(TaskbarHomeTilePolicy.Position.END);
+        assertEquals(DrawerTilePolicy.Position.START, store.drawerTilePosition());
+        store.setDrawerTilePosition(DrawerTilePolicy.Position.END);
         assertEquals("end", prefs.getString("layout.drawer_tile_position", null));
-        assertEquals(TaskbarHomeTilePolicy.Position.END, store().taskbarHomeTile());
-        assertEquals(TaskbarHomeTilePolicy.Position.START,
-            store.forVariant(LayoutVariant.HOME).taskbarHomeTile());
+        assertEquals(DrawerTilePolicy.Position.END, store().drawerTilePosition());
+        assertEquals(DrawerTilePolicy.Position.START,
+            store.forVariant(LayoutVariant.HOME).drawerTilePosition());
         prefs.edit().putString("layout.drawer_tile_position", "sideways").commit();
-        assertEquals(TaskbarHomeTilePolicy.Position.START, store.taskbarHomeTile());
+        assertEquals(DrawerTilePolicy.Position.START, store.drawerTilePosition());
     }
 
     @Test
@@ -1376,7 +1448,7 @@ public class PlaceLayoutStoreTest {
         assertEquals(DockStyle.LENS_BEADS, store.forVariant(LayoutVariant.NORMAL).dockStyle());
         assertEquals(DockStyle.LENS_BEADS, store.forVariant(LayoutVariant.MINIMAL).dockStyle());
         assertEquals(DockStyle.LENS_BEADS, store.forVariant(LayoutVariant.HOME).dockStyle());
-        assertEquals(TaskbarHomeTilePolicy.Position.END, store.taskbarHomeTile());
+        assertEquals(DrawerTilePolicy.Position.END, store.drawerTilePosition());
         assertFalse(prefs.contains("layout.home.dock_style"));
         assertFalse(prefs.contains("layout.home.taskbar_home_tile"));
         assertEquals(DockStyle.LENS_BEADS,
@@ -1396,9 +1468,15 @@ public class PlaceLayoutStoreTest {
         assertFalse(store.drawerTile());
 
         prefs.edit().clear().commit();
-        version8WithHomeAsTheWorkspace().putString("layout.home.dock_style", "taskbar").commit();
+        version8WithHomeAsTheWorkspace().putString("layout.home.dock_style", "taskbar")
+            .putString("layout.home.taskbar_home_tile", "middle").commit();
         store = store();
         assertTrue(store.drawerTile());
+        assertTrue(prefs.getBoolean("layout.minimal.drawer_tile", false));
+        assertEquals("the Taskbar is the Tray with the tile", DockStyle.GLASS_TRAY,
+            store.dockStyle());
+        assertEquals(DockStyle.GLASS_TRAY, store.forVariant(LayoutVariant.HOME).dockStyle());
+        assertEquals(DrawerTilePolicy.Position.MIDDLE, store.drawerTilePosition());
         assertFalse(store.searchField());
     }
 
