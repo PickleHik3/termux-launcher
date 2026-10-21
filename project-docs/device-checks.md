@@ -18,6 +18,11 @@ under twenty items; past that, the oldest are re-judged first.
   keyboard goes down and the terminal output stays at the top, no blank band above it; long
   session (scrollback): the prompt stays at the bottom with history filling the top; a restored
   Home float: no blank top · emulator.
+- 2026-10-21 · commit "refactor(chrome): the seam crossing is one module" (#94) · Home↔window
+  swipe, slow, fast, reversed mid-way, Home layout on/off, minimal on: chrome behaves as before
+  the refactor (bar still, extra keys fold, no dock re-dress); with the Home layout on and its own
+  Style or design, the dock dips and is re-dressed only out of sight, the Strip band and Lens beads
+  ease as before, the bar rides with the window's page · emulator.
 - 2026-10-21 · commit "feat(dock): three numbered designs in the picker" (#98) · Layout editor, dock
   selected: the picker shows #1 Tray, #2 Beads, #3 Strip, then Search and Drawer; fits at 360 dp,
   default and Large text (no label ellipsized) · emulator.
