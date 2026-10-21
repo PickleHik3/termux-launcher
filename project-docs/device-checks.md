@@ -1922,6 +1922,22 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
 
 ## Developer
 
+### Home dock styles on pong (10-21)
+- 2026-10-21 · feat(dock) five Home dock styles · On pong, build `1.1.0-pre.6+dev.120d6f511`: pick
+  each style in the Layout editor (Layout mode on Home, tap the dock, Row B). Taste: does Glass
+  tray's lower shelf read as thick glass rather than a cut, and are the icon reflections subtle
+  (not a second row of icons), on a dark and a pale wallpaper? Lens beads: a dock page swipe with
+  two pages — any jank while the beads ride their icons (the dock's effect is rebuilt once a
+  frame during the swipe)? Prompt line and Wall strip: a slow Home ⇄ Workspace swipe — any
+  stutter while the field/row eases with the page (one dock pass a frame), any step at the
+  settle? Taskbar: the run strip with real nvim/htop windows, names readable; the Home tile drag.
+  Wall strip: the clock row with 0, 1, 3 and 5 terminals, an attention ring after a bell. At rest
+  on Home for 30 s with each style, `dumpsys gfxinfo com.termux` shows no new frames (the Wall
+  strip clock's minute tick aside).
+- 2026-10-21 · fix(drawer) Suggested folder pull · In the drawer's categories view, open Suggested
+  and pull down from the empty area above its apps: the folder closes and the drawer stays open
+  at its root (it used to close the whole drawer). A pull down at the root still closes it.
+
 ### Living glass (10-19)
 - 2026-10-19 · feat(glass) living glass · Taste on pong, on a dark and on a pale wallpaper, under
   Clear and Mist: does a moving pane read as glass with weight (the rim thickening ahead, thinning
