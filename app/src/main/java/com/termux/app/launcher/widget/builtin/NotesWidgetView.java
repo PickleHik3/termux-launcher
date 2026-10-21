@@ -25,7 +25,7 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 /**
- * A markdown file in the home folder ({@code ~/notes/scratch.md} by default) as a scratchpad:
+ * A markdown file in the home folder ({@code ~/notes/scratch.md} by default) as the Notes widget:
  * its first lines in the terminal's monospace face, headings in the primary colour, checked
  * items dimmed, and how long ago it was edited. Tapping it opens the file in the user's editor
  * in a terminal window; what the editor saves shows here straight away. The wide card switches
@@ -54,7 +54,7 @@ public class NotesWidgetView extends BuiltinWidgetView
     private static final long SAMPLE_AGE_MS = 2 * 60_000L;
 
     /** How the card's age label is worded. */
-    private enum AgeLabel { NAME_COMPACT, NAME_EDITED, COMPACT }
+    private enum AgeLabel { AGE }
 
     @Nullable private MarkdownFileSource source;
     @Nullable private MarkdownFileSource.Snapshot snapshot;
@@ -161,6 +161,14 @@ public class NotesWidgetView extends BuiltinWidgetView
 
     // ----- layout ---------------------------------------------------------------------------
 
+    /**
+     * A card of two rows is never zoomed: its body block fills the height with more lines at the
+     * Body role. Zoomed, a tall cell drew the empty note's "Tap to write" near twice Body.
+     */
+    @Override protected boolean zoomsToFill(@NonNull BuiltinWidgetSpan span) {
+        return !span.isTall();
+    }
+
     @Override protected void onBuild(@NonNull FrameLayout frame, @NonNull BuiltinWidgetSpan span,
                                      @NonNull BuiltinWidgetUi ui) {
         build(frame, span, ui);
@@ -200,47 +208,123 @@ public class NotesWidgetView extends BuiltinWidgetView
     }
 
     @NonNull private FitStack buildTwoByOne(@NonNull BuiltinWidgetUi ui,
-                                                @Nullable MarkdownFileSource.Snapshot data) {
-        BuiltinWidgetStyle style = ui.style;
-        TextView header = ui.text(FilesWidgetPaths.fileName(shownPath()), 11f, style.sansBold,
-            style.onSurfaceVariant);
-        trackAge(header, AgeLabel.NAME_COMPACT);
-        // At 56dp the card has room for the name and one line of the note; each line that does
-        // not fit whole is left out from the last.
-        FitStack root = FitStack.column(getContext()).add(header, FitStack.ESSENTIAL, 0);
-        addPreviewLines(ui, root, data, 3, 11.5f, 1.45f);
-        inset(root, 14, 12, 14, 12, ui);
+                                            @Nullable MarkdownFileSource.Snapshot data) {
+        // One row: the header (file, age) always; the title and then body lines where they fit,
+        // each line that does not fit whole left out from the last.
+        FitStack root = FitStack.column(getContext())
+            .add(headerRow(ui, null, true), FitStack.ESSENTIAL, 0);
+        addTitle(ui, root, data, WidgetTokens.GAP_TIGHT_DP);
+        addBodyLines(ui, root, data, 2);
+        inset(root, WidgetTokens.INSET_COMPACT_DP, WidgetTokens.INSET_COMPACT_DP,
+            WidgetTokens.INSET_COMPACT_DP, WidgetTokens.INSET_COMPACT_DP, ui);
         return root;
     }
 
     @NonNull private LinearLayout buildTwoByTwo(@NonNull BuiltinWidgetUi ui,
                                                 @Nullable MarkdownFileSource.Snapshot data) {
-        String path = shownPath();
-        View caption = ui.caption(FilesWidgetPaths.fileName(path), GLYPH_NOTE,
-            FilesWidgetPaths.display(path, FilesWidgetPaths.home()));
-        LinearLayout root = ui.column(8, caption, block(ui, data, 11.5f, 1.55f, 7));
-        inset(root, 14, 14, 14, 14, ui);
+        return tallCard(ui, data, headerRow(ui, null, false));
+    }
+
+    /** Header, title, body and age: the card of every span of two rows. */
+    @NonNull private LinearLayout tallCard(@NonNull BuiltinWidgetUi ui,
+                                           @Nullable MarkdownFileSource.Snapshot data,
+                                           @NonNull View header) {
+        BuiltinWidgetStyle style = ui.style;
+        LinearLayout root = ui.column(WidgetTokens.GAP_DP, header);
+        String title = data == null ? null : NotesWidgetFormats.title(data.text);
+        if (title != null) root.addView(titleView(ui, title));
+        root.addView(block(ui, data));
+        TextView age = ui.text("", WidgetTokens.Role.LABEL.sp, style.sansMedium, style.onSurfaceVariant);
+        trackAge(age, AgeLabel.AGE);
+        root.addView(age);
+        inset(root, WidgetTokens.INSET_DP, WidgetTokens.INSET_DP, WidgetTokens.INSET_DP,
+            WidgetTokens.INSET_DP, ui);
         return root;
+    }
+
+    /** The file glyph and its name as a small label; the age on the right where {@code withAge}. */
+    @NonNull private LinearLayout headerRow(@NonNull BuiltinWidgetUi ui, @Nullable View nameOrChips,
+                                            boolean withAge) {
+        BuiltinWidgetStyle style = ui.style;
+        View name = nameOrChips;
+        if (name == null) {
+            TextView label = ui.text(FilesWidgetPaths.fileName(shownPath()),
+                WidgetTokens.Role.LABEL.sp, style.sansMedium, style.onSurfaceVariant);
+            label.setSingleLine(true);
+            label.setEllipsize(TextUtils.TruncateAt.END);
+            name = label;
+        }
+        LinearLayout row = ui.row(WidgetTokens.GAP_DP,
+            ui.glyph(GLYPH_NOTE, WidgetTokens.Role.BODY.sp, style.primary),
+            BuiltinWidgetUi.flex(name));
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        if (withAge) {
+            TextView age = ui.text("", WidgetTokens.Role.LABEL.sp, style.sansMedium,
+                style.onSurfaceVariant);
+            trackAge(age, AgeLabel.AGE);
+            row.addView(age);
+        }
+        return row;
+    }
+
+    @NonNull private TextView titleView(@NonNull BuiltinWidgetUi ui, @NonNull String title) {
+        TextView view = ui.text(title, WidgetTokens.Role.TITLE.sp, ui.style.sansBold,
+            ui.style.onSurface);
+        view.setSingleLine(true);
+        view.setEllipsize(TextUtils.TruncateAt.END);
+        return view;
+    }
+
+    private void addTitle(@NonNull BuiltinWidgetUi ui, @NonNull FitStack column,
+                          @Nullable MarkdownFileSource.Snapshot data, int gapDp) {
+        String title = data == null ? null : NotesWidgetFormats.title(data.text);
+        if (title != null) column.addRow(titleView(ui, title), ui.dp(gapDp));
+    }
+
+    /** Up to {@code max} body lines, one per row, each ellipsised; the empty note's hint if blank. */
+    private void addBodyLines(@NonNull BuiltinWidgetUi ui, @NonNull FitStack column,
+                              @Nullable MarkdownFileSource.Snapshot data, int max) {
+        BuiltinWidgetStyle style = ui.style;
+        if (data == null) return;
+        List<TextView> lines = new ArrayList<>();
+        if (!data.exists || NotesWidgetFormats.isBlank(data.text)) {
+            lines.add(ui.text(getContext().getString(R.string.bw_files_notes_empty),
+                WidgetTokens.Role.BODY.sp, style.mono, style.onSurfaceVariant));
+        } else {
+            for (String line : NotesWidgetFormats.bodyLines(data.text, max)) {
+                lines.add(ui.text(line, WidgetTokens.Role.BODY.sp, style.mono,
+                    NotesWidgetFormats.isDoneItem(line) ? style.onSurfaceVariant : style.onSurface));
+            }
+        }
+        for (TextView line : lines) {
+            line.setSingleLine(true);
+            line.setEllipsize(TextUtils.TruncateAt.END);
+            column.addRow(line, ui.dp(WidgetTokens.GAP_TIGHT_DP));
+        }
     }
 
     @NonNull private LinearLayout buildFourByOne(@NonNull BuiltinWidgetUi ui,
                                                  @Nullable MarkdownFileSource.Snapshot data) {
         BuiltinWidgetStyle style = ui.style;
         String path = shownPath();
-        TextView header = ui.text(FilesWidgetPaths.fileName(path), 11f, style.sansBold,
-            style.onSurfaceVariant);
-        trackAge(header, AgeLabel.NAME_EDITED);
+        String title = data == null ? null : NotesWidgetFormats.title(data.text);
         TextView line;
+        float bodySp = WidgetTokens.Role.BODY.sp;
         if (data == null) {
-            line = ui.text("", 12f, style.mono, style.onSurface);
+            line = ui.text("", bodySp, style.mono, style.onSurface);
         } else if (!data.exists || NotesWidgetFormats.isBlank(data.text)) {
-            line = ui.text(getContext().getString(R.string.bw_files_notes_empty), 12f, style.mono,
+            line = ui.text(getContext().getString(R.string.bw_files_notes_empty), bodySp, style.mono,
                 style.onSurfaceVariant);
         } else {
-            line = ui.text(TextUtils.join(" · ", NotesWidgetFormats.previewLines(data.text, 6)), 12f,
-                style.mono, style.onSurface);
+            List<String> body = NotesWidgetFormats.bodyLines(data.text, 6);
+            line = ui.text(body.isEmpty() ? "" : TextUtils.join(" · ", body), bodySp, style.mono,
+                style.onSurface);
         }
-        LinearLayout text = ui.column(5, header, line);
+        line.setSingleLine(true);
+        line.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout text = ui.column(WidgetTokens.GAP_TIGHT_DP, headerRow(ui, null, true));
+        if (title != null) text.addView(titleView(ui, title));
+        text.addView(line);
 
         LinearLayout pill = ui.row(7, ui.glyph(GLYPH_NOTE, 12f, style.onTertiaryContainer),
             ui.text(getContext().getString(R.string.bw_files_notes_note), 12f, style.sansBold,
@@ -256,14 +340,13 @@ public class NotesWidgetView extends BuiltinWidgetView
         pill.setOnClickListener(v -> onTap());
 
         LinearLayout root = ui.row(12, BuiltinWidgetUi.flex(text), pill);
-        inset(root, 16, 0, 12, 0, ui);
+        inset(root, WidgetTokens.INSET_COMPACT_DP, 0, WidgetTokens.INSET_COMPACT_DP, 0, ui);
         FilesWidgetTapRouter.install(root, ui).control(pill);
         return root;
     }
 
     @NonNull private LinearLayout buildFourByTwo(@NonNull BuiltinWidgetUi ui,
                                                  @Nullable MarkdownFileSource.Snapshot data) {
-        BuiltinWidgetStyle style = ui.style;
         String shown = shownPath();
         List<String> paths = files();
         List<String> names = new ArrayList<>();
@@ -277,11 +360,7 @@ public class NotesWidgetView extends BuiltinWidgetView
             chips.add(chip(ui, paths.get(i), names.get(i), paths.get(i).equals(shown)));
         }
         LinearLayout chipRow = ui.row(6, chips.toArray(new View[0]));
-        TextView age = ui.mono("", 10.5f);
-        trackAge(age, AgeLabel.COMPACT);
-        LinearLayout header = ui.row(8, BuiltinWidgetUi.flex(chipRow), age);
-        LinearLayout root = ui.column(8, header, block(ui, data, 12f, 1.6f, 6));
-        inset(root, 16, 14, 16, 14, ui);
+        LinearLayout root = tallCard(ui, data, headerRow(ui, chipRow, false));
         FilesWidgetTapRouter router = FilesWidgetTapRouter.install(root, ui);
         if (chips.size() > 1) for (View chip : chips) router.control(chip);
         return root;
@@ -292,7 +371,7 @@ public class NotesWidgetView extends BuiltinWidgetView
     @NonNull private TextView chip(@NonNull BuiltinWidgetUi ui, @NonNull String path,
                                    @NonNull String name, boolean selected) {
         BuiltinWidgetStyle style = ui.style;
-        TextView chip = ui.text(name, 11f, selected ? style.monoMedium : style.mono,
+        TextView chip = ui.text(name, WidgetTokens.Role.LABEL_FORCED.sp, selected ? style.monoMedium : style.mono,
             selected ? style.onPrimaryContainer : style.onSurfaceVariant);
         chip.setGravity(Gravity.CENTER);
         chip.setBackground(ui.rounded(selected ? style.primaryContainer : style.container, ui.dp(12)));
@@ -308,49 +387,17 @@ public class NotesWidgetView extends BuiltinWidgetView
     }
 
     /**
-     * Up to {@code max} one-line previews of the note under {@code column}, each ellipsised, one
-     * line height ({@code spacing} times the text size) apart.
-     */
-    private void addPreviewLines(@NonNull BuiltinWidgetUi ui, @NonNull FitStack column,
-                                 @Nullable MarkdownFileSource.Snapshot data, int max, float sp,
-                                 float spacing) {
-        BuiltinWidgetStyle style = ui.style;
-        if (data == null) return;
-        List<TextView> lines = new ArrayList<>();
-        if (!data.exists || NotesWidgetFormats.isBlank(data.text)) {
-            lines.add(ui.text(getContext().getString(R.string.bw_files_notes_empty), sp, style.mono,
-                style.onSurfaceVariant));
-        } else {
-            for (String line : NotesWidgetFormats.previewLines(data.text, max)) {
-                lines.add(ui.text(line, sp, style.mono,
-                    NotesWidgetFormats.isDoneItem(line) ? style.onSurfaceVariant : style.onSurface));
-            }
-        }
-        // A one-line TextView is as tall as its font's line; the rest of the design's line
-        // height goes between the lines.
-        float textPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp,
-            getResources().getDisplayMetrics());
-        int natural = lines.isEmpty() ? 0 : lines.get(0).getPaint().getFontMetricsInt(null);
-        int gap = Math.max(0, Math.round(textPx * spacing) - natural);
-        for (int i = 0; i < lines.size(); i++) {
-            // The header sits 5dp above the first line (the column's gap); the rest are line-height apart.
-            column.addRow(lines.get(i), i == 0 ? ui.dp(5) : gap);
-        }
-    }
-
-    /**
-     * The note as a wrapping block that fills the rest of the card: headings in primary, checked
+     * The body as a wrapping block that fills the rest of the card, in mono at Body: checked
      * items dimmed, as many lines as fit and an ellipsis on the last.
      */
     @NonNull private TextView block(@NonNull BuiltinWidgetUi ui,
-                                    @Nullable MarkdownFileSource.Snapshot data, float sp,
-                                    float spacing, int initialLines) {
+                                    @Nullable MarkdownFileSource.Snapshot data) {
         BuiltinWidgetStyle style = ui.style;
-        TextView view = ui.text("", sp, style.mono, style.onSurface);
+        TextView view = ui.text("", WidgetTokens.Role.BODY.sp, style.mono, style.onSurface);
         view.setSingleLine(false);
         view.setHorizontallyScrolling(false);
-        view.setLineSpacing(0f, spacing);
-        view.setMaxLines(initialLines);
+        view.setLineSpacing(0f, 1.25f);
+        view.setMaxLines(6);
         view.setEllipsize(TextUtils.TruncateAt.END);
         view.setGravity(Gravity.TOP | Gravity.START);
         if (data != null) {
@@ -358,7 +405,7 @@ public class NotesWidgetView extends BuiltinWidgetView
                 view.setText(getContext().getString(R.string.bw_files_notes_empty));
                 view.setTextColor(style.onSurfaceVariant);
             } else {
-                view.setText(styled(data.text, style));
+                view.setText(styled(NotesWidgetFormats.bodyLines(data.text, BLOCK_LINES), style));
             }
         }
         // Keep to the lines that fit, so the last visible one ends in an ellipsis rather than
@@ -375,16 +422,15 @@ public class NotesWidgetView extends BuiltinWidgetView
         return BuiltinWidgetUi.flexTall(view);
     }
 
-    @NonNull private static CharSequence styled(@NonNull String text, @NonNull BuiltinWidgetStyle style) {
+    @NonNull private static CharSequence styled(@NonNull List<String> lines,
+                                                @NonNull BuiltinWidgetStyle style) {
         SpannableStringBuilder out = new SpannableStringBuilder();
-        List<String> lines = NotesWidgetFormats.head(text, BLOCK_LINES);
         for (int i = 0; i < lines.size(); i++) {
             if (i > 0) out.append('\n');
             String line = lines.get(i);
             int start = out.length();
             out.append(line);
-            int color = NotesWidgetFormats.isHeading(line) ? style.primary
-                : NotesWidgetFormats.isDoneItem(line) ? style.onSurfaceVariant : 0;
+            int color = NotesWidgetFormats.isDoneItem(line) ? style.onSurfaceVariant : 0;
             if (color != 0 && out.length() > start) {
                 out.setSpan(new ForegroundColorSpan(color), start, out.length(),
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -408,20 +454,7 @@ public class NotesWidgetView extends BuiltinWidgetView
             ? NotesWidgetFormats.age(data.lastModified, System.currentTimeMillis()) : null;
         TextView view = ageView;
         if (view != null && ageLabel != null) {
-            String compact = age == null ? null : compact(age);
-            switch (ageLabel) {
-                case NAME_COMPACT:
-                    view.setText(compact == null ? name
-                        : getContext().getString(R.string.bw_files_notes_name_age, name, compact));
-                    break;
-                case NAME_EDITED:
-                    view.setText(age == null ? name
-                        : getContext().getString(R.string.bw_files_notes_name_age, name, edited(age)));
-                    break;
-                default:
-                    view.setText(compact == null ? "" : compact);
-                    break;
-            }
+            view.setText(age == null ? "" : ageText(age));
         }
         String label = getContext().getString(kind.label);
         if (data == null) {
@@ -435,19 +468,20 @@ public class NotesWidgetView extends BuiltinWidgetView
         }
     }
 
+    /** The card's age line: "2 h ago", "5 min ago", "just now", or the day it was edited. */
+    @NonNull private String ageText(@NonNull NotesWidgetFormats.Age age) {
+        switch (age.unit) {
+            case NOW: return getContext().getString(R.string.bw_files_age_label_now);
+            case MINUTES: return getContext().getString(R.string.bw_files_age_label_minutes, age.amount);
+            case HOURS: return getContext().getString(R.string.bw_files_age_label_hours, age.amount);
+            default: return compact(age);
+        }
+    }
+
     @NonNull private String compact(@NonNull NotesWidgetFormats.Age age) {
         return NotesWidgetFormats.compact(age, getContext().getString(R.string.bw_files_age_now),
             getContext().getString(R.string.bw_files_age_minutes),
             getContext().getString(R.string.bw_files_age_hours), locale(), TimeZone.getDefault());
-    }
-
-    @NonNull private String edited(@NonNull NotesWidgetFormats.Age age) {
-        switch (age.unit) {
-            case NOW: return getContext().getString(R.string.bw_files_edited_now);
-            case MINUTES:
-            case HOURS: return getContext().getString(R.string.bw_files_edited_ago, compact(age));
-            default: return getContext().getString(R.string.bw_files_edited_on, compact(age));
-        }
     }
 
     @NonNull private String spoken(@NonNull NotesWidgetFormats.Age age) {

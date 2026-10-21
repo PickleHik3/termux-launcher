@@ -26,4 +26,14 @@ public interface HostedFloatSlot {
      * a glass one so the wallpaper shows, as the card's own fill does.
      */
     int groundAlpha();
+
+    /**
+     * {@link #groundAlpha()} for a terminal drawn in {@code paletteForeground} on
+     * {@code paletteBackground}: at least that, and as much more of the background as the
+     * foreground needs to read on what the widget stands on. The terminal's ink is the palette's
+     * and never moves, so this is its veil.
+     */
+    default int groundAlpha(int paletteBackground, int paletteForeground) {
+        return groundAlpha();
+    }
 }

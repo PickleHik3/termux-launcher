@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.termux.app.launcher.home.HomeLayoutLock;
@@ -52,9 +53,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * from one place rather than from each way in and out.
          */
         default void onWidgetEditSessionChanged(boolean editing) { }
-        /** How the launcher's own widgets are drawn. */
-        @NonNull default BuiltinWidgetStyle.Direction builtinWidgetDirection() {
-            return BuiltinWidgetStyle.Direction.TONAL;
+        /** The face of every built-in widget numeral. */
+        @NonNull default BuiltinWidgetStyle.Numerals builtinWidgetNumerals() {
+            return BuiltinWidgetStyle.Numerals.SANS;
         }
         /**
          * A long press on the page's free area: the host puts up Home's long-press sheet, whose
@@ -151,7 +152,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         builtins = new BuiltinWidgetHost(pane.getContext(),
             new BuiltinWidgetServices(pane.getContext(),
                 builtinHost != null ? builtinHost : new InertBuiltinHost()),
-            host::builtinWidgetDirection);
+            host::builtinWidgetNumerals);
         pane.grid().setBuiltinFactory(builtins);
         appIcons = new HomeAppIconFactory(pane.getContext(), new HomeAppIconFactory.Listener() {
             @Override public void onUnavailableAppTapped(int id) {
@@ -871,7 +872,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (item.info == null) {
             // One of the launcher's own: a single durable write, no consent, no configure.
             if (item.builtinKind == null) return LauncherWidgetHostController.AddResult.FAILED;
-            return widgets.addBuiltin(item.builtinKind, rect, page, revision, null);
+            return widgets.addBuiltin(item.builtinKind, rect, page, revision,
+                builtins.initialConfig(item.builtinKind));
         }
         Rect bounds = pane.grid().metrics().boundsFor(rect);
         // The first options describe the same area the grid will report once the cell is laid
@@ -1104,13 +1106,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             // minimum, so a dense grid cannot squeeze one into a cell its text will not fit.
             horizontal = true; vertical = true;
             float density = pane.getResources().getDisplayMetrics().density;
-            WidgetGridMetrics.Span minSpan = metrics.spanForPixels(
-                Math.round(BuiltinWidgetSpan.ONE_BY_ONE.widthDp * density),
-                Math.round(BuiltinWidgetSpan.ONE_BY_ONE.heightDp * density));
-            minColumns = minSpan.columns > 0
-                ? Math.min(minSpan.columns, record.cell.columnSpan()) : record.cell.columnSpan();
-            minRows = minSpan.rows > 0
-                ? Math.min(minSpan.rows, record.cell.rowSpan()) : record.cell.rowSpan();
+            // Each kind names its own smallest span (Notifications has no 1×1, Glance no 1 column);
+            // a placement already below it keeps loading and may stay or shrink, never forced up.
+            BuiltinWidgetKind builtinKind = BuiltinWidgetKind.fromId(record.builtinKind);
+            WidgetGridMetrics.Span minSpan = WidgetEditPolicy.builtinMinimum(metrics,
+                builtinKind == null ? BuiltinWidgetSpan.ONE_BY_ONE : builtinKind.minSpan,
+                density, record.cell.columnSpan(), record.cell.rowSpan());
+            minColumns = minSpan.columns;
+            minRows = minSpan.rows;
         } else if (info != null && record.state == LauncherWidgetRecord.State.ACTIVE) {
             horizontal = (info.resizeMode
                 & AppWidgetProviderInfo.RESIZE_HORIZONTAL) != 0;
@@ -1164,9 +1167,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 kind == null ? builtin.builtinKind : pane.getResources().getString(kind.label));
             builtins.services().host().onSystemImeRequested();
             BuiltinWidgetConfigSheet.show(pane.getContext(), title, builtins.configFields(builtin),
-                builtin.sizeOptions(), config -> {
+                builtins.settingsOf(builtin), config -> {
                     if (widgets.updateBuiltinConfig(appWidgetId, config)) render();
-                }, () -> builtins.services().host().onSystemImeReleased());
+                }, () -> builtins.services().host().onSystemImeReleased(), kind);
             return;
         }
         exitEditMode();
@@ -1328,10 +1331,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 pane.postDelayed(mergeArm, HomeFolderPolicy.MERGE_HOVER_MS);
                 overlay.setGhostBounds(null);
             }
+            overlay.clearRefusal();
             previewDisplacement(Collections.emptyMap());
             return;
         }
         clearMergeTarget();
+        showRefusal(edit.moveCandidate.refusedBy, edit.turn.page);
         if (edit.moveCandidate.valid) {
             overlay.setGhostBounds(paneBounds(edit.moveCandidate.rect), true);
         } else if (edit.turn.page != record.page) {
@@ -1541,6 +1546,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         // Dropped over a page with no room for it: the widget goes home, and so does the page.
         boolean blocked = crossed && !committed && !canceled;
+        // A widget that would not step aside says so as the drop springs back. A drop sent home
+        // from another page clears it instead: the page it was measured on is going away, and the
+        // no-room notice below already explains that one.
+        if (canceled || (crossed && !committed)) pane.widgetEditOverlay().clearRefusal();
+        else pane.widgetEditOverlay().flashRefusal();
         if (lifted) returnDraggedCell(appWidgetId);
         // The real layout takes over on render(); a surviving translation would double the offset.
         clearDisplacementPreview(!committed);
@@ -1951,6 +1961,23 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             edit.maxColumnSpan, edit.maxRowSpan);
         pane.widgetEditOverlay().setFrameBounds(paneBounds(edit.resizeCandidate.rect));
         previewDisplacement(edit.resizeCandidate.displaced);
+        showRefusal(edit.resizeCandidate.refusedBy, record.page);
+    }
+
+    /**
+     * Tints the widgets that would not make room for what the finger asks, in the overlay's
+     * refusing red, so a grow that stops short or a drop that springs back shows who stopped it.
+     */
+    private void showRefusal(@NonNull Set<Integer> refusedBy, int page) {
+        if (refusedBy.isEmpty()) {
+            pane.widgetEditOverlay().showRefusal(Collections.emptyList());
+            return;
+        }
+        List<Rect> bounds = new ArrayList<>(refusedBy.size());
+        for (LauncherWidgetRecord other : widgets.repository().recordsOnPage(page)) {
+            if (refusedBy.contains(other.appWidgetId)) bounds.add(paneBounds(other.cell));
+        }
+        pane.widgetEditOverlay().showRefusal(bounds);
     }
 
     private void endResizeDrag() {
@@ -1959,6 +1986,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
         WidgetEditPolicy.Candidate candidate = edit.resizeCandidate;
         edit.resizeCandidate = null;
+        pane.widgetEditOverlay().flashRefusal();
         // The new span and every neighbour it pushed aside go in together: the same atomic batch
         // the move path commits, so a refused write leaves the page exactly as it was.
         if (record != null && candidate != null && !candidate.rect.equals(record.cell)

@@ -54,19 +54,17 @@ public final class TerminalWidgetView extends BuiltinWidgetView implements Hoste
             sample.setMaxLines(3);
             sample.setTextColor(style.onSurface);
             sample.setGravity(Gravity.START | Gravity.BOTTOM);
-            sample.setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10));
+            int pad = ui.dp(WidgetTokens.INSET_COMPACT_DP);
+            sample.setPadding(pad, pad, pad, pad);
             frame.addView(sample, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             paneFrame = null;
             endedLabel = null;
             return;
         }
-        // The card's rim is drawn under the content; the terminal's ground stops inside it.
-        int rim = style.hasRim() ? (int) Math.ceil(style.rimWidthPx) : 0;
         FrameLayout pane = new FrameLayout(getContext());
         FrameLayout.LayoutParams paneParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        paneParams.setMargins(rim, rim, rim, rim);
         frame.addView(pane, paneParams);
         paneFrame = pane;
         TextView label = ui.sans(getResources().getText(R.string.terminal_widget_ended), 13f, false);
@@ -75,7 +73,7 @@ public final class TerminalWidgetView extends BuiltinWidgetView implements Hoste
         label.setEllipsize(TextUtils.TruncateAt.END);
         label.setGravity(Gravity.CENTER);
         label.setTextColor(style.onSurfaceVariant);
-        label.setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(8));
+        label.setPadding(ui.dp(WidgetTokens.INSET_DP), ui.dp(WidgetTokens.GAP_DP), ui.dp(WidgetTokens.INSET_DP), ui.dp(WidgetTokens.GAP_DP));
         label.setVisibility(ended ? VISIBLE : GONE);
         frame.addView(label, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -127,6 +125,30 @@ public final class TerminalWidgetView extends BuiltinWidgetView implements Hoste
 
     /** The card's ground: whole on the solid card, the Look's tint on its glass. */
     @Override public int groundAlpha() { return cardAlpha(); }
+
+    /**
+     * The terminal's veil: the palette's background over the card at the smallest alpha, no less
+     * than the card's own, at which the palette's foreground reads at 4.5:1 and its dim (faint)
+     * foreground at 3:1 on what the widget stands on ({@link #groundSurface}). By day over a
+     * dark wallpaper a light palette's dark words stood on the see-through card and vanished.
+     */
+    @Override public int groundAlpha(int paletteBackground, int paletteForeground) {
+        return terminalGroundAlpha(cardAlpha(), groundSurface(), paletteBackground,
+            paletteForeground);
+    }
+
+    /** {@link #groundAlpha(int, int)} as arithmetic, for tests. */
+    static int terminalGroundAlpha(int cardAlpha, int groundSurface, int paletteBackground,
+                                   int paletteForeground) {
+        if (cardAlpha >= 255) return 255;
+        com.termux.app.chrome.OnGlass.Resolution veil =
+            com.termux.app.chrome.OnGlass.resolveFixedInk(groundSurface,
+                android.graphics.Color.TRANSPARENT, paletteForeground,
+                com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT,
+                com.termux.app.terminal.PaneGlass.dimTerminalInk(paletteForeground),
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT, paletteBackground, 255);
+        return Math.max(cardAlpha, android.graphics.Color.alpha(veil.veil));
+    }
 
     /**
      * How long the card's ground or corner has to rest before the pane in it is dressed again. A

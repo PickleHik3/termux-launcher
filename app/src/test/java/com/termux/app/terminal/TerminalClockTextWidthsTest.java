@@ -12,7 +12,7 @@ import java.util.List;
 public class TerminalClockTextWidthsTest {
 
     /** A measurer whose answer depends on the text and on a "paint" the test moves. */
-    private static final class CountingMeasurer implements TerminalClockWidget.TextWidths.Measurer {
+    private static final class CountingMeasurer implements ClockFaceRenderer.TextWidths.Measurer {
         final List<String> measured = new ArrayList<>();
         float scale = 1f;
 
@@ -25,7 +25,7 @@ public class TerminalClockTextWidthsTest {
 
     @Test
     public void aWidthIsMeasuredOnceForTheSameTextFaceSizeAndSpacing() {
-        TerminalClockWidget.TextWidths widths = new TerminalClockWidget.TextWidths();
+        ClockFaceRenderer.TextWidths widths = new ClockFaceRenderer.TextWidths();
         CountingMeasurer measurer = new CountingMeasurer();
         Object face = new Object();
         float first = widths.width("MON 06 OCT", face, 24f, .2f, measurer);
@@ -38,7 +38,7 @@ public class TerminalClockTextWidthsTest {
 
     @Test
     public void anyPartOfTheKeyChangingMeasuresAgain() {
-        TerminalClockWidget.TextWidths widths = new TerminalClockWidget.TextWidths();
+        ClockFaceRenderer.TextWidths widths = new ClockFaceRenderer.TextWidths();
         CountingMeasurer measurer = new CountingMeasurer();
         Object face = new Object();
         widths.width("12:30", face, 24f, 0f, measurer);
@@ -51,11 +51,11 @@ public class TerminalClockTextWidthsTest {
 
     @Test
     public void anEvictedEntryIsMeasuredAfreshWithTheSameAnswer() {
-        TerminalClockWidget.TextWidths widths = new TerminalClockWidget.TextWidths();
+        ClockFaceRenderer.TextWidths widths = new ClockFaceRenderer.TextWidths();
         CountingMeasurer measurer = new CountingMeasurer();
         Object face = new Object();
         float first = widths.width("A", face, 10f, 0f, measurer);
-        for (int i = 0; i < TerminalClockWidget.TextWidths.CAPACITY; i++) {
+        for (int i = 0; i < ClockFaceRenderer.TextWidths.CAPACITY; i++) {
             widths.width("filler" + i, face, 10f, 0f, measurer);
         }
         int before = measurer.measured.size();
@@ -65,7 +65,7 @@ public class TerminalClockTextWidthsTest {
 
     @Test
     public void advancesAreMeasuredPerGlyphOnceAndResetWhenTheFaceMoves() {
-        TerminalClockWidget.CharAdvances advances = new TerminalClockWidget.CharAdvances();
+        ClockFaceRenderer.CharAdvances advances = new ClockFaceRenderer.CharAdvances();
         CountingMeasurer measurer = new CountingMeasurer();
         Object face = new Object();
         for (int frame = 0; frame < 20; frame++) {
@@ -88,10 +88,10 @@ public class TerminalClockTextWidthsTest {
     @Test
     public void glyphStringsAreSharedForAsciiAndEqualToValueOf() {
         for (char c = 0; c < 128; c++) {
-            assertEquals(String.valueOf(c), TerminalClockWidget.CharAdvances.charString(c));
-            assertSame(TerminalClockWidget.CharAdvances.charString(c),
-                TerminalClockWidget.CharAdvances.charString(c));
+            assertEquals(String.valueOf(c), ClockFaceRenderer.CharAdvances.charString(c));
+            assertSame(ClockFaceRenderer.CharAdvances.charString(c),
+                ClockFaceRenderer.CharAdvances.charString(c));
         }
-        assertEquals("é", TerminalClockWidget.CharAdvances.charString('é'));
+        assertEquals("é", ClockFaceRenderer.CharAdvances.charString('é'));
     }
 }

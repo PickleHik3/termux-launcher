@@ -227,7 +227,7 @@ public final class WidgetPaneView extends FrameLayout {
         // The page dots sit in a band below the grid, never over its last row. The band is kept
         // whether or not the dots show, so adding a page does not shrink every cell.
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
-        gridParams.bottomMargin = dp(DOTS_HEIGHT_DP + DOTS_BOTTOM_MARGIN_DP + DOTS_GAP_DP);
+        gridParams.bottomMargin = gridBottomInsetPx(0, getResources().getDisplayMetrics().density);
         addView(grid, gridParams);
 
         empty = new LinearLayout(context); empty.setOrientation(LinearLayout.VERTICAL);
@@ -372,6 +372,41 @@ public final class WidgetPaneView extends FrameLayout {
     }
     @NonNull public WidgetGridView grid() { return grid; }
 
+    /** The band at the pane's bottom the dock takes at rest; see {@link #setDockReservePx}. */
+    private int dockReservePx;
+
+    /**
+     * The band at the pane's bottom the dock stands over at rest
+     * ({@code KeyboardOverlayPolicy#homeGridDockReservePx}, #104): the page dots and the grid stand
+     * above it, so the grid's last row is never behind the dock. The grid's rows are cut from what
+     * is left.
+     */
+    public void setDockReservePx(int px) {
+        int wanted = Math.max(0, px);
+        if (dockReservePx == wanted) return;
+        dockReservePx = wanted;
+        float density = getResources().getDisplayMetrics().density;
+        LayoutParams gridParams = (LayoutParams) grid.getLayoutParams();
+        gridParams.bottomMargin = gridBottomInsetPx(wanted, density);
+        grid.setLayoutParams(gridParams);
+        LayoutParams dotsParams = (LayoutParams) dots.getLayoutParams();
+        dotsParams.bottomMargin = wanted + Math.round(DOTS_BOTTOM_MARGIN_DP * density);
+        dots.setLayoutParams(dotsParams);
+    }
+
+    public int dockReservePx() {
+        return dockReservePx;
+    }
+
+    /**
+     * How far above the pane's bottom the grid ends: the dock's band, then the page dots' band
+     * (kept whether or not the dots show, so adding a page does not shrink every cell).
+     */
+    static int gridBottomInsetPx(int dockReservePx, float density) {
+        return Math.max(0, dockReservePx)
+            + Math.round((DOTS_HEIGHT_DP + DOTS_BOTTOM_MARGIN_DP + DOTS_GAP_DP) * density);
+    }
+
     /**
      * A pane corner may still claim the finger that is down, so nothing in the grid runs a long
      * press of its own until it cannot. The page's frame decides that on the landing point and
@@ -391,12 +426,38 @@ public final class WidgetPaneView extends FrameLayout {
         if (editOverlay == null) {
             editOverlay = new WidgetEditOverlayView(getContext());
             editOverlay.setId(R.id.widget_edit_overlay);
+            editOverlay.setReservedArea(overlayReservedArea());
             addView(editOverlay, new LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.MATCH_PARENT));
         } else if (indexOfChild(editOverlay) != getChildCount() - 1) {
             editOverlay.bringToFront();
         }
         return editOverlay;
+    }
+
+    /**
+     * What the page's frame draws over the edit chrome for the whole session — its editing tab —
+     * in this view's coordinates. The edit chips keep clear of it.
+     */
+    public void setWidgetEditReservedArea(@Nullable WidgetEditOverlayView.ReservedArea area) {
+        editReservedArea = area;
+        if (editOverlay != null) editOverlay.setReservedArea(overlayReservedArea());
+    }
+
+    /** The reserved area moved into the overlay's own coordinates, read fresh on every ask. */
+    @Nullable private WidgetEditOverlayView.ReservedArea overlayReservedArea() {
+        WidgetEditOverlayView.ReservedArea area = editReservedArea;
+        if (area == null) return null;
+        return out -> {
+            if (!area.fill(out)) return false;
+            if (editOverlay != null) out.offset(-editOverlay.getLeft(), -editOverlay.getTop());
+            return true;
+        };
+    }
+
+    /** Redraws the edit chrome, for a frame whose tab changed size or place under it. */
+    public void invalidateWidgetEditChrome() {
+        if (editOverlay != null) editOverlay.invalidate();
     }
 
     public void hideWidgetEditOverlay() {
@@ -520,6 +581,7 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     private WidgetEditOverlayView editOverlay;
+    @Nullable private WidgetEditOverlayView.ReservedArea editReservedArea;
 
     public void render(@NonNull LauncherWidgetRepository repository,
                        @NonNull LauncherWidgetHostController.Capability capability) {

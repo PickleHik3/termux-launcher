@@ -822,6 +822,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_FANCIER_GLASS_MOTION_LIGHT, value, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_WIDGETS_ON_GLASS}. */
+    public boolean isWidgetsOnGlassEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_WIDGETS_ON_GLASS, TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_WIDGETS_ON_GLASS}. */
+    public void setWidgetsOnGlassEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_WIDGETS_ON_GLASS, value, false);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_SHOW_KEY_HINTS}. */
     public boolean isShowKeyHintsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
@@ -1175,11 +1187,20 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED, value, false);
     }
 
-    /** The direction the launcher's own widgets are drawn in: "tonal" or "pane". */
+    /**
+     * The Numerals choice of the launcher's own widgets: "sans" or "mono". A value stored by the
+     * retired Tonal/Pane direction reads as the matching choice.
+     */
     public String getAppLauncherBuiltinWidgetStyle() {
-        return SharedPreferenceUtils.getString(mSharedPreferences,
+        return normaliseBuiltinWidgetNumerals(SharedPreferenceUtils.getString(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, true);
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, true));
+    }
+
+    /** "mono" and the retired "pane" are "mono"; everything else, the retired "tonal" included, is "sans". */
+    @NonNull
+    public static String normaliseBuiltinWidgetNumerals(@Nullable String stored) {
+        return "mono".equals(stored) || "pane".equals(stored) ? "mono" : "sans";
     }
 
     public void setAppLauncherBuiltinWidgetStyle(String value) {
@@ -2497,6 +2518,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     private static String normalizeTopPaneClockStyle(String value) {
         if (TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB.equals(value)) {

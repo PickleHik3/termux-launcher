@@ -26,7 +26,7 @@ import java.util.List;
  * ({@link #setWorn}), so a Home with no glass widget holds no frame for them; the frame it handed
  * out is remembered ({@link #holds}) for the cache's in-use scan, as the panes' is.</p>
  */
-public final class LookGlassStyle implements PaneSurfaceStyle {
+public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
 
     /** What only the activity knows. */
     public interface Host {
@@ -116,6 +116,33 @@ public final class LookGlassStyle implements PaneSurfaceStyle {
             return other instanceof Identity && ((Identity) other).mValue == mValue;
         }
         @Override public int hashCode() { return System.identityHashCode(mValue); }
+    }
+
+    // ----- WidgetInkSource ---------------------------------------------------------------------
+
+    @Override @NonNull public ChromeInk.Polarity widgetPolarity() {
+        return mChrome.ink().polarity();
+    }
+
+    /**
+     * Ready when the Look's glass needs no frame (no blur), or when the frame at Base's blur is
+     * resident. Never asks for one: the wearers' own pass does that.
+     */
+    @Override public boolean widgetFrameReady() {
+        LookGlassSpec spec = spec();
+        if (!spec.wantsBlurFrame()) return true;
+        return mHost.wallpaperFrame() != null && mHost.wallpaperBlurs()
+            && mChrome.blurCache().hasRadius(spec.blurDp);
+    }
+
+    @Override @NonNull public OnGlass.Resolution widgetInk(@NonNull Rect rootRect, int body,
+                                                           int veilColor, int textInk,
+                                                           int graphicInk) {
+        return mChrome.ink().widget(rootRect, body, veilColor, textInk, graphicInk);
+    }
+
+    @Override public int widgetWallpaper(@NonNull Rect rootRect) {
+        return mChrome.ink().widgetWallpaper(rootRect);
     }
 
     // ----- PaneSurfaceStyle --------------------------------------------------------------------

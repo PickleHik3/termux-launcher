@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Analog clock settings: the two extra cities beside the phone's own. -->
+    <!-- The cities the old analog clock kept, carried for the Clock's time zones (#113). -->
     <string name="bw_clocks_zone1_label">Second clock: city or time zone</string>
     <string name="bw_clocks_zone2_label">Third clock: city or time zone</string>
 
@@ -10,17 +10,23 @@
     <string name="bw_clocks_offset_tomorrow">%1$s tomorrow</string>
     <string name="bw_clocks_offset_yesterday">%1$s yesterday</string>
 
-    <!-- The caption a Pane-style clock shows, styled like a path. -->
-    <string name="bw_clocks_pane_caption">clock</string>
-
-    <string name="bw_clocks_day">Day</string>
-    <string name="bw_clocks_year">Year</string>
-    <string name="bw_clocks_percent">%1$d%%</string>
-
     <!-- Read aloud for the widget: %1$s the time, %2$s the date. -->
     <string name="bw_clocks_description">Clock, %1$s, %2$s</string>
     <!-- Appended per world clock: %1$s the city, %2$s its time. -->
     <string name="bw_clocks_description_zone">%1$s %2$s</string>
-    <string name="bw_clocks_description_progress">Day %1$d percent done, year %2$d percent done</string>
-    <string name="bw_clocks_description_sun">Sunrise %1$s, sunset %2$s</string>
+
+    <!-- The Clock widget's gear. The six bar faces keep the status bar's own names. -->
+    <string name="bw_clock_face">Face</string>
+    <string name="bw_clock_face_analog">Analog</string>
+    <string name="bw_clock_face_numerals">Numerals</string>
+    <!-- Minimal's weight, shown while Minimal is the face. -->
+    <string name="bw_clock_weight">Weight</string>
+    <string name="bw_clock_weight_thin">Thin</string>
+    <string name="bw_clock_weight_medium">Medium</string>
+    <string name="bw_clock_seconds">Seconds</string>
+    <string name="bw_clock_24_hour">24-hour time</string>
+    <!-- The Clock's next alarm at 2×2: %1$s its time, like "07:00" or "Thu 07:00". -->
+    <string name="bw_clock_zones">Time zones</string>
+    <string name="bw_clock_zones_none">None</string>
+    <string name="bw_clock_alarm">Alarm %1$s</string>
 </resources>

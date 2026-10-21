@@ -38,7 +38,7 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
      * ({@link com.termux.app.chrome.LookGlassSpec}), never a page's or another surface's.
      */
     public interface StyleSource {
-        @NonNull BuiltinWidgetStyle.Direction direction();
+        @NonNull BuiltinWidgetStyle.Numerals numerals();
     }
 
     private final Context context;
@@ -59,13 +59,13 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
     /** The current style, resolved once and kept until {@link #onStyleChanged()}. */
     @NonNull public BuiltinWidgetStyle style() {
         if (style == null) {
-            style = BuiltinWidgetStyle.resolve(context, styleSource.direction(), false,
+            style = BuiltinWidgetStyle.resolve(context, styleSource.numerals(), false,
                 services.host().monoTypeface());
         }
         return style;
     }
 
-    /** The theme, the Look or the direction setting changed: every live view is restyled. */
+    /** The theme, the Look or the Numerals setting changed: every live view is restyled. */
     public void onStyleChanged() {
         style = null;
         BuiltinWidgetStyle next = style();
@@ -84,8 +84,32 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
         }
         view.setWidgetId(record.appWidgetId);
         view.setCells(record.cell.columnSpan(), record.cell.rowSpan());
-        view.bind(record.sizeOptions());
+        view.bind(settingsOf(record));
         return view;
+    }
+
+    /**
+     * The settings {@code record} opens with: its own, over what a retired kind it was stored as
+     * implied ({@link BuiltinWidgetAliases#settings}). The record is not rewritten.
+     */
+    @NonNull public Bundle settingsOf(@NonNull LauncherWidgetRecord record) {
+        return BuiltinWidgetAliases.settings(record.builtinKind, record.sizeOptions());
+    }
+
+    /**
+     * The settings a widget of {@code kindId} is placed with, or null for none. A new Clock takes
+     * the status bar's face and 12/24-hour setting as they are now, once
+     * ({@link ClockWidgetSettings#initial}); the widget's settings and the bar's are separate
+     * stores from then on.
+     */
+    @Nullable public Bundle initialConfig(@Nullable String kindId) {
+        if (BuiltinWidgetKind.fromId(kindId) != BuiltinWidgetKind.CLOCK) return null;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(context, false);
+        if (preferences == null) return ClockWidgetSettings.initialBundle(null, false);
+        return ClockWidgetSettings.initialBundle(preferences.getTopPaneClockStyle(),
+            preferences.isTopPaneClockAmPmEnabled());
     }
 
     @Override public void release(int appWidgetId) {
@@ -116,6 +140,7 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
             BuiltinWidgetKind kind = BuiltinWidgetKind.fromId(record.builtinKind);
             if (kind == null) return new ArrayList<>();
             view = BuiltinWidgetFactory.create(context, kind, services, style());
+            view.bind(settingsOf(record));
         }
         return view.configFields();
     }
@@ -127,10 +152,10 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
         float density = context.getResources().getDisplayMetrics().density;
         // Spans are asked of the grid in pixels, as an app widget's minWidth is: on a dense grid
         // a widget designed for two 88 dp cells takes however many of its cells make 184 dp.
-        BuiltinWidgetSpan smallest = BuiltinWidgetSpan.ONE_BY_ONE;
-        WidgetGridMetrics.Span minimum = metrics.spanForPixels(
-            Math.round(smallest.widthDp * density), Math.round(smallest.heightDp * density));
         for (BuiltinWidgetKind kind : BuiltinWidgetKind.values()) {
+            WidgetGridMetrics.Span minimum = metrics.spanForPixels(
+                Math.round(kind.minSpan.widthDp * density),
+                Math.round(kind.minSpan.heightDp * density));
             BuiltinWidgetSpan designed = defaultSpan(kind);
             WidgetGridMetrics.Span span = metrics.spanForPixels(
                 Math.round(designed.widthDp * density), Math.round(designed.heightDp * density));
@@ -138,13 +163,24 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
             boolean fits = span.fits && columns <= metrics.definition().columns
                 && rows <= metrics.definition().rows;
             items.add(WidgetProviderItem.builtin(0L, kind.id, context.getString(kind.label),
-                columns, rows, Math.max(1, minimum.columns), Math.max(1, minimum.rows), fits));
+                columns, rows, Math.max(1, minimum.columns), Math.max(1, minimum.rows), fits)
+                .withCard(context.getString(kind.description), sizesText(kind)));
         }
         Drawable icon = null;
         try { icon = context.getPackageManager().getApplicationIcon(context.getPackageName()); }
         catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException ignored) { }
         return new WidgetAppGroup(0L, LauncherWidgetRecord.BUILTIN_PROVIDER_PACKAGE,
             context.getString(R.string.builtin_widget_group), icon, items);
+    }
+
+    /** The kind's sizes grouped for its one card: "2 \u00d7 1 \u00b7 2 \u00d7 2 \u00b7 4 \u00d7 2". */
+    @NonNull public static String sizesText(@NonNull BuiltinWidgetKind kind) {
+        StringBuilder text = new StringBuilder();
+        for (BuiltinWidgetSpan span : kind.sizes()) {
+            if (text.length() > 0) text.append(" \u00b7 ");
+            text.append(span.columns).append(" \u00d7 ").append(span.rows);
+        }
+        return text.toString();
     }
 
     @Override @Nullable public WidgetPreviewArtwork preview(@NonNull WidgetProviderItem item,
@@ -172,7 +208,7 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
         try {
             BuiltinWidgetView view = BuiltinWidgetFactory.create(context, kind, services, style());
             view.setPreview(true);
-            view.bind(null);
+            view.bind(initialConfig(kind.id));
             view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
             view.layout(0, 0, width, height);
@@ -189,11 +225,18 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
         }
     }
 
-    /** Settings written by the sheet, as the bundle a record keeps. */
+    /**
+     * Settings written by the sheet, as the bundle a record keeps. An empty field is left out,
+     * except a Clock's time zone: there it is the user's own "none", which must be stored so a
+     * migrated Analog clock does not bring its old city back ({@link BuiltinWidgetAliases#settings}).
+     */
     @NonNull public static Bundle configOf(@NonNull Map<String, String> values) {
         Bundle bundle = new Bundle();
         for (Map.Entry<String, String> entry : values.entrySet()) {
-            if (entry.getValue() != null && !entry.getValue().isEmpty()) {
+            if (entry.getValue() == null) continue;
+            boolean zone = ClockWidgetSettings.KEY_ZONE1.equals(entry.getKey())
+                || ClockWidgetSettings.KEY_ZONE2.equals(entry.getKey());
+            if (!entry.getValue().isEmpty() || zone) {
                 bundle.putString(entry.getKey(), entry.getValue());
             }
         }

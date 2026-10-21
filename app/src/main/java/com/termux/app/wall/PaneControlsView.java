@@ -258,6 +258,17 @@ public final class PaneControlsView extends View {
     private RectF[] mButtons = new RectF[0];
     /** Each action's asked-for width, in the order they are drawn. */
     private float[] mWidths = new float[0];
+    /**
+     * The tab where it rests once fully out ({@link #restingTabBounds}), kept with what it was laid
+     * out from — the corner, the frame and its border — and laid out again only when one moved or
+     * the actions changed; never by moving the slide's progress.
+     */
+    private final RectF mRestingTab = new RectF();
+    private RectF[] mRestingButtons = new RectF[0];
+    private final RectF mRestingFrame = new RectF();
+    private int mRestingCorner = CornerZones.NONE;
+    private float mRestingBorderPx = -1f;
+    private boolean mRestingValid;
     /** The ids drawn in the error colour rather than the primary one. */
     private final List<Integer> mAlerted = new ArrayList<>();
     @Nullable private ValueAnimator mAnimator;
@@ -592,6 +603,9 @@ public final class PaneControlsView extends View {
         mButtons = new RectF[mActions.size()];
         mWidths = new float[mActions.size()];
         for (int i = 0; i < mActions.size(); i++) mButtons[i] = new RectF();
+        mRestingButtons = new RectF[mActions.size()];
+        for (int i = 0; i < mActions.size(); i++) mRestingButtons[i] = new RectF();
+        mRestingValid = false;
         for (int i = mAlerted.size() - 1; i >= 0; i--) {
             if (indexOf(mAlerted.get(i)) < 0) mAlerted.remove(i);
         }
@@ -715,6 +729,33 @@ public final class PaneControlsView extends View {
     public void tabBounds(@NonNull RectF out) {
         computeGeometry();
         out.set(mTab);
+    }
+
+    /**
+     * Where the tab sits once fully out, while it is out or coming out; false when it is down or
+     * going away. Unlike {@link #tabBounds} this does not follow the slide, so chrome that keeps
+     * clear of the tab does not hop along with it.
+     */
+    public boolean restingTabBounds(@NonNull RectF out) {
+        if (!isControlsShown()) return false;
+        if (mActions.isEmpty() || !readFrame()) {
+            out.setEmpty();
+            return false;
+        }
+        int corner = corner();
+        if (!mRestingValid || corner != mRestingCorner || mPaneBorderPx != mRestingBorderPx
+            || !mBounds.equals(mRestingFrame)) {
+            for (int i = 0; i < mActions.size(); i++) mWidths[i] = buttonWidth(mActions.get(i));
+            CornerTabGeometry.layout(corner, mBounds, mWidths, mActions.size(), dp(8), dp(5),
+                dp(TAB_HEIGHT_DP), mPaneBorderPx, dp(3),
+                dp(CornerTabGeometry.TAB_CORNER_HOLD_DP), 1f, mRestingTab, mRestingButtons);
+            mRestingCorner = corner;
+            mRestingBorderPx = mPaneBorderPx;
+            mRestingFrame.set(mBounds);
+            mRestingValid = true;
+        }
+        out.set(mRestingTab);
+        return !out.isEmpty();
     }
 
     private int indexOf(int id) {
