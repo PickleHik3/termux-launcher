@@ -22,9 +22,11 @@ the keyboard closes. Drop it **Under the keyboard** in the Layout editor to keep
 The Workspace also has the extra keys, borders and corner tabs.
 
 One layout dresses Home and the Workspace. If you want Home laid out differently, open Appearance →
-**Layout** and set the **Layout** line to **Home's own**; Home then keeps its own copy of the layout,
-with its Style, Corners, Margin and Dock design, and the row's house segment previews it. It starts
-as **One layout**. On Home, Margin is the space around the widgets, around the terminals floating
+**Layout** and set the **Layout** line to **Home's own**; Home then keeps its own choice of which
+rows show, their order and edge, and its own Dock design, Search field and Drawer tile, and the
+row's house segment previews it. The sizes stay shared with the Workspace (the apps row's and the
+Strip row's heights, the keyboard's height and chin) and so do Style, Corners and Margin, so
+nothing resizes on the swipe. It starts as **One layout**. On Home, Margin is the space around the widgets, around the terminals floating
 over Home and around the dock, all at once. Minimal mode affects only windows; Home ignores it. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 

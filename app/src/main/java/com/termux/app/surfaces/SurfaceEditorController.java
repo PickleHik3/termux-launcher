@@ -114,10 +114,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Nullable TermuxAppSharedPreferences preferences();
         /** How the place on screen is arranged: which surfaces the frame has to offer. */
         @NonNull PlaceLayout placeLayout();
-        /**
-         * The page the wall rests on, which the editor stands over: on a Home page its Style,
-         * Corners and Margin are Home's own, on a window the Workspace's.
-         */
+        /** The page the wall rests on, which the editor stands over. */
         @NonNull PaneWallPage pageOnScreen();
         @Nullable TermuxInAppKeyboard inAppKeyboard();
         boolean isInAppKeyboardShown();
@@ -263,44 +260,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return mHost.preferences();
     }
 
-    /**
-     * The page whose Style, Corners and Margin the editor edits: the one its layout session is
-     * on, which is the page the editor stands over, or that page itself before the session opens.
+    /*
+     * Style, Corners and Margin are the Workspace's on both halves of the wall, a Home layout of
+     * its own included (linked, #84): the editor edits the one value over any page, and its
+     * legends carry no scope word.
      */
-    @NonNull
-    private PaneWallPage editedPage() {
-        LayoutEditorController layout = mHost.layoutEditor();
-        PaneWallPage place = layout == null ? null : layout.editedPlace();
-        return place != null ? place : mHost.pageOnScreen();
-    }
 
-    /**
-     * Whether Style, Corners and Margin are Home's own here: the editor was opened over a Home page
-     * that holds a Home layout (ADR 0009). Over a window, and over Home on the one shared layout,
-     * they are the Workspace's.
-     */
-    private boolean editsHome() {
-        return wearsHomeShape(editedPage());
-    }
-
-    /** Whether {@code page} wears Home's own Style, Corners and Margin rather than the Workspace's. */
-    private boolean wearsHomeShape(@NonNull PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS
-            && com.termux.app.place.PlaceLayoutStore.hasHomeLayout(prefs());
-    }
-
-    /** Corners' legend: the scope word on Home, so a Home edit never reads as the Workspace's. */
+    /** Corners' legend. */
     @NonNull
     private String cornersLabel(int corners) {
-        return getString(editsHome() ? R.string.appearance_editor_corners_home
-            : R.string.appearance_editor_corners, corners);
+        return getString(R.string.appearance_editor_corners, corners);
     }
 
-    /** Margin's legend, likewise. */
+    /** Margin's legend. */
     @NonNull
     private String marginLabel(int margin) {
-        return getString(editsHome() ? R.string.appearance_editor_margin_home
-            : R.string.appearance_editor_margin, margin);
+        return getString(R.string.appearance_editor_margin, margin);
     }
 
     @Nullable
@@ -602,7 +577,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             LayoutEditorController layout = mHost.layoutEditor();
             if (layoutMode) {
                 if (layout != null) {
-                    pushLayoutShape(layout, place != null ? place : mHost.pageOnScreen());
+                    pushLayoutShape(layout);
                     layout.begin(place);
                     syncHalfControls();
                 }
@@ -719,15 +694,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (layout != null) {
             attachLayoutViews(content, layout);
             layout.setOnChangedListener(this::syncDirty);
-            // The Home filter moved the session between Home and its window: the shape the canvas
-            // draws, the Style pill and Corners and Margin are that page's from now on.
+            // The Home filter moved the session between Home and its window: the canvas, the
+            // Style pill and Corners and Margin are restated for the page now shown.
             layout.setOnPlaceShownListener(() -> {
                 pushLayoutShape(layout);
                 syncHalfControls();
             });
             // The canvas draws its first frame under the Style and the Corners and Margin the
             // user already has.
-            pushLayoutShape(layout, place != null ? place : mHost.pageOnScreen());
+            pushLayoutShape(layout);
             layout.begin(place, carried == null ? null : carried.arrangement);
             syncHalfControls();
         }
@@ -1952,7 +1927,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (panel == null || prefs == null)
             return;
         panel.setStop(mStop);
-        panel.setFloating(prefs.getLayoutStyle(editsHome())
+        panel.setFloating(prefs.getLayoutStyle()
             == TermuxAppSharedPreferences.LayoutStyle.FLOATING);
         syncLayoutControls();
         switch (AppearanceLooks.rowFor(mStop, mTarget)) {
@@ -2186,12 +2161,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             TermuxAppSharedPreferences.LayoutStyle style = floating
                 ? TermuxAppSharedPreferences.LayoutStyle.FLOATING
                 : TermuxAppSharedPreferences.LayoutStyle.DOCKED;
-            // The half the editor stands over: Home's own Style on a Home page.
-            boolean home = editsHome();
-            if (style == prefs.getLayoutStyle(home))
+            // One Style on both halves, whichever the editor stands over.
+            if (style == prefs.getLayoutStyle())
                 return;
             // Style belongs to no Look: it never moves the slider.
-            prefs.setLayoutStyle(home, style);
+            prefs.setLayoutStyle(style);
             // The same dress a launch gives: nothing decided under the old Style is carried over.
             mHost.redressChrome();
             applyStructuralPreview();
@@ -2953,11 +2927,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null)
             return;
         int corners = AppearanceLooks.cornersDp(value);
-        boolean home = editsHome();
-        prefs.setLayoutCornersDp(home, corners);
-        // The terminal's own knob is the Workspace's: Home floats wear Corners, not it.
-        if (!home)
-            prefs.setTerminalCornerRadius(corners);
+        prefs.setLayoutCornersDp(false, corners);
+        prefs.setTerminalCornerRadius(corners);
         if (mPanel != null)
             mPanel.setCornersLabel(cornersLabel(corners));
         requestGeometryPreview();
@@ -2974,11 +2945,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null)
             return;
         int margin = AppearanceLooks.marginDp(value);
-        boolean home = editsHome();
-        prefs.setLayoutMarginDp(home, margin);
-        // The pane gap is the Workspace's tiled panes': Home has none to space.
-        if (!home)
-            prefs.setTerminalPaneGap(AppearanceLooks.terminalMarginDp(margin));
+        prefs.setLayoutMarginDp(false, margin);
+        prefs.setTerminalPaneGap(AppearanceLooks.terminalMarginDp(margin));
         if (mPanel != null)
             mPanel.setMarginLabel(marginLabel(margin));
         requestGeometryPreview();
@@ -3002,11 +2970,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         TermuxAppSharedPreferences prefs = prefs();
         if (panel == null || prefs == null)
             return;
-        boolean home = editsHome();
-        int corners = AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(home));
+        int corners = AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false));
         panel.setCorners(cornersLabel(corners), corners, AppearanceLooks.CORNERS_MAX_DP);
         int margin = AppearanceLooks.marginValueFor(mHost.isFloatingDock(),
-            prefs.getLayoutMarginDp(home), prefs.getTerminalPaneGap());
+            prefs.getLayoutMarginDp(false), prefs.getTerminalPaneGap());
         panel.setMargin(marginLabel(margin), margin, AppearanceLooks.MARGIN_MAX_DP);
     }
 
@@ -3028,31 +2995,24 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * Docked.
      */
     private void pushLayoutShape(@NonNull LayoutEditorController layout) {
-        pushLayoutShape(layout, editedPage());
-    }
-
-    /** The same, for the page a session is about to open or move on: Home's values on Home. */
-    private void pushLayoutShape(@NonNull LayoutEditorController layout,
-                                 @NonNull PaneWallPage page) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
-        boolean home = wearsHomeShape(page);
-        layout.setShape(prefs.getLayoutStyle(home),
-            AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(home)),
-            AppearanceLooks.marginDp(prefs.getLayoutMarginDp(home)));
+        layout.setShape(prefs.getLayoutStyle(),
+            AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false)),
+            AppearanceLooks.marginDp(prefs.getLayoutMarginDp(false)));
     }
 
     /**
-     * The Style pill and Corners and Margin restated once the layout session stands on its page:
-     * a door naming another page than the one on screen moves the editor to that page's half.
+     * The Style pill and Corners and Margin restated once the layout session stands on its page.
+     * They are one value on both halves, so a door naming another page shows the same numbers.
      */
     private void syncHalfControls() {
         AppearanceEditorPanel panel = mPanel;
         TermuxAppSharedPreferences prefs = prefs();
         if (panel == null || prefs == null)
             return;
-        panel.setFloating(prefs.getLayoutStyle(editsHome())
+        panel.setFloating(prefs.getLayoutStyle()
             == TermuxAppSharedPreferences.LayoutStyle.FLOATING);
         syncLayoutControls();
     }

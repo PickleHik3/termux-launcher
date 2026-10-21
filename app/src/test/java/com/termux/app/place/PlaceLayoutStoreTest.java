@@ -43,7 +43,7 @@ import java.util.Arrays;
 public class PlaceLayoutStoreTest {
 
     /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
-    private static final int MIGRATED = 12;
+    private static final int MIGRATED = 13;
 
     private Application app;
     private SharedPreferences prefs;
@@ -905,17 +905,18 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
-    public void theWallStripsRowIsEachLayoutsOwn() {
+    public void theWallStripsRowIsTheWorkspaceLayoutsOwn() {
         PlaceLayoutStore store = store();
         store.setHomeLayout(true);
         PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
         home.setWallStripHeightDp(PlaceOrientation.PORTRAIT, 64);
         assertEquals(64, home.wallStripHeightDp(PlaceOrientation.PORTRAIT));
-        assertEquals("the shared layout keeps its own",
-            com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP,
+        assertEquals("the Home layout's row is the normal one's (#84)", 64,
             store.forVariant(LayoutVariant.NORMAL).wallStripHeightDp(PlaceOrientation.PORTRAIT));
-        assertTrue("a Home layout with its own row differs",
-            store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+        store.forVariant(LayoutVariant.MINIMAL).setWallStripHeightDp(PlaceOrientation.PORTRAIT, 96);
+        assertEquals("the minimal layout keeps its own", 64,
+            home.wallStripHeightDp(PlaceOrientation.PORTRAIT));
     }
 
     @Test
@@ -1193,21 +1194,21 @@ public class PlaceLayoutStoreTest {
         store.setDrawerTilePosition(DrawerTilePolicy.Position.END);
         launcher.setLayoutStyle(false, LayoutStyle.FLOATING);
         launcher.setLayoutMarginDp(false, 14);
-        launcher.setLayoutMarginDp(true, 30);
 
         store.setHomeLayout(true);
         PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
         assertEquals(Edge.TOP, home.slot(PORTRAIT, Element.APPS).edge);
-        assertEquals(1.3f, home.dockHeightScale(PORTRAIT), 0.001f);
+        assertEquals("the height is the shared one (#84)", 1.3f, home.dockHeightScale(PORTRAIT),
+            0.001f);
         assertEquals(DockStyle.LENS_BEADS, home.dockStyle());
         assertEquals(DrawerTilePolicy.Position.END, home.drawerTilePosition());
-        assertEquals("Home's shape starts as the one it wore", store.halfShape(false),
-            store.halfShape(true));
+        assertEquals("Home wears the Workspace's shape", WallHalfShape.of(LayoutStyle.FLOATING,
+            launcher.getLayoutCornersDp(false), 14), store.halfShape(true));
         assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
 
-        // From then on it is Home's own.
-        home.setDockHeightScale(PORTRAIT, 0.8f);
-        assertEquals(1.3f, store.dockHeightScale(PORTRAIT), 0.001f);
+        // From then on its rows are Home's own.
+        home.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS));
+        assertEquals(Edge.TOP, store.slot(PORTRAIT, Element.APPS).edge);
     }
 
     @Test
@@ -1418,10 +1419,8 @@ public class PlaceLayoutStoreTest {
         assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
 
         home.setDockHeightScale(PORTRAIT, store.dockHeightScale(PORTRAIT) + 0.2f);
-        assertTrue("the dock's height",
+        assertFalse("the dock's height is linked (#84)",
             store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
-        home.setDockHeightScale(PORTRAIT, store.dockHeightScale(PORTRAIT));
-        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
 
         home.setSlotOrder(PORTRAIT, Element.AZ, home.slotOrder(PORTRAIT, Element.AZ) + 2);
         assertTrue("the rows' order",
@@ -1609,14 +1608,16 @@ public class PlaceLayoutStoreTest {
             home.slot(Element.APPS).edge);
     }
 
+    /** The dock's height is linked (#84): Home's own is no difference, and it goes. */
     @Test
-    public void anUpgradeWhoseHomeDockHeightDiffersKeepsIt() {
+    public void anUpgradeWhoseHomeDockHeightDiffersWearsTheSharedOne() {
         version8WithHomeAsTheWorkspace().putFloat("layout.home.landscape.dock_height", 0.8f)
             .commit();
         PlaceLayoutStore store = store();
-        assertTrue(store.hasHomeLayout());
-        assertEquals(0.8f, store.forVariant(LayoutVariant.HOME).dockHeightScale(LANDSCAPE),
+        assertFalse(store.hasHomeLayout());
+        assertEquals(1.1f, store.forVariant(LayoutVariant.HOME).dockHeightScale(LANDSCAPE),
             0.001f);
+        assertFalse(prefs.contains("layout.home.landscape.dock_height"));
     }
 
     @Test
@@ -1632,27 +1633,28 @@ public class PlaceLayoutStoreTest {
         assertTrue(store().hasHomeLayout());
     }
 
+    /** The keyboard's height and chin are linked (#84): no difference even while always on. */
     @Test
-    public void anUpgradeWhoseHomeKeyboardDiffersAndIsAlwaysOnKeepsItAsAHomeLayout() {
+    public void anUpgradeWhoseHomeKeyboardHeightOrChinDiffersAndIsAlwaysOnIgnoresIt() {
         version8WithHomeAsTheWorkspace()
             .putBoolean("layout.home.keyboard_shown", true)
             .putFloat("layout.home.portrait.keyboard_height", 1.3f)
             .commit();
-        assertTrue(store().hasHomeLayout());
-    }
-
-    @Test
-    public void anUpgradeWhoseHomeKeyboardFormOrChinDiffersCounts() {
-        version8WithHomeAsTheWorkspace()
-            .putBoolean("layout.home.keyboard_shown", true)
-            .putString("layout.home.landscape.keyboard_form", "floating")
-            .commit();
-        assertTrue(store().hasHomeLayout());
+        assertFalse(store().hasHomeLayout());
 
         prefs.edit().clear().commit();
         version8WithHomeAsTheWorkspace()
             .putBoolean("layout.home.keyboard_shown", true)
             .putInt("layout.home.portrait.keyboard_chin", 40)
+            .commit();
+        assertFalse(store().hasHomeLayout());
+    }
+
+    @Test
+    public void anUpgradeWhoseHomeKeyboardFormDiffersCounts() {
+        version8WithHomeAsTheWorkspace()
+            .putBoolean("layout.home.keyboard_shown", true)
+            .putString("layout.home.landscape.keyboard_form", "floating")
             .commit();
         assertTrue(store().hasHomeLayout());
     }
@@ -1666,15 +1668,16 @@ public class PlaceLayoutStoreTest {
         assertFalse(store().hasHomeLayout());
     }
 
+    /** Style, Corners and Margin are linked (#84): Home's own is no difference, and it goes. */
     @Test
-    public void anUpgradeWhoseHomeShapeDiffersKeepsItAsAHomeLayout() {
+    public void anUpgradeWhoseHomeShapeDiffersWearsTheWorkspacesShape() {
         version8WithHomeAsTheWorkspace()
             .putInt(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, 30)
             .commit();
         PlaceLayoutStore store = store();
-        assertTrue(store.hasHomeLayout());
-        assertEquals(30, store.halfShape(true).marginDp);
-        assertTrue(prefs.contains("layout.home.portrait.apps_row"));
+        assertFalse(store.hasHomeLayout());
+        assertEquals(launcher.getLayoutMarginDp(false), store.halfShape(true).marginDp);
+        assertFalse(prefs.contains(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP));
     }
 
     @Test
@@ -1712,9 +1715,8 @@ public class PlaceLayoutStoreTest {
         // The user sets Home apart afterwards; a later start does not fold it back.
         PlaceLayoutStore again = store();
         again.setHomeLayout(true);
-        again.forVariant(LayoutVariant.HOME).setDockHeightScale(PORTRAIT, 0.7f);
+        again.forVariant(LayoutVariant.HOME).setAzRowShown(PORTRAIT, false);
         assertTrue(store().hasHomeLayout());
-        assertEquals(0.7f, store().forVariant(LayoutVariant.HOME).dockHeightScale(PORTRAIT),
-            0.001f);
+        assertFalse(store().forVariant(LayoutVariant.HOME).azRowShown(PORTRAIT));
     }
 }

@@ -411,10 +411,14 @@ _Avoid_: bar (for the keyboard), widget, slot (the store's word for where an ele
 
 **Home layout**:
 An opt-in layout of Home's own, for a user who wants Home laid out unlike the Workspace. Off by
-default, when Home wears the one shared layout, its **Style**, Corners and Margin included; while
-on, Home holds its own copy of all of them, and the bar and dock may change on the swipe between the
-halves. It is the Layout editor's "Layout: One layout | Home's own" line; the row's house segment
-previews Home. It is to the layout what a surface's override is to **Base**.
+default, when Home wears the one shared layout. While on, Home holds its own copy of which rows show
+(the apps row, the A–Z row, the status bar), their order, edge and under-keyboard placement, the
+**Dock design**, and the Search field and Drawer tile toggles (with the tile's position). The sizes
+stay **linked** to the shared layout either way: the apps row's height, the #3 Strip row's height,
+the keyboard's height and chin, and **Style**, Corners and Margin are one value on both halves,
+edited from either, so nothing resizes on the swipe (decided 2026-10-21, #84). The keyboard's form
+stays Home's own. It is the Layout editor's "Layout: One layout | Home's own" line; the row's house
+segment previews Home. It is to the layout what a surface's override is to **Base**.
 _Avoid_: Home variant, Home place
 
 **Layout editor**:

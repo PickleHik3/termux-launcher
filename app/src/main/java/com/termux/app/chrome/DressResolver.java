@@ -24,7 +24,11 @@ import java.util.Set;
  * holds its own). A <b>Home page</b> wears the normal layout less the extra keys, in the same Style,
  * Corners and Margin, its dock the Dock design that layout holds, unless Home holds a <b>Home
  * layout</b> of its own: then it wears that ({@link LayoutVariant#HOME}), whatever minimal mode
- * says, in Home's own Style, Corners and Margin and the design picked for it. Either way a Home
+ * says, in Home's half of Style, Corners and Margin and the design picked for it. Home's half is
+ * linked to the Workspace's (#84, the preferences' per-half accessors answer one value), and so
+ * are the layout's sizes (the store's linked keys), so the crossing never re-sizes or re-shapes
+ * the chrome; the Source still names the half, so a resolver over any source asks the same
+ * question the store answers. Either way a Home
  * page wears the status bar its layout places (#90): one bar across the wall.
  *
  * <p>Pure over a {@link Source}, so every answer is read and tested without a window; {@link
