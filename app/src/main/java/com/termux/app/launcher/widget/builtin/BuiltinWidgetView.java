@@ -893,6 +893,23 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     public final void setPreview(boolean value) { preview = value; }
     public final boolean isPreview() { return preview; }
 
+    @Nullable private com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+        preferences;
+
+    /**
+     * The app's preferences, built once for this widget rather than on every refresh: a build
+     * opens the stores and reads the font settings, while each getter reads the live store, so a
+     * setting changed since is still read as it is now. Null where they cannot be read.
+     */
+    @Nullable protected final com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+            preferences() {
+        if (preferences == null) {
+            preferences = com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(getContext(), false);
+        }
+        return preferences;
+    }
+
     @NonNull public final BuiltinWidgetStyle style() { return style; }
     @NonNull public final BuiltinWidgetSpan span() { return span; }
     @NonNull public final BuiltinWidgetKind kind() { return kind; }
