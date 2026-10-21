@@ -581,17 +581,34 @@ public final class ClockFaceRenderer {
         int backdrop = backdrop();
         int sideInk = mHasBand ? mBandInk : mOnSurface;
         boolean pale = SchemeTone.tone(sideInk) > SchemeTone.tone(backdrop);
-        mDigitInk = OnGlass.inkOn(backdrop, mOnSurface, OnGlass.TARGET_LARGE_TEXT, pale);
-        mAccentInk = OnGlass.inkOn(backdrop, mPrimary, OnGlass.TARGET_LARGE_TEXT, pale);
+        mDigitInk = faceInk(backdrop, mOnSurface, OnGlass.TARGET_LARGE_TEXT, pale);
+        mAccentInk = faceInk(backdrop, mPrimary, OnGlass.TARGET_LARGE_TEXT, pale);
         mLcdGhost = alpha(mAccentInk, LCD_GHOST_ALPHA);
-        mSecondsInk = OnGlass.inkOn(backdrop, mSecondary, OnGlass.TARGET_BODY_TEXT, pale);
-        mDateInk = OnGlass.inkOn(backdrop, mOnSurfaceVariant, OnGlass.TARGET_BODY_TEXT, pale);
-        mPeriodInk = OnGlass.inkOn(backdrop, mPrimary, OnGlass.TARGET_BODY_TEXT, pale);
+        mSecondsInk = faceInk(backdrop, mSecondary, OnGlass.TARGET_BODY_TEXT, pale);
+        mDateInk = faceInk(backdrop, mOnSurfaceVariant, OnGlass.TARGET_BODY_TEXT, pale);
+        mPeriodInk = faceInk(backdrop, mPrimary, OnGlass.TARGET_BODY_TEXT, pale);
         mPrimaryLine = alpha(mPeriodInk, .45f);
         // The flip digits stand on their card, not on the glass: measure them on what the card's
         // two passes leave of the backdrop, taking whichever side of it reads.
         int card = ColorUtils.compositeColors(alpha(mSurfacePanelHigh, FLIP_CARD_COVER), backdrop);
         mFlipDigitInk = OnGlass.inkOn(card, mOnSurface, OnGlass.TARGET_LARGE_TEXT);
+    }
+
+    /**
+     * A role's ink on the backdrop, on the {@code pale} side. A role already on that side keeps
+     * its tone and moves only as far as {@code target} asks. A role on the other side (a light
+     * theme's dark ink over a dark wallpaper's band) is first mirrored across the tone axis, as
+     * the theme's opposite scheme would set it: walked only to the target, a light theme's
+     * near-black digits stopped at 3:1, a dim grey on the dark bar.
+     */
+    @ColorInt
+    @VisibleForTesting
+    static int faceInk(@ColorInt int backdrop, @ColorInt int seed, double target, boolean pale) {
+        double seedTone = SchemeTone.tone(seed);
+        if (!OnGlass.onSide(SchemeTone.tone(backdrop), seedTone, pale)) {
+            seed = SchemeTone.toneShift(seed, (100d - seedTone) - seedTone);
+        }
+        return OnGlass.inkOn(backdrop, seed, target, pale);
     }
 
     /**
