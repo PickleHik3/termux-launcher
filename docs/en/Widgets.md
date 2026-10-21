@@ -52,12 +52,12 @@ wallpaper colours and glass:
 | **Media** | What is playing, with play, pause, previous and next. |
 | **Notifications** | Recent notifications, with **Clear all**. |
 | **Tasks** | A task list kept in `~/notes/tasks.md`. |
-| **Scratchpad** | A note kept in `~/notes/scratch.md`. |
+| **Notes** | A note kept in `~/notes/scratch.md`: the file's name, the note's first heading as a title, the text below it and how long ago it changed. |
 
-- Tasks and Scratchpad are plain markdown files, so the shell sees exactly what the card shows. Tap
-  the scratchpad to open the file in your editor.
-- The Analog clock, Tasks and Scratchpad take settings from a cog that appears while you edit the
-  page: the extra time zones, or the file path (the scratchpad can switch between several files).
+- Tasks and Notes are plain markdown files, so the shell sees exactly what the card shows. Tap
+  the note to open the file in your editor.
+- The Analog clock, Tasks and Notes take settings from a cog that appears while you edit the
+  page: the extra time zones, or the file path (Notes can switch between several files).
 - The Calendar's month view has arrows to step to the previous or next month; tap the month's name
   to come back to this one.
 - Agenda and Calendar ask for calendar access on the card itself. Notifications and Media ask for

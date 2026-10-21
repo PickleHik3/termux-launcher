@@ -54,7 +54,8 @@ public final class TerminalWidgetView extends BuiltinWidgetView implements Hoste
             sample.setMaxLines(3);
             sample.setTextColor(style.onSurface);
             sample.setGravity(Gravity.START | Gravity.BOTTOM);
-            sample.setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10));
+            int pad = ui.dp(WidgetTokens.INSET_COMPACT_DP);
+            sample.setPadding(pad, pad, pad, pad);
             frame.addView(sample, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             paneFrame = null;
@@ -72,7 +73,7 @@ public final class TerminalWidgetView extends BuiltinWidgetView implements Hoste
         label.setEllipsize(TextUtils.TruncateAt.END);
         label.setGravity(Gravity.CENTER);
         label.setTextColor(style.onSurfaceVariant);
-        label.setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(8));
+        label.setPadding(ui.dp(WidgetTokens.INSET_DP), ui.dp(WidgetTokens.GAP_DP), ui.dp(WidgetTokens.INSET_DP), ui.dp(WidgetTokens.GAP_DP));
         label.setVisibility(ended ? VISIBLE : GONE);
         frame.addView(label, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
