@@ -34,9 +34,10 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The Layout editor opened on a Home page edits the Home layout and offers only its elements —
- * the pinned apps, the A–Z index and the keyboard, whose chip is always on — while opened on a
- * window it edits the Workspace layout with the full set, as before (ADR 0008).
+ * While Home holds a Home layout, the Layout editor opened on a Home page edits it and offers only
+ * its elements — the pinned apps, the A–Z index and the keyboard, whose chip is always on — while
+ * opened on a window it edits the Workspace layout with the full set (ADR 0008, kept by ADR 0009
+ * as the opt-in Home layout).
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -56,6 +57,8 @@ public class LayoutEditorHomeLayoutTest {
         prefs.edit().clear().commit();
         launcher = new TermuxAppSharedPreferences(app, prefs, null);
         places = new PlaceLayoutStore(launcher);
+        // Home holds a Home layout of its own here; the shared layout is LayoutEditorSharedLayoutTest.
+        places.setHomeLayout(true);
     }
 
     @Test
@@ -166,37 +169,38 @@ public class LayoutEditorHomeLayoutTest {
     /** An install that never picked one, or holds an id this build cannot read, is the glass tray. */
     @Test
     public void anAbsentOrUnknownDockStyleReadsAsTheGlassTray() {
-        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
-        prefs().edit().putString("layout.home.dock_style", "ask_bar").commit();
-        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
+        PlaceLayoutStore home = places.forVariant(LayoutVariant.HOME);
+        assertEquals(DockStyle.GLASS_TRAY, home.dockStyle());
+        prefs().edit().putString("layout.home.dock_design", "ask_bar").commit();
+        assertEquals(DockStyle.GLASS_TRAY, home.dockStyle());
         assertEquals(DockStyle.GLASS_TRAY,
             places.resolve(PORTRAIT, LayoutVariant.HOME).dockStyle);
     }
 
     @Test
-    public void theDockStyleIsHomesOneValueForBothOrientations() {
+    public void theHomeLayoutsDesignIsItsOwnOneValueForBothOrientations() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
         assertTrue(plan.offersDockStyle());
         plan.showOrientation(PlaceOrientation.LANDSCAPE);
         assertEquals("live whichever orientation the toggle shows", LayoutEditorPlan.Drop.LIVE,
             plan.setDockStyle(DockStyle.TASKBAR));
-        assertEquals("taskbar", prefs().getString("layout.home.dock_style", null));
-        assertEquals(DockStyle.TASKBAR, places.dockStyle());
-        assertEquals(DockStyle.TASKBAR, places.forVariant(LayoutVariant.NORMAL).dockStyle());
+        assertEquals("taskbar", prefs().getString("layout.home.dock_design", null));
+        assertEquals(DockStyle.TASKBAR, places.forVariant(LayoutVariant.HOME).dockStyle());
+        assertEquals("the shared layout keeps its own", DockStyle.GLASS_TRAY,
+            places.forVariant(LayoutVariant.NORMAL).dockStyle());
         assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.TASKBAR));
     }
 
-    /** The Taskbar's Home tile starts at the row's start and is stored next to the dock style. */
+    /** The Taskbar's Home tile starts at the row's start and is stored next to the design. */
     @Test
-    public void theTaskbarHomeTileIsHomesOneStoredPosition() {
+    public void theHomeLayoutsDrawerTileStandsWhereItWasDropped() {
+        PlaceLayoutStore home = places.forVariant(LayoutVariant.HOME);
         assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.START,
-            places.taskbarHomeTile());
-        places.forVariant(LayoutVariant.NORMAL).setTaskbarHomeTile(
-            com.termux.app.dock.TaskbarHomeTilePolicy.Position.END);
-        assertEquals("end", prefs().getString("layout.home.taskbar_home_tile", null));
+            home.taskbarHomeTile());
+        home.setTaskbarHomeTile(com.termux.app.dock.TaskbarHomeTilePolicy.Position.END);
+        assertEquals("end", prefs().getString("layout.home.drawer_tile_position", null));
         assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.END,
-            places.taskbarHomeTile());
-        prefs().edit().putString("layout.home.taskbar_home_tile", "sideways").commit();
+            home.taskbarHomeTile());
         assertEquals(com.termux.app.dock.TaskbarHomeTilePolicy.Position.START,
             places.taskbarHomeTile());
     }
@@ -221,7 +225,7 @@ public class LayoutEditorHomeLayoutTest {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
         assertFalse(plan.offersDockStyle());
         assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.LENS_BEADS));
-        assertFalse(prefs().contains("layout.home.dock_style"));
+        assertFalse(prefs().contains("layout.dock_design"));
         assertFalse(plan.isDirty());
     }
 
@@ -232,7 +236,7 @@ public class LayoutEditorHomeLayoutTest {
         assertTrue(plan.isDirty());
 
         plan.revert();
-        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
+        assertEquals(DockStyle.GLASS_TRAY, places.forVariant(LayoutVariant.HOME).dockStyle());
         assertFalse(plan.isDirty());
     }
 
@@ -246,7 +250,7 @@ public class LayoutEditorHomeLayoutTest {
         assertFalse(plan.offersDockStyle());
         assertTrue("the Home layout's pick is still unsaved", plan.isDirty());
         plan.revert();
-        assertEquals(DockStyle.GLASS_TRAY, places.dockStyle());
+        assertEquals(DockStyle.GLASS_TRAY, places.forVariant(LayoutVariant.HOME).dockStyle());
     }
 
     private SharedPreferences prefs() {

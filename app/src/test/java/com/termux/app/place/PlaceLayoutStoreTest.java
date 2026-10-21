@@ -10,12 +10,15 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.dock.DockStyle;
+import com.termux.app.dock.TaskbarHomeTilePolicy;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import org.junit.Before;
@@ -40,7 +43,7 @@ import java.util.Arrays;
 public class PlaceLayoutStoreTest {
 
     /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
-    private static final int MIGRATED = 8;
+    private static final int MIGRATED = 9;
 
     private Application app;
     private SharedPreferences prefs;
@@ -1070,5 +1073,364 @@ public class PlaceLayoutStoreTest {
         assertTrue(PlaceChromePolicy.appsShown(store.resolve(PlaceOrientation.PORTRAIT)));
         store.setMinimal(true);
         assertTrue(PlaceChromePolicy.appsShown(store.resolve(PlaceOrientation.PORTRAIT)));
+    }
+
+    // ------------------------------------------------------------------ one layout (ADR 0009)
+
+    private static final PlaceOrientation PORTRAIT = PlaceOrientation.PORTRAIT;
+    private static final PlaceOrientation LANDSCAPE = PlaceOrientation.LANDSCAPE;
+
+    @Test
+    public void theHomeLayoutSwitchIsOffUntilTurnedOn() {
+        PlaceLayoutStore store = store();
+        assertFalse(store.hasHomeLayout());
+        assertFalse(PlaceLayoutStore.hasHomeLayout(launcher));
+        assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
+
+        store.setHomeLayout(true);
+        assertTrue(prefs.getBoolean("place.home_layout", false));
+        assertTrue(store().hasHomeLayout());
+        assertTrue(PlaceLayoutStore.hasHomeLayout(launcher));
+        assertTrue("every view answers alike",
+            store.forVariant(LayoutVariant.MINIMAL).hasHomeLayout());
+        assertEquals(LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));
+
+        store.setHomeLayout(false);
+        assertFalse(store.hasHomeLayout());
+        assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
+    }
+
+    @Test
+    public void minimalModeDressesHomeWhileItHoldsNoLayoutOfItsOwn() {
+        PlaceLayoutStore store = store();
+        store.setMinimal(true);
+        assertEquals(LayoutVariant.MINIMAL, store.variantFor(PaneWallPage.WIDGETS));
+        store.setHomeLayout(true);
+        assertEquals("a Home layout stays as set", LayoutVariant.HOME,
+            store.variantFor(PaneWallPage.WIDGETS));
+    }
+
+    @Test
+    public void turnedOnTheHomeLayoutStartsAsACopyOfWhatHomeWore() {
+        PlaceLayoutStore store = store();
+        store.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.TOP, Element.APPS));
+        store.setDockHeightScale(PORTRAIT, 1.3f);
+        store.setDockStyle(DockStyle.LENS_BEADS);
+        store.setTaskbarHomeTile(TaskbarHomeTilePolicy.Position.END);
+        launcher.setLayoutStyle(false, LayoutStyle.FLOATING);
+        launcher.setLayoutMarginDp(false, 14);
+        launcher.setLayoutMarginDp(true, 30);
+
+        store.setHomeLayout(true);
+        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        assertEquals(Edge.TOP, home.slot(PORTRAIT, Element.APPS).edge);
+        assertEquals(1.3f, home.dockHeightScale(PORTRAIT), 0.001f);
+        assertEquals(DockStyle.LENS_BEADS, home.dockStyle());
+        assertEquals(TaskbarHomeTilePolicy.Position.END, home.taskbarHomeTile());
+        assertEquals("Home's shape starts as the one it wore", store.halfShape(false),
+            store.halfShape(true));
+        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+
+        // From then on it is Home's own.
+        home.setDockHeightScale(PORTRAIT, 0.8f);
+        assertEquals(1.3f, store.dockHeightScale(PORTRAIT), 0.001f);
+    }
+
+    @Test
+    public void theDockDesignIsEachLayoutsOwnKey() {
+        PlaceLayoutStore store = store();
+        for (LayoutVariant variant : LayoutVariant.values())
+            assertEquals(DockStyle.GLASS_TRAY, store.forVariant(variant).dockStyle());
+
+        store.forVariant(LayoutVariant.NORMAL).setDockStyle(DockStyle.LENS_BEADS);
+        store.forVariant(LayoutVariant.MINIMAL).setDockStyle(DockStyle.WALL_STRIP);
+        assertEquals("lens_beads", prefs.getString("layout.dock_design", null));
+        assertEquals("wall_strip", prefs.getString("layout.minimal.dock_design", null));
+        assertFalse(prefs.contains("layout.home.dock_design"));
+        assertEquals(DockStyle.LENS_BEADS, store().forVariant(LayoutVariant.NORMAL).dockStyle());
+        assertEquals(DockStyle.WALL_STRIP, store.forVariant(LayoutVariant.MINIMAL).dockStyle());
+        assertEquals(DockStyle.GLASS_TRAY, store.forVariant(LayoutVariant.HOME).dockStyle());
+        store.setMinimal(true);
+        assertEquals("the store follows minimal mode", DockStyle.WALL_STRIP, store.dockStyle());
+    }
+
+    /**
+     * The Search field and the Drawer tile are kept beside the design they come with today, so
+     * #96 and #97 only have to read them.
+     */
+    @Test
+    public void theSearchFieldAndTheDrawerTileAreStoredWithTheDesignTheyComeWith() {
+        PlaceLayoutStore store = store();
+        assertFalse(store.searchField());
+        assertFalse(store.drawerTile());
+
+        store.setDockStyle(DockStyle.PROMPT_LINE);
+        assertTrue(prefs.getBoolean("layout.search_field", false));
+        assertFalse(prefs.getBoolean("layout.drawer_tile", true));
+        assertTrue(store.searchField());
+        assertFalse(store.drawerTile());
+
+        store.setDockStyle(DockStyle.TASKBAR);
+        assertFalse(store.searchField());
+        assertTrue(store.drawerTile());
+        assertFalse("another layout's toggles are its own",
+            store.forVariant(LayoutVariant.HOME).drawerTile());
+
+        // A layout that holds the design but never stored the toggles reads them off it.
+        prefs.edit().putString("layout.minimal.dock_design", "prompt_line").commit();
+        assertTrue(store.forVariant(LayoutVariant.MINIMAL).searchField());
+    }
+
+    @Test
+    public void theDrawerTilesPositionIsEachLayoutsOwn() {
+        PlaceLayoutStore store = store();
+        assertEquals(TaskbarHomeTilePolicy.Position.START, store.taskbarHomeTile());
+        store.setTaskbarHomeTile(TaskbarHomeTilePolicy.Position.END);
+        assertEquals("end", prefs.getString("layout.drawer_tile_position", null));
+        assertEquals(TaskbarHomeTilePolicy.Position.END, store().taskbarHomeTile());
+        assertEquals(TaskbarHomeTilePolicy.Position.START,
+            store.forVariant(LayoutVariant.HOME).taskbarHomeTile());
+        prefs.edit().putString("layout.drawer_tile_position", "sideways").commit();
+        assertEquals(TaskbarHomeTilePolicy.Position.START, store.taskbarHomeTile());
+    }
+
+    @Test
+    public void twoArrangementsDifferInTheDockRowsTheyBothWear() {
+        PlaceLayoutStore store = store();
+        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        assertFalse("seeded from the normal one", store.arrangementsDiffer(
+            LayoutVariant.HOME, LayoutVariant.NORMAL));
+
+        // The status bar and the extra keys are not Home's to wear, so they never count.
+        store.setSlot(PORTRAIT, Element.STATUS, Slot.on(Edge.BOTTOM, Element.STATUS));
+        store.setExtraKeys(PORTRAIT, RowPlacement.HIDDEN);
+        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+        // The design is not an arrangement.
+        home.setDockStyle(DockStyle.LENS_BEADS);
+        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+
+        Slot apps = home.slot(LANDSCAPE, Element.APPS);
+        home.setSlot(LANDSCAPE, Element.APPS, apps.withHidden(true));
+        assertTrue("a dock row put away, in one orientation",
+            store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+        assertTrue("either way round",
+            store.arrangementsDiffer(LayoutVariant.NORMAL, LayoutVariant.HOME));
+        home.setSlot(LANDSCAPE, Element.APPS, apps);
+        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+
+        home.setDockHeightScale(PORTRAIT, store.dockHeightScale(PORTRAIT) + 0.2f);
+        assertTrue("the dock's height",
+            store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+        home.setDockHeightScale(PORTRAIT, store.dockHeightScale(PORTRAIT));
+        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+
+        home.setSlotOrder(PORTRAIT, Element.AZ, home.slotOrder(PORTRAIT, Element.AZ) + 2);
+        assertTrue("the rows' order",
+            store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+        home.setSlotOrder(PORTRAIT, Element.AZ, store.slotOrder(PORTRAIT, Element.AZ));
+        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+
+        home.setSlotUnderKeyboard(PORTRAIT, Element.APPS, true);
+        assertTrue("a row under the keyboard",
+            store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+    }
+
+    @Test
+    public void aHomeOnTheSharedLayoutResolvesItLessTheExtraKeysAndTheBar() {
+        PlaceLayoutStore store = store();
+        store.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.TOP, Element.APPS));
+        store.setDockStyle(DockStyle.LENS_BEADS);
+        PlaceLayout window = store.resolve(PORTRAIT, PaneWallPage.TERMINAL);
+        PlaceLayout home = store.resolve(PORTRAIT, PaneWallPage.WIDGETS);
+
+        assertEquals("a window wears the layout whole", store.resolve(PORTRAIT), window);
+        assertFalse(window.slot(Element.EXTRA_KEYS).hidden);
+        assertFalse(window.slot(Element.STATUS).hidden);
+        assertEquals("the Workspace's dock stays the tray", DockStyle.GLASS_TRAY,
+            window.dockStyle);
+
+        assertTrue(home.slot(Element.EXTRA_KEYS).hidden);
+        assertTrue(home.slot(Element.STATUS).hidden);
+        assertEquals(window.slot(Element.APPS), home.slot(Element.APPS));
+        assertEquals(window.slot(Element.AZ), home.slot(Element.AZ));
+        assertEquals(DockStyle.LENS_BEADS, home.dockStyle);
+        assertFalse("Home's keyboard is up only while always on", home.keyboardShown);
+        store.setHomeKeyboardAlwaysOn(true);
+        assertTrue(store.resolve(PORTRAIT, PaneWallPage.WIDGETS).keyboardShown);
+        assertTrue("the Workspace's switch is not touched",
+            store.resolve(PORTRAIT, PaneWallPage.TERMINAL).keyboardShown);
+
+        store.setMinimal(true);
+        assertEquals("minimal on both halves",
+            store.resolve(PORTRAIT, LayoutVariant.MINIMAL).slot(Element.APPS),
+            store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.APPS));
+    }
+
+    @Test
+    public void aHomeLayoutResolvesAsTheHomeLayout() {
+        PlaceLayoutStore store = store();
+        store.setHomeLayout(true);
+        store.forVariant(LayoutVariant.HOME).setSlot(PORTRAIT, Element.APPS,
+            Slot.on(Edge.TOP, Element.APPS));
+        assertEquals(store.resolve(PORTRAIT, LayoutVariant.HOME),
+            store.resolve(PORTRAIT, PaneWallPage.WIDGETS));
+    }
+
+    // ------------------------------------------------------------------ migration to one layout
+
+    /** An install on version 8 whose Home layout was seeded from the normal one and left alone. */
+    private SharedPreferences.Editor version8WithHomeAsTheWorkspace() {
+        SharedPreferences.Editor editor = prefs.edit().putInt("place.migrated", 8);
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            String o = orientation.storageValue();
+            String apps = orientation == PORTRAIT ? "bottom" : "left";
+            editor.putString("layout." + o + ".apps_row", apps)
+                .putString("layout.home." + o + ".apps_row", apps)
+                .putFloat("layout." + o + ".dock_height", 1.1f)
+                .putFloat("layout.home." + o + ".dock_height", 1.1f)
+                // The Home layout was seeded with what it does not wear put away.
+                .putString("layout." + o + ".status_bar", "top")
+                .putString("layout.home." + o + ".status_bar", "hidden")
+                .putString("layout.home." + o + ".extra_keys", "hidden")
+                .putInt("layout.home." + o + ".widget_columns", 5);
+        }
+        return editor;
+    }
+
+    @Test
+    public void anUpgradeWhoseHomeMatchesWearsTheSharedLayoutAndHomesKeysGo() {
+        version8WithHomeAsTheWorkspace()
+            .putString("layout.home.dock_style", "lens_beads")
+            .putString("layout.home.taskbar_home_tile", "end")
+            .commit();
+        PlaceLayoutStore store = store();
+
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
+        assertFalse("the design alone is no difference", store.hasHomeLayout());
+        assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            String o = orientation.storageValue();
+            assertFalse(prefs.contains("layout.home." + o + ".apps_row"));
+            assertFalse(prefs.contains("layout.home." + o + ".dock_height"));
+            assertFalse(prefs.contains("layout.home." + o + ".status_bar"));
+            assertEquals("the widget grid stays Home's", 5,
+                prefs.getInt("layout.home." + o + ".widget_columns", 0));
+        }
+        // Home's pick dresses the shared layout, both its variants, and the old keys go.
+        assertEquals(DockStyle.LENS_BEADS, store.forVariant(LayoutVariant.NORMAL).dockStyle());
+        assertEquals(DockStyle.LENS_BEADS, store.forVariant(LayoutVariant.MINIMAL).dockStyle());
+        assertEquals(DockStyle.LENS_BEADS, store.forVariant(LayoutVariant.HOME).dockStyle());
+        assertEquals(TaskbarHomeTilePolicy.Position.END, store.taskbarHomeTile());
+        assertFalse(prefs.contains("layout.home.dock_style"));
+        assertFalse(prefs.contains("layout.home.taskbar_home_tile"));
+        assertEquals(DockStyle.LENS_BEADS,
+            store.resolve(PORTRAIT, PaneWallPage.WIDGETS).dockStyle);
+    }
+
+    @Test
+    public void anUpgradeOnPromptLineOrTaskbarStoresItsToggle() {
+        version8WithHomeAsTheWorkspace().putString("layout.home.dock_style", "prompt_line")
+            .commit();
+        PlaceLayoutStore store = store();
+        assertTrue(store.searchField());
+        assertTrue(prefs.getBoolean("layout.minimal.search_field", false));
+        assertFalse(store.drawerTile());
+
+        prefs.edit().clear().commit();
+        version8WithHomeAsTheWorkspace().putString("layout.home.dock_style", "taskbar").commit();
+        store = store();
+        assertTrue(store.drawerTile());
+        assertFalse(store.searchField());
+    }
+
+    @Test
+    public void anUpgradeWhoseHomeDockRowsDifferKeepsThemAsAHomeLayout() {
+        version8WithHomeAsTheWorkspace()
+            .putString("layout.home.portrait.apps_row", "hidden")
+            .putString("layout.home.dock_style", "lens_beads")
+            .commit();
+        PlaceLayoutStore store = store();
+        assertTrue(store.hasHomeLayout());
+        assertEquals(LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));
+        assertEquals("hidden", prefs.getString("layout.home.portrait.apps_row", null));
+        assertTrue(store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.APPS).hidden);
+        assertFalse(store.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.APPS).hidden);
+        assertEquals("Home keeps its design", DockStyle.LENS_BEADS,
+            store.forVariant(LayoutVariant.HOME).dockStyle());
+    }
+
+    @Test
+    public void anUpgradeWhoseHomeDockHeightDiffersKeepsIt() {
+        version8WithHomeAsTheWorkspace().putFloat("layout.home.landscape.dock_height", 0.8f)
+            .commit();
+        PlaceLayoutStore store = store();
+        assertTrue(store.hasHomeLayout());
+        assertEquals(0.8f, store.forVariant(LayoutVariant.HOME).dockHeightScale(LANDSCAPE),
+            0.001f);
+    }
+
+    @Test
+    public void anUpgradeWhoseHomeRowOrderDiffersKeepsIt() {
+        version8WithHomeAsTheWorkspace().putInt("layout.home.portrait.az_bar_order", 3).commit();
+        assertTrue(store().hasHomeLayout());
+    }
+
+    @Test
+    public void anUpgradeWhoseHomeRowStandsUnderTheKeyboardKeepsIt() {
+        version8WithHomeAsTheWorkspace()
+            .putBoolean("layout.home.portrait.apps_row_under_keyboard", true).commit();
+        assertTrue(store().hasHomeLayout());
+    }
+
+    @Test
+    public void anUpgradeWhoseHomeShapeDiffersKeepsItAsAHomeLayout() {
+        version8WithHomeAsTheWorkspace()
+            .putInt(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, 30)
+            .commit();
+        PlaceLayoutStore store = store();
+        assertTrue(store.hasHomeLayout());
+        assertEquals(30, store.halfShape(true).marginDp);
+        assertTrue(prefs.contains("layout.home.portrait.apps_row"));
+    }
+
+    @Test
+    public void anUpgradeWhoseHomeShapeWasSetToTheWorkspacesDropsIt() {
+        version8WithHomeAsTheWorkspace()
+            .putInt(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, launcher.getLayoutMarginDp(false))
+            .commit();
+        PlaceLayoutStore store = store();
+        assertFalse(store.hasHomeLayout());
+        assertFalse(prefs.contains(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP));
+    }
+
+    @Test
+    public void anUpgradeThatNeverSeededAHomeLayoutWearsTheSharedOne() {
+        prefs.edit().putInt("place.migrated", 8).putString("layout.portrait.apps_row", "left")
+            .commit();
+        PlaceLayoutStore store = store();
+        assertFalse(store.hasHomeLayout());
+        assertEquals(Edge.LEFT,
+            store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.APPS).edge);
+    }
+
+    @Test
+    public void aFreshInstallWearsOneLayout() {
+        PlaceLayoutStore store = store();
+        assertFalse(store.hasHomeLayout());
+        assertFalse(prefs.contains("place.home_layout"));
+        assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
+    }
+
+    @Test
+    public void theMoveToOneLayoutRunsOnce() {
+        version8WithHomeAsTheWorkspace().commit();
+        store();
+        // The user sets Home apart afterwards; a later start does not fold it back.
+        PlaceLayoutStore again = store();
+        again.setHomeLayout(true);
+        again.forVariant(LayoutVariant.HOME).setDockHeightScale(PORTRAIT, 0.7f);
+        assertTrue(store().hasHomeLayout());
+        assertEquals(0.7f, store().forVariant(LayoutVariant.HOME).dockHeightScale(PORTRAIT),
+            0.001f);
     }
 }

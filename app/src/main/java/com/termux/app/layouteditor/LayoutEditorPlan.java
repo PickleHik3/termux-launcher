@@ -39,10 +39,11 @@ import java.util.Map;
  * on the toggle through the store's own setters, the same way a drop does, so the snapshot and the
  * dirty check see every one of them.
  *
- * <p>The Workspace's layout is every window's (ADR 0003), so a write there lands on every window.
- * Home has its own (ADR 0008): the session edits the layout of the page it stands on, and the Home
- * filter ({@link #showHome}) moves it between a Home page and its window, each layout's arrangement
- * at entry kept for Undo. The session knows which place it is on, because that is what the layout
+ * <p>One layout dresses both halves (ADR 0009), so a write there lands on every window and on
+ * Home. Only while Home holds a Home layout does a Home page wear one of its own: the session
+ * edits the layout of the page it stands on, as its dress says, and the Home filter ({@link
+ * #showHome}) moves it between a Home page and its window, each layout's arrangement at entry
+ * kept for Undo. The session knows which place it is on, because that is what the layout
  * canvas draws — Home's grid, the terminal's text, the display's screen — and what decides the
  * handles worth offering: the grid's only on Home. Which elements the tray and a drop offer, and
  * whether the dock's design is picked here, are the edited layout's page's {@link Dress}.
@@ -202,10 +203,14 @@ public final class LayoutEditorPlan {
         return mShownOrientation == mDeviceOrientation;
     }
 
-    /** The arrangement the layout canvas draws: the shown orientation's, resolved. */
+    /**
+     * The arrangement the layout canvas draws: the shown orientation's, resolved as the edited
+     * layout's page wears it, so a Home page on the shared layout is drawn without the extra keys
+     * and with its own keyboard element.
+     */
     @NonNull
     public PlaceLayout shownLayout() {
-        return mPlaces.resolve(mShownOrientation);
+        return mRoot.resolve(mShownOrientation, mVariant, mDressedPage);
     }
 
     // ------------------------------------------------------------------------ what a handle does
@@ -279,14 +284,19 @@ public final class LayoutEditorPlan {
 
     /**
      * The keyboard dropped in the tray, or brought back out of it. One switch for both
-     * orientations and every place — the palette's Keyboard on/off — so the live place follows it
-     * whichever orientation the toggle shows.
+     * orientations and every window — the palette's Keyboard on/off — so the live place follows it
+     * whichever orientation the toggle shows. On a Home page it is always on instead, Home's own
+     * whichever layout Home wears: whether the keyboard is up is each half's, not the layout's.
      */
     @NonNull
     public Drop setKeyboardShown(boolean shown) {
-        if (mPlaces.isKeyboardShown() == shown)
+        boolean home = mDressedPage == PaneWallPage.WIDGETS;
+        if ((home ? mRoot.isHomeKeyboardAlwaysOn() : mPlaces.isKeyboardShown()) == shown)
             return Drop.NONE;
-        mPlaces.setKeyboardShown(shown);
+        if (home)
+            mRoot.setHomeKeyboardAlwaysOn(shown);
+        else
+            mPlaces.setKeyboardShown(shown);
         return Drop.LIVE;
     }
 
@@ -294,22 +304,26 @@ public final class LayoutEditorPlan {
 
     /**
      * Whether the dock style picker is offered: where the edited layout's page picks its Dock
-     * design, the Home layout today; the Workspace's dock has no style (home-dock-styles spec,
-     * "The choice").
+     * design, a Home page on whichever layout it wears; the Workspace's dock is the tray until
+     * #93 (home-dock-styles spec, "The choice").
      */
     public boolean offersDockStyle() {
         return dress().picksDockDesign();
     }
 
-    /** Home's dock style as picked, whether or not it is drawn yet: what the picker marks. */
+    /**
+     * The edited layout's Dock design as picked, whether or not it is drawn yet: what the picker
+     * marks. The shared layout's while Home wears it, the Home layout's while Home holds one.
+     */
     @NonNull
     public DockStyle dockStyle() {
         return mPlaces.dockStyle();
     }
 
     /**
-     * A dock style picked. One value for both orientations, so the live dock follows it whichever
-     * orientation the toggle shows; nothing is written off the Home layout.
+     * A dock style picked, for the edited layout. One value for both orientations, so the live
+     * dock follows it whichever orientation the toggle shows; nothing is written where no page
+     * picks a design.
      */
     @NonNull
     public Drop setDockStyle(@NonNull DockStyle style) {

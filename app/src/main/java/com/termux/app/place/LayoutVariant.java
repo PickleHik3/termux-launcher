@@ -3,10 +3,11 @@ package com.termux.app.place;
 import androidx.annotation.NonNull;
 
 /**
- * Which of the launcher's saved arrangements a layout belongs to. The Workspace has two, the
- * normal one and the one minimal mode stands in (CONTEXT.md); Home has one of its own, the Home
- * layout (ADR 0008), whose only elements are the dock's rows and the keyboard. Each is a whole
- * per-orientation layout, kept beside {@link PlaceOrientation} in {@link PlaceLayoutStore}'s keys.
+ * Which of the launcher's saved arrangements a layout belongs to. The shared layout has two, the
+ * normal one and the one minimal mode stands in (CONTEXT.md), worn by both halves of the wall
+ * (ADR 0009); Home may hold one of its own, the opt-in Home layout, whose only elements are the
+ * dock's rows and the keyboard. Each is a whole per-orientation layout, kept beside {@link
+ * PlaceOrientation} in {@link PlaceLayoutStore}'s keys.
  */
 public enum LayoutVariant {
     NORMAL, MINIMAL, HOME;
