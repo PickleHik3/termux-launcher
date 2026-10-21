@@ -44,7 +44,9 @@ public final class Dress {
 
     /**
      * The layout the page follows: where its arrangement is read and written, and with it the
-     * keyboard's shape (height, chin, rows and form), which the layout holds per orientation.
+     * keyboard's rows and form, which the layout holds per orientation. The Home layout's sizes
+     * (the dock's and the Strip row's heights, the keyboard's height and chin) are the normal
+     * layout's, linked (#84).
      */
     @NonNull
     public LayoutVariant layout() {

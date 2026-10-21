@@ -14,7 +14,9 @@ import java.util.List;
  * orientations, as one immutable value: what the Layout editor took
  * a copy of on entry, what its revert puts back, and — folded to a string — how it knows a bar has
  * been moved since. The three sizes ride along, so a dragged dock, keyboard or chin is exactly as
- * unsaved as a moved bar, and so does the keyboard element's on/off switch, with Home's own
+ * unsaved as a moved bar (on the Home layout they are the normal layout's, linked, so its
+ * snapshot captures and restores the values both halves share, #84), and so does the keyboard
+ * element's on/off switch, with Home's own
  * (always on), which a Home page edits on whichever layout it wears. Each layout's Dock design
  * rides along too, with its Search field and Drawer tile toggles, so a design picked or a toggle
  * flipped in the editor is undone and asked about like a move.
@@ -69,6 +71,20 @@ public final class PlaceArrangeSnapshot {
             keyboardHeightScale = places.keyboardHeightScale(orientation);
             keyboardChinDp = places.keyboardChinDp(orientation);
             wallStripHeightDp = places.wallStripHeightDp(orientation);
+        }
+
+        /** {@code base} with the four sizes {@code sizes} holds. */
+        Entry(@NonNull Entry base, @NonNull Entry sizes) {
+            orientation = base.orientation;
+            slots = base.slots.clone();
+            keyboardMode = base.keyboardMode;
+            keyboardForm = base.keyboardForm;
+            widgetColumns = base.widgetColumns;
+            widgetRows = base.widgetRows;
+            dockHeightScale = sizes.dockHeightScale;
+            keyboardHeightScale = sizes.keyboardHeightScale;
+            keyboardChinDp = sizes.keyboardChinDp;
+            wallStripHeightDp = sizes.wallStripHeightDp;
         }
 
         void restore(@NonNull PlaceLayoutStore places) {
@@ -145,6 +161,26 @@ public final class PlaceArrangeSnapshot {
         return new PlaceArrangeSnapshot(variant, entries, layout.isKeyboardShown(),
             layout.isHomeKeyboardAlwaysOn(), layout.dockStyle(), layout.searchField(),
             layout.drawerTile());
+    }
+
+    /**
+     * This snapshot with the dock's, the keyboard's, the chin's and the Strip row's sizes {@code
+     * other} holds, orientation by orientation: for a snapshot of a layout whose sizes are linked
+     * to {@code other}'s ({@link PlaceLayoutStore#sizesLinked}), taken after they may have been
+     * edited through it, so both put back the sizes as they were first found.
+     */
+    @NonNull
+    public PlaceArrangeSnapshot withSizesOf(@NonNull PlaceArrangeSnapshot other) {
+        List<Entry> entries = new ArrayList<>();
+        for (Entry entry : mEntries) {
+            Entry sizes = entry;
+            for (Entry candidate : other.mEntries) {
+                if (candidate.orientation == entry.orientation) sizes = candidate;
+            }
+            entries.add(new Entry(entry, sizes));
+        }
+        return new PlaceArrangeSnapshot(mVariant, entries, mKeyboardShown, mHomeAlwaysOn,
+            mDockStyle, mSearchField, mDrawerTile);
     }
 
     /** The variant this snapshot was taken of, and restores onto. */

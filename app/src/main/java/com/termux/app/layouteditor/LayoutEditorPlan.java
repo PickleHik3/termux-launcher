@@ -91,7 +91,9 @@ public final class LayoutEditorPlan {
     /**
      * The arrangement of every variant this session has edited, as the editor found it; what
      * Discard and ↺ put back. The variant the session opened on first; another is taken the
-     * first time the Home filter shows it, before anything can have been written to it.
+     * first time the Home filter shows it, before anything can have been written to it, except to
+     * the sizes the Home and normal layouts share (linked, #84): those it takes from the entry
+     * already kept for the other ({@link #enterVariant}).
      */
     @NonNull private final EnumMap<LayoutVariant, PlaceArrangeSnapshot> mEntries =
         new EnumMap<>(LayoutVariant.class);
@@ -129,10 +131,23 @@ public final class LayoutEditorPlan {
         mEntrySignatures.put(entry.variant(), entry.signature());
     }
 
-    /** Takes the variant's arrangement as it stands, the first time the session reaches it. */
+    /**
+     * Takes the variant's arrangement as it stands, the first time the session reaches it. Its
+     * sizes may already have been edited through a layout it shares them with (the Home and
+     * normal layouts, {@link PlaceLayoutStore#sizesLinked}), so those come from that layout's
+     * entry: both entries then hold the sizes as the session found them.
+     */
     private void enterVariant(@NonNull LayoutVariant variant) {
-        if (!mEntries.containsKey(variant))
-            keepEntry(PlaceArrangeSnapshot.capture(mRoot, variant));
+        if (mEntries.containsKey(variant))
+            return;
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(mRoot, variant);
+        for (PlaceArrangeSnapshot kept : mEntries.values()) {
+            if (PlaceLayoutStore.sizesLinked(variant, kept.variant())) {
+                entry = entry.withSizesOf(kept);
+                break;
+            }
+        }
+        keepEntry(entry);
     }
 
     /**

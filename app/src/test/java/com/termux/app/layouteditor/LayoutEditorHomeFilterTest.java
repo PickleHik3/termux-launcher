@@ -97,14 +97,15 @@ public class LayoutEditorHomeFilterTest {
     }
 
     @Test
-    public void homesSizesAreHomesOwn() {
+    public void homesSizesAreTheSharedOnes() {
         LayoutEditorPlan plan = open(PaneWallPage.TERMINAL);
         float workspaceDock = workspace().dockHeightScale(PORTRAIT);
         plan.showHome(true);
         float target = workspaceDock > 1f ? 0.9f : 1.2f;
         plan.setDockHeightScale(target);
         assertEquals(target, home().dockHeightScale(PORTRAIT), 0.001f);
-        assertEquals(workspaceDock, workspace().dockHeightScale(PORTRAIT), 0.001f);
+        assertEquals("linked (#84): the window's follows", target,
+            workspace().dockHeightScale(PORTRAIT), 0.001f);
 
         plan.setWidgetGrid(3, 4);
         assertEquals(3, plan.shownLayout().widgetColumns);
