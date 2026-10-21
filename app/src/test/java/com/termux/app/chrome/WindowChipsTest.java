@@ -110,12 +110,34 @@ public class WindowChipsTest {
     // ---------------------------------------------------------------- what each surface shows
 
     @Test
-    public void theBar_showsEveryChipOnTheWorkspace_andNothingOnHome() {
+    public void theBar_showsEveryChip_onTheWorkspaceAndOnHome() {
         assertEquals(5, workspace().chips(Surface.BAR).size());
-        assertTrue(home().chips(Surface.BAR).isEmpty());
-        assertTrue("no row, no bar",
-            new WindowChips<String>(false, false, AB, -1, 0).addFloat("f", false, true, false)
-                .chips(Surface.BAR).isEmpty());
+        assertEquals(5, home().chips(Surface.BAR).size());
+    }
+
+    /** One bar across the wall (#90): the same chips in the same order on both halves. */
+    @Test
+    public void sameBarChipsOnHomeAndTheWorkspace() {
+        List<WindowChips.Chip<String>> onHome = home().chips(Surface.BAR);
+        List<WindowChips.Chip<String>> onWorkspace = workspace().chips(Surface.BAR);
+        assertEquals(onWorkspace.size(), onHome.size());
+        for (int i = 0; i < onHome.size(); i++) {
+            assertEquals("chip " + i, onWorkspace.get(i).kind, onHome.get(i).kind);
+            assertEquals("chip " + i, onWorkspace.get(i).window, onHome.get(i).window);
+            assertEquals("chip " + i, onWorkspace.get(i).row, onHome.get(i).row);
+            assertEquals("chip " + i, onWorkspace.get(i).index, onHome.get(i).index);
+            assertEquals("chip " + i, onWorkspace.get(i).minimised, onHome.get(i).minimised);
+        }
+        assertEquals("the same chip is selected, so the bar stands still on the swipe",
+            workspace().selected(Surface.BAR), home().selected(Surface.BAR));
+    }
+
+    @Test
+    public void noRow_theBarShowsTheFloatsAlone() {
+        List<WindowChips.Chip<String>> bar = new WindowChips<String>(true, false, AB, -1, 0)
+            .addFloat("f", false, true, false).chips(Surface.BAR);
+        assertEquals(1, bar.size());
+        assertEquals("f", bar.get(0).window);
     }
 
     @Test
@@ -150,9 +172,11 @@ public class WindowChipsTest {
     }
 
     @Test
-    public void theBarSelectsNothing_onHome_orWithoutARow() {
-        assertEquals(-1, home().selected(Surface.BAR));
+    public void theBarSelects_theRowsWindowInFront_onHomeToo_andNothingWithoutARow() {
+        assertEquals("b's place", 2, home().selected(Surface.BAR));
         assertEquals(-1, new WindowChips<String>(false, false, AB, -1, 0).selected(Surface.BAR));
+        assertEquals(-1, new WindowChips<String>(true, false, AB, -1, 0)
+            .addFloat("f", false, true, true).selected(Surface.BAR));
     }
 
     @Test
@@ -230,10 +254,23 @@ public class WindowChipsTest {
         assertEquals(Meaning.Action.NONE, chips.tap(Surface.FLOAT_CHIPS, 1).action);
     }
 
+    /** A window chip tapped on Home means slide to it: the Workspace travels in on it. */
     @Test
-    public void aTapOnTheBarOnHome_meansNothing() {
-        assertEquals(Meaning.Action.NONE, home().tap(Surface.BAR, 0).action);
-        assertEquals(Meaning.Action.NONE, home().tap(Surface.BAR, 3).action);
+    public void aWindowChipTappedOnHome_meansSlideToItWithTravel() {
+        for (int chip = 0; chip < 3; chip++) {
+            Meaning<String> meaning = home().tap(Surface.BAR, chip);
+            assertEquals(Meaning.Action.SHOW_WINDOW, meaning.action);
+            assertEquals("the display's chip included", chip, meaning.row);
+            assertTrue(meaning.travel);
+        }
+    }
+
+    @Test
+    public void aFloatsChipTappedOnHome_restoresThatFloat() {
+        Meaning<String> meaning = home().tap(Surface.BAR, 3);
+        assertEquals(Meaning.Action.RESTORE_FLOAT, meaning.action);
+        assertEquals("f", meaning.window);
+        assertFalse(meaning.travel);
     }
 
     @Test
@@ -268,9 +305,18 @@ public class WindowChipsTest {
         assertEquals("f", meaning.window);
     }
 
+    /** The chip's close means on Home what it means in the Workspace. */
     @Test
-    public void aCloseOnTheBarOnHome_meansNothing() {
-        assertEquals(Meaning.Action.NONE, home().close(Surface.BAR, 0).action);
-        assertEquals(Meaning.Action.NONE, home().close(Surface.BAR, 4).action);
+    public void aCloseOnTheBarOnHome_meansWhatItMeansInTheWorkspace() {
+        for (int chip = 0; chip < 5; chip++) {
+            Meaning<String> onHome = home().close(Surface.BAR, chip);
+            Meaning<String> onWorkspace = workspace().close(Surface.BAR, chip);
+            assertEquals("chip " + chip, onWorkspace.action, onHome.action);
+            assertEquals("chip " + chip, onWorkspace.row, onHome.row);
+            assertEquals("chip " + chip, onWorkspace.window, onHome.window);
+            assertFalse(onHome.travel);
+        }
+        assertEquals(Meaning.Action.CLOSE_WINDOW, home().close(Surface.BAR, 0).action);
+        assertEquals(Meaning.Action.CLOSE_FLOAT, home().close(Surface.BAR, 4).action);
     }
 }

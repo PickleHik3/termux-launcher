@@ -75,13 +75,14 @@ public class LayoutEditorHomeLayoutTest {
     }
 
     @Test
-    public void theHomeTrayHoldsOnlyTheDockRowsAndTheKeyboard() {
+    public void theHomeTrayHoldsTheBarTheDockRowsAndTheKeyboard() {
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         places.setAzRowShown(PORTRAIT, true);
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
-        // Fresh from its seed: the status bar and the extra keys are put away, and so is the
-        // keyboard, but only the keyboard is the Home layout's to bring back.
+        // Fresh from its seed: the extra keys are put away, and so is the keyboard, but only the
+        // keyboard is the Home layout's to bring back. The bar comes shown (#90).
         assertEquals(Arrays.asList(LayoutEditorPlan.TrayItem.KEYBOARD), plan.trayItems());
+        assertFalse(plan.shownLayout().slot(Element.STATUS).hidden);
 
         plan.drop(Bar.APPS_ROW, null);
         plan.drop(Bar.AZ_INDEX, null);
@@ -89,10 +90,15 @@ public class LayoutEditorHomeLayoutTest {
         assertEquals(Arrays.asList(LayoutEditorPlan.TrayItem.PINNED_APPS,
             LayoutEditorPlan.TrayItem.AZ_INDEX, LayoutEditorPlan.TrayItem.KEYBOARD), tray);
         assertEquals(LayoutEditorPlan.Drop.NONE,
-            plan.restore(LayoutEditorPlan.TrayItem.STATUS_BAR));
-        assertEquals(LayoutEditorPlan.Drop.NONE,
             plan.restore(LayoutEditorPlan.TrayItem.EXTRA_KEYS));
+
+        // The bar is Home's to put away and bring back.
+        plan.drop(Bar.STATUS_BAR, null);
+        assertTrue(plan.trayItems().contains(LayoutEditorPlan.TrayItem.STATUS_BAR));
         assertTrue(plan.shownLayout().slot(Element.STATUS).hidden);
+        assertEquals(LayoutEditorPlan.Drop.LIVE,
+            plan.restore(LayoutEditorPlan.TrayItem.STATUS_BAR));
+        assertFalse(plan.shownLayout().slot(Element.STATUS).hidden);
     }
 
     @Test
@@ -110,9 +116,10 @@ public class LayoutEditorHomeLayoutTest {
     }
 
     @Test
-    public void theStatusBarAndTheExtraKeysStandNowhereOnTheHomeLayout() {
+    public void theExtraKeysStandNowhereOnTheHomeLayout_theBarWhereItIsPlaced() {
         PlaceLayoutStore home = places.forVariant(LayoutVariant.HOME);
-        assertFalse(LayoutChooserModel.applyDrop(home, PORTRAIT, Bar.STATUS_BAR, Edge.TOP));
+        assertTrue(LayoutChooserModel.applyDrop(home, PORTRAIT, Bar.STATUS_BAR, Edge.BOTTOM));
+        assertEquals(Edge.BOTTOM, home.resolve(PORTRAIT).slot(Element.STATUS).edge);
         assertFalse(LayoutChooserModel.applyDrop(home, PORTRAIT, Bar.EXTRA_KEYS, Edge.BOTTOM));
         assertTrue(LayoutChooserModel.applyDrop(home, PORTRAIT, Bar.APPS_ROW, Edge.TOP));
         assertEquals(Edge.TOP, home.resolve(PORTRAIT).slot(Element.APPS).edge);

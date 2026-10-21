@@ -25,8 +25,8 @@ import org.robolectric.annotation.ConscryptMode;
 
 /**
  * The Home layout (ADR 0008, opt-in since ADR 0009): a third variant beside normal and minimal, keyed like minimal,
- * seeded from the normal layout with the status bar and the extra keys put away and the keyboard
- * put away, offering only the dock's rows and the keyboard, whose element is always on.
+ * seeded from the normal layout with the extra keys put away and the keyboard put away, offering
+ * the status bar (#90), the dock's rows and the keyboard, whose element is always on.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -59,7 +59,7 @@ public class PlaceLayoutHomeLayoutTest {
     }
 
     @Test
-    public void itIsSeededFromTheNormalLayoutWithTheWorkspacesElementsPutAway() {
+    public void itIsSeededFromTheNormalLayoutWithTheExtraKeysPutAway() {
         PlaceLayoutStore store = store();
         store.setStatusBarEdge(PORTRAIT, Edge.TOP);
         store.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
@@ -70,7 +70,8 @@ public class PlaceLayoutHomeLayoutTest {
 
         PlaceLayout home = store.resolve(PORTRAIT, LayoutVariant.HOME);
 
-        assertTrue("no status bar on Home", home.slot(Element.STATUS).hidden);
+        assertFalse("the bar comes along (#90)", home.slot(Element.STATUS).hidden);
+        assertEquals(Edge.TOP, home.slot(Element.STATUS).edge);
         assertTrue("no extra keys on Home", home.slot(Element.EXTRA_KEYS).hidden);
         assertFalse("the pinned apps come along", home.slot(Element.APPS).hidden);
         assertEquals(Edge.BOTTOM, home.slot(Element.APPS).edge);
@@ -86,21 +87,22 @@ public class PlaceLayoutHomeLayoutTest {
     }
 
     @Test
-    public void theHomeLayoutNeverShowsTheStatusBarOrTheExtraKeysWhateverIsStored() {
+    public void theHomeLayoutNeverShowsTheExtraKeysWhateverIsStored_andShowsTheBarAsPlaced() {
         PlaceLayoutStore home = store().forVariant(LayoutVariant.HOME);
-        home.setSlot(PORTRAIT, Element.STATUS, Slot.on(Edge.TOP, Element.STATUS));
+        home.setSlot(PORTRAIT, Element.STATUS, Slot.on(Edge.BOTTOM, Element.STATUS));
         home.setSlot(PORTRAIT, Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS));
         PlaceLayout layout = home.resolve(PORTRAIT);
-        assertTrue(layout.slot(Element.STATUS).hidden);
+        assertFalse(layout.slot(Element.STATUS).hidden);
+        assertEquals(Edge.BOTTOM, layout.slot(Element.STATUS).edge);
         assertTrue(layout.slot(Element.EXTRA_KEYS).hidden);
         assertFalse(PlaceChromePolicy.extraKeysShown(layout));
     }
 
     @Test
-    public void onlyTheDockRowsAreOfferedOnHome() {
+    public void theBarAndTheDockRowsAreOfferedOnHome() {
         assertTrue(LayoutVariant.HOME.offers(Element.APPS));
         assertTrue(LayoutVariant.HOME.offers(Element.AZ));
-        assertFalse(LayoutVariant.HOME.offers(Element.STATUS));
+        assertTrue(LayoutVariant.HOME.offers(Element.STATUS));
         assertFalse(LayoutVariant.HOME.offers(Element.EXTRA_KEYS));
         for (Element element : Element.values()) {
             assertTrue(LayoutVariant.NORMAL.offers(element));
@@ -212,6 +214,7 @@ public class PlaceLayoutHomeLayoutTest {
         PlaceLayout reset = home.resolve(PORTRAIT);
         assertEquals("re-seeded from the normal layout as it is now", KeyboardForm.FLOATING,
             reset.keyboardForm);
-        assertTrue(reset.slot(Element.STATUS).hidden);
+        assertFalse(reset.slot(Element.STATUS).hidden);
+        assertTrue(reset.slot(Element.EXTRA_KEYS).hidden);
     }
 }

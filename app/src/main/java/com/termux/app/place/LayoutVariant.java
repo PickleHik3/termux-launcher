@@ -5,8 +5,8 @@ import androidx.annotation.NonNull;
 /**
  * Which of the launcher's saved arrangements a layout belongs to. The shared layout has two, the
  * normal one and the one minimal mode stands in (CONTEXT.md), worn by both halves of the wall
- * (ADR 0009); Home may hold one of its own, the opt-in Home layout, whose only elements are the
- * dock's rows and the keyboard. Each is a whole per-orientation layout, kept beside {@link
+ * (ADR 0009); Home may hold one of its own, the opt-in Home layout, whose elements are the
+ * status bar, the dock's rows and the keyboard. Each is a whole per-orientation layout, kept beside {@link
  * PlaceOrientation} in {@link PlaceLayoutStore}'s keys.
  */
 public enum LayoutVariant {
@@ -21,8 +21,8 @@ public enum LayoutVariant {
     /**
      * Whether the Layout editor offers this element on this variant, and whether it may ever be
      * shown there: whether a page on it wears the element, as the dress answers ({@link
-     * com.termux.app.chrome.DressResolver#wornOn}). The Home layout keeps the dock's rows (the
-     * pinned apps and the A–Z index); the status bar and the extra keys are the Workspace's alone.
+     * com.termux.app.chrome.DressResolver#wornOn}). The Home layout keeps the status bar and the
+     * dock's rows (the pinned apps and the A–Z index); the extra keys are the Workspace's alone.
      * The keyboard is not an element with a slot and is offered on every variant.
      */
     public boolean offers(@NonNull Element element) {

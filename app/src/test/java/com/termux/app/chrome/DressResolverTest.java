@@ -23,7 +23,7 @@ import java.util.EnumMap;
 /**
  * What a page wears, as the Dress resolver answers it (ADR 0009, build step 1). One layout dresses
  * both halves: with the Home layout off, a Home page wears the Workspace's normal layout (minimal
- * mode is the windows' alone) less the status bar and the extra keys, in the Workspace's Style,
+ * mode is the windows' alone) less the extra keys, in the Workspace's Style,
  * Corners and Margin, its dock in the Dock design that layout holds. With the Home layout on, a
  * Home page wears its own copy and its own shape, as ADR 0008 had it. A window wears the
  * Workspace's layout whole, its dock in the Dock design that layout holds (#93), the minimal
@@ -79,13 +79,42 @@ public class DressResolverTest {
         assertEquals(WORKSPACE, home().shape());
     }
 
-    /** The bar on Home is #90: until then Home leaves it out whichever layout it wears. */
+    /** The bar on Home (#90): Home wears the status bar, and still not the extra keys. */
     @Test
-    public void homeStillLeavesOutTheStatusBarOnEitherLayout() {
-        assertFalse(home().wears(Element.STATUS));
-        stored.homeLayout = true;
-        assertFalse(home().wears(Element.STATUS));
+    public void homeWearsTheStatusBarStillNotTheExtraKeys() {
+        assertTrue(home().wears(Element.STATUS));
         assertFalse(home().wears(Element.EXTRA_KEYS));
+        assertTrue(DressResolver.wornBy(PaneWallPage.WIDGETS, Element.STATUS));
+        assertFalse(DressResolver.wornBy(PaneWallPage.WIDGETS, Element.EXTRA_KEYS));
+    }
+
+    /** With the Home layout on too: the bar is an element of Home's own layout, offered there. */
+    @Test
+    public void homeWearsTheStatusBarOnItsOwnLayoutToo() {
+        stored.homeLayout = true;
+        assertEquals(LayoutVariant.HOME, home().layout());
+        assertTrue(home().wears(Element.STATUS));
+        assertFalse(home().wears(Element.EXTRA_KEYS));
+        assertTrue(DressResolver.wornOn(LayoutVariant.HOME, Element.STATUS));
+        assertTrue(LayoutVariant.HOME.offers(Element.STATUS));
+        assertFalse(LayoutVariant.HOME.offers(Element.EXTRA_KEYS));
+    }
+
+    /**
+     * The bar stands still on the swipe: with the Home layout off, Home and a window differ only
+     * by the extra keys, so the bar's layout, shape and the bar itself are the same on both.
+     */
+    @Test
+    public void homeAndAWindowWearTheSameBarOnOneLayout() {
+        Dress home = home();
+        Dress window = terminal();
+        assertEquals(window.layout(), home.layout());
+        assertEquals(window.shape(), home.shape());
+        assertEquals(window.wears(Element.STATUS), home.wears(Element.STATUS));
+        for (Element element : Element.values()) {
+            if (element != Element.EXTRA_KEYS)
+                assertEquals(element.name(), window.wears(element), home.wears(element));
+        }
     }
 
     @Test

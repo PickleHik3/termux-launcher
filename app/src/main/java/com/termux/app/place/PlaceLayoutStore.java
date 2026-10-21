@@ -45,8 +45,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * layout, normal or minimal, less what Home leaves out ({@link #resolve(PlaceOrientation,
  * PaneWallPage)}), unless Home holds a <b>Home layout</b> of its own ({@link #hasHomeLayout},
  * {@code place.home_layout}). That is a third arrangement ({@link LayoutVariant#HOME}), under
- * {@code layout.home.<portrait|landscape>.<key>}: the dock's rows and the keyboard are its only
- * elements, so the status bar and the extra keys always resolve put away there. Turned on, it
+ * {@code layout.home.<portrait|landscape>.<key>}: the status bar, the dock's rows and the keyboard
+ * are its elements, so the extra keys always resolve put away there. Turned on, it
  * starts as a copy of what Home wore ({@link #setHomeLayout}). Home's keyboard element is its own
  * whichever layout Home wears ({@code layout.home.keyboard_shown}, absent is put away): shown, it
  * is always on ({@link #isHomeKeyboardAlwaysOn}). The widget grid is Home's alone, so its columns
@@ -64,7 +64,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * kept in this file's key scheme too. Version 7 folds the per-place minimal flags into the one
  * launcher-wide flag. Version 8 drops the alphabets index's minimised flag: the pull tab is gone,
  * and an index that was minimised reads as shown. Version 9 moves Home onto the shared layout,
- * keeping a Home that differed as a Home layout ({@link #migrateToOneLayout}).
+ * keeping a Home that differed as a Home layout ({@link #migrateToOneLayout}). Version 10 gives a
+ * kept Home layout the Workspace's status bar, which Home now wears ({@link
+ * #migrateHomeLayoutToTheBar}).
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
  * tested as one.
@@ -72,7 +74,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the current ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 9;
+    @VisibleForTesting static final int MIGRATION_VERSION = 10;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -442,11 +444,18 @@ public final class PlaceLayoutStore {
      * never counts; neither do the keyboard's sizes and form.
      */
     public boolean arrangementsDiffer(@NonNull LayoutVariant a, @NonNull LayoutVariant b) {
+        return arrangementsDiffer(a, b, null);
+    }
+
+    /** {@link #arrangementsDiffer(LayoutVariant, LayoutVariant)}, {@code ignored} left out too. */
+    private boolean arrangementsDiffer(@NonNull LayoutVariant a, @NonNull LayoutVariant b,
+                                       @Nullable Element ignored) {
         PlaceLayoutStore first = forVariant(a);
         PlaceLayoutStore second = forVariant(b);
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             for (Element element : Element.values()) {
-                if (!DressResolver.wornOn(a, element) || !DressResolver.wornOn(b, element))
+                if (element == ignored || !DressResolver.wornOn(a, element)
+                    || !DressResolver.wornOn(b, element))
                     continue;
                 if (!first.slot(orientation, element).equals(second.slot(orientation, element)))
                     return true;
@@ -524,8 +533,8 @@ public final class PlaceLayoutStore {
 
     /**
      * {@code variant}'s layout as {@code page} wears it. A window wears it whole, its dock the
-     * tray. A Home page on the shared layout leaves out what Home never wears (the status bar and
-     * the extra keys, {@link DressResolver#wornBy}), its keyboard element is always on, Home's own
+     * tray. A Home page on the shared layout leaves out what Home never wears (the extra keys,
+     * {@link DressResolver#wornBy}), its keyboard element is always on, Home's own
      * whichever layout it wears ({@link #isHomeKeyboardAlwaysOn}), and its dock draws the design
      * the layout holds. On the Home layout it is that layout as it resolves.
      */
@@ -552,7 +561,7 @@ public final class PlaceLayoutStore {
         for (Element element : Element.values()) {
             Slot slot = slot(orientation, element);
             // An element the variant does not offer is never shown on it, whatever is stored: the
-            // Home layout has no status bar and no extra keys.
+            // Home layout has no extra keys.
             slots.put(element, variant.offers(element) ? slot : slot.withHidden(true));
         }
         // The terminal's own toolbar switch can still have put the extra keys away everywhere.
@@ -1265,7 +1274,7 @@ public final class PlaceLayoutStore {
      * has stored nothing: the normal layout as it stands, with the variant's own changes taken off
      * it. The minimal layout is the normal one with {@link MinimalMode#apply}, which is what
      * minimal mode looked like before it had a layout of its own; the Home layout is the normal
-     * one with the elements it does not offer (the status bar, the extra keys) put away, its
+     * one with the element it does not offer (the extra keys) put away, its
      * keyboard element put away by having no key yet. Only what the normal layout has actually
      * stored is copied, so a default that still moves - the dock's height with its style - keeps
      * moving. Written once; from then on the user's edits are the layout, and {@link #clear} puts
@@ -1349,6 +1358,7 @@ public final class PlaceLayoutStore {
         // Version 9 compares the layouts through the store's own reads, which see only what the
         // steps before it have applied.
         if (fromVersion < 9) migrateToOneLayout();
+        if (fromVersion < 10) migrateHomeLayoutToTheBar();
         mStore.edit().putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
         mRevision.incrementAndGet();
     }
@@ -1371,8 +1381,10 @@ public final class PlaceLayoutStore {
         String legacyTile = homeKey(LEGACY_KEY_HOME_TASKBAR_HOME_TILE);
         String style = mStore.getString(legacyStyle, null);
         String tile = mStore.getString(legacyTile, null);
+        // The status bar is no difference: Home wore none before version 10, so what its layout
+        // held for the bar was only ever the seed's "put away" (#90).
         boolean differs = homeHoldsArrangement()
-            && (arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL)
+            && (arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL, Element.STATUS)
                 || (isHomeKeyboardAlwaysOn()
                     && keyboardsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL)));
         differs |= !halfShape(true).equals(halfShape(false));
@@ -1396,6 +1408,27 @@ public final class PlaceLayoutStore {
             editor.remove(TERMUX_APP.KEY_HOME_LAYOUT_STYLE)
                 .remove(TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS)
                 .remove(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP);
+        }
+        editor.apply();
+    }
+
+    /**
+     * Version 10: Home wears the status bar (#90). A Home layout held the bar only as its seed
+     * put it away, never as the user placed it, so it takes the Workspace's normal bar instead:
+     * where the bar stands, whether it is put away, its place in the stack and the edge it comes
+     * back to, in either orientation. A Home layout that holds nothing yet is seeded on first use
+     * as before, now with the bar.
+     */
+    private void migrateHomeLayoutToTheBar() {
+        if (!homeHoldsArrangement()) return;
+        Map<String, ?> all = mStore.getAll();
+        SharedPreferences.Editor editor = mStore.edit();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : new String[] {KEY_STATUS_BAR, orderKeyName(Element.STATUS),
+                    restoreEdgeKeyName(Element.STATUS)}) {
+                copy(editor, all, layoutKey(LayoutVariant.NORMAL, orientation, key),
+                    layoutKey(LayoutVariant.HOME, orientation, key));
+            }
         }
         editor.apply();
     }

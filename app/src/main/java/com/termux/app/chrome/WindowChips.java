@@ -31,8 +31,8 @@ public final class WindowChips<W> {
     /** A surface that shows the chips, each counting its own index. */
     public enum Surface {
         /**
-         * The Workspace's bar and its window column: every chip, and nothing on Home, which wears
-         * no status bar.
+         * The status bar and its window column: every chip, the same on both halves of the wall
+         * (#90); a window's tap on Home slides the Workspace in.
          */
         BAR,
         /** Home's Taskbar run strip: every chip; a window's tap slides the Workspace in. */
@@ -172,9 +172,6 @@ public final class WindowChips<W> {
     @NonNull
     public List<Chip<W>> chips(@NonNull Surface surface) {
         switch (surface) {
-            case BAR:
-                return barShows() ? Collections.unmodifiableList(mChips)
-                    : Collections.<Chip<W>>emptyList();
             case FLOAT_CHIPS: {
                 List<Chip<W>> minimised = new ArrayList<>(mFloats);
                 for (Chip<W> chip : mChips) {
@@ -200,12 +197,12 @@ public final class WindowChips<W> {
 
     /**
      * The chip {@code surface} selects, or -1: on the bar the row's window in front, held to the
-     * row; on the strips the float in focus, else the same; none among the float chips.
+     * row, alike on both halves so the bar stands still on the swipe; on the strips the float in focus, else the same; none among the float chips.
      */
     public int selected(@NonNull Surface surface) {
         switch (surface) {
             case BAR:
-                return barShows() ? rowFront() : -1;
+                return mRowShown ? rowFront() : -1;
             case FLOAT_CHIPS:
                 return -1;
             default:
@@ -216,8 +213,8 @@ public final class WindowChips<W> {
 
     /**
      * What a tap on {@code surface}'s chip at {@code index} means: a window's brings it in front,
-     * the Workspace sliding in when the chip is on Home's dock; a float's travels Home to its
-     * page and brings it back.
+     * the Workspace sliding in when the chip is on Home's dock or on the bar seen from Home; a
+     * float's travels Home to its page and brings it back.
      */
     @NonNull
     public Meaning<W> tap(@NonNull Surface surface, int index) {
@@ -226,7 +223,8 @@ public final class WindowChips<W> {
         if (chip.kind == Kind.HOME_FLOAT)
             return new Meaning<>(Meaning.Action.RESTORE_FLOAT, -1, chip.window, false);
         return new Meaning<>(Meaning.Action.SHOW_WINDOW, chip.row, null,
-            surface == Surface.RUN_STRIP || surface == Surface.WALL_STRIP);
+            surface == Surface.RUN_STRIP || surface == Surface.WALL_STRIP
+                || surface == Surface.BAR && mHome);
     }
 
     /** What a close on {@code surface}'s chip at {@code index} means: that window closes. */
@@ -237,11 +235,6 @@ public final class WindowChips<W> {
         if (chip.kind == Kind.HOME_FLOAT)
             return new Meaning<>(Meaning.Action.CLOSE_FLOAT, -1, chip.window, false);
         return new Meaning<>(Meaning.Action.CLOSE_WINDOW, chip.row, null, false);
-    }
-
-    /** Home wears no status bar, and there is no bar without a row. */
-    private boolean barShows() {
-        return !mHome && mRowShown;
     }
 
     /** The row's window in front, held to the row. */

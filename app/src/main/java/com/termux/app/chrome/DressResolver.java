@@ -24,8 +24,8 @@ import java.util.Set;
  * holds its own). A <b>Home page</b> wears the normal layout less the extra keys, in the same Style,
  * Corners and Margin, its dock the Dock design that layout holds, unless Home holds a <b>Home
  * layout</b> of its own: then it wears that ({@link LayoutVariant#HOME}), whatever minimal mode
- * says, in Home's own Style, Corners and Margin and the design picked for it. Until the bar on
- * Home lands (#90) a Home page also leaves out the status bar, on either layout.
+ * says, in Home's own Style, Corners and Margin and the design picked for it. Either way a Home
+ * page wears the status bar its layout places (#90): one bar across the wall.
  *
  * <p>Pure over a {@link Source}, so every answer is read and tested without a window; {@link
  * #of} reads the launcher's store.
@@ -51,10 +51,9 @@ public final class DressResolver {
 
     /**
      * What a Home page leaves out, whichever layout it wears: the extra keys are the Workspace's
-     * alone, and the status bar stays off Home until #90.
+     * alone. The status bar is worn on both halves (#90).
      */
-    @NonNull private static final Set<Element> HOME_LEAVES_OUT =
-        EnumSet.of(Element.STATUS, Element.EXTRA_KEYS);
+    @NonNull private static final Set<Element> HOME_LEAVES_OUT = EnumSet.of(Element.EXTRA_KEYS);
 
     @NonNull private static final Set<Element> NONE_LEFT_OUT = EnumSet.noneOf(Element.class);
 

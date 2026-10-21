@@ -87,16 +87,17 @@ public class LayoutEditorSharedLayoutTest {
     }
 
     @Test
-    public void homeIsDrawnAndOfferedWithoutTheExtraKeysOrTheBar() {
+    public void homeIsDrawnAndOfferedWithTheBarAndWithoutTheExtraKeys() {
         LayoutEditorPlan plan = onHome();
         assertTrue(plan.shownLayout().slot(Element.EXTRA_KEYS).hidden);
-        assertTrue(plan.shownLayout().slot(Element.STATUS).hidden);
+        assertFalse("Home wears the bar (#90)", plan.shownLayout().slot(Element.STATUS).hidden);
         assertFalse("nothing Home does not wear is in its tray",
             plan.trayItems().contains(LayoutEditorPlan.TrayItem.EXTRA_KEYS));
-        assertFalse(plan.trayItems().contains(LayoutEditorPlan.TrayItem.STATUS_BAR));
         assertEquals(LayoutEditorPlan.Drop.NONE, plan.drop(Bar.EXTRA_KEYS, Edge.BOTTOM));
-        assertEquals(LayoutEditorPlan.Drop.NONE,
-            plan.restore(LayoutEditorPlan.TrayItem.STATUS_BAR));
+        // The bar moved on Home moves on every window: one layout.
+        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.BOTTOM));
+        assertEquals(Edge.BOTTOM,
+            places.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.STATUS).edge);
         assertFalse("the windows keep them",
             places.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.EXTRA_KEYS).hidden);
     }

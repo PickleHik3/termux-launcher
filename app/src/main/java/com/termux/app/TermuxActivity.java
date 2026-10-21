@@ -809,6 +809,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * seam (syncPlaceBar), whichever page the wall has committed to; null otherwise.
      */
     @Nullable private com.termux.app.wall.PaneWallPage mTravelBarPage;
+    /**
+     * Read once per gesture as the seam is reached (readSeamTravel): whether both halves stand the
+     * status bar alike, in one shape, so it stands still on the crossing (#90); and otherwise
+     * whether the Workspace's bar rides with its page.
+     */
+    private boolean mTravelBarStill;
+    private boolean mTravelBarRides;
     /** Something was moved or faded during this slide, so settle has transforms to put back. */
     private boolean mChromeTravelMoved;
     /** The accessory stack's share of its translationY that the wall's travel owns. */
@@ -15374,6 +15381,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int reachPx = com.termux.app.place.PageTopInsets.canvasReachPx(reaches, barShown, layout,
             metrics);
         boolean reached = applyTopStackOverlap(reachPx);
+        // The bar laid over a Home page puts that page's top border at the bar's foot, where the
+        // status swipe starts on Home as on a window (#90).
+        if (mPaneWallController != null)
+            mPaneWallController.wall().setHomeTopOverlayPx(reachPx);
         // The side stacks ride up with the canvas; they start back at the bar's edge.
         boolean overlays = reachPx > 0;
         reached |= applySideStackTopInset(0, R.id.place_edge_stack_left,
@@ -22224,6 +22235,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 stackDressOf(other, orientation);
             mTravelSeamDressDiffers = !committedDress.equals(otherDress);
             mTravelSeamShapeDiffers = !committedDress.shape.equals(otherDress.shape);
+            // One bar across the wall (#90): where both halves stand it alike, in one shape, it
+            // stands still on the crossing instead of riding with the Workspace's page.
+            mTravelBarStill = committed.slot(Element.STATUS).equals(otherLayout.slot(Element.STATUS))
+                && !mTravelSeamShapeDiffers;
+            // Otherwise the Workspace's bar rides with its page, where the Workspace wears one.
+            PlaceLayout workspaceSide =
+                mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS ? otherLayout : committed;
+            mTravelBarRides = !mTravelBarStill && !workspaceSide.slot(Element.STATUS).hidden;
             // A keyboard in the stack, not one floating in a frame of its own.
             mTravelSeamCommittedKeyboard = committedKeyboardVisible() && !isKeyboardFloating()
                 && committed.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
@@ -22329,8 +22348,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float progress = com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage);
         boolean dockShown = com.termux.app.place.SeamTravel.showsOtherDock(mTravelSeamPlan,
             progress);
-        // Only from Home: the Workspace's bar is the one that travels with its page.
-        boolean statusShown = progress > 0f
+        // Only from Home: the Workspace's bar is the one that travels with its page, unless the
+        // bar is one across the wall and stands still (mTravelBarStill).
+        boolean statusShown = progress > 0f && !mTravelBarStill
             && mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS
             && mTravelSeamOther != com.termux.app.wall.PaneWallPage.WIDGETS
             && com.termux.app.place.SeamTravel.statusRides(otherLayout)
@@ -22379,13 +22399,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The status bar drawn where the Workspace's page stands (SeamTravel.workspaceScreenXPx) on
-     * any frame that reaches a Home page, with the strip behind the system bar when it continues
-     * the bar's glass: a translation, and the bar dressed for that page rather than the one the
-     * wall has committed to, so its chips do not change while it is on screen. Whether it rides.
+     * any frame that crosses the seam to a Home page while the two halves wear the bar apart (a
+     * Home layout that places or shapes it otherwise), with the strip behind the system bar when
+     * it continues the bar's glass: a translation, and the bar dressed for that page rather than
+     * the one the wall has committed to, so its chips do not change while it is on screen. A bar
+     * both halves wear alike stands still (#90), and so does every bar on a slide between Home's
+     * own pages. Whether it rides.
      */
     private boolean syncStatusTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
         View host = hotView(R.id.terminal_window_bar_host);
         boolean rides = host != null && host.getVisibility() == View.VISIBLE
+            && mTravelSeamOther != null && mTravelBarRides
             && mStatusBarEdge == PlaceLayout.Edge.TOP && mPaneWallController != null
             && (frame.from == com.termux.app.wall.PaneWallPage.WIDGETS
                 || frame.toward == com.termux.app.wall.PaneWallPage.WIDGETS);
@@ -22448,10 +22472,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull com.termux.app.wall.PaneWallPage place) {
         boolean keyboardUp = place == mLastWallPage ? committedKeyboardVisible()
             : wantsKeyboardOnEnter(place);
-        // A Home page has no status bar: the window's fades on the way there.
-        if (place == com.termux.app.wall.PaneWallPage.WIDGETS)
+        // A Home page wears the bar too (#90); only one whose layout puts it away has none, and
+        // the window's then fades on the way there.
+        if (place == com.termux.app.wall.PaneWallPage.WIDGETS && !homeWearsBarAtRest())
             return keyboardUp ? REST_HOME_KEYBOARD_UP : REST_HOME_KEYBOARD_DOWN;
         return keyboardUp ? REST_KEYBOARD_UP : REST_KEYBOARD_DOWN;
+    }
+
+    /**
+     * Whether Home's layout shows the status bar, from what is already resolved and held (asked
+     * per frame, so it reads no store): the committed layout while the chrome is on Home, else
+     * the other half's as the seam read it once for this gesture; shown until either says.
+     */
+    private boolean homeWearsBarAtRest() {
+        PlaceLayout home = null;
+        if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS) {
+            if (mCachedPlaceLayoutHome) home = mCachedPlaceLayout;
+        } else if (mTravelSeamOther == com.termux.app.wall.PaneWallPage.WIDGETS) {
+            home = mTravelSeamOtherLayout;
+        }
+        return home == null || !home.slot(Element.STATUS).hidden;
     }
 
     /** The rests a page can have (the Rest is immutable), so a slide frame allocates none. */
@@ -22823,6 +22863,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean stackDressDiffered = mTravelSeamDressDiffers;
             boolean stackShapeDiffered = mTravelSeamShapeDiffers;
             mTravelBarPage = null;
+            mTravelBarStill = false;
+            mTravelBarRides = false;
             applyStatusTravelX(0f);
             applySeamRowSink(0f);
             applyAccessoryStackTranslation();
@@ -23766,26 +23808,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Where the wall stands relative to its rest, as its last offset callback said. */
     private float mWallOffsetPx;
-    /** Scratch for the place strip's clip while it slides; setClipBounds copies it. */
-    private final Rect mTmpStripClip = new Rect();
 
     /** Dress the bar for the place on screen: row content, accents, summary, icons and tint. */
     private void syncPlaceBar() {
-        // A bar travelling with the Workspace's page across the seam stays that page's.
-        com.termux.app.wall.PaneWallPage page =
-            mTravelBarPage != null ? mTravelBarPage : currentWallPage();
-        // The display window is a window of the Workspace: the bar over it wears the Workspace's
-        // accent, so the badge and the chips keep their colour as the row steps onto it.
+        // One bar across the wall (#90): the same badge and chips on Home as on every window, in
+        // the Workspace's accent, so nothing in the row changes colour on the swipe.
         int accent = com.termux.app.statusbar.StatusBarLensView.accentFor(this,
-            page == com.termux.app.wall.PaneWallPage.DISPLAY
-                ? com.termux.app.wall.PaneWallPage.TERMINAL : page);
-        // One colour per place, worn by everything that is the place's: the home icon, the
-        // badge and the chips agree, so the row reads as one thing rather than three.
+            com.termux.app.wall.PaneWallPage.TERMINAL);
         Integer placeAccent = accent;
-        // The row's badge is the Workspace session's and shows on its every window, the display
-        // window's too; the chips are the row's windows, and the Widgets place has none: Home
-        // wears no status bar, and its minimised floats come back from chips above the dock.
-        boolean workspace = page != com.termux.app.wall.PaneWallPage.WIDGETS;
+        // The row's badge is the Workspace session's and the chips are its windows, the display
+        // window's and the Home floats' with them, on both halves alike.
+        boolean workspace = true;
         com.termux.app.statusbar.SessionsIndicatorView sessions =
             findViewById(R.id.terminal_sessions_indicator);
         if (sessions != null) {
@@ -24010,31 +24043,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncPlaceBarOffset(float offsetPx) {
         mWallOffsetPx = offsetPx;
         int width = mPaneWallController == null ? 0 : mPaneWallController.wall().getWidth();
-        // The place's row content and summary pan with the wall, one width per place like the
-        // terminal's own window switch, and dissolve towards the halfway point — which is where
-        // the wall commits to the next place and the content becomes that place's.
-        float travel = width <= 0 ? 0f : Math.min(1f, Math.abs(offsetPx) / (width * 0.5f));
-        float alpha = 1f - travel;
+        // The row's content is the same on every page (#90): the badge, the window chips and the
+        // readings stand still while the wall moves under them, so the strip never pans or fades
+        // with the wall. Only a bar riding with the Workspace's page moves, and the bar carries the
+        // strip with it (syncStatusTravel).
         View strip = hotView(R.id.terminal_status_place_content);
         if (strip != null) {
-            // The place's content leaves the way the wall does: sideways past a row's ends,
-            // up and down past a column's.
-            boolean vertical = isStatusBarVertical();
-            strip.setTranslationX(vertical ? 0f : offsetPx);
-            strip.setTranslationY(vertical ? offsetPx : 0f);
-            strip.setAlpha(alpha);
-            // What slides out of the strip's own place is cut there rather than carried over the
-            // stat widgets beside it, which hold still: the row clips its children to itself,
-            // not to each other, and a pill label read over the CPU figure mid-slide. The clip is
-            // in the strip's coordinates, so it moves against the translation to stay put.
-            if (offsetPx == 0f) {
-                if (strip.getClipBounds() != null) strip.setClipBounds(null);
-            } else {
-                int dx = vertical ? 0 : Math.round(-offsetPx);
-                int dy = vertical ? Math.round(-offsetPx) : 0;
-                mTmpStripClip.set(dx, dy, dx + strip.getWidth(), dy + strip.getHeight());
-                strip.setClipBounds(mTmpStripClip);
-            }
+            if (strip.getTranslationX() != 0f) strip.setTranslationX(0f);
+            if (strip.getTranslationY() != 0f) strip.setTranslationY(0f);
+            if (strip.getAlpha() != 1f) strip.setAlpha(1f);
+            if (strip.getClipBounds() != null) strip.setClipBounds(null);
         }
         if (mPaneWallController == null) return;
         java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
@@ -24044,9 +24062,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (lens != null) lens.setWallState(pages, current, offsetPx, width);
     }
 
-    /** The badge at the start of the status row is the terminal session's; it shows nowhere else. */
+    /** The badge at the start of the status row is the terminal session's, on both halves. */
     private void bindPlaceBadge(@Nullable com.termux.app.statusbar.SessionsIndicatorView badge) {
-        if (badge == null || isWidgetsPageShowing()) return;
+        if (badge == null) return;
         int sessionIndex = mCurrentWSession == null ? -1 : mWSessions.indexOf(mCurrentWSession);
         badge.setSession(currentStatusSessionName(), mWSessions.size(), sessionIndex);
     }
@@ -27424,8 +27442,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         syncBorderStatusSwipe(visible);
         if (!visible) {
-            // Home wears no status bar, but the Taskbar's run strip and the Wall strip's tiles
-            // read the same windows, as a window's Wall strip does with its bar put away.
+            // With the bar put away the Taskbar's run strip and the Wall strip's tiles still read
+            // the same windows, on Home as on a window.
             if (isWidgetsPageShowing() ? runStripWanted() || homeWallStrip()
                 : wallStripOn(mLastWallPage))
                 syncWindowBarItems(bar);
@@ -27564,21 +27582,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
             chips = windowChips(true);
         boolean home = isWidgetsPageShowing();
-        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items;
+        // One bar across the wall (#90): the same chips in the same order on Home as on every
+        // window, the display window's at its place and the Home floats after the row's.
+        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
+            windowChipItems(chips, com.termux.app.chrome.WindowChips.Surface.BAR, foregroundPids);
         if (home) {
-            // Home wears no status bar: the bar is empty there, and the Taskbar's run strip or
-            // the Wall strip's tiles show the chips, or the float chips above the dock bring the
-            // minimised floats back. Nothing is observed while neither strip is fed.
-            items = homeDockShowsWindowChips() || wallStripFed()
-                ? windowChipItems(chips, com.termux.app.chrome.WindowChips.Surface.RUN_STRIP,
-                    foregroundPids)
-                : java.util.Collections.emptyList();
+            // Home's dock may show the same chips too: the Taskbar's run strip or the Wall
+            // strip's tiles. Seen from Home nobody looks at a row window, so the bar's chips are
+            // dressed as the strips' are and serve them as they stand.
             syncRunStrip(chips, items);
             syncWallStrip(chips, items);
-            items = java.util.Collections.emptyList();
         } else {
-            items = windowChipItems(chips, com.termux.app.chrome.WindowChips.Surface.BAR,
-                foregroundPids);
             // A window whose dock wears the Wall strip shows the row over its apps (#93): its
             // tiles follow the windows here too, dressed as the strip dresses them.
             if (wallStripFed() && wallStripOn(mLastWallPage))
@@ -27588,15 +27602,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
         // The row's own windows can be dragged to reorder, the display window's chip with them:
-        // not the Home floats' after them, and nothing on the places that fill the bar otherwise.
-        bar.setMovableChipCount(home ? 0 : chips.rowCount());
+        // not the Home floats' after them. The same on both halves.
+        bar.setMovableChipCount(chips.rowCount());
         bar.setWindows(items, selected);
         // The row is rebuilt whenever anything about a window changes, so the count is the edge
         // the tour reads: one more chip is the +, one fewer is a chip's ×. Only the terminal
-        // windows, though — the Widgets place empties the bar, and neither that nor the display
-        // window coming or going is a terminal window opening or closing.
+        // windows, though — the display window coming or going is no terminal window opening or
+        // closing.
         if (mFirstBootTour != null)
-            mFirstBootTour.onWindowCountSettled(!home && mPaneController != null
+            mFirstBootTour.onWindowCountSettled(mPaneController != null
                 && mCurrentWSession != null ? mCurrentWSession.windows.size() : -1);
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
@@ -28572,7 +28586,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // the temperature, the sky, and where that is, with the degree glyph; the AI
                 // glyph or the mouse at the row's end shortens it (fitWeatherToRow). A side
                 // bar's chip has room for the number alone.
-                boolean widgetsPage = isWidgetsPageShowing();
+                // The long forms go with the centred cluster, which no page wears since #90.
+                boolean widgetsPage = com.termux.app.statusbar.StatusStatsClusterPolicy
+                    .centeredReversed(currentWallPage());
                 boolean bare = isStatusBarVertical() && !widgetsPage;
                 String temp = bare
                     ? com.termux.app.statusbar.WeatherController.formatTempBare(
@@ -28595,7 +28611,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             } else {
                 mWeatherForms = null;
-                widget.setValue(isStatusBarVertical() && !isWidgetsPageShowing() ? "--" : "--°");
+                widget.setValue(isStatusBarVertical()
+                    && !com.termux.app.statusbar.StatusStatsClusterPolicy
+                        .centeredReversed(currentWallPage()) ? "--" : "--°");
             }
         }
         if (mWeatherCardView != null && mStatusCardHost.isShowing()) {
@@ -29821,21 +29839,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Whether Home's dock shows the window chips this refresh: the Taskbar's run strip, or the
-     * Wall strip's row (fed only with split panes on), each once made.
-     */
-    private boolean homeDockShowsWindowChips() {
-        return mPaneController != null
-            && ((mRunStrip != null && runStripWanted())
-                || (mWallStripRow != null && homeWallStrip() && isSplitPanesEnabled()));
-    }
-
-    /**
      * Each chip {@code surface} shows, dressed for the bar, in its order: a row window's marks
      * read from this refresh's one observation of its shells, the display window's chip named
-     * after its app, a float's carrying its page. On the bar, the Workspace's, the window in front
+     * after its app, a float's carrying its page. On the bar in the Workspace the window in front
      * is the one the user is looking at, and so acknowledged; nobody looks at a row window from
-     * Home.
+     * Home, whichever surface shows its chip there.
      */
     @NonNull
     private java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> windowChipItems(
@@ -29849,7 +29857,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new java.util.ArrayList<>(list.size());
         if (list.isEmpty() || mPaneController == null) return items;
         long now = android.os.SystemClock.uptimeMillis();
-        boolean looking = surface == com.termux.app.chrome.WindowChips.Surface.BAR;
+        // The bar on Home shows the same chips (#90), but nobody looks at a row window from
+        // there: its attention marks stay until the window is in front in the Workspace.
+        boolean looking = surface == com.termux.app.chrome.WindowChips.Surface.BAR
+            && !isWidgetsPageShowing();
         boolean onDisplay = looking && isDisplayWindowInFront();
         int current = mCurrentWSession == null ? -1 : mCurrentWSession.current;
         for (com.termux.app.chrome.WindowChips.Chip<
