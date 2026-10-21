@@ -4,7 +4,6 @@
     <string name="builtin_widget_group">Termux Launcher</string>
     <string name="builtin_widget_clock">Clock</string>
     <string name="builtin_widget_glance">Glance</string>
-    <string name="builtin_widget_agenda">Agenda</string>
     <string name="builtin_widget_weather">Weather</string>
     <string name="builtin_widget_device">Device</string>
     <string name="builtin_widget_media">Media</string>
