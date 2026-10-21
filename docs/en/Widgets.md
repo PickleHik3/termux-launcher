@@ -18,7 +18,7 @@ the bottom of the sessions drawer, or drag right from the first window's border.
    page (see [Home floats](Panes_Windows_And_Sessions.md#home-floats)). **Edit widgets** joins them
    when the page has widgets, and **Remove page** when the page is empty and not the only one.
 2. Tap **Add widget**. The picker lists the launcher's own widgets first, under **Termux
-   Launcher**, then the widgets of your other apps. Each card shows its size in cells.
+   Launcher**, then the widgets of your other apps. Each card shows its sizes in cells and, for the launcher's own, what the widget is for.
 3. **Tap** a card to place the widget on the page you are on, at the size shown.
 
 For an app's widget, Android may ask you to allow the launcher to create widgets.
@@ -37,31 +37,49 @@ Only a widget bigger than the whole grid is greyed out ("too big for this grid")
 
 ## The launcher's own widgets
 
-Eleven widgets come with the launcher, drawn in the launcher's colours and following its theme,
-wallpaper colours and glass:
+Ten widgets come with the launcher, drawn in the launcher's colours and following its theme,
+wallpaper colours and glass. The picker shows one card per widget, with its sizes grouped on it and
+a line that says what it is for:
 
-| Widget | What it shows |
+| Widget | What it does |
 |---|---|
-| **Analog clock** | The time; at the wider sizes, up to two more cities or time zones. |
-| **Digital clock** | The time and the date. |
-| **Agenda** | Your next calendar events. |
-| **Calendar** | A month view. |
-| **Weather** | The weather for the location set in [Status bar](Status_Bar.md#weather). It updates as soon as you come back from picking a place. |
-| **Battery** | Charge and charging state. |
-| **System** | CPU, RAM and storage. |
-| **Media** | What is playing, with play, pause, previous and next. |
-| **Notifications** | Recent notifications, with **Clear all**. |
-| **Tasks** | A task list kept in `~/notes/tasks.md`. |
-| **Notes** | A note kept in `~/notes/scratch.md`: the file's name, the note's first heading as a title, the text below it and how long ago it changed. |
+| **Clock** | Keep time on one of eight faces, the same ones as the status bar (Analog, Numerals, Slab, Flip, LCD, LED matrix, Tape, Minimal). At the wider sizes it adds the date, the next alarm and up to two more time zones. |
+| **Glance** | Glance at the date and the weather now, then the one thing that matters most: the next event, an alarm or a low battery. Drawn Bare, at 2 × 1 and 4 × 1 only. |
+| **Device** | Watch the battery first: charge and charging state, then time to full or the drain rate, storage, memory and temperature, and at 4 × 2 the last 24 hours of battery. |
+| **Calendar** | See what is next. Your next events at the smaller sizes, the month at the larger ones. |
+| **Weather** | See the sky now for the location set in [Status bar](Status_Bar.md#weather), then the coming hours and days. It updates as soon as you come back from picking a place, and **Set a place** opens the same picker. |
+| **Media** | Control what is playing, with play, pause, previous and next. |
+| **Notifications** | See messages and people first, grouped by app with counts, with **Clear all** on the larger sizes. It starts at 2 × 1. |
+| **Tasks** | Keep your open tasks in reach: a task list kept in `~/notes/tasks.md`. |
+| **Notes** | Keep a note on Home: a file kept in `~/notes/scratch.md`, with the note's first heading as a title, the text below it and how long ago it changed. |
+| **Terminal** | Keep a live shell on the page and type into it in place. Resizing the widget changes the terminal's rows and columns. |
 
+Widgets placed before the redesign keep working: the analog and digital clocks open as the Clock,
+Battery and System as Device, and Agenda and the month Calendar as Calendar, each with the settings
+it had.
+
+- Every widget has a most useful size. Past it, a bigger widget only gains room; it does not add
+  anything. Clock and Calendar are fullest at 4 × 2, Glance at 4 × 1.
 - Tasks and Notes are plain markdown files, so the shell sees exactly what the card shows. Tap
   the note to open the file in your editor.
-- The Analog clock, Tasks and Notes take settings from a cog that appears while you edit the
-  page: the extra time zones, or the file path (Notes can switch between several files).
+- Clock, Tasks and Notes take settings from a cog that appears while you edit the page. The Clock's
+  are its **face**, **Seconds**, **24-hour time** and the extra **time zones**; Tasks and Notes take
+  the file path (Notes can switch between several files).
 - The Calendar's month view has arrows to step to the previous or next month; tap the month's name
   to come back to this one.
-- Agenda and Calendar ask for calendar access on the card itself. Notifications and Media ask for
+- Glance and Calendar ask for calendar access on the card itself. Notifications and Media ask for
   notification access the same way.
+
+### Glass
+
+Every widget's settings have a **Glass** row with four choices:
+
+- **Page** follows **Widgets on glass** in the Look, so one switch changes every widget at once.
+- **On** and **Off** set this widget apart from the page.
+- **Bare** draws no card at all, only the content on the wallpaper. It is offered on Clock and
+  Weather; Glance is always Bare.
+
+Widgets follow the Base Look for their glass and corners, not the terminal or keyboard overrides.
 
 **Settings → Home → Built-in widget style** chooses how they are drawn: **Tonal** ("soft cards with
 rounded corners") or **Pane** ("squared cards with a hairline rim, like a terminal pane").

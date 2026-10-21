@@ -31,8 +31,8 @@ import java.util.List;
 final class NotificationsLayoutPlanner {
     private NotificationsLayoutPlanner() { }
 
-    /** Notifications adds nothing past its 4×2, which gains Clear all. */
-    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetSpan.FOUR_BY_TWO;
+    /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}); past it the widget only gains room. */
+    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.NOTIFICATIONS.maxSpan;
 
     /** The bell of a notice and of an icon that cannot be drawn. */
     static final String GLYPH_BELL = "";

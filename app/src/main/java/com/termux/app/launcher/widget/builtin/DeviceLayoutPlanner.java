@@ -44,7 +44,8 @@ import java.util.List;
 final class DeviceLayoutPlanner {
     private DeviceLayoutPlanner() { }
 
-    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetSpan.FOUR_BY_TWO;
+    /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}); past it the widget only gains room. */
+    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.DEVICE.maxSpan;
 
     /** Every bar's height: the spec's floor. */
     static final float BAR_DP = 6f;

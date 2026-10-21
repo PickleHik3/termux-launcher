@@ -29,8 +29,8 @@ import java.util.List;
 final class GlanceLayoutPlanner {
     private GlanceLayoutPlanner() { }
 
-    /** Glance adds nothing past its 4×1. */
-    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetSpan.FOUR_BY_ONE;
+    /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}); past it the widget only gains room. */
+    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.GLANCE.maxSpan;
 
     /** The parts' ids. */
     static final String DATE = "date";

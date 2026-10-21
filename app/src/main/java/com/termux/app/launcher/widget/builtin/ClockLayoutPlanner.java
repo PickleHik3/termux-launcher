@@ -22,8 +22,8 @@ import java.util.List;
 final class ClockLayoutPlanner {
     private ClockLayoutPlanner() { }
 
-    /** Past its 2×2 the Clock adds nothing yet; the time zones (#113) extend it to 4×1 and 4×2. */
-    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetSpan.TWO_BY_TWO;
+    /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}); past it the widget only gains room. */
+    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.CLOCK.maxSpan;
 
     static final String FACE = "face";
     static final String DATE = "date";

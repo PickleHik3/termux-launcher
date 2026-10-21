@@ -26,7 +26,8 @@ import java.util.List;
 final class TasksLayoutPlanner {
     private TasksLayoutPlanner() { }
 
-    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetSpan.FOUR_BY_TWO;
+    /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}); past it the widget only gains room. */
+    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.TASKS.maxSpan;
 
     static final String GLYPH_ADD = "";
     static final String GLYPH_OPEN = "";

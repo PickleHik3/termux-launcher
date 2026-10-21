@@ -33,7 +33,8 @@ import java.util.List;
 final class CalendarLayoutPlanner {
     private CalendarLayoutPlanner() { }
 
-    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetSpan.FOUR_BY_TWO;
+    /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}); past it the widget only gains room. */
+    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.CALENDAR.maxSpan;
 
     static final String GLYPH_CALENDAR = "";
     static final String GLYPH_PREV = "";

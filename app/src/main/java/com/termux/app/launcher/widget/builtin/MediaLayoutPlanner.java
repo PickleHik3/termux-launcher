@@ -26,7 +26,8 @@ import java.util.List;
 final class MediaLayoutPlanner {
     private MediaLayoutPlanner() { }
 
-    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetSpan.FOUR_BY_TWO;
+    /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}); past it the widget only gains room. */
+    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.MEDIA.maxSpan;
 
     /** What the card is showing. */
     enum Mode { PLAYING, RESUME, IDLE }

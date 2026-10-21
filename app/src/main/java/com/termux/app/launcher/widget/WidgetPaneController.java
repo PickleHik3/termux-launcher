@@ -1106,13 +1106,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             // minimum, so a dense grid cannot squeeze one into a cell its text will not fit.
             horizontal = true; vertical = true;
             float density = pane.getResources().getDisplayMetrics().density;
-            WidgetGridMetrics.Span minSpan = metrics.spanForPixels(
-                Math.round(BuiltinWidgetSpan.ONE_BY_ONE.widthDp * density),
-                Math.round(BuiltinWidgetSpan.ONE_BY_ONE.heightDp * density));
-            minColumns = minSpan.columns > 0
-                ? Math.min(minSpan.columns, record.cell.columnSpan()) : record.cell.columnSpan();
-            minRows = minSpan.rows > 0
-                ? Math.min(minSpan.rows, record.cell.rowSpan()) : record.cell.rowSpan();
+            // Each kind names its own smallest span (Notifications has no 1×1, Glance no 1 column);
+            // a placement already below it keeps loading and may stay or shrink, never forced up.
+            BuiltinWidgetKind builtinKind = BuiltinWidgetKind.fromId(record.builtinKind);
+            WidgetGridMetrics.Span minSpan = WidgetEditPolicy.builtinMinimum(metrics,
+                builtinKind == null ? BuiltinWidgetSpan.ONE_BY_ONE : builtinKind.minSpan,
+                density, record.cell.columnSpan(), record.cell.rowSpan());
+            minColumns = minSpan.columns;
+            minRows = minSpan.rows;
         } else if (info != null && record.state == LauncherWidgetRecord.State.ACTIVE) {
             horizontal = (info.resizeMode
                 & AppWidgetProviderInfo.RESIZE_HORIZONTAL) != 0;

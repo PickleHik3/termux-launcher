@@ -216,6 +216,25 @@ public final class WidgetEditPolicy {
     }
 
     /**
+     * The smallest span a built-in resizes to: what the kind's own minimum span takes on this grid,
+     * measured in pixels like an app widget's minimum. A widget already below it keeps its size
+     * (the minimum never exceeds {@code currentColumns}×{@code currentRows}), so a placement from
+     * before the minimum existed is neither force-resized nor locked out of shrinking further.
+     */
+    @NonNull
+    public static WidgetGridMetrics.Span builtinMinimum(
+        @NonNull WidgetGridMetrics metrics,
+        @NonNull com.termux.app.launcher.widget.builtin.BuiltinWidgetSpan kindMinimum,
+        float density, int currentColumns, int currentRows) {
+        WidgetGridMetrics.Span minSpan = metrics.spanForPixels(
+            Math.round(kindMinimum.widthDp * density), Math.round(kindMinimum.heightDp * density));
+        int columns = minSpan.columns > 0 ? Math.min(minSpan.columns, currentColumns)
+            : currentColumns;
+        int rows = minSpan.rows > 0 ? Math.min(minSpan.rows, currentRows) : currentRows;
+        return new WidgetGridMetrics.Span(columns, rows, true);
+    }
+
+    /**
      * {@link #resize} with the provider's own ceiling: a span past {@code maxColumnSpan} or
      * {@code maxRowSpan} (0 for none) is never offered. A widget already past it may keep its
      * size or shrink, but not grow.
