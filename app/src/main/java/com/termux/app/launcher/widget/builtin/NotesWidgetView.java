@@ -161,6 +161,14 @@ public class NotesWidgetView extends BuiltinWidgetView
 
     // ----- layout ---------------------------------------------------------------------------
 
+    /**
+     * A card of two rows is never zoomed: its body block fills the height with more lines at the
+     * Body role. Zoomed, a tall cell drew the empty note's "Tap to write" near twice Body.
+     */
+    @Override protected boolean zoomsToFill(@NonNull BuiltinWidgetSpan span) {
+        return !span.isTall();
+    }
+
     @Override protected void onBuild(@NonNull FrameLayout frame, @NonNull BuiltinWidgetSpan span,
                                      @NonNull BuiltinWidgetUi ui) {
         build(frame, span, ui);
