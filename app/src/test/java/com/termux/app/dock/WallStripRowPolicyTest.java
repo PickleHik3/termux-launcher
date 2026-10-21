@@ -302,4 +302,41 @@ public class WallStripRowPolicyTest {
         assertEquals(38.5f, WallStripRowPolicy.sideInsetPx(Float.NaN, 38.5f), EPS);
         assertEquals(0f, WallStripRowPolicy.sideInsetPx(Float.NaN, -3f), EPS);
     }
+
+    // ---------------------------------------------------------------- the row's height
+
+    @Test
+    public void height_defaultsToTodaysRow_andIsHeldBetweenATappableTileAndTheTerminalsRoom() {
+        assertEquals(84, WallStripRowPolicy.DEFAULT_HEIGHT_DP);
+        assertEquals(56, WallStripRowPolicy.MIN_HEIGHT_DP);
+        assertEquals(128, WallStripRowPolicy.MAX_HEIGHT_DP);
+        assertTrue("a tile is a 48 dp target at the least",
+            WallStripRowPolicy.MIN_HEIGHT_DP >= 48);
+        assertEquals(84, WallStripRowPolicy.clampHeightDp(84));
+        assertEquals(100, WallStripRowPolicy.clampHeightDp(100));
+        assertEquals(56, WallStripRowPolicy.clampHeightDp(10));
+        assertEquals(56, WallStripRowPolicy.clampHeightDp(-4));
+        assertEquals(128, WallStripRowPolicy.clampHeightDp(400));
+    }
+
+    @Test
+    public void clock_growsWithTheRow_fromTheBarsOwnLargestFitAtTheDefault() {
+        float atDefault = WallStripRowPolicy.clockMaxScale(84f * 3f, 3f);
+        assertEquals(WallStripRowPolicy.CLOCK_MAX_SCALE_AT_DEFAULT, atDefault, EPS);
+        assertEquals(atDefault * 56f / 84f, WallStripRowPolicy.clockMaxScale(56f * 3f, 3f), EPS);
+        assertEquals(atDefault * 128f / 84f, WallStripRowPolicy.clockMaxScale(128f * 3f, 3f),
+            EPS);
+        // Not measured yet: the default row's.
+        assertEquals(atDefault, WallStripRowPolicy.clockMaxScale(0f, 3f), EPS);
+        assertEquals(atDefault, WallStripRowPolicy.clockMaxScale(252f, 0f), EPS);
+    }
+
+    @Test
+    public void aTileAtTheLeastHeight_keepsItsTitleOnOneLineAndASplitShape() {
+        // 12 sp monospace at 1x: a 16 dp line; the tile's 7 dp padding and 5 dp title gap.
+        WallStripRowPolicy.TileText text = WallStripRowPolicy.tileText(90f,
+            WallStripRowPolicy.MIN_HEIGHT_DP, 7f, 16f, 5f, 14f, 0f, 30f, 28f, 8f);
+        assertFalse(text.twoLines);
+        assertTrue("the split shape still shows", text.shapeHeightPx >= 8f);
+    }
 }

@@ -42,6 +42,7 @@ import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.Spring;
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.dock.WallStripRowPolicy;
 import com.termux.app.launcher.widget.WidgetGridCaps;
 import com.termux.app.place.ChromeShape;
 import com.termux.app.place.ChromeShape.Box;
@@ -52,6 +53,7 @@ import com.termux.app.place.ChromeShape.Piece;
 import com.termux.app.place.ChromeShape.PieceId;
 import com.termux.app.place.ChromeShapeModel;
 import com.termux.app.place.EdgeStackPolicy;
+import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -132,9 +134,12 @@ public final class LayoutCanvasView extends View {
      * A resize handle on the selected element (spec §3.5): the dock's inner edge for its height,
      * the keyboard's top edge for its height and its bottom edge for the chin under the last key
      * row, and on Home a corner handle for the widget grid's cells. Each is one pill drawn on the
-     * edge it moves, with the platform's 48dp target around it.
+     * edge it moves, with the platform's 48dp target around it. A dock wearing the Wall strip
+     * carries a second one, {@link #WALL_STRIP_HEIGHT}, on its first row's top edge, and the
+     * dock's own then stands on the apps row's top edge under it.
      */
-    public enum Handle { DOCK_HEIGHT, KEYBOARD_HEIGHT, KEYBOARD_CHIN, WIDGET_GRID }
+    public enum Handle { DOCK_HEIGHT, KEYBOARD_HEIGHT, KEYBOARD_CHIN, WIDGET_GRID,
+        WALL_STRIP_HEIGHT }
 
     /**
      * What an edit on the layout canvas asks for. Every value is already in the store's own units
@@ -153,6 +158,9 @@ public final class LayoutCanvasView extends View {
 
         /** The keyboard's bottom edge was dragged: the air under its last key row, in dp. */
         default void onKeyboardChinDragged(int dp) {}
+
+        /** The Wall strip's first row's top edge was dragged: the row's height, in dp. */
+        default void onWallStripHeightDragged(int dp) {}
 
         /** Home's corner handle was dragged: the grid in whole cells. */
         default void onWidgetGridDragged(int columns, int rows) {}
@@ -437,6 +445,7 @@ public final class LayoutCanvasView extends View {
     /** What the held handle stood at when the finger went down, which the drag is measured from. */
     private float mHandleStartScale;
     private int mHandleStartChin;
+    private int mHandleStartStripDp;
     private float mHandleStartExtentPx;
     private final RectF mHandleStartRect = new RectF();
     private int mHandleLastColumns;
@@ -451,6 +460,13 @@ public final class LayoutCanvasView extends View {
     private float mDockScale = TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
     private float mKeyboardScale = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
     private int mKeyboardChinDp = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING;
+    /**
+     * The Wall strip's first row's height in dp while the edited layout's dock wears the Wall
+     * strip, zero while it wears another design ({@link #setWallStrip}).
+     */
+    private int mWallStripDp;
+    /** Scratch for the dock band's two parts while the Wall strip's row is drawn over it. */
+    private final RectF mArtRect = new RectF();
     /** The status bar's stored state for the orientation shown; null leaves the launcher's rest. */
     @Nullable private Boolean mStatusCompact;
     /** Canvas pixels per real dp: what every dp figure is multiplied by to stand on the canvas. */
@@ -770,6 +786,35 @@ public final class LayoutCanvasView extends View {
         mKeyboardChinDp = keyboardChinDp;
         if (getWidth() > 0 && getHeight() > 0) layoutFrame(getWidth(), getHeight());
         invalidate();
+    }
+
+    /**
+     * The Wall strip's first row, in dp, while the edited layout's dock wears the Wall strip; zero
+     * or less for any other design. The dock's band stands taller by the row on the bottom edge,
+     * and its selection carries the row's own handle.
+     */
+    public void setWallStrip(int heightDp) {
+        int next = heightDp > 0 ? WallStripRowPolicy.clampHeightDp(heightDp) : 0;
+        if (next == mWallStripDp) return;
+        mWallStripDp = next;
+        if (getWidth() > 0 && getHeight() > 0) layoutFrame(getWidth(), getHeight());
+        invalidate();
+    }
+
+    /**
+     * Whether the canvas draws the Wall strip's row: the dock wears it and its apps row lies on
+     * the bottom edge, the only row the launcher hangs it over (DockLayoutPolicy).
+     */
+    private boolean wallStripOnCanvas() {
+        return mWallStripDp > 0 && mLayout != null && PlaceChromePolicy.appsShown(mLayout)
+            && EdgeStackPolicy.edgeOf(mLayout, Element.APPS) == Edge.BOTTOM;
+    }
+
+    /** The row and the slab's air over it, to scale; zero where the canvas draws none. */
+    private float wallStripBandPx() {
+        if (!wallStripOnCanvas()) return 0f;
+        return LayoutCanvasGeometry.toCanvasPx(LayoutCanvasGeometry.wallStripBandDp(mDockScale,
+            mStyle == LayoutStyle.FLOATING, mWallStripDp), mCanvasScale);
     }
 
     /** The element wearing the outline, or null. */
@@ -1299,6 +1344,11 @@ public final class LayoutCanvasView extends View {
             case APPS:
                 dp = edge.isOnSide() ? LayoutCanvasGeometry.dockRailWidthDp()
                     : LayoutCanvasGeometry.dockBandHeightDp(mDockScale, floating);
+                // The Wall strip's row stands over the apps row on the same slab.
+                if (!edge.isOnSide() && wallStripOnCanvas()) {
+                    dp += LayoutCanvasGeometry.wallStripBandDp(mDockScale, floating,
+                        mWallStripDp);
+                }
                 break;
             case AZ:
                 dp = LayoutCanvasGeometry.azBandHeightDp();
@@ -1537,8 +1587,21 @@ public final class LayoutCanvasView extends View {
             case APPS_ROW: {
                 RectF band = mBlockRects.get(Block.APPS_ROW);
                 if (band == null || band.isEmpty()) return;
-                mHandleRects.put(Handle.DOCK_HEIGHT, edgeHandle(band, innerEdgeOf(Block.APPS_ROW),
-                    band.centerX(), band.centerY()));
+                float strip = Math.min(band.height(), wallStripBandPx());
+                if (strip <= 0f) {
+                    mHandleRects.put(Handle.DOCK_HEIGHT, edgeHandle(band,
+                        innerEdgeOf(Block.APPS_ROW), band.centerX(), band.centerY()));
+                    return;
+                }
+                // The Wall strip's row tops the band: its handle rides that edge, a quarter in
+                // from the leading end so its target and the dock's never meet; the dock's own
+                // stands on the apps row's top edge, the seam under the row.
+                float x = isRtl() ? band.right - band.width() / 4f
+                    : band.left + band.width() / 4f;
+                mHandleRects.put(Handle.WALL_STRIP_HEIGHT, edgeHandle(band, Edge.TOP, x, 0f));
+                RectF dock = edgeHandle(band, Edge.TOP, band.centerX(), 0f);
+                dock.offset(0f, strip);
+                mHandleRects.put(Handle.DOCK_HEIGHT, dock);
                 return;
             }
             case KEYBOARD: {
@@ -1705,10 +1768,15 @@ public final class LayoutCanvasView extends View {
                 RectF band = mBlockRects.get(Block.APPS_ROW);
                 if (band == null) return abandonHandle();
                 mHandleStartScale = mDockScale;
+                // The apps row's own extent: the Wall strip's row over it is not the dock's.
                 mHandleStartExtentPx = edgeOfBlock(Block.APPS_ROW).isOnSide()
-                    ? band.width() : band.height();
+                    ? band.width() : band.height() - Math.min(band.height(), wallStripBandPx());
                 break;
             }
+            case WALL_STRIP_HEIGHT:
+                if (!handleOffered(Handle.WALL_STRIP_HEIGHT)) return abandonHandle();
+                mHandleStartStripDp = mWallStripDp;
+                break;
             case KEYBOARD_HEIGHT:
                 if (mKeyboardRect.isEmpty()) return abandonHandle();
                 mHandleStartScale = mKeyboardScale;
@@ -1778,6 +1846,14 @@ public final class LayoutCanvasView extends View {
                 commitHandleValue(Handle.KEYBOARD_CHIN, LayoutCanvasGeometry.chinDp(chin));
                 return;
             }
+            case WALL_STRIP_HEIGHT: {
+                // The row is drawn to scale, so a pixel of drag is 1/scale of a real dp; up is
+                // taller, the row's top edge following the finger.
+                float perDp = Math.max(0.01f, mCanvasScale);
+                commitHandleValue(Handle.WALL_STRIP_HEIGHT, WallStripRowPolicy.clampHeightDp(
+                    Math.round(mHandleStartStripDp + (-dy) / perDp)));
+                return;
+            }
             case WIDGET_GRID:
             default: {
                 RectF area = gridArea();
@@ -1808,6 +1884,9 @@ public final class LayoutCanvasView extends View {
             case DOCK_HEIGHT: mEditListener.onDockHeightDragged(value); return;
             case KEYBOARD_HEIGHT: mEditListener.onKeyboardHeightDragged(value); return;
             case KEYBOARD_CHIN: mEditListener.onKeyboardChinDragged(Math.round(value)); return;
+            case WALL_STRIP_HEIGHT:
+                mEditListener.onWallStripHeightDragged(Math.round(value));
+                return;
             case WIDGET_GRID:
             default:
         }
@@ -2649,9 +2728,19 @@ public final class LayoutCanvasView extends View {
                 if (vertical) mArtwork.statusColumn(canvas, box, p, k);
                 else mArtwork.status(canvas, box, isStatusCompact(), p, k);
                 break;
-            case APPS:
-                mArtwork.dock(canvas, box, vertical, p, k);
+            case APPS: {
+                float strip = vertical ? 0f : Math.min(box.height(), wallStripBandPx());
+                if (strip <= 0f) {
+                    mArtwork.dock(canvas, box, vertical, p, k);
+                    break;
+                }
+                // The Wall strip's row over the apps row, each in its own part of the band.
+                mArtRect.set(box.left, box.top, box.right, box.top + strip);
+                mArtwork.wallStrip(canvas, mArtRect, p, k);
+                mArtRect.set(box.left, box.top + strip, box.right, box.bottom);
+                mArtwork.dock(canvas, mArtRect, false, p, k);
                 break;
+            }
             case AZ:
                 mArtwork.alphabet(canvas, box, vertical, p, k);
                 break;
@@ -4276,7 +4365,8 @@ public final class LayoutCanvasView extends View {
     @NonNull
     private static Block ownerOf(@NonNull Handle handle) {
         switch (handle) {
-            case DOCK_HEIGHT: return Block.APPS_ROW;
+            case DOCK_HEIGHT:
+            case WALL_STRIP_HEIGHT: return Block.APPS_ROW;
             case KEYBOARD_HEIGHT:
             case KEYBOARD_CHIN: return Block.KEYBOARD;
             case WIDGET_GRID:
@@ -4311,6 +4401,7 @@ public final class LayoutCanvasView extends View {
         if (mLayout == null) return false;
         switch (handle) {
             case DOCK_HEIGHT: return isSelectable(Block.APPS_ROW);
+            case WALL_STRIP_HEIGHT: return isSelectable(Block.APPS_ROW) && wallStripOnCanvas();
             case KEYBOARD_HEIGHT: return !mKeyboardRect.isEmpty();
             case KEYBOARD_CHIN:
                 return !mKeyboardRect.isEmpty() && mLayout.keyboardForm != KeyboardForm.FLOATING;
@@ -4334,6 +4425,7 @@ public final class LayoutCanvasView extends View {
             case DOCK_HEIGHT: return mDockScale;
             case KEYBOARD_HEIGHT: return mKeyboardScale;
             case KEYBOARD_CHIN: return mKeyboardChinDp;
+            case WALL_STRIP_HEIGHT: return mWallStripDp;
             case WIDGET_GRID:
             default: return 0f;
         }
@@ -4346,6 +4438,7 @@ public final class LayoutCanvasView extends View {
     private float handleMin(@NonNull Handle handle) {
         switch (handle) {
             case DOCK_HEIGHT: return DockLayoutPolicy.minUsefulScale();
+            case WALL_STRIP_HEIGHT: return WallStripRowPolicy.MIN_HEIGHT_DP;
             case KEYBOARD_HEIGHT: return TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE;
             case KEYBOARD_CHIN:
             default: return TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING;
@@ -4356,6 +4449,7 @@ public final class LayoutCanvasView extends View {
         switch (handle) {
             case DOCK_HEIGHT:
                 return DockLayoutPolicy.maxUsefulScale(mStyle == LayoutStyle.FLOATING);
+            case WALL_STRIP_HEIGHT: return WallStripRowPolicy.MAX_HEIGHT_DP;
             case KEYBOARD_HEIGHT: return TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE;
             case KEYBOARD_CHIN:
             default: return TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING;
@@ -4373,6 +4467,10 @@ public final class LayoutCanvasView extends View {
                 return LayoutCanvasA11yPolicy.stepScale(mKeyboardScale,
                     LayoutCanvasA11yPolicy.KEYBOARD_SCALE_STEP, handleMin(handle),
                     handleMax(handle), direction);
+            case WALL_STRIP_HEIGHT:
+                return LayoutCanvasA11yPolicy.stepInt(mWallStripDp,
+                    WallStripRowPolicy.HEIGHT_STEP_DP, (int) handleMin(handle),
+                    (int) handleMax(handle), direction);
             case KEYBOARD_CHIN:
             default:
                 return LayoutCanvasA11yPolicy.stepInt(mKeyboardChinDp,
@@ -4393,7 +4491,8 @@ public final class LayoutCanvasView extends View {
     private boolean setHandleValue(@NonNull Handle handle, float value) {
         if (handle == Handle.WIDGET_GRID || !handleOffered(handle)) return false;
         float clamped = Math.max(handleMin(handle), Math.min(handleMax(handle), value));
-        if (handle == Handle.KEYBOARD_CHIN) clamped = Math.round(clamped);
+        if (handle == Handle.KEYBOARD_CHIN || handle == Handle.WALL_STRIP_HEIGHT)
+            clamped = Math.round(clamped);
         if (Float.compare(clamped, handleValue(handle)) == 0) return false;
         commitHandleValue(handle, clamped);
         commitHandleReleased();
@@ -4590,6 +4689,8 @@ public final class LayoutCanvasView extends View {
                 return getContext().getString(R.string.layout_canvas_a11y_handle_keyboard);
             case KEYBOARD_CHIN:
                 return getContext().getString(R.string.layout_canvas_a11y_handle_chin);
+            case WALL_STRIP_HEIGHT:
+                return getContext().getString(R.string.layout_canvas_a11y_handle_wall_strip);
             case WIDGET_GRID:
             default:
                 return getContext().getString(R.string.settings_layout_widget_grid_title);
@@ -4617,6 +4718,8 @@ public final class LayoutCanvasView extends View {
             case KEYBOARD_CHIN:
                 return context.getString(R.string.layout_canvas_a11y_chin_dp,
                     LayoutCanvasGeometry.chinDp(mKeyboardChinDp));
+            case WALL_STRIP_HEIGHT:
+                return context.getString(R.string.layout_canvas_a11y_size_dp, mWallStripDp);
             case WIDGET_GRID:
             default:
                 return context.getString(R.string.layout_canvas_a11y_grid_size,
@@ -4796,6 +4899,7 @@ public final class LayoutCanvasView extends View {
         }
         node.setClassName(android.widget.SeekBar.class.getName());
         node.setRangeInfo(RangeInfoCompat.obtain(handle == Handle.KEYBOARD_CHIN
+                || handle == Handle.WALL_STRIP_HEIGHT
                 ? RangeInfoCompat.RANGE_TYPE_INT : RangeInfoCompat.RANGE_TYPE_FLOAT,
             handleMin(handle), handleMax(handle), handleValue(handle)));
         if (canStep(handle, 1)) node.addAction(AccessibilityActionCompat.ACTION_SCROLL_FORWARD);

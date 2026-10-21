@@ -9,6 +9,7 @@ import androidx.annotation.VisibleForTesting;
 import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.dock.DrawerTilePolicy;
+import com.termux.app.dock.WallStripRowPolicy;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -136,6 +137,13 @@ public final class PlaceLayoutStore {
     private static final String KEY_DOCK_HEIGHT = "dock_height";
     private static final String KEY_KEYBOARD_HEIGHT = "keyboard_height";
     private static final String KEY_KEYBOARD_CHIN = "keyboard_chin";
+    /**
+     * The Wall strip's first row's height in dp, beside the dock's: {@code
+     * layout.<orientation>.wall_strip_height}, per layout like every size. Absent is the shipped
+     * row ({@link WallStripRowPolicy#DEFAULT_HEIGHT_DP}); nothing is written until the Layout
+     * editor's Strip handle is dragged.
+     */
+    private static final String KEY_WALL_STRIP_HEIGHT = "wall_strip_height";
 
     private static final String KEY_STATUS_COMPACT = "status_compact";
 
@@ -231,7 +239,7 @@ public final class PlaceLayoutStore {
         KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_EXTRA_KEYS,
         KEY_KEYBOARD_MODE,
         KEY_KEYBOARD_FORM, KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS,
-        KEY_DOCK_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN,
+        KEY_DOCK_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN, KEY_WALL_STRIP_HEIGHT,
         // The stack positions ride with the placements they belong to, so the Layout editor's
         // Discard and its reset put a re-order back the same way they put a move back.
         orderKeyName(Element.STATUS), orderKeyName(Element.APPS), orderKeyName(Element.AZ),
@@ -486,7 +494,8 @@ public final class PlaceLayoutStore {
                     return true;
             }
             if (Float.compare(first.dockHeightScale(orientation),
-                    second.dockHeightScale(orientation)) != 0)
+                    second.dockHeightScale(orientation)) != 0
+                || first.wallStripHeightDp(orientation) != second.wallStripHeightDp(orientation))
                 return true;
         }
         return false;
@@ -1134,6 +1143,23 @@ public final class PlaceLayoutStore {
     public void setKeyboardChinDp(@NonNull PlaceOrientation orientation, int dp) {
         writeInt(variantKey(orientation, KEY_KEYBOARD_CHIN),
             TermuxAppSharedPreferences.clampInAppKeyboardBottomPadding(dp));
+    }
+
+    /**
+     * How tall the Wall strip's first row stands over the apps row, in dp: the layout's own, the
+     * shipped row while it has none. Read only where a dock wears the Wall strip.
+     */
+    public int wallStripHeightDp(@NonNull PlaceOrientation orientation) {
+        String key = variantKey(orientation, KEY_WALL_STRIP_HEIGHT);
+        int value = mStore != null && mStore.contains(key)
+            ? mStore.getInt(key, WallStripRowPolicy.DEFAULT_HEIGHT_DP)
+            : WallStripRowPolicy.DEFAULT_HEIGHT_DP;
+        return WallStripRowPolicy.clampHeightDp(value);
+    }
+
+    public void setWallStripHeightDp(@NonNull PlaceOrientation orientation, int dp) {
+        writeInt(variantKey(orientation, KEY_WALL_STRIP_HEIGHT),
+            WallStripRowPolicy.clampHeightDp(dp));
     }
 
     /**

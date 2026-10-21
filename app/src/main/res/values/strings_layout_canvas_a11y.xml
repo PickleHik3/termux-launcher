@@ -19,6 +19,7 @@
     <string name="layout_canvas_a11y_handle_dock">Pinned apps size</string>
     <string name="layout_canvas_a11y_handle_keyboard">Keyboard height</string>
     <string name="layout_canvas_a11y_handle_chin">Space below the keys</string>
+    <string name="layout_canvas_a11y_handle_wall_strip">Strip row height</string>
 
     <!-- Actions. -->
     <string name="layout_canvas_a11y_select">Select</string>

@@ -13,6 +13,15 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commits "feat(dock): the #3 Strip's clock is the unfolded status bar's clock" and
+  "feat(dock): the #3 Strip's row height is each layout's…" (#84) · #3 Strip shows the status
+  bar's clock face; its row height is set by its own handle in the Layout editor, per layout;
+  tiles stay tappable at min height · pass: the Strip's clock matches the unfolded bar's (same
+  face after picking another in the surface editor, seconds/period, 12 h switch), slides out at 3
+  terminals and back at 2, no stutter on Home at rest; Layout editor: select the dock wearing
+  #3 → a second handle on the Strip row's top edge, readout "Strip row N dp", 56–128 dp, the
+  clock and tiles follow; a Home layout keeps its own; Undo/Discard put it back; at 56 dp every
+  tile and + still opens on a tap · emulator.
 - 2026-10-21 · commit "fix(statusbar): the bar's + opens a window in the current session's row on
   both halves" · on Home with a session up, tap the bar's + (and the Strip's +): the Workspace
   slides in on a new window right after the one in front, the session badge's count unchanged

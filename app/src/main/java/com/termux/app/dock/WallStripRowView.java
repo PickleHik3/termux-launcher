@@ -20,6 +20,7 @@ import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
 import android.view.animation.PathInterpolator;
 
 import androidx.annotation.ColorInt;
@@ -36,6 +37,8 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.AnimationSpeed;
 import com.termux.app.ReducedMotion;
+import com.termux.app.statusbar.TopPaneClockForm;
+import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.theme.SchemeTone;
 import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.terminal.TerminalColors;
@@ -44,14 +47,18 @@ import com.termux.terminal.TextStyle;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * The Wall strip's first row (spec "Wall strip"): a large clock with the date, then the
  * Workspace's terminals as tiles and a {@code +} tile, laid out by {@link WallStripRowPolicy}.
+ *
+ * <p>The clock is the unfolded status bar's own, a {@link TerminalClockWidget} in its full form
+ * in the face the user picked for the bar ({@link #setClockFace}), with the bar's typography,
+ * ink and ticking: a child of the row that redraws itself alone, never the tiles and never a
+ * layout. It fills the row's height, growing with the row ({@link
+ * WallStripRowPolicy#clockMaxScale}), within its share of the width.</p>
  *
  * <p>Each terminal tile is a dark well showing its window's split shape and title; the window in
  * front wears an accent ring, one asking for the user an amber ring and dot. {@code +} is a
@@ -61,9 +68,9 @@ import java.util.Locale;
  *
  * <p>Dumb: the host hands it the tiles ({@link #setTiles}, from {@link #tilesOf}) and the dock's
  * geometry ({@link #setGeometry}), and routes taps. Its background is clear: the slab is the
- * dock's. Nothing repaints at rest; the clock ticks once a minute while it is shown.</p>
+ * dock's. Nothing but the clock repaints at rest, and the clock only while it is shown.</p>
  */
-public final class WallStripRowView extends View {
+public final class WallStripRowView extends ViewGroup {
 
     /** Taps on the row. */
     public interface Listener {
@@ -182,8 +189,8 @@ public final class WallStripRowView extends View {
         return tiles;
     }
 
-    /** The row's height. */
-    public static final float HEIGHT_DP = 84f;
+    /** The row's shipped height; a layout may keep another ({@link WallStripRowPolicy}). */
+    public static final float HEIGHT_DP = WallStripRowPolicy.DEFAULT_HEIGHT_DP;
     static final float DEFAULT_INSET_DP = 14f;
     static final float DEFAULT_GAP_DP = 10f;
     static final float TILE_PAD_DP = 7f;
@@ -200,16 +207,8 @@ public final class WallStripRowView extends View {
     static final String MIN_LABEL_SAMPLE = "abc…";
     static final float RING_DP = 1.5f;
     static final float DOT_DP = 7f;
-    static final float TIME_SP = 50f;
-    static final float DATE_SP = 13f;
     static final float TITLE_SP = 12f;
     static final float PLUS_SP = 26f;
-    /** The clock's time fills at most this share of the row's height. */
-    static final float TIME_MAX_HEIGHT_SHARE = 0.62f;
-    /** The date reads a step quieter than the time. */
-    static final float DATE_INK_SHARE = 0.8f;
-    /** The date's skeleton for the locale: short weekday, day, short month. */
-    static final String DATE_SKELETON = "EEEdMMM";
     /** The ease the clock's slide runs on, as the mockup's cubic-bezier(.2,.8,.2,1). */
     static final PathInterpolator SLIDE_EASE = new PathInterpolator(0.2f, 0.8f, 0.2f, 1f);
 
@@ -226,8 +225,8 @@ public final class WallStripRowView extends View {
 
     private final float mDensity;
     private final int mTouchSlop;
-    private final TextPaint mTimePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-    private final TextPaint mDatePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    /** The status bar's clock, in the row's clock room. */
+    @NonNull private final TerminalClockWidget mClock;
     private final TextPaint mTitlePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint mPlusPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     /** The process glyphs, in the bundled Nerd Font symbols face; null when it is missing. */
@@ -260,13 +259,12 @@ public final class WallStripRowView extends View {
     /** Each tile's title fitted to it, from the last relayout. */
     @NonNull private Fitted[] mTitles = new Fitted[0];
 
-    @NonNull private String mTime = "";
-    @NonNull private String mDate = "";
-    @NonNull private CharSequence mFittedDate = "";
-    private final Runnable mTick = this::tick;
+    /** The clock's room as last laid out: its width at the slide's wider end, the row's height. */
+    private int mClockLaidWidth = -1;
+    private int mClockLaidHeight = -1;
+    private int mClockLaidLeft = -1;
 
     @ColorInt private int mAccent;
-    @ColorInt private int mClockInk;
     /** The tiles' well and how opaque it lies: a light scheme's is a dark tint over the glass. */
     @ColorInt private int mWell;
     private float mWellAlpha = WELL_ALPHA;
@@ -343,7 +341,15 @@ public final class WallStripRowView extends View {
         mInsetPx = DEFAULT_INSET_DP * mDensity;
         mGapPx = DEFAULT_GAP_DP * mDensity;
         mNewTerminalSpoken = context.getString(R.string.dock_wall_strip_new_terminal);
-        mTimePaint.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        setWillNotDraw(false);
+        mClock = new TerminalClockWidget(context, null);
+        mClock.setForm(TopPaneClockForm.FULL);
+        // Start-aligned with the first icon, whatever the bar's own alignment.
+        mClock.setAlignment(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT);
+        // The row's clock was never a node of its own; the tiles are the row's nodes.
+        mClock.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        addView(mClock);
         mTitlePaint.setTypeface(Typeface.MONOSPACE);
         mPlusPaint.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
         mPlusPaint.setTextAlign(Paint.Align.CENTER);
@@ -391,18 +397,20 @@ public final class WallStripRowView extends View {
     }
 
     /**
-     * The clock's ink on the dock's glass; the theme's on-surface until the dock hands one. Only
-     * the clock redraws.
+     * The status bar's clock settings, as the bar's own clock takes them: the face the user picked
+     * (Settings, or the surface editor's face picker), the twelve-hour switch, and lazy mode, which
+     * swaps the digits instead of folding them. Only the clock redraws.
      */
-    public void setClockInk(@ColorInt int ink) {
-        mClockInkHanded = true;
-        if (ink == mClockInk) return;
-        mClockInk = ink;
-        invalidate();
+    public void setClockFace(@Nullable String style, boolean useAmPm, boolean lazy) {
+        mClock.setStyle(style);
+        mClock.setUseAmPm(useAmPm);
+        mClock.setLazyMode(lazy);
     }
 
-    /** Whether the dock has handed the clock its ink; until then it follows the theme. */
-    private boolean mClockInkHanded;
+    /** The clock, for tests. */
+    @NonNull View clockView() {
+        return mClock;
+    }
 
     /**
      * The row's terminal tiles, in row order. Crossing two and three terminals slides the clock;
@@ -461,7 +469,7 @@ public final class WallStripRowView extends View {
         else if (keysChanged) cancelMorph();
         invalidateTiles();
         mAccessibility.invalidateRoot();
-        scheduleTick();
+        syncClockShown();
     }
 
     private static boolean sameKeys(@NonNull List<Tile> a, @NonNull List<Tile> b) {
@@ -573,6 +581,8 @@ public final class WallStripRowView extends View {
      */
     public void refreshTheme() {
         if (readThemeColors()) invalidateTiles();
+        // The bar's clock re-reads its roles the same way, keeping its gradients if none moved.
+        mClock.onThemeChanged();
     }
 
     // ---------------------------------------------------------------- the clock's slide
@@ -599,7 +609,9 @@ public final class WallStripRowView extends View {
             @Override public void onAnimationEnd(android.animation.Animator animation) {
                 if (mSlide != animation) return;
                 mSlide = null;
-                scheduleTick();
+                relayout();
+                invalidateTiles();
+                syncClockShown();
             }
         });
         mSlide = slide;
@@ -616,6 +628,75 @@ public final class WallStripRowView extends View {
     @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec),
             resolveSize(Math.round(HEIGHT_DP * mDensity), heightMeasureSpec));
+        mClockLaidWidth = -1;
+    }
+
+    @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        mClockLaidWidth = -1;
+        layoutClock();
+        placeClock();
+    }
+
+    /**
+     * The clock in its room: from the row's inset, as wide as the clock is at the slide's wider
+     * end and as tall as the row, its face fitted to both. Laid out again only when that room
+     * changes (a count crossing one and two, the row's height, the dock's geometry), never on a
+     * slide's frame or a tick: the slide moves and clips it ({@link #placeClock},
+     * {@link #drawChild}).
+     */
+    private void layoutClock() {
+        int width = Math.max(0, Math.round(mClockFullWidthPx));
+        int height = Math.max(0, getHeight());
+        int left = Math.round(mInsetPx);
+        if (width == mClockLaidWidth && height == mClockLaidHeight && left == mClockLaidLeft)
+            return;
+        mClockLaidWidth = width;
+        mClockLaidHeight = height;
+        mClockLaidLeft = left;
+        mClock.setFitMaxScale(WallStripRowPolicy.clockMaxScale(height, mDensity));
+        mClock.setFitBudget(width, height, false);
+        mClock.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+        mClock.layout(left, 0, left + width, height);
+    }
+
+    /**
+     * Sliding out, the clock is clipped to the row's inset and its room now, so it passes under
+     * the inset rather than over the slab's edge.
+     */
+    @Override protected boolean drawChild(@NonNull Canvas canvas, @NonNull View child,
+                                          long drawingTime) {
+        if (child != mClock) return super.drawChild(canvas, child, drawingTime);
+        float width = mRow.clockWidthPx;
+        if (width <= 0f || mClockFullWidthPx <= 0f) return false;
+        int saved = canvas.save();
+        canvas.clipRect(mInsetPx, 0f, mInsetPx + width, getHeight());
+        boolean more = super.drawChild(canvas, child, drawingTime);
+        canvas.restoreToCount(saved);
+        return more;
+    }
+
+    /**
+     * The clock's step of the slide: moved left by what its room lost and faded with it, as view
+     * properties only, so a slide's frame lays nothing out.
+     */
+    private void placeClock() {
+        float width = mRow.clockWidthPx;
+        float full = mClockFullWidthPx;
+        float shown = full > 0f ? Math.max(0f, Math.min(1f, width / full)) : 0f;
+        float dx = full > 0f ? -(full - width) : 0f;
+        if (mClock.getTranslationX() != dx) mClock.setTranslationX(dx);
+        if (mClock.getAlpha() != shown) mClock.setAlpha(shown);
+    }
+
+    /**
+     * The clock shows while it stands in the row or slides, and is put out of view once it has
+     * slid out, which stops its ticking too.
+     */
+    private void syncClockShown() {
+        boolean shown = WallStripRowPolicy.showsClock(mTiles.size()) || mSlide != null;
+        int visibility = shown ? VISIBLE : INVISIBLE;
+        if (mClock.getVisibility() != visibility) mClock.setVisibility(visibility);
     }
 
     @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
@@ -628,12 +709,13 @@ public final class WallStripRowView extends View {
         super.onConfigurationChanged(newConfig);
         applyTextSizes();
         readThemeColors();
-        updateClockText();
+        mClock.onThemeChanged();
+        mClockLaidWidth = -1;
         relayout();
         invalidateTiles();
     }
 
-    /** The row, its titles fitted to their tiles and the clock's text to its room; never in a draw. */
+    /** The row, its titles fitted to their tiles and the clock to its room; never in a draw. */
     private void relayout() {
         mRow = WallStripRowPolicy.layout(getWidth(), mInsetPx, mGapPx, mTiles.size(),
             mDockRadiusPx, mDockPaddingPx, mClockShare);
@@ -642,7 +724,8 @@ public final class WallStripRowView extends View {
         Fitted[] titles = new Fitted[mTiles.size()];
         for (int i = 0; i < titles.length; i++) titles[i] = fit(mTiles.get(i));
         mTitles = titles;
-        fitClockText();
+        if (getWidth() > 0 && getHeight() > 0) layoutClock();
+        placeClock();
     }
 
     /** Tile {@code tile}'s title fitted to the row's tile size ({@link WallStripRowPolicy#tileText}). */
@@ -669,18 +752,6 @@ public final class WallStripRowView extends View {
         return -metrics.ascent + metrics.descent;
     }
 
-    /** The time shrinks to the clock's full room, so the slide never squeezes the digits. */
-    private void fitClockText() {
-        float full = sp(TIME_SP);
-        float byHeight = getHeight() > 0 ? getHeight() * TIME_MAX_HEIGHT_SHARE : full;
-        mTimePaint.setTextSize(Math.min(full, byHeight));
-        float room = mClockFullWidthPx;
-        if (room <= 0f || mTime.isEmpty()) return;
-        float width = mTimePaint.measureText(mTime);
-        if (width > room) mTimePaint.setTextSize(mTimePaint.getTextSize() * room / width);
-        mFittedDate = TextUtils.ellipsize(mDate, mDatePaint, room, TextUtils.TruncateAt.END);
-    }
-
     /** Brings the window in front into view when the row scrolls. */
     private void showCurrentTile() {
         if (!mRow.scrolls()) {
@@ -694,12 +765,12 @@ public final class WallStripRowView extends View {
         }
     }
 
-    // ---------------------------------------------------------------- the clock's minute
+    // ---------------------------------------------------------------- attachment
 
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         readThemeColors();
-        scheduleTick();
+        syncClockShown();
     }
 
     @Override protected void onDetachedFromWindow() {
@@ -709,48 +780,13 @@ public final class WallStripRowView extends View {
             mSlide = null;
             slide.cancel();
             mClockShare = WallStripRowPolicy.clockShare(mTiles.size());
+            relayout();
+            syncClockShown();
         }
         cancelMorph();
         mTilesDirty = true;
-        removeCallbacks(mTick);
         removeCallbacks(mLongPress);
         super.onDetachedFromWindow();
-    }
-
-    @Override protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
-        super.onVisibilityChanged(changedView, visibility);
-        scheduleTick();
-    }
-
-    /** The minute turned: the clock's text, and only the clock, is drawn again. */
-    private void tick() {
-        updateClockText();
-        fitClockText();
-        invalidate();
-        scheduleTick();
-    }
-
-    /** One tick at the next minute while the clock stands in a shown row; none otherwise. */
-    private void scheduleTick() {
-        removeCallbacks(mTick);
-        boolean clockShown = WallStripRowPolicy.showsClock(mTiles.size()) || mSlide != null;
-        if (!isAttachedToWindow() || !isShown() || !clockShown) return;
-        if (mTime.isEmpty()) {
-            updateClockText();
-            fitClockText();
-        }
-        long now = System.currentTimeMillis();
-        postDelayed(mTick, 60_000L - now % 60_000L + 50L);
-    }
-
-    private void updateClockText() {
-        Context context = getContext();
-        Date now = new Date();
-        mTime = android.text.format.DateFormat.getTimeFormat(context).format(now);
-        Locale locale = Locale.getDefault();
-        String pattern = android.text.format.DateFormat.getBestDateTimePattern(locale,
-            DATE_SKELETON);
-        mDate = new java.text.SimpleDateFormat(pattern, locale).format(now);
     }
 
     // ---------------------------------------------------------------- drawing
@@ -758,7 +794,6 @@ public final class WallStripRowView extends View {
     @Override protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
         if (getWidth() <= 0 || getHeight() <= 0) return;
-        drawClock(canvas);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && canvas.isHardwareAccelerated()) {
             drawTilesRecorded(canvas);
         } else {
@@ -828,33 +863,6 @@ public final class WallStripRowView extends View {
         canvas.clipRect(left, 0f, left + width, getHeight());
         if (tile == null) drawPlusTile(canvas, left, width);
         else drawTerminalTile(canvas, tile, title, left, width);
-        canvas.restoreToCount(saved);
-    }
-
-    /**
-     * The clock: the time over the date, start-aligned with the first icon. Sliding out, it moves
-     * left by what its room lost and fades with it, clipped to the row's inset.
-     */
-    private void drawClock(@NonNull Canvas canvas) {
-        float width = mRow.clockWidthPx;
-        if (width <= 0f || mClockFullWidthPx <= 0f || mTime.isEmpty()) return;
-        float shown = Math.min(1f, width / mClockFullWidthPx);
-        int saved = canvas.save();
-        canvas.clipRect(mInsetPx, 0f, mInsetPx + width, getHeight());
-        float x = mInsetPx - (mClockFullWidthPx - width);
-        Paint.FontMetrics time = mTimePaint.getFontMetrics();
-        Paint.FontMetrics date = mDatePaint.getFontMetrics();
-        float timeHeight = -time.ascent + time.descent;
-        float dateHeight = -date.ascent + date.descent;
-        float gap = 2f * mDensity;
-        float top = (getHeight() - timeHeight - gap - dateHeight) / 2f;
-        mTimePaint.setColor(mClockInk);
-        mTimePaint.setAlpha(Math.round(Color.alpha(mClockInk) * shown));
-        canvas.drawText(mTime, x, top - time.ascent, mTimePaint);
-        mDatePaint.setColor(mClockInk);
-        mDatePaint.setAlpha(Math.round(Color.alpha(mClockInk) * shown * DATE_INK_SHARE));
-        canvas.drawText(mFittedDate, 0, mFittedDate.length(), x,
-            top + timeHeight + gap - date.ascent, mDatePaint);
         canvas.restoreToCount(saved);
     }
 
@@ -978,14 +986,11 @@ public final class WallStripRowView extends View {
         float wellAlpha = mWellAlpha;
         int titleInk = mTitleInk;
         int amber = mAmber;
-        int clockInk = mClockInk;
         Context context = getContext();
         mAccent = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
         mOnSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));
-        // The theme's ink until the dock hands the glass's.
-        if (!mClockInkHanded) mClockInk = mOnSurface;
         // The tiles are terminals: their wells and titles come from the terminal's own scheme,
         // the well a darker recess as the Prompt line's is: on a dark scheme a little below its
         // background, on a light one a dark tint over the glass. Inks are measured where they
@@ -1001,12 +1006,10 @@ public final class WallStripRowView extends View {
         mAmber = SchemeTone.contrastTone(colors[ANSI_YELLOW] | 0xFF000000, ink.inkSurface,
             MARK_CONTRAST);
         return accent != mAccent || onSurface != mOnSurface || well != mWell
-            || wellAlpha != mWellAlpha || titleInk != mTitleInk || amber != mAmber
-            || clockInk != mClockInk;
+            || wellAlpha != mWellAlpha || titleInk != mTitleInk || amber != mAmber;
     }
 
     private void applyTextSizes() {
-        mDatePaint.setTextSize(sp(DATE_SP));
         mTitlePaint.setTextSize(sp(TITLE_SP));
         if (mGlyphPaint != null) mGlyphPaint.setTextSize(sp(TITLE_SP));
         mPlusPaint.setTextSize(sp(PLUS_SP));

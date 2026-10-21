@@ -582,6 +582,12 @@ public final class LayoutEditorController {
                         mPlan.setKeyboardChinDp(dp));
             }
 
+            @Override public void onWallStripHeightDragged(int dp) {
+                if (mPlan != null)
+                    onHandleWrite(LayoutCanvasView.Handle.WALL_STRIP_HEIGHT,
+                        mPlan.setWallStripHeightDp(dp));
+            }
+
             @Override public void onWidgetGridDragged(int columns, int rows) {
                 if (mPlan != null)
                     onHandleWrite(LayoutCanvasView.Handle.WIDGET_GRID,
@@ -785,6 +791,8 @@ public final class LayoutEditorController {
         views.canvas.setExtraKeySlots(mKeySlots);
         views.canvas.setSizes(plan.dockHeightScale(), plan.keyboardHeightScale(),
             plan.keyboardChinDp());
+        // A dock wearing the Wall strip is drawn with its first row, and carries its handle.
+        views.canvas.setWallStrip(plan.showsWallStrip() ? plan.wallStripHeightDp() : 0);
         // The status bar's collapsed/expanded state is a per-orientation key the status swipe
         // sets; the canvas draws whichever the shown orientation holds (spec §5, DECISIONS
         // item 7). The keyboard's form and the minimal variant are the plan's layout's own.
@@ -869,6 +877,9 @@ public final class LayoutEditorController {
             case KEYBOARD_CHIN:
                 return context.getString(R.string.layout_editor_readout_chin,
                     plan.keyboardChinDp());
+            case WALL_STRIP_HEIGHT:
+                return context.getString(R.string.layout_editor_readout_wall_strip,
+                    plan.wallStripHeightDp());
             case WIDGET_GRID:
             default: {
                 PlaceLayout layout = plan.shownLayout();

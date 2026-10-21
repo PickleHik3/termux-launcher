@@ -228,10 +228,18 @@ public final class DockLayoutPolicy {
          * {@link #promptFieldReveal} is.
          */
         public final float wallStripReveal;
+        /**
+         * The Wall strip's first row's height in dp, as the page's layout keeps it (the Layout
+         * editor's Strip handle, {@code PlaceLayoutStore#wallStripHeightDp}); zero or less for
+         * the shipped {@link #WALL_STRIP_HEIGHT_DP}. Held to its range
+         * ({@link WallStripRowPolicy#clampHeightDp}).
+         */
+        public final int wallStripHeightDp;
 
         private DockInputs(Builder b) {
             this.promptFieldReveal = b.promptFieldReveal;
             this.wallStripReveal = b.wallStripReveal;
+            this.wallStripHeightDp = b.wallStripHeightDp;
             this.preferencesAvailable = b.preferencesAvailable;
             this.capsule = b.capsule;
             this.appsRowOnEdge = b.appsRowOnEdge;
@@ -290,10 +298,12 @@ public final class DockLayoutPolicy {
             private int displayCutoutInsetRightPx;
             private float promptFieldReveal;
             private float wallStripReveal;
+            private int wallStripHeightDp;
 
             public Builder preferencesAvailable(boolean v) { this.preferencesAvailable = v; return this; }
             public Builder promptFieldReveal(float v) { this.promptFieldReveal = v; return this; }
             public Builder wallStripReveal(float v) { this.wallStripReveal = v; return this; }
+            public Builder wallStripHeightDp(int v) { this.wallStripHeightDp = v; return this; }
             public Builder capsule(boolean v) { this.capsule = v; return this; }
             public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
             public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
@@ -486,7 +496,7 @@ public final class DockLayoutPolicy {
         float wallReveal = Float.isNaN(in.wallStripReveal)
             ? 0f : Math.max(0f, Math.min(1f, in.wallStripReveal));
         if (appsRowEnabled && wallReveal > 0f && out.appsBarHeightPx > 0) {
-            int rowPx = wallStripHeightPx(density);
+            int rowPx = wallStripHeightPx(density, in.wallStripHeightDp);
             int fullPx = rowPx + airPx;
             out.wallStripFullBandPx = fullPx;
             out.wallStripBandPx = Math.round(fullPx * wallReveal);
@@ -550,9 +560,18 @@ public final class DockLayoutPolicy {
         return Math.round(Math.max(0f, density) * LONE_ROW_AIR_DP);
     }
 
-    /** The Wall strip's first row view, px. */
+    /** The Wall strip's first row view at its shipped height, px. */
     public static int wallStripHeightPx(float density) {
         return Math.round(Math.max(0f, density) * WALL_STRIP_HEIGHT_DP);
+    }
+
+    /**
+     * The row at {@code heightDp}, the layout's own height, px: the shipped one for zero or less,
+     * otherwise held to the row's range.
+     */
+    public static int wallStripHeightPx(float density, int heightDp) {
+        if (heightDp <= 0) return wallStripHeightPx(density);
+        return Math.round(Math.max(0f, density) * WallStripRowPolicy.clampHeightDp(heightDp));
     }
 
     /** {@link #WALL_STRIP_SIDE_INSET_DP} in px. */

@@ -206,7 +206,7 @@ public final class TerminalClockWidget extends View {
     private int mColorSignature;
 
     /** Largest scale the fit mode grows the FULL face to. */
-    static final float FIT_MAX_SCALE = 1.35f;
+    public static final float FIT_MAX_SCALE = 1.35f;
     /** Budget the slot hands the clock; height 0 means no fit (the legacy shrink-only path). */
     private float mFitWidthPx;
     private float mFitHeightPx;
@@ -979,8 +979,22 @@ public final class TerminalClockWidget extends View {
         float floor = shared ? compactColumnHeightDp() / bandDp : 0f;
         return fitScalePlan(heightBudgetPx, widthBudgetPx,
             dp(bandDp + fullDateGapDp() + fullDateBlockDp()), dp(bandDp),
-            Math.max(.01f, fullContentWidth()), Math.max(.01f, fullTimeRowWidth()), floor);
+            Math.max(.01f, fullContentWidth()), Math.max(.01f, fullTimeRowWidth()), floor,
+            mFitMaxScale);
     }
+
+    /**
+     * The largest the fit grows the FULL face to; {@link #FIT_MAX_SCALE} unless a host that is
+     * not the bar asks for another (the Wall strip's row, whose clock grows with the row).
+     */
+    public void setFitMaxScale(float maxScale) {
+        float next = maxScale > 0f ? maxScale : FIT_MAX_SCALE;
+        if (next == mFitMaxScale) return;
+        mFitMaxScale = next;
+        invalidate();
+    }
+
+    private float mFitMaxScale = FIT_MAX_SCALE;
 
     /** Width the FULL face paints inside the given budget, so the slot can size the clock to it. */
     public float fitWidthPx(float widthBudgetPx, float heightBudgetPx, boolean shared) {
@@ -996,12 +1010,21 @@ public final class TerminalClockWidget extends View {
     @VisibleForTesting
     static float[] fitScalePlan(float heightBudget, float widthBudget, float columnPx,
                                 float bandPx, float fullWidthPx, float bandWidthPx, float floor) {
+        return fitScalePlan(heightBudget, widthBudget, columnPx, bandPx, fullWidthPx,
+            bandWidthPx, floor, FIT_MAX_SCALE);
+    }
+
+    /** {@link #fitScalePlan} growing the face to at most {@code maxScale}. */
+    @VisibleForTesting
+    static float[] fitScalePlan(float heightBudget, float widthBudget, float columnPx,
+                                float bandPx, float fullWidthPx, float bandWidthPx, float floor,
+                                float maxScale) {
         float byColumn = heightBudget / columnPx;
         if (byColumn >= floor) {
-            float scale = Math.min(Math.min(byColumn, FIT_MAX_SCALE), widthBudget / fullWidthPx);
+            float scale = Math.min(Math.min(byColumn, maxScale), widthBudget / fullWidthPx);
             return new float[] {scale, 1f, fullWidthPx * scale};
         }
-        float byBand = Math.max(floor, Math.min(heightBudget / bandPx, FIT_MAX_SCALE));
+        float byBand = Math.max(floor, Math.min(heightBudget / bandPx, maxScale));
         float scale = Math.min(byBand, widthBudget / bandWidthPx);
         return new float[] {scale, 0f, bandWidthPx * scale};
     }

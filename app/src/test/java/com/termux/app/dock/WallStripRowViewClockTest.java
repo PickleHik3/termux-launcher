@@ -73,6 +73,43 @@ public class WallStripRowViewClockTest {
     }
 
     @Test
+    public void theClockIsTheStatusBarsOwn_inTheFaceTheUserPicked() {
+        WallStripRowView row = laidOut(1);
+        View clock = row.clockView();
+        assertTrue("the expanded bar's clock, not a face of the row's own",
+            clock instanceof com.termux.app.terminal.TerminalClockWidget);
+        row.setClockFace(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD, true, true);
+        CharSequence spoken = clock.getContentDescription();
+        assertTrue(String.valueOf(spoken), String.valueOf(spoken).endsWith("LCD clock"));
+        assertTrue("twelve-hour, as the bar's setting says",
+            String.valueOf(spoken).contains(" AM,") || String.valueOf(spoken).contains(" PM,"));
+        assertEquals(com.termux.app.statusbar.TopPaneClockForm.FULL,
+            ((com.termux.app.terminal.TerminalClockWidget) clock).getForm());
+    }
+
+    @Test
+    public void theClockStandsInItsRoom_atTheRowsHeight() {
+        for (int terminals = 0; terminals <= 2; terminals++) {
+            WallStripRowView row = laidOut(terminals);
+            View clock = row.clockView();
+            WallStripRowPolicy.Row laid = row.rowNow();
+            assertEquals(terminals + " terminals", View.VISIBLE, clock.getVisibility());
+            assertEquals(INSET, clock.getLeft(), 1f);
+            assertEquals(laid.clockWidthPx, clock.getWidth(), 1f);
+            assertEquals(HEIGHT, clock.getHeight());
+        }
+    }
+
+    @Test
+    public void theClockStopsShowingOnceItHasSlidOut() {
+        assertFalse(laidOut(3).clockView().getVisibility() == View.VISIBLE);
+        WallStripRowView row = laidOut(4);
+        row.setTiles(tiles(1));
+        assertEquals(View.VISIBLE, row.clockView().getVisibility());
+    }
+
+    @Test
     public void closingDownToTwo_bringsTheClockBack() {
         WallStripRowView row = laidOut(4);
         row.setTiles(tiles(2));

@@ -12699,8 +12699,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.AZ_STRIP, azOpacity))
             syncAzScrubLettersAndTint();
         syncExtraKeysInk(dockOpacity);
-        mWallStripInkOpacity = dockOpacity;
-        syncWallStripInk(dockOpacity);
+        // The Wall strip's clock is the status bar's and takes its ink the bar's way, from the
+        // theme's roles; its tiles are the terminal scheme's. Either redraws only if it moved.
+        if (mWallStripRow != null) mWallStripRow.refreshTheme();
     }
 
     /**
@@ -15669,6 +15670,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mAppliedDockHeightScale = Float.NaN;
     private float mAppliedKeyboardHeightScale = Float.NaN;
     private int mAppliedKeyboardChinDp = -1;
+    /** The Wall strip's row, beside the three: the dock's slab is sized from it too. */
+    private int mAppliedWallStripHeightDp = -1;
 
     /** Whether the sizes the orientation on screen asks for have moved since. */
     private boolean applyPlaceSizes() {
@@ -15676,12 +15679,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float dock = mPreferences.getAppLauncherBarHeightScale();
         float keyboard = mPreferences.getInAppKeyboardHeightScale();
         int chin = mPreferences.getInAppKeyboardBottomPadding();
+        int strip = wallStripHeightDp();
         boolean moved = Float.compare(dock, mAppliedDockHeightScale) != 0
             || Float.compare(keyboard, mAppliedKeyboardHeightScale) != 0
-            || chin != mAppliedKeyboardChinDp;
+            || chin != mAppliedKeyboardChinDp || strip != mAppliedWallStripHeightDp;
         mAppliedDockHeightScale = dock;
         mAppliedKeyboardHeightScale = keyboard;
         mAppliedKeyboardChinDp = chin;
+        mAppliedWallStripHeightDp = strip;
         return moved;
     }
 
@@ -16402,8 +16407,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The Search field under the apps row: all of it while the page's layout turns it on,
             // between while the toggle, the palette or a slide across the seam eases the slab.
             .promptFieldReveal(promptFieldReveal())
-            // The Wall strip's first row over it, the same way.
+            // The Wall strip's first row over it, the same way, at the layout's own height.
             .wallStripReveal(wallStripReveal())
+            .wallStripHeightDp(preferencesAvailable ? wallStripHeightDp() : 0)
             .density(getResources().getDisplayMetrics().density)
             .barHeightScale(preferencesAvailable
                 ? mPreferences.getAppLauncherBarHeightScale() : DockLayoutPolicy.sizePreset(2))
@@ -16833,19 +16839,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // it. Its tiles are fed from the same window chips as the
     // Workspace's bar (syncWindowBarItems, built on Home too); a tile's tap brings the Workspace
     // in on its window. A style switch eases the slab with the Search field's ease; nothing here
-    // runs at rest but the clock's minute, which redraws the clock alone.
+    // runs at rest but the clock, the unfolded status bar's own (TerminalClockWidget, in the
+    // bar's face), which ticks as the bar's does and redraws itself alone. The row's height is
+    // the layout's (the Layout editor's Strip handle, PlaceLayoutStore.wallStripHeightDp).
 
     /** The row, made the first time the slab carries it; null before. */
     @Nullable private com.termux.app.dock.WallStripRowView mWallStripRow;
     /** The row's band and its share of the whole, as last laid out. */
     private int mAppliedWallStripBandPx;
     private float mAppliedWallStripReveal;
-    /** The dock's opacity its glass inks were last chosen at, for a row made since. */
-    private float mWallStripInkOpacity = -1f;
     /** The apps row's icon boxes, read to line the row up with the first icon. */
     private final float[] mWallStripIconBoxes = new float[4 * 32];
-    private final int[] mWallStripInkLocation = new int[2];
-    private final Rect mWallStripInkRect = new Rect();
     /** The gap between the row's tiles, the apps row's rhythm (spec "Shared rules"). */
     private static final float WALL_STRIP_GAP_DP = 10f;
     /** The display window's tile key: no terminal window's. */
@@ -16940,13 +16944,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (row.getAlpha() != alpha) row.setAlpha(alpha);
         applyWallStripGeometry(layout);
         if (made) {
-            // A row just made has neither windows nor ink yet: both on the next frame, off the
-            // layout pass.
+            // A row just made has no windows yet: they come on the next frame, off the layout
+            // pass.
             com.termux.app.dock.WallStripRowView fresh = row;
             fresh.post(() -> {
                 if (mWallStripRow != fresh) return;
                 syncWallStripFeed();
-                if (mWallStripInkOpacity >= 0f) syncWallStripInk(mWallStripInkOpacity);
             });
         }
         return moved;
@@ -16968,6 +16971,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public void onNewTerminalTapped() { onWallStripNewTerminal(); }
         });
+        applyWallStripClockFace(row);
         // The row lines up with the icons wherever the apps row is laid out again.
         if (mSuggestionBarView != null) {
             mSuggestionBarView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, orr, ob) -> {
@@ -16977,6 +16981,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         }
         return row;
+    }
+
+    /**
+     * The row's clock is the unfolded status bar's: the face the user picked for the bar, its
+     * twelve-hour switch and lazy mode, re-read wherever the bar's clock is (the window bar's
+     * refresh, which a face picked in Settings or the surface editor ends in).
+     */
+    private void applyWallStripClockFace(@Nullable com.termux.app.dock.WallStripRowView row) {
+        if (row == null || mPreferences == null) return;
+        row.setClockFace(mPreferences.getTopPaneClockStyle(),
+            mPreferences.isTopPaneClockAmPmEnabled(), mPreferences.isLazyModeEnabled());
+    }
+
+    /**
+     * The Wall strip's first row's height in dp, as the layout the stack is dressed for keeps it
+     * in the orientation on screen (the Layout editor's Strip handle): the Home layout's on a
+     * Home page that holds one, and mid-slide the half's whose rows the stack stands, as the
+     * dock's own height is read.
+     */
+    private int wallStripHeightDp() {
+        PlaceLayoutStore store = placeLayoutStore();
+        return store == null ? com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP
+            : store.forVariant(stackVariant()).wallStripHeightDp(currentPlaceOrientation());
     }
 
     /**
@@ -17171,26 +17198,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
             menu.show();
         });
-    }
-
-    /**
-     * The clock's ink on the dock's face under the row: the theme's on-surface where it reads
-     * there, else the nearest tone of it that does (GlassInk#faceInk), as the extra keys' labels.
-     * The row redraws the clock only when the ink moved.
-     */
-    private void syncWallStripInk(float dockOpacity) {
-        com.termux.app.dock.WallStripRowView row = mWallStripRow;
-        if (row == null || mChrome == null || !row.isShown() || row.getWidth() <= 0
-            || row.getHeight() <= 0) return;
-        mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
-        row.getLocationOnScreen(mWallStripInkLocation);
-        mWallStripInkRect.set(mWallStripInkLocation[0], mWallStripInkLocation[1],
-            mWallStripInkLocation[0] + row.getWidth(), mWallStripInkLocation[1] + row.getHeight());
-        int face = mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mWallStripInkRect);
-        int theme = com.google.android.material.color.MaterialColors.getColor(row,
-            com.termux.shared.R.attr.termuxColorOnSurface);
-        row.setClockInk(GlassInk.faceInk(face, theme,
-            mChrome.ink().target(OnGlass.TARGET_BODY_TEXT)));
     }
 
     /**
@@ -26955,6 +26962,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Re-applied here, not only at setup, so a lazy-mode toggle takes effect on the
         // settings-return refresh instead of waiting for the activity to be recreated.
         applyLazyMode();
+        // The Wall strip's clock is the bar's, in the face just picked, whether or not the bar
+        // is shown.
+        applyWallStripClockFace(mWallStripRow);
         boolean visible = isSplitPanesEnabled()
             && !currentPlaceLayout().slot(Element.STATUS).hidden;
         host.setVisibility(visible ? View.VISIBLE : View.GONE);

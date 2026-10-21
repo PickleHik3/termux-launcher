@@ -53,6 +53,8 @@ public final class PlaceArrangeSnapshot {
         final float dockHeightScale;
         final float keyboardHeightScale;
         final int keyboardChinDp;
+        /** The Wall strip's first row, in dp: a size like the dock's, so its handle undoes too. */
+        final int wallStripHeightDp;
 
         Entry(@NonNull PlaceLayoutStore places, @NonNull PlaceOrientation orientation) {
             this.orientation = orientation;
@@ -66,6 +68,7 @@ public final class PlaceArrangeSnapshot {
             dockHeightScale = places.dockHeightScale(orientation);
             keyboardHeightScale = places.keyboardHeightScale(orientation);
             keyboardChinDp = places.keyboardChinDp(orientation);
+            wallStripHeightDp = places.wallStripHeightDp(orientation);
         }
 
         void restore(@NonNull PlaceLayoutStore places) {
@@ -78,6 +81,7 @@ public final class PlaceArrangeSnapshot {
             places.setDockHeightScale(orientation, dockHeightScale);
             places.setKeyboardHeightScale(orientation, keyboardHeightScale);
             places.setKeyboardChinDp(orientation, keyboardChinDp);
+            places.setWallStripHeightDp(orientation, wallStripHeightDp);
         }
 
         void appendTo(@NonNull StringBuilder out) {
@@ -88,7 +92,8 @@ public final class PlaceArrangeSnapshot {
                 .append(widgetColumns).append('x').append(widgetRows).append(',')
                 .append(dockHeightScale).append(',')
                 .append(keyboardHeightScale).append(',')
-                .append(keyboardChinDp);
+                .append(keyboardChinDp).append(',')
+                .append(wallStripHeightDp);
             out.append('|');
         }
     }
