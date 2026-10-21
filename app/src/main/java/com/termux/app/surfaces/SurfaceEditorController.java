@@ -866,7 +866,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return;
             // One set of views per process, like the panel: the controller binds them once. The
             // keyboard's tools are the sheet's: they take its Row B while the keyboard is selected,
-            // and Home's dock styles while Home's dock is.
+            // and the Dock designs while the dock is.
             mLayoutViews = new LayoutEditorController.Views(frame, canvas, panel.keyboardTools(),
                 panel.keyboardForms(), panel.keyRadiusLabel(), panel.keyRadius(),
                 panel.dockStyles(), move,

@@ -557,11 +557,11 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * {@code variant}'s layout as {@code page} wears it. A window wears it whole, its dock the
-     * tray. A Home page on the shared layout leaves out what Home never wears (the extra keys,
-     * {@link DressResolver#wornBy}), its keyboard element is always on, Home's own
-     * whichever layout it wears ({@link #isHomeKeyboardAlwaysOn}), and its dock draws the design
-     * the layout holds. On the Home layout it is that layout as it resolves.
+     * {@code variant}'s layout as {@code page} wears it. A window wears it whole, its dock in the
+     * Dock design the layout holds (#93). A Home page on the shared layout leaves out what Home
+     * never wears (the extra keys, {@link DressResolver#wornBy}), its keyboard element is always
+     * on, Home's own whichever layout it wears ({@link #isHomeKeyboardAlwaysOn}), and its dock
+     * draws the design the layout holds too. On the Home layout it is that layout as it resolves.
      */
     @NonNull
     public PlaceLayout resolve(@NonNull PlaceOrientation orientation,

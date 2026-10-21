@@ -300,7 +300,7 @@ public final class LayoutEditorPlan {
         return Drop.LIVE;
     }
 
-    // -------------------------------------------------------------------------- the dock style
+    // ------------------------------------------------------------------------ the Dock design
 
     /**
      * The edited layout's Dock design as picked, whether or not it is drawn yet: what the picker
@@ -312,7 +312,7 @@ public final class LayoutEditorPlan {
     }
 
     /**
-     * A dock style picked, for the edited layout. One value for both orientations, so the live
+     * A Dock design picked, for the edited layout. One value for both orientations, so the live
      * dock follows it whichever orientation the toggle shows. Every layout holds one, Home's and
      * the windows' alike (#93).
      */

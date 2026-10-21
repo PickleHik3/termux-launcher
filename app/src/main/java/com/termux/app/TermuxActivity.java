@@ -4672,7 +4672,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // preference.
             program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook)
                 .withCover(Math.max(0f, navStrip ? mNavStripGlassCover : mDockGlassCover)));
-            // The dock style's own glass (the Glass tray's soft rim, shelf and icon reflection);
+            // The Dock design's own glass (the Tray's soft rim, shelf and icon reflection);
             // the strip under the pill wears none of it.
             if (navStrip) {
                 program.setDockSurface(0f, 0f);
@@ -15540,7 +15540,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout previous = mAppliedPlaceLayout;
         boolean arrangementChanged = !layout.equals(previous);
         mAppliedPlaceLayout = layout;
-        // A Dock style picked in the Layout editor: the dock takes its new shape on this pass.
+        // A Dock design picked in the Layout editor: the dock takes its new shape on this pass.
         boolean dockStyleChanged = previous != null && previous.dockStyle != layout.dockStyle;
         // The Search field toggled there, with whichever design (#96).
         boolean searchField = committedSearchField();
@@ -16471,7 +16471,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Lays the dock out and dresses its glass again for the spec it wears now: a settle between
-     * halves of different designs ({@link #restyleDockSurfaceForPageIfChanged}), or a Dock style
+     * halves of different designs ({@link #restyleDockSurfaceForPageIfChanged}), or a Dock design
      * picked in the
      * Layout editor ({@link #doSyncPlaceLayout}), live, with no restart. The backdrop up stays
      * until the re-cut one replaces it, so the switch never shows a bare frame.
@@ -16493,9 +16493,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ------------------------------------------------------------------ Drawer tile
     //
-    // The Drawer tile (#97; once the Taskbar design): where the page's layout turns it on
+    // The Drawer tile (#97): where the page's layout turns it on
     // (Dress.drawerTile) the dock row holds a tile that opens the app drawer among the apps
-    // (SuggestionBarView.setHomeTile, where it stands persisted per layout in PlaceLayoutStore),
+    // (SuggestionBarView.setDrawerTile, where it stands persisted per layout in PlaceLayoutStore),
     // with any Dock design, on whichever half wears the layout. On Lens beads it stands on a bead
     // of its own, as an app does. Nothing here runs at rest.
 
@@ -16511,7 +16511,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (bar == null) return;
         boolean on = mPreferences != null && mDresses.drawerTileOf(mLastWallPage);
         PlaceLayoutStore store = committedDockStore();
-        bar.setHomeTile(on ? (store != null ? store.drawerTilePosition()
+        bar.setDrawerTile(on ? (store != null ? store.drawerTilePosition()
                 : com.termux.app.dock.DrawerTilePolicy.DEFAULT) : null,
             on ? mDrawerTileListener : null);
     }
@@ -16530,13 +16530,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The Drawer tile opens the drawer as Home's own drawer entry does, on either half, and
      * remembers its place.
      */
-    private final SuggestionBarView.HomeTileListener mDrawerTileListener =
-        new SuggestionBarView.HomeTileListener() {
-            @Override public void onHomeTileTapped() {
+    private final SuggestionBarView.DrawerTileListener mDrawerTileListener =
+        new SuggestionBarView.DrawerTileListener() {
+            @Override public void onDrawerTileTapped() {
                 openAppDrawerFromHome();
             }
 
-            @Override public void onHomeTileMoved(
+            @Override public void onDrawerTileMoved(
                     @NonNull com.termux.app.dock.DrawerTilePolicy.Position position) {
                 PlaceLayoutStore store = committedDockStore();
                 if (store != null) store.setDrawerTilePosition(position);
@@ -16546,13 +16546,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ------------------------------------------------------------------ Search field
     //
-    // The Search field (#96; once the Prompt line design), on either half's dock, with any Dock
+    // The Search field (#96), on either half's dock, with any Dock
     // design: where the page's layout turns it on (Dress.searchField) the command palette's
     // field stands under the apps row on the same slab (DockLayout.promptFieldBandPx), in the
     // row's own host, so the dock's one glass, its shelf and its reflection are the taller slab's
     // (under Lens beads the row keeps its beads and the field stands in a glass capsule of its
     // own under them, LensBeadGeometry.withCapsule, #84); the Workspace's extra keys stay a
-    // band of their own beside it. The toggle, or a Dock style picked, in the Layout editor eases
+    // band of their own beside it. The toggle, or a Dock design picked, in the Layout editor eases
     // the slab's height in or out over a short run of frames, each a dock pass and one re-cut of
     // its glass; nothing runs before or after it.
 
@@ -16646,7 +16646,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * A Dock style was picked: where the Search field or the Wall strip's row comes or goes
+     * A Dock design was picked: where the Search field or the Wall strip's row comes or goes
      * on a dock in view, the slab eases from what it shows now to its new height, before any pass
      * lays the new style out, on either half. Anywhere else (the dock not laid out yet, reduced
      * motion) the passes land it at once.

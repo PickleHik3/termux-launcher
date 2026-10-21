@@ -30,9 +30,11 @@ import java.util.List;
  *       on the canvas's side of it go down by the part it hides, to where they rest without it,
  *       and the rows between it and the screen's edge never move ({@link DockPlan#FOLD_OUT},
  *       {@link DockPlan#FOLD_IN}, {@link #rowsOutsideExtraKeys}).</li>
- *   <li><b>The status bar.</b> It is the Workspace's alone, so it travels with the Workspace's
- *       page: its screen position is that page's ({@link #workspaceScreenXPx}), sliding out
- *       with the window toward Home and in with it from Home, instead of fading in place.</li>
+ *   <li><b>The status bar.</b> Where both halves wear it alike it stands still (one bar across
+ *       the wall, #90). Where Home's layout places or shapes it otherwise, the Workspace's bar
+ *       travels with the Workspace's page: its screen position is that page's
+ *       ({@link #workspaceScreenXPx}), sliding out with the window toward Home and in with it
+ *       from Home, instead of fading in place.</li>
  * </ul>
  *
  * <p>Only an arrangement whose dock rows all lie along the bottom, none under the keyboard and
@@ -269,8 +271,9 @@ public final class SeamTravel {
     /**
      * Whether the Workspace's bar can be laid out over a Home page for a slide toward the
      * Workspace without moving anything on that page: Home stands nothing on its top or side edges,
-     * whose stacks the bar's band would push in. The bar overlays Home's canvas
-     * (a Home page starts at the canvas's top, {@link PageTopInsets#pageTopInsetPx}), so with those edges empty nothing on Home moves.
+     * whose stacks the bar's band would push in. The bar overlays Home's canvas (a Home page
+     * whose layout stands no bar along the top starts at the canvas's top,
+     * {@link PageTopInsets#pageTopInsetPx}), so with those edges empty nothing on Home moves.
      */
     public static boolean statusCanArriveOver(@NonNull PlaceLayout home) {
         return EdgeStackPolicy.stack(home, Edge.TOP).isEmpty()

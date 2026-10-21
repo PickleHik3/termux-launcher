@@ -396,7 +396,7 @@ public final class SeamCrossing {
      * has not reached the other half answers the travel's own reveals and nothing else.
      *
      * @param dressable         whether the chrome can be dressed yet (the preferences are read)
-     * @param bandEaseRuns      whether a Dock style switch is easing the dock's bands, which own
+     * @param bandEaseRuns      whether a Dock design switch is easing the dock's bands, which own
      *                          them while it runs
      * @param fieldUnderPalette whether the command palette is up over the Search field, which then
      *                          stays the design's own

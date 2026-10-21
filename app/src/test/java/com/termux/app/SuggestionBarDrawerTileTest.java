@@ -47,17 +47,17 @@ import static org.junit.Assert.assertTrue;
 @Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-public class SuggestionBarHomeTileTest {
+public class SuggestionBarDrawerTileTest {
 
     private Activity activity;
     private SuggestionBarView bar;
     private int taps;
     private final List<DrawerTilePolicy.Position> moves = new ArrayList<>();
 
-    private final SuggestionBarView.HomeTileListener listener =
-        new SuggestionBarView.HomeTileListener() {
-            @Override public void onHomeTileTapped() { taps++; }
-            @Override public void onHomeTileMoved(@NonNull DrawerTilePolicy.Position p) {
+    private final SuggestionBarView.DrawerTileListener listener =
+        new SuggestionBarView.DrawerTileListener() {
+            @Override public void onDrawerTileTapped() { taps++; }
+            @Override public void onDrawerTileMoved(@NonNull DrawerTilePolicy.Position p) {
                 moves.add(p);
             }
         };
@@ -76,40 +76,40 @@ public class SuggestionBarHomeTileTest {
         idle();
     }
 
-    @Test public void everyOtherDockHasNoHomeTile() {
-        assertNull(homeTile());
+    @Test public void everyOtherDockHasNoDrawerTile() {
+        assertNull(drawerTile());
         assertEquals(7, bar.computePinnedItemsPerPage());
     }
 
-    @Test public void theHomeTileTakesOneOfTheRowsSlots() {
-        bar.setHomeTile(DrawerTilePolicy.Position.START, listener);
+    @Test public void theDrawerTileTakesOneOfTheRowsSlots() {
+        bar.setDrawerTile(DrawerTilePolicy.Position.START, listener);
         idle();
-        assertNotNull(homeTile());
+        assertNotNull(drawerTile());
         assertEquals("a page holds one app fewer", 6, bar.computePinnedItemsPerPage());
         assertEquals("the tile and the page's six app slots", 7, bar.getColumnCount());
 
-        bar.setHomeTile(null, null);
+        bar.setDrawerTile(null, null);
         idle();
-        assertNull(homeTile());
+        assertNull(drawerTile());
         assertEquals(7, bar.computePinnedItemsPerPage());
     }
 
     @Test public void theAppsKeepTheirOrderAroundTheTile() {
-        bar.setHomeTile(DrawerTilePolicy.Position.START, listener);
+        bar.setDrawerTile(DrawerTilePolicy.Position.START, listener);
         idle();
         assertTrue("at the start the tile stands before the apps",
-            centreX(homeTile()) < centreX(terminal()));
+            centreX(drawerTile()) < centreX(terminal()));
 
-        bar.setHomeTile(DrawerTilePolicy.Position.END, listener);
+        bar.setDrawerTile(DrawerTilePolicy.Position.END, listener);
         idle();
-        assertTrue("at the end it stands after them", centreX(homeTile()) > centreX(terminal()));
-        assertTrue("in the row's last slot", centreX(homeTile()) > bar.getWidth() * 6f / 7f);
+        assertTrue("at the end it stands after them", centreX(drawerTile()) > centreX(terminal()));
+        assertTrue("in the row's last slot", centreX(drawerTile()) > bar.getWidth() * 6f / 7f);
     }
 
     @Test public void aTapOpensTheDrawer() {
-        bar.setHomeTile(DrawerTilePolicy.Position.MIDDLE, listener);
+        bar.setDrawerTile(DrawerTilePolicy.Position.MIDDLE, listener);
         idle();
-        View tile = homeTile();
+        View tile = drawerTile();
         assertNotNull(tile);
         tile.performClick();
         assertEquals(1, taps);
@@ -125,7 +125,7 @@ public class SuggestionBarHomeTileTest {
         float[] boxes = new float[4 * 16];
         int without = bar.layoutIconBoxes(boxes);
 
-        bar.setHomeTile(DrawerTilePolicy.Position.END, listener);
+        bar.setDrawerTile(DrawerTilePolicy.Position.END, listener);
         idle();
         int with = bar.layoutIconBoxes(boxes);
         assertEquals("the tile is one more box", without + 1, with);
@@ -137,10 +137,10 @@ public class SuggestionBarHomeTileTest {
         assertTrue("the still centre is the tile's box's", matched);
         int[] row = new int[2];
         bar.getLocationOnScreen(row);
-        assertEquals(centreX(homeTile()) - row[0], tile, 1f);
+        assertEquals(centreX(drawerTile()) - row[0], tile, 1f);
     }
 
-    private View homeTile() {
+    private View drawerTile() {
         return findNamed(bar, activity.getString(R.string.dock_drawer_tile));
     }
 

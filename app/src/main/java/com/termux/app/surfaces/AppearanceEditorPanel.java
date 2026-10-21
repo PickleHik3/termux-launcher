@@ -202,7 +202,7 @@ final class AppearanceEditorPanel {
     private final Slider mMargin;
     /** The keyboard's tools in Row B: its type chips and Key radius, lent to Layout mode. */
     private final View mKeyboardTools;
-    /** Home's dock styles in Row B while Home's dock is selected, lent to Layout mode. */
+    /** The Dock designs in Row B while the dock is selected, lent to Layout mode. */
     private final ViewGroup mDockStyles;
     private final ChipGroup mKeyboardForms;
     private final TextView mKeyRadiusLabel;
@@ -234,7 +234,7 @@ final class AppearanceEditorPanel {
     private boolean mHiddenTilesOpen;
     /** Whether the keyboard's tools stand there (the keyboard is selected); the tiles win. */
     private boolean mKeyboardToolsShown;
-    /** Whether Home's dock styles stand there (Home's dock is selected); the tiles win. */
+    /** Whether the Dock designs stand there (the dock is selected); the tiles win. */
     private boolean mDockStylesShown;
 
     @Nullable private Listener mListener;
@@ -447,7 +447,7 @@ final class AppearanceEditorPanel {
         boolean docks = mDockStylesShown;
         mHiddenTilesOpen = false;
         mKeyboardToolsShown = false;
-        // The dock styles are pinned to Corner radius and Margin's extent, so they never set it.
+        // The Dock designs are pinned to Corner radius and Margin's extent, so they never set it.
         mDockStylesShown = false;
         applyGroups(EditorMode.LAYOUT);
         int height = measureNow(widthPx);
@@ -998,7 +998,7 @@ final class AppearanceEditorPanel {
 
     /**
      * Layout's Row B: Corner radius and Margin, or in their place the hidden tiles, or the
-     * keyboard's tools while the keyboard is selected, or Home's dock styles while Home's dock is
+     * keyboard's tools while the keyboard is selected, or the Dock designs while the dock is
      * (the tiles win while both would). Corner
      * radius and Margin go INVISIBLE rather than GONE while either stands there, so the row keeps
      * their height and the sheet never moves.
@@ -1101,7 +1101,7 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * Puts Home's dock styles in Row B's place while Home's dock is selected, or brings Corner
+     * Puts the Dock designs in Row B's place while the dock is selected, or brings Corner
      * radius and Margin back. The row is pinned to theirs, so the sheet's height does not change.
      */
     void setDockStylesShown(boolean shown) {
@@ -1111,7 +1111,7 @@ final class AppearanceEditorPanel {
         applyLayoutRow2();
     }
 
-    /** Home's dock styles: the row the layout controller fills with one preview per style. */
+    /** The Dock designs: the row the layout controller fills with one preview per design. */
     @NonNull ViewGroup dockStyles() {
         return mDockStyles;
     }
