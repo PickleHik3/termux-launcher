@@ -3,6 +3,7 @@ package com.termux.app;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Path;
+import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -33,6 +34,13 @@ public final class DockSurfaceHostLayout extends FrameLayout {
     @NonNull private View[] mSlabOnly = new View[0];
     /** The span the beads are cut to sideways, in this view's coordinates; NaN for none. */
     private float mSpanLeft = Float.NaN, mSpanRight = Float.NaN;
+    /**
+     * The slab's corner radius while beads melt into it across the seam (they are cut to the
+     * slab's outline as they swell over it); NaN at rest, when the beads stand inside it anyway.
+     */
+    private float mSlabClipRadius = Float.NaN;
+    private final Path mSlabClipPath = new Path();
+    private final RectF mSlabClipRect = new RectF();
 
     public DockSurfaceHostLayout(@NonNull Context context) {
         super(context);
@@ -54,6 +62,12 @@ public final class DockSurfaceHostLayout extends FrameLayout {
 
     /** The beads in this view's coordinates, or null for the slab. Redrawn only when they moved. */
     public void setBeads(@Nullable LensBeadGeometry.Beads beads) {
+        // The slab keeps no sideways cut: the next beads start uncut, as a swipe's frames set it.
+        if (beads == null) {
+            mSpanLeft = Float.NaN;
+            mSpanRight = Float.NaN;
+            mSlabClipRadius = Float.NaN;
+        }
         if (beads == null ? mBeads == null : beads.equals(mBeads)) return;
         mBeads = beads;
         mBeadPath.reset();
@@ -77,6 +91,21 @@ public final class DockSurfaceHostLayout extends FrameLayout {
         if (mBeads != null) invalidate();
     }
 
+    /**
+     * Cuts the beads to the slab's outline, a rounded rectangle of this view's bounds with
+     * {@code radiusPx} corners, while they swell over it; NaN lets go. Redrawn only on a change.
+     */
+    public void setSlabClip(float radiusPx) {
+        if (sameFloat(mSlabClipRadius, radiusPx)) return;
+        mSlabClipRadius = radiusPx;
+        if (mBeads != null) invalidate();
+    }
+
+    /** The slab clip's corner radius, NaN while there is none. */
+    public float slabClipRadius() {
+        return mSlabClipRadius;
+    }
+
     private static boolean sameFloat(float a, float b) {
         return Float.compare(a, b) == 0;
     }
@@ -96,6 +125,13 @@ public final class DockSurfaceHostLayout extends FrameLayout {
         int save = canvas.save();
         if (!Float.isNaN(mSpanLeft) && !Float.isNaN(mSpanRight) && mSpanRight > mSpanLeft)
             canvas.clipRect(mSpanLeft, 0f, mSpanRight, getHeight());
+        if (!Float.isNaN(mSlabClipRadius)) {
+            mSlabClipRect.set(0f, 0f, getWidth(), getHeight());
+            mSlabClipPath.reset();
+            mSlabClipPath.addRoundRect(mSlabClipRect, mSlabClipRadius, mSlabClipRadius,
+                Path.Direction.CW);
+            canvas.clipPath(mSlabClipPath);
+        }
         canvas.clipPath(mBeadPath);
         super.dispatchDraw(canvas);
         canvas.restoreToCount(save);

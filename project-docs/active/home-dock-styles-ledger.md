@@ -23,19 +23,24 @@ first within each section. Delete this file with the spec when the work is deliv
 | Fix | State | Commit |
 |---|---|---|
 | Drawer: pull down on Suggested's empty pane closed the drawer, now closes the folder | merged, unchecked on device | ba6144443 |
+| Pong 10-21: Workspace dock malformed after Home → Workspace (a second, unfrosted frame along the slab's bottom). The settle's chrome pass moved the glass host's top up by the dashes band and cut the backdrop and the glass from the host's old height in the same pass; the host was not among the views whose resize re-runs the pass, so the glass stayed a band short. The host's resize now books the pass; leaving beads also drops the moving beads, sideways cut and shelf beads | built, unit-tested, unchecked on device | 2742a62bc |
+| Pong 10-21: clunky Lens beads ⇄ Workspace hand-over. The beads now melt into the slab with Home's share of the slide (they swell under their icons, cut to the slab's outline, covering it by the last 15 %), and come back out of it; one effect rebuild a frame while the share moves | built, unit-tested, unchecked on device | 604fd8558 |
 
 ## Known issues
 
 Open, newest first. Move an item out when it is fixed (with its commit) or decided.
 
-- 2026-10-21 (pong) · With Lens beads on Home, the slide from Home to the Workspace (whose dock is
-  the plain dock) looks clunky: beads and the slab do not hand over smoothly. Being fixed.
-- 2026-10-21 (pong) · Right after swiping from Home (Lens beads) to the Workspace, the Workspace's
-  dock is malformed: the slab's lower-left corner and bottom edge show a second, misaligned
-  frame (screenshot from pong, apps row + A–Z + toolbar). Being fixed.
 - 2026-10-21 (pong) · In the Workspace, going from the second terminal window back to the first,
-  the keyboard flashes (seems to disappear and come back). Cause unknown; may predate the dock
-  work. Being investigated.
+  the keyboard flashes (seems to disappear and come back). Cause not found. By code it most
+  likely predates the dock work: the window switch path (showRowWindow, showWindowFromBar,
+  animateTerminalWindowArrival, the wall's nudge, which leaves the chrome travel at rest) reads
+  the same at a47df0ac3, and nothing the dock work added (restyle, band ease, Taskbar/Wall strip
+  feeds) runs on a Workspace window switch under Lens beads. The only direction-dependent code
+  found is the arrival's slide direction. Suspect the focus/IME side of the pane re-render
+  (TerminalPaneController.showWindow → render), unconfirmed. Device check owed (device-checks.md,
+  "Home dock: pong fixes").
+- Home ⇄ Workspace settle under a style with dashes above the slab: the slab's top still steps by
+  the dashes band (6.5 dp) at the settle; the beads' melt hides the beads → slab change, not that.
 - A dock page with fewer apps than slots stays left-aligned: the slot is the grid column in every
   drag, swipe and bead calculation, so centring needs an offset threaded through all of them.
 - Idle shells are all titled "home", so run strip entries and Wall strip tiles tell them apart

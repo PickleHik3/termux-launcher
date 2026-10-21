@@ -137,6 +137,13 @@ public final class LensBeadGeometry {
             return new Beads(moved, centerY + dy, radiusPx, iconHalfPx);
         }
 
+        /** The same beads at radius {@code radiusPx}. */
+        @NonNull
+        public Beads withRadius(float radiusPx) {
+            return radiusPx == this.radiusPx ? this
+                : new Beads(mCentersX, centerY, radiusPx, iconHalfPx);
+        }
+
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
@@ -206,6 +213,47 @@ public final class LensBeadGeometry {
         }
         Arrays.sort(kept);
         return new Beads(kept, rest.centerY, radius, rest.iconHalfPx);
+    }
+
+    /**
+     * The share of Home's slide over which the beads melt into the slab, counted from the
+     * Workspace's side: from Home's share 1 down to this they swell, below it they cover the slab
+     * whole, so the hand-over to the slab at share 0 changes nothing the clip lets through.
+     */
+    public static final float MELT_COVERED_SHARE = 0.15f;
+
+    /**
+     * The radius at which the beads, each clipped to the slab {@code width} by {@code height}
+     * (the beads' surface), cover all of it: the farthest any point of the slab stands from
+     * the nearest bead's centre, sideways (half the widest gap, or an end bead to its edge) and
+     * up and down (the row's line to the slab's top or bottom), plus a pixel.
+     */
+    public static float coverRadiusPx(@NonNull Beads beads, float width, float height) {
+        int n = beads.count();
+        if (n <= 0) return beads.radiusPx;
+        float[] sorted = beads.mCentersX.clone();
+        Arrays.sort(sorted);
+        float dx = Math.max(sorted[0], width - sorted[n - 1]);
+        for (int i = 1; i < n; i++) dx = Math.max(dx, (sorted[i] - sorted[i - 1]) * 0.5f);
+        float dy = Math.max(beads.centerY, height - beads.centerY);
+        dx = Math.max(0f, dx);
+        dy = Math.max(0f, dy);
+        return Math.max(beads.radiusPx, (float) Math.sqrt(dx * dx + dy * dy) + 1f);
+    }
+
+    /**
+     * The beads' radius while a slide across the seam carries Home's dock away or back:
+     * {@code homeShare} is Home's share of the slide (1 resting on Home, 0 on the Workspace).
+     * At 1 the beads are their own size; toward {@link #MELT_COVERED_SHARE} they swell on a
+     * smooth step to {@code coverPx}, where, clipped to the slab, they are the slab; below it
+     * they stay there.
+     */
+    public static float meltRadiusPx(float restPx, float coverPx, float homeShare) {
+        float share = Float.isNaN(homeShare) ? 1f : Math.max(0f, Math.min(1f, homeShare));
+        float t = (1f - share) / (1f - MELT_COVERED_SHARE);
+        t = Math.max(0f, Math.min(1f, t));
+        float eased = t * t * (3f - 2f * t);
+        return restPx + (Math.max(restPx, coverPx) - restPx) * eased;
     }
 
     /**

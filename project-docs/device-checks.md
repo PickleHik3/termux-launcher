@@ -1938,6 +1938,28 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   and pull down from the empty area above its apps: the folder closes and the drawer stays open
   at its root (it used to close the whole drawer). A pull down at the root still closes it.
 
+### Home dock: pong fixes (10-21)
+- 2026-10-21 · 2742a62bc · Home on Lens beads (and again on Glass tray), two dock pages so the
+  dashes float above the slab; swipe to the Workspace and let it settle: its dock (apps, A–Z,
+  toolbar) is one rounded slab, frosted to its lower edge, no second frame or unfrosted band
+  along its bottom or lower-left corner (crop the dock's lower edge, compare with the dock after
+  a rotation there and back). Also landing by a fling and by the dock's Terminal entry · emulator,
+  then pong.
+- 2026-10-21 · 604fd8558 · Lens beads ⇄ Workspace, slow finger drags across the seam and back
+  without letting go, then flings: as Home slides away the beads swell under their icons and fuse
+  into the slab, which is whole by the last stretch; returning, they shrink back out of it; the
+  settle changes nothing visible but the slab's own rim and the dashes' band (still a step: the
+  slab's top moves by the dashes band at the settle, as before). From the Workspace the dock
+  turns to swollen beads as soon as Home starts to show. No frame with a bare dock, a square
+  frame or beads off their icons; dark and pale wallpaper. Where the Workspace's dock has other
+  rows than Home's (A–Z, toolbar), the beads give way to the slab where the stack changes rows,
+  as before · emulator for the look (record at 60 fps), pong for jank (one dock effect rebuild a
+  frame while the share moves, `scripts/perf-frametime.sh` on a seam fling).
+- 2026-10-21 · keyboard flash (not fixed) · Workspace with two terminal windows, keyboard up:
+  window 2 → window 1 by chip tap, by `window.select`, and by swipe; record at 60 fps and say which
+  routes flash and for how many frames. Then the same on a build of a47df0ac3 (before the dock
+  work) to settle whether it predates it · pong, by hand (ask first), or emulator.
+
 ### Living glass (10-19)
 - 2026-10-19 · feat(glass) living glass · Taste on pong, on a dark and on a pale wallpaper, under
   Clear and Mist: does a moving pane read as glass with weight (the rim thickening ahead, thinning

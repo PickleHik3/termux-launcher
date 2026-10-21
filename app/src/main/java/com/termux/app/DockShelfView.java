@@ -120,6 +120,12 @@ public final class DockShelfView extends View {
         invalidate();
     }
 
+    /** The beads the shelf shadows, in the host's coordinates; null for the slab. */
+    @Nullable
+    com.termux.app.dock.LensBeadGeometry.Beads beads() {
+        return mBeads;
+    }
+
     /**
      * The beads' outline at the host's current offset, and their one shadow and glow, built
      * again only when the beads' size or line moved.
