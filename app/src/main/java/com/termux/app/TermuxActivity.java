@@ -4876,7 +4876,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) return false;
         if (dockSurfaceSpec().beads) return Float.isNaN(mSeamBeadShare) || mSeamBeadShare > 0f;
         return !Float.isNaN(mSeamBeadShare) && mSeamBeadShare > 0f
-            && homeDress().dockDesign() == com.termux.app.dock.DockStyle.LENS_BEADS;
+            && mDresses.dockDesignOf(com.termux.app.wall.PaneWallPage.WIDGETS)
+                == com.termux.app.dock.DockStyle.LENS_BEADS;
     }
 
     /** The beads where the row draws its icons now: moving with a swipe, or at rest. */
@@ -4928,7 +4929,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncSeamBeadMelt(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
         if (mTravelSeamOther == null || mPreferences == null || mChrome == null) return;
-        if (homeDress().dockDesign() != com.termux.app.dock.DockStyle.LENS_BEADS) return;
+        if (mDresses.dockDesignOf(com.termux.app.wall.PaneWallPage.WIDGETS)
+            != com.termux.app.dock.DockStyle.LENS_BEADS) return;
         if (!com.termux.app.place.SeamTravel.crosses(mLastWallPage, mTravelSeamOther)) return;
         boolean committedHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
         float share;

@@ -93,6 +93,16 @@ public final class DressResolver {
     }
 
     /**
+     * The Dock design the page draws ({@link Dress#dockDesign}), read without the rest of the
+     * dress: the question the seam's bead melt asks on every frame of a slide.
+     */
+    @NonNull
+    public DockStyle dockDesignOf(@NonNull PaneWallPage page) {
+        return dockDesignOn(layoutOf(page),
+            page == PaneWallPage.WIDGETS ? mSource.homeDockStyle() : null);
+    }
+
+    /**
      * Whether a page on {@code layout} wears {@code element} ({@link Dress#wears}), for a reader
      * that holds a layout rather than a page: the Layout editor's offers, the store's resolve.
      */

@@ -202,4 +202,11 @@ public class DressResolverTest {
         assertEquals(DockStyle.GLASS_TRAY,
             DressResolver.dockDesignOn(LayoutVariant.NORMAL, DockStyle.LENS_BEADS));
     }
+
+    @Test
+    public void theDockDesignAloneMatchesTheWholeDress() {
+        stored.homeDockStyle = DockStyle.LENS_BEADS;
+        assertEquals(home().dockDesign(), dresses.dockDesignOf(PaneWallPage.WIDGETS));
+        assertEquals(terminal().dockDesign(), dresses.dockDesignOf(PaneWallPage.TERMINAL));
+    }
 }
