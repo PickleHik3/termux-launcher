@@ -70,8 +70,9 @@ public class LauncherToolRegistryTest {
         // keyboard.toggle_enabled, which turns the keyboard off so a tap no longer raises it, and by
         // voice.dictate, the Dictate key that starts a dictation on any place, and by window.move
         // with its palette pair window.move_left and window.move_right, which reorder the row, and
-        // by pane.consume and pane.expel, Niri's column moves on the row.
-        assertEquals(89, registry.getUiTools().size());
+        // by pane.consume and pane.expel, Niri's column moves on the row, and by minimal.toggle,
+        // the palette's door to minimal mode.
+        assertEquals(90, registry.getUiTools().size());
     }
 
     @Test

@@ -193,6 +193,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_KEYBOARD_CLIPBOARD = "keyboard.clipboard";
     public static final String TOOL_KEYBOARD_TOGGLE_ENABLED = "keyboard.toggle_enabled";
     public static final String TOOL_VOICE_DICTATE = "voice.dictate";
+    public static final String TOOL_MINIMAL_TOGGLE = "minimal.toggle";
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
@@ -375,6 +376,7 @@ public final class TerminalActionDispatcher {
             case TOOL_KEYBOARD_CLIPBOARD:
             case TOOL_KEYBOARD_TOGGLE_ENABLED:
             case TOOL_VOICE_DICTATE:
+            case TOOL_MINIMAL_TOGGLE:
             case TOOL_TERMINAL_TOGGLE_TOOLBAR:
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
@@ -1580,6 +1582,9 @@ public final class TerminalActionDispatcher {
                     if (viewClient == null) return error(503, "unavailable", "Terminal view client is not ready");
                     return ok().put("enabled", viewClient.toggleKeyboardTurnedOff());
                 }
+                case TOOL_MINIMAL_TOGGLE:
+                    // The corner tab's button, so Home toggles the one flag as a window does.
+                    return ok().put("minimal", host.toggleMinimalMode());
                 case TOOL_VOICE_DICTATE:
                     // Start or stop; the text waits in the dictation panel, never typed on its own.
                     return ok().put("listening", host.toggleVoiceDictation());

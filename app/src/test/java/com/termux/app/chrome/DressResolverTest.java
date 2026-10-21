@@ -20,8 +20,8 @@ import java.util.EnumMap;
 
 /**
  * What a page wears, as the Dress resolver answers it (ADR 0009, build step 1). One layout dresses
- * both halves: with the Home layout off, a Home page wears the Workspace's layout (the minimal one
- * while minimal mode is on) less the status bar and the extra keys, in the Workspace's Style,
+ * both halves: with the Home layout off, a Home page wears the Workspace's normal layout (minimal
+ * mode is the windows' alone) less the status bar and the extra keys, in the Workspace's Style,
  * Corners and Margin, its dock in the Dock design that layout holds. With the Home layout on, a
  * Home page wears its own copy and its own shape, as ADR 0008 had it. A window wears the
  * Workspace's layout whole, its dock the tray until #93.
@@ -86,9 +86,9 @@ public class DressResolverTest {
     }
 
     @Test
-    public void minimalOnDressesBothHalvesMinimal() {
+    public void minimalOnDressesTheWindowsMinimalAndLeavesHomeNormal() {
         stored.minimal = true;
-        assertEquals(LayoutVariant.MINIMAL, home().layout());
+        assertEquals(LayoutVariant.NORMAL, home().layout());
         assertEquals(LayoutVariant.MINIMAL, terminal().layout());
         assertEquals(LayoutVariant.MINIMAL, dresses.dressOf(PaneWallPage.DISPLAY).layout());
         assertEquals(WORKSPACE, home().shape());
@@ -101,7 +101,7 @@ public class DressResolverTest {
         stored.designs.put(LayoutVariant.HOME, DockStyle.GLASS_TRAY);
         assertEquals(DockStyle.LENS_BEADS, home().dockDesign());
         stored.minimal = true;
-        assertEquals(DockStyle.WALL_STRIP, home().dockDesign());
+        assertEquals(DockStyle.LENS_BEADS, home().dockDesign());
     }
 
     /** Until #93 the Workspace's dock is the tray, whatever its layout holds. */
@@ -117,12 +117,13 @@ public class DressResolverTest {
     @Test
     public void homeAndAWindowOnOneLayoutShareTheLayoutAndTheShape() {
         stored.homeLayout = false;
-        for (boolean minimal : new boolean[] {false, true}) {
-            stored.minimal = minimal;
-            assertEquals(terminal().layout(), home().layout());
-            assertEquals("the stack is not re-dressed on the swipe",
-                terminal().shape(), home().shape());
-        }
+        assertEquals(terminal().layout(), home().layout());
+        assertEquals("the stack is not re-dressed on the swipe",
+            terminal().shape(), home().shape());
+        stored.minimal = true;
+        assertEquals("minimal is the windows' alone", LayoutVariant.NORMAL, home().layout());
+        assertEquals(LayoutVariant.MINIMAL, terminal().layout());
+        assertEquals(terminal().shape(), home().shape());
     }
 
     // ------------------------------------------------------------------ the Home layout on
@@ -134,6 +135,13 @@ public class DressResolverTest {
         assertEquals(HOME, home().shape());
         assertEquals(WORKSPACE, terminal().shape());
         assertEquals(LayoutVariant.NORMAL, terminal().layout());
+    }
+
+    @Test
+    public void aHomeLayoutAndMinimalModeDoNotMeet() {
+        stored.homeLayout = true;
+        stored.minimal = true;
+        assertEquals(LayoutVariant.HOME, home().layout());
     }
 
     @Test
@@ -245,10 +253,12 @@ public class DressResolverTest {
     @Test
     public void aDressFollowsTheStoreAsItChanges() {
         Dress before = home();
+        Dress window = terminal();
         stored.minimal = true;
-        assertNotEquals(before, home());
-        stored.minimal = false;
         assertEquals(before, home());
+        assertNotEquals(window, terminal());
+        stored.minimal = false;
+        assertEquals(window, terminal());
         stored.homeLayout = true;
         assertNotEquals(before, home());
     }

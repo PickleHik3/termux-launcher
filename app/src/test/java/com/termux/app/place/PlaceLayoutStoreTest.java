@@ -1101,10 +1101,11 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
-    public void minimalModeDressesHomeWhileItHoldsNoLayoutOfItsOwn() {
+    public void minimalModeDoesNotDressHome() {
         PlaceLayoutStore store = store();
         store.setMinimal(true);
-        assertEquals(LayoutVariant.MINIMAL, store.variantFor(PaneWallPage.WIDGETS));
+        assertEquals(LayoutVariant.MINIMAL, store.variantFor(PaneWallPage.TERMINAL));
+        assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
         store.setHomeLayout(true);
         assertEquals("a Home layout stays as set", LayoutVariant.HOME,
             store.variantFor(PaneWallPage.WIDGETS));
@@ -1261,8 +1262,8 @@ public class PlaceLayoutStoreTest {
             store.resolve(PORTRAIT, PaneWallPage.TERMINAL).keyboardShown);
 
         store.setMinimal(true);
-        assertEquals("minimal on both halves",
-            store.resolve(PORTRAIT, LayoutVariant.MINIMAL).slot(Element.APPS),
+        assertEquals("minimal is the windows' alone: Home keeps the normal layout",
+            window.slot(Element.APPS),
             store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.APPS));
     }
 
@@ -1380,6 +1381,40 @@ public class PlaceLayoutStoreTest {
         version8WithHomeAsTheWorkspace()
             .putBoolean("layout.home.portrait.apps_row_under_keyboard", true).commit();
         assertTrue(store().hasHomeLayout());
+    }
+
+    @Test
+    public void anUpgradeWhoseHomeKeyboardDiffersAndIsAlwaysOnKeepsItAsAHomeLayout() {
+        version8WithHomeAsTheWorkspace()
+            .putBoolean("layout.home.keyboard_shown", true)
+            .putFloat("layout.home.portrait.keyboard_height", 1.3f)
+            .commit();
+        assertTrue(store().hasHomeLayout());
+    }
+
+    @Test
+    public void anUpgradeWhoseHomeKeyboardFormOrChinDiffersCounts() {
+        version8WithHomeAsTheWorkspace()
+            .putBoolean("layout.home.keyboard_shown", true)
+            .putString("layout.home.landscape.keyboard_form", "floating")
+            .commit();
+        assertTrue(store().hasHomeLayout());
+
+        prefs.edit().clear().commit();
+        version8WithHomeAsTheWorkspace()
+            .putBoolean("layout.home.keyboard_shown", true)
+            .putInt("layout.home.portrait.keyboard_chin", 40)
+            .commit();
+        assertTrue(store().hasHomeLayout());
+    }
+
+    @Test
+    public void anUpgradeWhoseHomeKeyboardDiffersButIsNotAlwaysOnIgnoresIt() {
+        version8WithHomeAsTheWorkspace()
+            .putFloat("layout.home.portrait.keyboard_height", 1.3f)
+            .putString("layout.home.landscape.keyboard_form", "floating")
+            .commit();
+        assertFalse(store().hasHomeLayout());
     }
 
     @Test
