@@ -29,6 +29,7 @@
 
     <!-- Built-in Media widget. -->
     <string name="bw_feeds_media_nothing_playing">Nothing playing</string>
+    <string name="bw_feeds_media_resume">Resume %1$s</string>
     <string name="bw_feeds_media_allow_access">Allow notification access</string>
     <string name="bw_feeds_media_allow_access_hint">Tap to show what\'s playing</string>
     <string name="bw_feeds_media_play">Play</string>

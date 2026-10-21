@@ -14,6 +14,10 @@
     </plurals>
     <string name="bw_files_tasks_left_short">left</string>
     <string name="bw_files_tasks_header">%1$d left · %2$d done</string>
+    <string name="bw_files_tasks_header_open">Today · %1$d open</string>
+    <string name="bw_files_tasks_header_open_short">%1$d open</string>
+    <string name="bw_files_tasks_open_label">open</string>
+    <string name="bw_files_tasks_writes_to">Writes to %1$s</string>
     <string name="bw_files_tasks_empty">No tasks yet</string>
     <string name="bw_files_tasks_add">Add</string>
     <string name="bw_files_tasks_add_description">Add a task</string>

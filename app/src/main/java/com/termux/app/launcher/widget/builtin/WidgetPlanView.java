@@ -188,7 +188,8 @@ final class WidgetPlanView extends View {
     @ColorInt private int color(@NonNull WidgetLayoutPlan.Ink ink) {
         switch (ink) {
             case STRONG: return style.onSurface;
-            case SUN: return style.warm;
+            case SUN:
+            case CAUTION: return style.warm;
             case MOON: return style.primary;
             case RULE: return style.outlineVariant;
             case SOFT:

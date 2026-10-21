@@ -29,7 +29,7 @@ final class WidgetLayoutPlan {
     }
 
     /** The colour role a part is drawn in; the view maps it to the widget's style. */
-    enum Ink { STRONG, SOFT, SUN, MOON, CLOUD, RULE }
+    enum Ink { STRONG, SOFT, SUN, MOON, CLOUD, RULE, CAUTION }
 
     /** A box in dp. */
     static final class Box {
