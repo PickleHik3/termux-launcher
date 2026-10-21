@@ -13,6 +13,11 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "fix(terminal): a bottom-anchored growth pulls down history only as far as
+  it goes" · short session (a few lines, no scrollback): open the Layout editor, Done → the
+  keyboard goes down and the terminal output stays at the top, no blank band above it; long
+  session (scrollback): the prompt stays at the bottom with history filling the top; a restored
+  Home float: no blank top · emulator.
 - 2026-10-21 · commit "feat(dock): three numbered designs in the picker" (#98) · Layout editor, dock
   selected: the picker shows #1 Tray, #2 Beads, #3 Strip, then Search and Drawer; fits at 360 dp,
   default and Large text (no label ellipsized) · emulator.
