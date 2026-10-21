@@ -50,11 +50,30 @@ public final class WallStripRowPolicy {
     /** One step of the height, for the canvas's accessibility actions and keys. */
     public static final int HEIGHT_STEP_DP = 4;
 
+    /**
+     * The largest the clock grows at {@link #DEFAULT_HEIGHT_DP}: the status bar's own largest fit
+     * ({@code TerminalClockWidget.FIT_MAX_SCALE}), so at today's height the Strip's clock is the
+     * size the unfolded bar draws at its tallest.
+     */
+    public static final float CLOCK_MAX_SCALE_AT_DEFAULT =
+        com.termux.app.terminal.TerminalClockWidget.FIT_MAX_SCALE;
+
     private WallStripRowPolicy() {}
 
     /** A stored or dragged row height held to its range. */
     public static int clampHeightDp(int heightDp) {
         return Math.max(MIN_HEIGHT_DP, Math.min(MAX_HEIGHT_DP, heightDp));
+    }
+
+    /**
+     * The largest the clock's face may scale in a row {@code rowHeightPx} tall: the bar's largest
+     * fit at the shipped height, in proportion to the row, so the clock grows and shrinks with
+     * the row as its tiles do. The face still fits the width it is given. The default row's while
+     * the row is not measured.
+     */
+    public static float clockMaxScale(float rowHeightPx, float density) {
+        if (rowHeightPx <= 0f || density <= 0f) return CLOCK_MAX_SCALE_AT_DEFAULT;
+        return CLOCK_MAX_SCALE_AT_DEFAULT * rowHeightPx / (DEFAULT_HEIGHT_DP * density);
     }
 
     /** The clock's share of the row at rest with {@code terminals} open. */

@@ -320,6 +320,18 @@ public class WallStripRowPolicyTest {
     }
 
     @Test
+    public void clock_growsWithTheRow_fromTheBarsOwnLargestFitAtTheDefault() {
+        float atDefault = WallStripRowPolicy.clockMaxScale(84f * 3f, 3f);
+        assertEquals(WallStripRowPolicy.CLOCK_MAX_SCALE_AT_DEFAULT, atDefault, EPS);
+        assertEquals(atDefault * 56f / 84f, WallStripRowPolicy.clockMaxScale(56f * 3f, 3f), EPS);
+        assertEquals(atDefault * 128f / 84f, WallStripRowPolicy.clockMaxScale(128f * 3f, 3f),
+            EPS);
+        // Not measured yet: the default row's.
+        assertEquals(atDefault, WallStripRowPolicy.clockMaxScale(0f, 3f), EPS);
+        assertEquals(atDefault, WallStripRowPolicy.clockMaxScale(252f, 0f), EPS);
+    }
+
+    @Test
     public void aTileAtTheLeastHeight_keepsItsTitleOnOneLineAndASplitShape() {
         // 12 sp monospace at 1x: a 16 dp line; the tile's 7 dp padding and 5 dp title gap.
         WallStripRowPolicy.TileText text = WallStripRowPolicy.tileText(90f,
