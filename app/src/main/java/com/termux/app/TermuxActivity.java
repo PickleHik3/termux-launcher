@@ -4876,7 +4876,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) return false;
         if (dockSurfaceSpec().beads) return Float.isNaN(mSeamBeadShare) || mSeamBeadShare > 0f;
         return !Float.isNaN(mSeamBeadShare) && mSeamBeadShare > 0f
-            && homeDockStyle() == com.termux.app.dock.DockStyle.LENS_BEADS;
+            && homeDress().dockDesign() == com.termux.app.dock.DockStyle.LENS_BEADS;
     }
 
     /** The beads where the row draws its icons now: moving with a swipe, or at rest. */
@@ -4928,10 +4928,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncSeamBeadMelt(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
         if (mTravelSeamOther == null || mPreferences == null || mChrome == null) return;
-        if (homeDockStyle() != com.termux.app.dock.DockStyle.LENS_BEADS) return;
-        boolean committedHome = com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage);
-        if (committedHome == com.termux.app.place.HomeChromePolicy.wearsHomeShape(mTravelSeamOther))
-            return;
+        if (homeDress().dockDesign() != com.termux.app.dock.DockStyle.LENS_BEADS) return;
+        if (!com.termux.app.place.SeamTravel.crosses(mLastWallPage, mTravelSeamOther)) return;
+        boolean committedHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
         float share;
         if (committedHome && com.termux.app.place.SeamTravel.committedRowsLeave(mTravelSeamPlan)) {
             // Home's rows sink below the stack's bottom edge, which cuts them flat: the beads
@@ -5900,7 +5899,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Whether the chrome on screen wears Home's own Style, Corners and Margin rather than the
-     * Workspace's (HomeChromePolicy). Each surface wears the half it belongs to (SeamDress): at
+     * Workspace's (the page's Dress). Each surface wears the half it belongs to (SeamDress): at
      * rest that is the page the chrome is committed to, so it switches at settle with the layout
      * variant, and a settle that crosses between halves that differ dresses the chrome again
      * ({@link #restyleChromeForHalfIfChanged}). Mid-slide across the seam the stack wears the half
@@ -5929,8 +5928,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean stackDressedApart() {
         return mTravelSeamShapeDiffers && mTravelStackDressPage != null
-            && com.termux.app.place.HomeChromePolicy.wearsHomeShape(mTravelStackDressPage)
-                != com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage);
+            && com.termux.app.place.SeamTravel.crosses(mTravelStackDressPage, mLastWallPage);
     }
 
     /** {@link #isRoundedDockStyle()} for one surface's dress. */
@@ -5984,11 +5982,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void restyleChromeForHalfIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
                                                @NonNull com.termux.app.wall.PaneWallPage to) {
         if (mPreferences == null || mChrome == null) return;
-        if (com.termux.app.place.HomeChromePolicy.wearsHomeShape(from)
-            == com.termux.app.place.HomeChromePolicy.wearsHomeShape(to)) return;
-        if (!com.termux.app.place.HomeChromePolicy.shapeChanges(from, to,
-            com.termux.app.place.WallHalfShape.read(mPreferences, false),
-            com.termux.app.place.WallHalfShape.read(mPreferences, true))) return;
+        if (dressOf(from).shape().equals(dressOf(to).shape())) return;
         redressChromeFromState();
         updateAppLauncherBarHeight();
         setTerminalToolbarHeight(true);
@@ -9780,8 +9774,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void noteRootFitBottom(@NonNull WindowInsetsCompat insets) {
         mRootFitBottomPx = insets.getSystemWindowInsetBottom();
         mRootRestFitBottomPx = insets.getInsets(Type.systemBars() | Type.displayCutout()).bottom;
-        if (mTravelHoldsContent
-            || !com.termux.app.place.HomeChromePolicy.dockOverlays(mLastWallPage)) return;
+        if (mTravelHoldsContent || mLastWallPage != com.termux.app.wall.PaneWallPage.WIDGETS)
+            return;
         int reach = systemImeTakePx();
         int delta = reach - mHomeContentImeReachPx;
         if (delta == 0) return;
@@ -13302,7 +13296,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // At the session's end, Home with always on keeps it: it is the keyboard Home wants.
             PlaceLayoutStore store = placeLayoutStore();
             if ((!mSurfaceEditor.isActive() || mSurfaceEditor.isEndingSession()) && store != null
-                && com.termux.app.place.HomeChromePolicy.editorEndKeepsKeyboard(mLastWallPage,
+                && com.termux.app.place.PlaceKeyboard.editorEndKeepsKeyboard(mLastWallPage,
                     store.isHomeKeyboardAlwaysOn()))
                 return;
             if (mInAppKeyboard != null)
@@ -14295,7 +14289,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyWidgetGridPreference() {
         if (mWidgetHostController == null) return;
         PlaceLayout layout = placeLayout(currentPlaceOrientation());
-        // The rows always on gave the keyboard stay given on every pass (HomeChromePolicy).
+        // The rows always on gave the keyboard stay given on every pass (PlaceKeyboard).
         PlaceLayoutStore store = placeLayoutStore();
         int keyboardRows = store != null && store.isHomeKeyboardAlwaysOn()
             ? store.homeKeyboardRows() : 0;
@@ -14363,6 +14357,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPlaceLayoutStore;
     }
 
+    /**
+     * What each page wears (the Dress, ADR 0009), read off the store each time it is asked: every
+     * "does Home wear this?" asks here. Before the preferences are read, the dress of a store with
+     * nothing in it.
+     */
+    private final com.termux.app.chrome.DressResolver mDresses =
+        new com.termux.app.chrome.DressResolver(new com.termux.app.chrome.DressResolver.Source() {
+            @Override public boolean minimal() {
+                return isMinimalMode();
+            }
+
+            @NonNull @Override public com.termux.app.dock.DockStyle homeDockStyle() {
+                PlaceLayoutStore store = placeLayoutStore();
+                return store != null ? store.dockStyle() : com.termux.app.dock.DockStyle.GLASS_TRAY;
+            }
+
+            @NonNull @Override public com.termux.app.place.WallHalfShape shape(boolean home) {
+                return com.termux.app.place.WallHalfShape.read(mPreferences, home);
+            }
+        });
+
+    /** What {@code page} wears now. */
+    @NonNull
+    private com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PaneWallPage page) {
+        return mDresses.dressOf(page);
+    }
+
+    /** What a Home page wears now, whatever page is on screen: its Dock design, for one. */
+    @NonNull
+    private com.termux.app.chrome.Dress homeDress() {
+        return dressOf(com.termux.app.wall.PaneWallPage.WIDGETS);
+    }
+
     private PlaceOrientation currentPlaceOrientation() {
         return isLandscapeOrientation() ? PlaceOrientation.LANDSCAPE : PlaceOrientation.PORTRAIT;
     }
@@ -14398,13 +14425,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The layout the chrome on screen is arranged by (HomeChromePolicy): the Home layout while the
+     * The layout the chrome on screen is arranged by (the page's Dress): the Home layout while the
      * wall rests on a Home page, the Workspace's otherwise. Read off the page the chrome is
      * committed to, so a slide changes it once, at settle (syncWallKeyboard).
      */
     @NonNull
     private com.termux.app.place.LayoutVariant chromeVariant() {
-        return com.termux.app.place.HomeChromePolicy.variant(mLastWallPage, isMinimalMode());
+        return mDresses.layoutOf(mLastWallPage);
     }
 
     /**
@@ -14413,7 +14440,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private com.termux.app.place.LayoutVariant stackVariant() {
-        return com.termux.app.place.HomeChromePolicy.variant(stackDressPage(), isMinimalMode());
+        return mDresses.layoutOf(stackDressPage());
     }
 
     /**
@@ -15352,7 +15379,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The Workspace's layout in this orientation, whatever page the chrome is committed to. */
     @Nullable
     private PlaceLayout workspacePlaceLayout() {
-        if (!com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage))
+        if (mLastWallPage != com.termux.app.wall.PaneWallPage.WIDGETS)
             return committedPlaceLayout(currentPlaceOrientation());
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return null;
@@ -15555,7 +15582,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (dockStyleChanged) restyleDockSurface();
         if (sizesMoved) applySizedSurfaces();
         // Always on brings the keyboard up on Home, or takes it down, once the grid has its rows.
-        if (alwaysOnChanged && com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage))
+        if (alwaysOnChanged && mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS)
             applyPlaceKeyboard(mLastWallPage);
     }
 
@@ -15578,7 +15605,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.launcher.widget.LauncherWidgetRepository widgets =
             mWidgetHostController.repository();
         if (on) {
-            int rows = com.termux.app.place.HomeChromePolicy.keyboardRows(
+            int rows = com.termux.app.place.PlaceKeyboard.keyboardRows(
                 Math.max(0, mKeyboardGeometry.desiredHeightPx()),
                 mWidgetPaneController == null ? 0 : mWidgetPaneController.gridHeightPx(),
                 widgets.gridDefinition().rows);
@@ -15974,7 +16001,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncHomeFloatObstructions();
         // On a Home page the dock floats with the keyboard, either keyboard: the grid keeps its
         // whole height.
-        boolean dockOverlays = com.termux.app.place.HomeChromePolicy.dockOverlays(mLastWallPage);
+        boolean dockOverlays = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
         int homeImeReachPx = dockOverlays ? systemImeTakePx : 0;
         keyboardOverlapPx = KeyboardOverlayPolicy.overlapPx(
             dockOverlays, combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx,
@@ -16386,16 +16413,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec() {
-        return com.termux.app.dock.DockSurfaceSpec.forDock(
-            com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage), homeDockStyle());
+        return dockSurfaceSpec(dressOf(mLastWallPage));
     }
 
-    /** Home's dock style as the dock draws it ({@link com.termux.app.dock.DockStyle#effectiveStyle}). */
+    /**
+     * The slab the dock wears in {@code dress}: its Dock design's where the layout holds one the
+     * user picks (Home's), the plain dock where it holds none.
+     */
     @NonNull
-    private com.termux.app.dock.DockStyle homeDockStyle() {
-        PlaceLayoutStore store = placeLayoutStore();
-        return com.termux.app.dock.DockStyle.effectiveStyle(
-            store != null ? store.dockStyle() : null);
+    private static com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec(
+            @NonNull com.termux.app.chrome.Dress dress) {
+        return com.termux.app.dock.DockSurfaceSpec.forDock(dress.picksDockDesign(),
+            dress.dockDesign());
     }
 
     /**
@@ -16406,8 +16435,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void restyleDockSurfaceForPageIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
                                                     @NonNull com.termux.app.wall.PaneWallPage to) {
         if (mPreferences == null || mChrome == null) return;
-        if (com.termux.app.place.HomeChromePolicy.wearsHomeShape(from)
-            == com.termux.app.place.HomeChromePolicy.wearsHomeShape(to)) return;
+        if (dockSurfaceSpec(dressOf(from)).equals(dockSurfaceSpec(dressOf(to)))) return;
         // A settle lands the place's geometry at once (ADR 0003): an ease under way gives way.
         cancelDockBandEase();
         restyleDockSurface();
@@ -16468,8 +16496,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Whether Home's dock wears the Taskbar, so its strip and its Home tile are wanted. */
     private boolean runStripWanted() {
-        return mPreferences != null && isSplitPanesEnabled()
-            && homeDockStyle() == com.termux.app.dock.DockStyle.TASKBAR;
+        return mPreferences != null && isSplitPanesEnabled() && homeDress().drawerTile();
     }
 
     /** The Home tile and the run strip follow the dock's spec: both on the Taskbar, neither elsewhere. */
@@ -16772,8 +16799,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float promptFieldReveal() {
         if (mPromptFieldEase != null) return mPromptFieldEaseValue;
-        return mPreferences != null && !mPromptFieldUnderPalette
-            && homeDockStyle() == com.termux.app.dock.DockStyle.PROMPT_LINE ? homeBandShare() : 0f;
+        return mPreferences != null && !mPromptFieldUnderPalette && homeDress().searchField()
+            ? homeBandShare() : 0f;
     }
 
     /**
@@ -16784,7 +16811,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float homeBandShare() {
         if (!Float.isNaN(mTravelHomeBandShare)) return mTravelHomeBandShare;
-        return com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage) ? 1f : 0f;
+        return mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS ? 1f : 0f;
     }
 
     /** {@link #homeBandShare} while a slide crosses the seam; NaN otherwise. */
@@ -16798,13 +16825,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncSeamBandShare(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
         if (mTravelSeamOther == null || mPreferences == null || mChrome == null) return;
-        com.termux.app.dock.DockStyle style = homeDockStyle();
-        boolean carriesBand = style == com.termux.app.dock.DockStyle.WALL_STRIP
-            || (style == com.termux.app.dock.DockStyle.PROMPT_LINE && !mPromptFieldUnderPalette);
+        com.termux.app.chrome.Dress home = homeDress();
+        boolean carriesBand = home.dockDesign() == com.termux.app.dock.DockStyle.WALL_STRIP
+            || (home.searchField() && !mPromptFieldUnderPalette);
         if (!carriesBand || mPromptFieldEase != null) return;
-        boolean committedHome = com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage);
-        if (committedHome == com.termux.app.place.HomeChromePolicy.wearsHomeShape(mTravelSeamOther))
-            return;
+        if (!com.termux.app.place.SeamTravel.crosses(mLastWallPage, mTravelSeamOther)) return;
+        boolean committedHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
         float progress = Math.max(0f, Math.min(1f,
             com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage)));
         float share = committedHome ? 1f - progress : progress;
@@ -16839,7 +16865,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float wallTarget = spec.wallStrip ? 1f : 0f;
         float wallFrom = mAppliedWallStripReveal;
         if ((from == target && wallFrom == wallTarget) || isReducedMotionEnabled()
-            || !com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage)) return false;
+            || !dressOf(mLastWallPage).picksDockDesign()) return false;
         View stack = findViewById(R.id.accessory_stack_container);
         View rowHost = findViewById(R.id.apps_bar_row_host);
         if (stack == null || rowHost == null || stack.getVisibility() != View.VISIBLE
@@ -17009,13 +17035,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float wallStripReveal() {
         if (mPromptFieldEase != null) return mWallStripEaseValue;
-        return mPreferences != null && homeDockStyle() == com.termux.app.dock.DockStyle.WALL_STRIP
+        return mPreferences != null
+            && homeDress().dockDesign() == com.termux.app.dock.DockStyle.WALL_STRIP
             ? homeBandShare() : 0f;
     }
 
     /** Whether Home's dock wears the Wall strip, so its row wants the Workspace's windows. */
     private boolean wallStripWanted() {
-        return mPreferences != null && homeDockStyle() == com.termux.app.dock.DockStyle.WALL_STRIP;
+        return mPreferences != null
+            && homeDress().dockDesign() == com.termux.app.dock.DockStyle.WALL_STRIP;
     }
 
     /**
@@ -21449,7 +21477,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Always on turned on in the editor: the keyboard Home wants is up now, whatever the
             // editor did with the one it raised, and the notice the editor held back follows on
             // the arrangement after the close.
-            if (com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage)
+            if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS
                 && wantsKeyboardOnEnter(mLastWallPage))
                 applyPlaceKeyboard(mLastWallPage);
             String notice = mAlwaysOnNotice.onEditorClosed();
@@ -22193,7 +22221,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // From Home, the bar takes off Home's dress for the Workspace's while it is still
             // hidden, before any pass lays it out over Home.
             if (seamBegins && mTravelSeamShapeDiffers
-                && com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage)) {
+                && mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS) {
                 refreshTerminalWindowBar();
                 mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
             }
@@ -22214,11 +22242,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull com.termux.app.wall.PaneWallPage page,
             @NonNull PlaceOrientation orientation) {
         PlaceLayoutStore store = placeLayoutStore();
-        com.termux.app.place.WallHalfShape shape = com.termux.app.place.WallHalfShape.read(
-            mPreferences, com.termux.app.place.HomeChromePolicy.wearsHomeShape(page));
+        com.termux.app.chrome.Dress dress = dressOf(page);
+        com.termux.app.place.WallHalfShape shape = dress.shape();
         if (store == null)
             return com.termux.app.place.SeamDress.StackDress.of(shape, Float.NaN, Float.NaN, -1);
-        PlaceLayoutStore sizes = store.forVariant(store.variantFor(page));
+        PlaceLayoutStore sizes = store.forVariant(dress.layout());
         return com.termux.app.place.SeamDress.StackDress.of(shape,
             sizes.dockHeightScale(orientation), sizes.keyboardHeightScale(orientation),
             sizes.keyboardChinDp(orientation));
@@ -22270,8 +22298,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             progress);
         // Only from Home: the Workspace's bar is the one that travels with its page.
         boolean statusShown = progress > 0f
-            && com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage)
-            && !com.termux.app.place.HomeChromePolicy.isHome(mTravelSeamOther)
+            && mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS
+            && mTravelSeamOther != com.termux.app.wall.PaneWallPage.WIDGETS
             && com.termux.app.place.SeamTravel.statusRides(otherLayout)
             && com.termux.app.place.SeamTravel.statusCanArriveOver(
                 committedPlaceLayout(orientation))
@@ -22326,17 +22354,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View host = hotView(R.id.terminal_window_bar_host);
         boolean rides = host != null && host.getVisibility() == View.VISIBLE
             && mStatusBarEdge == PlaceLayout.Edge.TOP && mPaneWallController != null
-            && (com.termux.app.place.HomeChromePolicy.isHome(frame.from)
-                || com.termux.app.place.HomeChromePolicy.isHome(frame.toward));
+            && (frame.from == com.termux.app.wall.PaneWallPage.WIDGETS
+                || frame.toward == com.termux.app.wall.PaneWallPage.WIDGETS);
         float x = rides ? com.termux.app.place.SeamTravel.workspaceScreenXPx(frame,
             mPaneWallController.wall().getWidth()) : 0f;
         applyStatusTravelX(x);
         com.termux.app.wall.PaneWallPage barPage = null;
         if (rides) {
             mChromeTravelMoved = true;
-            barPage = !com.termux.app.place.HomeChromePolicy.isHome(frame.toward) ? frame.toward
-                : !com.termux.app.place.HomeChromePolicy.isHome(frame.from) ? frame.from
-                : com.termux.app.place.HomeChromePolicy.isHome(mLastWallPage) ? null
+            barPage = frame.toward != com.termux.app.wall.PaneWallPage.WIDGETS ? frame.toward
+                : frame.from != com.termux.app.wall.PaneWallPage.WIDGETS ? frame.from
+                : mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS ? null
                 : mLastWallPage;
             // The bar carries its place content with it: the strip does not also pan inside it.
             View strip = hotView(R.id.terminal_status_place_content);
@@ -22387,8 +22415,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull com.termux.app.wall.PaneWallPage place) {
         boolean keyboardUp = place == mLastWallPage ? committedKeyboardVisible()
             : wantsKeyboardOnEnter(place);
-        // A Home page has no status bar: the window's fades on the way there (HomeChromePolicy).
-        if (!com.termux.app.place.HomeChromePolicy.statusShownAtRest(place))
+        // A Home page has no status bar: the window's fades on the way there.
+        if (place == com.termux.app.wall.PaneWallPage.WIDGETS)
             return keyboardUp ? REST_HOME_KEYBOARD_UP : REST_HOME_KEYBOARD_DOWN;
         return keyboardUp ? REST_KEYBOARD_UP : REST_KEYBOARD_DOWN;
     }
@@ -22488,7 +22516,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int flushPadding = place == com.termux.app.wall.PaneWallPage.TERMINAL
             && place == mLastWallPage && !keyboardShown ? mAppliedTerminalFlushPaddingPx : 0;
         return KeyboardOverlayPolicy.restReservationPx(
-            com.termux.app.place.HomeChromePolicy.dockOverlays(place),
+            place == com.termux.app.wall.PaneWallPage.WIDGETS,
             mAppliedDockContentHeightPx, flushPadding,
             keyboardShown, KeyboardOverlayPolicy.overlays(place, currentPlaceLayout()),
             Math.max(0, mKeyboardGeometry.desiredHeightPx()),
@@ -22797,8 +22825,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // or reduced motion took the last frames) leaves the stack dressed for the half it did
             // not land on: it is dressed back now, in the frame that puts the stack back on screen.
             if (stackDressDiffered && stackDressedFor != null
-                && com.termux.app.place.HomeChromePolicy.wearsHomeShape(stackDressedFor)
-                    != com.termux.app.place.HomeChromePolicy.wearsHomeShape(mLastWallPage)) {
+                && com.termux.app.place.SeamTravel.crosses(stackDressedFor, mLastWallPage)) {
                 restyleStackForDress(stackShapeDiffered);
                 syncPlaceLayout();
             }
@@ -22852,7 +22879,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     void setMinimalMode(boolean minimal) {
         // Home has no minimal mode: the Workspace's flag is not changed from a Home page.
-        if (!com.termux.app.place.HomeChromePolicy.minimalModeApplies(mLastWallPage)) return;
+        if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS) return;
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null || store.isMinimal() == minimal) return;
         com.termux.app.wall.PaneWallPage place = mLastWallPage;
@@ -22942,7 +22969,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Whether the place wants its keyboard up as the wall lands on it. */
     private boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) {
         PlaceLayoutStore store = placeLayoutStore();
-        return store != null && com.termux.app.place.HomeChromePolicy.keyboardOnEnter(place,
+        return store != null && com.termux.app.place.PlaceKeyboard.keyboardOnEnter(place,
             store.wasKeyboardOpen(place), store.isMinimal(), store.isHomeKeyboardAlwaysOn());
     }
 
