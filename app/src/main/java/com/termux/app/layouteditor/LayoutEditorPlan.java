@@ -427,6 +427,24 @@ public final class LayoutEditorPlan {
         return place;
     }
 
+    /** Whether Home holds a Home layout of its own: the Layout editor's Home layout switch. */
+    public boolean hasHomeLayout() {
+        return mRoot.hasHomeLayout();
+    }
+
+    /**
+     * The Home layout switch turned: Home wears its own copy of the layout, or the shared one
+     * again. The page being edited stays; what it wears is re-read, so a Home page edits Home's
+     * layout while the switch is on and the shared one while it is off, and the canvas, offers and
+     * Undo follow. The caller re-lays the live place and restates the shape that page wears.
+     */
+    public void setHomeLayout(boolean on) {
+        mRoot.setHomeLayout(on);
+        mVariant = dress().layout();
+        mPlaces = mRoot.forVariant(mVariant);
+        enterVariant(mVariant);
+    }
+
     /** The Portrait / Landscape toggle. Moves the picture and the target of the next drop. */
     public void showOrientation(@NonNull PlaceOrientation orientation) {
         mShownOrientation = orientation;

@@ -1983,6 +1983,10 @@
                 <!-- The Home filter beside the orientation toggle: on, the picture and every edit
                      are Home's layout; off, the window's. -->
                 <string name="layout_editor_home_filter">Home layout</string>
+                <!-- The same segment, named for what it is now: the Home layout switch. Off says
+                     what is true, on says what it holds; the label follows the state. -->
+                <string name="layout_editor_home_layout_off">One layout for every screen</string>
+                <string name="layout_editor_home_layout_on">Home has its own layout</string>
                 <string name="termux_layout_editor_revert">Undo changes</string>
                 <string name="termux_layout_editor_unsaved_message">Discard your changes, or save them?</string>
                 <string name="termux_layout_editor_narrow_notice">With bars down the side there is not much room left.</string>

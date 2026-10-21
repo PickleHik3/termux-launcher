@@ -664,8 +664,33 @@ public final class LayoutEditorController {
         views.homeFilter.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (mRestatingToggle || checkedId != R.id.layout_editor_home_filter_home)
                 return;
-            showHome(isChecked);
+            setHomeLayout(isChecked);
         });
+    }
+
+    /**
+     * The Home layout switch turned on or off: Home gets its own copy of the layout or goes back
+     * to the shared one. The page being edited stays; the live place re-reads what it wears and
+     * the host restates the shape that page wears before the canvas is re-read.
+     */
+    @VisibleForTesting
+    void setHomeLayout(boolean on) {
+        LayoutEditorPlan plan = mPlan;
+        if (plan == null || plan.hasHomeLayout() == on)
+            return;
+        plan.setHomeLayout(on);
+        Views views = mViews;
+        if (views != null) {
+            // The selection and the tiles were the other layout's.
+            views.canvas.cancelLift();
+            views.canvas.setSelectedBlock(null);
+            if (mTilesOpen)
+                setTilesOpen(views, false);
+        }
+        mHost.applyPlaceArrangement();
+        if (mOnPlaceShown != null)
+            mOnPlaceShown.run();
+        sync();
     }
 
     /**
@@ -735,10 +760,18 @@ public final class LayoutEditorController {
         mRestatingToggle = true;
         views.orientation.check(plan.shownOrientation() == PlaceOrientation.LANDSCAPE
             ? R.id.layout_editor_orientation_landscape : R.id.layout_editor_orientation_portrait);
-        if (plan.showsHome())
+        boolean homeLayout = plan.hasHomeLayout();
+        if (homeLayout)
             views.homeFilter.check(R.id.layout_editor_home_filter_home);
         else
             views.homeFilter.uncheck(R.id.layout_editor_home_filter_home);
+        View homeSwitch = views.homeFilter.findViewById(R.id.layout_editor_home_filter_home);
+        if (homeSwitch != null) {
+            CharSequence label = views.homeFilter.getContext().getText(homeLayout
+                ? R.string.layout_editor_home_layout_on : R.string.layout_editor_home_layout_off);
+            homeSwitch.setContentDescription(label);
+            androidx.appcompat.widget.TooltipCompat.setTooltipText(homeSwitch, label);
+        }
         mRestatingToggle = false;
         views.canvas.setShape(mStyle, mCornersDp, mMarginDp);
         views.canvas.setExtraKeyCount(mExtraKeyCount);
