@@ -63,10 +63,55 @@ public final class WidgetPaneFrame extends PaneContentFrame
         return mStyle == null ? null : mStyle.lookGlass();
     }
 
-    /** The Look's "Widgets on glass", read on each dress pass. */
+    /**
+     * The Look's "Widgets on glass". Read once while the page is attached and kept in step by the
+     * store's listener, since a dress pass runs on every slider tick; read on each pass while
+     * detached, when nothing watches the store.
+     */
     private boolean mWidgetsOnGlass;
+    /** Whether {@link #mWidgetsOnGlass} is kept in step by {@link #mWidgetsOnGlassListener}. */
+    private boolean mWidgetsOnGlassWatched;
+    @Nullable private android.content.SharedPreferences mWidgetsOnGlassStore;
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener
+        mWidgetsOnGlassListener = (store, key) -> {
+            if (key != null && !com.termux.shared.termux.settings.preferences
+                    .TermuxPreferenceConstants.TERMUX_APP.KEY_WIDGETS_ON_GLASS.equals(key)) {
+                return;
+            }
+            boolean before = mWidgetsOnGlass;
+            readWidgetsOnGlass();
+            if (mWidgetsOnGlass != before) redressWidgets();
+        };
 
     @Override public boolean widgetsOnGlass() { return mWidgetsOnGlass; }
+
+    private void readWidgetsOnGlass() {
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(getContext(), false);
+        mWidgetsOnGlass = prefs != null && prefs.isWidgetsOnGlassEnabled();
+    }
+
+    private void watchWidgetsOnGlass() {
+        unwatchWidgetsOnGlass();
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(getContext(), false);
+        android.content.SharedPreferences store = prefs == null ? null
+            : prefs.getSharedPreferences();
+        mWidgetsOnGlass = prefs != null && prefs.isWidgetsOnGlassEnabled();
+        if (store == null) return;
+        store.registerOnSharedPreferenceChangeListener(mWidgetsOnGlassListener);
+        mWidgetsOnGlassStore = store;
+        mWidgetsOnGlassWatched = true;
+    }
+
+    private void unwatchWidgetsOnGlass() {
+        if (mWidgetsOnGlassStore != null)
+            mWidgetsOnGlassStore.unregisterOnSharedPreferenceChangeListener(mWidgetsOnGlassListener);
+        mWidgetsOnGlassStore = null;
+        mWidgetsOnGlassWatched = false;
+    }
 
     @Override public void addGlassWidget(
             @NonNull com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget) {
@@ -92,13 +137,17 @@ public final class WidgetPaneFrame extends PaneContentFrame
         super.onAttachedToWindow();
         if (mSystemWatch == null) {
             mSystemWatch = new com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass
-                .SystemWatch(getContext(), this::onSystemAsksChanged);
+                .SystemWatch(getContext(), this::redressWidgets);
         }
         mSystemWatch.start();
+        watchWidgetsOnGlass();
     }
 
-    /** A system ask for the solid card changed: the frame is held or let go, the widgets re-dress. */
-    private void onSystemAsksChanged() {
+    /**
+     * A system ask for the solid card or the "Widgets on glass" switch changed: the frame is held
+     * or let go, the widgets re-dress.
+     */
+    private void redressWidgets() {
         syncLookWorn();
         PaneSurfaceStyle look = widgetGlassStyle();
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget
@@ -696,10 +745,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
-        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
-            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
-                .build(getContext(), false);
-        mWidgetsOnGlass = prefs != null && prefs.isWidgetsOnGlassEnabled();
+        if (!mWidgetsOnGlassWatched) readWidgetsOnGlass();
         float density = getResources().getDisplayMetrics().density;
         float requestedRadiusPx = PaneGlass.radiusPx(style, density);
         // A Home page wears no frame (ADR 0008): no slab, no line, the widgets straight on the
@@ -765,6 +811,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         if (mSystemWatch != null) mSystemWatch.stop();
+        unwatchWidgetsOnGlass();
         cancelHold();
         dismissGridSizePopup();
         mRim.cancel();
