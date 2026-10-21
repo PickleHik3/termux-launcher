@@ -4,6 +4,8 @@
     <string name="bw_feeds_weather_empty">No weather yet</string>
     <string name="bw_feeds_weather_no_location">Weather needs a location fix</string>
     <string name="bw_feeds_weather_tap_refresh">Tap to refresh</string>
+    <string name="bw_feeds_weather_set_place">Set a place</string>
+    <string name="bw_feeds_weather_updated_ago">Updated %1$d min ago</string>
     <string name="bw_feeds_weather_place_unknown">Current location</string>
     <!-- Today's high and low, e.g. "36 / 24". -->
     <string name="bw_feeds_weather_range_short">%1$s / %2$s</string>

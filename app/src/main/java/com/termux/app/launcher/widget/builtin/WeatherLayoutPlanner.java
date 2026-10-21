@@ -74,6 +74,10 @@ final class WeatherLayoutPlanner {
         @NonNull String nextDays(int count);
         /** "Tap to refresh". */
         @NonNull String tapToRefresh();
+        /** "Updated 40 min ago". */
+        @NonNull String updatedAgo(int minutes);
+        /** "Set a place": the card's offer when there is no location. */
+        @NonNull String setAPlace();
     }
 
     /**
@@ -85,11 +89,20 @@ final class WeatherLayoutPlanner {
                                           @Nullable WeatherWidgetModel model,
                                           @NonNull String emptyMessage, @NonNull Words words,
                                           @NonNull Measure measure) {
+        return plan(span, widthDp, heightDp, fontScale, model, emptyMessage, false, words, measure);
+    }
+
+    /** As above; {@code offerPlace} makes the empty card offer "Set a place" instead of a retry. */
+    @NonNull static WidgetLayoutPlan plan(@NonNull BuiltinWidgetSpan span, float widthDp,
+                                          float heightDp, float fontScale,
+                                          @Nullable WeatherWidgetModel model,
+                                          @NonNull String emptyMessage, boolean offerPlace,
+                                          @NonNull Words words, @NonNull Measure measure) {
         Box card = new Box(0f, 0f, widthDp, heightDp);
         Box inner = WidgetLayoutPlan.insetBox(widthDp, heightDp, WidgetTokens.insetDp(span));
         Builder b = new Builder(span, fontScale, words, measure);
         if (model == null) {
-            b.empty(inner, emptyMessage);
+            b.empty(inner, emptyMessage, offerPlace);
         } else {
             switch (span) {
                 case ONE_BY_ONE: b.oneByOne(inner, model); break;
@@ -235,7 +248,7 @@ final class WeatherLayoutPlanner {
 
         // ----- empty ----------------------------------------------------------------------
 
-        void empty(@NonNull Box inner, @NonNull String message) {
+        void empty(@NonNull Box inner, @NonNull String message, boolean offerPlace) {
             boolean small = span == BuiltinWidgetSpan.ONE_BY_ONE;
             // A card too short for the message's role takes the forced label instead.
             Role role = small ? Role.LABEL : Role.BODY;
@@ -254,8 +267,10 @@ final class WeatherLayoutPlanner {
                 lineRows.add(row);
                 rows.add(row);
             }
-            Row hint = new Row(2, GAP_S, line(Role.LABEL), 0f);
-            if (!small) rows.add(hint);
+            // The offer to set a place is the way out of this card, so it outranks the hint and
+            // shows at 1×1 too.
+            Row hint = new Row(offerPlace ? 3 : 2, GAP_S, line(Role.LABEL), 0f);
+            if (!small || offerPlace) rows.add(hint);
             fit(rows, inner.height, 0f, 0f);
             float top = inner.top + (inner.height - stackHeight(rows, 0f)) / 2f;
             place(rows, top, 0f);
@@ -278,7 +293,10 @@ final class WeatherLayoutPlanner {
                 textCentered("message." + i, text, role, false, Ink.STRONG, cx, lineRows.get(i).top,
                     inner.width);
             }
-            if (!small && hint.kept) {
+            if (offerPlace && hint.kept) {
+                textCentered("setplace", words.setAPlace(), Role.LABEL, false, Ink.MOON, cx, hint.top,
+                    inner.width);
+            } else if (!small && hint.kept) {
                 textCentered("hint", words.tapToRefresh(), Role.LABEL, false, Ink.SOFT, cx, hint.top,
                     inner.width);
             }
@@ -387,6 +405,7 @@ final class WeatherLayoutPlanner {
             List<Line> lines = new ArrayList<>();
             if (withPlace) lines.add(new Line("place", placeName(m), Role.TITLE, Ink.STRONG, 1, 0f));
             addNowLines(lines, m);
+            addStale(lines, m, 0);
             List<Row> rows = rowsOf(lines);
             fit(rows, inner.height, 0f, 0f);
             place(rows, inner.top + (inner.height - stackHeight(rows, 0f)) / 2f, 0f);
@@ -415,11 +434,16 @@ final class WeatherLayoutPlanner {
             List<Row> rows = rowsOf(lines);
             HourColumns strip = withHours && !m.hours.isEmpty()
                 ? hourColumns(m.hours, box.width) : null;
+            Row stale = null;
+            if (m.staleMinutes >= 0) {
+                stale = new Row(3, GAP_M, line(Role.LABEL), 0f);
+            }
             Row hours = null;
             if (strip != null && strip.count > 0) {
                 hours = new Row(5, 2f * GAP_M + RULE_DP, hourBlockHeight(true), 0f);
                 rows.add(hours);
             }
+            if (stale != null) rows.add(stale);
             float size = fit(rows, box.height, heroMin(), heroMax);
             place(rows, box.top, size);
 
@@ -435,11 +459,20 @@ final class WeatherLayoutPlanner {
             lines.remove(heroLine);
             rows.remove(hero);
             if (hours != null) rows.remove(hours);
+            if (stale != null) rows.remove(stale);
             emit(lines, rows, box.left, box.width);
 
+            float bottom = box.bottom();
+            if (stale != null && stale.kept) {
+                // The age sits on the bottom edge under the hours.
+                bottom -= line(Role.LABEL);
+                text("updated", words.updatedAgo(m.staleMinutes), Role.LABEL, false, Ink.SOFT,
+                    box.left, bottom, box.width);
+                bottom -= GAP_M;
+            }
             if (hours != null && hours.kept) {
-                // The strip sits on the bottom edge; the slack falls between it and the lines.
-                float blockTop = box.bottom() - hourBlockHeight(true);
+                // The strip sits above that; the slack falls between it and the lines.
+                float blockTop = bottom - hourBlockHeight(true);
                 parts.add(Part.rule("rule", new Box(box.left, blockTop - GAP_M - RULE_DP, box.width,
                     RULE_DP)));
                 hourStrip(strip, m.hours, box.left, blockTop, box.width, hourBlockHeight(true),
@@ -623,6 +656,13 @@ final class WeatherLayoutPlanner {
             String sun = m.sun == WeatherWidgetModel.Sun.RISE ? words.sunrise(m.sunTime)
                 : m.sun == WeatherWidgetModel.Sun.SET ? words.sunset(m.sunTime) : "";
             if (!sun.isEmpty()) lines.add(new Line("sun", sun, Role.BODY, Ink.SOFT, 2, GAP_S));
+        }
+
+        /** "Updated 40 min ago" as the card's last line, when the data is past its cache life. */
+        void addStale(@NonNull List<Line> lines, @NonNull WeatherWidgetModel m, int rank) {
+            if (m.staleMinutes < 0) return;
+            lines.add(new Line("updated", words.updatedAgo(m.staleMinutes), Role.LABEL, Ink.SOFT,
+                rank, GAP_M));
         }
 
         /** "H 24 · L 15 · 10% rain"; a dry hour says nothing about rain. */

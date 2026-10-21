@@ -51,6 +51,10 @@ public class WeatherLayoutPlanTest {
         @NonNull @Override public String sunset(@NonNull String time) { return "Sunset " + time; }
         @NonNull @Override public String nextDays(int count) { return "Next " + count + " days"; }
         @NonNull @Override public String tapToRefresh() { return "Tap to refresh"; }
+        @NonNull @Override public String updatedAgo(int minutes) {
+            return "Updated " + minutes + " min ago";
+        }
+        @NonNull @Override public String setAPlace() { return "Set a place"; }
     };
 
     private static final String EMPTY = "Weather needs a location fix";
@@ -276,6 +280,57 @@ public class WeatherLayoutPlanTest {
         assertTrue(plan.has("hint"));
         assertFalse(plan.has("temp"));
         assertFalse(design(BuiltinWidgetSpan.ONE_BY_ONE, null).has("hint"));
+    }
+
+    @NonNull private static WeatherWidgetModel stale(@NonNull WeatherWidgetModel t, int minutes) {
+        return new WeatherWidgetModel(t.place, t.temp, t.tempBare, t.condition, t.glyph, t.tone,
+            t.high, t.low, t.humidityPct, t.windKmh, t.rainPct, t.sun, t.sunTime, t.hours, t.days,
+            minutes);
+    }
+
+    @Test public void staleDataSaysHowOldItIsOnTheTallSpans() {
+        for (BuiltinWidgetSpan span : Arrays.asList(
+            BuiltinWidgetSpan.TWO_BY_TWO,
+            BuiltinWidgetSpan.FOUR_BY_TWO)) {
+            WidgetLayoutPlan plan = design(span, stale(typical(), 40));
+            assertNotNull(span.name(), plan.part("updated"));
+            assertEquals(span.name(), "Updated 40 min ago", plan.part("updated").text);
+            assertEquals(span.name(), WidgetTokens.Role.LABEL, plan.part("updated").role);
+        }
+        assertFalse(design(BuiltinWidgetSpan.TWO_BY_TWO, typical()).has("updated"));
+    }
+
+    @Test public void theTwoByTwoShowsTheAgeUnderTheHoursAndKeepsTheHours() {
+        WidgetLayoutPlan plan = design(BuiltinWidgetSpan.TWO_BY_TWO, stale(typical(), 40));
+        assertTrue(plan.has("hour.0.temp"));
+        Part updated = plan.part("updated");
+        assertTrue(updated.box.top >= plan.part("hour.0.temp").box.bottom());
+        assertTrue(updated.box.bottom() <= plan.inset.bottom() + WidgetLayoutPlan.EPSILON);
+    }
+
+    @Test public void theAgeNeverOverlapsAnythingAtAnySize() {
+        for (BuiltinWidgetSpan span : BuiltinWidgetSpan.values()) {
+            for (float[] size : sizes(span)) {
+                WidgetLayoutPlan plan = plan(span, size[0], size[1], 1f, stale(typical(), 75));
+                Part updated = plan.part("updated");
+                if (updated == null) continue;
+                for (Part other : plan.parts) {
+                    if (other == updated || other.type == WidgetLayoutPlan.Type.TOUCH) continue;
+                    assertFalse(span + " " + other.id, other.box.overlaps(updated.box));
+                }
+            }
+        }
+    }
+
+    @Test public void withNoLocationTheEmptyCardOffersToSetAPlace() {
+        for (BuiltinWidgetSpan span : BuiltinWidgetSpan.values()) {
+            WidgetLayoutPlan plan = WeatherLayoutPlanner.plan(span, span.widthDp, span.heightDp,
+                1f, null, EMPTY, true, WORDS, MEASURE);
+            assertNotNull(span.name(), plan.part("setplace"));
+            assertEquals("Set a place", plan.part("setplace").text);
+            assertFalse(span.name(), plan.has("hint"));
+        }
+        assertFalse(design(BuiltinWidgetSpan.TWO_BY_ONE, null).has("setplace"));
     }
 
     @Test public void longWordsAreCutShortInsideTheirBoxRatherThanPushingPastIt() {
