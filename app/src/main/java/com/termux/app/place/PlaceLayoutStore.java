@@ -66,7 +66,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * and an index that was minimised reads as shown. Version 9 moves Home onto the shared layout,
  * keeping a Home that differed as a Home layout ({@link #migrateToOneLayout}). Version 10 gives a
  * kept Home layout the Workspace's status bar, which Home now wears ({@link
- * #migrateHomeLayoutToTheBar}).
+ * #migrateHomeLayoutToTheBar}). Version 11 turns the Prompt line design into the Tray with the
+ * Search field on ({@link #migratePromptLineToTheSearchField}).
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
  * tested as one.
@@ -74,7 +75,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the current ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 10;
+    @VisibleForTesting static final int MIGRATION_VERSION = 11;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -172,9 +173,11 @@ public final class PlaceLayoutStore {
      */
     private static final String KEY_DOCK_DESIGN = "dock_design";
     /**
-     * Whether a layout's dock carries the Search field, beside its design. Written with the
-     * design while the Prompt line design is what brings it (until #96 splits them); absent reads
-     * it off the design.
+     * Whether a layout's dock carries the Search field, a toggle of its own beside the design
+     * (#96): {@code layout.search_field}, {@code layout.minimal.search_field},
+     * {@code layout.home.search_field}. Absent is off, unless the layout still holds the Prompt
+     * line design the field came from (version 11 of the migration turns that into the Tray
+     * with the field on).
      */
     private static final String KEY_SEARCH_FIELD = "search_field";
     /** The Drawer tile, as {@link #KEY_SEARCH_FIELD} is the Search field: the Taskbar's (#97). */
@@ -291,6 +294,10 @@ public final class PlaceLayoutStore {
     private int mDockDesignRevision = Integer.MIN_VALUE;
     @Nullable private LayoutVariant mDockDesignVariant;
     @NonNull private DockStyle mDockDesign = DockStyle.GLASS_TRAY;
+    /** This view's Search field as last read, cached as the design is: the dock's pass asks it. */
+    private int mSearchFieldRevision = Integer.MIN_VALUE;
+    @Nullable private LayoutVariant mSearchFieldVariant;
+    private boolean mSearchField;
 
     /** What each page wears, over this view; made the first time a page asks. */
     @Nullable private DressResolver mDresses;
@@ -653,9 +660,9 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * A design picked for this view's layout. The Search field and the Drawer tile are written
-     * beside it as the design brings them today (the Prompt line's field, the Taskbar's tile), so
-     * the tickets that split them off (#96, #97) only change what reads them.
+     * A design picked for this view's layout. The Search field is a toggle of its own and stays
+     * as it is ({@link #setSearchField}); the Drawer tile is written beside the design as the
+     * Taskbar brings it today, until #97 splits it off as well.
      */
     public void setDockStyle(@NonNull DockStyle style) {
         if (mStore == null || style == dockStyle()) return;
@@ -665,20 +672,35 @@ public final class PlaceLayoutStore {
         mRevision.incrementAndGet();
     }
 
-    /** One layout's design, with the toggles it brings. */
+    /** One layout's design, with the Drawer tile the Taskbar brings. */
     private static void putDockDesign(@NonNull SharedPreferences.Editor editor,
                                       @NonNull LayoutVariant variant, @NonNull DockStyle style) {
         editor.putString(layoutWideKey(variant, KEY_DOCK_DESIGN), style.storageValue())
-            .putBoolean(layoutWideKey(variant, KEY_SEARCH_FIELD), style == DockStyle.PROMPT_LINE)
             .putBoolean(layoutWideKey(variant, KEY_DRAWER_TILE), style == DockStyle.TASKBAR);
     }
 
     /**
-     * Whether this view's layout carries the Search field, as stored beside its design; a layout
-     * that never stored it reads it off the design (the Prompt line).
+     * Whether this view's layout carries the Search field under the dock's apps row, with
+     * whichever design it holds (#96). A layout that never stored the toggle reads it off the
+     * design: on only for a Prompt line the migration has not turned into the Tray yet.
      */
     public boolean searchField() {
-        return toggle(KEY_SEARCH_FIELD, DockStyle.PROMPT_LINE);
+        if (mStore == null) return false;
+        LayoutVariant variant = activeVariant();
+        int revision = mRevision.get();
+        if (mSearchFieldRevision != revision || mSearchFieldVariant != variant) {
+            mSearchField = toggle(KEY_SEARCH_FIELD, DockStyle.PROMPT_LINE);
+            mSearchFieldRevision = revision;
+            mSearchFieldVariant = variant;
+        }
+        return mSearchField;
+    }
+
+    /** The Search field turned on or off for this view's layout, its design left as it is. */
+    public void setSearchField(boolean on) {
+        if (mStore == null || on == searchField()) return;
+        mStore.edit().putBoolean(layoutWideKey(activeVariant(), KEY_SEARCH_FIELD), on).apply();
+        mRevision.incrementAndGet();
     }
 
     /** Whether this view's layout carries the Drawer tile; read as {@link #searchField} is. */
@@ -1359,6 +1381,7 @@ public final class PlaceLayoutStore {
         // steps before it have applied.
         if (fromVersion < 9) migrateToOneLayout();
         if (fromVersion < 10) migrateHomeLayoutToTheBar();
+        if (fromVersion < 11) migratePromptLineToTheSearchField();
         mStore.edit().putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
         mRevision.incrementAndGet();
     }
@@ -1429,6 +1452,23 @@ public final class PlaceLayoutStore {
                 copy(editor, all, layoutKey(LayoutVariant.NORMAL, orientation, key),
                     layoutKey(LayoutVariant.HOME, orientation, key));
             }
+        }
+        editor.apply();
+    }
+
+    /**
+     * Version 11: the Prompt line design is the Search field now (#96). Every layout that holds
+     * it, normal, minimal or Home's, holds the Tray instead with the field on, so its search
+     * field stays where it was. Every other layout keeps its design and its stored toggle.
+     */
+    private void migratePromptLineToTheSearchField() {
+        SharedPreferences.Editor editor = mStore.edit();
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            String design = layoutWideKey(variant, KEY_DOCK_DESIGN);
+            if (!DockStyle.PROMPT_LINE.storageValue().equals(mStore.getString(design, null)))
+                continue;
+            editor.putString(design, DockStyle.GLASS_TRAY.storageValue())
+                .putBoolean(layoutWideKey(variant, KEY_SEARCH_FIELD), true);
         }
         editor.apply();
     }

@@ -39,18 +39,24 @@ public class DressResolverTest {
         boolean minimal;
         boolean homeLayout;
         final EnumMap<LayoutVariant, DockStyle> designs = new EnumMap<>(LayoutVariant.class);
+        final EnumMap<LayoutVariant, Boolean> searchFields = new EnumMap<>(LayoutVariant.class);
         WallHalfShape workspace = WORKSPACE;
         WallHalfShape home = HOME;
 
         Stored() {
-            for (LayoutVariant layout : LayoutVariant.values())
+            for (LayoutVariant layout : LayoutVariant.values()) {
                 designs.put(layout, DockStyle.GLASS_TRAY);
+                searchFields.put(layout, false);
+            }
         }
 
         @Override public boolean minimal() { return minimal; }
         @Override public boolean homeLayout() { return homeLayout; }
         @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant layout) {
             return designs.get(layout);
+        }
+        @Override public boolean searchField(@NonNull LayoutVariant layout) {
+            return searchFields.get(layout);
         }
         @NonNull @Override public WallHalfShape shape(boolean home) {
             return home ? this.home : workspace;
@@ -287,20 +293,70 @@ public class DressResolverTest {
         }
     }
 
+    /** The Search field is a toggle of its own, with any design (#96). */
     @Test
-    public void theSearchFieldAndTheDrawerTileComeWithTheirDesigns() {
-        stored.designs.put(LayoutVariant.NORMAL, DockStyle.PROMPT_LINE);
-        assertTrue(home().searchField());
-        assertFalse(home().drawerTile());
+    public void searchFieldOnWithBeadsTheDressHasBoth() {
+        stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
+        stored.searchFields.put(LayoutVariant.NORMAL, true);
+        for (Dress dress : new Dress[] {home(), terminal()}) {
+            assertEquals(DockStyle.LENS_BEADS, dress.dockDesign());
+            assertTrue(dress.searchField());
+        }
+        assertTrue(dresses.searchFieldOf(PaneWallPage.WIDGETS));
+        assertTrue(dresses.searchFieldOf(PaneWallPage.DISPLAY));
+    }
+
+    @Test
+    public void theSearchFieldGoesWithEveryDesign() {
+        for (DockStyle style : DockStyle.CHOICES) {
+            stored.designs.put(LayoutVariant.NORMAL, style);
+            for (boolean on : new boolean[] {false, true}) {
+                stored.searchFields.put(LayoutVariant.NORMAL, on);
+                assertEquals(style.name(), style, terminal().dockDesign());
+                assertEquals(style.name(), on, terminal().searchField());
+                assertEquals(style.name(), on, home().searchField());
+            }
+        }
+    }
+
+    @Test
+    public void theSearchFieldIsEachLayoutsOwn() {
+        stored.searchFields.put(LayoutVariant.NORMAL, true);
+        stored.minimal = true;
+        assertFalse("the minimal layout holds its own", terminal().searchField());
+        assertTrue("Home wears the normal layout", home().searchField());
+        stored.minimal = false;
+        stored.homeLayout = true;
+        assertFalse("a Home layout holds its own", home().searchField());
+        assertFalse(dresses.searchFieldOf(PaneWallPage.WIDGETS));
         assertTrue(terminal().searchField());
+    }
+
+    @Test
+    public void theSearchFieldAloneChangesTheDress() {
+        Dress without = terminal();
+        stored.searchFields.put(LayoutVariant.NORMAL, true);
+        assertNotEquals(without, terminal());
+        stored.homeLayout = true;
+        stored.home = WORKSPACE;
+        stored.designs.put(LayoutVariant.HOME, DockStyle.GLASS_TRAY);
+        assertNotEquals("a field on one half only sets them apart",
+            dresses.dressOf(PaneWallPage.WIDGETS).searchField(), terminal().searchField());
+    }
+
+    @Test
+    public void aStrayPromptLineDrawsTheTrayAndTheDrawerTileStillComesWithTheTaskbar() {
+        stored.designs.put(LayoutVariant.NORMAL, DockStyle.PROMPT_LINE);
+        assertEquals(DockStyle.GLASS_TRAY, home().dockDesign());
+        assertFalse("the field is the stored toggle's", home().searchField());
+        assertFalse(home().drawerTile());
 
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.TASKBAR);
         assertTrue(home().drawerTile());
-        assertFalse(home().searchField());
         assertTrue(terminal().drawerTile());
+        assertFalse(home().searchField());
 
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.GLASS_TRAY);
-        assertFalse(home().searchField());
         assertFalse(home().drawerTile());
     }
 

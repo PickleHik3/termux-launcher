@@ -2021,8 +2021,12 @@
                 <string name="layout_editor_dock_style_glass_tray">Glass tray</string>
                 <string name="layout_editor_dock_style_lens_beads">Lens beads</string>
                 <string name="layout_editor_dock_style_taskbar">Taskbar</string>
-                <string name="layout_editor_dock_style_prompt_line">Prompt line</string>
                 <string name="layout_editor_dock_style_wall_strip">Wall strip</string>
+                <!-- The Search field toggle beside the dock styles (#96): the command palette's
+                     field under the dock's apps row, with any style. The label stands under its
+                     chip in a fifth of the row, so it stays one short word. -->
+                <string name="layout_editor_search_field">Search field</string>
+                <string name="layout_editor_search_field_label">Search</string>
                 <!-- What a resize handle shows while it is dragged, in the store's real units. The
                      dp forms are the live launcher measured after the write; the × forms are for
                      the orientation the phone is not in, where there is nothing live to measure. -->

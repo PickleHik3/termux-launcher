@@ -241,7 +241,7 @@ public class LayoutEditorHomeLayoutTest {
     @Test
     public void aPickedDockStyleIsUnsavedAndDiscardPutsItBack() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
-        plan.setDockStyle(DockStyle.PROMPT_LINE);
+        plan.setDockStyle(DockStyle.WALL_STRIP);
         assertTrue(plan.isDirty());
 
         plan.revert();

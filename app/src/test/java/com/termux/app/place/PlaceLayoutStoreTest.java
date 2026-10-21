@@ -43,7 +43,7 @@ import java.util.Arrays;
 public class PlaceLayoutStoreTest {
 
     /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
-    private static final int MIGRATED = 10;
+    private static final int MIGRATED = 11;
 
     private Application app;
     private SharedPreferences prefs;
@@ -1155,31 +1155,78 @@ public class PlaceLayoutStoreTest {
         assertEquals("the store follows minimal mode", DockStyle.WALL_STRIP, store.dockStyle());
     }
 
-    /**
-     * The Search field and the Drawer tile are kept beside the design they come with today, so
-     * #96 and #97 only have to read them.
-     */
+    /** The Search field is a toggle of its own beside the design, with any design (#96). */
     @Test
-    public void theSearchFieldAndTheDrawerTileAreStoredWithTheDesignTheyComeWith() {
+    public void theSearchFieldIsAToggleIndependentOfTheDesign() {
         PlaceLayoutStore store = store();
         assertFalse(store.searchField());
-        assertFalse(store.drawerTile());
 
-        store.setDockStyle(DockStyle.PROMPT_LINE);
+        store.setSearchField(true);
         assertTrue(prefs.getBoolean("layout.search_field", false));
-        assertFalse(prefs.getBoolean("layout.drawer_tile", true));
         assertTrue(store.searchField());
-        assertFalse(store.drawerTile());
-
-        store.setDockStyle(DockStyle.TASKBAR);
+        for (DockStyle style : DockStyle.CHOICES) {
+            store.setDockStyle(style);
+            assertEquals(style, store.dockStyle());
+            assertTrue("a design picked keeps the field: " + style, store.searchField());
+        }
+        store.setSearchField(false);
         assertFalse(store.searchField());
+        assertEquals("the toggle leaves the design", DockStyle.WALL_STRIP, store.dockStyle());
+
+        store.setSearchField(true);
+        assertFalse("another layout's toggle is its own",
+            store.forVariant(LayoutVariant.HOME).searchField());
+        assertFalse(store.forVariant(LayoutVariant.MINIMAL).searchField());
+    }
+
+    /** The Drawer tile still comes with the Taskbar, until #97 splits it off too. */
+    @Test
+    public void theDrawerTileIsStillStoredWithTheTaskbar() {
+        PlaceLayoutStore store = store();
+        assertFalse(store.drawerTile());
+        store.setDockStyle(DockStyle.TASKBAR);
+        assertTrue(prefs.getBoolean("layout.drawer_tile", false));
         assertTrue(store.drawerTile());
+        assertFalse("the field is not the design's", store.searchField());
         assertFalse("another layout's toggles are its own",
             store.forVariant(LayoutVariant.HOME).drawerTile());
+        store.setDockStyle(DockStyle.GLASS_TRAY);
+        assertFalse(store.drawerTile());
+    }
 
-        // A layout that holds the design but never stored the toggles reads them off it.
-        prefs.edit().putString("layout.minimal.dock_design", "prompt_line").commit();
-        assertTrue(store.forVariant(LayoutVariant.MINIMAL).searchField());
+    /** Prompt line users land on the Tray with the Search field on (#96). */
+    @Test
+    public void anUpgradeOnPromptLineLandsOnTheTrayWithTheSearchField() {
+        prefs.edit().putInt("place.migrated", 10)
+            .putString("layout.dock_design", "prompt_line")
+            .putBoolean("layout.search_field", true)
+            .putString("layout.minimal.dock_design", "prompt_line")
+            .putString("layout.home.dock_design", "lens_beads")
+            .commit();
+        PlaceLayoutStore store = store();
+
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
+        assertEquals("glass_tray", prefs.getString("layout.dock_design", null));
+        assertEquals(DockStyle.GLASS_TRAY, store.forVariant(LayoutVariant.NORMAL).dockStyle());
+        assertTrue(store.forVariant(LayoutVariant.NORMAL).searchField());
+        assertEquals("a layout that never stored the field gets it too", DockStyle.GLASS_TRAY,
+            store.forVariant(LayoutVariant.MINIMAL).dockStyle());
+        assertTrue(prefs.getBoolean("layout.minimal.search_field", false));
+        assertEquals("another design is left as it was", DockStyle.LENS_BEADS,
+            store.forVariant(LayoutVariant.HOME).dockStyle());
+        assertFalse(store.forVariant(LayoutVariant.HOME).searchField());
+    }
+
+    @Test
+    public void anUpgradeOnAnotherDesignKeepsItWithoutTheField() {
+        prefs.edit().putInt("place.migrated", 10)
+            .putString("layout.dock_design", "wall_strip")
+            .putBoolean("layout.search_field", false)
+            .commit();
+        PlaceLayoutStore store = store();
+        assertEquals(DockStyle.WALL_STRIP, store.dockStyle());
+        assertFalse(store.searchField());
+        assertFalse(prefs.getBoolean("layout.minimal.search_field", false));
     }
 
     @Test
@@ -1343,6 +1390,9 @@ public class PlaceLayoutStoreTest {
         PlaceLayoutStore store = store();
         assertTrue(store.searchField());
         assertTrue(prefs.getBoolean("layout.minimal.search_field", false));
+        assertEquals("the Prompt line is the Tray with the field", DockStyle.GLASS_TRAY,
+            store.dockStyle());
+        assertEquals(DockStyle.GLASS_TRAY, store.forVariant(LayoutVariant.HOME).dockStyle());
         assertFalse(store.drawerTile());
 
         prefs.edit().clear().commit();

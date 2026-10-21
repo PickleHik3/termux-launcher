@@ -26,14 +26,16 @@ public final class Dress {
     @NonNull private final LayoutVariant mLayout;
     @NonNull private final Set<Element> mLeftOut;
     @NonNull private final DockStyle mDockDesign;
+    private final boolean mSearchField;
     @NonNull private final WallHalfShape mShape;
 
     Dress(@NonNull LayoutVariant layout, @NonNull Set<Element> leftOut,
-          @NonNull DockStyle dockDesign, @NonNull WallHalfShape shape) {
+          @NonNull DockStyle dockDesign, boolean searchField, @NonNull WallHalfShape shape) {
         mLayout = layout;
         mLeftOut = leftOut.isEmpty() ? Collections.emptySet()
             : Collections.unmodifiableSet(EnumSet.copyOf(leftOut));
         mDockDesign = dockDesign;
+        mSearchField = searchField;
         mShape = shape;
     }
 
@@ -68,9 +70,12 @@ public final class Dress {
         return true;
     }
 
-    /** Whether the dock carries the Search field, which opens the command palette. */
+    /**
+     * Whether the dock carries the Search field, which opens the command palette: the toggle the
+     * page's layout holds beside its design, with any design (#96).
+     */
     public boolean searchField() {
-        return mDockDesign == DockStyle.PROMPT_LINE;
+        return mSearchField;
     }
 
     /** Whether the dock carries the Drawer tile, which opens the app drawer. */
@@ -90,18 +95,19 @@ public final class Dress {
         if (!(other instanceof Dress)) return false;
         Dress that = (Dress) other;
         return mLayout == that.mLayout && mLeftOut.equals(that.mLeftOut)
-            && mDockDesign == that.mDockDesign && mShape.equals(that.mShape);
+            && mDockDesign == that.mDockDesign && mSearchField == that.mSearchField
+            && mShape.equals(that.mShape);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(mLayout, mLeftOut, mDockDesign, mShape);
+        return Objects.hash(mLayout, mLeftOut, mDockDesign, mSearchField, mShape);
     }
 
     @NonNull
     @Override
     public String toString() {
-        return "Dress{" + mLayout + ", leftOut=" + mLeftOut + ", " + mDockDesign + ", " + mShape
-            + "}";
+        return "Dress{" + mLayout + ", leftOut=" + mLeftOut + ", " + mDockDesign
+            + (mSearchField ? "+search_field" : "") + ", " + mShape + "}";
     }
 }

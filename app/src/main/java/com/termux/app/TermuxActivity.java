@@ -4781,13 +4781,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // While a swipe fades the reflection out, it is aimed where the swipe draws the icons,
         // so it leaves with them rather than staying behind.
         float rowOffset = mSuggestionBarView != null ? mSuggestionBarView.drawnPageOffsetPx() : 0f;
-        // Under the Prompt line's field the lower bevel shows the icons as the tray's would,
-        // aimed that much lower, and nowhere over the field or the icons themselves.
+        // Under the Search field the lower bevel shows the icons as the tray's would, aimed that
+        // much lower, and nowhere over the field or the icons themselves, with any design.
         int belowPx = mAppliedPromptFieldBandPx;
         // The Taskbar holds its reflection to a low slab's strength (spec.reflectionScale). The
         // Wall strip's tiles stand over the icons: its reflection is the lower bevel's alone.
         reflection.bind(program, host, container, mGlassOriginLeft + rowOffset, mGlassOriginTop,
-            belowPx, belowPx > 0 ? PROMPT_LINE_REFLECTION_SCALE : spec.reflectionScale,
+            belowPx, belowPx > 0
+                ? Math.min(PROMPT_LINE_REFLECTION_SCALE, spec.reflectionScale)
+                : spec.reflectionScale,
             spec.reflectsLowerBevelOnly());
     }
 
@@ -4927,7 +4929,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * One frame of a slide across the seam while one half's dock draws Lens beads and the
      * other's does not ({@link #mTravelSeamBeadMelt}): the beads melt into the slab as the beaded
      * half slides away, swelling under their icons until, cut to the slab's outline, they are the
-     * slab, and come back out of it as that half returns, as the Prompt line's and the Wall
+     * slab, and come back out of it as that half returns, as the Search field's and the Wall
      * strip's bands follow their halves' shares ({@link #syncSeamBandShare}). Where the beaded
      * half's rows leave the screen on the way out they melt over the wall's first stretch, while
      * the chrome still rests (LensBeadGeometry.leavingMeltShare), so they sink as the slab rather
@@ -5143,6 +5145,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private com.termux.app.dock.LensBeadGeometry.Beads resolveDockBeads() {
         if (!dockBeadsWanted()) return null;
+        // The Search field is another band on the dock's glass, which beads cannot draw: the row
+        // keeps the slab, so the field is never clipped to the beads (#96).
+        if (mAppliedPromptFieldBandPx > 0) return null;
         SuggestionBarView row = mSuggestionBarView;
         View host = findViewById(R.id.accessory_surface_host);
         View container = findViewById(R.id.accessory_stack_container);
@@ -13234,7 +13239,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // dock's height scale sizes.
         @Override public int measuredDockHeightDp() {
             int px = shownThicknessPx(R.id.apps_bar_row_host);
-            // The Prompt line's field shares the row's host; the size scale is the row's own.
+            // The Search field shares the row's host; the size scale is the row's own.
             if (px > 0 && mPromptLineField != null
                 && mPromptLineField.getVisibility() == View.VISIBLE
                 && mPromptLineField.getParent() == findViewById(R.id.apps_bar_row_host))
@@ -14395,6 +14400,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : com.termux.app.dock.DockStyle.GLASS_TRAY;
             }
 
+            @Override public boolean searchField(
+                    @NonNull com.termux.app.place.LayoutVariant layout) {
+                PlaceLayoutStore store = placeLayoutStore();
+                return store != null && store.forVariant(layout).searchField();
+            }
+
             @NonNull @Override public com.termux.app.place.WallHalfShape shape(boolean home) {
                 return com.termux.app.place.WallHalfShape.read(mPreferences, home);
             }
@@ -15537,7 +15548,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // it and the index riding the plank claims only the letters themselves. The ticks stand in
         // the row's own air wherever it lies down, so a lying-down row claims its band and nothing
         // more; only a rail's strip is a column beside it.
-        // On the dock the Prompt line's field stands under the row, and the Wall strip's first
+        // On the dock the Search field stands under the row, and the Wall strip's first
         // row over it, on the same slab.
         int appsRowPx = dockLayout.appsRowBandPx + dockLayout.promptFieldBandPx
             + dockLayout.wallStripBandPx
@@ -15581,8 +15592,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAppliedPlaceLayout = layout;
         // A Dock style picked in the Layout editor: the dock takes its new shape on this pass.
         boolean dockStyleChanged = previous != null && previous.dockStyle != layout.dockStyle;
-        // Where the new style brings the Prompt line's field or takes it away, the slab eases to
-        // its new height from what it shows now: started before any pass below lays it out.
+        // The Search field toggled there, with whichever design (#96).
+        boolean searchField = committedSearchField();
+        dockStyleChanged |= mAppliedSearchField != null && mAppliedSearchField != searchField;
+        mAppliedSearchField = searchField;
+        // Where the new style brings the Wall strip's row or the toggle the Search field, or
+        // either goes, the slab eases to its new height from what it shows now: started before
+        // any pass below lays it out.
         if (dockStyleChanged) beginDockBandEase();
         com.termux.app.place.LayoutVariant variant = chromeVariant();
         boolean home = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
@@ -16429,8 +16445,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .appsRowPageStripShown(!PlaceChromePolicy.appsRailShown(layout))
             // The committed page's Dock design, on either half (#93).
             .surface(dockSurfaceSpec())
-            // The Prompt line's field under the apps row: all of it while the page wears the
-            // design, between while a design switch or a slide across the seam eases the slab.
+            // The Search field under the apps row: all of it while the page's layout turns it on,
+            // between while the toggle, the palette or a slide across the seam eases the slab.
             .promptFieldReveal(promptFieldReveal())
             // The Wall strip's first row over it, the same way.
             .wallStripReveal(wallStripReveal())
@@ -16487,7 +16503,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void restyleDockSurfaceForPageIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
                                                     @NonNull com.termux.app.wall.PaneWallPage to) {
         if (mPreferences == null || mChrome == null) return;
-        if (dockSurfaceSpec(from).equals(dockSurfaceSpec(to))) {
+        if (dockSurfaceSpec(from).equals(dockSurfaceSpec(to))
+            && mDresses.searchFieldOf(from) == mDresses.searchFieldOf(to)) {
             // One design on both, but a Home layout keeps its own Drawer tile's place.
             if (dockSurfaceSpec(to).taskbar) syncTaskbarHomeTile();
             return;
@@ -16570,14 +16587,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         };
 
-    // ------------------------------------------------------------------ Prompt line
+    // ------------------------------------------------------------------ Search field
     //
-    // The Prompt line (DockSurfaceSpec.PROMPT_LINE), on either half's dock: the command palette's
+    // The Search field (#96; once the Prompt line design), on either half's dock, with any Dock
+    // design: where the page's layout turns it on (Dress.searchField) the command palette's
     // field stands under the apps row on the same slab (DockLayout.promptFieldBandPx), in the
-    // row's own host, so the dock's one glass, its shelf and its reflection are the taller slab's;
-    // the Workspace's extra keys stay a band of their own beside it. A Dock style picked
-    // in the Layout editor eases the slab's height in or out over a short run of frames, each a
-    // dock pass and one re-cut of its glass; nothing runs before or after it.
+    // row's own host, so the dock's one glass, its shelf and its reflection are the taller slab's
+    // (Lens beads give way to the slab while it stands there); the Workspace's extra keys stay a
+    // band of their own beside it. The toggle, or a Dock style picked, in the Layout editor eases
+    // the slab's height in or out over a short run of frames, each a dock pass and one re-cut of
+    // its glass; nothing runs before or after it.
 
     /** How long a style switch takes to grow or shrink the slab by the field. */
     private static final long PROMPT_FIELD_EASE_MS = 240L;
@@ -16586,7 +16605,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The field, made the first time the slab carries it; null before. */
     @Nullable private com.termux.app.dock.PromptLineFieldView mPromptLineField;
     /**
-     * A style switch easing the slab's bands in or out (the Prompt line's field under the row,
+     * A style switch easing the slab's bands in or out (the Search field under the row,
      * the Wall strip's row over it, both at once where one style trades for the other); null at
      * rest.
      */
@@ -16598,20 +16617,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The field's band and its share of the whole, as last laid out. */
     private int mAppliedPromptFieldBandPx;
     private float mAppliedPromptFieldReveal;
+    /** The committed page's Search field as the last place pass saw it; null before one. */
+    @Nullable private Boolean mAppliedSearchField;
 
     /**
      * How much of the field the dock is laid out with: the ease's value while one runs, otherwise
-     * all of it where the committed page's dock wears the Prompt line and none anywhere else.
+     * all of it where the committed page's layout turns the Search field on and none anywhere
+     * else, and between while a slide crosses the seam toward a half of the other kind.
      */
     private float promptFieldReveal() {
         if (mPromptFieldEase != null) return mPromptFieldEaseValue;
-        return mPreferences != null && !mPromptFieldUnderPalette
-            ? dockBandShare(com.termux.app.dock.DockStyle.PROMPT_LINE) : 0f;
+        if (mPreferences == null || mPromptFieldUnderPalette) return 0f;
+        float here = committedSearchField() ? 1f : 0f;
+        if (Float.isNaN(mTravelSeamBandProgress) || mTravelSeamOtherDesign == null) return here;
+        float there = mTravelSeamOtherSearchField ? 1f : 0f;
+        return here + (there - here) * mTravelSeamBandProgress;
     }
 
     /**
-     * How much of a band only {@code design} carries (the Prompt line's field, the Wall strip's
-     * row) the dock is laid out with: all of it resting on a page whose dock wears the design,
+     * Whether the committed page's dock carries the Search field: the toggle read when the slide
+     * reached the seam while one crosses it ({@link #readSeamTravel}), so its frames read no
+     * store, else the dress's.
+     */
+    private boolean committedSearchField() {
+        if (mTravelSeamCommittedDesign != null) return mTravelSeamCommittedSearchField;
+        return mPreferences != null && mDresses.searchFieldOf(mLastWallPage);
+    }
+
+    /**
+     * How much of a band only {@code design} carries (the Wall strip's row) the dock is laid
+     * out with: all of it resting on a page whose dock wears the design,
      * none on one whose dock does not, and between, while a slide crosses the seam toward a half
      * of the other kind, the share of the way to the half that wears it ({@link
      * #syncSeamBandShare}), so the slab eases with the page rather than stepping at the settle.
@@ -16646,10 +16681,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private com.termux.app.dock.DockStyle mTravelSeamCommittedDesign;
     @Nullable private com.termux.app.dock.DockStyle mTravelSeamOtherDesign;
+    /** The two halves' Search field, read with their designs; meaningful while those are set. */
+    private boolean mTravelSeamCommittedSearchField;
+    private boolean mTravelSeamOtherSearchField;
 
     /**
      * One frame of a slide across the seam between Home and the Workspace, where one half's dock
-     * carries a band the other's does not (the Prompt line's field, the Wall strip's row): the
+     * carries a band the other's does not (the Search field, the Wall strip's row): the
      * band follows its page, out as that half slides away and back in as it returns, one dock
      * pass and one glass re-cut a frame while the share moves. Nothing where both halves wear the
      * same design (one layout: Home and a window alike), and nothing at rest.
@@ -16662,8 +16700,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean stripMoves = (here == com.termux.app.dock.DockStyle.WALL_STRIP)
             != (there == com.termux.app.dock.DockStyle.WALL_STRIP);
         boolean fieldMoves = !mPromptFieldUnderPalette
-            && (here == com.termux.app.dock.DockStyle.PROMPT_LINE)
-                != (there == com.termux.app.dock.DockStyle.PROMPT_LINE);
+            && mTravelSeamCommittedSearchField != mTravelSeamOtherSearchField;
         if (!(stripMoves || fieldMoves) || mPromptFieldEase != null) return;
         if (!com.termux.app.place.SeamTravel.crosses(mLastWallPage, mTravelSeamOther)) return;
         float progress = Math.max(0f, Math.min(1f,
@@ -16676,16 +16713,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Whether the slab carries the field at rest: where the committed page's dock wears the
-     * Prompt line, and not while the command palette it opens is up (the palette's own field is
-     * the one search box then, and the slab is the tray's until the palette goes).
+     * Whether the slab carries the field at rest: where the committed page's layout turns the
+     * Search field on, and not while the command palette it opens is up (the palette's own field
+     * is the one search box then, and the slab is the design's own until the palette goes).
      */
     private boolean promptFieldWanted() {
-        return mPreferences != null && dockSurfaceSpec().promptField && !mPromptFieldUnderPalette;
+        return mPreferences != null && committedSearchField() && !mPromptFieldUnderPalette;
     }
 
     /**
-     * A Dock style was picked: where the Prompt line's field or the Wall strip's row comes or goes
+     * A Dock style was picked: where the Search field or the Wall strip's row comes or goes
      * on a dock in view, the slab eases from what it shows now to its new height, before any pass
      * lays the new style out, on either half. Anywhere else (the dock not laid out yet, reduced
      * motion) the passes land it at once.
@@ -16813,12 +16850,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return t * t * (3f - 2f * t);
     }
 
-    /** Whether the command palette is open over the Prompt line's field, which then goes. */
+    /** Whether the command palette is open over the Search field, which then goes. */
     private boolean mPromptFieldUnderPalette;
 
     /**
      * The palette opened or closed ({@link #setCommandPaletteInterceptorActive}): while it is open
-     * the Prompt line's slab eases to the tray's height, the field fading out with its band, so
+     * the slab eases to its design's own height, the field fading out with its band, so
      * the palette's field is the only search box on screen and no empty glass is left where the
      * field stood; it eases back when the palette goes. The same 240 ms ease a style switch
      * runs (one dock pass and one glass re-cut a frame, nothing at rest). Nothing on any other
@@ -16827,7 +16864,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void setPromptFieldUnderPalette(boolean under) {
         if (mPromptFieldUnderPalette == under) return;
         mPromptFieldUnderPalette = under;
-        if (mPreferences == null || mChrome == null || !dockSurfaceSpec().promptField) return;
+        if (mPreferences == null || mChrome == null || !committedSearchField()) return;
         if (beginDockBandEase()) return;
         // No ease (reduced motion, the dock not laid out): the pass lands it at once.
         if (setTerminalToolbarHeight(false))
@@ -16844,7 +16881,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // outline are the taller slab's; the Workspace's extra keys stay a band of their own beside
     // it. Its tiles are fed from the same window chips as the
     // Workspace's bar (syncWindowBarItems, built on Home too); a tile's tap brings the Workspace
-    // in on its window. A style switch eases the slab with the Prompt line's ease; nothing here
+    // in on its window. A style switch eases the slab with the Search field's ease; nothing here
     // runs at rest but the clock's minute, which redraws the clock alone.
 
     /** The row, made the first time the slab carries it; null before. */
@@ -18105,7 +18142,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             else mFirstBootTour.onPaletteClosed();
             mFirstBootTour.onChromeChanged();
         }
-        // The Prompt line's field is not a second search box under the open palette.
+        // The Search field is not a second search box under the open palette.
         setPromptFieldUnderPalette(active);
         if (mInAppKeyboard == null)
             return;
@@ -22034,6 +22071,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // gives both halves one design, and then no band eases and no bead melts (#93).
             mTravelSeamCommittedDesign = mDresses.dockDesignOf(mLastWallPage);
             mTravelSeamOtherDesign = mDresses.dockDesignOf(other);
+            mTravelSeamCommittedSearchField = mDresses.searchFieldOf(mLastWallPage);
+            mTravelSeamOtherSearchField = mDresses.searchFieldOf(other);
             com.termux.app.place.SeamDress.StackDress committedDress =
                 stackDressOf(mLastWallPage, orientation);
             com.termux.app.place.SeamDress.StackDress otherDress =
@@ -22060,6 +22099,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // layout's two halves both drawing beads keep them all the way across.
             boolean committedBeads = mDockBeads != null;
             boolean otherBeads = mTravelSeamOtherDesign == com.termux.app.dock.DockStyle.LENS_BEADS
+                && !mTravelSeamOtherSearchField
                 && com.termux.app.dock.LensBeadGeometry.rowWearsBeads(otherLayout,
                     stackStandsDownOnFrame(), mTravelSeamOtherKeyboard);
             mTravelSeamBeadMelt = committedBeads != otherBeads;
@@ -29572,7 +29612,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void lowerKeyboard() { lowerHomePaletteKeyboard(); }
 
-        // The Prompt line's field opens the palette with the keyboard: up already, or raised
+        // The Search field opens the palette with the keyboard: up already, or raised
         // by hand as the swipe up raises it (openHomePalette).
         @Override public boolean isKeyboardUp() { return committedKeyboardVisible(); }
 
@@ -30759,7 +30799,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     void updateWindowBackgroundForCurrentSession() {
         // Every terminal scheme pass ends here (a theme, light or dark, Material You's palette):
-        // the Prompt line's prompt takes the scheme's colours, redrawing only if they moved.
+        // the Search field's prompt takes the scheme's colours, redrawing only if they moved.
         if (mPromptLineField != null) mPromptLineField.refreshTheme();
         // The Wall strip's tiles are terminals: their wells and titles are the scheme's.
         if (mWallStripRow != null) mWallStripRow.refreshTheme();

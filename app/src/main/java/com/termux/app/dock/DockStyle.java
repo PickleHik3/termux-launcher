@@ -3,8 +3,10 @@ package com.termux.app.dock;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -27,7 +29,12 @@ public enum DockStyle {
     LENS_BEADS("lens_beads"),
     /** A Home tile beside the apps, and a strip of running windows above. */
     TASKBAR("taskbar"),
-    /** The apps above a permanent command palette field, styled as a shell prompt. */
+    /**
+     * Once the apps above the command palette's field; the field is the <b>Search field</b>
+     * toggle now, beside any design (#96). Kept only so a stored id still parses: the store's
+     * migration turns it into {@link #GLASS_TRAY} with the field on, it is never offered
+     * ({@link #CHOICES}) and never drawn ({@link #BUILT}).
+     */
     PROMPT_LINE("prompt_line"),
     /** A first row for the Workspace (a clock and the terminals) above the apps. */
     WALL_STRIP("wall_strip");
@@ -38,7 +45,12 @@ public enum DockStyle {
      */
     @NonNull
     public static final Set<DockStyle> BUILT = Collections.unmodifiableSet(EnumSet.of(GLASS_TRAY, LENS_BEADS,
-        TASKBAR, PROMPT_LINE, WALL_STRIP));
+        TASKBAR, WALL_STRIP));
+
+    /** The designs the Layout editor's picker offers, in the order it shows them. */
+    @NonNull
+    public static final List<DockStyle> CHOICES = Collections.unmodifiableList(Arrays.asList(
+        GLASS_TRAY, LENS_BEADS, TASKBAR, WALL_STRIP));
 
     @NonNull private final String mId;
 

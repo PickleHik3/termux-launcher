@@ -327,9 +327,37 @@ public final class LayoutEditorPlan {
      */
     @NonNull
     public Drop setDockStyle(@NonNull DockStyle style) {
-        if (!offersDockStyle() || style == dockStyle())
+        // Only what the picker offers: the Prompt line is the Search field now (#96).
+        if (!offersDockStyle() || !DockStyle.CHOICES.contains(style) || style == dockStyle())
             return Drop.NONE;
         mPlaces.setDockStyle(style);
+        return Drop.LIVE;
+    }
+
+    // ------------------------------------------------------------------- the Search field
+
+    /**
+     * Whether the Search field toggle is offered: beside the design picker, wherever it is
+     * (#96), since the field goes with any design.
+     */
+    public boolean offersSearchField() {
+        return offersDockStyle();
+    }
+
+    /** Whether the edited layout turns the Search field on: what the toggle shows. */
+    public boolean searchField() {
+        return mPlaces.searchField();
+    }
+
+    /**
+     * The Search field turned on or off for the edited layout, both orientations, its design
+     * left as it is; the live dock grows or loses the field under its apps row.
+     */
+    @NonNull
+    public Drop setSearchField(boolean on) {
+        if (!offersSearchField() || on == searchField())
+            return Drop.NONE;
+        mPlaces.setSearchField(on);
         return Drop.LIVE;
     }
 

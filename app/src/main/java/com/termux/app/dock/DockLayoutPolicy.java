@@ -133,7 +133,7 @@ public final class DockLayoutPolicy {
     public static final float SHARED_ROW_AIR_DP = AccessoryStackLayoutPolicy.AZ_ROW_CROWN_DP;
 
     /**
-     * The Prompt line's field as it stands under the apps row: the field view's height (its tap
+     * The Search field (once the Prompt line's) as it stands under the apps row: the field view's height (its tap
      * target, {@link PromptLineFieldView#HIT_HEIGHT_DP}) and the well drawn centred in it
      * ({@link PromptLineFieldView#WELL_HEIGHT_DP}).
      */
@@ -144,7 +144,7 @@ public final class DockLayoutPolicy {
 
     /** The Wall strip's first row as it stands over the apps row ({@link WallStripRowView#HEIGHT_DP}). */
     public static final float WALL_STRIP_HEIGHT_DP = WallStripRowView.HEIGHT_DP;
-    /** The row's side inset inside the slab: the apps row's 14 dp, as the Prompt line's field. */
+    /** The row's side inset inside the slab: the apps row's 14 dp, as the Search field. */
     public static final float WALL_STRIP_SIDE_INSET_DP = PROMPT_FIELD_SIDE_INSET_DP;
 
     /** Everything the dock's numbers are a function of, snapshotted by the caller. */
@@ -214,10 +214,11 @@ public final class DockLayoutPolicy {
         public final int displayCutoutInsetLeftPx;
         public final int displayCutoutInsetRightPx;
         /**
-         * How much of the Prompt line's field the slab carries under the apps row, 0..1: 1 while
-         * Home's dock wears {@link DockSurfaceSpec#PROMPT_LINE}, 0 for every other dock, and
-         * between while a style switch eases the slab's height. Read off its own value rather
-         * than the spec, so the slab can ease out after the spec has already moved on.
+         * How much of the Search field the slab carries under the apps row, 0..1: 1 while the
+         * page's layout turns the field on, with whichever design (#96), 0 while it does not,
+         * and between while the toggle, the palette or a slide across the seam eases the slab's
+         * height. Read off its own value rather than the dress, so the slab can ease out after
+         * the toggle has already moved on.
          */
         public final float promptFieldReveal;
         /**
@@ -448,7 +449,7 @@ public final class DockLayoutPolicy {
         out.appsRowBandHintPx = Math.max(0, out.appsRowBandPx - airPx - tickSideAirPx);
         out.appsBarHeightHintPx = appsRowEnabled ? out.appsRowBandHintPx : 0;
 
-        // The Prompt line's field, under the apps row on the same slab. Its well keeps the air
+        // The Search field, under the apps row on the same slab, with any design (#96). Its well keeps the air
         // over the icons from the slab's lower edge, so the slab's outer padding is equal top and
         // bottom; the row's own air under the icons is the gap between the icons and the well.
         // Only on the dock's own row: a row on another edge, or no row, carries no field.
@@ -547,7 +548,7 @@ public final class DockLayoutPolicy {
         return Math.round(Math.max(0f, density) * WALL_STRIP_SIDE_INSET_DP);
     }
 
-    /** The Prompt line's field view, px: its whole tap target. */
+    /** The Search field's view, px: its whole tap target. */
     public static int promptFieldHeightPx(float density) {
         return Math.round(Math.max(0f, density) * PROMPT_FIELD_HEIGHT_DP);
     }
