@@ -1001,7 +1001,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             cell.setTranslationZ(0f);
             cell.setVisibility(View.VISIBLE);
         }
-        pane.grid().setDragPinned(-1);
+        pane.grid().setDragPinned(WidgetGridView.NO_DRAG_PIN);
         if (edit != null) edit.lifted = false;
     }
 
