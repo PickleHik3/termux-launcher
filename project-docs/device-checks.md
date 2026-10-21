@@ -64,7 +64,8 @@ under twenty items; past that, the oldest are re-judged first.
   CPU/RAM in the bar on Home, not in the focused float's titlebar, whose grip centres in the span
   the buttons leave; TalkBack on a minimised float's chip says "minimised" · emulator, status bar
   shown, then with the bar hidden in the layout (a minimised float then has no chip but the
-  Taskbar's or Wall strip's).
+  Taskbar's or Wall strip's); a minimised float's chip is dimmed with a dot, unlike an open
+  window's (in the pill row and in the side column).
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on

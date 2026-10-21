@@ -142,7 +142,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
          */
         @Nullable public final Bitmap icon;
 
+        /** Whether this is a Home float's chip while the float is minimised (#91). */
+        public final boolean minimised;
+
         public static final int NO_PERCENTAGE = -1;
+        /** A minimised float's chip, as an alpha: reduced emphasis against an open window's. */
+        public static final float MINIMISED_ALPHA = 0.6f;
+        /** The dot a minimised float's chip wears, its diameter. */
+        public static final float MINIMISED_DOT_DP = 4f;
 
         public WindowItem(@NonNull String label, @NonNull String spokenLabel) {
             this(label, spokenLabel, false, false);
@@ -185,6 +192,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                           boolean attention, int progress, boolean progressError, boolean done,
                           boolean doneFailed, @Nullable AgentStatus.State agentState,
                           @Nullable Bitmap icon) {
+            this(label, spokenLabel, busy, attention, progress, progressError, done, doneFailed,
+                agentState, icon, false);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done,
+                          boolean doneFailed, @Nullable AgentStatus.State agentState,
+                          @Nullable Bitmap icon, boolean minimised) {
+            this.minimised = minimised;
             this.label = label;
             this.spokenLabel = spokenLabel;
             this.busy = busy;
@@ -206,14 +222,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withBusy(boolean busy) {
             return busy == this.busy ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         @NonNull
         public WindowItem withAttention(boolean attention) {
             return attention == this.attention ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         @NonNull
@@ -226,7 +242,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withDone(boolean done, boolean failed) {
             return done == this.done && failed == this.doneFailed ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    failed, agentState, icon);
+                    failed, agentState, icon, minimised);
         }
 
         /** The shell's own progress report; {@link #NO_PERCENTAGE} for indeterminate. */
@@ -234,7 +250,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withProgress(int progress, boolean progressError) {
             return progress == this.progress && progressError == this.progressError ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         /** The rolled-up agent reading for this window's panes; null leaves it to the shell. */
@@ -242,7 +258,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withAgentState(@Nullable AgentStatus.State agentState) {
             return agentState == this.agentState ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         /**
@@ -254,7 +270,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withIcon(@Nullable Bitmap icon) {
             return icon == this.icon ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         /**
@@ -265,7 +281,24 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withHomeFloat(int page, @NonNull String spokenMark) {
             return new WindowItem(label + HomeFloatPolicy.chipPageMark(page),
                 spokenLabel + ", " + spokenMark, busy, attention, progress, progressError, done,
-                doneFailed, agentState, icon);
+                doneFailed, agentState, icon, minimised);
+        }
+
+        /**
+         * A minimised Home float's chip (#91): drawn at {@link #MINIMISED_ALPHA} with a small dot
+         * ({@link #MINIMISED_DOT_DP}), the way the old run strip marked a parked float. The
+         * spoken label already says it, so this is the sighted reading only.
+         */
+        @NonNull
+        public WindowItem withMinimised(boolean minimised) {
+            return minimised == this.minimised ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState, icon, minimised);
+        }
+
+        /** The alpha this chip rests at: dimmed while it is a minimised float's. */
+        public float restAlpha() {
+            return minimised ? MINIMISED_ALPHA : 1f;
         }
 
         /** Whether the two would draw the same marks. Labels are compared separately. */
@@ -273,7 +306,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             return busy == other.busy && attention == other.attention && done == other.done
                 && doneFailed == other.doneFailed
                 && progress == other.progress && progressError == other.progressError
-                && agentState == other.agentState && icon == other.icon;
+                && agentState == other.agentState && icon == other.icon
+                && minimised == other.minimised;
         }
 
         /**
@@ -306,6 +340,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             hash = 31 * hash + (attention ? 1 : 0);
             hash = 31 * hash + (done ? 1 : 0);
             hash = 31 * hash + (doneFailed ? 1 : 0);
+            hash = 31 * hash + (minimised ? 1 : 0);
             hash = 31 * hash + progress;
             hash = 31 * hash + (progressError ? 1 : 0);
             hash = 31 * hash + (agentState == null ? 0 : agentState.hashCode());
@@ -1293,10 +1328,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             Object shown = child.getTag(R.id.terminal_window_tab_state);
             if (!force && shown instanceof WindowItem && ((WindowItem) shown).sameActivity(item)
                 && ((WindowItem) shown).label.equals(item.label)) continue;
-            if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)) {
+            if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)
+                || ((WindowItem) shown).minimised != item.minimised) {
                 setTitle((TextView) child, item);
             }
             applyChipWatermark((TextView) child, item, i == mSelectedIndex ? 1f : 0f);
+            child.setAlpha(item.restAlpha());
             child.setTag(R.id.terminal_window_tab_state, item);
         }
         updateBusyAnimator();
@@ -1313,7 +1350,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     @NonNull
     private CharSequence tabText(@NonNull WindowItem item) {
-        String title = titleOf(item.label);
+        // A minimised float's dot, after the title: a bullet, in the title's own ink and alpha.
+        String title = titleOf(item.label) + (item.minimised ? " \u2022" : "");
         return TerminalLabelSymbolSpans.apply(
             com.termux.shared.termux.font.NerdFontSpans.span(getContext(), title), mSymbolMaps);
     }
@@ -1895,7 +1933,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             applyTitleHalo(tab, selected ? 1f : 0f);
             ChipWatermarkDrawable chip = chipWatermarkAt(i);
             if (chip != null) chip.setSelection(selected ? 1f : 0f);
-            tab.setAlpha(1f);
+            tab.setAlpha(mItems.get(i).restAlpha());
             tab.setTranslationX(0f);
         }
     }
@@ -1923,7 +1961,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 applyTitleHalo(tab, 0f);
                 if (chip != null) chip.setSelection(0f);
             }
-            tab.setAlpha(1f);
+            tab.setAlpha(mItems.get(i).restAlpha());
             tab.setTranslationX(0f);
         }
     }

@@ -234,6 +234,33 @@ public final class StatusBarWindowColumn extends ScrollView {
                     OnGlass.TARGET_BODY_TEXT));
         }
         chip.setBackground(chipBackground(item, selected));
+        // A minimised float (#91): the chip at reduced emphasis, and a small dot in its corner in
+        // the chip's own ink.
+        chip.setAlpha(item.restAlpha());
+        chip.setForeground(item.minimised ? minimisedDot(chip.getCurrentTextColor()) : null);
+    }
+
+    /** The dot a minimised float's chip wears, in its top end corner. */
+    @NonNull
+    private android.graphics.drawable.Drawable minimisedDot(int color) {
+        final float size = WindowItem.MINIMISED_DOT_DP * density();
+        final float inset = 3f * density();
+        final android.graphics.Paint paint = new android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(color);
+        return new android.graphics.drawable.Drawable() {
+            @Override public void draw(@NonNull android.graphics.Canvas canvas) {
+                boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+                float cx = rtl ? getBounds().left + inset + size / 2f
+                    : getBounds().right - inset - size / 2f;
+                canvas.drawCircle(cx, getBounds().top + inset + size / 2f, size / 2f, paint);
+            }
+            @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); }
+            @Override public void setColorFilter(@Nullable android.graphics.ColorFilter filter) {
+                paint.setColorFilter(filter);
+            }
+            @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+        };
     }
 
     /** The corner the bar's chips wear, shared with the badge and the lens icons. */
