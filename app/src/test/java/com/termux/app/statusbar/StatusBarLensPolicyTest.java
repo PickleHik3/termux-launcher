@@ -184,86 +184,41 @@ public class StatusBarLensPolicyTest {
         assertFalse(StatusBarLensPolicy.slotLeadsRow(Edge.RIGHT));
     }
 
-    // -------------------------------------------------------- the peek is legible and reachable
+    // -------------------------------------------------------- no place marks (#90)
 
-    /**
-     * The landscape window of the 17 Sep review: 1300x600 at density 2, where the neighbouring
-     * place marks were reported as small, low-contrast fragments. The bar is 34dp of that in the
-     * compact form it rests in and 68dp open.
-     */
     private static final float DENSITY = 2f;
     private static final int BAR_W = 1300;
     private static final int COMPACT_H = 68;   // 34dp
     private static final int EXPANDED_H = 136; // 68dp
 
-    private static List<Mark> landscapeMarks(TopStatusBarState state) {
-        int height = state == TopStatusBarState.COMPACT ? COMPACT_H : EXPANDED_H;
-        return StatusBarLensMetrics.marks(Bar.of(BAR_W, height, DENSITY, false, state),
-            ROW, PaneWallPage.TERMINAL, 0f, BAR_W);
-    }
-
-    private static Mark markFor(List<Mark> marks, PaneWallPage page) {
-        for (Mark mark : marks) if (mark.page == page) return mark;
-        throw new AssertionError("no mark for " + page);
-    }
-
-    @Test public void everyMarkIsAtLeastThePlatformsMinimumTargetInBothFormsOfTheBar() {
-        // 48dp each way, or the whole of the bar on an axis with less than that to give — a 34dp
-        // compact bar cannot be 48dp thick, and the target takes all of it rather than a strip of
-        // it. Before: the drawn half-tile plus 8dp of air, which is 17dp along a compact bar.
+    /**
+     * With the bar on both halves every place mark goes (decided 2026-10-21, #90): not the house,
+     * not the Workspace's prompt beside the clock, not the Display's. The bar is the clock, the
+     * readings and the window chips, wherever the wall is and however the bar stands.
+     */
+    @Test public void noPlaceMarksAtAll() {
         for (TopStatusBarState state : TopStatusBarState.values()) {
             int height = state == TopStatusBarState.COMPACT ? COMPACT_H : EXPANDED_H;
-            float minAlong = StatusBarLensMetrics.minTargetPx(DENSITY, BAR_W);
-            float minAcross = StatusBarLensMetrics.minTargetPx(DENSITY, height);
-            for (Mark mark : landscapeMarks(state)) {
-                assertTrue(state + " " + mark.page + " target " + mark.target,
-                    mark.target.width() >= minAlong - 0.01f);
-                assertTrue(state + " " + mark.page + " target " + mark.target,
-                    mark.target.height() >= minAcross - 0.01f);
-                // And it is a patch of the bar, not a rectangle hanging off one end of it.
-                assertTrue(mark.target.left >= -0.01f && mark.target.right <= BAR_W + 0.01f);
-                assertTrue(mark.target.top >= -0.01f && mark.target.bottom <= height + 0.01f);
+            for (boolean vertical : new boolean[] {false, true}) {
+                Bar bar = vertical ? Bar.of(COMPACT_H, 600, DENSITY, true, state)
+                    : Bar.of(BAR_W, height, DENSITY, false, state);
+                int wall = vertical ? 600 : BAR_W;
+                for (PaneWallPage current : ROW) {
+                    for (float offset : new float[] {0f, -wall / 2f, wall / 2f, wall}) {
+                        List<Mark> marks =
+                            StatusBarLensMetrics.marks(bar, ROW, current, offset, wall);
+                        assertTrue(state + " " + current + " " + offset + " " + marks,
+                            marks.isEmpty());
+                    }
+                }
             }
         }
     }
 
-    @Test public void aNeighboursTargetReachesInwardBecauseItsOuterHalfIsPastTheBar() {
-        List<Mark> marks = landscapeMarks(TopStatusBarState.COMPACT);
-        // The compact row carries no mark at home, so the two neighbours are all there is.
-        // Home has no mark, so the far neighbour is all there is.
-        assertEquals(1, marks.size());
-        Mark right = markFor(marks, PaneWallPage.DISPLAY);
-        assertEquals(BAR_W, right.centerX, 0.01f);
-        assertEquals(BAR_W - 96f, right.target.left, 0.01f);
-        assertEquals(BAR_W, right.target.right, 0.01f);
-        // Across a bar too thin for 48dp the target is the whole thickness.
-        assertEquals(0f, right.target.top, 0.01f);
-        assertEquals(COMPACT_H, right.target.bottom, 0.01f);
-    }
-
-    @Test public void aPeekingMarkStaysAboveTheLegibilityFloorInBothFormsOfTheBar() {
-        // It used to read at 0.62 ink, halved again by a dissolve that ran to nothing exactly where
-        // the glyph is drawn: 0.31 reaching the glass, which is the fragment the review saw.
-        for (TopStatusBarState state : TopStatusBarState.values()) {
-            for (Mark mark : landscapeMarks(state)) {
-                if (mark.home) continue;
-                assertTrue(state + " " + mark.page + " ink " + mark.effectiveInk,
-                    mark.effectiveInk >= StatusBarLensMetrics.EFFECTIVE_INK_FLOOR);
-            }
-        }
-        Mark peek = markFor(landscapeMarks(TopStatusBarState.COMPACT), PaneWallPage.DISPLAY);
-        assertEquals(0.85f, peek.ink, 0.001f);
-        assertEquals(0.5f, peek.fadeOuterAlpha, 0.001f);
-        assertEquals(0.6375f, peek.effectiveInk, 0.001f);
-        // Quieter in strength, not in colour: the neighbour keeps the place's own colour and is
-        // faded in it by exactly the share the extra-keys row fades its unfocused switches by, and
-        // only the mark at home wears a glow.
-        assertEquals(StatusBarLensMetrics.UNFOCUSED_GLYPH_SHARE, peek.glyphInk, 0.001f);
-        assertEquals(0f, peek.glow, 0.001f);
-        Mark home = markFor(landscapeMarks(TopStatusBarState.EXPANDED), PaneWallPage.TERMINAL);
-        assertEquals(1f, home.ink, 0.001f);
-        assertEquals(1f, home.glyphInk, 0.001f);
-        assertTrue(home.glow > 0f);
+    /** No mark stands beside the clock, so the row keeps no cell for one: no gap is left. */
+    @Test public void theLeadingInsetIsClosedUp() {
+        assertEquals(0, StatusBarLensMetrics.leadingCellWidthPx(DENSITY));
+        assertEquals(0, StatusBarLensMetrics.leadingCellWidthPx(2.75f));
     }
 
     /**
@@ -277,56 +232,5 @@ public class StatusBarLensPolicyTest {
             StatusBarLensMetrics.glyphInkFor(1f), 0.001f);
         assertTrue(StatusBarLensMetrics.glyphInkFor(0.5f)
             > StatusBarLensMetrics.glyphInkFor(1f));
-    }
-
-    @Test public void aPeekingMarkNeverFallsThroughTheInkFloor() {
-        for (TopStatusBarState state : TopStatusBarState.values()) {
-            for (Mark mark : landscapeMarks(state)) {
-                if (mark.home) continue;
-                assertEquals(1f - StatusBarLensMetrics.PEEK_INK_DRAIN, mark.ink, 0.001f);
-                assertTrue(mark.effectiveInk >= StatusBarLensMetrics.EFFECTIVE_INK_FLOOR);
-            }
-        }
-    }
-
-    @Test public void aColumnsMarksQueueDownItAndTakeTheWholeOfItsWidth() {
-        int columnW = 68;  // 34dp
-        int columnH = 600;
-        List<Mark> marks = StatusBarLensMetrics.marks(
-            Bar.of(columnW, columnH, DENSITY, true, TopStatusBarState.COMPACT),
-            ROW, PaneWallPage.TERMINAL, 0f, columnH);
-        assertEquals(1, marks.size());
-        Mark below = markFor(marks, PaneWallPage.DISPLAY);
-        assertEquals(columnH, below.centerY, 0.01f);
-        assertEquals(columnH - 96f, below.target.top, 0.01f);
-    }
-
-    @Test public void aMarkThatHasLeftIsNeitherDrawnNorTappable() {
-        // Two widths away the leaving mark has dissolved; nothing of it is reported.
-        List<Mark> marks = StatusBarLensMetrics.marks(
-            Bar.of(BAR_W, EXPANDED_H, DENSITY, false, TopStatusBarState.EXPANDED),
-            ROW, PaneWallPage.TERMINAL, BAR_W, BAR_W);
-        for (Mark mark : marks) assertTrue(mark.page != PaneWallPage.DISPLAY);
-    }
-
-    @Test public void homeWearsNoMarkWhereverTheWallIs() {
-        // The house glyph is gone from both halves: not at home beside the clock, not peeking in.
-        for (TopStatusBarState state : TopStatusBarState.values()) {
-            int height = state == TopStatusBarState.COMPACT ? COMPACT_H : EXPANDED_H;
-            Bar bar = Bar.of(BAR_W, height, DENSITY, false, state);
-            for (PaneWallPage current : ROW) {
-                for (float offset : new float[] {0f, -BAR_W / 2f, BAR_W / 2f}) {
-                    for (Mark mark : StatusBarLensMetrics.marks(bar, ROW, current, offset, BAR_W)) {
-                        assertTrue(state + " " + current + " " + offset,
-                            mark.page != PaneWallPage.WIDGETS);
-                    }
-                }
-            }
-        }
-    }
-
-    @Test public void theRowStartsAfterTheHomeMarkAndItsGap() {
-        assertEquals(Math.round((20f + 36f + 8f) * DENSITY),
-            StatusBarLensMetrics.leadingCellWidthPx(DENSITY));
     }
 }
