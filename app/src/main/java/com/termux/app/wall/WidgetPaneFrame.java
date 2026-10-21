@@ -709,6 +709,11 @@ public final class WidgetPaneFrame extends PaneContentFrame
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget
                 : new java.util.ArrayList<>(mGlassWidgets))
             widget.onGlassStyle(look);
+        // The hosted app widgets' cells take the same corner in the same pass.
+        if (look != null && mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView) {
+            ((com.termux.app.launcher.widget.WidgetPaneView) mGrid).grid()
+                .setCellCornerRadius(PaneGlass.radiusPx(look, density));
+        }
     }
 
     /**

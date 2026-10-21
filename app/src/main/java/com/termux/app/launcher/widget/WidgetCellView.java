@@ -134,6 +134,25 @@ public final class WidgetCellView extends FrameLayout {
         refreshCornerClip();
     }
 
+    /**
+     * The Look's Corners, fed by the page on its dress pass as the built-ins are, a Corners
+     * slider's every tick included: the clip is re-cut in place, nothing is laid out. A feed of
+     * the corner the cell already wears (within a quarter pixel) does nothing.
+     */
+    public void setLookCornerRadius(float radiusPx) {
+        if (!com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.cornersMoved(cornerRadius,
+                radiusPx)) {
+            return;
+        }
+        cornerRadius = radiusPx;
+        refreshCornerClip();
+        invalidate();
+    }
+
+    /** The corner this cell clips at now, before {@link WidgetCornerPolicy} caps it; for tests. */
+    @androidx.annotation.VisibleForTesting
+    float cornerRadiusPx() { return cornerRadius; }
+
     @Override protected void onDetachedFromWindow() {
         getViewTreeObserver().removeOnGlobalFocusChangeListener(globalFocusWatch);
         if (focusedEditor != null) {
