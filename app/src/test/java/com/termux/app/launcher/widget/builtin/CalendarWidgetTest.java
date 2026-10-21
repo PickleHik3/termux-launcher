@@ -352,6 +352,46 @@ public class CalendarWidgetTest {
         assertNull(CalendarWidgetFormats.firstStarting(events, today.plusDays(2), zone));
     }
 
+    /** "Allow ac…" was cut in the Next up column at font 2.0: a form that fits whole, or none. */
+    @Test public void theAllowLineIsNeverCut() {
+        Content denied = content(0, false, false, false, false, false, october(false));
+        for (BuiltinWidgetSpan span : new BuiltinWidgetSpan[] {BuiltinWidgetSpan.TWO_BY_TWO,
+            BuiltinWidgetSpan.FOUR_BY_ONE, BuiltinWidgetSpan.FOUR_BY_TWO}) {
+            for (float fs : new float[] {1f, 1.3f, 2f}) {
+                for (float width : new float[] {span.widthDp, span.widthDp * 0.8f}) {
+                    WidgetLayoutPlan plan = CalendarLayoutPlanner.plan(span, width, span.heightDp,
+                        fs, denied, WORDS, MEASURE).plan;
+                    assertTrue(span + " " + fs, plan.has(CalendarLayoutPlanner.ALLOW_TOUCH));
+                    WidgetLayoutPlan.Part allow = plan.part(CalendarLayoutPlanner.ALLOW);
+                    if (allow == null) continue;
+                    assertTrue(span + " " + fs + " " + allow.text + " is cut to "
+                        + allow.box.width, MEASURE.widthDp(allow.text, allow.role, false,
+                            allow.sizeDp) <= allow.box.width + WidgetLayoutPlan.EPSILON);
+                }
+            }
+        }
+    }
+
+    /** The selected day's circle is the cell less the 2 dp gap, so "21 [22] 23" keep apart. */
+    @Test public void theSelectedDayCircleKeepsClearOfItsNeighbours() {
+        for (float fs : new float[] {1f, 1.3f, 2f}) {
+            CalendarLayoutPlanner.Grid grid = CalendarLayoutPlanner.grid(184f, 150f, 7, 5, 0,
+                NAMES, LETTERS, WidgetTokens.Role.LABEL, WidgetTokens.Role.BODY, fs, MEASURE);
+            if (grid == null) continue;
+            for (int i = 0; i + 1 < grid.cells.size(); i++) {
+                WidgetLayoutPlan.Box a = grid.selectedDisc(i);
+                WidgetLayoutPlan.Box cell = grid.cells.get(i);
+                assertEquals(fs + " diameter", Math.min(cell.width, cell.height)
+                    - CalendarLayoutPlanner.CELL_GAP_DP, a.width, 0.001f);
+                assertEquals("round", a.width, a.height, 0.001f);
+                if (i % 7 == 6) continue;
+                WidgetLayoutPlan.Box b = grid.selectedDisc(i + 1);
+                assertTrue(fs + " circles " + i + " and " + (i + 1) + " touch",
+                    b.left - (a.left + a.width) >= CalendarLayoutPlanner.CELL_GAP_DP - 0.001f);
+            }
+        }
+    }
+
     @Test public void calendarAccessIsAskedForOnTheCard() {
         Content denied = content(0, false, false, false, false, false, october(false));
         for (BuiltinWidgetSpan span : new BuiltinWidgetSpan[] {BuiltinWidgetSpan.TWO_BY_ONE,

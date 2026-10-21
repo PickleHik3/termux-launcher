@@ -102,8 +102,7 @@ final class CalendarMonthGridView extends View {
             if (day < 1 || day > days) continue;
             boolean isToday = day == todayDay;
             if (isToday) {
-                Box cell = grid.cells.get(i);
-                set(rect, cell, rtl, width);
+                set(rect, grid.selectedDisc(i), rtl, width);
                 float radius = Math.min(rect.width(), rect.height()) / 2f;
                 fillPaint.setColor(style.primary);
                 canvas.drawRoundRect(rect, radius, radius, fillPaint);
