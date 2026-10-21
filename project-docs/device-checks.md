@@ -13,6 +13,14 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "fix(chrome): a float restored from the Workspace lands with its keyboard"
+  · minimise a focused Home float (keyboard up), go to the Workspace, tap the float's chip in the
+  bar: the wall slides to Home, the keyboard stays up through the slide (no drop and re-raise),
+  the float comes back focused at the height it was minimised at (ending above the keyboard),
+  with no blank band above its output; the same with the keyboard down in the Workspace (it
+  comes up for the float); from the palette's and the sessions drawer's restore too; afterwards
+  a plain swipe Workspace → Home still lands with Home's keyboard down (unless Always on) ·
+  emulator.
 - 2026-10-21 · commit "fix(widgets): the empty page's hint steps out from under floats, drawer
   and palette" · on an empty Home page "Long-press to add widgets" is gone while a Home float
   shows on the page (anywhere on it, not only over the hint), while the app drawer is open or

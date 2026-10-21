@@ -21847,6 +21847,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // (it only acts on a change), as the settle from the Workspace's window always did.
         if (!commitWallPage(page) && !remember) syncChromeArrangement();
         applyPlaceKeyboard(page);
+        // Wherever the wall came to rest, a restored float's landing has been had.
+        mKeyboardForRestoredFloat = false;
     }
 
     /**
@@ -22949,8 +22951,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mInAppKeyboard != null && mInAppKeyboard.isVisible() && !mTravelKeyboardPreRolled;
     }
 
+    /**
+     * A float's chip sent the wall to Home to bring the float back focused, with the keyboard up
+     * (showHomeFloat): Home wants its keyboard on this one landing. Cleared when the wall rests.
+     */
+    private boolean mKeyboardForRestoredFloat;
+
     /** Whether the place wants its keyboard up as the wall lands on it. */
     private boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) {
+        if (mKeyboardForRestoredFloat && place == com.termux.app.wall.PaneWallPage.WIDGETS)
+            return true;
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && com.termux.app.place.PlaceKeyboard.keyboardOnEnter(place,
             store.wasKeyboardOpen(place), store.isMinimal(), store.isHomeKeyboardAlwaysOn());
@@ -29403,6 +29413,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mPaneWallController != null
             && mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.WIDGETS) {
+            // Home comes back with its keyboard down, so the slide's landing put away the one this
+            // asks for and the float grew back to its own shape, taller than it was minimised.
+            // This landing keeps it: the slide carries it to Home, and the float meets it there.
+            mKeyboardForRestoredFloat = true;
             mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
         }
         mPaneController.restoreHomeFloat(window);
