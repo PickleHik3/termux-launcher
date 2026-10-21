@@ -16,9 +16,11 @@ under twenty items; past that, the oldest are re-judged first.
 - 2026-10-21 · commit "feat(settings): a Battery & performance page for the presets and the
   motion they trim" · Settings › App › Battery & performance opens with Presets (Reduce idle
   activity, Low-memory preset) and Smoother motion (Glass refraction, Living glass, Wallpaper
-  parallax, Terminal effect); App behavior's link row opens the same page; Appearance no longer
-  shows Wallpaper parallax. Live greying: Low-memory preset on greys parallax and Terminal effect
-  ("Set by Low-memory preset", parallax off, effect None) and the glass rows ("Off while Reduce
+  parallax, Cursor trail, Terminal effect); App behavior's link row opens the same page; Appearance
+  no longer shows Wallpaper parallax. Cursor trail off here stops the trail in the terminal on
+  return (also check an unfocused pane of a split: only the focused pane is re-read on resume).
+  Live greying: Low-memory preset on greys parallax, Cursor trail and Terminal effect ("Set by
+  Low-memory preset", parallax and trail off, effect "Set by Low-memory preset · None") and the glass rows ("Off while Reduce
   idle activity is on", shown off); off again brings back the look, the glass switches as they
   were, and the stored fancier_glass is never written by the greying. Reduce idle activity alone
   greys only the glass. Glass refraction off gives Living glass "Needs Glass refraction"; with a
