@@ -15,7 +15,16 @@ and bottom borders, out in that air, it is a plain sideways swipe: past the touc
 claimed at once and follows the finger from there. On the left and right borders, which share
 their edge with Android's back swipe, and wherever a border reaches into the page, it is a press
 held for the same hold a corner takes, then dragged sideways; a hold works on the top and bottom
-too. The top and bottom borders are one gesture: the finger lands and the edge lights, then
+too. The bottom border, where paging between windows starts most, is a seam band a fingertip
+tall (`SeamSwipe`, 44dp at the default Margin): its air, 24dp up into the window's last row (more
+where the Margin is thinner, so the band never comes out shorter) and 8dp down into the dock's
+top air, between the corner squares. In the last row and on the dock's top only a clearly
+sideways start pages (the body swipe's lean, about 34° off the horizontal at most); a tap, a
+long press and a steeper start stay the terminal's or the dock's, and the last row pages only
+where the terminal gives the swipe away (no selection, no program tracking the mouse), whatever
+the body swipe's setting. The dock keeps the press: the activity shows the wall each event first
+and the dock is sent a cancel at the claim. A slide's flick counts the travel before its claim,
+so a quick 25dp flick pages. The top and bottom borders are one gesture: the finger lands and the edge lights, then
 sideways pages, up or down is the keyboard swipe (bottom) or the status swipe (top), and holding
 still pages. The border never reaches the page's text, so a tap, long press or mouse click on the
 terminal is the terminal's right up to its edge: the left and right borders reach 2dp over the

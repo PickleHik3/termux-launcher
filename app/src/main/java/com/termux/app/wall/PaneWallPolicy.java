@@ -221,9 +221,22 @@ public final class PaneWallPolicy {
      */
     public static int settle(float offsetPx, float velocityPxPerSec, int widthPx, float density,
                              boolean previousExists, boolean nextExists) {
+        return settle(offsetPx, velocityPxPerSec, widthPx, density, previousExists, nextExists,
+            0f);
+    }
+
+    /**
+     * {@link #settle}, for a drag that began only once the finger had already gone {@code
+     * leadPx} sideways (positive to the right): a slide off a border is claimed past the touch
+     * slop and dragged from there, so the wall never jumps by the slop. That lead counts toward
+     * the flick's least distance, which is the finger's travel, not the wall's: a quick 25 dp
+     * flick pages from a border as it does anywhere, rather than needing the slop on top.
+     */
+    public static int settle(float offsetPx, float velocityPxPerSec, int widthPx, float density,
+                             boolean previousExists, boolean nextExists, float leadPx) {
         if (widthPx <= 0) return 0;
         float flingPx = DRAG_COMMIT_VELOCITY_DP_PER_SEC * Math.max(0f, density);
-        boolean flung = Math.abs(offsetPx) >= DRAG_COMMIT_FLING_MIN_DISTANCE_DP
+        boolean flung = Math.abs(offsetPx + leadPx) >= DRAG_COMMIT_FLING_MIN_DISTANCE_DP
             * Math.max(0f, density);
         // A flick decides on its own, whichever way the finger had already dragged: reversing
         // direction at the end of a drag must not commit the page the drag was heading for.

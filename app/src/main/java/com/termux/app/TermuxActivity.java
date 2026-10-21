@@ -2349,28 +2349,74 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public boolean dispatchTouchEvent(MotionEvent ev) {
         Trace.beginSection("Touch.dispatch");
         try {
-            // A finger on the A-Z pull tab is the letters' and nothing else's: the pane under the
-            // tab neither tilts for it nor reads it as a tap on the terminal.
-            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                mAzTabTouch = mAzTabLayer != null
-                    && mAzTabLayer.isOnTab(ev.getRawX(), ev.getRawY());
-                // The Home folder popup lives in the Home pane: a press outside the pane closes it.
-                if (mWidgetPaneController != null)
-                    mWidgetPaneController.onWindowTouchDown(ev.getRawX(), ev.getRawY());
-            }
-            // Seen before any view acts on it: a tap off the dictation card's text ends its edit.
-            if (mVoiceCardEdit != null)
-                mVoiceCardEdit.onWindowTouch(ev.getActionMasked(), ev.getRawX(), ev.getRawY());
-            feedDockPlank(ev);
-            feedDockTouchLight(ev);
-            if (!mAzTabTouch) feedTerminalPlank(ev);
-            if (!mAzTabTouch && touchBeganOverTerminal(ev))
-                mKeybindHintPresenter.onTerminalTouch(ev);
-            notifyKeybindHintPanelTouch(ev);
-            return super.dispatchTouchEvent(ev);
+            if (routeDockSeamTouch(ev)) return true;
+            return dispatchTouchToViews(ev);
         } finally {
             Trace.endSection();
         }
+    }
+
+    /**
+     * True from the move where the window's border drag took a finger that landed on the dock's
+     * top (the seam band, {@link com.termux.app.wall.SeamSwipe}) to its lift: the stream is the
+     * wall's, and nothing of it reaches the views.
+     */
+    private boolean mDockSeamOwned;
+
+    /**
+     * The seam band between the window and the dock reaches into the dock's top, which the dock
+     * otherwise has: every event is shown to the wall first
+     * ({@link com.termux.app.wall.PaneWallLayout#dispatchDockSeamTouch}), and goes on to the views
+     * as usual until the wall takes the finger by a clearly sideways start. At that move the views
+     * are sent a cancel, so the dock ends its own gesture and the reactions fed from here let go,
+     * and the rest of the stream is the wall's alone.
+     *
+     * @return whether the wall owns this event and the views are to see nothing of it
+     */
+    private boolean routeDockSeamTouch(@NonNull MotionEvent ev) {
+        int action = ev.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) mDockSeamOwned = false;
+        com.termux.app.wall.PaneWallLayout wall = mPaneWallController == null ? null
+            : mPaneWallController.wall();
+        boolean taken = wall != null && wall.dispatchDockSeamTouch(ev);
+        if (taken && !mDockSeamOwned) {
+            mDockSeamOwned = true;
+            MotionEvent cancel = MotionEvent.obtain(ev);
+            cancel.setAction(MotionEvent.ACTION_CANCEL);
+            try {
+                dispatchTouchToViews(cancel);
+            } finally {
+                cancel.recycle();
+            }
+        }
+        boolean owned = mDockSeamOwned;
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            mDockSeamOwned = false;
+        }
+        return owned;
+    }
+
+    /** Every touch the wall's seam has not taken, to the window's views and the feeds beside them. */
+    private boolean dispatchTouchToViews(@NonNull MotionEvent ev) {
+        // A finger on the A-Z pull tab is the letters' and nothing else's: the pane under the
+        // tab neither tilts for it nor reads it as a tap on the terminal.
+        if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            mAzTabTouch = mAzTabLayer != null
+                && mAzTabLayer.isOnTab(ev.getRawX(), ev.getRawY());
+            // The Home folder popup lives in the Home pane: a press outside the pane closes it.
+            if (mWidgetPaneController != null)
+                mWidgetPaneController.onWindowTouchDown(ev.getRawX(), ev.getRawY());
+        }
+        // Seen before any view acts on it: a tap off the dictation card's text ends its edit.
+        if (mVoiceCardEdit != null)
+            mVoiceCardEdit.onWindowTouch(ev.getActionMasked(), ev.getRawX(), ev.getRawY());
+        feedDockPlank(ev);
+        feedDockTouchLight(ev);
+        if (!mAzTabTouch) feedTerminalPlank(ev);
+        if (!mAzTabTouch && touchBeganOverTerminal(ev))
+            mKeybindHintPresenter.onTerminalTouch(ev);
+        notifyKeybindHintPanelTouch(ev);
+        return super.dispatchTouchEvent(ev);
     }
 
     /**
@@ -23359,6 +23405,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean bodySwipePagesWall(float rawX, float rawY) {
                     return mPreferences != null && mPreferences.isTerminalBodySwipeEnabled()
                         && mPaneController != null
+                        && mPaneController.bodySwipePagesWall(rawX, rawY);
+                }
+                // The seam band's last row is the bottom border's, so only the pane is asked.
+                @Override public boolean seamSwipePagesWall(float rawX, float rawY) {
+                    return mPaneController != null
                         && mPaneController.bodySwipePagesWall(rawX, rawY);
                 }
                 // The keyboard swipe tied to the finger: the reveal the wall's slide already

@@ -66,6 +66,14 @@ import com.termux.app.terminal.TerminalBodySwipe;
  * is taken there. The hold never pages from it, so a still finger is the content's long press, and
  * a tap, a mouse click or a sideways drag in it reach the content as anywhere else on the page.
  *
+ * <p>The bottom border is where paging between windows starts most, and its air is only the
+ * Margin tall, so the seam there is a band a fingertip tall ({@link SeamSwipe}, set by {@link
+ * Zone#seam}): the air, the window's last row above it and the dock's top below it. From the last
+ * row a clearly sideways start pages where the terminal there gives the swipe away (asked as the
+ * finger lands, whatever the body swipe's setting), and from the dock's top too ({@link
+ * #downOnDock}: the dock has the finger, and its owner hands the wall the stream). In both a still
+ * finger and a steeper start stay the content's.
+ *
  * <p>The hold is timed by whoever owns the finger; this class only says whether a hold that has
  * elapsed may claim ({@link #holdElapsed}). Pure, so the zone, the hold and the drag can be
  * tested without a view; one instance is reused across gestures, so a swipe allocates nothing.</p>
@@ -180,6 +188,17 @@ public final class BorderDrag {
         private boolean mBottomPillSet;
         /** Scratch for {@link #inPill}, so a press allocates nothing. */
         private final float[] mPillBox = new float[4];
+        /**
+         * The seam band's reach above the bottom air into the page ({@link #seam}); 0, the
+         * default, leaves the bottom border its air alone.
+         */
+        float mSeamReach;
+        /** The seam band's reach below the bottom air into the dock's top. */
+        float mSeamDockReach;
+        /** Where the bottom air ends: the dock's top, or NaN for the wall's edge. */
+        float mSeamAirBottom = Float.NaN;
+        /** Whether the dock stands below the air, so the band reaches into its top. */
+        boolean mSeamDock;
 
         /** The page's edges, as it stands now (its slide applied). */
         @NonNull
@@ -252,6 +271,47 @@ public final class BorderDrag {
             mBottomPill[3] = bottom;
             mBottomPillSet = right > left && bottom > top;
             return this;
+        }
+
+        /**
+         * The seam band along the bottom border ({@link SeamSwipe}): reaching {@code paneReachPx}
+         * into the page's last row and, where {@code dockTop} is a number, {@code dockReachPx}
+         * into the dock whose top it is. The air between ends at the dock's top, or at the wall's
+         * edge with no dock ({@code dockTop} NaN).
+         */
+        @NonNull
+        public Zone seam(float dockTop, float paneReachPx, float dockReachPx) {
+            mSeamReach = Math.max(0f, paneReachPx);
+            mSeamDockReach = Math.max(0f, dockReachPx);
+            mSeamAirBottom = dockTop;
+            mSeamDock = !Float.isNaN(dockTop);
+            return this;
+        }
+
+        /** No seam band: the bottom border is its air alone. */
+        @NonNull
+        public Zone clearSeam() {
+            mSeamReach = 0f;
+            mSeamDockReach = 0f;
+            mSeamAirBottom = Float.NaN;
+            mSeamDock = false;
+            return this;
+        }
+
+        /** Where the bottom air ends: the dock's top where one is set, else the wall's edge. */
+        public float seamAirBottom() {
+            float wallEdge = mBottom + mGapBottom;
+            return Float.isNaN(mSeamAirBottom) ? wallEdge : Math.min(wallEdge, mSeamAirBottom);
+        }
+
+        /** Where {@code (x, y)} lies on the seam band ({@link SeamSwipe#startAt}). */
+        @NonNull
+        public SeamSwipe.Start seamAt(float x, float y) {
+            if (!(mSeamReach > 0f) || mRight <= mLeft || mBottom <= mTop) {
+                return SeamSwipe.Start.NONE;
+            }
+            return SeamSwipe.startAt(x, y, mLeft, mRight, cornerSize(), mBottom, seamAirBottom(),
+                Math.min(mSeamReach, (mBottom - mTop) / 2f), mSeamDockReach, mSeamDock);
         }
 
         /** The bottom pill's box by the page's bottom edge again, as {@link #pills} puts it. */
@@ -396,6 +456,20 @@ public final class BorderDrag {
      * ({@link TerminalBodySwipe#isSideways}).
      */
     private boolean mBodySlides;
+    /**
+     * Whether a clearly sideways start pages from the seam band beyond the border's air
+     * ({@link SeamSwipe}): the window's last row, where the terminal gives the swipe away, or the
+     * dock's top ({@link #downOnDock}).
+     */
+    private boolean mSeamSlides;
+    /** Where on the seam band the finger landed; NONE off it. */
+    @NonNull private SeamSwipe.Start mSeamStart = SeamSwipe.Start.NONE;
+    /**
+     * How far the finger had already gone sideways when a start claimed the wall, positive to the
+     * right; 0 for a hold. The wall is dragged from the claim, so this is travel the drag never
+     * saw, and a short flick counts it ({@link #claimLead}).
+     */
+    private float mClaimLeadX;
 
     /**
      * Which border the point {@code (x, y)} presses in {@code zone}: the page edge it lies beyond,
@@ -528,6 +602,20 @@ public final class BorderDrag {
     public boolean down(float x, float y, @NonNull Zone zone, float slopPx, boolean canPage,
                         boolean keyboardSwipe, boolean statusSwipe, float statusTopLimit,
                         boolean bodySwipe) {
+        return down(x, y, zone, slopPx, canPage, keyboardSwipe, statusSwipe, statusTopLimit,
+            bodySwipe, false);
+    }
+
+    /**
+     * {@link #down}, for a press that may also land in the window's last row of the seam band
+     * ({@link Zone#seam}) with a terminal there that gives a sideways swipe away ({@code
+     * seamSwipe}, asked whatever the body swipe's setting). From there a clearly sideways start
+     * pages as from the border's air; a still finger or a steeper start stay the terminal's, or
+     * the keyboard's swipe where the press is in the pill's box.
+     */
+    public boolean down(float x, float y, @NonNull Zone zone, float slopPx, boolean canPage,
+                        boolean keyboardSwipe, boolean statusSwipe, float statusTopLimit,
+                        boolean bodySwipe, boolean seamSwipe) {
         mDownX = x;
         mDownY = y;
         mDragOriginX = x;
@@ -541,10 +629,42 @@ public final class BorderDrag {
         mStatusEligible = statusSwipe && swipeSide == Border.TOP && !(y < statusTopLimit);
         mBodySlides = bodySwipe && canPage && !mSlidePages && zone.holds(x, y)
             && !(y < statusTopLimit);
-        boolean armed = mHoldPages || mKeyboardEligible || mStatusEligible || mBodySlides;
-        mBorder = !armed ? Border.NONE : mHoldPages ? mBorder : swipeSide;
+        mSeamStart = zone.seamAt(x, y);
+        // The dock's part of the band is never this view's press: its owner calls downOnDock.
+        if (mSeamStart == SeamSwipe.Start.DOCK) mSeamStart = SeamSwipe.Start.NONE;
+        mSeamSlides = mSeamStart == SeamSwipe.Start.PANE && seamSwipe && canPage && !mSlidePages
+            && !(y < statusTopLimit);
+        mClaimLeadX = 0f;
+        boolean armed = mHoldPages || mKeyboardEligible || mStatusEligible || mBodySlides
+            || mSeamSlides;
+        mBorder = !armed ? Border.NONE : mHoldPages ? mBorder
+            : swipeSide == Border.NONE && mSeamSlides ? Border.BOTTOM : swipeSide;
         mClaim = armed ? Claim.PENDING : Claim.NONE;
         return armed;
+    }
+
+    /**
+     * The finger landed at {@code (x, y)} on the dock, which has it: arms the drag only where the
+     * point lies on the dock's top in the seam band ({@link Zone#seamAt}) and the wall has another
+     * place to go. Only a clearly sideways start then pages ({@link SeamSwipe#decide}); a tap, a
+     * still finger, a steeper start or a second finger are the dock's, and the hold never pages.
+     *
+     * @return whether the press is armed
+     */
+    public boolean downOnDock(float x, float y, @NonNull Zone zone, float slopPx,
+                              boolean canPage) {
+        reset();
+        mDownX = x;
+        mDownY = y;
+        mDragOriginX = x;
+        mSlop = Math.max(0f, slopPx);
+        SeamSwipe.Start start = zone.seamAt(x, y);
+        if (!canPage || start != SeamSwipe.Start.DOCK) return false;
+        mSeamStart = start;
+        mSeamSlides = true;
+        mBorder = Border.BOTTOM;
+        mClaim = Claim.PENDING;
+        return true;
     }
 
     /**
@@ -564,9 +684,12 @@ public final class BorderDrag {
         if (vertical) {
             mClaim = mKeyboardEligible ? Claim.KEYBOARD
                 : mStatusEligible ? Claim.STATUS : Claim.ABANDONED;
-        } else if (mSlidePages || (mBodySlides && TerminalBodySwipe.isSideways(dx, dy))) {
+        } else if (mSlidePages || (mBodySlides && TerminalBodySwipe.isSideways(dx, dy))
+            || (mSeamSlides && SeamSwipe.decide(mSeamStart, dx, dy, mSlop, true, false)
+                == SeamSwipe.Decision.BORDER_DRAG)) {
             mClaim = Claim.PAGING;
             mDragOriginX = x;
+            mClaimLeadX = dx;
         } else {
             mClaim = Claim.ABANDONED;
         }
@@ -626,6 +749,9 @@ public final class BorderDrag {
         mKeyboardEligible = false;
         mStatusEligible = false;
         mBodySlides = false;
+        mSeamSlides = false;
+        mSeamStart = SeamSwipe.Start.NONE;
+        mClaimLeadX = 0f;
     }
 
     @NonNull
@@ -667,6 +793,31 @@ public final class BorderDrag {
      */
     public boolean bodySlides() {
         return mBodySlides;
+    }
+
+    /**
+     * True from a DOWN on the seam band beyond the border's air — the window's last row, or the
+     * dock's top ({@link #downOnDock}) — whose clearly sideways start pages, until the lift.
+     */
+    public boolean seamSlides() {
+        return mSeamSlides;
+    }
+
+    /** Where on the seam band the finger landed, from the DOWN to the lift; NONE off it. */
+    @NonNull
+    public SeamSwipe.Start seamStart() {
+        return mSeamStart;
+    }
+
+    /**
+     * How far the finger had gone sideways before a sideways start claimed the wall, positive to
+     * the right; 0 for a claim by the hold, or no claim. The drag is measured from the claim so
+     * the wall does not jump by the slop, and this is the travel it left out: a release adds it
+     * back for the flick's least distance ({@link PaneWallPolicy#settle}), so a short fast flick
+     * pages rather than springing back for the slop it spent.
+     */
+    public float claimLead() {
+        return mClaim == Claim.PAGING ? mClaimLeadX : 0f;
     }
 
     /** True while the wall owns the finger. */

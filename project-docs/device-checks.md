@@ -2059,6 +2059,14 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   extra keys fold (the emulator had the dock glass end 26 px low with the keyboard up and 10 px
   high with it down, then jump at settle); Home→window the same, no step on the first frame ·
   pong, release build.
+### Border drag seam band (10-21)
+- 2026-10-21 · feat(wall) seam band (SeamSwipe) · pong: border drag between windows starts
+  reliably from on/near the seam (slight diagonal ok); taps/long press on the border, dock app
+  paging and terminal selection unaffected. Try: a swipe a row high (last terminal row) with the
+  body swipe setting off, a swipe from the dock's top air above the icons, a 25° diagonal, a quick
+  short flick; then a tap and a long press on the last row and on a dock icon, a dock page swipe
+  from the icons' middle, an A–Z scrub and an extra-keys swipe when that row is the dock's top,
+  and a text selection drag along the last row.
 
 ### Home dock styles on pong (10-21)
 - 2026-10-21 · feat(dock) five Home dock styles · On pong, build `1.1.0-pre.6+dev.120d6f511`: pick
