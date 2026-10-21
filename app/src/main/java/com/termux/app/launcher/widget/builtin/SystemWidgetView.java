@@ -188,8 +188,7 @@ public class SystemWidgetView extends BuiltinWidgetView
 
     @NonNull private View buildTwoByTwo(@NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle s = ui.style;
-        View caption = ui.caption(getContext().getString(R.string.bw_device_system_caption),
-            StatGlyphs.CPU, getContext().getString(R.string.bw_device_system_path));
+        View caption = ui.caption(getContext().getString(R.string.bw_device_system_caption));
         ramValue = groupValue(ui);
         tempValue = groupValue(ui);
         diskValue = groupValue(ui);

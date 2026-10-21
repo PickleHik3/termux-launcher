@@ -137,8 +137,7 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
     }
 
     @NonNull private View buildTwoByTwo(@NonNull BuiltinWidgetUi ui) {
-        View caption = ui.caption(getContext().getString(R.string.bw_device_battery_caption),
-            StatGlyphs.BATTERY, getContext().getString(R.string.bw_device_battery_path));
+        View caption = ui.caption(getContext().getString(R.string.bw_device_battery_caption));
         level = ui.numeral("", 46f);
         level.setLetterSpacing(-0.03f);
         levelUnit = ui.text("%", 20f, ui.style.numerals, ui.style.onSurfaceVariant);

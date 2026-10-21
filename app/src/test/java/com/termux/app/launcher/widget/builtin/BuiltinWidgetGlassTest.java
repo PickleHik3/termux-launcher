@@ -124,7 +124,7 @@ public class BuiltinWidgetGlassTest {
     @Before public void setUp() {
         context = RuntimeEnvironment.getApplication();
         services = new BuiltinWidgetServices(context, HOST);
-        style = BuiltinWidgetStyle.resolve(context, BuiltinWidgetStyle.Direction.TONAL, false, null);
+        style = BuiltinWidgetStyle.resolve(context, BuiltinWidgetStyle.Numerals.SANS, false, null);
     }
 
     private static Bundle glassOn() {
@@ -182,7 +182,7 @@ public class BuiltinWidgetGlassTest {
         float look = TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS * density;
         assertEquals(look, style.cornerRadiusPx, 0.01f);
         assertEquals("Pane is no longer its own 12dp", look, BuiltinWidgetStyle.resolve(context,
-            BuiltinWidgetStyle.Direction.PANE, false, null).cornerRadiusPx, 0.01f);
+            BuiltinWidgetStyle.Numerals.MONO, false, null).cornerRadiusPx, 0.01f);
     }
 
     @Test
@@ -257,7 +257,7 @@ public class BuiltinWidgetGlassTest {
     /** A style resolved in {@code theme}, whatever theme the test's application wears. */
     private BuiltinWidgetStyle themed(int theme) {
         return BuiltinWidgetStyle.resolve(new android.view.ContextThemeWrapper(context, theme),
-            BuiltinWidgetStyle.Direction.TONAL, false, null);
+            BuiltinWidgetStyle.Numerals.SANS, false, null);
     }
 
     private BuiltinWidgetStyle dayStyle() {

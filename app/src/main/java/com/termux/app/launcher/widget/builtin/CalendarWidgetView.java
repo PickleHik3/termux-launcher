@@ -209,9 +209,6 @@ public class CalendarWidgetView extends BuiltinWidgetView {
         TextView numeral = ui.numeral(Integer.toString(day.today.getDayOfMonth()), 34f);
         numeral.setGravity(Gravity.CENTER);
         LinearLayout root = ui.column(0, band, BuiltinWidgetUi.flexTall(numeral));
-        // The band sits inside the rim, as the design's border-box card has it.
-        int rim = Math.round(ui.style.rimWidthPx);
-        root.setPadding(rim, rim, rim, 0);
         return root;
     }
 

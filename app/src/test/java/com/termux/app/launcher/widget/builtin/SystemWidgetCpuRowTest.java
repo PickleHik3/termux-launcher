@@ -83,7 +83,7 @@ public class SystemWidgetCpuRowTest {
     @NonNull private BuiltinWidgetView laidOut(@NonNull BuiltinWidgetSpan span, boolean preview) {
         BuiltinWidgetServices services = new BuiltinWidgetServices(context, HOST);
         BuiltinWidgetStyle style = BuiltinWidgetStyle.resolve(context,
-            BuiltinWidgetStyle.Direction.values()[0], false, null);
+            BuiltinWidgetStyle.Numerals.values()[0], false, null);
         BuiltinWidgetView view = BuiltinWidgetFactory.create(context, BuiltinWidgetKind.SYSTEM,
             services, style);
         view.setPreview(preview);

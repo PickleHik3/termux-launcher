@@ -27,16 +27,16 @@
     <string name="builtin_widget_glass_summary">Wear your Look\'s glass, so the wallpaper shows through.</string>
 
     <!-- Settings: the look shared by every built-in widget. -->
-    <string name="settings_builtin_widget_style_title">Built-in widget style</string>
-    <string name="settings_builtin_widget_style_summary">How the launcher\'s own widgets are drawn.</string>
-    <string name="settings_builtin_widget_style_tonal">Tonal — soft Material cards</string>
-    <string name="settings_builtin_widget_style_pane">Pane — a hairline rim and mono captions, like a terminal pane</string>
+    <string name="settings_builtin_widget_style_title">Widget numerals</string>
+    <string name="settings_builtin_widget_style_summary">The face of the numbers in the launcher\'s own widgets.</string>
+    <string name="settings_builtin_widget_style_tonal">Sans</string>
+    <string name="settings_builtin_widget_style_pane">Mono</string>
     <string-array name="settings_builtin_widget_style_entries">
         <item>@string/settings_builtin_widget_style_tonal</item>
         <item>@string/settings_builtin_widget_style_pane</item>
     </string-array>
     <string-array name="settings_builtin_widget_style_values">
-        <item>tonal</item>
-        <item>pane</item>
+        <item>sans</item>
+        <item>mono</item>
     </string-array>
 </resources>

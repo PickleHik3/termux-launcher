@@ -26625,8 +26625,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
                 }
                 @Override @NonNull
-                public com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle.Direction builtinWidgetDirection() {
-                    return com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle.Direction.fromKey(
+                public com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle.Numerals builtinWidgetNumerals() {
+                    return com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle.Numerals.fromKey(
                         mPreferences == null ? null : mPreferences.getAppLauncherBuiltinWidgetStyle());
                 }
                 @Override public void onHomeLongPressed(float rawX, float rawY) {

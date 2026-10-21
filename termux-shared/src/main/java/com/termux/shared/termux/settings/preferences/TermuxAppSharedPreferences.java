@@ -1200,11 +1200,20 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED, value, false);
     }
 
-    /** The direction the launcher's own widgets are drawn in: "tonal" or "pane". */
+    /**
+     * The Numerals choice of the launcher's own widgets: "sans" or "mono". A value stored by the
+     * retired Tonal/Pane direction reads as the matching choice.
+     */
     public String getAppLauncherBuiltinWidgetStyle() {
-        return SharedPreferenceUtils.getString(mSharedPreferences,
+        return normaliseBuiltinWidgetNumerals(SharedPreferenceUtils.getString(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, true);
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, true));
+    }
+
+    /** "mono" and the retired "pane" are "mono"; everything else, the retired "tonal" included, is "sans". */
+    @NonNull
+    public static String normaliseBuiltinWidgetNumerals(@Nullable String stored) {
+        return "mono".equals(stored) || "pane".equals(stored) ? "mono" : "sans";
     }
 
     public void setAppLauncherBuiltinWidgetStyle(String value) {

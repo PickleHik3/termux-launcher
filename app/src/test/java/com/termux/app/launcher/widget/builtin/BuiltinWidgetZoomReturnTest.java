@@ -79,7 +79,7 @@ public class BuiltinWidgetZoomReturnTest {
         metrics.scaledDensity = DENSITY;
         metrics.densityDpi = 320;
         services = new BuiltinWidgetServices(context, HOST);
-        style = BuiltinWidgetStyle.resolve(context, BuiltinWidgetStyle.Direction.values()[0],
+        style = BuiltinWidgetStyle.resolve(context, BuiltinWidgetStyle.Numerals.values()[0],
             false, null);
     }
 

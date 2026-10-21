@@ -14,7 +14,7 @@ import androidx.annotation.Nullable;
 /**
  * The analog clock's face, drawn as the design draws it: every proportion is a share of the
  * face's diameter, so the 68dp face of a 2×1 card and the 160dp one of a 2×2 are the same
- * drawing. Tonal fills the face; Pane leaves it clear inside a hairline ring.
+ * drawing, filled with the card's container colour.
  *
  * <p>It wants its design size and settles for less when the card is smaller, always square; a
  * face made with {@link #FILL} takes all the room it is given instead, as the 1×1 does. Setting
@@ -29,7 +29,6 @@ final class AnalogClockFaceView extends View {
     /** The centre dot's diameter as a share of the face: 12%, or 8% on the large faces. */
     private final float dotShare;
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private final RectF rect = new RectF();
     @Nullable private String labelText;
@@ -41,9 +40,6 @@ final class AnalogClockFaceView extends View {
         this.style = style;
         this.desiredPx = sizeDp == FILL ? FILL : style.dp(sizeDp);
         this.dotShare = dotShare;
-        ring.setStyle(Paint.Style.STROKE);
-        ring.setColor(style.outlineVariant);
-        ring.setStrokeWidth(Math.max(1f, style.density));
         label.setTypeface(style.monoMedium);
         label.setColor(style.onSurfaceVariant);
         label.setTextAlign(Paint.Align.CENTER);
@@ -93,10 +89,6 @@ final class AnalogClockFaceView extends View {
         if (Color.alpha(style.face) != 0) {
             fill.setColor(style.face);
             canvas.drawCircle(cx, cy, d / 2f, fill);
-        }
-        if (style.isPane()) {
-            float hair = ring.getStrokeWidth();
-            canvas.drawCircle(cx, cy, d / 2f - hair / 2f, ring);
         }
 
         // Twelve marks 5% in from the rim; every third one longer, wider and darker.
