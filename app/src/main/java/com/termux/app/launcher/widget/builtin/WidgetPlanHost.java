@@ -55,7 +55,8 @@ final class WidgetPlanHost extends FrameLayout {
         WidgetLayoutPlan plan = latest;
         if (plan == null || plan == synced) return;
         synced = plan;
-        for (View view : placed) removeView(view);
+        // Inside the layout pass: removeView would ask for another layout, as addView would.
+        for (View view : placed) removeViewInLayout(view);
         placed.clear();
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         int width = right - left;
