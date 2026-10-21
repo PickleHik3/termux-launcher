@@ -13,6 +13,11 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "fix(statusbar): a new window joins the session the bar's box shows" ·
+  fresh install → on Home tap the bar's '+' → a second window in session 1 (box still '1') and
+  you land on it; also check the box before the tap (if it already reads "2" after Welcome →
+  storage → Start, the second session comes from the setup, not from '+': record which) ·
+  emulator.
 - 2026-10-21 · commits "feat(dock): the #3 Strip's clock is the unfolded status bar's clock" and
   "feat(dock): the #3 Strip's row height is each layout's…" (#84) · #3 Strip shows the status
   bar's clock face; its row height is set by its own handle in the Layout editor, per layout;

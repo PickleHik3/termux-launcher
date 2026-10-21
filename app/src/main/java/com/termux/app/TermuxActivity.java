@@ -17125,6 +17125,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController != null)
             mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
         createRowWindow();
+        // A row that had no window in front before (no current session) only joins the wall with
+        // the new window: the slide waited for it.
+        if (mPaneWallController != null && mPaneWallController.currentPage()
+                != com.termux.app.wall.PaneWallPage.TERMINAL)
+            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
     }
 
     /**
@@ -29060,16 +29065,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** A fresh shell as a new window of the row, wherever the wall is (the entry's New window). */
     private void createRowWindow() {
         if (!isSplitPanesEnabled() || mPaneController == null) return;
-        if (mCurrentWSession == null && !mWSessions.isEmpty()) {
-            // Sessions stand but none is current (the row emptied under Home): the window opens
-            // in the one the Workspace shows next, as after a close (showNextSessionAfterClose),
-            // never in a session of its own beside them.
-            mCurrentWSession = mWSessions.get(0);
-            mPaneController.showWindow(mCurrentWSession.currentWindow());
-        }
-        if (mCurrentWSession == null) { // no session yet -> behave like new session
+        // The session the bar's box shows as current takes the window, also when none is current
+        // (the row emptied under Home) or the current one is no longer among the sessions; only
+        // with no session at all does the window start one (NewWindowSessionPolicy).
+        int target = com.termux.app.terminal.NewWindowSessionPolicy.sessionFor(
+            mCurrentWSession == null ? -1 : mWSessions.indexOf(mCurrentWSession),
+            mWSessions.size());
+        if (target == com.termux.app.terminal.NewWindowSessionPolicy.NEW_SESSION) {
             getTermuxTerminalSessionClient().addNewSession(false, null);
             return;
+        }
+        WSession joined = mWSessions.get(target);
+        if (joined != mCurrentWSession) {
+            mCurrentWSession = joined;
+            com.termux.app.terminal.TerminalPaneController.Window shown = joined.currentWindow();
+            if (shown != null) mPaneController.showWindow(shown);
         }
         TerminalSession cur = getCurrentSession();
         TerminalSession shell = createShellForCwd(cur != null ? cur.getCwd() : null);
