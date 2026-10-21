@@ -316,6 +316,15 @@ public final class PlaceLayoutStore {
     }
 
     /**
+     * One half's Style, Corners and Margin as the preferences hold them now, Home's or the
+     * Workspace's ({@link WallHalfShape#read}): what the Dress resolver shapes a page by.
+     */
+    @NonNull
+    public WallHalfShape halfShape(boolean home) {
+        return WallHalfShape.read(mPreferences, home);
+    }
+
+    /**
      * Counts changes to anything a resolved layout is a function of. A caller that holds a
      * {@link PlaceLayout} can keep it while this has not moved.
      */
