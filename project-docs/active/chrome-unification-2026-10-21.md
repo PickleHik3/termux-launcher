@@ -11,12 +11,13 @@ tile**). It changes the dock-design work in [`home-dock-styles-2026-10-20.md`](h
 ### Layout
 
 - One layout dresses both halves of the wall. Home leaves out the extra keys and nothing else.
-- **Home layout** is opt-in: a switch in the Layout menu ("One layout for every screen" / "Home has
-  its own layout"). While on, a Home page opens the Layout editor on Home's own layout, and the bar
+- **Home layout** is opt-in: the Layout editor's Layout line ("Layout: One layout | Home's own"; the
+  row's house segment previews Home). It holds Style, Corners, Margin, Dock design and toggles too. While on, a Home page opens the Layout editor on Home's own layout, and the bar
   and dock may change on the swipe. Off by default.
 - Minimal mode stays the Workspace's (amended 2026-10-21): Home wears the normal shared layout, or
   its Home layout, whatever minimal says, because Home has no corner tab to leave minimal by. The
-  command palette gains a Minimal action that turns it on or off from anywhere.
+  command palette gains a "Minimal on/off" action that turns it on or off from anywhere (the corner
+  tab's button still works in a window). Home ignores minimal altogether.
 - Migration also counts a differing keyboard (height, chin, form) as "Home differs", but only
   while Home's keyboard is always on.
 - Migration: if a user's saved Home layout (dock rows, dock height, row order, under-keyboard flags)
@@ -34,7 +35,13 @@ tile**). It changes the dock-design work in [`home-dock-styles-2026-10-20.md`](h
 - The bar's CPU and RAM readings show on Home again; the focused float's titlebar readings go.
 - The status swipe works on Home's top border as in the Workspace; Android's own top strip still
   pulls the notification shade.
-- The house glyph is removed from the bar on both halves.
+- The house glyph is removed from the bar on both halves, and so are all place marks (prompt and
+  display icons).
+- The bar's `+` on Home opens a new Workspace window and slides to it; a chip tapped on Home slides
+  to that window; × closes it.
+- Home's page starts below the bar, as a window's does.
+- A minimised float's chip is dimmed with a dot. No fallback row above the dock: with the bar hidden,
+  minimised floats are reached from the command palette and the drawer.
 
 ### Dock
 
@@ -46,13 +53,20 @@ tile**). It changes the dock-design work in [`home-dock-styles-2026-10-20.md`](h
   shows the number and the word under each glyph, whenever the dock is selected in the Layout
   editor on any page.
 - **Search field** toggle (was the Prompt line design): the command-palette field under the apps
-  row, with any design. Stored per layout.
+  row, with any design. Stored per layout. With #2 Beads it sits in its own glass capsule under the
+  beads.
 - **Drawer tile** toggle (was the Taskbar design's Home tile): opens the app drawer on both halves,
-  movable to the start, middle or end, with any design. Stored per layout.
+  movable to the start, middle or end, with any design. Stored per layout. With #2 Beads it gets
+  its own bead.
 - Taskbar's run strip is dropped: windows live in the bar's chips.
 - #3 Strip keeps its window tiles though the bar's chips repeat them.
 - Migration: Prompt line → #1 Tray with the Search field on; Taskbar → #1 Tray with the Drawer
   tile on (its position kept).
+
+### Terminal grow
+
+- A terminal pane that grows (e.g. the keyboard goes down) keeps the prompt at the bottom only while
+  scrollback fills the new rows; otherwise output stays at the top.
 
 ## Deepenings
 
@@ -99,14 +113,14 @@ in the layout store.
 
 ## Build order
 
-Each step lands and passes an emulator check before the next.
+Each step lands and passes an emulator check before the next. All four steps are built (2026-10-21).
 
-1. Shared layout, the Home layout switch, migration (Minimal stays the Workspace's).
-2. The bar on Home: same chips, floats as chips (float chips retire), readings, status swipe,
+1. [x] Shared layout, the Home layout switch, migration (Minimal stays the Workspace's).
+2. [x] The bar on Home: same chips, floats as chips (float chips retire), readings, status swipe,
    house glyph removed.
-3. The dock design on the Workspace dock, the extra keys folding with the travel, the run strip
+3. [x] The dock design on the Workspace dock, the extra keys folding with the travel, the run strip
    dropped.
-4. Prompt line → Search field toggle, Taskbar → Drawer tile toggle, the #1–#3 picker names.
+4. [x] Prompt line → Search field toggle, Taskbar → Drawer tile toggle, the #1–#3 picker names.
 
 ## Notes for later
 

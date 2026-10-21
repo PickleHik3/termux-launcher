@@ -80,16 +80,16 @@ _Avoid_: taskbar, nav bar, hotseat
 
 **Dock design**:
 Which of the dock's variants dresses it, held by the layout (so on both halves unless Home holds a
-**Home layout**): #1 Tray (the default), #2 Beads or #3 Strip (the clock-and-windows row over the
-apps). Separate from the **Style**, which shapes all the chrome, and from the **Search field** and
+**Home layout**): #1 Tray (the default), #2 Beads or #3 Strip (a big clock and a tile per terminal over the
+apps; the clock slides out at 3+ terminals). Separate from the **Style**, which shapes all the chrome, and from the **Search field** and
 the **Drawer tile**, which any design can carry.
 _Avoid_: dock style (the old name, it collides with **Style**), dock form, dock theme, Glass tray,
 Lens beads, Wall strip, Taskbar (old names; Taskbar became the Drawer tile, Prompt line the Search field)
 
 **Dress**:
 Everything a page wears: the layout it follows and the elements it leaves out, the **Dock design**,
-the **Search field** and **Drawer tile**, the **Style**, Corners and Margin, and the keyboard's
-shape. Home's dress equals a window's, less the extra keys, unless Home holds a **Home layout**.
+the **Search field** and **Drawer tile**, the **Style**, Corners and Margin. The keyboard's shape
+comes from the layout the dress names; the dress itself does not carry the numbers. Home's dress equals a window's, less the extra keys, unless Home holds a **Home layout**.
 Whether the keyboard is open is not dress; each half remembers that.
 _Avoid_: outfit, chrome plan, place chrome
 
@@ -178,8 +178,8 @@ see Minimal mode); appearance is never per orientation.
 
 **Page**:
 One full-screen stop on the **wall**: a **Home page** or a **window**. Appearance is one look for
-every page. Layout is per half: the Home layout for Home pages, the Workspace layout (normal or
-minimal) for windows.
+every page. One layout dresses both halves, minimal only for windows; a Home page wears its own
+only when Home holds a **Home layout**.
 _Avoid_: place (the retired word for Home, Terminal and Display as three pages), screen, tab
 
 **Pane**:
@@ -412,7 +412,8 @@ _Avoid_: bar (for the keyboard), widget, slot (the store's word for where an ele
 An opt-in layout of Home's own, for a user who wants Home laid out unlike the Workspace. Off by
 default, when Home wears the one shared layout, its **Style**, Corners and Margin included; while
 on, Home holds its own copy of all of them, and the bar and dock may change on the swipe between the
-halves. It is to the layout what a surface's override is to **Base**.
+halves. It is the Layout editor's "Layout: One layout | Home's own" line; the row's house segment
+previews Home. It is to the layout what a surface's override is to **Base**.
 _Avoid_: Home variant, Home place
 
 **Layout editor**:

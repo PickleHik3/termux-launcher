@@ -14,19 +14,18 @@ any [Linux display](X11_Display.md). Swiping left past the last Home page reache
 dragging right from the first window's border comes back. The home button always lands on Home
 page 1, and coming back from another app shows the page you left.
 
-Home is kept plain. It has no borders, Android's own status bar shows as it does on any launcher,
-and the dock carries only the apps row and the A–Z index. The dock floats over the widgets rather
-than taking room from them: on the bottom edge it rides up with the keyboard and settles back when
+Home wears the same chrome as the Workspace: the same status bar (with the same window chips), the
+same dock and the same look. Only the extra keys are the Workspace's alone; they fold away as you
+swipe to Home while the bar and dock stand still. Home has no borders. The dock floats over the
+widgets rather than taking room from them: on the bottom edge it rides up with the keyboard and settles back when
 the keyboard closes. Drop it **Under the keyboard** in the Layout editor to keep it below instead.
-The Workspace keeps the full terminal chrome: the status bar, the extra keys, borders and corner
-tabs.
+The Workspace also has the extra keys, borders and corner tabs.
 
-Home has a layout of its own. Opened on a Home page, Appearance → **Layout** edits only the dock's
-rows and the keyboard. Style, Corners and Margin are Home's own there: they start as the
-Workspace's, and once you change them over a Home page (the labels read **· Home**) Home keeps its
-own while the Workspace keeps its. On Home, Margin is the space around the widgets, around the
-terminals floating over Home and around the dock, all at once. Minimal mode belongs to the
-Workspace only. See
+One layout dresses Home and the Workspace. If you want Home laid out differently, open Appearance →
+**Layout** and set the **Layout** line to **Home's own**; Home then keeps its own copy of the layout,
+with its Style, Corners, Margin and Dock design, and the row's house segment previews it. It starts
+as **One layout**. On Home, Margin is the space around the widgets, around the terminals floating
+over Home and around the dock, all at once. Minimal mode affects only windows; Home ignores it. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
 **Settings → Home → Start in** says where the launcher opens after a restart: **Home** (the default) or
