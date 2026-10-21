@@ -328,18 +328,6 @@ public final class TerminalBuffer {
     }
 
     /**
-     * Resize the screen which this transcript backs. Currently, this only works if the number of columns does not
-     * change or the rows expand (that is, it only works when shrinking the number of rows).
-     *
-     * @param newColumns The number of columns the screen should have.
-     * @param newRows    The number of rows the screen should have.
-     * @param cursor     An int[2] containing the (column, row) cursor location.
-     */
-    public void resize(int newColumns, int newRows, int newTotalRows, int[] cursor, long currentStyle, boolean altScreen) {
-        resize(newColumns, newRows, newTotalRows, cursor, currentStyle, altScreen, false);
-    }
-
-    /**
      * Where a rows-only {@link #resize} would put the rows now on screen, without doing it: the
      * number of rows down that every surviving screen row moves (negative is up), so old external
      * row {@code i} is found at {@code i + shift} afterwards. It mirrors the fast path of
@@ -352,11 +340,9 @@ public final class TerminalBuffer {
      * which is exactly as tall as the screen — takes the slow path, which copies the rows
      * top-aligned, so that answers 0.
      *
-     * @param cursorRow          the cursor's external row before the resize
-     * @param keepCursorAtBottom as for {@link #resize}, already narrowed by the caller to a cursor
-     *                           near the bottom edge
+     * @param cursorRow the cursor's external row before the resize
      */
-    public int predictRowsOnlyResizeShift(int newRows, int cursorRow, boolean keepCursorAtBottom) {
+    public int predictRowsOnlyResizeShift(int newRows, int cursorRow) {
         if (newRows > mTotalRows) return 0;
         int shiftDownOfTopRow = mScreenRows - newRows;
         if (shiftDownOfTopRow > 0 && shiftDownOfTopRow < mScreenRows) {
@@ -370,21 +356,22 @@ public final class TerminalBuffer {
                 }
             }
         } else if (shiftDownOfTopRow < 0) {
-            // Growth moves down only as far as the transcript goes, anchored or not (see resize).
+            // Growth moves down only as far as the transcript goes (see resize).
             shiftDownOfTopRow = Math.max(shiftDownOfTopRow, -mActiveTranscriptRows);
         }
         return -shiftDownOfTopRow;
     }
 
     /**
-     * Resize with an optional bottom anchor. A growth pulls transcript rows down above the old
-     * screen, so a prompt at the bottom edge stays there, only as far as the transcript goes; the
-     * rest of the new rows are blank rows below, so a short session's output stays at the top.
-     * That is what the unanchored growth already does, so the anchor no longer changes this
-     * buffer's growth; it is kept for the callers that pass it.
+     * Resize the screen which this transcript backs. Currently, this only works if the number of columns does not
+     * change or the rows expand (that is, it only works when shrinking the number of rows).
+     *
+     * @param newColumns The number of columns the screen should have.
+     * @param newRows    The number of rows the screen should have.
+     * @param cursor     An int[2] containing the (column, row) cursor location.
      */
     public void resize(int newColumns, int newRows, int newTotalRows, int[] cursor,
-                       long currentStyle, boolean altScreen, boolean keepCursorAtBottom) {
+                       long currentStyle, boolean altScreen) {
         // newRows > mTotalRows should not normally happen since mTotalRows is TRANSCRIPT_ROWS (10000):
         if (newColumns == mColumns && newRows <= mTotalRows) {
             // Fast resize where just the rows changed.

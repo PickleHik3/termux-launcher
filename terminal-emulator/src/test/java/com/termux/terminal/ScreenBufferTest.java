@@ -31,7 +31,7 @@ public class ScreenBufferTest extends TerminalTestCase {
         screen.setChar(0, 2, 'p', TextStyle.NORMAL);
         int[] cursor = {0, 2};
 
-        screen.resize(5, 5, 10, cursor, TextStyle.NORMAL, false, true);
+        screen.resize(5, 5, 10, cursor, TextStyle.NORMAL, false);
 
         assertEquals(2, cursor[1]);
         assertEquals("a\n\np", screen.getSelectedText(0, 0, 4, 2, false));
