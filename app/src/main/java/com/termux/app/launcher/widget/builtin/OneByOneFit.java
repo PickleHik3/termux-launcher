@@ -9,8 +9,8 @@ package com.termux.app.launcher.widget.builtin;
 final class OneByOneFit {
     private OneByOneFit() { }
 
-    /** The content inset at 1×1, in dp: the one-row and 1×1 inset of the widget shell. */
-    static final int INSET_DP = 12;
+    /** The content inset at 1×1, in dp: the widget tokens' compact inset. */
+    static final int INSET_DP = WidgetTokens.INSET_COMPACT_DP;
 
     /** The clear band kept between the number and the inner disc's rim, as a share of its diameter. */
     static final float RING_CLEAR = 0.06f;

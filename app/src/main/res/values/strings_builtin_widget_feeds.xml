@@ -7,13 +7,18 @@
     <string name="bw_feeds_weather_place_unknown">Current location</string>
     <!-- Today's high and low, e.g. "36 / 24". -->
     <string name="bw_feeds_weather_range_short">%1$s / %2$s</string>
-    <!-- e.g. "36/24", when there is no condition to lead it. -->
-    <string name="bw_feeds_weather_range_compact">%1$s/%2$s</string>
-    <!-- e.g. "Clear · 36/24". -->
-    <string name="bw_feeds_weather_condition_range">%1$s · %2$s/%3$s</string>
-    <!-- e.g. "H 36 L 24". -->
-    <string name="bw_feeds_weather_range_long">H %1$s L %2$s</string>
-    <string name="bw_feeds_weather_wind">%1$d km/h</string>
+    <!-- Today's high and low, e.g. "H 36 · L 24". -->
+    <string name="bw_feeds_weather_high_low">H %1$s · L %2$s</string>
+    <!-- The chance of rain this hour, e.g. "10% rain". -->
+    <string name="bw_feeds_weather_rain">%1$d%% rain</string>
+    <!-- Today's next sun time, e.g. "Sunrise 6:58", "Sunset 19:42". -->
+    <string name="bw_feeds_weather_sunrise">Sunrise %1$s</string>
+    <string name="bw_feeds_weather_sunset">Sunset %1$s</string>
+    <!-- Over the coming days on the widest card. -->
+    <plurals name="bw_feeds_weather_next_days">
+        <item quantity="one">Tomorrow</item>
+        <item quantity="other">Next %d days</item>
+    </plurals>
     <!-- Spoken: "Weather in Kuwait City: 34 degrees", then ", clear", then ", high 36 low 24". -->
     <string name="bw_feeds_weather_cd_place">Weather in %1$s: %2$s degrees</string>
     <string name="bw_feeds_weather_cd">Weather: %1$s degrees</string>
