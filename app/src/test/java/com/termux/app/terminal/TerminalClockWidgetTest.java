@@ -34,8 +34,8 @@ public class TerminalClockWidgetTest {
         calendar.clear();
         calendar.set(2026, Calendar.JULY, 22, 4, 5, 6);
 
-        TerminalClockWidget.ClockSnapshot snapshot =
-            TerminalClockWidget.snapshot(calendar.getTimeInMillis(), utc);
+        ClockFaceRenderer.ClockSnapshot snapshot =
+            ClockFaceRenderer.snapshot(calendar.getTimeInMillis(), utc);
 
         assertEquals("04", snapshot.hh);
         assertEquals("05", snapshot.mm);
@@ -51,8 +51,8 @@ public class TerminalClockWidgetTest {
         calendar.clear();
         calendar.set(2026, Calendar.JULY, 22, 16, 5, 6);
 
-        TerminalClockWidget.ClockSnapshot snapshot =
-            TerminalClockWidget.snapshot(calendar.getTimeInMillis(), utc, true);
+        ClockFaceRenderer.ClockSnapshot snapshot =
+            ClockFaceRenderer.snapshot(calendar.getTimeInMillis(), utc, true);
 
         assertEquals("04", snapshot.hh);
         assertEquals("PM", snapshot.period);
@@ -126,7 +126,7 @@ public class TerminalClockWidgetTest {
      */
     @Test
     public void everyFullStyleTranslatesTheTimeBandByTheAlignmentOffset() throws Exception {
-        String source = read("app/src/main/java/com/termux/app/terminal/TerminalClockWidget.java");
+        String source = read("app/src/main/java/com/termux/app/terminal/ClockFaceRenderer.java");
         for (String method : new String[] {"drawFullLcd", "drawFullMinimal", "drawFullSlab",
             "drawFullTape", "drawFullLed", "drawFullFlip"}) {
             assertTrue(method + " must offset its time band by the alignment",
@@ -173,30 +173,30 @@ public class TerminalClockWidgetTest {
     public void flip_pairGapIsOneAndAHalfDigitGapsInEveryForm() {
         // Full: 5.7dp between the cards of a pair, so the hour stands 8.55dp off the minutes
         // (it was 13.5dp, which read as two separate numbers).
-        assertEquals(1.5f, TerminalClockWidget.FLIP_PAIR_GAP_RATIO, 0f);
-        assertEquals(8.55f, TerminalClockWidget.flipPairGapDp(5.7f), 1e-4f);
+        assertEquals(1.5f, ClockFaceRenderer.FLIP_PAIR_GAP_RATIO, 0f);
+        assertEquals(8.55f, ClockFaceRenderer.flipPairGapDp(5.7f), 1e-4f);
         assertEquals(4f * 26f + 2f * 5.7f + 8.55f,
-            TerminalClockWidget.flipRowWidthDp(26f, 5.7f), 1e-4f);
+            ClockFaceRenderer.flipRowWidthDp(26f, 5.7f), 1e-4f);
         // Compact: 1.5dp digit gaps, 2.25dp between the pairs.
         assertEquals(4f * 15f + 2f * 1.5f + 2.25f,
-            TerminalClockWidget.flipRowWidthDp(15f, 1.5f), 1e-4f);
+            ClockFaceRenderer.flipRowWidthDp(15f, 1.5f), 1e-4f);
     }
 
     @Test
     public void fitScale_growsTheWholeColumnToTheBudgetButNeverPastTheCeiling() {
         // 58 budget over a 48 column: the date stays and the face grows by one uniform scale.
-        float[] plan = TerminalClockWidget.fitScalePlan(58f, 400f, 48f, 34f, 150f, 130f, .65f);
+        float[] plan = ClockFaceRenderer.fitScalePlan(58f, 400f, 48f, 34f, 150f, 130f, .65f);
         assertEquals(58f / 48f, plan[0], 1e-4f);
         assertEquals(1f, plan[1], 0f);
         assertEquals(150f * plan[0], plan[2], 1e-3f);
         // A tall budget stops at the ceiling.
-        float[] tall = TerminalClockWidget.fitScalePlan(200f, 4000f, 48f, 34f, 150f, 130f, .65f);
-        assertEquals(TerminalClockWidget.FIT_MAX_SCALE, tall[0], 0f);
+        float[] tall = ClockFaceRenderer.fitScalePlan(200f, 4000f, 48f, 34f, 150f, 130f, .65f);
+        assertEquals(ClockFaceRenderer.FIT_MAX_SCALE, tall[0], 0f);
     }
 
     @Test
     public void fitScale_widthBudgetShrinksTheWholeFaceTogether() {
-        float[] plan = TerminalClockWidget.fitScalePlan(58f, 120f, 48f, 34f, 150f, 130f, .65f);
+        float[] plan = ClockFaceRenderer.fitScalePlan(58f, 120f, 48f, 34f, 150f, 130f, .65f);
         assertEquals(120f / 150f, plan[0], 1e-4f);
         assertEquals(1f, plan[1], 0f);
     }
@@ -204,12 +204,12 @@ public class TerminalClockWidgetTest {
     @Test
     public void fitScale_dropsTheDateWhenTheColumnFallsBelowTheFloor() {
         // 30 over a 48 column is .625, under the .65 floor: the band alone is fitted.
-        float[] plan = TerminalClockWidget.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, .65f);
+        float[] plan = ClockFaceRenderer.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, .65f);
         assertEquals(0f, plan[1], 0f);
         assertEquals(30f / 34f, plan[0], 1e-4f);
         assertEquals(130f * plan[0], plan[2], 1e-3f);
         // With no floor (the slot to itself) the date is never dropped.
-        assertEquals(1f, TerminalClockWidget.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, 0f)[1], 0f);
+        assertEquals(1f, ClockFaceRenderer.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, 0f)[1], 0f);
     }
 
     /** The source of {@code method}, from its signature to the first line that closes it. */
