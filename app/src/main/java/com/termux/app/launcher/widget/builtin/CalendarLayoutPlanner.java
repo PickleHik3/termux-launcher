@@ -65,6 +65,11 @@ final class CalendarLayoutPlanner {
 
     /** At least this much between two day cells of a grid, either way. */
     static final float CELL_GAP_DP = 2f;
+    /**
+     * Two day numbers side by side stand at least this share of their size apart, a word space,
+     * so "11 12 13" never reads as "111213": the 2 dp cell gap alone did not, at font 2.0.
+     */
+    static final float DAY_SPACING_EM = 0.25f;
     /** The event dot under a day's digit. */
     static final float DOT_DP = 4f;
     /** The 1×1's dots, one per event of today. */
@@ -276,7 +281,10 @@ final class CalendarLayoutPlanner {
         float colW = (width - (columns - 1) * CELL_GAP_DP) / columns;
         if (colW <= 0f) return null;
         float digitSize = WidgetTokens.sizeDp(digitRole, fontScale);
-        if (measure.widthDp(WIDEST_DAY, digitRole, true, digitSize) > colW + EPS) return null;
+        float spacing = Math.max(0f, DAY_SPACING_EM * digitSize - CELL_GAP_DP);
+        if (measure.widthDp(WIDEST_DAY, digitRole, true, digitSize) + spacing > colW + EPS) {
+            return null;
+        }
         float letterSize = 0f;
         float lettersBlock = 0f;
         boolean useShort = false;
@@ -829,12 +837,14 @@ final class CalendarLayoutPlanner {
         void fourByTwo(Box inner) {
             float divider = 1f;
             float side = GAP_L + divider + GAP_L;
-            float monthW = Math.round(inner.width * MONTH_SHARE);
-            if (inner.width - monthW - side < EVENTS_MIN_DP) {
-                monthW = inner.width - side - EVENTS_MIN_DP;
-            }
-            if (monthW > 0f) {
-                Box monthArea = new Box(inner.left, inner.top, monthW, inner.height);
+            float widest = inner.width - side - EVENTS_MIN_DP;
+            float monthW = Math.min(Math.round(inner.width * MONTH_SHARE), widest);
+            // The month at its share, then as wide as the events column allows (a large font's
+            // day numbers need it), before the card falls back to the events alone.
+            float[] widths = widest > monthW ? new float[] {monthW, widest} : new float[] {monthW};
+            for (float width : widths) {
+                if (width <= 0f) continue;
+                Box monthArea = new Box(inner.left, inner.top, width, inner.height);
                 if (month(monthArea, GAP_L - divider)) {
                     float ruleLeft = monthArea.right() + GAP_L;
                     parts.add(Part.rule(DIVIDER, new Box(ruleLeft, inner.top, divider,

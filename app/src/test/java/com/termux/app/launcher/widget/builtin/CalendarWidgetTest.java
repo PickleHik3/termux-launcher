@@ -205,6 +205,24 @@ public class CalendarWidgetTest {
         assertTrue("grids drawn: " + grids, grids >= 8);
     }
 
+    /**
+     * At font 2.0 the 4×2's month (emulator, build 7dbf41b90: "111213…") keeps its day numbers a
+     * word space apart: it widens into the events column's slack rather than packing them.
+     */
+    @Test public void aLargeFontsFourByTwoMonthKeepsItsDaysApart() {
+        Content typical = content(3, true, true, true, false, false, october(false));
+        // The emulator's 4×2 card, in dp.
+        for (int[] size : new int[][] {{390, 311}}) {
+            Result big = CalendarLayoutPlanner.plan(BuiltinWidgetSpan.FOUR_BY_TWO, size[0],
+                size[1], 2f, typical, WORDS, MEASURE);
+            String what = "4×2 " + size[0] + "x" + size[1] + " at 2.0";
+            assertNotNull(what + ": the month", big.month);
+            checkGrid(big.month, big.plan.part(CalendarLayoutPlanner.MONTH), 2f, what);
+            assertTrue(what + ": the events beside it",
+                big.plan.has(CalendarLayoutPlanner.HEADER));
+        }
+    }
+
     @Test public void eachSpanShowsItsDesign() {
         Content typical = content(3, true, true, true, false, false, october(false));
         WidgetLayoutPlan one = plan(BuiltinWidgetSpan.ONE_BY_ONE, typical);
@@ -483,6 +501,11 @@ public class CalendarWidgetTest {
                 float gap = grid.cells.get(i + 1).left - cell.right();
                 assertTrue(what + ": cells " + i + " and " + (i + 1) + " " + gap + " dp apart",
                     gap >= CalendarLayoutPlanner.CELL_GAP_DP - EPS);
+                // Two centred "28"s stand a word space apart, never run together.
+                float digits = MEASURE.widthDp("28", grid.digitRole, true, grid.digitSizeDp);
+                float apart = gap + cell.width - digits;
+                assertTrue(what + ": day numbers at cell " + i + " " + apart + " dp apart",
+                    apart >= CalendarLayoutPlanner.DAY_SPACING_EM * grid.digitSizeDp - EPS);
             }
             if (i + grid.columns < grid.cells.size()) {
                 float gap = grid.cells.get(i + grid.columns).top - cell.bottom();
