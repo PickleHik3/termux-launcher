@@ -243,6 +243,8 @@ public final class WidgetPaneFrame extends PaneContentFrame
     private float mDownX, mDownY;
     /** True only inside {@link #cancelGridGesture()}: that cancel is the grid's, not the page's. */
     private boolean mCancellingGrid;
+    /** Scratch for the editing tab's resting bounds, asked from the overlay's draw and touch path. */
+    private final RectF mEditTab = new RectF();
 
     public WidgetPaneFrame(Context context) {
         super(context);
@@ -278,7 +280,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
      */
     private boolean fillEditTabInPane(@NonNull android.graphics.Rect out) {
         if (!mEditing || mControls == null || mGrid == null) return false;
-        RectF tab = new RectF();
+        RectF tab = mEditTab;
         if (!mControls.restingTabBounds(tab)) return false;
         tab.offset(mControls.getLeft() - mGrid.getLeft(), mControls.getTop() - mGrid.getTop());
         tab.roundOut(out);
