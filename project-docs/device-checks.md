@@ -13,12 +13,10 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
-- 2026-10-21 · 1.1.0-pre.6 crash report (NPE in WidgetPaneController.flipDragPage, moto g15,
-  Android 15), cause not yet found: Robolectric does not reproduce it · On the Widgets place, hold
-  a widget and drag it into the trailing edge band for two turns (one page, so a page is made; and
-  two pages), once dropping there and once carrying it back to the first page first; then the same
-  from the pencil. The page turns, the drop lands, and `ad -s emu crash` shows nothing; on a crash,
-  keep its trace · emulator, debug build.
+- 2026-10-21 · commit "fix(widgets): a carried built-in widget keeps its cell through a page turn" ·
+  Passed on the emulator 2026-10-21 for the crashing case (a fresh built-in Battery widget, long-press
+  drag held in the right band: two turns, a clean drop). Still owed: a system app widget, two or
+  more pages, the left edge, carrying it back to the first page before dropping · emulator, debug build.
 - 2026-10-21 · commit "fix(chrome): fullscreen claims the status bar's band over the cutout" ·
   With fullscreen on, the window bar sits at the top edge with no empty band, in the terminal and
   the Display place; with it off, nothing moved. Look at where the camera hole lands on the window
