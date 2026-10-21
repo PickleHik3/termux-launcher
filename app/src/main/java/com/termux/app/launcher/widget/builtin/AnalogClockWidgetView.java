@@ -112,14 +112,22 @@ public class AnalogClockWidgetView extends BuiltinWidgetView {
      */
     private static final int FACE_AIR_DP = 10;
 
+    /** The dial fills the card to the 1×1 inset, on its shorter side, at any cell size. */
     private void buildOneByOne(@NonNull FrameLayout frame, @NonNull BuiltinWidgetUi ui) {
-        frame.addView(aired(face(70, 0.12f), ui), fill());
+        frame.addView(aired(face(AnalogClockFaceView.FILL, 0.12f), OneByOneFit.INSET_DP, ui),
+            fill());
     }
 
-    /** {@code face} centred inside a frame that keeps {@link #FACE_AIR_DP} on every side. */
-    @NonNull private FrameLayout aired(@NonNull AnalogClockFaceView face, @NonNull BuiltinWidgetUi ui) {
+    /** The 1×1 dial takes the card's room itself; zooming it would only narrow that room. */
+    @Override protected boolean zoomsToFill(@NonNull BuiltinWidgetSpan span) {
+        return span != BuiltinWidgetSpan.ONE_BY_ONE;
+    }
+
+    /** {@code face} centred inside a frame that keeps {@code airDp} on every side. */
+    @NonNull private FrameLayout aired(@NonNull AnalogClockFaceView face, int airDp,
+                                       @NonNull BuiltinWidgetUi ui) {
         FrameLayout room = new FrameLayout(getContext());
-        inset(room, FACE_AIR_DP, FACE_AIR_DP, FACE_AIR_DP, FACE_AIR_DP, ui);
+        inset(room, airDp, airDp, airDp, airDp, ui);
         room.addView(face, centred());
         return room;
     }
@@ -136,7 +144,7 @@ public class AnalogClockWidgetView extends BuiltinWidgetView {
     private void buildTwoByTwo(@NonNull FrameLayout frame, @NonNull BuiltinWidgetUi ui) {
         AnalogClockFaceView face = face(160, 0.08f);
         datedFace = face;
-        frame.addView(aired(face, ui), fill());
+        frame.addView(aired(face, FACE_AIR_DP, ui), fill());
     }
 
     private void buildFourByOne(@NonNull FrameLayout frame, @NonNull BuiltinWidgetUi ui) {
