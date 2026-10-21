@@ -8,9 +8,10 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * The shape Home's dock is drawn in, picked in the Layout editor while it edits Home's layout
- * (project-docs/active/home-dock-styles-2026-10-20.md, "The choice"). One value for Home, both
- * orientations; the Workspace's dock has no style and stays as it is.
+ * The shape the dock is drawn in (the glossary's <b>Dock design</b>), picked in the Layout editor
+ * with the dock selected on any page (project-docs/active/home-dock-styles-2026-10-20.md, "The
+ * choice"). One value per layout, both orientations, so it dresses the dock on both halves unless
+ * Home holds a Home layout of its own (#93).
  *
  * <p>The stored id is the contract: it is what the preference holds, so a style is renamed in
  * code and strings, never in {@link #storageValue}. Anything the store cannot read, an absent key

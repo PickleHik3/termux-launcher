@@ -4759,8 +4759,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     private void applyDockSurfaceGlass(@NonNull com.termux.app.chrome.GlassRefraction.Program program) {
         com.termux.app.dock.DockSurfaceSpec spec = dockSurfaceSpec();
-        // Beads are drawn under Home's Lens beads, and across the seam while they melt into the
-        // slab with Home's share of the slide (dockBeadsWanted), whichever page is committed.
+        // Beads are drawn under Lens beads, and across the seam while they melt into the slab
+        // with the beaded half's share of the slide (dockBeadsWanted), whichever page is committed.
         com.termux.app.dock.LensBeadGeometry.Beads beads = dockBeadsDrawn();
         if (beads != null) {
             // Lens beads: each bead floats, whatever the Style, so each wears the shelf's lip;
@@ -4848,7 +4848,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ------------------------------------------------------------------ Lens beads
     //
-    // Home's Lens beads (DockSurfaceSpec.LENS_BEADS): the dock's one glass host draws a round
+    // Lens beads (DockSurfaceSpec.LENS_BEADS), on whichever half's dock wears the design (#93;
+    // under the Workspace's extra keys or a keyboard sharing the glass the row keeps the slab,
+    // LensBeadGeometry.rowWearsBeads): the dock's one glass host draws a round
     // bead under each icon instead of its slab. The host clips everything in it to the beads
     // (DockSurfaceHostLayout), the dock's one glass program draws every bead's rim, shelf and
     // reflection from the beads' centres (GlassRefraction.Program#setBeads), and the shelf view
@@ -4870,23 +4872,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new float[com.termux.app.dock.LensBeadGeometry.MAX_DRAWN_BEADS];
 
     /**
-     * Home's share of a slide across the seam while Home's dock wears Lens beads (1 on Home, 0
-     * on the Workspace), which the beads melt into the slab by ({@link #syncSeamBeadMelt}); NaN
-     * otherwise, the beads then their own size.
+     * The beaded half's share of a slide across the seam while one half's dock draws Lens beads
+     * and the other's does not (1 resting on the beaded half, 0 on the other), which the beads
+     * melt into the slab by ({@link #syncSeamBeadMelt}); NaN otherwise, the beads then their own
+     * size. Where both halves draw beads (one layout, one design) nothing melts.
      */
     private float mSeamBeadShare = Float.NaN;
 
     /**
+     * Whether this crossing of the seam melts beads ({@link #readSeamTravel}): one half's dock
+     * draws them and the other's does not; and which half that is.
+     */
+    private boolean mTravelSeamBeadMelt;
+    private boolean mTravelSeamBeadsCommitted;
+
+    /**
      * Whether the dock draws beads now (the row still has to wear them, {@link #resolveDockBeads}):
-     * under Home's Lens beads, but not where a slide has carried Home wholly off; and across the
-     * seam from the Workspace while any of Home's share shows, so they come in as the page does.
+     * under Lens beads, but not where a slide has carried the beaded half wholly off; and across
+     * the seam from a half without them while any of the beaded half's share shows, so they come
+     * in as the page does.
      */
     private boolean dockBeadsWanted() {
         if (mPreferences == null) return false;
         if (dockSurfaceSpec().beads) return Float.isNaN(mSeamBeadShare) || mSeamBeadShare > 0f;
-        return !Float.isNaN(mSeamBeadShare) && mSeamBeadShare > 0f
-            && mDresses.dockDesignOf(com.termux.app.wall.PaneWallPage.WIDGETS)
-                == com.termux.app.dock.DockStyle.LENS_BEADS;
+        return !Float.isNaN(mSeamBeadShare) && mSeamBeadShare > 0f;
     }
 
     /** The beads where the row draws its icons now: moving with a swipe, or at rest. */
@@ -4926,33 +4935,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * One frame of a slide across the seam while Home's dock wears Lens beads: the beads melt
-     * into the slab as Home slides away, swelling under their icons until, cut to the slab's
-     * outline, they are the slab, and come back out of it as Home returns, as the Prompt line's
-     * and the Wall strip's bands follow Home's share ({@link #syncSeamBandShare}). Where Home's
-     * rows leave the screen on the way out they melt over the wall's first stretch, while the
-     * chrome still rests (LensBeadGeometry.leavingMeltShare), so they sink as the slab rather
+     * One frame of a slide across the seam while one half's dock draws Lens beads and the
+     * other's does not ({@link #mTravelSeamBeadMelt}): the beads melt into the slab as the beaded
+     * half slides away, swelling under their icons until, cut to the slab's outline, they are the
+     * slab, and come back out of it as that half returns, as the Prompt line's and the Wall
+     * strip's bands follow their halves' shares ({@link #syncSeamBandShare}). Where the beaded
+     * half's rows leave the screen on the way out they melt over the wall's first stretch, while
+     * the chrome still rests (LensBeadGeometry.leavingMeltShare), so they sink as the slab rather
      * than as beads cut flat by the stack's bottom edge; their shadows and glow fade as they
      * swell. Each frame the share moves re-cuts the host's clip and rebuilds the dock's effect
-     * once; nothing for any other style, and nothing at rest.
+     * once; nothing where both halves draw the same (one layout, one design), and nothing at rest.
      */
     private void syncSeamBeadMelt(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
         if (mTravelSeamOther == null || mPreferences == null || mChrome == null) return;
-        if (mDresses.dockDesignOf(com.termux.app.wall.PaneWallPage.WIDGETS)
-            != com.termux.app.dock.DockStyle.LENS_BEADS) return;
+        if (!mTravelSeamBeadMelt) return;
         if (!com.termux.app.place.SeamTravel.crosses(mLastWallPage, mTravelSeamOther)) return;
-        boolean committedHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
+        boolean committedBeaded = mTravelSeamBeadsCommitted;
         float share;
-        if (committedHome && com.termux.app.place.SeamTravel.committedRowsLeave(mTravelSeamPlan)) {
-            // Home's rows sink below the stack's bottom edge, which cuts them flat: the beads
-            // melt while the chrome still rests and sink as the slab, the mirror of the way back.
+        if (committedBeaded
+            && com.termux.app.place.SeamTravel.committedRowsLeave(mTravelSeamPlan)) {
+            // The beaded half's rows sink below the stack's bottom edge, which cuts them flat: the
+            // beads melt while the chrome still rests and sink as the slab, the mirror of the way
+            // back.
             share = com.termux.app.dock.LensBeadGeometry.leavingMeltShare(
                 com.termux.app.place.SeamTravel.otherHalfFraction(frame, mLastWallPage),
                 com.termux.app.place.PlaceChromeTravel.LANDING);
         } else {
             float progress = Math.max(0f, Math.min(1f,
                 com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage)));
-            share = committedHome ? 1f - progress : progress;
+            share = committedBeaded ? 1f - progress : progress;
         }
         if (Float.compare(share, mSeamBeadShare) == 0) return;
         mSeamBeadShare = share;
@@ -4961,7 +4972,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The beads drawn again for {@link #mSeamBeadShare}: the host's clip and slab cut, and the
-     * dock's effect once. Beads coming or going (Home's share reaching or leaving nothing) dress
+     * dock's effect once. Beads coming or going (the beaded half's share reaching or leaving
+     * nothing) dress
      * the dock again, as a row turning to beads or back does. Mid-slide the row is read again
      * only when beads are to come or go ({@code settled}: always, the slide having landed).
      */
@@ -14405,12 +14417,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mDresses.dressOf(page);
     }
 
-    /** What a Home page wears now, whatever page is on screen: its Dock design, for one. */
-    @NonNull
-    private com.termux.app.chrome.Dress homeDress() {
-        return dressOf(com.termux.app.wall.PaneWallPage.WIDGETS);
-    }
-
     private PlaceOrientation currentPlaceOrientation() {
         return isLandscapeOrientation() ? PlaceOrientation.LANDSCAPE : PlaceOrientation.PORTRAIT;
     }
@@ -16412,10 +16418,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A row that lies down carries the ticks in its own air; a rail's stand in a column
             // beside it, so its cross-axis keeps the plain air of a lone row.
             .appsRowPageStripShown(!PlaceChromePolicy.appsRailShown(layout))
-            // Home's dock is the Glass tray, the Workspace's the plain dock.
+            // The committed page's Dock design, on either half (#93).
             .surface(dockSurfaceSpec())
-            // The Prompt line's field under the apps row: all of it while Home wears the style,
-            // between while a style switch eases the slab.
+            // The Prompt line's field under the apps row: all of it while the page wears the
+            // design, between while a design switch or a slide across the seam eases the slab.
             .promptFieldReveal(promptFieldReveal())
             // The Wall strip's first row over it, the same way.
             .wallStripReveal(wallStripReveal())
@@ -16445,44 +16451,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * What the dock's style asks of its slab: Home's dock is the Glass tray, every other page's
-     * the plain dock. Read off the committed page rather than the stack's dress, so a slide
-     * across the seam keeps the geometry it was committed with and the tray's comes and goes at
-     * settle ({@link #restyleDockSurfaceForPageIfChanged}).
+     * What the dock's design asks of its slab, on the committed page: the Dock design its layout
+     * holds, on either half (#93). Read off the committed page rather than the stack's dress, so
+     * a slide across the seam keeps the geometry it was committed with and a design that differs
+     * between the halves comes and goes at settle ({@link #restyleDockSurfaceForPageIfChanged}).
+     * A narrow read (no dress built), since a key's lens rebuilds the dock's glass per frame.
      */
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec() {
-        return dockSurfaceSpec(dressOf(mLastWallPage));
+        return com.termux.app.dock.DockSurfaceSpec.forStyle(committedDockDesign());
     }
 
-    /**
-     * The slab the dock wears in {@code dress}: its Dock design's where the layout holds one the
-     * user picks (Home's), the plain dock where it holds none.
-     */
+    /** The slab the dock wears on {@code page}: its Dock design's. */
     @NonNull
-    private static com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec(
-            @NonNull com.termux.app.chrome.Dress dress) {
-        return com.termux.app.dock.DockSurfaceSpec.forDock(dress.picksDockDesign(),
-            dress.dockDesign());
+    private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec(
+            @NonNull com.termux.app.wall.PaneWallPage page) {
+        return com.termux.app.dock.DockSurfaceSpec.forStyle(mDresses.dockDesignOf(page));
     }
 
     /**
-     * A settle that changes the dock's surface spec — onto Home or off it — lays the dock out and
-     * dresses its glass again: the tray's dashes stand above its slab and its glass wears the
-     * dock-surface features, the Workspace's do not. Nothing happens while the spec is the same.
+     * A settle that changes the dock's surface spec — between halves whose layouts hold different
+     * designs — lays the dock out and dresses its glass again. Nothing happens while the spec is
+     * the same, as it is between Home and a window on one layout: the swipe never re-dresses the
+     * dock there.
      */
     private void restyleDockSurfaceForPageIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
                                                     @NonNull com.termux.app.wall.PaneWallPage to) {
         if (mPreferences == null || mChrome == null) return;
-        if (dockSurfaceSpec(dressOf(from)).equals(dockSurfaceSpec(dressOf(to)))) return;
+        if (dockSurfaceSpec(from).equals(dockSurfaceSpec(to))) {
+            // One design on both, but a Home layout keeps its own Drawer tile's place.
+            if (dockSurfaceSpec(to).taskbar) syncTaskbarHomeTile();
+            return;
+        }
         // A settle lands the place's geometry at once (ADR 0003): an ease under way gives way.
         cancelDockBandEase();
         restyleDockSurface();
     }
 
     /**
-     * Lays the dock out and dresses its glass again for the spec it wears now: a settle onto or
-     * off Home ({@link #restyleDockSurfaceForPageIfChanged}), or a Dock style picked in the
+     * Lays the dock out and dresses its glass again for the spec it wears now: a settle between
+     * halves of different designs ({@link #restyleDockSurfaceForPageIfChanged}), or a Dock style
+     * picked in the
      * Layout editor ({@link #doSyncPlaceLayout}), live, with no restart. The backdrop up stays
      * until the re-cut one replaces it, so the switch never shows a bare frame.
      */
@@ -16503,12 +16512,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ------------------------------------------------------------------ Taskbar
     //
-    // Home's Taskbar (DockSurfaceSpec.TASKBAR): the dock row holds a Home tile among the apps
-    // (SuggestionBarView.setHomeTile, where it stands persisted in PlaceLayoutStore), and the run
-    // strip (RunStripView) floats above the dock on its own thin glass, where the minimised
-    // floats' chips would stand, while anything runs. The strip rides in Home's float layer, so it
-    // slides with Home and is never on the Workspace; it is fed from the same window chips as the
-    // Workspace's bar (syncWindowBarItems), built on Home too. Nothing here runs at rest.
+    // The Taskbar (DockSurfaceSpec.TASKBAR): the dock row holds a Home tile among the apps
+    // (SuggestionBarView.setHomeTile, where it stands persisted in PlaceLayoutStore) on whichever
+    // half's dock wears the design (#93), and on Home the run strip (RunStripView) floats above
+    // the dock on its own thin glass, where the minimised floats' chips would stand, while
+    // anything runs. The strip rides in Home's float layer, so it slides with Home and is never
+    // on the Workspace (it goes in #95); it is fed from the same window chips as the Workspace's
+    // bar (syncWindowBarItems), built on Home too. Nothing here runs at rest.
 
     /** The run strip, built with Home's float layer; null before. */
     @Nullable private com.termux.app.dock.RunStripView mRunStrip;
@@ -16531,9 +16541,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The least air the strip keeps from the screen's sides, where the dock's slab has none. */
     private static final float RUN_STRIP_SIDE_DP = 8f;
 
-    /** Whether Home's dock wears the Taskbar, so its strip and its Home tile are wanted. */
+    /** Whether Home's dock wears the Taskbar, so its run strip is wanted (Home's alone, #95). */
     private boolean runStripWanted() {
-        return mPreferences != null && isSplitPanesEnabled() && homeDress().drawerTile();
+        return mPreferences != null && isSplitPanesEnabled()
+            && mDresses.dockDesignOf(com.termux.app.wall.PaneWallPage.WIDGETS)
+                == com.termux.app.dock.DockStyle.TASKBAR;
     }
 
     /** The Home tile and the run strip follow the dock's spec: both on the Taskbar, neither elsewhere. */
@@ -16549,23 +16561,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** The dock row holds the Home tile where Home's dock wears the Taskbar, and none elsewhere. */
+    /**
+     * The dock row holds the Home tile where the committed page's dock wears the Taskbar, on
+     * either half, and none elsewhere.
+     */
     private void syncTaskbarHomeTile() {
         SuggestionBarView bar = mSuggestionBarView;
         if (bar == null) return;
         boolean on = mPreferences != null && dockSurfaceSpec().taskbar;
-        PlaceLayoutStore store = homeDockStore();
+        PlaceLayoutStore store = committedDockStore();
         bar.setHomeTile(on ? (store != null ? store.taskbarHomeTile()
                 : com.termux.app.dock.TaskbarHomeTilePolicy.DEFAULT) : null,
             on ? mTaskbarHomeTileListener : null);
     }
 
-    /** The store pinned to the layout Home's dock is dressed by, where its tile is kept. */
+    /**
+     * The store pinned to the layout the committed page's dock is dressed by, where its Home
+     * tile is kept: Home's layout on Home, the Workspace's (normal or minimal) on a window.
+     */
     @Nullable
-    private PlaceLayoutStore homeDockStore() {
+    private PlaceLayoutStore committedDockStore() {
         PlaceLayoutStore store = placeLayoutStore();
-        return store == null ? null
-            : store.forVariant(mDresses.layoutOf(com.termux.app.wall.PaneWallPage.WIDGETS));
+        return store == null ? null : store.forVariant(mDresses.layoutOf(mLastWallPage));
     }
 
     /** The Home tile opens the drawer as Home's own drawer entry does, and remembers its place. */
@@ -16577,7 +16594,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public void onHomeTileMoved(
                     @NonNull com.termux.app.dock.TaskbarHomeTilePolicy.Position position) {
-                PlaceLayoutStore store = homeDockStore();
+                PlaceLayoutStore store = committedDockStore();
                 if (store != null) store.setTaskbarHomeTile(position);
                 syncTaskbarHomeTile();
             }
@@ -16765,9 +16782,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ------------------------------------------------------------------ Prompt line
     //
-    // Home's Prompt line (DockSurfaceSpec.PROMPT_LINE): the command palette's field stands under
-    // the apps row on the same slab (DockLayout.promptFieldBandPx), in the row's own host, so the
-    // dock's one glass, its shelf and its reflection are the taller slab's. A Dock style picked
+    // The Prompt line (DockSurfaceSpec.PROMPT_LINE), on either half's dock: the command palette's
+    // field stands under the apps row on the same slab (DockLayout.promptFieldBandPx), in the
+    // row's own host, so the dock's one glass, its shelf and its reflection are the taller slab's;
+    // the Workspace's extra keys stay a band of their own beside it. A Dock style picked
     // in the Layout editor eases the slab's height in or out over a short run of frames, each a
     // dock pass and one re-cut of its glass; nothing runs before or after it.
 
@@ -16793,56 +16811,84 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * How much of the field the dock is laid out with: the ease's value while one runs, otherwise
-     * all of it where Home's dock wears the Prompt line and none anywhere else.
+     * all of it where the committed page's dock wears the Prompt line and none anywhere else.
      */
     private float promptFieldReveal() {
         if (mPromptFieldEase != null) return mPromptFieldEaseValue;
-        return mPreferences != null && !mPromptFieldUnderPalette && homeDress().searchField()
-            ? homeBandShare() : 0f;
+        return mPreferences != null && !mPromptFieldUnderPalette
+            ? dockBandShare(com.termux.app.dock.DockStyle.PROMPT_LINE) : 0f;
     }
 
     /**
-     * How much of Home's own bands (the Prompt line's field, the Wall strip's row) the dock
-     * carries: all of them resting on Home, none on the Workspace, and between, the share of the
-     * way back to Home while a slide crosses the seam ({@link #syncSeamBandShare}), so the slab
-     * eases with the page rather than stepping at the settle.
+     * How much of a band only {@code design} carries (the Prompt line's field, the Wall strip's
+     * row) the dock is laid out with: all of it resting on a page whose dock wears the design,
+     * none on one whose dock does not, and between, while a slide crosses the seam toward a half
+     * of the other kind, the share of the way to the half that wears it ({@link
+     * #syncSeamBandShare}), so the slab eases with the page rather than stepping at the settle.
+     * Halves that wear the same design keep the band whole, or without it, all the way across.
      */
-    private float homeBandShare() {
-        if (!Float.isNaN(mTravelHomeBandShare)) return mTravelHomeBandShare;
-        return mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS ? 1f : 0f;
+    private float dockBandShare(@NonNull com.termux.app.dock.DockStyle design) {
+        float here = committedDockDesign() == design ? 1f : 0f;
+        com.termux.app.dock.DockStyle other = mTravelSeamOtherDesign;
+        if (Float.isNaN(mTravelSeamBandProgress) || other == null) return here;
+        float there = other == design ? 1f : 0f;
+        return here + (there - here) * mTravelSeamBandProgress;
     }
 
-    /** {@link #homeBandShare} while a slide crosses the seam; NaN otherwise. */
-    private float mTravelHomeBandShare = Float.NaN;
+    /**
+     * The committed page's Dock design: the one read when the slide reached the seam while one
+     * crosses it ({@link #readSeamTravel}), so its frames read no store, else the dress's.
+     */
+    @NonNull
+    private com.termux.app.dock.DockStyle committedDockDesign() {
+        com.termux.app.dock.DockStyle travelling = mTravelSeamCommittedDesign;
+        return travelling != null ? travelling : mDresses.dockDesignOf(mLastWallPage);
+    }
 
     /**
-     * One frame of a slide across the seam between Home and the Workspace, where Home's dock
-     * carries a band of its own (the Prompt line's field, the Wall strip's row): the band follows
-     * the page, out as Home slides away and back in as it returns, one dock pass and one glass
-     * re-cut a frame while the share moves. Nothing for any other dock style, and nothing at rest.
+     * How far a slide across the seam has come toward the other half, 0..1, while the halves'
+     * bands differ ({@link #syncSeamBandShare}); NaN otherwise.
+     */
+    private float mTravelSeamBandProgress = Float.NaN;
+    /**
+     * The Dock designs of the committed half and of the other one, read once when a slide reaches
+     * the seam ({@link #readSeamTravel}); null at rest.
+     */
+    @Nullable private com.termux.app.dock.DockStyle mTravelSeamCommittedDesign;
+    @Nullable private com.termux.app.dock.DockStyle mTravelSeamOtherDesign;
+
+    /**
+     * One frame of a slide across the seam between Home and the Workspace, where one half's dock
+     * carries a band the other's does not (the Prompt line's field, the Wall strip's row): the
+     * band follows its page, out as that half slides away and back in as it returns, one dock
+     * pass and one glass re-cut a frame while the share moves. Nothing where both halves wear the
+     * same design (one layout: Home and a window alike), and nothing at rest.
      */
     private void syncSeamBandShare(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
         if (mTravelSeamOther == null || mPreferences == null || mChrome == null) return;
-        com.termux.app.chrome.Dress home = homeDress();
-        boolean carriesBand = home.dockDesign() == com.termux.app.dock.DockStyle.WALL_STRIP
-            || (home.searchField() && !mPromptFieldUnderPalette);
-        if (!carriesBand || mPromptFieldEase != null) return;
+        com.termux.app.dock.DockStyle here = mTravelSeamCommittedDesign;
+        com.termux.app.dock.DockStyle there = mTravelSeamOtherDesign;
+        if (here == null || there == null) return;
+        boolean stripMoves = (here == com.termux.app.dock.DockStyle.WALL_STRIP)
+            != (there == com.termux.app.dock.DockStyle.WALL_STRIP);
+        boolean fieldMoves = !mPromptFieldUnderPalette
+            && (here == com.termux.app.dock.DockStyle.PROMPT_LINE)
+                != (there == com.termux.app.dock.DockStyle.PROMPT_LINE);
+        if (!(stripMoves || fieldMoves) || mPromptFieldEase != null) return;
         if (!com.termux.app.place.SeamTravel.crosses(mLastWallPage, mTravelSeamOther)) return;
-        boolean committedHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
         float progress = Math.max(0f, Math.min(1f,
             com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage)));
-        float share = committedHome ? 1f - progress : progress;
-        if (Float.compare(share, mTravelHomeBandShare) == 0) return;
-        mTravelHomeBandShare = share;
+        if (Float.compare(progress, mTravelSeamBandProgress) == 0) return;
+        mTravelSeamBandProgress = progress;
         if (setTerminalToolbarHeight(false))
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
     /**
-     * Whether the slab carries the field at rest: where Home's dock wears the Prompt line, and
-     * not while the command palette it opens is up (the palette's own field is the one search
-     * box then, and the slab is the tray's until the palette goes).
+     * Whether the slab carries the field at rest: where the committed page's dock wears the
+     * Prompt line, and not while the command palette it opens is up (the palette's own field is
+     * the one search box then, and the slab is the tray's until the palette goes).
      */
     private boolean promptFieldWanted() {
         return mPreferences != null && dockSurfaceSpec().promptField && !mPromptFieldUnderPalette;
@@ -16851,8 +16897,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * A Dock style was picked: where the Prompt line's field or the Wall strip's row comes or goes
      * on a dock in view, the slab eases from what it shows now to its new height, before any pass
-     * lays the new style out. Anywhere else (off Home, the dock not laid out yet, reduced motion)
-     * the passes land it at once.
+     * lays the new style out, on either half. Anywhere else (the dock not laid out yet, reduced
+     * motion) the passes land it at once.
      */
     private boolean beginDockBandEase() {
         cancelDockBandEase();
@@ -16862,8 +16908,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float from = mAppliedPromptFieldReveal;
         float wallTarget = spec.wallStrip ? 1f : 0f;
         float wallFrom = mAppliedWallStripReveal;
-        if ((from == target && wallFrom == wallTarget) || isReducedMotionEnabled()
-            || !dressOf(mLastWallPage).picksDockDesign()) return false;
+        if ((from == target && wallFrom == wallTarget) || isReducedMotionEnabled()) return false;
         View stack = findViewById(R.id.accessory_stack_container);
         View rowHost = findViewById(R.id.apps_bar_row_host);
         if (stack == null || rowHost == null || stack.getVisibility() != View.VISIBLE
@@ -16994,7 +17039,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPromptFieldUnderPalette = under;
         if (mPreferences == null || mChrome == null || !dockSurfaceSpec().promptField) return;
         if (beginDockBandEase()) return;
-        // No ease (off Home, reduced motion, the dock not laid out): the pass lands it at once.
+        // No ease (reduced motion, the dock not laid out): the pass lands it at once.
         if (setTerminalToolbarHeight(false))
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -17002,14 +17047,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ------------------------------------------------------------------ Wall strip
     //
-    // Home's Wall strip (DockSurfaceSpec.WALL_STRIP), the expanded dock: a first row for the
-    // Workspace (WallStripRowView: a large clock with the date, the Workspace's terminal windows
-    // as tiles and a + tile) stands over the apps row in the row's own host, on the same slab
-    // (DockLayout.wallStripBandPx), so the dock's one glass, shelf and outline are the taller
-    // slab's. Its tiles are fed from the same window chips as the Taskbar's run strip
-    // (syncWindowBarItems, built on Home too); a tile's tap brings the Workspace in on its window.
-    // A style switch eases the slab with the Prompt line's ease; nothing here runs at rest but the
-    // clock's minute, which redraws the clock alone.
+    // The Wall strip (DockSurfaceSpec.WALL_STRIP), the expanded dock, on either half's dock
+    // (#93): a first row for the Workspace (WallStripRowView: a large clock with the date, the
+    // Workspace's terminal windows as tiles and a + tile) stands over the apps row in the row's
+    // own host, on the same slab (DockLayout.wallStripBandPx), so the dock's one glass, shelf and
+    // outline are the taller slab's; the Workspace's extra keys stay a band of their own beside
+    // it. Its tiles are fed from the same window chips as the Taskbar's run strip and the
+    // Workspace's bar (syncWindowBarItems, built on Home too); a tile's tap brings the Workspace
+    // in on its window. A style switch eases the slab with the Prompt line's ease; nothing here
+    // runs at rest but the clock's minute, which redraws the clock alone.
 
     /** The row, made the first time the slab carries it; null before. */
     @Nullable private com.termux.app.dock.WallStripRowView mWallStripRow;
@@ -17029,19 +17075,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * How much of the row the dock is laid out with: the ease's value while one runs, otherwise
-     * all of it where Home's dock wears the Wall strip and none anywhere else.
+     * all of it where the committed page's dock wears the Wall strip and none anywhere else.
      */
     private float wallStripReveal() {
         if (mPromptFieldEase != null) return mWallStripEaseValue;
         return mPreferences != null
-            && homeDress().dockDesign() == com.termux.app.dock.DockStyle.WALL_STRIP
-            ? homeBandShare() : 0f;
+            ? dockBandShare(com.termux.app.dock.DockStyle.WALL_STRIP) : 0f;
     }
 
-    /** Whether Home's dock wears the Wall strip, so its row wants the Workspace's windows. */
-    private boolean wallStripWanted() {
+    /** Whether {@code page}'s dock wears the Wall strip. */
+    private boolean wallStripOn(@NonNull com.termux.app.wall.PaneWallPage page) {
         return mPreferences != null
-            && homeDress().dockDesign() == com.termux.app.dock.DockStyle.WALL_STRIP;
+            && mDresses.dockDesignOf(page) == com.termux.app.dock.DockStyle.WALL_STRIP;
+    }
+
+    /** Whether the row is made and fed: a dock wears it, with split panes on. */
+    private boolean wallStripFed() {
+        return mWallStripRow != null && mPaneController != null && isSplitPanesEnabled()
+            && wallStripWanted();
+    }
+
+    /** Whether Home's dock wears the Wall strip, so its row carries Home's floats too. */
+    private boolean homeWallStrip() {
+        return wallStripOn(com.termux.app.wall.PaneWallPage.WIDGETS);
+    }
+
+    /**
+     * Whether a dock the row can show on wears the Wall strip, so its row wants the Workspace's
+     * windows: the committed page's, or Home's, whose row a slide across the seam brings in.
+     */
+    private boolean wallStripWanted() {
+        return wallStripOn(mLastWallPage)
+            || wallStripOn(com.termux.app.wall.PaneWallPage.WIDGETS);
     }
 
     /**
@@ -17183,8 +17248,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Feeds the row on Home from the window chips ({@code chips}, dressed as {@code items} by
-     * {@link #windowChipItems}): the row's terminal windows and the display window's at its
+     * Feeds the row, on either half, from the window chips ({@code chips}, dressed as
+     * {@code items} by {@link #windowChipItems}): the row's terminal windows and the display window's at its
      * place, then Home's floats (as the Taskbar's run strip lists them), each with its split
      * shape; the ringed tile is the Home float in focus, else the window the Workspace has in
      * front.
@@ -17228,8 +17293,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The row takes the windows as they are now, on Home where it shows; elsewhere it keeps what
-     * it had until Home comes back, and an empty row where the style is not the Wall strip.
+     * The row takes the windows as they are now, where it shows: on Home, or on a window whose
+     * dock wears it; elsewhere it keeps what it had until it shows again, and an empty row where
+     * no dock wears the Wall strip.
      */
     private void syncWallStripFeed() {
         com.termux.app.dock.WallStripRowView row = mWallStripRow;
@@ -17238,7 +17304,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             row.setTiles(java.util.Collections.emptyList());
             return;
         }
-        if (!isWidgetsPageShowing()) return;
+        if (!isWidgetsPageShowing() && !wallStripOn(mLastWallPage)) return;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) syncWindowBarItems(bar);
     }
@@ -21937,7 +22003,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Home wears its own Style, Corners and Margin: a crossing between halves that differ
         // dresses the chrome for the arriving one, as the variant above re-arranged it.
         restyleChromeForHalfIfChanged(left, page);
-        // Home's dock is the Glass tray: its geometry and its glass follow the arriving page.
+        // The dock wears the arriving page's Dock design; one design on both changes nothing.
         restyleDockSurfaceForPageIfChanged(left, page);
         // The readings live in a focused Home float's titlebar on Home, in the bar elsewhere.
         syncHomeFloatReadings();
@@ -22062,9 +22128,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Across the seam, how the stack crosses and which half's dress it wears are read before
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
         readSeamTravel(frame);
-        // Home's own bands on its dock follow the page across the seam.
+        // A band only one half's dock carries follows its page across the seam.
         syncSeamBandShare(frame);
-        // And Home's Lens beads melt into the slab, or come out of it, the same way.
+        // And Lens beads only one half draws melt into the slab, or come out of it, the same way.
         syncSeamBeadMelt(frame);
         // The dock rows are always laid out by the layout on screen, the minimal one included
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
@@ -22148,6 +22214,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             PlaceLayout otherLayout = store.resolve(orientation, other);
             mTravelSeamOther = other;
             mTravelSeamOtherLayout = otherLayout;
+            // Each half's Dock design, read once here so the frames read no store: one layout
+            // gives both halves one design, and then no band eases and no bead melts (#93).
+            mTravelSeamCommittedDesign = mDresses.dockDesignOf(mLastWallPage);
+            mTravelSeamOtherDesign = mDresses.dockDesignOf(other);
             com.termux.app.place.SeamDress.StackDress committedDress =
                 stackDressOf(mLastWallPage, orientation);
             com.termux.app.place.SeamDress.StackDress otherDress =
@@ -22160,6 +22230,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTravelSeamOtherKeyboard = mInAppKeyboard != null && mInAppKeyboard.isEnabled()
                 && wantsKeyboardOnEnter(other)
                 && otherLayout.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
+            // Beads melt only where one half's dock draws them and the other's does not: the
+            // committed half's as they lie now, the other's as its layout lays its row out (the
+            // Workspace's extra keys, or a keyboard in the stack, keep the slab there). One
+            // layout's two halves both drawing beads keep them all the way across.
+            boolean committedBeads = mDockBeads != null;
+            boolean otherBeads = mTravelSeamOtherDesign == com.termux.app.dock.DockStyle.LENS_BEADS
+                && com.termux.app.dock.LensBeadGeometry.rowWearsBeads(otherLayout,
+                    stackStandsDownOnFrame(), mTravelSeamOtherKeyboard);
+            mTravelSeamBeadMelt = committedBeads != otherBeads;
+            mTravelSeamBeadsCommitted = committedBeads;
             boolean exchangeable = com.termux.app.place.SeamTravel.dockExchangeable(committed)
                 && com.termux.app.place.SeamTravel.dockExchangeable(otherLayout);
             mTravelSeamPlan = com.termux.app.place.SeamDress.plan(
@@ -22707,13 +22787,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDockTravelTranslationPx = 0f;
             mKeyboardTravelSharePx = 0f;
             mTravelHeldOverlapPx = 0;
-            // Home's bands land as the page did: the commit below lays them out for the page it
-            // lands on, and a slide that came back lays them out whole again just after it.
-            boolean bandShareMoved = !Float.isNaN(mTravelHomeBandShare);
-            mTravelHomeBandShare = Float.NaN;
-            // Melting beads land as the page did: their own size on Home, the slab elsewhere.
+            // A half's own bands land as the page did: the commit below lays them out for the
+            // page it lands on, and a slide that came back lays them out whole again just after.
+            boolean bandShareMoved = !Float.isNaN(mTravelSeamBandProgress);
+            mTravelSeamBandProgress = Float.NaN;
+            mTravelSeamCommittedDesign = null;
+            mTravelSeamOtherDesign = null;
+            // Melting beads land as the page did: their own size on the beaded half, the slab
+            // on the other.
             boolean beadsMelted = !Float.isNaN(mSeamBeadShare);
             mSeamBeadShare = Float.NaN;
+            mTravelSeamBeadMelt = false;
             // The material blend, if one ran, has landed on the arriving place's material; the
             // pass below paints that material plainly, and the blend's layers go with it.
             mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
@@ -25150,7 +25234,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * tray, Lens beads and Prompt line keep the chips.
      */
     private boolean homeFloatChipsCarriedByDock() {
-        return runStripWanted() || (wallStripWanted() && isSplitPanesEnabled());
+        return runStripWanted() || (homeWallStrip() && isSplitPanesEnabled());
     }
 
     /** The shared frame the chips are drawing, for the blur cache's in-use scan. */
@@ -27341,8 +27425,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncBorderStatusSwipe(visible);
         if (!visible) {
             // Home wears no status bar, but the Taskbar's run strip and the Wall strip's tiles
-            // read the same windows.
-            if (isWidgetsPageShowing() && (runStripWanted() || wallStripWanted()))
+            // read the same windows, as a window's Wall strip does with its bar put away.
+            if (isWidgetsPageShowing() ? runStripWanted() || homeWallStrip()
+                : wallStripOn(mLastWallPage))
                 syncWindowBarItems(bar);
             applyTerminalSurfaceAppearance();
             // Idempotence: the widgets live inside the GONE host here, so nothing is shown either
@@ -27484,7 +27569,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Home wears no status bar: the bar is empty there, and the Taskbar's run strip or
             // the Wall strip's tiles show the chips, or the float chips above the dock bring the
             // minimised floats back. Nothing is observed while neither strip is fed.
-            items = homeDockShowsWindowChips()
+            items = homeDockShowsWindowChips() || wallStripFed()
                 ? windowChipItems(chips, com.termux.app.chrome.WindowChips.Surface.RUN_STRIP,
                     foregroundPids)
                 : java.util.Collections.emptyList();
@@ -27494,6 +27579,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else {
             items = windowChipItems(chips, com.termux.app.chrome.WindowChips.Surface.BAR,
                 foregroundPids);
+            // A window whose dock wears the Wall strip shows the row over its apps (#93): its
+            // tiles follow the windows here too, dressed as the strip dresses them.
+            if (wallStripFed() && wallStripOn(mLastWallPage))
+                syncWallStrip(chips, windowChipItems(chips,
+                    com.termux.app.chrome.WindowChips.Surface.RUN_STRIP,
+                    new java.util.ArrayList<>()));
         }
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
         // The row's own windows can be dragged to reorder, the display window's chip with them:
@@ -29736,7 +29827,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean homeDockShowsWindowChips() {
         return mPaneController != null
             && ((mRunStrip != null && runStripWanted())
-                || (mWallStripRow != null && wallStripWanted() && isSplitPanesEnabled()));
+                || (mWallStripRow != null && homeWallStrip() && isSplitPanesEnabled()));
     }
 
     /**

@@ -1247,7 +1247,7 @@ public class PlaceLayoutStoreTest {
         assertEquals("a window wears the layout whole", store.resolve(PORTRAIT), window);
         assertFalse(window.slot(Element.EXTRA_KEYS).hidden);
         assertFalse(window.slot(Element.STATUS).hidden);
-        assertEquals("the Workspace's dock stays the tray", DockStyle.GLASS_TRAY,
+        assertEquals("a window wears the layout's design too (#93)", DockStyle.LENS_BEADS,
             window.dockStyle);
 
         assertTrue(home.slot(Element.EXTRA_KEYS).hidden);

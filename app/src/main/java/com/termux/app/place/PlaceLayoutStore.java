@@ -565,8 +565,7 @@ public final class PlaceLayoutStore {
             isKeyboardShown(),
             widgetColumns(orientation),
             widgetRows(orientation),
-            // The Dock design the dress puts on the variant: the Workspace's dock has no style of
-            // its own and stays the dock it has always been.
+            // The Dock design the dress puts on the variant: the one it holds, on either half.
             DressResolver.dockDesignOn(variant, dockStyle()));
     }
 

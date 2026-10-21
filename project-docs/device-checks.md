@@ -30,6 +30,14 @@ under twenty items; past that, the oldest are re-judged first.
 - 2026-10-21 · commit "feat(statusbar): remove the house glyph from the bar" (#92) · The bar on
   the Workspace starts with the window chips, no house glyph, nothing clipped at the left; on Home
   no house beside the clock and the Workspace's mark peeks in at the far end only · emulator.
+- 2026-10-21 · commit "feat(dock): the Workspace's dock wears the Dock design" (#93) · Pick each
+  design on a window's page → Home and the Workspace dock both wear it (Home layout off); Beads,
+  Strip and Tray render with the extra keys row (Beads keep the slab while the extra keys or a
+  keyboard share the dock's glass, by design; beads with the extra keys hidden); the Wall strip's
+  tiles follow windows opened/closed on the Workspace; no dock re-dress on the Home↔window swipe;
+  with the Home layout on and a different design, the bands and beads ease across the seam; the
+  Workspace's Tray now has the tray's glass (rim, shelf, reflection) and, with the apps row next
+  to the terminal, its dashes above the slab · emulator.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on

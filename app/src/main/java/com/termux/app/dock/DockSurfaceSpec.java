@@ -12,8 +12,9 @@ import com.termux.app.chrome.GlassRefraction;
  * {@link GlassRefraction.Program#setReflection}) and the shelf under the slab each read the part
  * that is theirs.
  *
- * <p>{@link #PLAIN} is the dock exactly as it was, which the Workspace's dock and every surface
- * that is not Home's dock keep. {@link #GLASS_TRAY} is Home's default style
+ * <p>{@link #PLAIN} is the dock exactly as it was, which a layout pass that names no surface
+ * keeps; every page's dock, Home's and the Workspace's alike, wears its Dock design's spec (#93).
+ * {@link #GLASS_TRAY} is the default design
  * (project-docs/active/home-dock-styles-2026-10-20.md): one slab, equal air above and below the
  * icons, the dashes floating just above the slab, and the shared glass work every later style
  * builds on. {@link #LENS_BEADS} keeps the tray's geometry but draws no slab: each icon sits on
@@ -26,7 +27,10 @@ import com.termux.app.chrome.GlassRefraction;
  */
 public final class DockSurfaceSpec {
 
-    /** The dock as it always was: dashes in the row's own air, the narrow rim, no shelf, no reflection. */
+    /**
+     * The dock as it always was: dashes in the row's own air, the narrow rim, no shelf, no
+     * reflection. What a layout pass that names no surface gets; no Dock design draws it.
+     */
     @NonNull public static final DockSurfaceSpec PLAIN =
         new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false, false, false, 1f, false);
 
@@ -152,24 +156,9 @@ public final class DockSurfaceSpec {
     }
 
     /**
-     * The spec the dock wears on a page in Home's default style: Home's dock is the Glass tray,
-     * every other page's the plain dock.
+     * The spec a Dock design draws with, on whichever page's dock wears it (the page's dress
+     * names the design); a design not built yet is the Glass tray. No design is {@link #PLAIN}.
      */
-    @NonNull
-    public static DockSurfaceSpec forDock(boolean homeDock) {
-        return forDock(homeDock, DockStyle.GLASS_TRAY);
-    }
-
-    /**
-     * The spec the dock wears on a page: Home's dock wears Home's dock style as it draws
-     * ({@link DockStyle#effectiveStyle}), every other page's the plain dock whatever the style.
-     */
-    @NonNull
-    public static DockSurfaceSpec forDock(boolean homeDock, @Nullable DockStyle homeStyle) {
-        return homeDock ? forStyle(homeStyle) : PLAIN;
-    }
-
-    /** The spec a Home dock style draws with; a style not built yet is the Glass tray. */
     @NonNull
     public static DockSurfaceSpec forStyle(@Nullable DockStyle style) {
         switch (DockStyle.effectiveStyle(style)) {
