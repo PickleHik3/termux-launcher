@@ -277,6 +277,24 @@ public class PlaceLayoutStoreTest {
         assertFalse(prefs.contains("place.home.keyboard_open"));
     }
 
+    /** Minimal mode is read once per revision, and follows every write that moves it. */
+    @Test
+    public void minimalModeFollowsWritesFromAnywhere() {
+        PlaceLayoutStore store = store();
+        PlaceLayoutStore view = store.forVariant(LayoutVariant.NORMAL);
+        assertFalse(store.isMinimal());
+        assertFalse(view.isMinimal());
+        store.setMinimal(true);
+        assertTrue("a variant view reads the root's write", view.isMinimal());
+        // Another store over the same preferences, as the settings screens keep.
+        store().setMinimal(false);
+        assertFalse(store.isMinimal());
+        // And a write to the preferences themselves.
+        prefs.edit().putBoolean("place.minimal", true).commit();
+        assertTrue(store.isMinimal());
+        assertTrue(view.isMinimal());
+    }
+
     @Test
     public void minimalModeIsOneFlagForTheWholeLauncherBesideTheKeyboardMemory() {
         PlaceLayoutStore store = store();

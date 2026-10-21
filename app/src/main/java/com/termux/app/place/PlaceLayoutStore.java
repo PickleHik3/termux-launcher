@@ -299,6 +299,12 @@ public final class PlaceLayoutStore {
      */
     private int mHomeLayoutRevision = Integer.MIN_VALUE;
     private boolean mHomeLayout;
+    /**
+     * Minimal mode as last read, cached as the Home layout switch is: a window's Dock design is
+     * the minimal layout's or the normal one's, and the key lens asks that design every frame.
+     */
+    private int mMinimalRevision = Integer.MIN_VALUE;
+    private boolean mMinimal;
     private int mDockDesignRevision = Integer.MIN_VALUE;
     @Nullable private LayoutVariant mDockDesignVariant;
     @NonNull private DockStyle mDockDesign = DockStyle.GLASS_TRAY;
@@ -1194,7 +1200,12 @@ public final class PlaceLayoutStore {
      * remembered.
      */
     public boolean isMinimal() {
-        return mStore != null && mStore.getBoolean(minimalKey(), false);
+        int revision = mRevision.get();
+        if (mMinimalRevision != revision) {
+            mMinimal = mStore != null && mStore.getBoolean(minimalKey(), false);
+            mMinimalRevision = revision;
+        }
+        return mMinimal;
     }
 
     public void setMinimal(boolean minimal) {
