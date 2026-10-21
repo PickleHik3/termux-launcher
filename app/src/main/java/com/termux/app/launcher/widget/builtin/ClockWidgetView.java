@@ -207,9 +207,9 @@ public class ClockWidgetView extends BuiltinWidgetView {
         return isPreview() ? sampleNow() : ZonedDateTime.now(ZoneId.systemDefault());
     }
 
-    /** The design's sample moment in the phone's zone, so a preview reads 13:40 wherever it is. */
+    /** The design's sample moment, today at 13:40 in the phone's zone. */
     @NonNull static ZonedDateTime sampleNow() {
-        return ClockWidgetSupport.SAMPLE_NOW.toLocalDateTime().atZone(ZoneId.systemDefault());
+        return ClockWidgetSupport.sampleNow();
     }
 
     private boolean lazy() {
