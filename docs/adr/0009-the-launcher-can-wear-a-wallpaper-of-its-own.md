@@ -36,6 +36,24 @@ second path to choose between. One file with one mark keeps them all reading the
 
 Consequences: the launcher stays on the frame ADR 0002 and 0004 describe; nothing new is blurred
 or decoded per frame, and the mark is one in-memory preference read where the stored id already
-was. Material colours still come from Android's wallpaper: the roles are the system's
-(`Theme.Material3.DynamicColors`), and nothing in the managed flow captured them from the picture,
-so an app-only picture does not move them. Making them follow it is a separate decision.
+was.
+
+**The colours follow the app-only picture** (amended 2026-10-21; this ADR first left them on
+Android's wallpaper). While an app-only picture is on screen, every Material colour the launcher
+derives from "the wallpaper" comes from that picture: the activity and Settings themes, the
+terminal's Wallpaper colours, the exported palettes and the in-app keyboard. The picker's apply
+takes the picture's seed on its worker, from a small downsampled decode through Material's own
+content-based extraction (`DynamicColorsOptions.setContentBasedSource`), and stores it with the
+exact copy's stamp (`wallpaper_app_only_seed`, `wallpaper_app_only_seed_stamp`) before it writes
+the mark. Activity creation decodes nothing: it reads the seed, builds Material's content scheme
+from it, and loads it over the same `material_personalized_color_*` resources the terminal-scheme
+chrome uses (`LauncherSchemeTheme`), so every reader of a Material role follows without knowing.
+`WallpaperColorSource` holds the rule: the terminal scheme, when it owns the chrome, wins; below
+Android 12 nothing follows a wallpaper; a seed whose stamp is not the copy's is taken again on a
+worker (a picture set before seeds were kept, a restore) while Android's colours stand in. Android
+sends no configuration change for a picture it never got, so the activity checks its colours
+wherever it reads the wallpaper facts again (and Settings on resume) and recreates when they moved:
+a new app-only picture, the mark ended, the copy gone. The check compares what was decided, not
+what loaded, so a failed load cannot recreate in a loop. The contexts built outside an activity
+(the exported dark and light palettes, the background day/night refresh) are wrapped in the same
+colours.
