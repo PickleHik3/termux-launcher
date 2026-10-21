@@ -345,12 +345,38 @@ public final class WidgetPaneView extends FrameLayout {
         if (editOverlay == null) {
             editOverlay = new WidgetEditOverlayView(getContext());
             editOverlay.setId(R.id.widget_edit_overlay);
+            editOverlay.setReservedArea(overlayReservedArea());
             addView(editOverlay, new LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.MATCH_PARENT));
         } else if (indexOfChild(editOverlay) != getChildCount() - 1) {
             editOverlay.bringToFront();
         }
         return editOverlay;
+    }
+
+    /**
+     * What the page's frame draws over the edit chrome for the whole session — its editing tab —
+     * in this view's coordinates. The edit chips keep clear of it.
+     */
+    public void setWidgetEditReservedArea(@Nullable WidgetEditOverlayView.ReservedArea area) {
+        editReservedArea = area;
+        if (editOverlay != null) editOverlay.setReservedArea(overlayReservedArea());
+    }
+
+    /** The reserved area moved into the overlay's own coordinates, read fresh on every ask. */
+    @Nullable private WidgetEditOverlayView.ReservedArea overlayReservedArea() {
+        WidgetEditOverlayView.ReservedArea area = editReservedArea;
+        if (area == null) return null;
+        return out -> {
+            if (!area.fill(out)) return false;
+            if (editOverlay != null) out.offset(-editOverlay.getLeft(), -editOverlay.getTop());
+            return true;
+        };
+    }
+
+    /** Redraws the edit chrome, for a frame whose tab changed size or place under it. */
+    public void invalidateWidgetEditChrome() {
+        if (editOverlay != null) editOverlay.invalidate();
     }
 
     public void hideWidgetEditOverlay() {
@@ -474,6 +500,7 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     private WidgetEditOverlayView editOverlay;
+    @Nullable private WidgetEditOverlayView.ReservedArea editReservedArea;
 
     public void render(@NonNull LauncherWidgetRepository repository,
                        @NonNull LauncherWidgetHostController.Capability capability) {
