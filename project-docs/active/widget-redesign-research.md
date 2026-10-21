@@ -15,7 +15,7 @@ wallpapers are out (removed 2026-10-06, never to return). Glass may cost battery
 and any new glass term arrives as an opt-in knob. Widgets keep following the Base Look for glass and
 corners (decided 2026-10-19).
 
-Every external claim cites its primary source. Section 10 lists the sources, and section 9 lists
+Every external claim cites its primary source. Section 11 lists the sources, and section 10 lists
 every claim I could not confirm from one. Code references are paths under
 `app/src/main/java/com/termux/app/` unless shown otherwise. **Proposal** marks this note's own
 suggestions.
