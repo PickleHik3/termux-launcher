@@ -13,6 +13,7 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · #107 (feat/widget-redesign) · Weather at 1×1, 2×1, 2×2, 4×1, 4×2 on light and dark wallpaper, glass on/off, font 1.0 and 2.0: text inside the 12/16 dp inset, nothing clipped or overlapping, hero bold with tabular figures and centred, Nerd glyph fits, 4×2 days column beside its rule; against the approved mockups in ~/reports/widgets-research/mockups/weather-*.png · emulator.
 - 2026-10-21 · #103 (feat/widget-redesign) · A new 4×2 Terminal widget (light/dark wallpaper, glass on/off) and a portrait Workspace pane: the welcome box spans the width with no wrapped right border; landscape or tablet still shows the 66-column side-by-side box · emulator.
 - 2026-10-21 · #110 (feat/widget-redesign) · All six bar clock faces, full form alone and beside media, before (280042dd3) and after: pixel for pixel the same, including the date hairline, Flip's load flourish when the bar appears, the seconds animating, and the media art's vertical anchor beside a FULL face · emulator.
 - 2026-10-21 · #102 (feat/widget-redesign) · Battery 1×1 at font 1.0/1.3/2.0, charging and not: "100" and the bolt stay inside the inner disc, ring fills the card less 12 dp; Analog 1×1 dial fills the card width less 12 dp and draws as crisply as the picker preview; other spans and both picker previews unchanged · emulator.
