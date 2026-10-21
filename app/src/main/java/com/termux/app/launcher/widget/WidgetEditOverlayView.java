@@ -5,6 +5,9 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -22,6 +25,8 @@ import java.util.List;
  * Launcher-owned widget edit chrome drawn over the whole pane: the selected widget's frame with
  * per-axis resize handles and a remove chip, a thin outline around every other widget on the page
  * so the whole page reads as editable, and the snap-target ghost shown while a move drag is live.
+ * Widgets that refuse to make room for a move or a resize are tinted in the refusing ghost's red
+ * while the finger asks, and the tint fades out once it lets go.
  * All input on this overlay is consumed; a press on an outlined widget moves the selection there,
  * a press on empty space dismisses edit mode.
  */
@@ -54,7 +59,19 @@ public final class WidgetEditOverlayView extends View {
         }
     }
 
+    /**
+     * Where something else on the page draws over this overlay for the whole session (the page's
+     * editing tab), in this overlay's coordinates. The chips keep clear of it.
+     */
+    public interface ReservedArea {
+        /** Fills {@code out}; false when nothing is out right now. */
+        boolean fill(@NonNull Rect out);
+    }
+
     private enum Mode { NONE, MOVE, RESIZE, CHIP, SETTINGS }
+
+    /** How long a refusal's tint takes to fade once the finger lets go. */
+    static final long REFUSAL_FADE_MS = 600L;
 
     private final Paint framePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint outlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -81,6 +98,15 @@ public final class WidgetEditOverlayView extends View {
     @Nullable private Listener listener;
     private Mode mode = Mode.NONE;
     @Nullable private WidgetEditPolicy.Handle activeHandle;
+    @Nullable private ReservedArea reservedArea;
+    private final Rect reserved = new Rect();
+    /** The widgets refusing the current ask, or the last one while its tint fades. */
+    @NonNull private List<Rect> refusal = Collections.emptyList();
+    /** When the refusal's fade began, in uptime milliseconds; 0 while the finger still asks. */
+    private long refusalFadeStart;
+    private final Runnable clearRefusalAfterFade = this::clearRefusal;
+    /** Its own handler, so the fade ends even while the view is between windows. */
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     public WidgetEditOverlayView(@NonNull Context context) {
         super(context);
@@ -166,6 +192,7 @@ public final class WidgetEditOverlayView extends View {
         dragging = false;
         configurable = false;
         ghost = null;
+        clearRefusal();
         outlines = Collections.emptyList();
         mode = Mode.NONE;
         setVisibility(GONE);
@@ -212,6 +239,60 @@ public final class WidgetEditOverlayView extends View {
         invalidate();
     }
 
+    /**
+     * The tab or other chrome that sits over this overlay; the remove and settings chips move
+     * below it rather than under it. Kept across sessions: the tab outlives any one widget.
+     */
+    public void setReservedArea(@Nullable ReservedArea area) {
+        reservedArea = area;
+        invalidate();
+    }
+
+    /**
+     * The widgets standing where the finger asked, which would not make room: tinted red for as
+     * long as the ask stands. An empty list clears the tint at once.
+     */
+    public void showRefusal(@NonNull List<Rect> blockers) {
+        handler.removeCallbacks(clearRefusalAfterFade);
+        refusalFadeStart = 0L;
+        if (blockers.isEmpty()) {
+            if (refusal.isEmpty()) return;
+            refusal = Collections.emptyList();
+        } else {
+            List<Rect> copy = new ArrayList<>(blockers.size());
+            for (Rect bounds : blockers) copy.add(new Rect(bounds));
+            refusal = copy;
+        }
+        invalidate();
+    }
+
+    /**
+     * The finger let go: a refusal still showing fades out, so a drop that went back or a grow
+     * that stopped short still says who stopped it. Nothing happens when nothing refused.
+     */
+    public void flashRefusal() {
+        if (refusal.isEmpty()) return;
+        refusalFadeStart = Math.max(1L, SystemClock.uptimeMillis());
+        handler.removeCallbacks(clearRefusalAfterFade);
+        handler.postDelayed(clearRefusalAfterFade, REFUSAL_FADE_MS);
+        invalidate();
+    }
+
+    public void clearRefusal() {
+        handler.removeCallbacks(clearRefusalAfterFade);
+        refusalFadeStart = 0L;
+        if (refusal.isEmpty()) return;
+        refusal = Collections.emptyList();
+        invalidate();
+    }
+
+    /** The bounds tinted as refusing, live or fading. */
+    @NonNull public List<Rect> refusalBounds() {
+        List<Rect> copy = new ArrayList<>(refusal.size());
+        for (Rect bounds : refusal) copy.add(new Rect(bounds));
+        return copy;
+    }
+
     /** The snap target being shown, or null while none is. */
     @Nullable public Rect ghostBounds() { return ghost == null ? null : new Rect(ghost); }
 
@@ -220,6 +301,7 @@ public final class WidgetEditOverlayView extends View {
 
     @Override protected void onDraw(@NonNull Canvas canvas) {
         if (!frameVisible) return;
+        drawRefusal(canvas);
         if (ghost != null) {
             RectF ghostRect = new RectF(ghost);
             float radius = dp(14f);
@@ -260,6 +342,28 @@ public final class WidgetEditOverlayView extends View {
             settingsY - (metrics.ascent + metrics.descent) / 2f, chipGlyphPaint);
     }
 
+    private void drawRefusal(@NonNull Canvas canvas) {
+        if (refusal.isEmpty()) return;
+        float alpha = 1f;
+        if (refusalFadeStart > 0L) {
+            long elapsed = SystemClock.uptimeMillis() - refusalFadeStart;
+            alpha = 1f - Math.min(1f, Math.max(0f, elapsed / (float) REFUSAL_FADE_MS));
+            if (alpha <= 0f) return;
+            postInvalidateOnAnimation();
+        }
+        int fillAlpha = blockedFillPaint.getAlpha(), strokeAlpha = blockedStrokePaint.getAlpha();
+        blockedFillPaint.setAlpha(Math.round(fillAlpha * alpha));
+        blockedStrokePaint.setAlpha(Math.round(strokeAlpha * alpha));
+        float radius = dp(14f);
+        for (Rect bounds : refusal) {
+            RectF rect = new RectF(bounds);
+            canvas.drawRoundRect(rect, radius, radius, blockedFillPaint);
+            canvas.drawRoundRect(rect, radius, radius, blockedStrokePaint);
+        }
+        blockedFillPaint.setAlpha(fillAlpha);
+        blockedStrokePaint.setAlpha(strokeAlpha);
+    }
+
     private void drawHandle(Canvas canvas, float x, float y, float radius) {
         canvas.drawCircle(x, y, radius, handlePaint);
         canvas.drawCircle(x, y, radius, handleRingPaint);
@@ -298,10 +402,31 @@ public final class WidgetEditOverlayView extends View {
         return Math.min(Math.max(center, radius + inset), getWidth() - radius - inset);
     }
 
+    /**
+     * The row the chip pair sits on. Where the pair would land under the reserved area (the page's
+     * editing tab, out for the whole session, which takes the taps there and covers the drawing)
+     * both chips drop together to just below it, on the same side of the frame they took.
+     */
     float chipCenterY() {
         float radius = chipRadius(), inset = dp(2f);
         float center = inTopRow() ? frame.top + radius + inset : frame.top + inset;
-        return Math.min(Math.max(center, radius + inset), getHeight() - radius - inset);
+        center = Math.min(Math.max(center, radius + inset), getHeight() - radius - inset);
+        if (reservedArea == null || !reservedArea.fill(reserved) || reserved.isEmpty()) {
+            return center;
+        }
+        float gap = dp(4f);
+        float chipX = chipCenterX();
+        float left = chipX - radius - gap, right = chipX + radius + gap;
+        if (configurable) {
+            float settingsX = settingsCenterX();
+            left = Math.min(left, settingsX - radius - gap);
+            right = Math.max(right, settingsX + radius + gap);
+        }
+        boolean covered = left < reserved.right && reserved.left < right
+            && center - radius - gap < reserved.bottom && reserved.top < center + radius + gap;
+        if (!covered) return center;
+        float below = reserved.bottom + gap + radius;
+        return Math.min(Math.max(below, radius + inset), getHeight() - radius - inset);
     }
 
     /** Whether the cog chip is on the frame at all. */
