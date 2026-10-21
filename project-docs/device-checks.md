@@ -13,6 +13,13 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "feat(dock): the Drawer tile is a toggle beside any design" (#97) · Drawer
+  tile toggle beside Search (Layout editor, dock selected; Row B fits at 360 dp, the "Drawer" label
+  not ellipsized, no Taskbar chip); the tile opens the drawer on Home and in a window, with
+  Tray/Beads/Strip (on Beads it stands on its own bead, and the bead stays under the tile while a
+  swipe carries the pages; judge it); drag it to start/middle/end and it stays; Taskbar users land
+  on Tray with the tile at its old place (the Taskbar's lower 0.6 reflection is gone: the Tray's
+  own) · emulator, fresh install then an install over a build with Taskbar picked.
 - 2026-10-21 · commit "feat(dock): the Search field is a toggle beside any design" (#96) · Search
   field toggle beside the design picker (Layout editor, dock selected; Row B fits at 360 dp, the
   "Search" label not ellipsized, no Prompt line chip, no "Ask" anywhere); field under the apps row
