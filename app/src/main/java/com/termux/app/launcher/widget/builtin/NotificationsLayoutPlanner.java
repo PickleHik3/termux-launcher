@@ -19,8 +19,9 @@ import java.util.List;
  * two-row span adds a header ("Messages 5") and one row per person or app: icon, sender in the
  * Title weight, a count badge where there is more than one, and a body of two lines. A body
  * takes every line it has, up to two; where the room is short the second line goes first, then
- * the title, then whole rows from the bottom. The smallest span is 2×1: a 1×1 is planned at
- * {@link #ONE_BY_ONE_LOGICAL_WIDTH_DP} and drawn scaled down. Android-free.
+ * the title, then whole rows from the bottom. The smallest span offered is 2×1; an existing
+ * 1×1 draws a glance, legible and never scaled: a bell with the count and the top sender's name.
+ * Android-free.
  *
  * <p>Part ids: {@code icon.N}, {@code badge.N} (where the badge sits, drawn by the view) with
  * {@code count.N} (its number), {@code title.N}, {@code body.N.M}, {@code rule.N}, {@code row.N}
@@ -36,11 +37,7 @@ final class NotificationsLayoutPlanner {
     /** The bell of a notice and of an icon that cannot be drawn. */
     static final String GLYPH_BELL = "";
 
-    /**
-     * A 1×1 is planned as a 2×1 this wide, in dp, and drawn scaled down to the card; narrower
-     * than a 2×1's design so the text stays as large as it can.
-     */
-    static final float ONE_BY_ONE_LOGICAL_WIDTH_DP = 152f;
+    private static final float ICON_GLANCE_DP = 24f;
 
     private static final int MAX_BODY_LINES = 2;
     private static final float ICON_ROW_DP = 36f;
@@ -87,13 +84,14 @@ final class NotificationsLayoutPlanner {
                                           @NonNull List<Group> groups, @Nullable Notice notice,
                                           boolean canClear, @NonNull Words words,
                                           @NonNull Measure measure) {
-        BuiltinWidgetSpan drawn = span == BuiltinWidgetSpan.ONE_BY_ONE
-            ? BuiltinWidgetSpan.TWO_BY_ONE : span;
+        BuiltinWidgetSpan drawn = span;
         Box card = new Box(0f, 0f, widthDp, heightDp);
         Box inner = WidgetLayoutPlan.insetBox(widthDp, heightDp, WidgetTokens.insetDp(drawn));
         Builder b = new Builder(drawn, fontScale, words, measure);
         if (notice != null || groups.isEmpty()) {
             b.notice(inner, notice == null ? new Notice("", "") : notice);
+        } else if (drawn == BuiltinWidgetSpan.ONE_BY_ONE) {
+            b.glance(inner, groups);
         } else if (drawn.isTall()) {
             b.tall(inner, groups, canClear && drawn.isWide());
         } else {
@@ -153,6 +151,42 @@ final class NotificationsLayoutPlanner {
             parts.add(Part.text("count." + n, new Box(right - (size[0] + w) / 2f,
                 top + (size[1] - line(Role.LABEL)) / 2f, w, line(Role.LABEL)), count, Role.LABEL,
                 true, size(Role.LABEL), Ink.MOON));
+        }
+
+        // ----- 1×1 ------------------------------------------------------------------------
+
+        /**
+         * A bell with the count beside it, over the top sender's name; the name goes first where
+         * the card is short, then the bell shrinks to what is left.
+         */
+        void glance(@NonNull Box inner, @NonNull List<Group> groups) {
+            int total = 0;
+            for (Group g : groups) total += g.count;
+            String count = words.count(total);
+            Role countRole = line(Role.TITLE) <= inner.height ? Role.TITLE : Role.LABEL_FORCED;
+            Group top = groups.get(0);
+            String name = top.person() ? top.newest.who : top.newest.app;
+            float rowH = Math.min(Math.max(ICON_GLANCE_DP, line(countRole)), inner.height);
+            float nameH = line(Role.LABEL);
+            boolean showName = rowH + GAP_S + nameH <= inner.height + WidgetLayoutPlan.EPSILON;
+            float height = rowH + (showName ? GAP_S + nameH : 0f);
+            float y = inner.top + (inner.height - height) / 2f;
+            float countFull = width(count, countRole, true);
+            float bell = Math.min(Math.min(ICON_GLANCE_DP, rowH),
+                Math.max(0f, inner.width - GAP_S - countFull));
+            float countW = Math.min(countFull, Math.max(0f, inner.width - bell - GAP_S));
+            float rowW = bell + GAP_S + countW;
+            float x = inner.left + (inner.width - rowW) / 2f;
+            parts.add(Part.glyph("glyph", new Box(x, y + (rowH - bell) / 2f, bell, bell), GLYPH_BELL,
+                Ink.STRONG));
+            parts.add(Part.text("header.count", new Box(x + bell + GAP_S,
+                y + (rowH - line(countRole)) / 2f, countW, line(countRole)), count, countRole, true,
+                size(countRole), Ink.STRONG));
+            if (showName) {
+                float w = Math.min(width(name, Role.LABEL, false), inner.width);
+                parts.add(Part.text("title.0", new Box(inner.centerX() - w / 2f, y + rowH + GAP_S, w,
+                    nameH), name, Role.LABEL, false, size(Role.LABEL), Ink.SOFT));
+            }
         }
 
         // ----- one row --------------------------------------------------------------------
