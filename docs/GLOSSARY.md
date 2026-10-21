@@ -1,7 +1,7 @@
 # Glossary
 
 The language the code, the docs and the developer use. One file: the product model (the wall, chrome,
-editors, voice, local AI) and the words the project uses about itself (editions, releases, pong,
+editors, widgets, voice, local AI) and the words the project uses about itself (editions, releases, pong,
 the seams). AGENTS.md carries the rules; this carries the names. Terms are alphabetical within
 each section. `_Avoid_` lines list the words not to use for a term.
 
@@ -444,6 +444,44 @@ The strip under the layout canvas: one chip, with a struck-through eye, per hidd
 brings the element back to the edge it was put away from; one short line when nothing is hidden;
 "Drop here to hide" while something is lifted.
 _Avoid_: Hidden box, shelf
+
+### Widgets
+
+The launcher's own Home widgets after the redesign (ADR 0010, decided 2026-10-21, research
+`project-docs/active/widget-redesign-research.md`). None of it is built yet: until it is, the code
+and the picker still have the twelve older kinds, whose names are kept under _Avoid_.
+
+**Bare**:
+A widget drawn without its card: its ink sits straight on the wallpaper, dimmed only where it would
+not read. It is an opt-in per widget, offered by the Clock, **Glance** and Weather. The **Look**'s
+Clear stop does not turn it on.
+_Avoid_: Clear (that is a Look stop), transparent, no card
+
+**Clock face**:
+One of the designs a clock is drawn in: Analog, Numerals, Slab, Flip, LCD, LED matrix, Tape and
+Minimal, the same designs in the status bar and on the Clock widget. A new Clock widget starts on the
+bar's current face, and from then on each is chosen on its own.
+_Avoid_: clock style (the setting's old name), skin, Analog clock and Digital clock (the two widgets
+the Clock replaces)
+
+**Device**:
+The widget for the phone's own state: battery first, then storage, memory and temperature as it
+grows, and the processor only where the launcher has privileged access.
+_Avoid_: Battery widget, System widget (the two it replaces), stats
+
+**Glance**:
+The one-row widget for the first look of the day: the date, the next event, the weather, the next
+alarm and, when low or charging, the battery. It never shows the time, which is the Clock's.
+_Avoid_: At a Glance (Pixel's), summary, today
+
+**Notes**:
+The widget that shows a markdown file from the home folder, opening it in the editor on a tap.
+_Avoid_: Scratchpad (as the widget's name; the scratchpad is the toggled floating terminal), memo
+
+**Widgets on glass**:
+The **Look**'s one switch for whether the launcher's widgets wear its glass, following **Base**. A
+widget's own Glass switch can still set it apart.
+_Avoid_: widget glass (for the per-widget switch alone), glass mode
 
 ### Tlstore
 
