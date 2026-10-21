@@ -215,18 +215,20 @@ public class LayoutEditorHomeLayoutTest {
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             assertEquals(DockStyle.effectiveStyle(DockStyle.WALL_STRIP),
                 places.resolve(orientation, LayoutVariant.HOME).dockStyle);
-            assertEquals("the Workspace's dock has no style", DockStyle.GLASS_TRAY,
+            assertEquals("the Workspace's layout keeps its own design", DockStyle.GLASS_TRAY,
                 places.resolve(orientation, LayoutVariant.NORMAL).dockStyle);
         }
     }
 
     @Test
-    public void theWorkspaceLayoutOffersNoDockStyle() {
+    public void theWorkspaceLayoutOffersItsDockDesign() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
-        assertFalse(plan.offersDockStyle());
-        assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.LENS_BEADS));
-        assertFalse(prefs().contains("layout.dock_design"));
-        assertFalse(plan.isDirty());
+        assertTrue(plan.offersDockStyle());
+        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setDockStyle(DockStyle.LENS_BEADS));
+        assertEquals(DockStyle.LENS_BEADS, places.forVariant(LayoutVariant.NORMAL).dockStyle());
+        assertEquals("the Home layout keeps its own", DockStyle.GLASS_TRAY,
+            places.forVariant(LayoutVariant.HOME).dockStyle());
+        assertTrue(plan.isDirty());
     }
 
     @Test
@@ -247,7 +249,7 @@ public class LayoutEditorHomeLayoutTest {
         assertTrue(plan.offersDockStyle());
         plan.setDockStyle(DockStyle.LENS_BEADS);
         plan.showHome(false);
-        assertFalse(plan.offersDockStyle());
+        assertTrue("a window offers its layout's design", plan.offersDockStyle());
         assertTrue("the Home layout's pick is still unsaved", plan.isDirty());
         plan.revert();
         assertEquals(DockStyle.GLASS_TRAY, places.forVariant(LayoutVariant.HOME).dockStyle());

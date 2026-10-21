@@ -124,9 +124,9 @@ public class LayoutEditorSharedLayoutTest {
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setDockStyle(DockStyle.LENS_BEADS));
         assertEquals(DockStyle.LENS_BEADS, places.forVariant(LayoutVariant.NORMAL).dockStyle());
         assertEquals(DockStyle.LENS_BEADS, plan.shownLayout().dockStyle);
-        assertEquals("the windows' dock stays the tray until #93", DockStyle.GLASS_TRAY,
+        assertEquals("the windows' dock wears it too", DockStyle.LENS_BEADS,
             places.resolve(PORTRAIT, PaneWallPage.TERMINAL).dockStyle);
-        assertFalse(LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT)
+        assertTrue(LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT)
             .offersDockStyle());
 
         plan.revert();
