@@ -141,6 +141,9 @@ public class RootPreferencesSearchIndexTest {
         assertFalse("status bar page has no idle activity row", isVisible(root, "status_bar"));
         assertFalse("App behavior only links to it", isVisible(root, "app_behavior"));
 
+        search.getOnQueryChangedListener().onQueryChanged("lazy mode");
+        assertTrue("the old name is a search term of its own", isVisible(root, "performance"));
+
         search.getOnQueryChangedListener().onQueryChanged("low-memory preset");
         assertTrue(isVisible(root, "performance"));
         assertEquals("the hit opens the page itself",

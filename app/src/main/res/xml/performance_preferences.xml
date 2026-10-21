@@ -12,7 +12,10 @@
             app:key="lazy_mode"
             app:title="@string/settings_behavior_idle_title"
             app:summary="@string/settings_behavior_idle_summary"
-            app:defaultValue="false" />
+            app:defaultValue="false">
+            <!-- Its old name, so a search for it still lands here. -->
+            <extra android:name="search_terms" android:value="lazy mode" />
+        </SwitchPreferenceCompat>
         <SwitchPreferenceCompat
             app:key="low_memory_preset"
             app:title="@string/settings_behavior_low_memory_title"

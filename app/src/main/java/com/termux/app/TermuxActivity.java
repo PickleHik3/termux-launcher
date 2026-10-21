@@ -26327,6 +26327,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateAppLauncherBarHeight();
         applyPaddingFillPolicyToVisiblePanes();
         applyTrailStyleAndRetroEffect();
+        // Settings can switch the trail off for every pane, not only the focused one onResume re-reads.
+        applyCursorTrailEnabledToPanes();
         if (mWidgetPaneController != null) mWidgetPaneController.onLookChanged();
         applySuggestionBarPreferences();
         if (mSuggestionBarView != null) {

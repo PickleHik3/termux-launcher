@@ -973,8 +973,12 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 CharSequence title = child.getTitle();
                 CharSequence summary = child.getSummary();
                 String titleText = title == null ? "" : title.toString();
-                String searchable = (titleText + " " + (summary == null ? "" : summary.toString()))
-                    .trim().toLowerCase(Locale.ROOT);
+                // An <extra android:name="search_terms"> in the XML: words a row is found by without
+                // showing them, such as a feature's old name.
+                String terms = child.peekExtras() == null ? null
+                    : child.peekExtras().getString("search_terms");
+                String searchable = (titleText + " " + (summary == null ? "" : summary.toString())
+                    + " " + (terms == null ? "" : terms)).trim().toLowerCase(Locale.ROOT);
                 if (!searchable.isEmpty()) {
                     out.add(new ChildSearchEntry(titleText, searchable, page));
                 }
