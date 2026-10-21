@@ -10,10 +10,11 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
 import java.util.Objects;
 
 /**
- * The Style, Corners and Margin one half of the wall wears (ADR 0008): Home's on the Home pages,
- * the Workspace's on the windows. Corners and Margin are in dp as stored, Corners' -1 being the
- * auto token. A value, so the chrome can tell whether crossing between the halves changes its
- * shape at all ({@link HomeChromePolicy#shapeChanges}).
+ * The Style, Corners and Margin the halves of the wall wear (ADR 0008): the Workspace's, on the
+ * windows and on the Home pages alike, a Home layout of its own included (ADR 0009; linked since
+ * #84, so crossing between the halves never changes the shape). Corners and Margin are in dp as
+ * stored, Corners' -1 being the auto token. A value, so the chrome can compare the shape each
+ * side wears ({@link com.termux.app.chrome.Dress#shape}).
  */
 public final class WallHalfShape {
 
@@ -37,7 +38,10 @@ public final class WallHalfShape {
         return new WallHalfShape(style, cornersDp, marginDp);
     }
 
-    /** One half's three values as preferences hold them now; Home's read the Workspace's while unset. */
+    /**
+     * One half's three values as preferences hold them now: the Workspace's on either half, since
+     * the per-half accessors are linked (#84).
+     */
     @NonNull
     public static WallHalfShape read(@Nullable TermuxAppSharedPreferences prefs, boolean home) {
         if (prefs == null) return DEFAULT;

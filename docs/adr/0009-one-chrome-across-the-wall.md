@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-21
-supersedes: 0008's "Home wears no status bar" amendment (2026-10-19), and 0008's two layouts and Workspace-only Minimal mode
+supersedes: 0008's "Home wears no status bar" amendment (2026-10-19), and 0008's two layouts
 ---
 
 # One chrome across the wall: Home and the Workspace share one layout, bar and dock
@@ -16,7 +16,7 @@ Home floats included) and the same dock (one set of rows, one height, one **Dock
 still while the wall moves. Only the extra keys stay the Workspace's own, folding away with the
 travel toward Home. A user who wants Home laid out differently opts into a **Home layout**, much as
 a surface holds an override of **Base**; only then may the bar and dock change on the swipe.
-Minimal mode applies to both halves. The design, the **Search field** and the **Drawer tile** are
+Minimal mode stays the Workspace's: Home has no corner tab to leave it by, so it ignores minimal (amended the same day; the command palette gains a Minimal action). The design, the **Search field** and the **Drawer tile** are
 held by the layout.
 
 Considered options: keeping the bar Workspace-only and unifying the dock alone (still a seam at the

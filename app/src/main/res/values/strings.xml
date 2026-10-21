@@ -410,10 +410,10 @@
     <string name="launcher_entry_display">Display</string>
     <string name="launcher_entry_new_float">New float here</string>
     <string name="window_chip_home_float">Home float, page %1$d</string>
+    <!-- A minimised Home float's window chip in the bar, spoken after its label: it is folded into the chip. -->
+    <string name="window_chip_home_float_minimised">Home float, minimised on page %1$d</string>
     <!-- What a screen reader says for the display window's chip: the app in front, then Display. -->
     <string name="display_window_spoken_label">%1$s, %2$s</string>
-    <!-- A minimised Home float's chip above the dock, spoken: its window's label and its page. -->
-    <string name="home_float_chip_description">%1$s, minimised on page %2$d</string>
     <string name="launcher_entry_new_window">New window</string>
     <string name="termux_x11_session_failed">This desktop could not be opened.</string>
     <string name="termux_x11_session_replace">Stop %1$s and open %2$s instead?</string>
@@ -1980,9 +1980,16 @@
                 <!-- The chooser above the miniature. The header already says what is edited, so
                      this row only has to say which of its two layouts is on the picture. -->
                 <string name="termux_layout_editor_orientation">Orientation</string>
-                <!-- The Home filter beside the orientation toggle: on, the picture and every edit
-                     are Home's layout; off, the window's. -->
-                <string name="layout_editor_home_filter">Home layout</string>
+                <!-- The Home filter beside the orientation toggle: on, the picture is a Home page;
+                     off, the window's. Every edit lands on the layout that page wears. -->
+                <string name="layout_editor_home_filter">Show Home</string>
+                <!-- The Home layout line under that row (#89): its label, and its two segments'
+                     words, with their full names for the screen reader and the tooltip. -->
+                <string name="layout_editor_home_layout_label">Layout</string>
+                <string name="layout_editor_home_layout_one">One layout</string>
+                <string name="layout_editor_home_layout_own">Home\'s own</string>
+                <string name="layout_editor_home_layout_off">One layout for every screen</string>
+                <string name="layout_editor_home_layout_on">Home has its own layout</string>
                 <string name="termux_layout_editor_revert">Undo changes</string>
                 <string name="termux_layout_editor_unsaved_message">Discard your changes, or save them?</string>
                 <string name="termux_layout_editor_narrow_notice">With bars down the side there is not much room left.</string>
@@ -2009,13 +2016,21 @@
                 <string name="layout_editor_key_radius_description">Key radius</string>
                 <string name="layout_editor_keyboard">Keyboard</string>
                 <string name="layout_editor_keyboard_forms">Keyboard type</string>
-                <!-- Home's dock styles, in Row B while Home's dock is selected. -->
-                <string name="layout_editor_dock_styles">Dock style</string>
-                <string name="layout_editor_dock_style_glass_tray">Glass tray</string>
-                <string name="layout_editor_dock_style_lens_beads">Lens beads</string>
-                <string name="layout_editor_dock_style_taskbar">Taskbar</string>
-                <string name="layout_editor_dock_style_prompt_line">Prompt line</string>
-                <string name="layout_editor_dock_style_wall_strip">Wall strip</string>
+                <!-- The Dock designs, in Row B while the dock is selected (#93). -->
+                <string name="layout_editor_dock_styles">Dock design</string>
+                <string name="layout_editor_dock_style_glass_tray">#1 Tray</string>
+                <string name="layout_editor_dock_style_lens_beads">#2 Beads</string>
+                <string name="layout_editor_dock_style_wall_strip">#3 Strip</string>
+                <!-- The Search field toggle beside the Dock designs (#96): the command palette's
+                     field under the dock's apps row, with any design. The label stands under its
+                     chip in a fifth of the row, so it stays one short word. -->
+                <string name="layout_editor_search_field">Search field</string>
+                <string name="layout_editor_search_field_label">Search</string>
+                <!-- The Drawer tile toggle after the Search field (#97; once the Taskbar style): a
+                     tile among the dock's apps that opens the app drawer, with any style. Its
+                     label shares the row the same way, so it too stays one short word. -->
+                <string name="layout_editor_drawer_tile">Drawer tile</string>
+                <string name="layout_editor_drawer_tile_label">Drawer</string>
                 <!-- What a resize handle shows while it is dragged, in the store's real units. The
                      dp forms are the live launcher measured after the write; the × forms are for
                      the orientation the phone is not in, where there is nothing live to measure. -->
@@ -2024,6 +2039,7 @@
                 <string name="layout_editor_readout_keyboard_dp">Keyboard %1$d dp</string>
                 <string name="layout_editor_readout_keyboard_scale">Keyboard ×%1$s</string>
                 <string name="layout_editor_readout_chin">Bottom padding %1$d dp</string>
+                <string name="layout_editor_readout_wall_strip">Strip row %1$d dp</string>
                 <string name="layout_editor_readout_grid">%1$d × %2$d cells</string>
                 <!-- The sheet's handle, read aloud: it is pulled or tapped to grow the card. -->
                 <string name="termux_layout_editor_sheet_handle">Expand or collapse the editor</string>
@@ -2163,13 +2179,12 @@
     <string name="palette_home_go_to_workspace">Go to Workspace</string>
     <string name="palette_home_go_to_workspace_hint">Slide over to your windows</string>
     <string name="palette_home_new_window">New window</string>
-    <!-- Home's dock styles: the Prompt line's field, the run strip and the Wall strip's tiles. -->
+    <!-- The dock's Search field and the Wall strip's tiles. -->
     <string name="dock_prompt_line_hint">Search apps, commands, settings</string>
-    <string name="dock_run_strip_minimised">%1$s, minimised</string>
     <string name="dock_run_strip_attention">%1$s, needs attention</string>
     <string name="dock_wall_strip_new_terminal">New terminal</string>
-    <!-- The Taskbar's Home tile, spoken: it opens the app drawer; hold to move it. -->
-    <string name="dock_taskbar_home_tile">All apps</string>
+    <!-- The Drawer tile (#97), spoken: it opens the app drawer; hold to move it. -->
+    <string name="dock_drawer_tile">All apps</string>
     <string name="palette_home_minimise_floats">Minimise all floats</string>
     <string name="palette_home_minimise_floats_hint">Tuck every floating terminal into its chip</string>
     <string name="palette_home_restore_floats">Restore floats</string>
@@ -2240,6 +2255,8 @@
     <string name="tool_keyboard_hide">Hide keyboard</string>
     <string name="tool_keyboard_clipboard">Clipboard history</string>
     <string name="tool_keyboard_toggle_enabled">Keyboard on/off</string>
+    <string name="tool_minimal_toggle">Minimal on/off</string>
+    <string name="tool_desc_minimal_toggle">Turn minimal mode on or off. Only the windows wear it; Home keeps its layout.</string>
     <string name="tool_voice_dictate">Dictate</string>
     <string name="tool_desc_voice_dictate">Start dictating, or stop. The text waits in the panel until you insert or copy it.</string>
     <string name="tool_desc_keyboard_clipboard">Open or close the list of things you copied.</string>

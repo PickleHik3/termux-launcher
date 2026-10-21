@@ -3053,7 +3053,7 @@ public final class TerminalView extends View {
      *              the session is actually resized: {@code layout}, {@code attach}, {@code direct}
      *              (a caller's own re-measure), or the cause a paused span was resumed with
      */
-    private void updateSize(boolean keepCursorAtBottom, @NonNull String cause) {
+    private void updateSize(boolean allowZeroHeight, @NonNull String cause) {
         if (mTerminalSizeUpdatesPaused) {
             mTerminalSizeUpdatePending = true;
             invalidate();
@@ -3070,7 +3070,7 @@ public final class TerminalView extends View {
         // (e.g. a split pane made visible before setTextSize()). Nothing to size yet.
         // A settled host takeover may intentionally leave the pane at zero height. It still owes
         // the PTY its single final (minimum-row) size; ordinary pre-layout zeroes remain ignored.
-        if (viewWidth == 0 || (viewHeight == 0 && !keepCursorAtBottom)
+        if (viewWidth == 0 || (viewHeight == 0 && !allowZeroHeight)
             || mTermSession == null || mRenderer == null) {
             if (travelling) endTravelDisplacement(false);
             return;
@@ -3080,11 +3080,11 @@ public final class TerminalView extends View {
         int newRows = Math.max(4, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
         if (mEmulator == null || (newColumns != mEmulator.mColumns || newRows != mEmulator.mRows)) {
             reflowed = true;
-            logSessionResize(newColumns, newRows, keepCursorAtBottom, cause);
+            logSessionResize(newColumns, newRows, cause);
             android.os.Trace.beginSection("Terminal.updateSize");
             try {
                 mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(),
-                    mRenderer.getFontLineSpacing(), keepCursorAtBottom);
+                    mRenderer.getFontLineSpacing());
                 mEmulator = mTermSession.getEmulator();
                 updateKittyAnimationVisibility();
                 mClient.onEmulatorSet();
@@ -3113,13 +3113,13 @@ public final class TerminalView extends View {
     /** The cause a resume carries when a return hold covered the paused span it ends. */
     public static final String CAUSE_RETURN_HOLD = "return-hold";
 
-    private void logSessionResize(int newColumns, int newRows, boolean keepCursorAtBottom,
+    private void logSessionResize(int newColumns, int newRows,
                                   @NonNull String cause) {
         // The session's emulator, not this view's: a freshly attached session already has a size.
         TerminalEmulator prior = mTermSession.getEmulator();
         String from = prior == null ? "none" : prior.mColumns + "x" + prior.mRows;
         android.util.Log.d(GEOMETRY_LOG_TAG, "resize " + from + " -> " + newColumns + "x" + newRows
-            + " keepBottom=" + keepCursorAtBottom + " cause=" + cause
+            + " cause=" + cause
             + " returnHold=" + CAUSE_RETURN_HOLD.equals(cause));
     }
 
@@ -3249,7 +3249,7 @@ public final class TerminalView extends View {
     float predictResizeDisplacementPx(int fromHeightPx, int toHeightPx) {
         if (!canPredictResize(fromHeightPx, toHeightPx)) return 0f;
         int toRows = rowsForHeight(toHeightPx);
-        int rowShift = mEmulator.predictRowsOnlyResizeShift(toRows, true);
+        int rowShift = mEmulator.predictRowsOnlyResizeShift(toRows);
         return travelDisplacementPx(fromHeightPx, toHeightPx, mEmulator.mRows, toRows, rowShift,
             mRenderer.mFontLineSpacing, mRenderer.mFontLineSpacingAndAscent);
     }
@@ -3257,7 +3257,7 @@ public final class TerminalView extends View {
     /** How many rows down the settle's resize to {@code toHeightPx} moves the rows on screen. */
     private int predictResizeRowShift(int toHeightPx) {
         if (!canPredictResize(mTravelAnchorHeightPx, toHeightPx)) return 0;
-        return mEmulator.predictRowsOnlyResizeShift(rowsForHeight(toHeightPx), true);
+        return mEmulator.predictRowsOnlyResizeShift(rowsForHeight(toHeightPx));
     }
 
     /** What the centring slack above the grid changes by across that resize. */
@@ -3418,17 +3418,17 @@ public final class TerminalView extends View {
         setTerminalSizeUpdatesPaused(paused, false);
     }
 
-    /** Resume a coalesced resize with optional bottom anchoring after the final layout pass. */
+    /** Resume a coalesced resize after the final layout pass; a settled takeover may size to zero height. */
     public void setTerminalSizeUpdatesPaused(boolean paused,
-                                             boolean keepCursorAtBottomOnResume) {
-        setTerminalSizeUpdatesPaused(paused, keepCursorAtBottomOnResume, "resume");
+                                             boolean allowZeroHeightOnResume) {
+        setTerminalSizeUpdatesPaused(paused, allowZeroHeightOnResume, "resume");
     }
 
     /**
      * As {@link #setTerminalSizeUpdatesPaused(boolean, boolean)}, naming what ended the pause for
      * the resize log line ({@link #CAUSE_RETURN_HOLD} when a return hold covered it).
      */
-    public void setTerminalSizeUpdatesPaused(boolean paused, boolean keepCursorAtBottomOnResume,
+    public void setTerminalSizeUpdatesPaused(boolean paused, boolean allowZeroHeightOnResume,
                                              @NonNull String resumeCause) {
         if (mTerminalSizeUpdatesPaused == paused) return;
         mTerminalSizeUpdatesPaused = paused;
@@ -3436,7 +3436,7 @@ public final class TerminalView extends View {
             mTerminalSizeUpdatePending = false;
             // Run after the final split layout pass so only the settled geometry reaches the PTY.
             new Handler(Looper.getMainLooper()).post(
-                () -> updateSize(keepCursorAtBottomOnResume, resumeCause));
+                () -> updateSize(allowZeroHeightOnResume, resumeCause));
         }
     }
 

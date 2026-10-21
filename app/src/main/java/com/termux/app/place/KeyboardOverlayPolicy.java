@@ -52,7 +52,7 @@ public final class KeyboardOverlayPolicy {
 
     /**
      * How far the content root reaches past the top of the accessory stack once the dock is
-     * counted too: on a Home page ({@link HomeChromePolicy#dockOverlays}) the whole stack and the
+     * counted too: on a Home page, where the dock floats over the grid, the whole stack and the
      * margin under it, so the widget grid keeps its full height and the dock and the keyboard draw
      * over it; everywhere else the keyboard's share alone, as {@link #contentOverlapPx} says.
      */

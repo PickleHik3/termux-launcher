@@ -12,23 +12,30 @@ import com.termux.app.chrome.GlassRefraction;
  * {@link GlassRefraction.Program#setReflection}) and the shelf under the slab each read the part
  * that is theirs.
  *
- * <p>{@link #PLAIN} is the dock exactly as it was, which the Workspace's dock and every surface
- * that is not Home's dock keep. {@link #GLASS_TRAY} is Home's default style
+ * <p>{@link #PLAIN} is the dock exactly as it was, which a layout pass that names no surface
+ * keeps; every page's dock, Home's and the Workspace's alike, wears its Dock design's spec (#93).
+ * {@link #GLASS_TRAY} is the default design
  * (project-docs/active/home-dock-styles-2026-10-20.md): one slab, equal air above and below the
  * icons, the dashes floating just above the slab, and the shared glass work every later style
  * builds on. {@link #LENS_BEADS} keeps the tray's geometry but draws no slab: each icon sits on
- * a round bead of glass ({@link LensBeadGeometry}). {@link #PROMPT_LINE} is the tray made one
- * taller slab: the apps row, then the command palette's field ({@link PromptLineFieldView}) on
- * a darker well, both on the same glass. {@link #TASKBAR} is the tray holding a Home tile among
- * the apps, with the run strip of running windows above it. {@link #WALL_STRIP} is the tray made
+ * a round bead of glass ({@link LensBeadGeometry}). {@link #WALL_STRIP} is the tray made
  * the expanded dock: a first row for the Workspace over the apps row, both on one tall slab. A
  * later style is one more constant here, and {@link #forStyle} picks it.</p>
+ *
+ * <p>The Search field is no spec: it is a toggle the layout holds beside the design (#96), and
+ * the slab carries it under the apps row with any design, as much of it as {@link
+ * DockLayoutPolicy.DockInputs#promptFieldReveal} lays out. Nor is the Drawer tile (#97, once
+ * the Taskbar design): the layout's toggle puts it in one of the apps row's slots with any design
+ * ({@link DrawerTilePolicy}), the row's own business, so the slab draws it as one more icon.</p>
  */
 public final class DockSurfaceSpec {
 
-    /** The dock as it always was: dashes in the row's own air, the narrow rim, no shelf, no reflection. */
+    /**
+     * The dock as it always was: dashes in the row's own air, the narrow rim, no shelf, no
+     * reflection. What a layout pass that names no surface gets; no Dock design draws it.
+     */
     @NonNull public static final DockSurfaceSpec PLAIN =
-        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false, false, false, 1f, false);
+        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false, 1f, false);
 
     /**
      * Home's Glass tray. Its glass numbers are the program's own constants, so the spec says only
@@ -36,7 +43,7 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec GLASS_TRAY =
         new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
-            false, false, 1f, false);
+            1f, false);
 
     /**
      * Home's Lens beads: the tray's row geometry (dashes above, equal air) with no slab; each icon
@@ -47,39 +54,11 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec LENS_BEADS =
         new DockSurfaceSpec("lens_beads", true, GlassRefraction.BEAD_SOFT_RIM_DP, 1f, true, true, true,
-            false, false, 1f, false);
+            1f, false);
 
     /**
-     * Home's Prompt line: the tray's glass (dashes above, equal air, soft rim, shelf, shadow) on
-     * one taller slab, the apps row over the palette's field ({@link DockLayout#promptFieldBandPx}).
-     * The icons are reflected only in the lower bevel, under the field, where the tray's own air
-     * would have put them.
-     */
-    @NonNull public static final DockSurfaceSpec PROMPT_LINE =
-        new DockSurfaceSpec("prompt_line", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
-            true, false, 1f, false);
-
-    /**
-     * How strongly the Taskbar's slab shows its icons' reflection, of the tray's: a low slab's
-     * strength (the lower bevel's rim about a fifth of the icons, the face's mirror under 3 %),
-     * since the developer flagged the tray's as too strong on this style.
-     */
-    public static final float TASKBAR_REFLECTION_SCALE = 0.6f;
-
-    /**
-     * Home's Taskbar: the tray's slab (dashes above, equal air, soft rim, shelf, shadow) holding
-     * only tiles, a Home tile that opens the drawer among the apps
-     * ({@link TaskbarHomeTilePolicy}), with the run strip floating above it on its own thin glass
-     * ({@link RunStripView}). The icons' reflection is held to a low slab's strength
-     * ({@link #TASKBAR_REFLECTION_SCALE}).
-     */
-    @NonNull public static final DockSurfaceSpec TASKBAR =
-        new DockSurfaceSpec("taskbar", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
-            false, true, TASKBAR_REFLECTION_SCALE, false);
-
-    /**
-     * How strongly the Wall strip's lower bevel shows the icons, of the tray's: the Prompt line's
-     * share, since there too only the lower bevel carries them.
+     * How strongly the Wall strip's lower bevel shows the icons, of the tray's: the Search
+     * field's share, since there too only the lower bevel carries them.
      */
     public static final float WALL_STRIP_REFLECTION_SCALE = 0.8f;
 
@@ -92,7 +71,7 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec WALL_STRIP =
         new DockSurfaceSpec("wall_strip", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
-            false, false, WALL_STRIP_REFLECTION_SCALE, true);
+            WALL_STRIP_REFLECTION_SCALE, true);
 
     /** A name for logs and tests. */
     @NonNull public final String name;
@@ -116,16 +95,6 @@ public final class DockSurfaceSpec {
      * beads, another band on the dock's glass) the dock falls back to the slab.
      */
     public final boolean beads;
-    /**
-     * The slab carries the command palette's field under the apps row, on the same glass; how
-     * much of it is laid out is {@link DockLayoutPolicy.DockInputs#promptFieldReveal}.
-     */
-    public final boolean promptField;
-    /**
-     * The row holds the Taskbar's Home tile among the apps, and the run strip floats above the
-     * dock while anything runs.
-     */
-    public final boolean taskbar;
     /** How strongly the icons are reflected in the glass, of the tray's own strength, 0..1. */
     public final float reflectionScale;
     /**
@@ -136,8 +105,7 @@ public final class DockSurfaceSpec {
 
     private DockSurfaceSpec(@NonNull String name, boolean dashesAboveSlab, float softRimDp,
                             float shelf, boolean iconReflections, boolean contactShadow,
-                            boolean beads, boolean promptField, boolean taskbar,
-                            float reflectionScale, boolean wallStrip) {
+                            boolean beads, float reflectionScale, boolean wallStrip) {
         this.name = name;
         this.dashesAboveSlab = dashesAboveSlab;
         this.softRimDp = softRimDp;
@@ -145,40 +113,19 @@ public final class DockSurfaceSpec {
         this.iconReflections = iconReflections;
         this.contactShadow = contactShadow;
         this.beads = beads;
-        this.promptField = promptField;
-        this.taskbar = taskbar;
         this.reflectionScale = reflectionScale;
         this.wallStrip = wallStrip;
     }
 
     /**
-     * The spec the dock wears on a page in Home's default style: Home's dock is the Glass tray,
-     * every other page's the plain dock.
+     * The spec a Dock design draws with, on whichever page's dock wears it (the page's dress
+     * names the design); a design not built yet is the Glass tray. No design is {@link #PLAIN}.
      */
-    @NonNull
-    public static DockSurfaceSpec forDock(boolean homeDock) {
-        return forDock(homeDock, DockStyle.GLASS_TRAY);
-    }
-
-    /**
-     * The spec the dock wears on a page: Home's dock wears Home's dock style as it draws
-     * ({@link DockStyle#effectiveStyle}), every other page's the plain dock whatever the style.
-     */
-    @NonNull
-    public static DockSurfaceSpec forDock(boolean homeDock, @Nullable DockStyle homeStyle) {
-        return homeDock ? forStyle(homeStyle) : PLAIN;
-    }
-
-    /** The spec a Home dock style draws with; a style not built yet is the Glass tray. */
     @NonNull
     public static DockSurfaceSpec forStyle(@Nullable DockStyle style) {
         switch (DockStyle.effectiveStyle(style)) {
             case LENS_BEADS:
                 return LENS_BEADS;
-            case PROMPT_LINE:
-                return PROMPT_LINE;
-            case TASKBAR:
-                return TASKBAR;
             case WALL_STRIP:
                 return WALL_STRIP;
             case GLASS_TRAY:

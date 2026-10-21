@@ -64,6 +64,24 @@ public class PlaceArrangeSnapshotTest {
         places.setWidgetColumns(LANDSCAPE, 6);
     }
 
+    /** The Wall strip's row height is as unsaved as the dock's, and Discard puts it back. */
+    @Test
+    public void theWallStripsRowHeightIsSomethingToLose() {
+        places.setWallStripHeightDp(PORTRAIT, 96);
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        String entrySignature = entry.signature();
+        places.setWallStripHeightDp(PORTRAIT, 120);
+        places.setWallStripHeightDp(LANDSCAPE, 64);
+        assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+
+        entry.restore(places);
+
+        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+        assertEquals(96, places.wallStripHeightDp(PORTRAIT));
+        assertEquals(com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP,
+            places.wallStripHeightDp(LANDSCAPE));
+    }
+
     /** A band moved under the keyboard is as unsaved as any move, and Discard takes it back. */
     @Test
     public void aBandUnderTheKeyboardIsSomethingToLose() {

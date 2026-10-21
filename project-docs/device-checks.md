@@ -13,6 +13,146 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "feat(place): Home's own layout keeps the sizes and shape linked to the
+  shared layout" (#84) · Home's own on: change the apps row height / Strip height / keyboard
+  height / corners on Home → the window matches; rows, design and toggles still differ; no size
+  change on the swipe. Also: the Corner radius and Margin legends on Home read without "Home ·";
+  Discard after editing the apps row height on a window and then on Home puts the first height
+  back; an install already on this branch with Home's own on keeps it on, and its Home dock height
+  becomes the window's after the update · emulator.
+- 2026-10-21 · commit "fix(statusbar): a new window joins the session the bar's box shows" ·
+  fresh install → on Home tap the bar's '+' → a second window in session 1 (box still '1') and
+  you land on it; also check the box before the tap (if it already reads "2" after Welcome →
+  storage → Start, the second session comes from the setup, not from '+': record which) ·
+  emulator.
+- 2026-10-21 · commits "feat(dock): the #3 Strip's clock is the unfolded status bar's clock" and
+  "feat(dock): the #3 Strip's row height is each layout's…" (#84) · #3 Strip shows the status
+  bar's clock face; its row height is set by its own handle in the Layout editor, per layout;
+  tiles stay tappable at min height · pass: the Strip's clock matches the unfolded bar's (same
+  face after picking another in the surface editor, seconds/period, 12 h switch), slides out at 3
+  terminals and back at 2, no stutter on Home at rest; Layout editor: select the dock wearing
+  #3 → a second handle on the Strip row's top edge, readout "Strip row N dp", 56–128 dp, the
+  clock and tiles follow; a Home layout shares the normal layout's (linked since the #84 commit
+  "feat(place): Home's own layout keeps the sizes…"); Undo/Discard put it back; at 56 dp every
+  tile and + still opens on a tap · emulator.
+- 2026-10-21 · commit "fix(statusbar): the bar's + opens a window in the current session's row on
+  both halves" · on Home with a session up, tap the bar's + (and the Strip's +): the Workspace
+  slides in on a new window right after the one in front, the session badge's count unchanged
+  (the emulator showed a new session, "2", at d0fa1f662; the cause was not reproduced, so check
+  after a float took the row's last window too); split panes off: no + on either half · emulator.
+- 2026-10-21 · commit "fix(place): the extra keys fold wherever they stand in the bottom stack"
+  (#94) · Layout editor: put the extra keys between the A–Z row and the apps, then innermost;
+  swipe Home↔window slow and reversed: the rows between the keys and the screen's edge never
+  move, the keys shut into their own bottom edge, the rows above sink by their height, the
+  hairlines move with their rows; the shipped order folds as before · emulator.
+- 2026-10-21 · commits "fix(statusbar): the minimised dot is built once…" and "fix(chrome):
+  window chips observed once per refresh, Home floats marked too" · minimise a Home float: its
+  chip on the bar's row and in the side column wears the same small dot, top end corner, dimmed
+  chip; a float running a command or ringing the bell shows the ring/bell like a row window's;
+  a window whose dock wears the Strip shows the same marks on its tiles as on the bar; no
+  stutter while the bar's glass re-measures · emulator.
+- 2026-10-21 · commit "fix(layouteditor): the Dock design picker shows for a dock of the A-Z row
+  alone" (#93) · Layout editor: put the apps row away, select the A–Z row → the designs show in
+  Row B, labelled "Dock design"; with the apps row shown, selecting the A–Z row keeps Corner
+  radius and Margin; the sheet keeps its height · emulator.
+- 2026-10-21 · commit "feat(dock): beads keep the Search field in a glass capsule" (#84) · #2 Beads
+  + Search field: beads stay, the field sits in its own glass capsule under them on Home and a
+  window; tap opens the palette; swipe Home↔window melts beads and capsule together; A–Z row on
+  still turns beads into the slab · emulator.
+- 2026-10-21 · commit "fix(terminal): a bottom-anchored growth pulls down history only as far as
+  it goes" · short session (a few lines, no scrollback): open the Layout editor, Done → the
+  keyboard goes down and the terminal output stays at the top, no blank band above it; long
+  session (scrollback): the prompt stays at the bottom with history filling the top; a restored
+  Home float: no blank top · emulator.
+- 2026-10-21 · commit "refactor(chrome): the seam crossing is one module" (#94) · Home↔window
+  swipe, slow, fast, reversed mid-way, Home layout on/off, minimal on: chrome behaves as before
+  the refactor (bar still, extra keys fold, no dock re-dress); with the Home layout on and its own
+  Style or design, the dock dips and is re-dressed only out of sight, the Strip band and Lens beads
+  ease as before, the bar rides with the window's page · emulator.
+- 2026-10-21 · commit "feat(dock): three numbered designs in the picker" (#98) · Layout editor, dock
+  selected: the picker shows #1 Tray, #2 Beads, #3 Strip, then Search and Drawer; fits at 360 dp,
+  default and Large text (no label ellipsized) · emulator.
+- 2026-10-21 · commit "fix(chrome): a float restored from the Workspace lands with its keyboard"
+  · minimise a focused Home float (keyboard up), go to the Workspace, tap the float's chip in the
+  bar: the wall slides to Home, the keyboard stays up through the slide (no drop and re-raise),
+  the float comes back focused at the height it was minimised at (ending above the keyboard),
+  with no blank band above its output; the same with the keyboard down in the Workspace (it
+  comes up for the float); from the palette's and the sessions drawer's restore too; afterwards
+  a plain swipe Workspace → Home still lands with Home's keyboard down (unless Always on) ·
+  emulator.
+- 2026-10-21 · commit "fix(widgets): the empty page's hint steps out from under floats, drawer
+  and palette" · on an empty Home page "Long-press to add widgets" is gone while a Home float
+  shows on the page (anywhere on it, not only over the hint), while the app drawer is open or
+  being dragged, and while the command palette is open; it is back once each goes (float
+  minimised or closed, drawer shut, palette dismissed); no flicker of the hint as the drawer
+  drags; the page's long-press menu still opens on an empty page · emulator.
+- 2026-10-21 · commit "feat(dock): the Drawer tile is a toggle beside any design" (#97) · Drawer
+  tile toggle beside Search (Layout editor, dock selected; Row B fits at 360 dp, the "Drawer" label
+  not ellipsized, no Taskbar chip); the tile opens the drawer on Home and in a window, with
+  Tray/Beads/Strip (on Beads it stands on its own bead, and the bead stays under the tile while a
+  swipe carries the pages; judge it); drag it to start/middle/end and it stays; Taskbar users land
+  on Tray with the tile at its old place (the Taskbar's lower 0.6 reflection is gone: the Tray's
+  own) · emulator, fresh install then an install over a build with Taskbar picked.
+- 2026-10-21 · commit "feat(dock): the Search field is a toggle beside any design" (#96) · Search
+  field toggle beside the design picker (Layout editor, dock selected; Row B fits at 360 dp, the
+  "Search" label not ellipsized, no Prompt line chip, no "Ask" anywhere); field under the apps row
+  with Tray, Beads, Strip on Home and a window, no clipping (Strip + field is the tallest; Beads
+  give way to the slab while the field is on, by design — judge the look); tapping it opens the
+  palette; Prompt line users land on Tray with the field · emulator, fresh install then an install
+  over a build with Prompt line picked.
+- 2026-10-21 · commit "refactor(dock): remove the run strip" (#95) · Taskbar design: no run strip above
+  the dock; the drawer tile still opens the drawer; Wall strip tiles still follow open windows ·
+  emulator.
+- 2026-10-21 · commit "feat(chrome): Home follows the Workspace's layout and shape" (#88) · A
+  fresh install shows the same dock rows, dock height and glass shape (Style, Corners, Margin) on
+  Home and on the first window, and the swipe between them does not re-dress the dock; minimal
+  mode on from a window leaves Home as it was (see the next item); an upgrade from a build whose Home layout or Home
+  shape differed keeps Home exactly as it was (Home layout on) · emulator, fresh install then an
+  install over a pre-#88 build with a Home dock height or Margin set apart.
+- 2026-10-21 · commit "fix(chrome): Home ignores minimal mode; the palette's Minimal action" · Minimal
+  on in a window, then swipe Home: Home keeps its dock and layout; the palette's Minimal action
+  toggles minimal from Home and from a window · emulator.
+- 2026-10-21 · commit "feat(layout-editor): the Home layout line" (#89) · Layout editor row:
+  labelled One layout / Home's own choice works; the Home/window preview toggle is back; the row
+  fits at 360 dp; nothing else in the editor moved; the new line fits at 360 dp, default and Large
+  text · emulator, also on an upgraded install whose Home layout was kept (Home's own checked).
+- 2026-10-21 · commit "feat(statusbar): remove the house glyph from the bar" (#92) · The bar on
+  the Workspace starts with the window chips, no house glyph, nothing clipped at the left; on Home
+  no house beside the clock (since #90 no place mark at all, see the #90 item) · emulator.
+- 2026-10-21 · commit "feat(dock): the Workspace's dock wears the Dock design" (#93) · Pick each
+  design on a window's page → Home and the Workspace dock both wear it (Home layout off); Beads,
+  Strip and Tray render with the extra keys row (Beads keep the slab while the extra keys or a
+  keyboard share the dock's glass, by design; beads with the extra keys hidden); the Wall strip's
+  tiles follow windows opened/closed on the Workspace; no dock re-dress on the Home↔window swipe;
+  with the Home layout on and a different design, the bands and beads ease across the seam; the
+  Workspace's Tray now has the tray's glass (rim, shelf, reflection) and, with the apps row next
+  to the terminal, its dashes above the slab · emulator.
+- 2026-10-21 · commit "feat(chrome): the status bar on Home with the same window chips" (#90) ·
+  Home shows the launcher bar with the same window chips; a chip on Home slides to its window; ×
+  closes it; status swipe works on Home and the shade still pulls from the top strip; no place
+  marks, no gap beside the clock; the bar does not move on the Home↔window swipe; widgets are
+  not covered (Home starts below the bar, lined up with the window's page across the swipe); the
+  bar's + on Home opens a Workspace window and slides to it · emulator, Home layout off, then on
+  with the bar placed apart.
+- 2026-10-21 · commit "fix(chrome): the extra keys fold on the seam instead of the dock dipping" ·
+  One layout, keyboard up and down: a slow swipe window → Home and back keeps the apps row, the
+  A–Z row and the tray's glass on screen all the way; only the extra keys row shuts (opens) on
+  the dock's edge; no jump of the A–Z row at settle; a Floating tray's bottom corners may read
+  square mid-fold; Home layout on with a different shape still dips as before · emulator.
+- 2026-10-21 · commit "fix(dock): the Wall strip keeps 14 dp inside the slab" · Wall strip on,
+  Docked with no Margin and Floating, on Home and a window: the clock clears the left edge and
+  the + tile ends clear of the right one, at least 14 dp inside the slab; on a Floating slab the
+  clock still lines up with the first icon · emulator.
+- 2026-10-21 · commits "feat(chrome): a minimised Home float is a window chip in the bar" and
+  "feat(chrome): CPU and RAM in the bar on Home, not in the titlebar" (#91) · Minimise a Home
+  float → it flies to its chip in the bar (down and away if the bar is hidden or the chip is
+  scrolled off); tap that chip in the Workspace → Home, the float restored and focused; no chips
+  row above the dock, and floats use the room down to the dock (Glass tray, Beads, Prompt line);
+  CPU/RAM in the bar on Home, not in the focused float's titlebar, whose grip centres in the span
+  the buttons leave; TalkBack on a minimised float's chip says "minimised" · emulator, status bar
+  shown, then with the bar hidden in the layout (a minimised float then has no chip but the
+  Taskbar's or Wall strip's); a minimised float's chip is dimmed with a dot, unlike an open
+  window's (in the pill row and in the side column).
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on
@@ -1921,6 +2061,22 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
+
+- 2026-10-21 · commit "fix(place): a fold across the seam lands on Home's own stack" (#94) ·
+  pong: Workspace→Home swipe, slow/fast, keyboard up/down: dock never sinks then snaps; only the
+  extra keys fold (the emulator had the dock glass end 26 px low with the keyboard up and 10 px
+  high with it down, then jump at settle); Home→window the same, no step on the first frame.
+  Also: with Home's own on and the apps row hidden on Home, the swipe swaps rows cleanly (the
+  rows dip out and the other half's rise, swapped while hidden; no flash, no step at settle),
+  both ways, keyboard up and down · pong, release build.
+### Border drag seam band (10-21)
+- 2026-10-21 · feat(wall) seam band (SeamSwipe) · pong: border drag between windows starts
+  reliably from on/near the seam (slight diagonal ok); taps/long press on the border, dock app
+  paging and terminal selection unaffected. Try: a swipe a row high (last terminal row) with the
+  body swipe setting off, a swipe from the dock's top air above the icons, a 25° diagonal, a quick
+  short flick; then a tap and a long press on the last row and on a dock icon, a dock page swipe
+  from the icons' middle, an A–Z scrub and an extra-keys swipe when that row is the dock's top,
+  and a text selection drag along the last row.
 
 ### Home dock styles on pong (10-21)
 - 2026-10-21 · feat(dock) five Home dock styles · On pong, build `1.1.0-pre.6+dev.120d6f511`: pick

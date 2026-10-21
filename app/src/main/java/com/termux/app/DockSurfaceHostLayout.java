@@ -16,7 +16,8 @@ import com.termux.app.dock.LensBeadGeometry;
 /**
  * The dock's glass host ({@code accessory_surface_host}): the frost, its tint and the dock's
  * glass light stand in it. Drawn as Lens beads ({@link #setBeads}), everything in it is clipped
- * to the beads, one round lens under each icon, so the frost, the tint, a launch's wave and a
+ * to the beads, one round lens under each icon (and the Search field's capsule under them, where
+ * the dock carries the field), so the frost, the tint, a launch's wave and a
  * press's light are each bead's on every Android version: below Android 13 the beads are plain
  * frost, from 13 the glass program draws each bead's rim, shelf and reflection as well. The
  * slab's own furniture ({@link #setSlabOnlyChildren}: its top seam, its rim glow) is not drawn
@@ -31,6 +32,7 @@ public final class DockSurfaceHostLayout extends FrameLayout {
 
     @Nullable private LensBeadGeometry.Beads mBeads;
     private final Path mBeadPath = new Path();
+    private final RectF mCapsuleRect = new RectF();
     @NonNull private View[] mSlabOnly = new View[0];
     /** The span the beads are cut to sideways, in this view's coordinates; NaN for none. */
     private float mSpanLeft = Float.NaN, mSpanRight = Float.NaN;
@@ -75,6 +77,13 @@ public final class DockSurfaceHostLayout extends FrameLayout {
             for (int i = 0; i < beads.count(); i++) {
                 mBeadPath.addCircle(beads.centerX(i), beads.centerY, beads.radiusPx,
                     Path.Direction.CW);
+            }
+            // The Search field's capsule under them is one more of their shapes (#84).
+            if (beads.hasCapsule()) {
+                float r = beads.capsuleRadiusPx();
+                mCapsuleRect.set(beads.capsuleLeft, beads.capsuleTop, beads.capsuleRight,
+                    beads.capsuleBottom);
+                mBeadPath.addRoundRect(mCapsuleRect, r, r, Path.Direction.CW);
             }
         }
         invalidate();

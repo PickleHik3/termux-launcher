@@ -43,8 +43,9 @@ thing out, less the corner squares. Anywhere on it outside the window's text (th
 sides, and the side borders' 2 dp of clearance inside the frame) it is a plain sideways swipe that
 pages at once, past the touch slop, with no hold. A hold there still starts it too. Where the border
 reaches further into the window (a window almost flush with the wall) it is a hold and then a
-sideways drag. A drag that starts in the terminal's text is the terminal's, unless it is a **body
-swipe**, which pages the same way. The edge lights in
+sideways drag. The bottom border reaches a little further, a fingertip tall: a clearly sideways
+swipe from the window's last row or the dock's top air pages too. A drag that starts in the
+terminal's text is the terminal's, unless it is a **body swipe**, which pages the same way. The edge lights in
 the accent colour inside the frame where a finger can page. A **Home page** has no border: it pages
 by a plain swipe anywhere on it, as any launcher does. Reach, hold, glow and tilt are
 specified in `project-docs/reference/launcher/gestures-and-style.md`.
@@ -52,8 +53,9 @@ _Avoid_: edge swipe, status bar swipe, page swipe
 
 **Chrome**:
 Everything the launcher draws around a page: the status bar, dock, keyboard, borders and corner
-tabs. The **Workspace** wears all of it; a **Home page** wears the same status bar and dock
-(without the extra keys) and the keyboard, as overlays that take no room from the grid. The dock and
+tabs. The **Workspace** wears all of it; a **Home page** wears the same status bar, starting below
+it as a window's page does, and the same dock (without the extra keys) and the keyboard, as
+overlays that take no room from the grid. The dock and
 status bar are one each across both halves and stay put while the wall moves (decided 2026-10-21,
 replacing the 2026-10-19 Home without a launcher status bar).
 _Avoid_: UI (too wide), decoration
@@ -79,16 +81,16 @@ _Avoid_: taskbar, nav bar, hotseat
 
 **Dock design**:
 Which of the dock's variants dresses it, held by the layout (so on both halves unless Home holds a
-**Home layout**): #1 Tray (the default), #2 Beads or #3 Strip (the clock-and-windows row over the
-apps). Separate from the **Style**, which shapes all the chrome, and from the **Search field** and
+**Home layout**): #1 Tray (the default), #2 Beads or #3 Strip (a big clock and a tile per terminal over the
+apps; the clock slides out at 3+ terminals). Separate from the **Style**, which shapes all the chrome, and from the **Search field** and
 the **Drawer tile**, which any design can carry.
 _Avoid_: dock style (the old name, it collides with **Style**), dock form, dock theme, Glass tray,
 Lens beads, Wall strip, Taskbar (old names; Taskbar became the Drawer tile, Prompt line the Search field)
 
 **Dress**:
 Everything a page wears: the layout it follows and the elements it leaves out, the **Dock design**,
-the **Search field** and **Drawer tile**, the **Style**, Corners and Margin, and the keyboard's
-shape. Home's dress equals a window's, less the extra keys, unless Home holds a **Home layout**.
+the **Search field** and **Drawer tile**, the **Style**, Corners and Margin. The keyboard's shape
+comes from the layout the dress names; the dress itself does not carry the numbers. Home's dress equals a window's, less the extra keys, unless Home holds a **Home layout**.
 Whether the keyboard is open is not dress; each half remembers that.
 _Avoid_: outfit, chrome plan, place chrome
 
@@ -120,19 +122,14 @@ _Avoid_: place, widgets page, desktop
 A **window** of the current session drawn floating over one Home page instead of in the Workspace's
 row: born full-size, moved only by its **titlebar** (a **body swipe** on its terminal pages Home as
 a swipe beside it does), resized at its bottom-right corner, minimised into
-its **float chip** above the dock and docked into the row by the titlebar's Dock. It is what
-Terminal from Home opens. The Workspace's chips, the drawer and the shortcuts see it like any
-window.
+its **window chip** in the status bar and docked into the row by the titlebar's Dock. It is what
+Terminal from Home opens. The bar's chips, the drawer and the shortcuts see it like any window.
 _Avoid_: floating terminal (in prose), scratchpad (that is the toggled one), popup
 
 **Float chip**:
-A minimised **Home float**'s chip: a small glass chip, like the dock's glass, in a row centred
-just above the dock on Home (above the keyboard while one is up), showing the float's glyph and
-short name. A tap brings the float back onto its page; Minimise flies the float into it. While the
-row shows, Home floats keep clear of it. Never on the Workspace, where the window chips stand for
-the floats. To retire (decided 2026-10-21): with the status bar on Home, a minimised float becomes
-a chip in the bar on both halves, like a window's.
-_Avoid_: Home pills (removed 2026-10-19), windows pill, minimised pill
+Retired 2026-10-21: a minimised **Home float** is a **window chip** in the status bar on both
+halves, and Minimise flies the float into that chip. There is no row of chips above the dock.
+_Avoid_: float chip (for the bar's chip, say window chip), Home pills, minimised pill
 
 **Keyboard swipe**:
 The one way to the keyboard in the **Workspace**: an up or down swipe that starts on the window's
@@ -169,8 +166,9 @@ _Avoid_: custom wallpaper, in-app wallpaper
 A second saved **Workspace** layout, and nothing more. It starts with only each window's content, so
 by default the bars, the A–Z index, the extra keys and the keyboard go away, and it changes no
 behaviour. It is one mode for every window, turned on and off only from the corner tab's minimal
-button, and stays on until turned off; while it is on Home wears the minimal layout too, unless
-Home holds a **Home layout** of its own (decided 2026-10-21). The Layout editor opened while it
+button or the command palette's Minimal action, and stays on until turned off. Home ignores it:
+Home wears the normal shared layout (or its **Home layout**) whatever minimal says (decided
+2026-10-21, after a day of Minimal on both halves left Home with no way out). The Layout editor opened while it
 is on edits the **minimal layout**. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: full screen, focus mode, zen mode, zen view
@@ -181,8 +179,8 @@ see Minimal mode); appearance is never per orientation.
 
 **Page**:
 One full-screen stop on the **wall**: a **Home page** or a **window**. Appearance is one look for
-every page. Layout is per half: the Home layout for Home pages, the Workspace layout (normal or
-minimal) for windows.
+every page. One layout dresses both halves, minimal only for windows; a Home page wears its own
+only when Home holds a **Home layout**.
 _Avoid_: place (the retired word for Home, Terminal and Display as three pages), screen, tab
 
 **Pane**:
@@ -266,8 +264,7 @@ _Avoid_: terminal icon (in prose), Create Pane, Open Workspace
 **Titlebar**:
 The translucent glass strip along the top of every floating pane, Home float and the scratchpad:
 the drag handle and Minimise, Maximise and Close; Dock is in the menu a long press on the handle
-opens. The focused Home float's titlebar also carries the CPU and RAM readings at its leading end,
-drawn as the status bar draws them; on a narrow float RAM gives way first, then CPU. It replaces
+opens. It carries no readings: the status bar shows them on both halves (2026-10-21). It replaces
 the floating pane's move corner and pill; resizing stays at the bottom-right corner.
 _Avoid_: pill (the retired control; the dictation pill is another thing), header, handle bar
 
@@ -414,9 +411,14 @@ _Avoid_: bar (for the keyboard), widget, slot (the store's word for where an ele
 
 **Home layout**:
 An opt-in layout of Home's own, for a user who wants Home laid out unlike the Workspace. Off by
-default, when Home wears the one shared layout, its **Style**, Corners and Margin included; while
-on, Home holds its own copy of all of them, and the bar and dock may change on the swipe between the
-halves. It is to the layout what a surface's override is to **Base**.
+default, when Home wears the one shared layout. While on, Home holds its own copy of which rows show
+(the apps row, the A–Z row, the status bar), their order, edge and under-keyboard placement, the
+**Dock design**, and the Search field and Drawer tile toggles (with the tile's position). The sizes
+stay **linked** to the shared layout either way: the apps row's height, the #3 Strip row's height,
+the keyboard's height and chin, and **Style**, Corners and Margin are one value on both halves,
+edited from either, so nothing resizes on the swipe (decided 2026-10-21, #84). The keyboard's form
+stays Home's own. It is the Layout editor's "Layout: One layout | Home's own" line; the row's house
+segment previews Home. It is to the layout what a surface's override is to **Base**.
 _Avoid_: Home variant, Home place
 
 **Layout editor**:

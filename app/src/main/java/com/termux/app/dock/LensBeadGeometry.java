@@ -18,6 +18,12 @@ import java.util.Arrays;
  * <p>A row that cannot be drawn as beads answers null and the dock keeps its slab: nothing to
  * draw, more icons than the glass program holds ({@link #MAX_BEADS}), or so little room that a
  * bead would be smaller than its icon.</p>
+ *
+ * <p>With the Search field on (#96) the row keeps its beads and the field stands in a glass
+ * capsule of its own under them ({@link #withCapsule}): a stadium as wide as the apps row, as
+ * tall as the field's view, at least {@link #CAPSULE_AIR_DP} under the beads. It is one more
+ * shape of the same glass, drawn by the same program over the same shared frame, clipped, tinted
+ * and shadowed with the beads.</p>
  */
 public final class LensBeadGeometry {
 
@@ -60,7 +66,26 @@ public final class LensBeadGeometry {
      */
     public static final float MIN_FIT_SCALE = 1.1f;
 
+    /**
+     * The least air between the beads and the Search field's capsule under them, dp: the air the
+     * beads keep between themselves ({@link #MIN_GAP_DP}), so the capsule reads as one more lens
+     * of the set rather than a slab the beads stand on.
+     */
+    public static final float CAPSULE_AIR_DP = MIN_GAP_DP;
+    /**
+     * How much more air the dock lays over the field under Lens beads than over the slab's, dp
+     * ({@link DockLayoutPolicy}): the beads already stand {@link #EDGE_CLEARANCE_DP} short of the
+     * row's band, so this much more puts the capsule {@link #CAPSULE_AIR_DP} under beads as tall
+     * as the band lets them be, and the beads keep the size they have without the field.
+     */
+    public static final float CAPSULE_TOP_PAD_DP = CAPSULE_AIR_DP - EDGE_CLEARANCE_DP;
+
     private LensBeadGeometry() {}
+
+    /** {@link #CAPSULE_TOP_PAD_DP} in px. */
+    public static int capsuleTopPadPx(float density) {
+        return Math.round(Math.max(0f, density) * CAPSULE_TOP_PAD_DP);
+    }
 
     /** {@link #ROW_SIDE_INSET_DP} in px. */
     public static int rowSideInsetPx(float density) {
@@ -103,7 +128,10 @@ public final class LensBeadGeometry {
                 com.termux.app.place.PlaceLayout.Edge.BOTTOM)).size() <= 1;
     }
 
-    /** One row of beads, in the coordinates of the surface they were computed for. */
+    /**
+     * One row of beads, in the coordinates of the surface they were computed for, and the Search
+     * field's capsule under them where the dock carries the field ({@link #hasCapsule}).
+     */
     public static final class Beads {
         /** Each bead's centre x, left to right as the row laid them out. */
         @NonNull private final float[] mCentersX;
@@ -113,12 +141,25 @@ public final class LensBeadGeometry {
         public final float radiusPx;
         /** Half the icon's size: where its picture's top and bottom stand about the centre line. */
         public final float iconHalfPx;
+        /** The capsule's bounds; NaN for none. A stadium: its corners are half its height. */
+        public final float capsuleLeft, capsuleTop, capsuleRight, capsuleBottom;
 
         Beads(@NonNull float[] centersX, float centerY, float radiusPx, float iconHalfPx) {
+            this(centersX, centerY, radiusPx, iconHalfPx, Float.NaN, Float.NaN, Float.NaN,
+                Float.NaN);
+        }
+
+        private Beads(@NonNull float[] centersX, float centerY, float radiusPx, float iconHalfPx,
+                      float capsuleLeft, float capsuleTop, float capsuleRight,
+                      float capsuleBottom) {
             mCentersX = centersX;
             this.centerY = centerY;
             this.radiusPx = radiusPx;
             this.iconHalfPx = iconHalfPx;
+            this.capsuleLeft = capsuleLeft;
+            this.capsuleTop = capsuleTop;
+            this.capsuleRight = capsuleRight;
+            this.capsuleBottom = capsuleBottom;
         }
 
         public int count() {
@@ -129,19 +170,45 @@ public final class LensBeadGeometry {
             return mCentersX[index];
         }
 
+        /** Whether the Search field's capsule stands under the beads. */
+        public boolean hasCapsule() {
+            return !Float.isNaN(capsuleLeft);
+        }
+
+        /** The capsule's corner radius: half its height (or its width, were that less); 0 for none. */
+        public float capsuleRadiusPx() {
+            if (!hasCapsule()) return 0f;
+            return 0.5f * Math.min(capsuleRight - capsuleLeft, capsuleBottom - capsuleTop);
+        }
+
+        /** The same beads without a capsule. */
+        @NonNull
+        public Beads withoutCapsule() {
+            return hasCapsule() ? new Beads(mCentersX, centerY, radiusPx, iconHalfPx) : this;
+        }
+
         /** The same beads in a surface whose origin sits {@code (-dx, -dy)} from this one's. */
         @NonNull
         public Beads offset(float dx, float dy) {
             float[] moved = new float[mCentersX.length];
             for (int i = 0; i < moved.length; i++) moved[i] = mCentersX[i] + dx;
-            return new Beads(moved, centerY + dy, radiusPx, iconHalfPx);
+            return new Beads(moved, centerY + dy, radiusPx, iconHalfPx, capsuleLeft + dx,
+                capsuleTop + dy, capsuleRight + dx, capsuleBottom + dy);
         }
 
-        /** The same beads at radius {@code radiusPx}. */
+        /** The same beads at radius {@code radiusPx}; the capsule stays as it is. */
         @NonNull
         public Beads withRadius(float radiusPx) {
             return radiusPx == this.radiusPx ? this
-                : new Beads(mCentersX, centerY, radiusPx, iconHalfPx);
+                : new Beads(mCentersX, centerY, radiusPx, iconHalfPx, capsuleLeft, capsuleTop,
+                    capsuleRight, capsuleBottom);
+        }
+
+        /** Other beads over this one's capsule, which no swipe or fade moves. */
+        @NonNull
+        Beads withCentres(@NonNull float[] centersX, float radiusPx) {
+            return new Beads(centersX, centerY, radiusPx, iconHalfPx, capsuleLeft, capsuleTop,
+                capsuleRight, capsuleBottom);
         }
 
         @Override
@@ -150,7 +217,11 @@ public final class LensBeadGeometry {
             if (!(o instanceof Beads)) return false;
             Beads that = (Beads) o;
             return centerY == that.centerY && radiusPx == that.radiusPx
-                && iconHalfPx == that.iconHalfPx && Arrays.equals(mCentersX, that.mCentersX);
+                && iconHalfPx == that.iconHalfPx && Arrays.equals(mCentersX, that.mCentersX)
+                && Float.compare(capsuleLeft, that.capsuleLeft) == 0
+                && Float.compare(capsuleTop, that.capsuleTop) == 0
+                && Float.compare(capsuleRight, that.capsuleRight) == 0
+                && Float.compare(capsuleBottom, that.capsuleBottom) == 0;
         }
 
         @Override
@@ -158,14 +229,39 @@ public final class LensBeadGeometry {
             int h = Arrays.hashCode(mCentersX);
             h = 31 * h + Float.floatToIntBits(centerY);
             h = 31 * h + Float.floatToIntBits(radiusPx);
-            return 31 * h + Float.floatToIntBits(iconHalfPx);
+            h = 31 * h + Float.floatToIntBits(iconHalfPx);
+            h = 31 * h + Float.floatToIntBits(capsuleLeft);
+            h = 31 * h + Float.floatToIntBits(capsuleTop);
+            h = 31 * h + Float.floatToIntBits(capsuleRight);
+            return 31 * h + Float.floatToIntBits(capsuleBottom);
         }
 
         @NonNull
         @Override
         public String toString() {
-            return "Beads{" + Arrays.toString(mCentersX) + " y=" + centerY + " r=" + radiusPx + "}";
+            return "Beads{" + Arrays.toString(mCentersX) + " y=" + centerY + " r=" + radiusPx
+                + (hasCapsule() ? " capsule=[" + capsuleLeft + ", " + capsuleTop + ", "
+                    + capsuleRight + ", " + capsuleBottom + "]" : "") + "}";
         }
+    }
+
+    /**
+     * The beads with the Search field's glass capsule under them: the field's view, laid out at
+     * {@code left..right} by {@code top..bottom} in the beads' surface (as wide as the apps row,
+     * {@link DockLayoutPolicy}), its top held at least {@link #CAPSULE_AIR_DP} under the beads.
+     * At rest the dock lays the field out exactly that far under beads as tall as the row's band
+     * lets them be ({@link #CAPSULE_TOP_PAD_DP}), so the capsule is the field's view; while its
+     * band eases in, the capsule's top waits under the beads. A capsule with no height or no
+     * width left (the band's first frames) is none: the beads alone.
+     */
+    @NonNull
+    public static Beads withCapsule(@NonNull Beads beads, float left, float top, float right,
+                                    float bottom, float density) {
+        float air = CAPSULE_AIR_DP * Math.max(0f, density);
+        float capTop = Math.max(top, beads.centerY + beads.radiusPx + air);
+        if (!(right > left) || !(bottom > capTop)) return beads.withoutCapsule();
+        return new Beads(beads.mCentersX, beads.centerY, beads.radiusPx, beads.iconHalfPx, left,
+            capTop, right, bottom);
     }
 
     /**
@@ -184,23 +280,47 @@ public final class LensBeadGeometry {
     public static Beads follow(@NonNull Beads rest, float offsetPx,
                                @NonNull float[] neighbourCentersX, int neighbourCount,
                                float left, float right, float scale) {
+        return follow(rest, offsetPx, Float.NaN, neighbourCentersX, neighbourCount, left, right,
+            scale);
+    }
+
+    /**
+     * {@link #follow(Beads, float, float[], int, float, float, float)} for a row holding the
+     * Drawer tile (#97), which is no page's and stands still while the pages move: the rest's
+     * bead nearest {@code stillCenterX} (within a radius of it) stays where it was, under the
+     * tile, while every other one rides with its icon. NaN is a row without the tile.
+     */
+    @NonNull
+    public static Beads follow(@NonNull Beads rest, float offsetPx, float stillCenterX,
+                               @NonNull float[] neighbourCentersX, int neighbourCount,
+                               float left, float right, float scale) {
         float s = Float.isNaN(scale) ? 1f : Math.max(0f, Math.min(1f, scale));
         // Never quite nothing: a radius of 0 is the program's "no beads", which is the slab.
         float radius = Math.max(0.5f, rest.radiusPx * s);
         int neighbours = Math.max(0, Math.min(neighbourCount, neighbourCentersX.length));
+        int still = -1;
+        if (!Float.isNaN(stillCenterX)) {
+            float nearest = rest.radiusPx;
+            for (int i = 0; i < rest.count(); i++) {
+                float away = Math.abs(rest.centerX(i) - stillCenterX);
+                if (away <= nearest) {
+                    nearest = away;
+                    still = i;
+                }
+            }
+        }
         float[] all = new float[rest.count() + neighbours];
         int n = 0;
         for (int i = 0; i < rest.count(); i++) {
-            float cx = rest.centerX(i) + offsetPx;
+            float cx = rest.centerX(i) + (i == still ? 0f : offsetPx);
             if (cx + radius > left && cx - radius < right) all[n++] = cx;
         }
         for (int i = 0; i < neighbours; i++) {
             float cx = neighbourCentersX[i];
             if (cx + radius > left && cx - radius < right) all[n++] = cx;
         }
-        if (n == 0) {
-            return new Beads(new float[] {PARKED_X}, rest.centerY, radius, rest.iconHalfPx);
-        }
+        // The capsule is the field's, no page's: it stands still while the beads ride.
+        if (n == 0) return rest.withCentres(new float[] {PARKED_X}, radius);
         float[] kept = Arrays.copyOf(all, n);
         if (n > MAX_DRAWN_BEADS) {
             // Keep the ones nearest the middle: the ones at the ends are leaving or arriving.
@@ -212,7 +332,7 @@ public final class LensBeadGeometry {
             for (int i = 0; i < MAX_DRAWN_BEADS; i++) kept[i] = boxed[i];
         }
         Arrays.sort(kept);
-        return new Beads(kept, rest.centerY, radius, rest.iconHalfPx);
+        return rest.withCentres(kept, radius);
     }
 
     /**

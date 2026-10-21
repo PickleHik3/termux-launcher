@@ -38,7 +38,43 @@ public final class WallStripRowPolicy {
     /** The clock's slide in or out as the terminal count crosses two and three, ms. */
     public static final long CLOCK_SLIDE_MS = 420L;
 
+    /**
+     * The row's height, as each layout keeps it per orientation (the Layout editor's Strip
+     * handle): today's 84 dp until the user drags it. The least keeps every tile a full 48 dp
+     * target with its title on one line and its split shape still drawn; the most is half again
+     * the shipped row, so the terminal over the dock keeps its room.
+     */
+    public static final int DEFAULT_HEIGHT_DP = 84;
+    public static final int MIN_HEIGHT_DP = 56;
+    public static final int MAX_HEIGHT_DP = 128;
+    /** One step of the height, for the canvas's accessibility actions and keys. */
+    public static final int HEIGHT_STEP_DP = 4;
+
+    /**
+     * The largest the clock grows at {@link #DEFAULT_HEIGHT_DP}: the status bar's own largest fit
+     * ({@code TerminalClockWidget.FIT_MAX_SCALE}), so at today's height the Strip's clock is the
+     * size the unfolded bar draws at its tallest.
+     */
+    public static final float CLOCK_MAX_SCALE_AT_DEFAULT =
+        com.termux.app.terminal.TerminalClockWidget.FIT_MAX_SCALE;
+
     private WallStripRowPolicy() {}
+
+    /** A stored or dragged row height held to its range. */
+    public static int clampHeightDp(int heightDp) {
+        return Math.max(MIN_HEIGHT_DP, Math.min(MAX_HEIGHT_DP, heightDp));
+    }
+
+    /**
+     * The largest the clock's face may scale in a row {@code rowHeightPx} tall: the bar's largest
+     * fit at the shipped height, in proportion to the row, so the clock grows and shrinks with
+     * the row as its tiles do. The face still fits the width it is given. The default row's while
+     * the row is not measured.
+     */
+    public static float clockMaxScale(float rowHeightPx, float density) {
+        if (rowHeightPx <= 0f || density <= 0f) return CLOCK_MAX_SCALE_AT_DEFAULT;
+        return CLOCK_MAX_SCALE_AT_DEFAULT * rowHeightPx / (DEFAULT_HEIGHT_DP * density);
+    }
 
     /** The clock's share of the row at rest with {@code terminals} open. */
     public static float clockShare(int terminals) {
@@ -147,6 +183,18 @@ public final class WallStripRowPolicy {
             h = 31 * h + Float.floatToIntBits(tileWidthPx);
             return 31 * h + Float.floatToIntBits(maxScrollPx);
         }
+    }
+
+    /**
+     * The row's side inset: where the apps row's first slot draws its icon ({@code firstIconPx},
+     * NaN while no icon is laid out), but never closer to the slab's side than
+     * {@code slabInsetPx}, the spec's 14 dp inside the slab. Icons laid out to the edges of a slab
+     * that runs to the screen's (Docked, no Margin) would otherwise put the clock and the
+     * {@code +} tile on the screen's edges.
+     */
+    public static float sideInsetPx(float firstIconPx, float slabInsetPx) {
+        float floor = Math.max(0f, slabInsetPx);
+        return firstIconPx > floor ? firstIconPx : floor;
     }
 
     /** The row at rest with {@code terminals} open. */

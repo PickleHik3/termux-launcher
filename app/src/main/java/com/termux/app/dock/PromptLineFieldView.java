@@ -24,8 +24,9 @@ import com.termux.terminal.TerminalColors;
 import com.termux.terminal.TextStyle;
 
 /**
- * The Prompt line's field (spec "Prompt line"): the command palette's search, standing in Home's
- * dock as a shell prompt, {@code ~ ❯ Search apps, commands, settings}, on a darker well.
+ * The <b>Search field</b> (once the Prompt line design's field, spec "Prompt line"; a toggle
+ * beside any Dock design since #96): the command palette's search, standing in the dock under its
+ * apps row as a shell prompt, {@code ~ ❯ Search apps, commands, settings}, on a darker well.
  *
  * <p>It holds no text of its own and takes no focus: it is a door. A tap opens the palette and
  * the keyboard with the caret in the palette's own query line
@@ -64,6 +65,8 @@ public final class PromptLineFieldView extends View {
     @NonNull private PromptLineInk mInk;
     private int mPressedWell;
     private float mRadiusPx;
+    /** How far the well stands in from the view's sides ({@link #setWellSideInsetPx}). */
+    private float mWellSideInsetPx;
     @Nullable private Runnable mOnOpen;
 
     public PromptLineFieldView(@NonNull Context context) {
@@ -96,6 +99,20 @@ public final class PromptLineFieldView extends View {
         float radius = Math.max(0f, radiusPx);
         if (radius == mRadiusPx) return;
         mRadiusPx = radius;
+        invalidate();
+    }
+
+    /**
+     * How far the well stands in from the view's sides, px: none on a slab, where the well spans
+     * the field; under Lens beads the view is the field's glass capsule and the well nests in it
+     * as far from its sides as from its top and bottom. The prompt keeps its padding from the
+     * well's edge. Laid out again only on a change.
+     */
+    public void setWellSideInsetPx(float insetPx) {
+        float inset = Math.max(0f, insetPx);
+        if (inset == mWellSideInsetPx) return;
+        mWellSideInsetPx = inset;
+        if (getWidth() > 0 && getHeight() > 0) layoutWell(getWidth(), getHeight());
         invalidate();
     }
 
@@ -137,17 +154,23 @@ public final class PromptLineFieldView extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
+        layoutWell(w, h);
+    }
+
+    /** The well's rect and the prompt's fit for a view {@code w} by {@code h}. */
+    private void layoutWell(int w, int h) {
         float wellHeight = Math.min(h, WELL_HEIGHT_DP * mDensity);
         float top = (h - wellHeight) / 2f;
-        mWellRect.set(0f, top, w, top + wellHeight);
+        float side = Math.min(mWellSideInsetPx, w / 2f);
+        mWellRect.set(side, top, w - side, top + wellHeight);
         float textPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, TEXT_SP,
             getResources().getDisplayMetrics());
         // A raised font scale is what clips fixed chrome: the prompt shrinks to its well instead.
         mText.setTextSize(Math.min(textPx, wellHeight * MAX_TEXT_SHARE));
         float pad = PAD_DP * mDensity;
         float gap = SEGMENT_GAP_DP * mDensity;
-        float hintRoom = w - 2f * pad - mText.measureText(DIRECTORY) - mText.measureText(GLYPH)
-            - 2f * gap;
+        float hintRoom = mWellRect.width() - 2f * pad - mText.measureText(DIRECTORY)
+            - mText.measureText(GLYPH) - 2f * gap;
         mFittedHint = hintRoom <= 0f ? ""
             : TextUtils.ellipsize(mHint, mText, hintRoom, TextUtils.TruncateAt.END);
     }
@@ -164,7 +187,7 @@ public final class PromptLineFieldView extends View {
         Paint.FontMetrics metrics = mText.getFontMetrics();
         float baseline = mWellRect.centerY() - (metrics.ascent + metrics.descent) / 2f;
         // The prompt reads from the start edge, as a shell's does.
-        float x = rtl ? getWidth() - pad : pad;
+        float x = rtl ? mWellRect.right - pad : mWellRect.left + pad;
         x = drawSegment(canvas, DIRECTORY, mInk.directory, x, baseline, gap, rtl);
         x = drawSegment(canvas, GLYPH, mInk.glyph, x, baseline, gap, rtl);
         drawSegment(canvas, mFittedHint, mInk.hint, x, baseline, 0f, rtl);

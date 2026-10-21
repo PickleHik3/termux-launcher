@@ -206,7 +206,7 @@ public final class TerminalClockWidget extends View {
     private int mColorSignature;
 
     /** Largest scale the fit mode grows the FULL face to. */
-    static final float FIT_MAX_SCALE = 1.35f;
+    public static final float FIT_MAX_SCALE = 1.35f;
     /** Budget the slot hands the clock; height 0 means no fit (the legacy shrink-only path). */
     private float mFitWidthPx;
     private float mFitHeightPx;
@@ -529,15 +529,15 @@ public final class TerminalClockWidget extends View {
                 return dp(94f) + dp(6f)
                     + stackedMetaWidth(12f, Typeface.MONOSPACE);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
-                return spacedTextWidth(timeText(), thinTypeface(), 38f, -.02f) + dp(6f)
+                return fadingTimeWidth(thinTypeface(), 38f, -.02f) + dp(6f)
                     + stackedMetaWidth(15f, lightTypeface());
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
                 return dotTextWidth(timeText(), dp(3.4f)) + dp(7f) + ledMetaWidth(26f, 1.6f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
-                return spacedTextWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + dp(5f)
+                return fadingTimeWidth(Typeface.MONOSPACE, 28f, -.02f) + dp(5f)
                     + stackedMetaWidth(11f, Typeface.MONOSPACE);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
-                return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + dp(6f)
+                return fadingTimeWidth(Typeface.DEFAULT_BOLD, 39f, -.045f) + dp(6f)
                     + stackedMetaWidth(11f, mediumTypeface());
             default:
                 return dp(flipRowWidthDp(FULL_FLIP_CARD_DP, FULL_FLIP_DIGIT_GAP_DP) + 6.7f)
@@ -551,16 +551,16 @@ public final class TerminalClockWidget extends View {
                 return dp(61f) + dp(5f)
                     + stackedMetaWidth(9f, Typeface.MONOSPACE);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
-                return spacedTextWidth(timeText(), thinTypeface(), 26f, -.02f) + dp(5f)
+                return fadingTimeWidth(thinTypeface(), 26f, -.02f) + dp(5f)
                     + stackedMetaWidth(10.5f, lightTypeface());
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
                 return dotTextWidth(timeText(), dp(2.2f)) + dp(5f) + ledMetaWidth(16f, 1.2f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
                 return Math.max(dp(100f),
-                    spacedTextWidth(timeText(), Typeface.MONOSPACE, 18f, -.02f) + dp(4f)
+                    fadingTimeWidth(Typeface.MONOSPACE, 18f, -.02f) + dp(4f)
                         + stackedMetaWidth(8f, Typeface.MONOSPACE));
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
-                return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f)
+                return fadingTimeWidth(Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f)
                     + stackedMetaWidth(9f, mediumTypeface());
             default:
                 // The cards, then the meta column plus the ink that glyphs and the card shadow
@@ -979,8 +979,22 @@ public final class TerminalClockWidget extends View {
         float floor = shared ? compactColumnHeightDp() / bandDp : 0f;
         return fitScalePlan(heightBudgetPx, widthBudgetPx,
             dp(bandDp + fullDateGapDp() + fullDateBlockDp()), dp(bandDp),
-            Math.max(.01f, fullContentWidth()), Math.max(.01f, fullTimeRowWidth()), floor);
+            Math.max(.01f, fullContentWidth()), Math.max(.01f, fullTimeRowWidth()), floor,
+            mFitMaxScale);
     }
+
+    /**
+     * The largest the fit grows the FULL face to; {@link #FIT_MAX_SCALE} unless a host that is
+     * not the bar asks for another (the Wall strip's row, whose clock grows with the row).
+     */
+    public void setFitMaxScale(float maxScale) {
+        float next = maxScale > 0f ? maxScale : FIT_MAX_SCALE;
+        if (next == mFitMaxScale) return;
+        mFitMaxScale = next;
+        invalidate();
+    }
+
+    private float mFitMaxScale = FIT_MAX_SCALE;
 
     /** Width the FULL face paints inside the given budget, so the slot can size the clock to it. */
     public float fitWidthPx(float widthBudgetPx, float heightBudgetPx, boolean shared) {
@@ -996,12 +1010,21 @@ public final class TerminalClockWidget extends View {
     @VisibleForTesting
     static float[] fitScalePlan(float heightBudget, float widthBudget, float columnPx,
                                 float bandPx, float fullWidthPx, float bandWidthPx, float floor) {
+        return fitScalePlan(heightBudget, widthBudget, columnPx, bandPx, fullWidthPx,
+            bandWidthPx, floor, FIT_MAX_SCALE);
+    }
+
+    /** {@link #fitScalePlan} growing the face to at most {@code maxScale}. */
+    @VisibleForTesting
+    static float[] fitScalePlan(float heightBudget, float widthBudget, float columnPx,
+                                float bandPx, float fullWidthPx, float bandWidthPx, float floor,
+                                float maxScale) {
         float byColumn = heightBudget / columnPx;
         if (byColumn >= floor) {
-            float scale = Math.min(Math.min(byColumn, FIT_MAX_SCALE), widthBudget / fullWidthPx);
+            float scale = Math.min(Math.min(byColumn, maxScale), widthBudget / fullWidthPx);
             return new float[] {scale, 1f, fullWidthPx * scale};
         }
-        float byBand = Math.max(floor, Math.min(heightBudget / bandPx, FIT_MAX_SCALE));
+        float byBand = Math.max(floor, Math.min(heightBudget / bandPx, maxScale));
         float scale = Math.min(byBand, widthBudget / bandWidthPx);
         return new float[] {scale, 0f, bandWidthPx * scale};
     }
@@ -2018,6 +2041,36 @@ public final class TerminalClockWidget extends View {
         mPaint.setLetterSpacing(0f);
         mPaint.setTextSize(sp(textDp));
         return top + height / 2f - (mPaint.ascent() + mPaint.descent()) / 2f;
+    }
+
+    /**
+     * Width of the time run as {@link #drawFadingTime} lays it: the sum of the glyph advances it
+     * steps by, not the run measured whole. Each glyph is drawn and measured on its own, and a
+     * glyph alone need not shape as it does inside the run (letter spacing a platform leaves off
+     * a run's ends, kerning between glyphs): measured whole, the run can read narrower than it
+     * draws, and the fit then grows the face past its room (the Wall strip's clock at 128 dp
+     * lost its period and seconds on the 2026-10-21 emulator check).
+     */
+    private float fadingTimeWidth(Typeface typeface, float textDp, float letterSpacing) {
+        mPaint.setTypeface(typeface);
+        mPaint.setLetterSpacing(letterSpacing);
+        mPaint.setTextSize(sp(textDp));
+        float width = glyphRunWidth(timeText(), typeface, mPaint.getTextSize(), letterSpacing,
+            mTimeAdvances, mMeasure);
+        mPaint.setLetterSpacing(0f);
+        return width;
+    }
+
+    /** {@code text}'s width as glyphs laid one after another at their own advances. */
+    @VisibleForTesting
+    static float glyphRunWidth(@NonNull String text, @Nullable Object face, float size,
+                               float spacing, @NonNull CharAdvances advances,
+                               @NonNull TextWidths.Measurer measurer) {
+        float width = 0f;
+        for (int i = 0; i < text.length(); i++) {
+            width += advances.advance(text.charAt(i), face, size, spacing, measurer);
+        }
+        return width;
     }
 
     private float spacedTextWidth(String text, Typeface typeface, float textDp, float letterSpacing) {

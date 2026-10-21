@@ -37,15 +37,6 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
         }
     }
 
-    /**
-     * A child that holds only part of its bounds: the float chips' row, which is as wide as its
-     * chips but leaves the air between them to the page.
-     */
-    public interface PartlyHeld {
-        /** Whether ({@code x}, {@code y}), in the child's own coordinates, is on something it holds. */
-        boolean holdsLocalPoint(float x, float y);
-    }
-
     @Nullable private Listener mListener;
     private int mPage;
 
@@ -71,6 +62,14 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
         if (mListener != null) mListener.onHomePageShown(mPage);
     }
 
+    /** A float shows on the page in view: the others are gone, and a minimised one is its chip. */
+    @Override
+    public boolean showsAnything() {
+        for (int i = 0; i < getChildCount(); i++)
+            if (getChildAt(i).getVisibility() == VISIBLE) return true;
+        return false;
+    }
+
     @Override
     public boolean holdsPoint(float x, float y) {
         float localX = x - getLeft() - getTranslationX();
@@ -81,9 +80,7 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
             float left = child.getLeft() + child.getTranslationX();
             float top = child.getTop() + child.getTranslationY();
             if (localX >= left && localX < left + child.getWidth()
-                && localY >= top && localY < top + child.getHeight()
-                && (!(child instanceof PartlyHeld)
-                    || ((PartlyHeld) child).holdsLocalPoint(localX - left, localY - top)))
+                && localY >= top && localY < top + child.getHeight())
                 return true;
         }
         return false;
@@ -101,13 +98,6 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
             float top = child.getTop() + child.getTranslationY();
             if (localX >= left && localX < left + child.getWidth()
                 && localY >= top && localY < top + child.getHeight()) {
-                if (child instanceof PartlyHeld) {
-                    // A sideways swipe that starts on a chip pages Home; between chips the page
-                    // has the press anyway.
-                    if (((PartlyHeld) child).holdsLocalPoint(localX - left, localY - top))
-                        return true;
-                    continue;
-                }
                 // The topmost float under the finger answers; the ones beneath never see it.
                 return mListener.floatYieldsSideways(child, localX - left, localY - top);
             }

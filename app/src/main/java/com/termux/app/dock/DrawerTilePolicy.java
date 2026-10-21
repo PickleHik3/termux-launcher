@@ -6,17 +6,18 @@ import androidx.annotation.Nullable;
 import java.util.Locale;
 
 /**
- * The Taskbar's Home tile (spec "Taskbar"): a tile like the apps', which opens the drawer, held at
- * the start, the middle or the end of the dock's row. The user moves it with a long-press and a
- * drag; where it lands is persisted as one of {@link Position#value}.
+ * The <b>Drawer tile</b> (#97; once the Taskbar design's tile, spec "Taskbar"): a tile like the
+ * apps', which opens the app drawer, held at the start, the middle or the end of the dock's apps
+ * row, with any Dock design where the layout turns it on. The user moves it with a long-press and
+ * a drag; where it lands is persisted per layout as one of {@link Position#value}.
  *
- * <p>The row holds the Home tile plus {@code apps} app tiles, in the user's own order and never
- * sorted: the Home tile only takes a slot, and the apps keep their order around it. Pure: the dock
- * asks which slot the Home tile takes and which app each other slot holds.</p>
+ * <p>The row holds the tile plus {@code apps} app tiles, in the user's own order and never
+ * sorted: the tile only takes a slot, and the apps keep their order around it. Pure: the dock
+ * asks which slot the tile takes and which app each other slot holds.</p>
  */
-public final class TaskbarHomeTilePolicy {
+public final class DrawerTilePolicy {
 
-    /** Where the Home tile stands in the row. */
+    /** Where the tile stands in the row. */
     public enum Position {
         START("start"), MIDDLE("middle"), END("end");
 
@@ -28,10 +29,10 @@ public final class TaskbarHomeTilePolicy {
         }
     }
 
-    /** Where the Home tile stands until the user moves it. */
+    /** Where the tile stands until the user moves it. */
     @NonNull public static final Position DEFAULT = Position.START;
 
-    private TaskbarHomeTilePolicy() {}
+    private DrawerTilePolicy() {}
 
     /** The stored value read back; anything unknown, or nothing stored, is {@link #DEFAULT}. */
     @NonNull
@@ -50,16 +51,16 @@ public final class TaskbarHomeTilePolicy {
         return position.value;
     }
 
-    /** How many apps fit beside the Home tile in a row of {@code slots} tiles. */
+    /** How many apps fit beside the tile in a row of {@code slots} tiles. */
     public static int appSlots(int slots) {
         return Math.max(0, slots - 1);
     }
 
     /**
-     * The Home tile's slot in a row of the tile and {@code apps} apps. The middle is the centre
+     * The tile's slot in a row of the tile and {@code apps} apps. The middle is the centre
      * slot; with an odd count of apps the extra one stands after the tile.
      */
-    public static int homeSlot(@NonNull Position position, int apps) {
+    public static int tileSlot(@NonNull Position position, int apps) {
         int n = Math.max(0, apps);
         switch (position) {
             case START: return 0;
@@ -69,13 +70,13 @@ public final class TaskbarHomeTilePolicy {
     }
 
     /**
-     * The app at {@code slot}, as its index among the apps, or -1 for the Home tile's slot and a
+     * The app at {@code slot}, as its index among the apps, or -1 for the tile's slot and a
      * slot outside the row.
      */
     public static int appAt(int slot, @NonNull Position position, int apps) {
         int n = Math.max(0, apps);
         if (slot < 0 || slot > n) return -1;
-        int home = homeSlot(position, n);
+        int home = tileSlot(position, n);
         if (slot == home) return -1;
         return slot < home ? slot : slot - 1;
     }
@@ -84,11 +85,11 @@ public final class TaskbarHomeTilePolicy {
     public static int slotOf(int app, @NonNull Position position, int apps) {
         int n = Math.max(0, apps);
         if (app < 0 || app >= n) return -1;
-        return app < homeSlot(position, n) ? app : app + 1;
+        return app < tileSlot(position, n) ? app : app + 1;
     }
 
     /**
-     * Where the Home tile lands when the drag lets go with its centre at {@code fraction} of the
+     * Where the tile lands when the drag lets go with its centre at {@code fraction} of the
      * row's width (0 the row's start, 1 its end): the nearest of the three, the row read in
      * thirds. Mirror the fraction for a right-to-left row before asking.
      */

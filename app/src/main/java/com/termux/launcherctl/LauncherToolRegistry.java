@@ -461,6 +461,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_KEYBOARD_TOGGLE_ENABLED = "keyboard.toggle_enabled";
     /** Starts or stops a dictation on any place; the text waits in the panel for ✓ or Copy. */
     public static final String TOOL_VOICE_DICTATE = "voice.dictate";
+    public static final String TOOL_MINIMAL_TOGGLE = "minimal.toggle";
     public static final String TOOL_TERMINAL_TOGGLE_TOOLBAR = "terminal.toggle_toolbar";
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
@@ -1287,6 +1288,13 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_open_apps_bar, R.string.tool_desc_app_open_apps_bar, null);
+        // The corner tab's minimal button, for any page: on and off, Home included, though only
+        // the windows wear minimal mode.
+        addUi(map, TOOL_MINIMAL_TOGGLE,
+            "Turn minimal mode on or off: the windows show only their content, or come back.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_minimal_toggle, R.string.tool_desc_minimal_toggle, null);
         addUi(map, TOOL_TERMINAL_RESET,
             "Reset the terminal emulator state for the focused shell.",
             schemaEmpty(),

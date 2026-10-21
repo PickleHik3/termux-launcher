@@ -191,6 +191,7 @@ final class AppearanceEditorPanel {
     private final MaterialButtonToggleGroup mOrientation;
     private final MaterialButtonToggleGroup mStyle;
     private final MaterialButtonToggleGroup mHomeFilter;
+    private final MaterialButtonToggleGroup mHomeLayout;
     private final MaterialButton mHidden;
     private final View mHiddenHighlight;
     private final HorizontalScrollView mHiddenTiles;
@@ -201,7 +202,7 @@ final class AppearanceEditorPanel {
     private final Slider mMargin;
     /** The keyboard's tools in Row B: its type chips and Key radius, lent to Layout mode. */
     private final View mKeyboardTools;
-    /** Home's dock styles in Row B while Home's dock is selected, lent to Layout mode. */
+    /** The Dock designs in Row B while the dock is selected, lent to Layout mode. */
     private final ViewGroup mDockStyles;
     private final ChipGroup mKeyboardForms;
     private final TextView mKeyRadiusLabel;
@@ -233,7 +234,7 @@ final class AppearanceEditorPanel {
     private boolean mHiddenTilesOpen;
     /** Whether the keyboard's tools stand there (the keyboard is selected); the tiles win. */
     private boolean mKeyboardToolsShown;
-    /** Whether Home's dock styles stand there (Home's dock is selected); the tiles win. */
+    /** Whether the Dock designs stand there (the dock is selected); the tiles win. */
     private boolean mDockStylesShown;
 
     @Nullable private Listener mListener;
@@ -279,6 +280,7 @@ final class AppearanceEditorPanel {
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mStyle = root.findViewById(R.id.appearance_editor_style);
         mHomeFilter = root.findViewById(R.id.layout_editor_home_filter);
+        mHomeLayout = root.findViewById(R.id.layout_editor_home_layout);
         mHidden = root.findViewById(R.id.layout_editor_hidden);
         TooltipCompat.setTooltipText(mHidden,
             context.getString(R.string.appearance_editor_hidden_tooltip));
@@ -300,13 +302,15 @@ final class AppearanceEditorPanel {
             R.id.appearance_editor_look_labels});
         mLayoutGroup.setReferencedIds(new int[] {R.id.layout_editor_orientation,
             R.id.appearance_editor_style, R.id.layout_editor_home_filter,
-            R.id.layout_editor_hidden});
+            R.id.layout_editor_hidden, R.id.layout_editor_home_layout_label,
+            R.id.layout_editor_home_layout});
         applyGroups(EditorMode.LOOK);
         applyRow2(false);
         paintSheet();
         paintSelectedSegments(mOrientation);
         paintSelectedSegments(mStyle);
         paintSelectedSegments(mHomeFilter);
+        paintSelectedSegments(mHomeLayout);
         paintSelected(mOpacityLink);
         buildLookLabels();
         bind();
@@ -443,7 +447,7 @@ final class AppearanceEditorPanel {
         boolean docks = mDockStylesShown;
         mHiddenTilesOpen = false;
         mKeyboardToolsShown = false;
-        // The dock styles are pinned to Corner radius and Margin's extent, so they never set it.
+        // The Dock designs are pinned to Corner radius and Margin's extent, so they never set it.
         mDockStylesShown = false;
         applyGroups(EditorMode.LAYOUT);
         int height = measureNow(widthPx);
@@ -994,7 +998,7 @@ final class AppearanceEditorPanel {
 
     /**
      * Layout's Row B: Corner radius and Margin, or in their place the hidden tiles, or the
-     * keyboard's tools while the keyboard is selected, or Home's dock styles while Home's dock is
+     * keyboard's tools while the keyboard is selected, or the Dock designs while the dock is
      * (the tiles win while both would). Corner
      * radius and Margin go INVISIBLE rather than GONE while either stands there, so the row keeps
      * their height and the sheet never moves.
@@ -1035,6 +1039,11 @@ final class AppearanceEditorPanel {
     /** The Home filter beside the orientation toggle: one segment, checked while Home is shown. */
     @NonNull MaterialButtonToggleGroup homeFilterToggle() {
         return mHomeFilter;
+    }
+
+    /** The Home layout line under Row A: One layout | Home's own, the stored state checked. */
+    @NonNull MaterialButtonToggleGroup homeLayoutToggle() {
+        return mHomeLayout;
     }
 
     /**
@@ -1092,7 +1101,7 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * Puts Home's dock styles in Row B's place while Home's dock is selected, or brings Corner
+     * Puts the Dock designs in Row B's place while the dock is selected, or brings Corner
      * radius and Margin back. The row is pinned to theirs, so the sheet's height does not change.
      */
     void setDockStylesShown(boolean shown) {
@@ -1102,7 +1111,7 @@ final class AppearanceEditorPanel {
         applyLayoutRow2();
     }
 
-    /** Home's dock styles: the row the layout controller fills with one preview per style. */
+    /** The Dock designs: the row the layout controller fills with one preview per design. */
     @NonNull ViewGroup dockStyles() {
         return mDockStyles;
     }

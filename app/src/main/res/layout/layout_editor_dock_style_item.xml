@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One of Home's dock styles in the Layout editor's Row B: the style's silhouette on a filter
+<!-- One of the Dock designs in the Layout editor's Row B: the design's silhouette on a filter
      chip, checked for the picked one, with its name under it. The whole item is the target. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"

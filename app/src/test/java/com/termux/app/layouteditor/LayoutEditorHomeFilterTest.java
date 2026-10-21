@@ -54,6 +54,9 @@ public class LayoutEditorHomeFilterTest {
         places = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         places.setAppsRow(LANDSCAPE, RowPlacement.BOTTOM);
+        // The filter moves between two layouts only while Home holds one of its own; on the
+        // shared layout see LayoutEditorSharedLayoutTest.
+        places.setHomeLayout(true);
     }
 
     private PlaceLayoutStore home() {
@@ -90,19 +93,19 @@ public class LayoutEditorHomeFilterTest {
         assertEquals(Edge.TOP, home().slot(PORTRAIT, Element.APPS).edge);
         assertEquals("the Workspace's layout is left alone",
             Edge.BOTTOM, workspace().slot(PORTRAIT, Element.APPS).edge);
-        assertEquals("the status bar is not Home's to place",
-            LayoutEditorPlan.Drop.NONE, plan.drop(Bar.STATUS_BAR, Edge.TOP));
+        // What Home offers (no status bar to place) is its dress's: DressResolverTest.
     }
 
     @Test
-    public void homesSizesAreHomesOwn() {
+    public void homesSizesAreTheSharedOnes() {
         LayoutEditorPlan plan = open(PaneWallPage.TERMINAL);
         float workspaceDock = workspace().dockHeightScale(PORTRAIT);
         plan.showHome(true);
         float target = workspaceDock > 1f ? 0.9f : 1.2f;
         plan.setDockHeightScale(target);
         assertEquals(target, home().dockHeightScale(PORTRAIT), 0.001f);
-        assertEquals(workspaceDock, workspace().dockHeightScale(PORTRAIT), 0.001f);
+        assertEquals("linked (#84): the window's follows", target,
+            workspace().dockHeightScale(PORTRAIT), 0.001f);
 
         plan.setWidgetGrid(3, 4);
         assertEquals(3, plan.shownLayout().widgetColumns);

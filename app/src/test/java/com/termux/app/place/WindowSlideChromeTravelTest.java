@@ -33,7 +33,7 @@ public class WindowSlideChromeTravelTest {
         Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
 
     /** Home with its keyboard down and no status bar; the Workspace with its keyboard up. */
-    private static final PlaceChromeTravel.States STATES = place -> HomeChromePolicy.isHome(place)
+    private static final PlaceChromeTravel.States STATES = place -> place == PaneWallPage.WIDGETS
         ? new Rest(false, false, false) : new Rest(true, false, true);
 
     /** A window with windows on both sides. */

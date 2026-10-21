@@ -177,6 +177,26 @@ public class LayoutCanvasViewTest {
         assertEquals(LayoutCanvasView.CanvasKind.DISPLAY, view.canvasKind());
     }
 
+    /**
+     * Home wears the status bar as a window does (#90): its preview stands the bar where the
+     * layout places it, and the widget grid's page starts below it, as a window's page does.
+     */
+    @Test
+    public void homesPreviewStandsTheBarAndItsGridStartsBelowIt() {
+        LayoutCanvasView view = sized();
+        view.setLayout(layout(RowPlacement.BOTTOM, 4, 5), PlaceOrientation.PORTRAIT,
+            PaneWallPage.WIDGETS);
+        RectF bar = view.blockRect(LayoutCanvasView.Block.STATUS_BAR);
+        RectF page = view.blockRect(LayoutCanvasView.Block.CANVAS);
+        assertNotNull("Home's preview draws its status bar", bar);
+        assertNotNull(page);
+        assertTrue("the grid's page starts below the bar", page.top >= bar.bottom);
+        view.setLayout(layout(RowPlacement.BOTTOM, 4, 5), PlaceOrientation.PORTRAIT,
+            PaneWallPage.TERMINAL);
+        assertEquals("the same page top as a window's", view.blockRect(
+            LayoutCanvasView.Block.CANVAS).top, page.top, 0.5f);
+    }
+
     @Test
     public void theWidgetGridCollapsesOnlyWhenACellWouldBeTooSmall() {
         LayoutCanvasView view = sized();
@@ -789,6 +809,83 @@ public class LayoutCanvasViewTest {
         assertNotNull(height);
         assertNotNull(chin);
         assertTrue("the height handle is above the chin's", height.centerY() < chin.centerY());
+    }
+
+    /**
+     * A dock wearing the Wall strip stands taller by its first row, and its selection carries the
+     * row's own handle on the band's inner edge, with the apps row's handle on the seam under it.
+     */
+    @Test
+    public void theWallStripsRowCarriesItsOwnHandleAtItsTopEdge() {
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        RectF tray = new RectF(view.blockRect(LayoutCanvasView.Block.APPS_ROW));
+        view.setWallStrip(84);
+        RectF band = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        assertNotNull(band);
+        assertTrue("the Strip's row adds to the dock", band.height() > tray.height());
+
+        view.setSelectedBlock(LayoutCanvasView.Block.APPS_ROW);
+        RectF strip = view.handleRect(LayoutCanvasView.Handle.WALL_STRIP_HEIGHT);
+        RectF dock = view.handleRect(LayoutCanvasView.Handle.DOCK_HEIGHT);
+        assertNotNull(strip);
+        assertNotNull(dock);
+        assertEquals("on the edge that faces the canvas", band.top, strip.centerY(), 1f);
+        assertTrue("the apps row's handle stands under it", dock.centerY() > strip.centerY());
+        assertTrue("on the apps row's own top edge", dock.centerY() < band.bottom);
+    }
+
+    @Test
+    public void aTrayDockHasNoWallStripHandle() {
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        view.setWallStrip(0);
+        view.setSelectedBlock(LayoutCanvasView.Block.APPS_ROW);
+        assertNull(view.handleRect(LayoutCanvasView.Handle.WALL_STRIP_HEIGHT));
+        RectF band = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF dock = view.handleRect(LayoutCanvasView.Handle.DOCK_HEIGHT);
+        assertNotNull(band);
+        assertNotNull(dock);
+        assertEquals(band.top, dock.centerY(), 1f);
+    }
+
+    /** Dragging the Strip's handle up asks for a taller row, in dp, within its range. */
+    @Test
+    public void theWallStripsHandleDraggedUpAsksForATallerRow() {
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        view.setWallStrip(84);
+        int[] asked = {-1};
+        boolean[] released = {false};
+        view.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
+            @Override public void onWallStripHeightDragged(int dp) {
+                asked[0] = dp;
+            }
+
+            @Override public void onHandleReleased() {
+                released[0] = true;
+            }
+        });
+        view.setSelectedBlock(LayoutCanvasView.Block.APPS_ROW);
+        RectF handle = view.handleRect(LayoutCanvasView.Handle.WALL_STRIP_HEIGHT);
+        assertNotNull(handle);
+        touch(view, MotionEvent.ACTION_DOWN, handle.centerX(), handle.centerY());
+        assertEquals(LayoutCanvasView.Handle.WALL_STRIP_HEIGHT, view.draggedHandle());
+        touch(view, MotionEvent.ACTION_MOVE, handle.centerX(), handle.centerY() - 10f);
+        assertTrue("taller", asked[0] > 84);
+        touch(view, MotionEvent.ACTION_MOVE, handle.centerX(), handle.centerY() - 4000f);
+        assertEquals(com.termux.app.dock.WallStripRowPolicy.MAX_HEIGHT_DP, asked[0]);
+        touch(view, MotionEvent.ACTION_MOVE, handle.centerX(), handle.centerY() + 4000f);
+        assertEquals(com.termux.app.dock.WallStripRowPolicy.MIN_HEIGHT_DP, asked[0]);
+        touch(view, MotionEvent.ACTION_UP, handle.centerX(), handle.centerY());
+        assertNull(view.draggedHandle());
+        assertTrue(released[0]);
     }
 
     /** The keyboard lifted off the phone may go to the tray alone, and is put away there. */

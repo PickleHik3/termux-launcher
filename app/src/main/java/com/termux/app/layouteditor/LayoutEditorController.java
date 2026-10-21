@@ -52,10 +52,11 @@ import java.util.Locale;
 /**
  * Layout mode of the one editor (appearance-layout-editor SPEC §3.5, layout editor v2): the layout
  * canvas of the place the user is looking at, drawn at the full size of the editor's frame, with
- * the Portrait / Landscape toggle, the Home filter and eye-off in the editor's bottom area. The
- * Workspace's layout is every window's (ADR 0003): a write lands on the terminal and the display
- * alike. Home has a layout of its own (ADR 0008), which the Home filter shows and edits, in either
- * orientation, with Home's own Style, Corners and Margin.
+ * the Portrait / Landscape toggle, the Home filter and eye-off in the editor's bottom area, and the
+ * Home layout line under them. The Workspace's layout is every window's (ADR 0003): a write lands
+ * on the terminal and the display alike. Home may have a layout of its own (ADR 0008), with Home's
+ * own Style, Corners and Margin, which the Home layout line turns on or off; the Home filter shows
+ * a Home page either way and edits the layout it wears, in either orientation.
  *
  * <p>This class owns no screen of its own. The editor that hosts it
  * ({@link com.termux.app.surfaces.SurfaceEditorController}) lends it the canvas, what stands over
@@ -71,8 +72,8 @@ import java.util.Locale;
  * cancels. A tap selects an element: one outline along its own shape, its valid edges outlined,
  * the move control outside it, whose menu sends it to an edge or hides it, and on the dock, the
  * keyboard and Home's grid a handle that resizes it with a readout while it is held. The keyboard,
- * selected, shows its type chips and Key radius in the sheet's Row B; Home's dock, selected, shows
- * the dock styles there, one preview per style. Eye-off carries the count of hidden
+ * selected, shows its type chips and Key radius in the sheet's Row B; the dock, selected, shows
+ * the Dock designs there, one preview per design. Eye-off carries the count of hidden
  * elements and opens their tiles in the sheet; a tile brings its element back to the edge it left,
  * or is dragged onto the canvas to an edge of the user's choosing. Every write goes straight
  * through, so the live place under the canvas follows every edit made in the orientation the phone
@@ -169,7 +170,7 @@ public final class LayoutEditorController {
         /** The keyboard's tools in Row B's place while {@code shown}, Corner radius and Margin back otherwise. */
         default void setKeyboardToolsShown(boolean shown) {}
 
-        /** Home's dock styles in Row B's place while {@code shown}, Corner radius and Margin back otherwise. */
+        /** The Dock designs in Row B's place while {@code shown}, Corner radius and Margin back otherwise. */
         default void setDockStylesShown(boolean shown) {}
     }
 
@@ -209,15 +210,20 @@ public final class LayoutEditorController {
         @NonNull final MaterialButtonToggleGroup orientation;
         /**
          * The Home filter: one segment beside the orientation toggle, checked while the canvas
-         * shows a Home page and writes the Home layout ({@link LayoutEditorPlan#showHome}).
+         * shows a Home page and writes the layout Home wears ({@link LayoutEditorPlan#showHome}).
          */
         @NonNull final MaterialButtonToggleGroup homeFilter;
+        /**
+         * The Home layout choice, a line of its own under that row: One layout | Home's own, the
+         * stored state checked ({@link LayoutEditorPlan#setHomeLayout}).
+         */
+        @NonNull final MaterialButtonToggleGroup homeLayout;
         /** Eye-off: the only hide drop target, the tiles' toggle, the count badge's anchor. */
         @NonNull final MaterialButton hiddenControl;
         /** The highlight behind eye-off, larger than its 48dp target: the drop area itself. */
         @NonNull final View hiddenHighlight;
         @NonNull final ChipGroup hiddenTiles;
-        /** Home's dock styles, in the sheet's Row B while Home's dock is selected; filled here. */
+        /** The Dock designs, in the sheet's Row B while the dock is selected; filled here. */
         @NonNull final ViewGroup dockStyles;
         @NonNull final TilesHost tilesHost;
 
@@ -228,6 +234,7 @@ public final class LayoutEditorController {
                      @NonNull MaterialButton moveControl,
                      @NonNull MaterialButtonToggleGroup orientation,
                      @NonNull MaterialButtonToggleGroup homeFilter,
+                     @NonNull MaterialButtonToggleGroup homeLayout,
                      @NonNull MaterialButton hiddenControl, @NonNull View hiddenHighlight,
                      @NonNull ChipGroup hiddenTiles, @NonNull TilesHost tilesHost) {
             this.canvasHost = canvasHost;
@@ -240,6 +247,7 @@ public final class LayoutEditorController {
             this.moveControl = moveControl;
             this.orientation = orientation;
             this.homeFilter = homeFilter;
+            this.homeLayout = homeLayout;
             this.hiddenControl = hiddenControl;
             this.hiddenHighlight = hiddenHighlight;
             this.hiddenTiles = hiddenTiles;
@@ -547,7 +555,7 @@ public final class LayoutEditorController {
         views.canvas.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
             @Override public void onSelectionChanged(@Nullable LayoutCanvasView.Block selected) {
                 dismissMoveMenu();
-                // The keyboard's tools and the dock styles stand in Row B's place: the tiles give
+                // The keyboard's tools and the Dock designs stand in Row B's place: the tiles give
                 // it up to them.
                 if ((showsKeyRadius(selected) || showsDockStyles(mPlan, selected)) && mTilesOpen)
                     setTilesOpen(views, false);
@@ -572,6 +580,12 @@ public final class LayoutEditorController {
                 if (mPlan != null)
                     onHandleWrite(LayoutCanvasView.Handle.KEYBOARD_CHIN,
                         mPlan.setKeyboardChinDp(dp));
+            }
+
+            @Override public void onWallStripHeightDragged(int dp) {
+                if (mPlan != null)
+                    onHandleWrite(LayoutCanvasView.Handle.WALL_STRIP_HEIGHT,
+                        mPlan.setWallStripHeightDp(dp));
             }
 
             @Override public void onWidgetGridDragged(int columns, int rows) {
@@ -666,6 +680,36 @@ public final class LayoutEditorController {
                 return;
             showHome(isChecked);
         });
+        views.homeLayout.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked || mRestatingToggle)
+                return;
+            setHomeLayout(checkedId == R.id.layout_editor_home_layout_own);
+        });
+    }
+
+    /**
+     * The Home layout switch turned on or off: Home gets its own copy of the layout or goes back
+     * to the shared one. The page being edited stays; the live place re-reads what it wears and
+     * the host restates the shape that page wears before the canvas is re-read.
+     */
+    @VisibleForTesting
+    void setHomeLayout(boolean on) {
+        LayoutEditorPlan plan = mPlan;
+        if (plan == null || plan.hasHomeLayout() == on)
+            return;
+        plan.setHomeLayout(on);
+        Views views = mViews;
+        if (views != null) {
+            // The selection and the tiles were the other layout's.
+            views.canvas.cancelLift();
+            views.canvas.setSelectedBlock(null);
+            if (mTilesOpen)
+                setTilesOpen(views, false);
+        }
+        mHost.applyPlaceArrangement();
+        if (mOnPlaceShown != null)
+            mOnPlaceShown.run();
+        sync();
     }
 
     /**
@@ -739,12 +783,16 @@ public final class LayoutEditorController {
             views.homeFilter.check(R.id.layout_editor_home_filter_home);
         else
             views.homeFilter.uncheck(R.id.layout_editor_home_filter_home);
+        views.homeLayout.check(plan.hasHomeLayout()
+            ? R.id.layout_editor_home_layout_own : R.id.layout_editor_home_layout_one);
         mRestatingToggle = false;
         views.canvas.setShape(mStyle, mCornersDp, mMarginDp);
         views.canvas.setExtraKeyCount(mExtraKeyCount);
         views.canvas.setExtraKeySlots(mKeySlots);
         views.canvas.setSizes(plan.dockHeightScale(), plan.keyboardHeightScale(),
             plan.keyboardChinDp());
+        // A dock wearing the Wall strip is drawn with its first row, and carries its handle.
+        views.canvas.setWallStrip(plan.showsWallStrip() ? plan.wallStripHeightDp() : 0);
         // The status bar's collapsed/expanded state is a per-orientation key the status swipe
         // sets; the canvas draws whichever the shown orientation holds (spec §5, DECISIONS
         // item 7). The keyboard's form and the minimal variant are the plan's layout's own.
@@ -829,6 +877,9 @@ public final class LayoutEditorController {
             case KEYBOARD_CHIN:
                 return context.getString(R.string.layout_editor_readout_chin,
                     plan.keyboardChinDp());
+            case WALL_STRIP_HEIGHT:
+                return context.getString(R.string.layout_editor_readout_wall_strip,
+                    plan.wallStripHeightDp());
             case WIDGET_GRID:
             default: {
                 PlaceLayout layout = plan.shownLayout();
@@ -1209,31 +1260,43 @@ public final class LayoutEditorController {
         }
     }
 
-    // ------------------------------------------------------------------------ the dock styles
+    // ----------------------------------------------------------------------- the Dock designs
 
-    /** Each style's name and silhouette, in {@link DockStyle#values()} order, as the row holds them. */
+    /** Each design's name and silhouette, in {@link DockStyle#CHOICES} order, as the row holds them. */
     private static final int[] DOCK_STYLE_LABELS = {
         R.string.layout_editor_dock_style_glass_tray, R.string.layout_editor_dock_style_lens_beads,
-        R.string.layout_editor_dock_style_taskbar, R.string.layout_editor_dock_style_prompt_line,
         R.string.layout_editor_dock_style_wall_strip};
     private static final int[] DOCK_STYLE_ICONS = {
         R.drawable.ic_symbol_dock_glass_tray, R.drawable.ic_symbol_dock_lens_beads,
-        R.drawable.ic_symbol_dock_taskbar, R.drawable.ic_symbol_dock_prompt_line,
         R.drawable.ic_symbol_dock_wall_strip};
 
     /**
-     * Whether the dock styles show: in Layout mode on the Home layout, with its dock (the pinned
-     * apps) selected. The Workspace's dock has no style.
+     * The Search field toggle, the first item after the divider (#96); null before the row is
+     * bound.
+     */
+    @Nullable private Chip mSearchFieldChip;
+    /** The Drawer tile toggle, the row's last item, after the Search field (#97); null before. */
+    @Nullable private Chip mDrawerTileChip;
+
+    /**
+     * Whether the Dock designs show: in Layout mode on any layout, Home's or a window's (#93), with
+     * the dock selected — its pinned apps row, or its A–Z row where the layout shows the index and
+     * not the apps, which makes that row the whole dock.
      */
     @VisibleForTesting
     static boolean showsDockStyles(@Nullable LayoutEditorPlan plan,
                                    @Nullable LayoutCanvasView.Block selected) {
-        return plan != null && plan.offersDockStyle() && selected == LayoutCanvasView.Block.APPS_ROW;
+        if (plan == null) return false;
+        if (selected == LayoutCanvasView.Block.APPS_ROW) return true;
+        return selected == LayoutCanvasView.Block.ALPHABETS_ROW
+            && plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden;
     }
 
     /**
-     * One item per style in the row: its silhouette on a chip painted as the keyboard's type chips
-     * are, its name under it. The chip and the name are one target.
+     * One item per design in the row: its silhouette on a chip painted as the keyboard's type
+     * chips are, its name under it. The chip and the name are one target. After a divider, the
+     * Search field (#96) and the Drawer tile (#97) toggles in the same dress: each checked while
+     * the edited layout carries it, with whichever design is picked.
      */
     private void bindDockStyles(@NonNull Views views) {
         views.dockStyles.removeAllViews();
@@ -1245,28 +1308,50 @@ public final class LayoutEditorController {
         int quiet = EditorM3.color(views.dockStyles,
             com.google.android.material.R.attr.colorOnSurfaceVariant);
         int[][] states = {{android.R.attr.state_checked}, {}};
-        DockStyle[] styles = DockStyle.values();
-        for (int i = 0; i < styles.length; i++) {
-            DockStyle style = styles[i];
-            View item = inflater.inflate(R.layout.layout_editor_dock_style_item, views.dockStyles,
-                false);
-            Chip chip = item.findViewById(R.id.layout_editor_dock_style_chip);
-            TextView label = item.findViewById(R.id.layout_editor_dock_style_label);
-            String name = mHost.context().getString(DOCK_STYLE_LABELS[i]);
-            chip.setChipIconResource(DOCK_STYLE_ICONS[i]);
-            chip.setChipBackgroundColor(new ColorStateList(states, new int[] {container, 0}));
-            chip.setChipIconTint(new ColorStateList(states, new int[] {onContainer, quiet}));
-            chip.setContentDescription(name);
-            label.setText(name);
+        List<DockStyle> styles = DockStyle.CHOICES;
+        for (int i = 0; i < styles.size(); i++) {
+            DockStyle style = styles.get(i);
             View.OnClickListener pick = tapped -> onDockStylePicked(style);
-            chip.setOnClickListener(pick);
-            item.setOnClickListener(pick);
-            views.dockStyles.addView(item);
+            addDockStyleItem(views, inflater, states, container, onContainer, quiet,
+                DOCK_STYLE_LABELS[i], DOCK_STYLE_ICONS[i],
+                mHost.context().getString(DOCK_STYLE_LABELS[i]), pick);
         }
+        views.dockStyles.addView(inflater.inflate(R.layout.layout_editor_dock_style_divider,
+            views.dockStyles, false));
+        mSearchFieldChip = addDockStyleItem(views, inflater, states, container, onContainer,
+            quiet, R.string.layout_editor_search_field_label, R.drawable.ic_symbol_dock_prompt_line,
+            mHost.context().getString(R.string.layout_editor_search_field),
+            tapped -> onSearchFieldToggled());
+        mDrawerTileChip = addDockStyleItem(views, inflater, states, container, onContainer,
+            quiet, R.string.layout_editor_drawer_tile_label, R.drawable.ic_symbol_dock_drawer_tile,
+            mHost.context().getString(R.string.layout_editor_drawer_tile),
+            tapped -> onDrawerTileToggled());
+    }
+
+    /** One item of the row, its chip painted and named, the chip and the name one target. */
+    @NonNull
+    private Chip addDockStyleItem(@NonNull Views views, @NonNull LayoutInflater inflater,
+                                  @NonNull int[][] states, int container, int onContainer,
+                                  int quiet, int labelRes, int iconRes,
+                                  @NonNull String description,
+                                  @NonNull View.OnClickListener onTap) {
+        View item = inflater.inflate(R.layout.layout_editor_dock_style_item, views.dockStyles,
+            false);
+        Chip chip = item.findViewById(R.id.layout_editor_dock_style_chip);
+        TextView label = item.findViewById(R.id.layout_editor_dock_style_label);
+        chip.setChipIconResource(iconRes);
+        chip.setChipBackgroundColor(new ColorStateList(states, new int[] {container, 0}));
+        chip.setChipIconTint(new ColorStateList(states, new int[] {onContainer, quiet}));
+        chip.setContentDescription(description);
+        label.setText(labelRes);
+        chip.setOnClickListener(onTap);
+        item.setOnClickListener(onTap);
+        views.dockStyles.addView(item);
+        return chip;
     }
 
     /**
-     * The dock styles take Row B while Home's dock is selected, the picked style checked; on
+     * The Dock designs take Row B while the dock is selected, the picked design checked; on
      * deselect Corner radius and Margin come back. The sheet's height never changes.
      */
     private void syncDockStyles(@NonNull Views views) {
@@ -1278,14 +1363,50 @@ public final class LayoutEditorController {
             return;
         }
         DockStyle picked = plan.dockStyle();
-        DockStyle[] styles = DockStyle.values();
-        for (int i = 0; i < styles.length && i < views.dockStyles.getChildCount(); i++) {
+        List<DockStyle> styles = DockStyle.CHOICES;
+        for (int i = 0; i < styles.size() && i < views.dockStyles.getChildCount(); i++) {
             Chip chip = views.dockStyles.getChildAt(i)
                 .findViewById(R.id.layout_editor_dock_style_chip);
-            if (chip.isChecked() != (styles[i] == picked))
-                chip.setChecked(styles[i] == picked);
+            if (chip.isChecked() != (styles.get(i) == picked))
+                chip.setChecked(styles.get(i) == picked);
         }
+        Chip search = mSearchFieldChip;
+        boolean field = plan.searchField();
+        if (search != null && search.isChecked() != field)
+            search.setChecked(field);
+        Chip drawer = mDrawerTileChip;
+        boolean tile = plan.drawerTile();
+        if (drawer != null && drawer.isChecked() != tile)
+            drawer.setChecked(tile);
         views.tilesHost.setDockStylesShown(true);
+    }
+
+    /** The Search field toggle tapped: on or off for the edited layout, its design kept. */
+    private void onSearchFieldToggled() {
+        LayoutEditorPlan plan = mPlan;
+        Views views = mViews;
+        if (plan == null)
+            return;
+        LayoutEditorPlan.Drop drop = plan.setSearchField(!plan.searchField());
+        if (drop != LayoutEditorPlan.Drop.NONE)
+            afterCanvasWrite(drop);
+        // The chip toggles itself on a tap: the stored state is restated either way.
+        if (views != null)
+            syncDockStyles(views);
+    }
+
+    /** The Drawer tile toggle tapped: on or off for the edited layout, its design kept. */
+    private void onDrawerTileToggled() {
+        LayoutEditorPlan plan = mPlan;
+        Views views = mViews;
+        if (plan == null)
+            return;
+        LayoutEditorPlan.Drop drop = plan.setDrawerTile(!plan.drawerTile());
+        if (drop != LayoutEditorPlan.Drop.NONE)
+            afterCanvasWrite(drop);
+        // The chip toggles itself on a tap: the stored state is restated either way.
+        if (views != null)
+            syncDockStyles(views);
     }
 
     /** A style tapped: written for Home, both orientations, and the live dock follows it. */

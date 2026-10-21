@@ -177,10 +177,9 @@ so the window chips, the sessions drawer and the shortcuts all see it.
   tap one to bring it to the front. The focused float wears the active rim.
 - Drag its **titlebar** to move it and its bottom-right corner to resize it. Each float remembers
   its size and spot in each orientation, across a restart too (see [After a restart](#after-a-restart)).
-- The focused float's titlebar shows your CPU and memory use at its left, as the Workspace's
-  status bar does (whichever of the two Status bar settings has on). On a narrow float memory gives
-  way first, then CPU.
-- The titlebar's buttons: **Minimise** tucks the float into a chip just above the dock,
+- The titlebar carries no readings; your CPU and memory use are in the status bar, which stands
+  on Home as it does in the Workspace.
+- The titlebar's buttons: **Minimise** tucks the float into its window chip in the status bar,
   **Maximise** fills the room and becomes **Restore size**, and **Close** closes it and its shell.
   Long press the titlebar's handle for its menu: **Dock** moves the float into the Workspace as a
   window right after the current one and takes you there.
@@ -189,12 +188,13 @@ so the window chips, the sessions drawer and the shortcuts all see it.
   and lifts so the cursor's line stays above the keyboard, never past the top of the room, and
   settles back when it closes. A tap on the page outside any float puts the keyboard away, as does
   minimising or closing the focused float.
-- Home has no status bar of its own. Minimised floats wait as small chips in a row just above
-  the dock, from every page; tap one to go to its page and bring the float back. The row moves up
-  with the dock when the keyboard is open, and floats keep clear of it.
+- Home wears the same status bar as the Workspace. A minimised float waits there as a dimmed
+  window chip with a dot, from every page and from the Workspace too; tap it to go to its page and
+  bring the float back. If you hide the status bar, reach a minimised float from the command
+  palette or the app drawer.
 
-A float does not keep the Workspace open, and the Workspace's windows are not chips on Home: the
-Terminal entry takes you to them.
+A float does not keep the Workspace open. The status bar's chips are the same on both halves, so
+tapping a window's chip on Home slides you to that window.
 
 ## Floating panes
 

@@ -14,6 +14,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.view.ViewTreeObserver;
 import android.util.AttributeSet;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -118,6 +119,20 @@ public final class WidgetPaneView extends FrameLayout {
          * with what is under the finger.
          */
         default boolean yieldsSidewaysSwipe(float x, float y) { return false; }
+        /** Whether anything of the page in view is drawn on the layer now (a float that is up). */
+        default boolean showsAnything() { return false; }
+    }
+
+    /**
+     * What else may lie over Home, read each frame rather than pushed: the drawer and the palette
+     * open and close along many paths, and a hint still drawn under one is what a missed one
+     * looks like ({@link WidgetEmptyHintPolicy}).
+     */
+    public interface HintCover {
+        /** The app drawer's plane is engaged: open, or on its way in or out. */
+        boolean drawerUp();
+        /** The command palette is open. */
+        boolean paletteUp();
     }
 
     /** Fraction of the pane width a released drag must cross to commit a page switch. */
@@ -253,6 +268,37 @@ public final class WidgetPaneView extends FrameLayout {
 
     private WidgetPickerAdapter.Listener providerListener;
     @Nullable private View pinnedLayer;
+    @Nullable private HintCover hintCover;
+    /** A few boolean reads a frame; only a change touches the hint. */
+    private final ViewTreeObserver.OnPreDrawListener hintCoverCheck = () -> {
+        syncEmptyHint();
+        return true;
+    };
+
+    /** What else may cover Home, so the empty page's hint steps out from under it. */
+    public void setEmptyHintCover(@Nullable HintCover cover) {
+        hintCover = cover;
+        syncEmptyHint();
+    }
+
+    /**
+     * The empty page's hint, hidden (not gone: the page's layout stays) while a float, the drawer
+     * or the palette is over it. Each of those is see-through, so the hint would read through it.
+     */
+    private void syncEmptyHint() {
+        boolean floatOnPage = pinnedLayer instanceof PagePinnedLayer
+            && pinnedLayer.getVisibility() == VISIBLE && ((PagePinnedLayer) pinnedLayer).showsAnything();
+        HintCover cover = hintCover;
+        boolean shown = WidgetEmptyHintPolicy.shown(floatOnPage,
+            cover != null && cover.drawerUp(), cover != null && cover.paletteUp());
+        int visibility = shown ? VISIBLE : INVISIBLE;
+        if (emptyMessage.getVisibility() != visibility) emptyMessage.setVisibility(visibility);
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        getViewTreeObserver().addOnPreDrawListener(hintCoverCheck);
+    }
 
     /**
      * Pins {@code layer} to the Home pages: drawn over the grid and under the page dots, the picker
@@ -987,6 +1033,7 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
+        getViewTreeObserver().removeOnPreDrawListener(hintCoverCheck);
         if (contentSettle != null) { contentSettle.end(); contentSettle = null; }
         if (pagingVelocity != null) { pagingVelocity.recycle(); pagingVelocity = null; }
         if (seamVelocity != null) { seamVelocity.recycle(); seamVelocity = null; }

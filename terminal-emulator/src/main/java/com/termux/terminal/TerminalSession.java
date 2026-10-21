@@ -33,8 +33,7 @@ public final class TerminalSession extends TerminalOutput {
 
     /** Per-session instrumentation seam; returning true consumes native resizing in tests. */
     public interface SizeUpdateObserver {
-        boolean onUpdateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
-                             boolean keepCursorAtBottom);
+        boolean onUpdateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels);
     }
 
     private SizeUpdateObserver mSizeUpdateObserver;
@@ -149,22 +148,15 @@ public final class TerminalSession extends TerminalOutput {
 
     /** Inform the attached pty of the new size and reflow or initialize the emulator. */
     public void updateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
-        updateSize(columns, rows, cellWidthPixels, cellHeightPixels, false);
-    }
-
-    /** Inform the pty of a new size with an optional bottom-anchored row expansion. */
-    public void updateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
-                           boolean keepCursorAtBottom) {
         if (mSizeUpdateObserver != null && mSizeUpdateObserver.onUpdateSize(columns, rows,
-            cellWidthPixels, cellHeightPixels, keepCursorAtBottom)) return;
+            cellWidthPixels, cellHeightPixels)) return;
         if (mEmulator == null) {
             initializeEmulator(columns, rows, cellWidthPixels, cellHeightPixels);
         } else {
             Trace.beginSection("Terminal.resize");
             try {
                 JNI.setPtyWindowSize(mTerminalFileDescriptor, rows, columns, cellWidthPixels, cellHeightPixels);
-                mEmulator.resize(columns, rows, cellWidthPixels, cellHeightPixels,
-                    keepCursorAtBottom);
+                mEmulator.resize(columns, rows, cellWidthPixels, cellHeightPixels);
             } finally {
                 Trace.endSection();
             }
