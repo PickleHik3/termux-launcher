@@ -11,7 +11,7 @@
     <string name="builtin_widget_media">Media</string>
     <string name="builtin_widget_notifications">Notifications</string>
     <string name="builtin_widget_tasks">Tasks</string>
-    <string name="builtin_widget_notes">Scratchpad</string>
+    <string name="builtin_widget_notes">Notes</string>
     <string name="builtin_widget_calendar">Calendar</string>
     <string name="builtin_widget_terminal">Terminal</string>
 
