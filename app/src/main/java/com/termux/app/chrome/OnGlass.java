@@ -751,4 +751,79 @@ public final class OnGlass {
         return new Resolution(Color.TRANSPARENT, surface, toned, tonedRatio, target,
             false, false, true);
     }
+
+    // ---------------------------------------------------------------- the widget band
+
+    /**
+     * The card-versus-wallpaper ratio under which a Home widget's card draws its rim at the
+     * outline role (spec #101, "Ink"). A design threshold, not WCAG: 1.4.11 asks 3:1 only of a
+     * boundary that identifies a control, and a card is not one. Under it the card nearly
+     * disappears into the wallpaper, which the device capture showed on a light one.
+     */
+    public static final double CARD_EDGE_RATIO = 1.5d;
+
+    /** Whether {@code card} stands out from {@code wallpaper} enough to need no rim. */
+    public static boolean cardShowsEdge(@ColorInt int card, @ColorInt int wallpaper) {
+        return ratio(opaque(card), opaque(wallpaper)) >= CARD_EDGE_RATIO;
+    }
+
+    /**
+     * How much more opaque a widget's glass body is than the Look's Base, as a fraction of full
+     * opacity: the thicker material a body of text stands on (research note §4.4.1). Fixed, so
+     * the body follows Base's Opacity with no knob of its own.
+     */
+    public static final float WIDGET_BODY_LIFT = 0.15f;
+
+    /**
+     * The alpha of the layer a widget lays over the Look's slab, tinted at {@code tintAlpha255},
+     * so the two together are Base's opacity plus {@link #WIDGET_BODY_LIFT}: {@code l} with
+     * {@code 1 - (1 - a)(1 - l) = a + lift}, held to opaque. 0 over an opaque tint.
+     */
+    public static int widgetLiftAlpha255(int tintAlpha255) {
+        float tint = Math.max(0, Math.min(255, tintAlpha255)) / 255f;
+        if (tint >= 1f) return 0;
+        float body = Math.min(1f, tint + WIDGET_BODY_LIFT);
+        float lift = (body - tint) / (1f - tint);
+        return Math.max(0, Math.min(255, Math.round(lift * 255f)));
+    }
+
+    /**
+     * Two layers of one colour, {@code first} under {@code second}, as the one layer they draw:
+     * the colour of {@code first} (or of {@code second} where {@code first} is clear) at their
+     * combined alpha. A widget draws its body's lift and its veil as one fill.
+     */
+    @ColorInt
+    public static int stackAlpha(@ColorInt int first, @ColorInt int second) {
+        int a = Color.alpha(first);
+        int b = Color.alpha(second);
+        if (a == 0) return second;
+        if (b == 0) return first;
+        int combined = 255 - Math.round((255 - a) * (255 - b) / 255f);
+        return withAlpha(first, combined);
+    }
+
+    /**
+     * The widget band's answer: a widget's content on its body over what is behind it.
+     *
+     * <p>{@code body} is what the widget lays over {@code backdrop}: the Look's slab tint with the
+     * body's lift on glass, or the opaque card, which hides the backdrop. The content's inks are
+     * the card's own roles on the page's ink polarity, so they are never re-toned: what moves is
+     * the veil, the card's own colour laid over the body at the smallest alpha that holds
+     * {@code textInk} to {@code textTarget} (body and label, 4.5:1) and {@code graphicInk} to
+     * {@code graphicTarget} (hero numerals of 24 sp and up, and graphics, 3:1). The veil may run
+     * to opaque: a widget that can only be read on its solid card is drawn as its solid card.</p>
+     *
+     * @param backdrop the opaque wallpaper behind the widget, under the launcher's dim
+     * @param body what the widget's glass or card draws over it, alpha included
+     * @param veilColor the card's colour on the page's polarity; its alpha is ignored
+     */
+    @NonNull
+    public static Resolution resolveWidget(@ColorInt int backdrop, @ColorInt int body,
+                                           @ColorInt int textInk, double textTarget,
+                                           @ColorInt int graphicInk, double graphicTarget,
+                                           @ColorInt int veilColor) {
+        int ground = opaque(composite(body, opaque(backdrop)));
+        return resolveFixedInk(ground, Color.TRANSPARENT, textInk, textTarget, graphicInk,
+            graphicTarget, veilColor, 255);
+    }
 }

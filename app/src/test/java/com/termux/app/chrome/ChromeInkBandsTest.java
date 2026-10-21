@@ -2,6 +2,7 @@ package com.termux.app.chrome;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -52,6 +53,18 @@ public class ChromeInkBandsTest {
     private static final Rect PANE_TOP = new Rect(0, 200, 1080, 1100);
     private static final Rect PANE_BOTTOM = new Rect(0, 1110, 1080, 1800);
     private static final Rect KEYBOARD_RECT = new Rect(0, 1800, 1080, 2400);
+    private static final Rect DOCK_RECT = new Rect(0, 120, 1080, 196);
+    /** Two Home widgets side by side, each its own rect of the widget band. */
+    private static final Rect WIDGET_A = new Rect(40, 300, 500, 700);
+    private static final Rect WIDGET_B = new Rect(580, 300, 1040, 700);
+
+    /** A day scheme's widget card, its body-and-label ink; the dark card's and its ink. */
+    private static final int DAY_CARD = 0xFFECEEF4;
+    private static final int DAY_CARD_TEXT = 0xFF44474E;
+    private static final int DARK_CARD = 0xFF1D2024;
+    private static final int DARK_CARD_TEXT = 0xFFC4C6D0;
+    /** The Look's day glass at Base's opacity 30, the slab under a glass widget. */
+    private static final int DAY_TINT_30 = 0x4DE1E7F2;
 
     /** A sampler that answers per rect and remembers what it was asked. */
     private static final class Wallpaper implements GlassBackdropCache.Sampler {
@@ -60,11 +73,15 @@ public class ChromeInkBandsTest {
         int paneBottom = DARK_WALLPAPER;
         int keyboard = LIGHT_WALLPAPER;
         int other = DARK_WALLPAPER;
+        int widgetA = DARK_WALLPAPER;
+        int widgetB = LIGHT_WALLPAPER;
         @NonNull final List<Rect> asked = new ArrayList<>();
 
         @Override
         public int sampleWallpaper(@NonNull Rect rect) {
             asked.add(new Rect(rect));
+            if (rect.equals(WIDGET_A)) return widgetA;
+            if (rect.equals(WIDGET_B)) return widgetB;
             if (rect.equals(STATUS_RECT)) return status;
             if (rect.equals(PANE_TOP)) return paneTop;
             if (rect.equals(PANE_BOTTOM)) return paneBottom;
@@ -319,5 +336,142 @@ public class ChromeInkBandsTest {
         assertTrue("the sampler was asked for the unscaled rect: " + wallpaper.asked,
             wallpaper.asked.contains(STATUS_RECT));
         assertTrue("and never for the scaled one", !wallpaper.asked.contains(onScreen));
+    }
+
+    // ------------------------------------------------------------------ the widget band
+
+    /** A glass widget's body: the slab tint and the body's lift of the card over it. */
+    private static int glassBody(int card) {
+        int lift = OnGlass.withAlpha(card, OnGlass.widgetLiftAlpha255(Color.alpha(DAY_TINT_30)));
+        return OnGlass.composite(lift, DAY_TINT_30);
+    }
+
+    private OnGlass.Resolution dayGlassWidget(@NonNull Rect rect) {
+        return ink.widget(rect, glassBody(DAY_CARD), DAY_CARD, DAY_CARD_TEXT, LIGHT_INK);
+    }
+
+    /**
+     * The Scratchpad defect: dark ink on day glass over a dark wallpaper. The widget band veils
+     * the glass in the card's colour until body text holds 4.5:1 and graphics 3:1.
+     */
+    @Test
+    public void aDayGlassWidgetOverADarkWallpaperIsVeiledUntilItsTextReads() {
+        OnGlass.Resolution answer = dayGlassWidget(WIDGET_A);
+        assertTrue("veiled: " + answer, Color.alpha(answer.veil) > 0);
+        assertEquals(DAY_CARD, OnGlass.opaque(answer.veil));
+        assertTrue(answer.toString(),
+            OnGlass.ratio(DAY_CARD_TEXT, answer.surface) >= OnGlass.TARGET_BODY_TEXT);
+        assertTrue(answer.toString(),
+            OnGlass.ratio(LIGHT_INK, answer.surface) >= OnGlass.TARGET_LARGE_TEXT);
+
+        OnGlass.Resolution light = dayGlassWidget(WIDGET_B);
+        assertTrue("the same card over a light wallpaper needs none: " + light, light.isBare());
+    }
+
+    /** Pale ink on its dark card's glass over the dark wallpaper reads as the glass is. */
+    @Test
+    public void aDarkCardWidgetOverADarkWallpaperIsBare() {
+        OnGlass.Resolution answer = ink.widget(WIDGET_A, glassBody(DARK_CARD), DARK_CARD,
+            DARK_CARD_TEXT, NIGHT_INK);
+        assertTrue(answer.toString(), answer.isBare());
+        assertTrue(OnGlass.ratio(DARK_CARD_TEXT, answer.surface) >= OnGlass.TARGET_BODY_TEXT);
+    }
+
+    /** The solid card is opaque: nothing behind it matters to its ink, and no veil is spent. */
+    @Test
+    public void aSolidCardWidgetIsBareOnEveryWallpaper() {
+        for (int behind : new int[] {Color.WHITE, Color.BLACK, 0xFF7A6E66}) {
+            wallpaper.widgetA = behind;
+            ink.invalidate();
+            OnGlass.Resolution answer = ink.widget(WIDGET_A, DAY_CARD, DAY_CARD, DAY_CARD_TEXT,
+                LIGHT_INK);
+            assertTrue(answer.toString(), answer.isBare() && !answer.shortfall);
+            assertEquals(DAY_CARD, answer.surface);
+        }
+    }
+
+    /**
+     * One rect per widget, like the terminal pane: each is sampled once and remembered on its own
+     * rect, so the dress passes that ask again read no pixels and search nothing.
+     */
+    @Test
+    public void widgetsAreMemoisedPerRect() {
+        OnGlass.Resolution a = dayGlassWidget(WIDGET_A);
+        OnGlass.Resolution b = dayGlassWidget(WIDGET_B);
+        int reads = wallpaper.asked.size();
+        for (int pass = 0; pass < 3; pass++) {
+            assertSame(a, dayGlassWidget(WIDGET_A));
+            assertSame(b, dayGlassWidget(WIDGET_B));
+            ink.widgetWallpaper(WIDGET_A);
+        }
+        assertEquals("no widget re-sampled", reads, wallpaper.asked.size());
+        assertEquals(2, ink.widgetAnswerCountForTests());
+    }
+
+    /** A new wallpaper drops every widget's answer, and the next ask follows it. */
+    @Test
+    public void aNewWallpaperReSamplesTheWidgets() {
+        assertTrue(Color.alpha(dayGlassWidget(WIDGET_A).veil) > 0);
+        ink.invalidate();
+        assertEquals(0, ink.widgetAnswerCountForTests());
+        wallpaper.widgetA = Color.WHITE;
+        assertTrue("the widget follows the new wallpaper", dayGlassWidget(WIDGET_A).isBare());
+    }
+
+    /** A widget asked before its wallpaper is readable is answered nominally and asks again. */
+    @Test
+    public void anUnreadableWidgetIsAskedAgain() {
+        wallpaper.widgetA = GlassBackdropCache.UNREADABLE;
+        dayGlassWidget(WIDGET_A);
+        int reads = wallpaper.asked.size();
+        wallpaper.widgetA = DARK_WALLPAPER;
+        OnGlass.Resolution answer = dayGlassWidget(WIDGET_A);
+        assertEquals("read again", reads + 1, wallpaper.asked.size());
+        assertTrue("and answered on what it read", Color.alpha(answer.veil) > 0);
+    }
+
+    /**
+     * Widgets take the dock's polarity and cast no vote: a widget over a white wallpaper does not
+     * pull a dock drawn in pale ink over to the dark one, and widgets alone decide nothing.
+     */
+    @Test
+    public void theWidgetBandSharesTheDocksPolarityAndCastsNoVote() {
+        wallpaper.widgetA = Color.WHITE;
+        wallpaper.widgetB = Color.WHITE;
+        dayGlassWidget(WIDGET_A);
+        dayGlassWidget(WIDGET_B);
+        assertEquals("widgets alone leave the default", ChromeInk.Polarity.DARK_INK,
+            ink.polarity());
+
+        ink.onGlass(GlassBackdropCache.Band.DOCK, DOCK_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_BODY_TEXT);
+        assertEquals("the dock over a dark wallpaper", ChromeInk.Polarity.PALE_INK,
+            ink.polarity());
+        ink.invalidate();
+        ink.onGlass(GlassBackdropCache.Band.DOCK, DOCK_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_BODY_TEXT);
+        dayGlassWidget(WIDGET_A);
+        dayGlassWidget(WIDGET_B);
+        assertEquals("two white widgets do not flip it", ChromeInk.Polarity.PALE_INK,
+            ink.polarity());
+    }
+
+    /** The one legibility control holds widgets too: body text at 7.0 at Harder. */
+    @Test
+    public void theLegibilityLevelHoldsWidgets() {
+        surfaces.legibility = LegibilityLevel.HARDER;
+        OnGlass.Resolution answer = dayGlassWidget(WIDGET_A);
+        assertTrue(answer.toString(), OnGlass.ratio(DAY_CARD_TEXT, answer.surface)
+            >= LegibilityLevel.HARDER.target(OnGlass.TARGET_BODY_TEXT));
+        assertTrue(answer.toString(), OnGlass.ratio(LIGHT_INK, answer.surface)
+            >= LegibilityLevel.HARDER.target(OnGlass.TARGET_LARGE_TEXT));
+    }
+
+    /** What the card's rim is judged against: the widget's wallpaper under the launcher's dim. */
+    @Test
+    public void theWidgetsWallpaperIsTheBackdropUnderTheDim() {
+        surfaces.dim = 0x66000000;
+        assertEquals(OnGlass.backdrop(LIGHT_WALLPAPER, 0x66000000, Color.TRANSPARENT),
+            ink.widgetWallpaper(WIDGET_B));
     }
 }
