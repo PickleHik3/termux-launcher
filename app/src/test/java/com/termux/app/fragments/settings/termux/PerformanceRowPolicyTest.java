@@ -25,6 +25,7 @@ public class PerformanceRowPolicyTest {
         assertEquals(Reason.NONE, PerformanceRowPolicy.glassRefraction(facts));
         assertEquals(Reason.NONE, PerformanceRowPolicy.livingGlass(facts));
         assertEquals(Reason.NONE, PerformanceRowPolicy.wallpaperParallax(facts));
+        assertEquals(Reason.NONE, PerformanceRowPolicy.cursorTrail(facts));
         assertEquals(Reason.NONE, PerformanceRowPolicy.terminalEffect(facts));
         assertTrue(Reason.NONE.enabled());
         assertFalse(Reason.NONE.shownOff());
@@ -35,6 +36,7 @@ public class PerformanceRowPolicyTest {
         // The preset turns idle reduction on as well, which the glass rows answer to.
         Facts facts = new Facts(T, true, true, true, true, true);
         assertEquals(Reason.SET_BY_LOW_MEMORY_PRESET, PerformanceRowPolicy.wallpaperParallax(facts));
+        assertEquals(Reason.SET_BY_LOW_MEMORY_PRESET, PerformanceRowPolicy.cursorTrail(facts));
         assertEquals(Reason.SET_BY_LOW_MEMORY_PRESET, PerformanceRowPolicy.terminalEffect(facts));
         assertEquals(Reason.OFF_WHILE_IDLE_REDUCED, PerformanceRowPolicy.glassRefraction(facts));
         assertEquals(Reason.OFF_WHILE_IDLE_REDUCED, PerformanceRowPolicy.livingGlass(facts));
@@ -54,6 +56,7 @@ public class PerformanceRowPolicyTest {
         assertEquals(Reason.OFF_WHILE_IDLE_REDUCED, PerformanceRowPolicy.glassRefraction(facts));
         assertEquals(Reason.OFF_WHILE_IDLE_REDUCED, PerformanceRowPolicy.livingGlass(facts));
         assertEquals(Reason.NONE, PerformanceRowPolicy.wallpaperParallax(facts));
+        assertEquals(Reason.NONE, PerformanceRowPolicy.cursorTrail(facts));
         assertEquals(Reason.NONE, PerformanceRowPolicy.terminalEffect(facts));
         assertTrue(Reason.OFF_WHILE_IDLE_REDUCED.shownOff());
         assertFalse(Reason.OFF_WHILE_IDLE_REDUCED.enabled());

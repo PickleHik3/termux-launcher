@@ -38,6 +38,11 @@
             app:title="@string/settings_wallpaper_parallax_title"
             app:summary="@string/settings_performance_parallax_summary"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="terminal_cursor_trail"
+            app:title="@string/settings_performance_cursor_trail_title"
+            app:summary="@string/settings_performance_cursor_trail_summary"
+            android:defaultValue="true" />
         <ListPreference
             app:key="terminal_retro_effect"
             app:title="@string/settings_terminal_retro_effect_title"

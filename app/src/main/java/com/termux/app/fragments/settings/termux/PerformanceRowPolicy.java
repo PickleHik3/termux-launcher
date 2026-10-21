@@ -81,6 +81,11 @@ final class PerformanceRowPolicy {
     }
 
     @NonNull
+    static Reason cursorTrail(@NonNull Facts facts) {
+        return facts.lowMemoryPreset ? Reason.SET_BY_LOW_MEMORY_PRESET : Reason.NONE;
+    }
+
+    @NonNull
     static Reason terminalEffect(@NonNull Facts facts) {
         return facts.lowMemoryPreset ? Reason.SET_BY_LOW_MEMORY_PRESET : Reason.NONE;
     }

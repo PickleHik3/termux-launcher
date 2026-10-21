@@ -42,6 +42,8 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_GLASS_REFRACTION = "fancier_glass";
     private static final String KEY_LIVING_GLASS = TermuxStylePreferencesDataStore.KEY_MOTION_LIGHT;
     private static final String KEY_WALLPAPER_PARALLAX = "wallpaper_parallax";
+    /** The trail's on/off, which the preset and the Appearance editor write; not Terminal's style list. */
+    private static final String KEY_CURSOR_TRAIL = "terminal_cursor_trail";
     private static final String KEY_TERMINAL_EFFECT = "terminal_retro_effect";
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
@@ -123,13 +125,19 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
             PerformanceRowPolicy.livingGlass(facts), R.string.settings_performance_living_glass_summary);
         showSwitch(KEY_WALLPAPER_PARALLAX, prefs.isWallpaperParallaxEnabled(),
             PerformanceRowPolicy.wallpaperParallax(facts), R.string.settings_performance_parallax_summary);
+        showSwitch(KEY_CURSOR_TRAIL, prefs.isTerminalCursorTrailEnabled(),
+            PerformanceRowPolicy.cursorTrail(facts), R.string.settings_performance_cursor_trail_summary);
         ListPreference effect = findPreference(KEY_TERMINAL_EFFECT);
         if (effect != null) {
             Reason reason = PerformanceRowPolicy.terminalEffect(facts);
             effect.setEnabled(reason.enabled());
-            effect.setSummary(summary(reason, R.string.settings_performance_terminal_effect_summary));
             String stored = prefs.getTerminalRetroEffect();
             if (stored != null && !stored.equals(effect.getValue())) effect.setValue(stored);
+            // A list shows no value of its own, so a greyed one names the choice the preset wrote.
+            CharSequence entry = effect.getEntry();
+            effect.setSummary(reason == Reason.SET_BY_LOW_MEMORY_PRESET && entry != null
+                ? getString(R.string.settings_performance_set_by_preset_value, entry)
+                : summary(reason, R.string.settings_performance_terminal_effect_summary));
         }
     }
 
@@ -162,7 +170,8 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
     /**
      * Idle activity and Glass refraction belong to the terminal I/O store, the effect to the
      * terminal view's, the preset's switch to the preferences themselves (its change listener has
-     * already applied or undone it), and the rest to the launcher's.
+     * already applied or undone it), the trail's switch to the preferences too (no store owns it:
+     * the Appearance editor writes it in the launcher), and the rest to the launcher's.
      */
     private static final class PerformanceDataStore extends PreferenceDataStore {
         @NonNull private final Context context;
@@ -188,6 +197,12 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
                 // turnOn and turnOff, run by the switch's change listener, have set it already.
                 TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
                 if (prefs != null) prefs.setLowMemoryPresetEnabled(value);
+            } else if (KEY_CURSOR_TRAIL.equals(key)) {
+                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
+                if (prefs == null) return;
+                prefs.setTerminalCursorTrailEnabled(value);
+                // The launcher re-reads the trail into its focused pane when it resumes.
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
             } else style.putBoolean(key, value);
         }
 
@@ -197,6 +212,10 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
             if (KEY_LOW_MEMORY_PRESET.equals(key)) {
                 TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
                 return prefs == null ? defValue : prefs.isLowMemoryPresetEnabled();
+            }
+            if (KEY_CURSOR_TRAIL.equals(key)) {
+                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
+                return prefs == null ? defValue : prefs.isTerminalCursorTrailEnabled();
             }
             return style.getBoolean(key, defValue);
         }
