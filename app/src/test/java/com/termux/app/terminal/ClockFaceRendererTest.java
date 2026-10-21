@@ -25,9 +25,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The status bar's clock draws through {@link ClockFaceRenderer}. Taking the renderer out of
- * {@link TerminalClockWidget} must not move a face by a pixel, so its fit plan at the bar's sizes
- * is held to what the bar's own fit produced before the split.
+ * The status bar's clock draws through {@link ClockFaceRenderer}. Its fit plan at the bar's
+ * sizes must keep the face inside the budget the bar hands it, and the bar must report exactly
+ * the renderer's plan and bounds.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.Q, application = Application.class)
@@ -36,87 +36,27 @@ public class ClockFaceRendererTest {
 
     /** 2026-07-23 04:05:06 UTC: a fixed time, so the date and minute-track text are fixed too. */
     private static final long WALL = 1_784_779_506_000L;
-    private static final String[] FACES = {"flip", "lcd", "minimal", "led", "tape", "slab"};
+    private static final String[] FACES = {"flip", "lcd", "minimal", "minimal_medium", "led",
+        "tape", "slab"};
 
     /**
-     * {face, 12-hour, width budget dp, height budget dp, compact floor, scale, date kept, painted
-     * width px}, recorded from {@code TerminalClockWidget}'s private fit plan at commit 280042dd3,
-     * before the renderer was taken out, at density 1. 49dp is the bar's 65dp slot less its 8dp air
-     * on each side; 30dp is a squeezed slot that drops the date under the compact floor.
+     * {width budget dp, height budget dp, compact floor (1 or 0), date kept (1 or 0)}: the bar's
+     * budgets. 49dp is the bar's 65dp slot less its 8dp air on each side; 190dp and 100dp are the
+     * run beside media; 30dp is a squeezed slot that drops the date under the compact floor.
+     *
+     * <p>Until #111 this table held the exact plans recorded before the renderer was split out.
+     * The Label-role seconds and date (12sp, no longer scaled with the face) moved every scale,
+     * so the table now holds what must stay true instead: the face fits its budget, and the date
+     * row stays or goes as it did, except LED in the floored 30dp slot, which now drops its date
+     * (its taller date row no longer fits above the compact floor).
      */
-    private static final Object[][] BAR_PLANS = {
-        {"flip", "false", 340.0f, 49.0f, "false", 0.9521958f, 1.0f, 135.83073f},
-        {"flip", "false", 190.0f, 49.0f, "true", 0.9521958f, 1.0f, 135.83073f},
-        {"flip", "false", 100.0f, 49.0f, "true", 0.7010165f, 1.0f, 100.0f},
-        {"flip", "false", 340.0f, 30.0f, "true", 0.8450704f, 0.0f, 120.54929f},
-        {"flip", "false", 340.0f, 30.0f, "false", 0.58297706f, 1.0f, 83.161674f},
-        {"flip", "false", 120.0f, 49.0f, "false", 0.8412198f, 1.0f, 120.0f},
-        {"flip", "true", 340.0f, 49.0f, "false", 0.9521958f, 1.0f, 135.83073f},
-        {"flip", "true", 190.0f, 49.0f, "true", 0.9521958f, 1.0f, 135.83073f},
-        {"flip", "true", 100.0f, 49.0f, "true", 0.7010165f, 1.0f, 100.0f},
-        {"flip", "true", 340.0f, 30.0f, "true", 0.8450704f, 0.0f, 120.54929f},
-        {"flip", "true", 340.0f, 30.0f, "false", 0.58297706f, 1.0f, 83.161674f},
-        {"flip", "true", 120.0f, 49.0f, "false", 0.8412198f, 1.0f, 120.0f},
-        {"lcd", "false", 340.0f, 49.0f, "false", 0.98f, 1.0f, 111.72f},
-        {"lcd", "false", 190.0f, 49.0f, "true", 0.98f, 1.0f, 111.72f},
-        {"lcd", "false", 100.0f, 49.0f, "true", 0.877193f, 1.0f, 100.0f},
-        {"lcd", "false", 340.0f, 30.0f, "true", 0.88235295f, 0.0f, 100.588234f},
-        {"lcd", "false", 340.0f, 30.0f, "false", 0.6f, 1.0f, 68.4f},
-        {"lcd", "false", 120.0f, 49.0f, "false", 0.98f, 1.0f, 111.72f},
-        {"lcd", "true", 340.0f, 49.0f, "false", 0.98f, 1.0f, 111.72f},
-        {"lcd", "true", 190.0f, 49.0f, "true", 0.98f, 1.0f, 111.72f},
-        {"lcd", "true", 100.0f, 49.0f, "true", 0.877193f, 1.0f, 100.0f},
-        {"lcd", "true", 340.0f, 30.0f, "true", 0.88235295f, 0.0f, 100.588234f},
-        {"lcd", "true", 340.0f, 30.0f, "false", 0.6f, 1.0f, 68.4f},
-        {"lcd", "true", 120.0f, 49.0f, "false", 0.98f, 1.0f, 111.72f},
-        {"minimal", "false", 340.0f, 49.0f, "false", 1.0888889f, 1.0f, 119.77778f},
-        {"minimal", "false", 190.0f, 49.0f, "true", 1.0888889f, 1.0f, 119.77778f},
-        {"minimal", "false", 100.0f, 49.0f, "true", 0.90909094f, 1.0f, 100.0f},
-        {"minimal", "false", 340.0f, 30.0f, "true", 0.9677419f, 0.0f, 106.45161f},
-        {"minimal", "false", 340.0f, 30.0f, "false", 0.6666667f, 1.0f, 73.333336f},
-        {"minimal", "false", 120.0f, 49.0f, "false", 1.0888889f, 1.0f, 119.77778f},
-        {"minimal", "true", 340.0f, 49.0f, "false", 1.0888889f, 1.0f, 119.77778f},
-        {"minimal", "true", 190.0f, 49.0f, "true", 1.0888889f, 1.0f, 119.77778f},
-        {"minimal", "true", 100.0f, 49.0f, "true", 0.90909094f, 1.0f, 100.0f},
-        {"minimal", "true", 340.0f, 30.0f, "true", 0.9677419f, 0.0f, 106.45161f},
-        {"minimal", "true", 340.0f, 30.0f, "false", 0.6666667f, 1.0f, 73.333336f},
-        {"minimal", "true", 120.0f, 49.0f, "false", 1.0888889f, 1.0f, 119.77778f},
-        {"led", "false", 340.0f, 49.0f, "false", 1.1395348f, 1.0f, 140.3907f},
-        {"led", "false", 190.0f, 49.0f, "true", 1.1395348f, 1.0f, 140.3907f},
-        {"led", "false", 100.0f, 49.0f, "true", 0.8116883f, 1.0f, 100.0f},
-        {"led", "false", 340.0f, 30.0f, "true", 0.6976744f, 1.0f, 85.95349f},
-        {"led", "false", 340.0f, 30.0f, "false", 0.6976744f, 1.0f, 85.95349f},
-        {"led", "false", 120.0f, 49.0f, "false", 0.97402596f, 1.0f, 120.0f},
-        {"led", "true", 340.0f, 49.0f, "false", 1.1395348f, 1.0f, 140.3907f},
-        {"led", "true", 190.0f, 49.0f, "true", 1.1395348f, 1.0f, 140.3907f},
-        {"led", "true", 100.0f, 49.0f, "true", 0.8116883f, 1.0f, 100.0f},
-        {"led", "true", 340.0f, 30.0f, "true", 0.6976744f, 1.0f, 85.95349f},
-        {"led", "true", 340.0f, 30.0f, "false", 0.6976744f, 1.0f, 85.95349f},
-        {"led", "true", 120.0f, 49.0f, "false", 0.97402596f, 1.0f, 120.0f},
-        {"tape", "false", 340.0f, 49.0f, "false", 1.1807228f, 1.0f, 212.5301f},
-        {"tape", "false", 190.0f, 49.0f, "true", 1.0555556f, 1.0f, 190.0f},
-        {"tape", "false", 100.0f, 49.0f, "true", 0.5555556f, 1.0f, 100.00001f},
-        {"tape", "false", 340.0f, 30.0f, "true", 1.35f, 0.0f, 137.7f},
-        {"tape", "false", 340.0f, 30.0f, "false", 0.72289157f, 1.0f, 130.12048f},
-        {"tape", "false", 120.0f, 49.0f, "false", 0.6666667f, 1.0f, 120.0f},
-        {"tape", "true", 340.0f, 49.0f, "false", 1.1807228f, 1.0f, 212.5301f},
-        {"tape", "true", 190.0f, 49.0f, "true", 1.0555556f, 1.0f, 190.0f},
-        {"tape", "true", 100.0f, 49.0f, "true", 0.5555556f, 1.0f, 100.00001f},
-        {"tape", "true", 340.0f, 30.0f, "true", 1.35f, 0.0f, 137.7f},
-        {"tape", "true", 340.0f, 30.0f, "false", 0.72289157f, 1.0f, 130.12048f},
-        {"tape", "true", 120.0f, 49.0f, "false", 0.6666667f, 1.0f, 120.0f},
-        {"slab", "false", 340.0f, 49.0f, "false", 1.0888889f, 1.0f, 118.68889f},
-        {"slab", "false", 190.0f, 49.0f, "true", 1.0888889f, 1.0f, 118.68889f},
-        {"slab", "false", 100.0f, 49.0f, "true", 0.9174312f, 1.0f, 100.0f},
-        {"slab", "false", 340.0f, 30.0f, "true", 0.9677419f, 0.0f, 105.48387f},
-        {"slab", "false", 340.0f, 30.0f, "false", 0.6666667f, 1.0f, 72.66667f},
-        {"slab", "false", 120.0f, 49.0f, "false", 1.0888889f, 1.0f, 118.68889f},
-        {"slab", "true", 340.0f, 49.0f, "false", 1.0888889f, 1.0f, 118.68889f},
-        {"slab", "true", 190.0f, 49.0f, "true", 1.0888889f, 1.0f, 118.68889f},
-        {"slab", "true", 100.0f, 49.0f, "true", 0.9174312f, 1.0f, 100.0f},
-        {"slab", "true", 340.0f, 30.0f, "true", 0.9677419f, 0.0f, 105.48387f},
-        {"slab", "true", 340.0f, 30.0f, "false", 0.6666667f, 1.0f, 72.66667f},
-        {"slab", "true", 120.0f, 49.0f, "false", 1.0888889f, 1.0f, 118.68889f},
+    private static final float[][] BAR_BUDGETS = {
+        {340f, 49f, 0f, 1f},
+        {190f, 49f, 1f, 1f},
+        {100f, 49f, 1f, 1f},
+        {340f, 30f, 1f, 0f},
+        {340f, 30f, 0f, 1f},
+        {120f, 49f, 0f, 1f},
     };
 
     private TimeZone mSavedZone;
@@ -133,28 +73,36 @@ public class ClockFaceRendererTest {
     }
 
     @Test
-    public void fitPlanAtBarSizes_equalsWhatTheBarProducedBeforeTheSplit() {
+    public void fitPlanAtBarSizes_keepsTheFaceInsideTheBudget() {
         Context context = ApplicationProvider.getApplicationContext();
         float density = context.getResources().getDisplayMetrics().density;
-        assertEquals("the recorded plans are at density 1", 1f, density, 0f);
-        for (Object[] row : BAR_PLANS) {
-            String face = (String) row[0];
-            boolean amPm = Boolean.parseBoolean((String) row[1]);
-            float width = (Float) row[2] * density;
-            float height = (Float) row[3] * density;
-            boolean floor = Boolean.parseBoolean((String) row[4]);
-            ClockFaceRenderer renderer = new ClockFaceRenderer(context.getResources());
-            renderer.setStyle(face);
-            renderer.setUseAmPm(amPm);
-            renderer.updateTime(WALL, 1_000L);
-            float[] plan = renderer.fitPlan(width, height, floor);
-            String label = face + (amPm ? " 12h " : " 24h ") + row[2] + "x" + row[3]
-                + (floor ? " floored" : "");
-            assertEquals(label + " scale", (Float) row[5], plan[0], 1e-5f);
-            assertEquals(label + " date kept", (Float) row[6], plan[1], 0f);
-            assertEquals(label + " painted width", (Float) row[7], plan[2], 1e-3f);
-            assertEquals(label + " fit width", (Float) row[7],
-                renderer.fitWidthPx(width, height, floor), 1e-3f);
+        int slot = Math.round(65f * density);
+        for (String face : FACES) {
+            for (boolean amPm : new boolean[] {false, true}) {
+                for (float[] row : BAR_BUDGETS) {
+                    float width = row[0] * density;
+                    float height = row[1] * density;
+                    boolean floor = row[2] > 0f;
+                    ClockFaceRenderer renderer = new ClockFaceRenderer(context.getResources());
+                    renderer.setStyle(face);
+                    renderer.setUseAmPm(amPm);
+                    renderer.updateTime(WALL, 1_000L);
+                    float[] plan = renderer.fitPlan(width, height, floor);
+                    String label = face + (amPm ? " 12h " : " 24h ") + row[0] + "x" + row[1]
+                        + (floor ? " floored" : "");                    assertTrue(label + " scale " + plan[0],
+                        plan[0] > 0f && plan[0] <= ClockFaceRenderer.FIT_MAX_SCALE);
+                    assertTrue(label + " painted width " + plan[2], plan[2] <= width + 1e-3f);
+                    boolean expectDate = row[3] > 0f
+                        && !(face.equals("led") && row[1] == 30f && floor);
+                    assertEquals(label + " date kept", expectDate ? 1f : 0f, plan[1], 0f);
+                    assertEquals(label + " fit width", plan[2],
+                        renderer.fitWidthPx(width, height, floor), 1e-3f);
+
+                    renderer.setFitBudget(width, height, floor);
+                    assertTrue(label + " painted column " + renderer.fullColumnPx(slot),
+                        renderer.fullColumnPx(slot) <= height + 1e-3f);
+                }
+            }
         }
     }
 

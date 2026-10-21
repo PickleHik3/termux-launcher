@@ -28099,7 +28099,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.MediaWidgetView media = findViewById(R.id.terminal_media_widget);
         if (media != null) media.onThemeChanged();
         com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
-        if (clock != null) clock.onThemeChanged();
+        if (clock != null) {
+            clock.setBandInk(band.surface, band.ink);
+            clock.onThemeChanged();
+        }
     }
 
     /** The role colour a status tier is written in; its hue is the tier, and the toning keeps it. */
