@@ -16,8 +16,12 @@ Home floats included) and the same dock (one set of rows, one height, one **Dock
 still while the wall moves. Only the extra keys stay the Workspace's own, folding away with the
 travel toward Home. A user who wants Home laid out differently opts into a **Home layout**, much as
 a surface holds an override of **Base**; only then may the bar and dock change on the swipe.
-Minimal mode stays the Workspace's: Home has no corner tab to leave it by, so it ignores minimal (amended the same day; the command palette gains a Minimal action). The design, the **Search field** and the **Drawer tile** are
-held by the layout.
+Minimal mode stays the Workspace's: Home has no corner tab to leave it by, so it ignores minimal
+(amended the same day; the command palette gains a Minimal action). The design, the **Search field**
+and the **Drawer tile** are held by the layout. Even under a Home layout the sizes and the shape stay
+linked to the shared layout (the apps row and #3 Strip row heights, the keyboard's height and chin,
+Style, Corners and Margin; amended the same day), so a Home layout only changes which rows show and
+where, the design and the toggles, and nothing resizes on the swipe.
 
 Considered options: keeping the bar Workspace-only and unifying the dock alone (still a seam at the
 top), folding the bar's contents into the dock (the developer's aim for a later design, but a much

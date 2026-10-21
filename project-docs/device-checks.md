@@ -13,6 +13,15 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-22 · PR #99 (244fcf46a, migrations 9–13) · Upgrade: install over a release from before
+  this branch with a Home dock height, Corners or Margin set apart from the Workspace's and a
+  Prompt line or Taskbar dock style picked → Home keeps its rows (Home's own on only if rows
+  differed), sizes and shape follow the window, Prompt line → #1 Tray + Search field, Taskbar →
+  #1 Tray + Drawer tile at its spot · emulator or pong.
+- 2026-10-22 · commit "fix(place): the extra keys' fold ends at the other half's resting dock" ·
+  Re-measure Workspace→Home (keyboard down, keyboard up, fast drag): the last travel frame's dock
+  glass top equals Home's rest, no one-frame jump at settle, the A–Z letters don't step · emulator
+  (frame capture as in project-docs/active/chrome-unification-2026-10-21.md, Follow-ups).
 - 2026-10-21 · commit "feat(place): Home's own layout keeps the sizes and shape linked to the
   shared layout" (#84) · Home's own on: change the apps row height / Strip height / keyboard
   height / corners on Home → the window matches; rows, design and toggles still differ; no size

@@ -141,3 +141,27 @@ Each step lands and passes an emulator check before the next. All four steps are
   bar as the Layout editor places it today.
 - Each design must fit the Search field and the Drawer tile; #3 Strip with the Search field is the
   tallest combination.
+
+## Follow-ups (after the merge, 2026-10-22)
+
+Merged into v2-redesign as PR #99 (244fcf46a); #84 and #85–#98 are closed. What is still open:
+
+- **Setup card double tap → a second session.** Once, on a fresh install, tapping "You're set"'s
+  Start twice (the first tap landed before the card showed) ended setup with the bar's session box
+  at "2" holding one window. It did not reproduce in four clean fresh installs (before and after
+  builds, storage allowed and denied). Suspect: Start's handler running twice, or the client's
+  `onStart` promoting a windowless shell into its own session (`setCurrentSession(...)` →
+  `activateSessionInPanes`). Not caused by the bar's '+' (that path now goes through
+  `NewWindowSessionPolicy`). Reproduce by double-tapping Start, then fix in the setup flow.
+- **Device checks owed** (in `project-docs/device-checks.md`): pong taste and jank for the
+  extra-keys fold, the dock no longer sinking then snapping on Workspace→Home, the seam's 44 dp
+  border-drag band, the #3 Strip clock's per-second tick; an upgrade install from a build before
+  this branch (migrations 9–13); the emulator re-measure of the Workspace→Home dock (blocked on
+  2026-10-21 by another session's lease).
+- **Leftovers from the review**: `TermuxActivity.chromeWearsHomeShape` passes a half the shape
+  getters now ignore (removing it touches ~40 callers of `isRoundedStyle` / `chromeCornersDp` /
+  `chromeMarginDp`); the Layout editor's #3 Strip preview draws a fixed "08:03" in a plain face
+  instead of the bar's clock; `WindowItem`'s 11-argument constructor was left as is.
+- **Later design**: #3 Strip as the start of a dock that carries the status bar's work (see
+  Notes for later).
+
