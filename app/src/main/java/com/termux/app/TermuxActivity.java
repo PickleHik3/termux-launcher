@@ -17244,7 +17244,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The row's side inset in its own pixels: where the apps row's first slot draws its icon (the
      * row's icons are space-between, so the last slot's ends as far from the other side), read off
-     * any laid-out icon and its column; the 14 dp inside the slab while no icon is laid out.
+     * any laid-out icon and its column; the 14 dp inside the slab while no icon is laid out, and
+     * never less than that (WallStripRowPolicy.sideInsetPx).
      */
     private float wallStripInsetPx(@NonNull DockLayout layout) {
         float fallback = layout.wallStripSideInsetPx;
@@ -17271,7 +17272,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int column = Math.max(0, Math.min(columns - 1,
             (int) Math.floor((boxLeft + boxRight) / 2f / slot)));
         float first = barLeft + bar.getPaddingLeft() + boxLeft - column * slot;
-        return first > 0f && first < host.getWidth() / 3f ? first : fallback;
+        return com.termux.app.dock.WallStripRowPolicy.sideInsetPx(
+            first > 0f && first < host.getWidth() / 3f ? first : Float.NaN, fallback);
     }
 
     /**

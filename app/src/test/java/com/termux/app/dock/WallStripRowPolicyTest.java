@@ -278,4 +278,28 @@ public class WallStripRowPolicyTest {
         assertTrue(text.showsGlyph);
         assertEquals(0f, text.labelRoomPx, 0f);
     }
+
+    @Test
+    public void sideInset_followsTheFirstIcon_whenItStandsInsideTheSlab() {
+        // A Floating slab: the icons stand well inside it, and the clock lines up with them.
+        assertEquals(60f, WallStripRowPolicy.sideInsetPx(60f, 50f), EPS);
+    }
+
+    @Test
+    public void sideInset_neverCloserToTheSlabsSideThanTheSpecs14dp() {
+        // A Docked slab with no Margin lays its icons out to the screen's edges: the first icon
+        // read about 5 px in put the clock on the edge and cut the + tile (2026-10-21 check).
+        float slab = 14f * 2.75f;
+        assertEquals(slab, WallStripRowPolicy.sideInsetPx(5f, slab), EPS);
+        WallStripRowPolicy.Row row = WallStripRowPolicy.layout(1080f,
+            WallStripRowPolicy.sideInsetPx(5f, slab), 27.5f, 1, 0f, 0f);
+        assertTrue(row.tileLeft(row.tileCount() - 1) + row.tileWidthPx <= 1080f - slab + EPS);
+        assertTrue(row.tilesLeftPx - row.clockWidthPx >= slab - EPS);
+    }
+
+    @Test
+    public void sideInset_isTheSlabsWhileNoIconIsLaidOut() {
+        assertEquals(38.5f, WallStripRowPolicy.sideInsetPx(Float.NaN, 38.5f), EPS);
+        assertEquals(0f, WallStripRowPolicy.sideInsetPx(Float.NaN, -3f), EPS);
+    }
 }

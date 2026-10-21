@@ -49,6 +49,10 @@ under twenty items; past that, the oldest are re-judged first.
   A–Z row and the tray's glass on screen all the way; only the extra keys row shuts (opens) on
   the dock's edge; no jump of the A–Z row at settle; a Floating tray's bottom corners may read
   square mid-fold; Home layout on with a different shape still dips as before · emulator.
+- 2026-10-21 · commit "fix(dock): the Wall strip keeps 14 dp inside the slab" · Wall strip on,
+  Docked with no Margin and Floating, on Home and a window: the clock clears the left edge and
+  the + tile ends clear of the right one, at least 14 dp inside the slab; on a Floating slab the
+  clock still lines up with the first icon · emulator.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on
