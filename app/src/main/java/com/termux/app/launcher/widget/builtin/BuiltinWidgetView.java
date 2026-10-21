@@ -89,6 +89,26 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     /** The alpha of the Look's tint the slab wears; what the card's ground is, see-through. */
     private int wornTintAlpha;
     @Nullable private GlassSource glassSource;
+    /** Whether the page's ink is the pale one, so the card is the dark one ({@link #resolveStyle}). */
+    private boolean inkPale;
+    /** Whether the widget wears the Look's glass now: its switch on and no solid fallback. */
+    private boolean glassWorn;
+    /** The Look last fed, which the widget band is asked through; null before any. */
+    @Nullable private com.termux.app.terminal.PaneSurfaceStyle fedLook;
+    /**
+     * The card's own fill over the slab while glass is worn: the body's lift and the measured veil,
+     * one layer of the card's colour. Transparent otherwise.
+     */
+    private int cardFill;
+    /** Whether the solid card draws its rim at the outline role, where it would vanish. */
+    private boolean edgeRim;
+    /** The opaque colour the content stands on, as last measured; the card itself before that. */
+    private int groundSurface;
+    private final android.graphics.Rect inkRect = new android.graphics.Rect();
+    private final int[] inkLocation = new int[2];
+    private final int[] inkRootLocation = new int[2];
+    /** A restyle the dress asked for inside a layout pass, built after it. */
+    private final Runnable restyle = () -> { if (this.built) rebuild(); };
     @NonNull private BuiltinWidgetSpan span = BuiltinWidgetSpan.ONE_BY_ONE;
     /** The cells the widget spans on its grid; the bucket is chosen from them and the room. */
     private int cellColumns = 1, cellRows = 1;
@@ -137,6 +157,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         this.services = services;
         this.hostStyle = style;
         this.style = style;
+        groundSurface = style.card;
         corner = new BuiltinWidgetCorner(style.cornerRadiusPx, style.density);
         background = new View(context);
         background.setId(android.R.id.background);
@@ -182,16 +203,19 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         boolean glass = BuiltinWidgetGlass.isOn(nextConfig.getString(BuiltinWidgetGlass.CONFIG_KEY));
         if (glass != glassOn) {
             glassOn = glass;
-            resolveStyle();
-            applyChrome();
+            // The re-dress settles the style; the rebuild below builds in it.
             syncGlassRegistration();
         }
         rebuild();
     }
 
-    /** The look drawn: the see-through card while this widget's Glass is on, else the solid one. */
+    /**
+     * The look drawn: the host's, on the card the page's ink asks for ({@link #inkPale}), on the
+     * Look's glass while the widget wears it ({@link #glassWorn}), else on the solid card.
+     */
     private void resolveStyle() {
-        style = glassOn ? hostStyle.glassVariant(getContext()) : hostStyle;
+        BuiltinWidgetStyle onInk = hostStyle.onInk(inkPale);
+        style = glassWorn ? onInk.glassVariant(getContext()) : onInk;
     }
 
     /** The cells the widget spans on its grid, from its record. */
@@ -285,6 +309,9 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         if (slab != null) slab.layout(0, 0, right - left, bottom - top);
         background.layout(0, 0, right - left, bottom - top);
         content.layout(0, 0, content.getMeasuredWidth(), content.getMeasuredHeight());
+        // Moved on its grid without a new size: what is behind it is new. A memoised ask when it
+        // is not; a re-dress of the card's fill and rim only, never a rebuild.
+        if (changed) remeasureInk();
     }
 
     private void setZoom(float next) {
@@ -386,6 +413,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         // Freshly resolved, so the Look's corner as stored now; the rebuild cuts its shapes at it.
         corner.set(next.cornerRadiusPx);
         applyChrome();
+        // Built below whatever the dress settles, so its own restyle is not built twice.
         dressSlab();
         if (built) rebuild();
     }
@@ -402,7 +430,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
      * that moved is re-dressed in place ({@link #takeCorner}): nothing is rebuilt or laid out.
      */
     public final void onGlassStyle(@Nullable com.termux.app.terminal.PaneSurfaceStyle source) {
-        dressSlab(source);
+        if (dressSlab(source)) restyled();
     }
 
     /**
@@ -441,12 +469,13 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     @NonNull final BuiltinWidgetCorner corner() { return corner; }
 
     /**
-     * How opaque the card's own ground is: whole on the solid card, the Look's tint on the Look's
-     * glass, the see-through card's fill where there is no glass to wear.
+     * How opaque the card's own ground is: whole on the solid card; on the Look's glass, the
+     * Look's tint with the card's fill (the body's lift and its veil) over it.
      */
     protected final int cardAlpha() {
-        if (wornLook != null) return wornTintAlpha;
-        return style.glass ? android.graphics.Color.alpha(style.card) : 255;
+        if (wornLook == null) return 255;
+        int fill = android.graphics.Color.alpha(cardFill);
+        return 255 - Math.round((255 - wornTintAlpha) * (255 - fill) / 255f);
     }
 
     /**
@@ -461,7 +490,8 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         // Neither asks for a layout; both only redraw.
         if (background.getBackground() instanceof GradientDrawable)
             ((GradientDrawable) background.getBackground()).setCornerRadius(cardRadiusPx());
-        if (wornLook != null) dressSlab(wornLook);
+        // The slab follows the size, and the band is asked about the new rect.
+        if (dressSlab(fedLook)) restyled();
     }
 
     /** The wall moved the page, or the wallpaper panned: the slab re-aims at what is behind it. */
@@ -469,13 +499,14 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         if (slab != null && slab.getVisibility() == VISIBLE) slab.invalidateGlassPosition();
     }
 
-    private void syncGlassRegistration() {
+    /** @return whether the style moved; see {@link #dressSlab(com.termux.app.terminal.PaneSurfaceStyle)} */
+    private boolean syncGlassRegistration() {
         GlassSource source = isAttachedToWindow() && !preview ? findGlassSource() : null;
         if (glassSource != null && glassSource != source) glassSource.removeGlassWidget(this);
         glassSource = source;
         // Again on a switch flip, so the page knows before the slab asks for a frame.
         if (source != null) source.addGlassWidget(this);
-        dressSlab();
+        return dressSlab();
     }
 
     @Nullable private GlassSource findGlassSource() {
@@ -486,29 +517,64 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         return null;
     }
 
-    private void dressSlab() {
-        dressSlab(glassSource == null ? null : glassSource.widgetGlassStyle());
+    /** {@link #dressSlab(com.termux.app.terminal.PaneSurfaceStyle)} with the page's Look. */
+    private boolean dressSlab() {
+        return dressSlab(glassSource == null ? null : glassSource.widgetGlassStyle());
+    }
+
+    /** A restyle {@link #dressSlab} reported, built now or, inside a layout pass, after it. */
+    private void restyled() {
+        if (!built) return;
+        removeCallbacks(restyle);
+        if (isInLayout()) post(restyle);
+        else rebuild();
     }
 
     /**
-     * Shows the Look's slab, fed from {@code source}, or puts it away. Dressed by
-     * {@link com.termux.app.terminal.PaneGlass#apply} as a terminal pane's slab is — the one
-     * shared frame through a matrix (no pixels of its own), the Look's frost, tint, grain and
-     * Fancier Glass — with the Look's rim, cut at the card's corner. The card over it then draws
-     * no fill of its own: the slab's tint is the card.
+     * Shows the Look's slab, fed from {@code source}, or puts it away, and settles the card on
+     * the page's ink. Dressed by {@link com.termux.app.terminal.PaneGlass#apply} as a terminal
+     * pane's slab is — the one shared frame through a matrix (no pixels of its own), the Look's
+     * frost, tint, grain and Fancier Glass — with the Look's rim, cut at the card's corner. The
+     * card over it then draws only the body's lift and the measured veil ({@link #measureInk}).
+     *
+     * <p>The slab is shown only where the glass can be worn: the widget's switch on, the
+     * launcher on the wallpaper, the shared frame ready, and none of battery saver, outline text
+     * or high system contrast ({@link BuiltinWidgetGlass#solidFallback}); else the solid card.
+     * The card is the dark one on the page's pale ink, or at night
+     * ({@link BuiltinWidgetStyle#onInk}).</p>
+     *
+     * @return whether the style moved (the card's side, or glass worn or put down), so the
+     *     layout has to be built again in it; the caller builds
      */
-    private void dressSlab(@Nullable com.termux.app.terminal.PaneSurfaceStyle source) {
+    private boolean dressSlab(@Nullable com.termux.app.terminal.PaneSurfaceStyle source) {
+        fedLook = source;
         // Every widget wears the Look's corner, glass or not.
         if (source != null) takeCorner(source);
-        boolean shown = BuiltinWidgetGlass.slabShown(glassOn, preview,
-            com.termux.app.terminal.PaneGlass.isActive(source));
+        com.termux.app.chrome.WidgetInkSource ink = inkSource(source);
+        boolean onWallpaper = com.termux.app.terminal.PaneGlass.isActive(source);
+        boolean shown;
+        if (BuiltinWidgetGlass.slabShown(glassOn, preview, onWallpaper)) {
+            BuiltinWidgetGlass.SystemAsks asks = BuiltinWidgetGlass.SystemAsks.current(getContext());
+            shown = BuiltinWidgetGlass.glassWorn(glassOn, preview, onWallpaper,
+                ink == null || ink.widgetFrameReady(), asks.batterySaver, asks.outlineText,
+                asks.highContrast);
+        } else {
+            shown = false;
+        }
+        // Night is the style's own (onInk keeps a night style dark); a picker card asks nothing.
+        boolean pale = ink != null && !preview
+            && BuiltinWidgetGlass.darkCard(false, ink.widgetPolarity());
+        BuiltinWidgetStyle before = style;
+        inkPale = pale;
+        glassWorn = shown;
+        resolveStyle();
+        boolean styleMoved = style != before;
         if (!shown) {
             if (slab != null && slab.getVisibility() != GONE) slab.setVisibility(GONE);
-            if (wornLook != null) {
-                wornLook = null;
-                applyChrome();
-            }
-            return;
+            boolean chromeMoved = wornLook != null;
+            wornLook = null;
+            if (measureInk() || chromeMoved || styleMoved) applyChrome();
+            return styleMoved;
         }
         if (slab == null) {
             slab = new com.termux.app.terminal.PaneGlassBackdropView(getContext());
@@ -526,14 +592,69 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         slab.setRim(cardRadiusPx(), source);
         slab.invalidateOutline();
         int tintAlpha = android.graphics.Color.alpha(source.paneGlassTintColor());
-        if (wornLook == null || tintAlpha != wornTintAlpha) {
-            wornLook = source;
-            wornTintAlpha = tintAlpha;
-            applyChrome();
-        } else {
-            wornLook = source;
-        }
+        boolean chromeMoved = wornLook == null || tintAlpha != wornTintAlpha;
+        wornLook = source;
+        wornTintAlpha = tintAlpha;
+        if (measureInk() || chromeMoved || styleMoved) applyChrome();
+        return styleMoved;
     }
+
+    /** The widget band of the Look fed, or null where there is no chrome to ask (a test, a picker). */
+    @Nullable
+    private static com.termux.app.chrome.WidgetInkSource inkSource(
+            @Nullable com.termux.app.terminal.PaneSurfaceStyle source) {
+        return source instanceof com.termux.app.chrome.WidgetInkSource
+            ? (com.termux.app.chrome.WidgetInkSource) source : null;
+    }
+
+    /**
+     * Asks the widget band ({@link com.termux.app.chrome.ChromeInk#widget}) what this card needs
+     * where it is laid out: the veil over the glass body, the ground the content stands on, and
+     * whether the solid card shows its edge. A memoised answer for a widget asked before at the
+     * same rect; never per frame (the wall's slide is not a new rect: the laid-out one ignores it).
+     *
+     * @return whether the card's fill or rim moved, so it is dressed again
+     */
+    private boolean measureInk() {
+        com.termux.app.chrome.WidgetInkSource ink = preview ? null : inkSource(fedLook);
+        int lift = glassWorn && wornLook != null
+            ? com.termux.app.chrome.OnGlass.withAlpha(style.card,
+                com.termux.app.chrome.OnGlass.widgetLiftAlpha255(wornTintAlpha))
+            : android.graphics.Color.TRANSPARENT;
+        int fill = lift;
+        boolean rim = false;
+        int ground = style.card;
+        if (ink != null && getWidth() > 0 && getHeight() > 0) {
+            com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, inkLocation,
+                inkRootLocation);
+            inkRect.set(inkLocation[0], inkLocation[1], inkLocation[0] + getWidth(),
+                inkLocation[1] + getHeight());
+            int body = glassWorn && wornLook != null
+                ? com.termux.app.chrome.OnGlass.composite(lift, wornLook.paneGlassTintColor())
+                : style.card;
+            com.termux.app.chrome.OnGlass.Resolution answer = ink.widgetInk(inkRect, body,
+                style.card, style.onSurfaceVariant, style.primary);
+            ground = answer.surface;
+            if (glassWorn) fill = com.termux.app.chrome.OnGlass.stackAlpha(lift, answer.veil);
+            else rim = BuiltinWidgetGlass.edgeRimWanted(style.card, ink.widgetWallpaper(inkRect));
+        }
+        boolean moved = fill != cardFill || rim != edgeRim;
+        cardFill = fill;
+        edgeRim = rim;
+        groundSurface = ground;
+        return moved;
+    }
+
+    /** Re-asks the band for where the widget is laid out now, and re-dresses the card if it moved. */
+    private void remeasureInk() {
+        if (measureInk()) applyChrome();
+    }
+
+    /**
+     * The opaque colour this widget's content stands on, as last measured: the card's ground, the
+     * glass body and its veil over what is behind the widget. The card itself before any answer.
+     */
+    protected final int groundSurface() { return groundSurface; }
 
     /** {@link #widgetId()} of a view no record stands behind. */
     public static final int NO_WIDGET_ID = Integer.MIN_VALUE;
@@ -639,7 +760,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     @Override @CallSuper protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (!preview) startInternal();
-        syncGlassRegistration();
+        if (syncGlassRegistration()) restyled();
     }
 
     @Override @CallSuper protected void onDetachedFromWindow() {
@@ -657,18 +778,32 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     // ----- chrome ---------------------------------------------------------------------------
 
     /**
-     * Dresses the card: the solid or see-through card with its rim, or, while the Look's slab is
-     * worn, nothing at all over it. Runs on a style change and when the slab comes or goes,
-     * never on a frame or inside a layout.
+     * Dresses the card: the solid card with its rim, or, while the Look's slab is worn, the
+     * card's fill over it (the body's lift and the measured veil, in the card's colour; no rim of
+     * its own, the slab draws the Look's). The solid card draws the outline role's rim where it
+     * would vanish into its wallpaper ({@link #edgeRim}), else Pane's hairline. Runs on a style
+     * change, when the slab comes or goes, and when the band's answer moves; never on a frame.
+     * Only the drawable changes, so it is safe inside a layout pass.
      */
     private void applyChrome() {
         if (wornLook != null) {
-            background.setBackground(null);
+            if (android.graphics.Color.alpha(cardFill) == 0) {
+                background.setBackground(null);
+            } else {
+                GradientDrawable fill = new GradientDrawable();
+                fill.setColor(cardFill);
+                fill.setCornerRadius(cardRadiusPx());
+                background.setBackground(fill);
+            }
         } else {
             GradientDrawable card = new GradientDrawable();
             card.setColor(style.card);
             card.setCornerRadius(cardRadiusPx());
-            if (style.hasRim()) card.setStroke(Math.round(style.rimWidthPx), style.rim);
+            if (edgeRim) {
+                card.setStroke(Math.round(Math.max(1f, style.density)), style.outline);
+            } else if (style.hasRim()) {
+                card.setStroke(Math.round(style.rimWidthPx), style.rim);
+            }
             background.setBackground(card);
         }
         background.invalidateOutline();

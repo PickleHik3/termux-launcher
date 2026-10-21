@@ -38,8 +38,19 @@ public final class BuiltinWidgetStyle {
     }
 
     @NonNull public final Direction direction;
-    /** True for the see-through card a widget with its Glass switch on wears. */
+    /**
+     * True while the widget wears the Look's glass: the slab is its card and the card's own fill
+     * is only the body's lift and veil over it ({@code BuiltinWidgetView}). Inner fills stay
+     * opaque either way: no glass on glass.
+     */
     public final boolean glass;
+    /**
+     * True for the dark card: the theme's night, or the page's pale ink polarity by day
+     * ({@link #onInk}). Every role below is on this card's side.
+     */
+    public final boolean dark;
+    /** True when the theme itself is dark (night mode), which forces the dark card. */
+    public final boolean night;
     public final float density;
 
     public final float cornerRadiusPx;
@@ -55,6 +66,8 @@ public final class BuiltinWidgetStyle {
     @ColorInt public final int onSurface;
     @ColorInt public final int onSurfaceVariant;
     @ColorInt public final int outlineVariant;
+    /** The outline role: the rim a card draws where it would vanish into its wallpaper. */
+    @ColorInt public final int outline;
     @ColorInt public final int primary;
     @ColorInt public final int onPrimary;
     @ColorInt public final int primaryContainer;
@@ -80,6 +93,11 @@ public final class BuiltinWidgetStyle {
     @NonNull public final Typeface numerals;
     @Nullable public final Typeface nerd;
 
+    /** This look on the Look's glass, made once ({@link #glassVariant}). */
+    @Nullable private BuiltinWidgetStyle glassCache;
+    /** This look on the dark card, made once ({@link #onInk}). */
+    @Nullable private BuiltinWidgetStyle darkCache;
+
     private BuiltinWidgetStyle(@NonNull Context context, @NonNull Direction direction,
                                boolean glass, @Nullable Typeface monoFace, float cornerRadiusPx) {
         this.direction = direction;
@@ -92,6 +110,8 @@ public final class BuiltinWidgetStyle {
         onSurface = M3.onSurface(context);
         onSurfaceVariant = M3.onSurfaceVariant(context);
         outlineVariant = M3.outlineVariant(context);
+        outline = com.google.android.material.color.MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOutline, atTone(onSurfaceVariant, 50d));
         primary = M3.primary(context);
         onPrimary = M3.color(context, com.google.android.material.R.attr.colorOnPrimary, R.color.termux_on_primary);
         primaryContainer = M3.color(context, com.google.android.material.R.attr.colorPrimaryContainer,
@@ -109,17 +129,14 @@ public final class BuiltinWidgetStyle {
         container = M3.surfaceContainerHigh(context);
         containerHigh = M3.color(context, com.google.android.material.R.attr.colorSurfaceContainerHighest,
             R.color.termux_surface_panel_highest);
-        boolean dark = isDark(onSurface);
-        if (glass) {
-            card = ColorUtils.setAlphaComponent(surfaceContainer, Math.round(255 * (dark ? 0.55f : 0.62f)));
-            rim = ColorUtils.setAlphaComponent(Color.WHITE, Math.round(255 * (dark ? 0.12f : 0.55f)));
-            ringInner = ColorUtils.compositeColors(card, dark ? 0xFF18202A : 0xFFE9EEF5);
-        } else {
-            card = surfaceContainer;
-            rim = outlineVariant;
-            ringInner = surfaceContainer;
-        }
-        rimWidthPx = (pane || glass) ? Math.max(1f, density) : 0f;
+        night = isDark(onSurface);
+        dark = night;
+        // One card, glass or not: on glass the slab under it is the card's material and the
+        // card's colour is the body's lift and veil over it, so every fill inside stays opaque.
+        card = ColorUtils.setAlphaComponent(surfaceContainer, 255);
+        rim = outlineVariant;
+        ringInner = card;
+        rimWidthPx = pane ? Math.max(1f, density) : 0f;
         face = pane ? Color.TRANSPARENT : container;
 
         sans = Typeface.SANS_SERIF;
@@ -130,6 +147,81 @@ public final class BuiltinWidgetStyle {
         monoMedium = weighted(baseMono, 500);
         numerals = pane ? monoMedium : weighted(baseMono, 300);
         nerd = com.termux.shared.termux.font.NerdFontSpans.typeface(context);
+    }
+
+    /**
+     * {@code src} on the Look's glass ({@code glass}) and/or moved to the dark card
+     * ({@code toDark}): every role re-toned to the Material dark scheme's tone for it, hue and
+     * chroma kept, so a day scheme's card goes dark on a dark page without leaving its scheme.
+     */
+    private BuiltinWidgetStyle(@NonNull BuiltinWidgetStyle src, boolean glass, boolean toDark) {
+        direction = src.direction;
+        this.glass = glass;
+        night = src.night;
+        dark = src.dark || toDark;
+        density = src.density;
+        cornerRadiusPx = src.cornerRadiusPx;
+        barRadiusPx = src.barRadiusPx;
+        rimWidthPx = src.rimWidthPx;
+        boolean shift = toDark && !src.dark;
+        card = shift ? atTone(src.card, DarkTones.CARD) : src.card;
+        container = shift ? atTone(src.container, DarkTones.CONTAINER) : src.container;
+        containerHigh = shift ? atTone(src.containerHigh, DarkTones.CONTAINER_HIGH)
+            : src.containerHigh;
+        onSurface = shift ? atTone(src.onSurface, DarkTones.ON_SURFACE) : src.onSurface;
+        onSurfaceVariant = shift ? atTone(src.onSurfaceVariant, DarkTones.ON_SURFACE_VARIANT)
+            : src.onSurfaceVariant;
+        outlineVariant = shift ? atTone(src.outlineVariant, DarkTones.OUTLINE_VARIANT)
+            : src.outlineVariant;
+        outline = shift ? atTone(src.outline, DarkTones.OUTLINE) : src.outline;
+        primary = shift ? atTone(src.primary, DarkTones.PRIMARY) : src.primary;
+        onPrimary = shift ? atTone(src.onPrimary, DarkTones.ON_PRIMARY) : src.onPrimary;
+        primaryContainer = shift ? atTone(src.primaryContainer, DarkTones.CONTAINER_ACCENT)
+            : src.primaryContainer;
+        onPrimaryContainer = shift ? atTone(src.onPrimaryContainer, DarkTones.ON_CONTAINER_ACCENT)
+            : src.onPrimaryContainer;
+        tertiaryContainer = shift ? atTone(src.tertiaryContainer, DarkTones.CONTAINER_ACCENT)
+            : src.tertiaryContainer;
+        onTertiaryContainer = shift
+            ? atTone(src.onTertiaryContainer, DarkTones.ON_CONTAINER_ACCENT)
+            : src.onTertiaryContainer;
+        error = shift ? atTone(src.error, DarkTones.ERROR) : src.error;
+        done = src.done;
+        warm = src.warm;
+        rim = shift ? outlineVariant : src.rim;
+        ringInner = card;
+        face = direction == Direction.PANE ? Color.TRANSPARENT : container;
+        sans = src.sans;
+        sansMedium = src.sansMedium;
+        sansBold = src.sansBold;
+        mono = src.mono;
+        monoMedium = src.monoMedium;
+        numerals = src.numerals;
+        nerd = src.nerd;
+    }
+
+    /** The Material dark scheme's tone for each role a dark card re-tones. */
+    static final class DarkTones {
+        private DarkTones() { }
+        static final double CARD = 12d;
+        static final double CONTAINER = 17d;
+        static final double CONTAINER_HIGH = 22d;
+        static final double ON_SURFACE = 90d;
+        static final double ON_SURFACE_VARIANT = 80d;
+        static final double OUTLINE_VARIANT = 30d;
+        static final double OUTLINE = 60d;
+        static final double PRIMARY = 80d;
+        static final double ON_PRIMARY = 20d;
+        static final double CONTAINER_ACCENT = 30d;
+        static final double ON_CONTAINER_ACCENT = 90d;
+        static final double ERROR = 80d;
+    }
+
+    /** {@code color} at HCT {@code tone}, its hue and chroma kept, opaque. */
+    @ColorInt static int atTone(@ColorInt int color, double tone) {
+        int opaque = ColorUtils.setAlphaComponent(color, 255);
+        return com.termux.app.theme.SchemeTone.toneShift(opaque,
+            tone - com.termux.app.theme.SchemeTone.tone(opaque));
     }
 
     /** {@code base} at {@code weight} where the platform can vary it; {@code base} itself before 28. */
@@ -163,18 +255,31 @@ public final class BuiltinWidgetStyle {
     }
 
     /**
-     * This look on a see-through card ({@link BuiltinWidgetGlass}): the same direction, scheme and
-     * faces, with the glass card and rim. Itself when it already is glass.
+     * This look on the Look's glass ({@link BuiltinWidgetGlass}): the same direction, scheme,
+     * card side and faces. Itself when it already is glass; made once, so a re-dress with the
+     * same answer keeps the same style and builds nothing again.
      */
     @NonNull public BuiltinWidgetStyle glassVariant(@NonNull Context context) {
-        return glass ? this : new BuiltinWidgetStyle(context, direction, true, mono,
-            cornerRadiusPx);
+        if (glass) return this;
+        if (glassCache == null) glassCache = new BuiltinWidgetStyle(this, true, false);
+        return glassCache;
+    }
+
+    /**
+     * This look on the card the page's ink asks for: the dark card for the pale ink
+     * ({@code paleInk}), the theme's own for the dark ink. Night forces the dark card whatever
+     * the ink, so a night style is always itself. Made once per style.
+     */
+    @NonNull public BuiltinWidgetStyle onInk(boolean paleInk) {
+        if (dark || !paleInk) return this;
+        if (darkCache == null) darkCache = new BuiltinWidgetStyle(this, glass, true);
+        return darkCache;
     }
 
     public boolean isPane() { return direction == Direction.PANE; }
 
     public int dp(float value) { return Math.round(value * density); }
 
-    /** Pane's hairline rim is a stroke; Tonal on glass has the light rim; Tonal solid has none. */
+    /** Pane's hairline rim is a stroke; Tonal draws none of its own (see the card's edge rim). */
     public boolean hasRim() { return rimWidthPx > 0f; }
 }
