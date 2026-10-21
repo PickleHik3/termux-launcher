@@ -13,6 +13,9 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "feat(statusbar): remove the house glyph from the bar" (#92) · The bar on
+  the Workspace starts with the window chips, no house glyph, nothing clipped at the left; on Home
+  no house beside the clock and the Workspace's mark peeks in at the far end only · emulator.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on

@@ -308,10 +308,10 @@ public final class StatusBarLensView extends View {
         }
     }
 
-    /** The place's mark: a house for Home, a prompt for the Workspace. */
+    /** The place's mark: a prompt. Home has none. */
     @NonNull
     private String glyphFor(@NonNull PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS ? "\uf015" : "\uf120";
+        return "\uf120";
     }
 
     /** What the slot keeps clear at its start, from the bar's edge: the home icon and its gap. */
