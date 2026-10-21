@@ -22,11 +22,10 @@ under twenty items; past that, the oldest are re-judged first.
 - 2026-10-21 · commit "fix(chrome): Home ignores minimal mode; the palette's Minimal action" · Minimal
   on in a window, then swipe Home: Home keeps its dock and layout; the palette's Minimal action
   toggles minimal from Home and from a window · emulator.
-- 2026-10-21 · commit "feat(layout-editor): the Home layout switch" (#89) · Layout menu shows
-  the Home layout choice; on → editing on Home changes only Home; off → Home matches the
-  Workspace again; the menu's look is unchanged otherwise (the choice is the one segment beside
-  Style, named "One layout for every screen" / "Home has its own layout" by state) · emulator,
-  also on an upgraded install whose Home layout was kept (the segment shows on).
+- 2026-10-21 · commit "feat(layout-editor): the Home layout line" (#89) · Layout editor row:
+  labelled One layout / Home's own choice works; the Home/window preview toggle is back; the row
+  fits at 360 dp; nothing else in the editor moved; the new line fits at 360 dp, default and Large
+  text · emulator, also on an upgraded install whose Home layout was kept (Home's own checked).
 - 2026-10-21 · commit "feat(statusbar): remove the house glyph from the bar" (#92) · The bar on
   the Workspace starts with the window chips, no house glyph, nothing clipped at the left; on Home
   no house beside the clock and the Workspace's mark peeks in at the far end only · emulator.

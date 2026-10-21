@@ -54,7 +54,8 @@
      highlight, larger than its 48dp target, shows while a lifted bar may be dropped on it. Row B:
      Corner radius and Margin as two equal columns, each a label above its slider; while the hidden
      tiles are open they stand in Row B's place, one line of chips (it pans sideways when five
-     elements are hidden at 360dp), so the sheet never changes height. While the keyboard is
+     elements are hidden at 360dp), so the sheet never changes height. Between the two, the
+     Home layout line: a "Layout" label and two text segments, One layout | Home's own (#89). While the keyboard is
      selected its tools take the same place: the three type chips, then Key radius (a label above
      its slider) in the rest of the row. The tiles win while both would. No hint text anywhere.
 
@@ -68,6 +69,9 @@
        Layout Row A: 96 + 8 + 96 + 8 + 48 + gap + 48 = 304 + gap; gap 24 / 75 / 197. The 64dp highlight
          is centred on eye-off: 8dp of it stand past the button's end, inside the sheet's 16dp
          padding.
+       Layout's Home layout line: the label (LabelMedium "Layout" ≈ 40) + 8 + two text segments,
+         each 12 + 18 (the check's slot) + 4 + word + 12: "One layout" ≈ 74, "Home's own" ≈ 82, so
+         ≈ 296 ≤ 328 at 360; at Large (×1.15 on the words) ≈ 326. The label gives way first.
        Layout Row B: two columns, one 16dp gap: 156 / 181.5 / 242.5; "Corner radius · 40 dp"
          (LabelMedium) ≈ 120 ≤ 156 at the default text size; at Large it wraps to two lines,
          and a Barrier under both labels keeps the sliders level.
@@ -79,7 +83,8 @@
      Heights, dp, without the navigation inset (the controller adds it to the bottom padding):
        Appearance: Row A (slider 48 + labels 16 = 64) + 8
                    + Row B (heading row 48 + 8 + sliders 168 = 224) + 16 = 312 (Row A alone: 80).
-       Layout:     Row A 48 + 8 + Row B (label 16 + slider 48 = 64) + 16 = 136.
+       Layout:     Row A 48 + 8 + the Home layout line 48 + 8
+                   + Row B (label 16 + slider 48 = 64) + 16 = 192.
      The controller uses the measured heights, not these numbers. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -539,9 +544,10 @@
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
     <!-- The Home filter (LayoutEditorController.showHome): one segment, checked while the canvas
-         shows a Home page and every edit lands on the Home layout with Home's own Style, Corners
-         and Margin; unchecked, the window the editor was opened over. A filter of its own beside
-         Orientation, which still applies either way. -->
+         shows a Home page, unchecked while it shows the window the editor was opened over. Every
+         edit lands on the layout that page wears: Home's own while the Home layout line below says
+         so, the shared one otherwise. A filter of its own beside Orientation, which still applies
+         either way. -->
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/layout_editor_home_filter"
         android:layout_width="wrap_content"
@@ -564,6 +570,61 @@
             app:icon="@drawable/ic_layout_home"
             app:iconPadding="0dp"
             app:iconSize="24dp" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <!-- The Home layout choice (#89, LayoutEditorController.setHomeLayout): a line of its own
+         under Row A, the label and two text segments, the stored state checked. One layout: Home
+         wears the layout every window wears; Home's own: Home keeps a copy of its own. A packed
+         chain from the start; the label is the one that gives way if the line is ever short. -->
+    <TextView
+        android:id="@+id/layout_editor_home_layout_label"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="8dp"
+        android:ellipsize="end"
+        android:labelFor="@id/layout_editor_home_layout"
+        android:maxLines="1"
+        android:text="@string/layout_editor_home_layout_label"
+        android:textAppearance="?attr/textAppearanceLabelMedium"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/layout_editor_home_layout"
+        app:layout_constraintEnd_toStartOf="@id/layout_editor_home_layout"
+        app:layout_constraintHorizontal_bias="0"
+        app:layout_constraintHorizontal_chainStyle="packed"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/layout_editor_home_layout"
+        app:layout_constraintWidth_default="wrap" />
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/layout_editor_home_layout"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/layout_editor_home_layout_label"
+        app:layout_constraintTop_toBottomOf="@id/layout_editor_orientation"
+        app:selectionRequired="true"
+        app:singleSelection="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/layout_editor_home_layout_one"
+            style="@style/Widget.Termux.Button.Segment"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/layout_editor_home_layout_off"
+            android:text="@string/layout_editor_home_layout_one"
+            android:tooltipText="@string/layout_editor_home_layout_off" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/layout_editor_home_layout_own"
+            style="@style/Widget.Termux.Button.Segment"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/layout_editor_home_layout_on"
+            android:text="@string/layout_editor_home_layout_own"
+            android:tooltipText="@string/layout_editor_home_layout_on" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
     <!-- Eye-off's drop highlight: 64dp, larger than the 48dp target it stands behind, shown
@@ -609,7 +670,7 @@
         app:layout_constraintEnd_toStartOf="@id/appearance_editor_margin_label"
         app:layout_constraintHorizontal_chainStyle="spread"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/layout_editor_orientation" />
+        app:layout_constraintTop_toBottomOf="@id/layout_editor_home_layout" />
 
     <TextView
         android:id="@+id/appearance_editor_margin_label"
@@ -787,12 +848,13 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="@id/appearance_editor_corners_label" />
 
-    <!-- Row A's members only: Row B (Corner radius and Margin, or the hidden tiles in their place)
-         is shown in code, since a Group restates its members' visibility on every layout pass. -->
+    <!-- Row A's members and the Home layout line only: Row B (Corner radius and Margin, or the
+         hidden tiles in their place) is shown in code, since a Group restates its members'
+         visibility on every layout pass. -->
     <androidx.constraintlayout.widget.Group
         android:id="@+id/appearance_editor_layout_group"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:visibility="gone"
-        app:constraint_referenced_ids="layout_editor_orientation,appearance_editor_style,layout_editor_home_filter,layout_editor_hidden" />
+        app:constraint_referenced_ids="layout_editor_orientation,appearance_editor_style,layout_editor_home_filter,layout_editor_hidden,layout_editor_home_layout_label,layout_editor_home_layout" />
 </androidx.constraintlayout.widget.ConstraintLayout>

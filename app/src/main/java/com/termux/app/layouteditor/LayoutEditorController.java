@@ -52,10 +52,11 @@ import java.util.Locale;
 /**
  * Layout mode of the one editor (appearance-layout-editor SPEC §3.5, layout editor v2): the layout
  * canvas of the place the user is looking at, drawn at the full size of the editor's frame, with
- * the Portrait / Landscape toggle, the Home filter and eye-off in the editor's bottom area. The
- * Workspace's layout is every window's (ADR 0003): a write lands on the terminal and the display
- * alike. Home has a layout of its own (ADR 0008), which the Home filter shows and edits, in either
- * orientation, with Home's own Style, Corners and Margin.
+ * the Portrait / Landscape toggle, the Home filter and eye-off in the editor's bottom area, and the
+ * Home layout line under them. The Workspace's layout is every window's (ADR 0003): a write lands
+ * on the terminal and the display alike. Home may have a layout of its own (ADR 0008), with Home's
+ * own Style, Corners and Margin, which the Home layout line turns on or off; the Home filter shows
+ * a Home page either way and edits the layout it wears, in either orientation.
  *
  * <p>This class owns no screen of its own. The editor that hosts it
  * ({@link com.termux.app.surfaces.SurfaceEditorController}) lends it the canvas, what stands over
@@ -209,9 +210,14 @@ public final class LayoutEditorController {
         @NonNull final MaterialButtonToggleGroup orientation;
         /**
          * The Home filter: one segment beside the orientation toggle, checked while the canvas
-         * shows a Home page and writes the Home layout ({@link LayoutEditorPlan#showHome}).
+         * shows a Home page and writes the layout Home wears ({@link LayoutEditorPlan#showHome}).
          */
         @NonNull final MaterialButtonToggleGroup homeFilter;
+        /**
+         * The Home layout choice, a line of its own under that row: One layout | Home's own, the
+         * stored state checked ({@link LayoutEditorPlan#setHomeLayout}).
+         */
+        @NonNull final MaterialButtonToggleGroup homeLayout;
         /** Eye-off: the only hide drop target, the tiles' toggle, the count badge's anchor. */
         @NonNull final MaterialButton hiddenControl;
         /** The highlight behind eye-off, larger than its 48dp target: the drop area itself. */
@@ -228,6 +234,7 @@ public final class LayoutEditorController {
                      @NonNull MaterialButton moveControl,
                      @NonNull MaterialButtonToggleGroup orientation,
                      @NonNull MaterialButtonToggleGroup homeFilter,
+                     @NonNull MaterialButtonToggleGroup homeLayout,
                      @NonNull MaterialButton hiddenControl, @NonNull View hiddenHighlight,
                      @NonNull ChipGroup hiddenTiles, @NonNull TilesHost tilesHost) {
             this.canvasHost = canvasHost;
@@ -240,6 +247,7 @@ public final class LayoutEditorController {
             this.moveControl = moveControl;
             this.orientation = orientation;
             this.homeFilter = homeFilter;
+            this.homeLayout = homeLayout;
             this.hiddenControl = hiddenControl;
             this.hiddenHighlight = hiddenHighlight;
             this.hiddenTiles = hiddenTiles;
@@ -664,7 +672,12 @@ public final class LayoutEditorController {
         views.homeFilter.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (mRestatingToggle || checkedId != R.id.layout_editor_home_filter_home)
                 return;
-            setHomeLayout(isChecked);
+            showHome(isChecked);
+        });
+        views.homeLayout.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked || mRestatingToggle)
+                return;
+            setHomeLayout(checkedId == R.id.layout_editor_home_layout_own);
         });
     }
 
@@ -760,18 +773,12 @@ public final class LayoutEditorController {
         mRestatingToggle = true;
         views.orientation.check(plan.shownOrientation() == PlaceOrientation.LANDSCAPE
             ? R.id.layout_editor_orientation_landscape : R.id.layout_editor_orientation_portrait);
-        boolean homeLayout = plan.hasHomeLayout();
-        if (homeLayout)
+        if (plan.showsHome())
             views.homeFilter.check(R.id.layout_editor_home_filter_home);
         else
             views.homeFilter.uncheck(R.id.layout_editor_home_filter_home);
-        View homeSwitch = views.homeFilter.findViewById(R.id.layout_editor_home_filter_home);
-        if (homeSwitch != null) {
-            CharSequence label = views.homeFilter.getContext().getText(homeLayout
-                ? R.string.layout_editor_home_layout_on : R.string.layout_editor_home_layout_off);
-            homeSwitch.setContentDescription(label);
-            androidx.appcompat.widget.TooltipCompat.setTooltipText(homeSwitch, label);
-        }
+        views.homeLayout.check(plan.hasHomeLayout()
+            ? R.id.layout_editor_home_layout_own : R.id.layout_editor_home_layout_one);
         mRestatingToggle = false;
         views.canvas.setShape(mStyle, mCornersDp, mMarginDp);
         views.canvas.setExtraKeyCount(mExtraKeyCount);

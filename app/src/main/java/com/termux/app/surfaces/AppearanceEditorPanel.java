@@ -191,6 +191,7 @@ final class AppearanceEditorPanel {
     private final MaterialButtonToggleGroup mOrientation;
     private final MaterialButtonToggleGroup mStyle;
     private final MaterialButtonToggleGroup mHomeFilter;
+    private final MaterialButtonToggleGroup mHomeLayout;
     private final MaterialButton mHidden;
     private final View mHiddenHighlight;
     private final HorizontalScrollView mHiddenTiles;
@@ -279,6 +280,7 @@ final class AppearanceEditorPanel {
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mStyle = root.findViewById(R.id.appearance_editor_style);
         mHomeFilter = root.findViewById(R.id.layout_editor_home_filter);
+        mHomeLayout = root.findViewById(R.id.layout_editor_home_layout);
         mHidden = root.findViewById(R.id.layout_editor_hidden);
         TooltipCompat.setTooltipText(mHidden,
             context.getString(R.string.appearance_editor_hidden_tooltip));
@@ -300,13 +302,15 @@ final class AppearanceEditorPanel {
             R.id.appearance_editor_look_labels});
         mLayoutGroup.setReferencedIds(new int[] {R.id.layout_editor_orientation,
             R.id.appearance_editor_style, R.id.layout_editor_home_filter,
-            R.id.layout_editor_hidden});
+            R.id.layout_editor_hidden, R.id.layout_editor_home_layout_label,
+            R.id.layout_editor_home_layout});
         applyGroups(EditorMode.LOOK);
         applyRow2(false);
         paintSheet();
         paintSelectedSegments(mOrientation);
         paintSelectedSegments(mStyle);
         paintSelectedSegments(mHomeFilter);
+        paintSelectedSegments(mHomeLayout);
         paintSelected(mOpacityLink);
         buildLookLabels();
         bind();
@@ -1035,6 +1039,11 @@ final class AppearanceEditorPanel {
     /** The Home filter beside the orientation toggle: one segment, checked while Home is shown. */
     @NonNull MaterialButtonToggleGroup homeFilterToggle() {
         return mHomeFilter;
+    }
+
+    /** The Home layout line under Row A: One layout | Home's own, the stored state checked. */
+    @NonNull MaterialButtonToggleGroup homeLayoutToggle() {
+        return mHomeLayout;
     }
 
     /**
