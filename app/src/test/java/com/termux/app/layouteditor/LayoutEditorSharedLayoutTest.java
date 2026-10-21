@@ -65,7 +65,7 @@ public class LayoutEditorSharedLayoutTest {
     public void openedOnHomeItEditsTheSharedLayout() {
         assertEquals(LayoutVariant.NORMAL, onHome().variant());
         places.setMinimal(true);
-        assertEquals("minimal on both halves", LayoutVariant.MINIMAL, onHome().variant());
+        assertEquals("Home ignores minimal", LayoutVariant.NORMAL, onHome().variant());
     }
 
     @Test
