@@ -54,7 +54,7 @@ public class BuiltinWidgetFillTest {
 
     @Test public void oneRowCardsTallerThanTheDesignAreZoomedToFill() {
         for (BuiltinWidgetKind kind : new BuiltinWidgetKind[] {
-            BuiltinWidgetKind.SYSTEM, BuiltinWidgetKind.CLOCK_DIGITAL}) {
+            BuiltinWidgetKind.SYSTEM}) {
             for (int columns : new int[] {2, 4}) {
                 BuiltinWidgetView view = laidOut(kind, columns, 1, columns * 92 - 4, 118);
                 View content = view.content();

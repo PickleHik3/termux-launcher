@@ -47,14 +47,81 @@ import java.util.List;
 public abstract class BuiltinWidgetView extends FrameLayout {
     /** One editable setting of a widget, offered by the settings sheet. */
     public static final class ConfigField {
-        public enum Type { TEXT, NUMBER, MULTILINE }
+        /**
+         * A text field; a switch, stored "on" or "off"; or one of a few {@link Option}s, as
+         * segmented buttons or, with {@link #tiles}, a strip of live previews.
+         */
+        public enum Type { TEXT, NUMBER, MULTILINE, SWITCH, CHOICE }
+
+        /** One value a {@link Type#CHOICE} offers, and its name. */
+        public static final class Option {
+            @NonNull public final String value;
+            @NonNull public final CharSequence label;
+            public Option(@NonNull String value, @NonNull CharSequence label) {
+                this.value = value; this.label = label;
+            }
+        }
+
+        /** Draws one option of a choice as itself, for the settings sheet's strip. */
+        public interface TileArt {
+            @NonNull View make(@NonNull Context context, @NonNull String value);
+        }
+
+        /** {@link Type#SWITCH}'s stored values. */
+        public static final String ON = "on";
+        public static final String OFF = "off";
+
         @NonNull public final String key;
         @NonNull public final CharSequence label;
         @NonNull public final Type type;
         @NonNull public final String fallback;
+        /** A choice's options, in order; empty for the other types. */
+        @NonNull public final List<Option> options;
+        /** A choice drawn as a strip of previews, or null for segmented buttons. */
+        @Nullable public final TileArt tiles;
+        /** The field shows only while {@link #shownWhenKey} holds {@link #shownWhenValue}. */
+        @Nullable public final String shownWhenKey;
+        @Nullable public final String shownWhenValue;
+
         public ConfigField(@NonNull String key, @NonNull CharSequence label, @NonNull Type type,
                            @NonNull String fallback) {
+            this(key, label, type, fallback, Collections.emptyList(), null, null, null);
+        }
+
+        private ConfigField(@NonNull String key, @NonNull CharSequence label, @NonNull Type type,
+                            @NonNull String fallback, @NonNull List<Option> options,
+                            @Nullable TileArt tiles, @Nullable String shownWhenKey,
+                            @Nullable String shownWhenValue) {
             this.key = key; this.label = label; this.type = type; this.fallback = fallback;
+            this.options = Collections.unmodifiableList(new ArrayList<>(options));
+            this.tiles = tiles;
+            this.shownWhenKey = shownWhenKey; this.shownWhenValue = shownWhenValue;
+        }
+
+        /** One of {@code options}, {@code fallback} where none is stored. */
+        @NonNull public static ConfigField choice(@NonNull String key, @NonNull CharSequence label,
+                                                  @NonNull String fallback,
+                                                  @NonNull List<Option> options,
+                                                  @Nullable TileArt tiles) {
+            return new ConfigField(key, label, Type.CHOICE, fallback, options, tiles, null, null);
+        }
+
+        /** A switch, on or off by {@code fallback} where none is stored. */
+        @NonNull public static ConfigField toggle(@NonNull String key, @NonNull CharSequence label,
+                                                  boolean fallback) {
+            return new ConfigField(key, label, Type.SWITCH, fallback ? ON : OFF,
+                Collections.emptyList(), null, null, null);
+        }
+
+        /** This field, shown only while the field {@code key} holds {@code value}. */
+        @NonNull public ConfigField shownWhen(@NonNull String key, @NonNull String value) {
+            return new ConfigField(this.key, label, type, fallback, options, tiles, key, value);
+        }
+
+        /** Whether the field shows while the sheet's fields hold {@code values}. */
+        public boolean shownFor(@NonNull java.util.Map<String, String> values) {
+            return shownWhenKey == null || java.util.Objects.equals(values.get(shownWhenKey),
+                shownWhenValue);
         }
     }
 
@@ -354,7 +421,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     }
 
     /**
-     * What the layout gives up at {@code scale}: parts left out, labels cut short, numerals shrunk.
+     * What the layout gives up at {@code scale}: parts left out, labels cut short.
      *
      * <p>Every trial measures the whole layout afresh. A view answers a measure at a spec it has
      * seen before from its measure cache, without measuring its children, and the losses are read
@@ -386,7 +453,6 @@ public abstract class BuiltinWidgetView extends FrameLayout {
 
     private static int losses(@NonNull View view) {
         if (view.getVisibility() == GONE) return 0;
-        if (view instanceof ClockNumeralView) return ((ClockNumeralView) view).isShrunk() ? 1 : 0;
         if (view instanceof TextView) {
             Layout layout = ((TextView) view).getLayout();
             int lines = layout == null ? 0 : layout.getLineCount();

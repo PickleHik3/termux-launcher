@@ -27,8 +27,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The settings dialog of a built-in widget: one text field per {@link BuiltinWidgetView.ConfigField},
- * seeded from the record's bundle, and the Glass switch every built-in carries
+ * The settings dialog of a built-in widget: one row per {@link BuiltinWidgetView.ConfigField} (a
+ * text field, a switch, or a choice as segmented buttons or a strip of live previews; a row shown
+ * only while another field holds a value follows it live), seeded from the record's bundle, and the Glass switch every built-in carries
  * ({@link BuiltinWidgetGlass}), written back on Save; anything stored that the sheet does not offer
  * is kept. Material by construction, so it follows the scheme like every other dialog.
  */
@@ -54,34 +55,34 @@ public final class BuiltinWidgetConfigSheet {
         column.setOrientation(LinearLayout.VERTICAL);
         column.setPadding(pad, Math.round(8 * density), pad, 0);
         List<TextInputEditText> inputs = new ArrayList<>();
+        // The choices' and switches' values as the sheet holds them now: a row shown only for one
+        // value of another field follows them live.
+        Map<String, String> chosen = new LinkedHashMap<>();
+        List<Runnable> visibility = new ArrayList<>();
+        Runnable syncVisibility = () -> { for (Runnable sync : visibility) sync.run(); };
         for (BuiltinWidgetView.ConfigField field : fields) {
-            TextInputLayout box = new TextInputLayout(context, null,
-                com.google.android.material.R.attr.textInputOutlinedStyle);
-            box.setHint(field.label);
-            TextInputEditText input = new TextInputEditText(box.getContext());
-            input.setTag(field.key);
-            String value = current.getString(field.key);
-            input.setText(value == null ? field.fallback : value);
+            final View row;
             switch (field.type) {
-                case NUMBER:
-                    input.setInputType(InputType.TYPE_CLASS_NUMBER);
+                case SWITCH:
+                    row = switchRow(context, field, current, chosen, syncVisibility);
                     break;
-                case MULTILINE:
-                    input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-                    input.setMaxLines(4);
+                case CHOICE:
+                    row = choiceRow(context, field, current, chosen, syncVisibility);
                     break;
                 default:
-                    input.setInputType(InputType.TYPE_CLASS_TEXT);
-                    input.setSingleLine(true);
+                    row = textBox(context, field, current, inputs);
+                    break;
             }
-            box.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             params.topMargin = Math.round(12 * density);
-            column.addView(box, params);
-            inputs.add(input);
+            column.addView(row, params);
+            if (field.shownWhenKey != null) {
+                visibility.add(() -> row.setVisibility(field.shownFor(chosen)
+                    ? View.VISIBLE : View.GONE));
+            }
         }
+        syncVisibility.run();
         // Every built-in widget's Glass, per widget (BuiltinWidgetGlass): follow the page, on or
         // off, in one row, and one line.
         LinearLayout glass = new LinearLayout(context);
@@ -144,6 +145,7 @@ public final class BuiltinWidgetConfigSheet {
                 for (int i = 0; i < 3; i++)
                     if (glassChoice.getCheckedButtonId() == glassIds[i]) picked = glassValues[i];
                 BuiltinWidgetGlass.write(values, picked);
+                values.putAll(chosen);
                 for (TextInputEditText input : inputs) {
                     CharSequence text = input.getText();
                     values.put(String.valueOf(input.getTag()), text == null ? "" : text.toString().trim());
@@ -152,6 +154,200 @@ public final class BuiltinWidgetConfigSheet {
             })
             .setOnDismissListener(dialog -> { if (onDismiss != null) onDismiss.run(); })
             .show();
+    }
+
+    /** A text field, seeded from the record. */
+    @NonNull private static View textBox(@NonNull Context context,
+                                         @NonNull BuiltinWidgetView.ConfigField field,
+                                         @NonNull Bundle current,
+                                         @NonNull List<TextInputEditText> inputs) {
+        TextInputLayout box = new TextInputLayout(context, null,
+            com.google.android.material.R.attr.textInputOutlinedStyle);
+        box.setHint(field.label);
+        TextInputEditText input = new TextInputEditText(box.getContext());
+        input.setTag(field.key);
+        String value = current.getString(field.key);
+        input.setText(value == null ? field.fallback : value);
+        switch (field.type) {
+            case NUMBER:
+                input.setInputType(InputType.TYPE_CLASS_NUMBER);
+                break;
+            case MULTILINE:
+                input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+                input.setMaxLines(4);
+                break;
+            default:
+                input.setInputType(InputType.TYPE_CLASS_TEXT);
+                input.setSingleLine(true);
+        }
+        box.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        inputs.add(input);
+        return box;
+    }
+
+    /** The value a choice or switch starts at: the stored one when it is one it offers. */
+    @NonNull static String startValue(@NonNull BuiltinWidgetView.ConfigField field,
+                                      @NonNull Bundle current) {
+        String stored = current.getString(field.key);
+        if (field.type == BuiltinWidgetView.ConfigField.Type.SWITCH) {
+            if (BuiltinWidgetView.ConfigField.ON.equals(stored)
+                || BuiltinWidgetView.ConfigField.OFF.equals(stored)) return stored;
+            return field.fallback;
+        }
+        for (BuiltinWidgetView.ConfigField.Option option : field.options) {
+            if (option.value.equals(stored)) return stored;
+        }
+        return field.fallback;
+    }
+
+    /** A switch on its label's line, the label taking the row. */
+    @NonNull private static View switchRow(@NonNull Context context,
+                                           @NonNull BuiltinWidgetView.ConfigField field,
+                                           @NonNull Bundle current,
+                                           @NonNull Map<String, String> picked,
+                                           @NonNull Runnable onChange) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(Math.round(48 * context.getResources().getDisplayMetrics().density));
+        TextView label = new TextView(context);
+        label.setText(field.label);
+        label.setTextAppearance(com.google.android.material.R.style
+            .TextAppearance_Material3_BodyLarge);
+        row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f));
+        com.google.android.material.materialswitch.MaterialSwitch toggle =
+            new com.google.android.material.materialswitch.MaterialSwitch(context);
+        String start = startValue(field, current);
+        picked.put(field.key, start);
+        toggle.setChecked(BuiltinWidgetView.ConfigField.ON.equals(start));
+        toggle.setContentDescription(field.label);
+        toggle.setOnCheckedChangeListener((button, checked) -> {
+            picked.put(field.key, checked ? BuiltinWidgetView.ConfigField.ON
+                : BuiltinWidgetView.ConfigField.OFF);
+            onChange.run();
+        });
+        row.addView(toggle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        return row;
+    }
+
+    /**
+     * A choice: its label, then a strip of the options drawn as themselves (a live preview) when
+     * the field draws them, else segmented buttons on the label's line.
+     */
+    @NonNull private static View choiceRow(@NonNull Context context,
+                                           @NonNull BuiltinWidgetView.ConfigField field,
+                                           @NonNull Bundle current,
+                                           @NonNull Map<String, String> picked,
+                                           @NonNull Runnable onChange) {
+        float density = context.getResources().getDisplayMetrics().density;
+        String start = startValue(field, current);
+        picked.put(field.key, start);
+        TextView label = new TextView(context);
+        label.setText(field.label);
+        label.setTextAppearance(com.google.android.material.R.style
+            .TextAppearance_Material3_BodyLarge);
+        BuiltinWidgetView.ConfigField.TileArt art = field.tiles;
+        if (art == null) {
+            LinearLayout row = new LinearLayout(context);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.addView(label, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            MaterialButtonToggleGroup group = new MaterialButtonToggleGroup(context);
+            group.setSingleSelection(true);
+            group.setSelectionRequired(true);
+            Map<Integer, String> valueOf = new java.util.HashMap<>();
+            for (BuiltinWidgetView.ConfigField.Option option : field.options) {
+                MaterialButton button = new MaterialButton(context, null,
+                    com.google.android.material.R.attr.materialButtonOutlinedStyle);
+                button.setId(View.generateViewId());
+                button.setText(option.label);
+                group.addView(button);
+                valueOf.put(button.getId(), option.value);
+                if (option.value.equals(start)) group.check(button.getId());
+            }
+            group.addOnButtonCheckedListener((g, checkedId, isChecked) -> {
+                String value = valueOf.get(checkedId);
+                if (!isChecked || value == null) return;
+                picked.put(field.key, value);
+                onChange.run();
+            });
+            row.addView(group, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            return row;
+        }
+        LinearLayout column = new LinearLayout(context);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.addView(label);
+        android.widget.HorizontalScrollView scroll =
+            new android.widget.HorizontalScrollView(context);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout strip = new LinearLayout(context);
+        strip.setOrientation(LinearLayout.HORIZONTAL);
+        int primary = MaterialColors.getColor(label, androidx.appcompat.R.attr.colorPrimary);
+        int outline = MaterialColors.getColor(label,
+            com.google.android.material.R.attr.colorOutlineVariant);
+        List<View> frames = new ArrayList<>();
+        List<String> values = new ArrayList<>();
+        Runnable dress = () -> {
+            for (int i = 0; i < frames.size(); i++) {
+                boolean selected = values.get(i).equals(picked.get(field.key));
+                android.graphics.drawable.GradientDrawable rim =
+                    new android.graphics.drawable.GradientDrawable();
+                rim.setCornerRadius(12 * density);
+                rim.setColor(android.graphics.Color.TRANSPARENT);
+                rim.setStroke(Math.round((selected ? 2 : 1) * density),
+                    selected ? primary : outline);
+                frames.get(i).setBackground(rim);
+                frames.get(i).setSelected(selected);
+            }
+        };
+        for (BuiltinWidgetView.ConfigField.Option option : field.options) {
+            LinearLayout tile = new LinearLayout(context);
+            tile.setOrientation(LinearLayout.VERTICAL);
+            tile.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            tile.setPadding(Math.round(4 * density), Math.round(8 * density),
+                Math.round(4 * density), 0);
+            android.widget.FrameLayout frame = new android.widget.FrameLayout(context);
+            int inset = Math.round(6 * density);
+            frame.setPadding(inset, inset, inset, inset);
+            frame.addView(art.make(context, option.value),
+                new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+            tile.addView(frame, new LinearLayout.LayoutParams(Math.round(76 * density),
+                Math.round(48 * density)));
+            TextView name = new TextView(context);
+            name.setText(option.label);
+            name.setTextAppearance(com.google.android.material.R.style
+                .TextAppearance_Material3_LabelMedium);
+            name.setGravity(android.view.Gravity.CENTER);
+            name.setMaxLines(1);
+            LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            nameParams.topMargin = Math.round(4 * density);
+            tile.addView(name, nameParams);
+            tile.setContentDescription(option.label);
+            tile.setClickable(true);
+            tile.setFocusable(true);
+            tile.setOnClickListener(v -> {
+                picked.put(field.key, option.value);
+                dress.run();
+                onChange.run();
+            });
+            frames.add(frame);
+            values.add(option.value);
+            strip.addView(tile);
+        }
+        dress.run();
+        scroll.addView(strip);
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        scrollParams.topMargin = Math.round(4 * density);
+        column.addView(scroll, scrollParams);
+        return column;
     }
 
     /** True when {@code value} parses as a positive number. */

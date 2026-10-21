@@ -84,8 +84,32 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
         }
         view.setWidgetId(record.appWidgetId);
         view.setCells(record.cell.columnSpan(), record.cell.rowSpan());
-        view.bind(record.sizeOptions());
+        view.bind(settingsOf(record));
         return view;
+    }
+
+    /**
+     * The settings {@code record} opens with: its own, over what a retired kind it was stored as
+     * implied ({@link BuiltinWidgetAliases#settings}). The record is not rewritten.
+     */
+    @NonNull public Bundle settingsOf(@NonNull LauncherWidgetRecord record) {
+        return BuiltinWidgetAliases.settings(record.builtinKind, record.sizeOptions());
+    }
+
+    /**
+     * The settings a widget of {@code kindId} is placed with, or null for none. A new Clock takes
+     * the status bar's face and 12/24-hour setting as they are now, once
+     * ({@link ClockWidgetSettings#initial}); the widget's settings and the bar's are separate
+     * stores from then on.
+     */
+    @Nullable public Bundle initialConfig(@Nullable String kindId) {
+        if (BuiltinWidgetKind.fromId(kindId) != BuiltinWidgetKind.CLOCK) return null;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(context, false);
+        if (preferences == null) return ClockWidgetSettings.initialBundle(null, false);
+        return ClockWidgetSettings.initialBundle(preferences.getTopPaneClockStyle(),
+            preferences.isTopPaneClockAmPmEnabled());
     }
 
     @Override public void release(int appWidgetId) {
@@ -116,6 +140,7 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
             BuiltinWidgetKind kind = BuiltinWidgetKind.fromId(record.builtinKind);
             if (kind == null) return new ArrayList<>();
             view = BuiltinWidgetFactory.create(context, kind, services, style());
+            view.bind(settingsOf(record));
         }
         return view.configFields();
     }
@@ -172,7 +197,7 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
         try {
             BuiltinWidgetView view = BuiltinWidgetFactory.create(context, kind, services, style());
             view.setPreview(true);
-            view.bind(null);
+            view.bind(initialConfig(kind.id));
             view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
             view.layout(0, 0, width, height);

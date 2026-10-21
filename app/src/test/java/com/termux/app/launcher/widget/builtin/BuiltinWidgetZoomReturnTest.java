@@ -125,24 +125,4 @@ public class BuiltinWidgetZoomReturnTest {
         assertEquals("the zoom it had at this size", before, widget.content().getScaleX(), 0.001f);
         assertTrue("the label is not cut short on return", !cutShort(widget.label));
     }
-
-    @Test public void theDigitalClockComesBackAtItsZoom() {
-        int width = 380, height = 298;
-        DigitalClockWidgetView clock = new DigitalClockWidgetView(context, services, style);
-        clock.setCells(2, 1);
-        clock.bind(null);
-        settle(clock, width, height);
-        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, clock.span());
-        float before = clock.content().getScaleX();
-
-        DigitalClockWidgetView fresh = new DigitalClockWidgetView(context, services, style);
-        fresh.setCells(2, 1);
-        fresh.bind(null);
-        settle(fresh, width, height);
-        assertEquals("a fresh clock agrees", before, fresh.content().getScaleX(), 0.001f);
-
-        walkAndReturn(clock, width, height);
-
-        assertEquals("the zoom it had at this size", before, clock.content().getScaleX(), 0.001f);
-    }
 }
