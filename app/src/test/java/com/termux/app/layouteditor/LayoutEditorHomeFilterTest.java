@@ -90,8 +90,7 @@ public class LayoutEditorHomeFilterTest {
         assertEquals(Edge.TOP, home().slot(PORTRAIT, Element.APPS).edge);
         assertEquals("the Workspace's layout is left alone",
             Edge.BOTTOM, workspace().slot(PORTRAIT, Element.APPS).edge);
-        assertEquals("the status bar is not Home's to place",
-            LayoutEditorPlan.Drop.NONE, plan.drop(Bar.STATUS_BAR, Edge.TOP));
+        // What Home offers (no status bar to place) is its dress's: DressResolverTest.
     }
 
     @Test
