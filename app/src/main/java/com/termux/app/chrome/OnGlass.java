@@ -826,4 +826,80 @@ public final class OnGlass {
         return resolveFixedInk(ground, Color.TRANSPARENT, textInk, textTarget, graphicInk,
             graphicTarget, veilColor, 255);
     }
+
+    // ---------------------------------------------------------------- the Bare widget
+
+    /**
+     * The most a Bare widget dims the wallpaper behind it (spec #101, "Bare"): a widget drawn
+     * without its card may lay a soft dim of its card's colour under its ink, never thicker than
+     * this. Past it the ink moves instead, as a chrome band's does at {@link #MAX_VEIL_ALPHA}.
+     */
+    public static final float BARE_MAX_DIM = 0.35f;
+
+    /** {@link #BARE_MAX_DIM} as an 8-bit alpha. */
+    public static final int BARE_MAX_DIM_255 = Math.round(BARE_MAX_DIM * 255f);
+
+    /**
+     * A Bare widget's answer: its ink straight on the wallpaper behind it, measured there, with a
+     * dim only where the measurement says the ink would not read otherwise.
+     *
+     * <p>Cheapest first, the ladder of {@link #resolve} held to {@link #BARE_MAX_DIM}:</p>
+     * <ol>
+     *   <li>The page's inks read on the bare wallpaper, or under the smallest dim of
+     *       {@code dimColor} up to {@link #BARE_MAX_DIM_255} that makes them: {@code textInk} to
+     *       {@code textTarget} and {@code graphicInk} to {@code graphicTarget} together.</li>
+     *   <li>The dim ran out: under the dim that helped most, the inks move on the page's side
+     *       ({@code paleSide}), their hue kept, never across it.</li>
+     *   <li>That is short too: the inks move to the other side on the bare wallpaper, with no dim
+     *       (a dim of the page's card only ever helps the page's own ink).
+     *       {@link Resolution#inkFlipped} is set.</li>
+     *   <li>Nothing reads: under rung two's dim, the page side's extreme, with
+     *       {@link Resolution#shortfall} set.</li>
+     * </ol>
+     *
+     * <p>Every ink the widget draws is then read through {@link #bareInk} on this answer.</p>
+     *
+     * @param backdrop the opaque wallpaper behind the widget, under the launcher's dim
+     * @param dimColor the widget's card on the page's polarity; its alpha is ignored
+     * @param paleSide true when the page's ink is the pale one
+     */
+    @NonNull
+    public static Resolution resolveBareWidget(@ColorInt int backdrop, @ColorInt int textInk,
+                                               double textTarget, @ColorInt int graphicInk,
+                                               double graphicTarget, @ColorInt int dimColor,
+                                               boolean paleSide) {
+        Resolution dimmed = resolveFixedInk(backdrop, Color.TRANSPARENT, textInk, textTarget,
+            graphicInk, graphicTarget, dimColor, BARE_MAX_DIM_255);
+        if (!dimmed.shortfall) return dimmed;
+        // Every move is directed (tonedToward): an ink never crosses to the other side of a dim
+        // laid for its own side, which would only make the dim work against it.
+        int text = tonedToward(dimmed.surface, textInk, paleSide, textTarget);
+        int graphic = tonedToward(dimmed.surface, graphicInk, paleSide, graphicTarget);
+        if (text != NO_TONE && graphic != NO_TONE) {
+            return new Resolution(dimmed.veil, dimmed.surface, text, ratio(text, dimmed.surface),
+                textTarget, true, false, false);
+        }
+        int bare = opaque(backdrop);
+        int flippedText = tonedToward(bare, textInk, !paleSide, textTarget);
+        int flippedGraphic = tonedToward(bare, graphicInk, !paleSide, graphicTarget);
+        if (flippedText != NO_TONE && flippedGraphic != NO_TONE) {
+            return new Resolution(Color.TRANSPARENT, bare, flippedText, ratio(flippedText, bare),
+                textTarget, false, true, false);
+        }
+        int extreme = inkOn(dimmed.surface, textInk, textTarget, paleSide);
+        return new Resolution(dimmed.veil, dimmed.surface, extreme,
+            ratio(extreme, dimmed.surface), textTarget, true, false, true);
+    }
+
+    /**
+     * One of a Bare widget's inks on {@code answer} ({@link #resolveBareWidget}): {@code ink}
+     * itself where it reads at {@code target} on the answer's surface, else a tone of it on the
+     * answer's side, the page's or, where the answer flipped, the other one; that side's extreme
+     * where no tone of it reads.
+     */
+    @ColorInt
+    public static int bareInk(@NonNull Resolution answer, @ColorInt int ink, double target,
+                              boolean paleSide) {
+        return inkOn(answer.surface, ink, target, answer.inkFlipped != paleSide);
+    }
 }
