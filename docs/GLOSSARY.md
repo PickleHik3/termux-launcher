@@ -169,8 +169,9 @@ _Avoid_: custom wallpaper, in-app wallpaper
 A second saved **Workspace** layout, and nothing more. It starts with only each window's content, so
 by default the bars, the A–Z index, the extra keys and the keyboard go away, and it changes no
 behaviour. It is one mode for every window, turned on and off only from the corner tab's minimal
-button, and stays on until turned off; while it is on Home wears the minimal layout too, unless
-Home holds a **Home layout** of its own (decided 2026-10-21). The Layout editor opened while it
+button or the command palette's Minimal action, and stays on until turned off. Home ignores it:
+Home wears the normal shared layout (or its **Home layout**) whatever minimal says (decided
+2026-10-21, after a day of Minimal on both halves left Home with no way out). The Layout editor opened while it
 is on edits the **minimal layout**. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: full screen, focus mode, zen mode, zen view

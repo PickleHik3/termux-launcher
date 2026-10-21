@@ -14,7 +14,11 @@ tile**). It changes the dock-design work in [`home-dock-styles-2026-10-20.md`](h
 - **Home layout** is opt-in: a switch in the Layout menu ("One layout for every screen" / "Home has
   its own layout"). While on, a Home page opens the Layout editor on Home's own layout, and the bar
   and dock may change on the swipe. Off by default.
-- Minimal mode applies to both halves; a Home layout, if on, stays as the user set it.
+- Minimal mode stays the Workspace's (amended 2026-10-21): Home wears the normal shared layout, or
+  its Home layout, whatever minimal says, because Home has no corner tab to leave minimal by. The
+  command palette gains a Minimal action that turns it on or off from anywhere.
+- Migration also counts a differing keyboard (height, chin, form) as "Home differs", but only
+  while Home's keyboard is always on.
 - Migration: if a user's saved Home layout (dock rows, dock height, row order, under-keyboard flags)
   differs from their Workspace layout, turn on the Home layout with those values so nothing visibly
   changes. Otherwise Home follows the shared layout and its saved keys are dropped.
@@ -97,7 +101,7 @@ in the layout store.
 
 Each step lands and passes an emulator check before the next.
 
-1. Shared layout, the Home layout switch, Minimal on both halves, migration.
+1. Shared layout, the Home layout switch, migration (Minimal stays the Workspace's).
 2. The bar on Home: same chips, floats as chips (float chips retire), readings, status swipe,
    house glyph removed.
 3. The dock design on the Workspace dock, the extra keys folding with the travel, the run strip
