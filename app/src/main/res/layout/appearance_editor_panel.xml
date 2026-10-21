@@ -55,8 +55,8 @@
      Corner radius and Margin as two equal columns, each a label above its slider; while the hidden
      tiles are open they stand in Row B's place, one line of chips (it pans sideways when five
      elements are hidden at 360dp), so the sheet never changes height. Between the two, the
-     Home layout line: a "Layout" label and two text segments, One layout | Home's own (#89). While the keyboard is
-     selected its tools take the same place: the three type chips, then Key radius (a label above
+     Home layout line: a "Layout" label and two text segments, One layout | Home's own (#89).
+     While the keyboard is selected its tools take the same place: the three type chips, then Key radius (a label above
      its slider) in the rest of the row. The tiles win while both would. No hint text anywhere.
 
      Width arithmetic, dp. Sheet padding 16 + 16, so the content width is W - 32.
