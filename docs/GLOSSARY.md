@@ -43,8 +43,9 @@ thing out, less the corner squares. Anywhere on it outside the window's text (th
 sides, and the side borders' 2 dp of clearance inside the frame) it is a plain sideways swipe that
 pages at once, past the touch slop, with no hold. A hold there still starts it too. Where the border
 reaches further into the window (a window almost flush with the wall) it is a hold and then a
-sideways drag. A drag that starts in the terminal's text is the terminal's, unless it is a **body
-swipe**, which pages the same way. The edge lights in
+sideways drag. The bottom border reaches a little further, a fingertip tall: a clearly sideways
+swipe from the window's last row or the dock's top air pages too. A drag that starts in the
+terminal's text is the terminal's, unless it is a **body swipe**, which pages the same way. The edge lights in
 the accent colour inside the frame where a finger can page. A **Home page** has no border: it pages
 by a plain swipe anywhere on it, as any launcher does. Reach, hold, glow and tilt are
 specified in `project-docs/reference/launcher/gestures-and-style.md`.
